@@ -2,6 +2,8 @@
 
 マウス・実験動物のmicro-CT画像を、ブラウザだけで観察できる教育用の体験版です。同梱の練習データ4種類を使って、断面表示、3D表示、セグメンテーション、画像フィルター、体積計測などの操作を試せます。**VRヘッドセットを使えば、CT画像を目の前の空間に立体で浮かべて観察することもできます（VR / AR）。** 診断用のソフトウェアではありません。
 
+**公開サイト: https://naomitsu-ozawa.github.io/virtual-rodent-la-trial/**
+
 > English summary is provided below.
 
 ## 練習データの開き方
@@ -79,6 +81,8 @@ npm run test:e2e         # ブラウザテスト (Playwright)
 ## English
 
 Virtual Rodent Lab (trial) is an educational, browser-only viewer for small-animal micro-CT. It ships with four bundled practice datasets so you can try multiplanar views, 3D rendering, segmentation, non-destructive filters and volume measurements. **With a VR headset you can also place the CT volume in the space in front of you (VR / AR).** It is not a diagnostic tool.
+
+**Site: https://naomitsu-ozawa.github.io/virtual-rodent-la-trial/**
 
 ### Opening the practice data
 
