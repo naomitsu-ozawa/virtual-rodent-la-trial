@@ -1,6 +1,6 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { currentLanguage, setCurrentLanguage } from './state.js?v=20261018-build620';
+import { currentLanguage, setCurrentLanguage } from './state.js?v=20261018-build621';
 export const I18N={
  ja:{
   subtitle:'マウス・実験動物画像のためのブラウザDICOM CTビューワー',
@@ -24,7 +24,7 @@ export const I18N={
   footer:'元のキャリブレーション済みCT値は保持されます。',
   slices:'スライス',matrix:'マトリクス',voxel:'ボクセル',stored:'保存形式',
   estimated:'推定展開サイズ',decoding:'CTボリュームを展開中…',ready:'CTボリューム準備完了',
-  vrView:'VRで見る',arView:'ARで見る',vrToggleToVr:'VR表示',vrToggleToAr:'AR表示',vrToggleNowVr:'VR表示にしました（スティック押し込み2回／リングで AR 表示に戻せます）',vrToggleNowAr:'AR表示に戻しました（パススルー）',vrSecUndo:'元に戻す',vrSecDeletedShort:'断面{n}を削除',vrSecDeleted:'断面{n}を削除しました（数秒間は「元に戻す」で復元できます）',vrSecRestored:'断面{n}を元に戻しました',vrSecUndoFull:'断面が{max}枚あるため元に戻せません',vrSecDeleteRing:'断面を削除',vrFailed:'VRを開始できませんでした',sampleDemo:'練習データ',sampleChoose:'練習データを選ぶ',sampleMouse:'マウス腹部（約260MB）',sampleRat:'ラット腹部（約260MB）',sampleMouseHead:'マウス頭部（約270MB）',sampleTrabecular:'骨梁（約260MB）',sampleLoading:'練習データ（512×512×512、約260MB）を取得中…',sampleDone:'練習データを読み込みました',sampleCached:'キャッシュから',
+  vrView:'VRで見る',arView:'ARで見る',vrToggleToVr:'VR表示',vrToggleToAr:'AR表示',vrToggleNowVr:'VR表示にしました（スティック押し込み2回／リングで AR 表示に戻せます）',vrToggleNowAr:'AR表示に戻しました（パススルー）',vrSecUndo:'元に戻す',vrSecDeletedShort:'断面{n}を削除',vrSecDeleted:'断面{n}を削除しました（数秒間は「元に戻す」で復元できます）',vrSecRestored:'断面{n}を元に戻しました',vrSecUndoFull:'断面が{max}枚あるため元に戻せません',vrSecDeleteRing:'断面を削除',vrFailed:'VRを開始できませんでした',vrBtnBusy:'準備中…',vrBtnStarting:'起動中…',vrBtnRunning:'表示中',vrStepLoading:'{m}の機能を読み込んでいます…',vrStepPrepare:'{m}の準備中: {t}',vrStepStarting:'ヘッドセットを起動しています…（{m}画面が出るまで数秒かかることがあります）',vrStepRunning:'{m}表示中（ヘッドセットで操作してください）',sampleDemo:'練習データ',sampleChoose:'練習データを選ぶ',sampleMouse:'マウス腹部（約260MB）',sampleRat:'ラット腹部（約260MB）',sampleMouseHead:'マウス頭部（約270MB）',sampleTrabecular:'骨梁（約260MB）',sampleLoading:'練習データ（512×512×512、約260MB）を取得中…',sampleDone:'練習データを読み込みました',sampleCached:'キャッシュから',
   dicomChecking:'DICOMを確認中…',
   pixelDeferred:'Pixel Dataはまだ展開しません。',noSeries:'DICOMシリーズを検出できませんでした',
   original:'元のキャリブレーション済みCT値',processingReset:'処理をリセットしました。元のキャリブレーション済みCT値を復元しました',
@@ -53,7 +53,7 @@ export const I18N={
   footer:'Original calibrated CT values are preserved.',
   slices:'Slices',matrix:'Matrix',voxel:'Voxel',stored:'Stored',
   estimated:'Estimated decoded size',decoding:'Decoding CT volume…',ready:'CT volume ready',
-  vrView:'View in VR',arView:'View in AR',vrToggleToVr:'VR view',vrToggleToAr:'AR view',vrToggleNowVr:'VR view on (double-click a thumbstick or use the ring to go back to AR)',vrToggleNowAr:'Back to AR view (passthrough)',vrSecUndo:'Undo',vrSecDeletedShort:'Section {n} deleted',vrSecDeleted:'Section {n} deleted (Undo restores it for a few seconds)',vrSecRestored:'Section {n} restored',vrSecUndoFull:'Cannot restore: already {max} sections',vrSecDeleteRing:'Delete section',vrFailed:'Could not start VR',sampleDemo:'Practice data',sampleChoose:'Choose practice data',sampleMouse:'Mouse abdomen (about 260 MB)',sampleRat:'Rat abdomen (about 260 MB)',sampleMouseHead:'Mouse head (about 270 MB)',sampleTrabecular:'Trabecular bone (about 260 MB)',sampleLoading:'Loading practice data (512×512×512, about 260 MB)…',sampleDone:'Practice data loaded',sampleCached:'from cache',
+  vrView:'View in VR',arView:'View in AR',vrToggleToVr:'VR view',vrToggleToAr:'AR view',vrToggleNowVr:'VR view on (double-click a thumbstick or use the ring to go back to AR)',vrToggleNowAr:'Back to AR view (passthrough)',vrSecUndo:'Undo',vrSecDeletedShort:'Section {n} deleted',vrSecDeleted:'Section {n} deleted (Undo restores it for a few seconds)',vrSecRestored:'Section {n} restored',vrSecUndoFull:'Cannot restore: already {max} sections',vrSecDeleteRing:'Delete section',vrFailed:'Could not start VR',vrBtnBusy:'Preparing…',vrBtnStarting:'Starting…',vrBtnRunning:'In use',vrStepLoading:'Loading {m}…',vrStepPrepare:'Preparing {m}: {t}',vrStepStarting:'Starting the headset… ({m} may take a few seconds to appear)',vrStepRunning:'{m} is running (use the headset)',sampleDemo:'Practice data',sampleChoose:'Choose practice data',sampleMouse:'Mouse abdomen (about 260 MB)',sampleRat:'Rat abdomen (about 260 MB)',sampleMouseHead:'Mouse head (about 270 MB)',sampleTrabecular:'Trabecular bone (about 260 MB)',sampleLoading:'Loading practice data (512×512×512, about 260 MB)…',sampleDone:'Practice data loaded',sampleCached:'from cache',
   dicomChecking:'Checking DICOM…',
   pixelDeferred:'Pixel Data has not been expanded yet.',noSeries:'No DICOM Series detected',
   original:'Original calibrated CT values',processingReset:'Processing reset. Original calibrated CT values restored.',
