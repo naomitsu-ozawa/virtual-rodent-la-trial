@@ -1,0 +1,28 @@
+name: Pages
+
+# Publishes docs/ to the gh-pages branch on every push to main.
+# Requires Settings > Pages > Source: "Deploy from a branch", gh-pages / (root).
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write        # push to gh-pages
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  production:
+    name: Deploy main to site root
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: JamesIves/github-pages-deploy-action@v4.9.0
+        with:
+          folder: docs
+          branch: gh-pages
+          force: false
