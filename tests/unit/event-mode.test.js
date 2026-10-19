@@ -400,7 +400,7 @@ describe('static wiring', () => {
     expect(src).toContain("const evMenu=eventModeOn();let evLabels=TRIGGER_AT_START==='label';");
     expect(src).toContain('const menu=makeMenu(MENU_W,MENU_H,MENU_WIDTH);menu.mesh.visible=evMenu;scene.add(menu.mesh);');
     expect(src).toContain('const ui={sliceClear:false,tab:evMenu?10:0,open:evMenu,');
-    expect(src).toContain('const setMenuOpen=open=>{ui.open=open;menu.mesh.visible=open;if(open)placeMenuNow();menu.refresh()};');
+    expect(src).toContain('const setMenuOpen=open=>{ui.open=open;menu.mesh.visible=open;if(open){placeMenuNow();ui.probeOnOpen=true}menu.refresh()};');
     expect(src).toContain("if(!ui.open){setMenuOpen(true);pulseTwice(c)}");
     expect(src).toContain("case'menu':setMenuOpen(!ui.open);break;");
     expect(src).toContain('const menuHit=c=>{if(!ui.open)return null;');

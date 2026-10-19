@@ -30,7 +30,10 @@ describe('the section limit is 10', () => {
     expect(fs).toMatch(new RegExp('#define SECTION_PLANES ' + MAX_SECTION_PLANES + '\\n'));
     expect(fs).toContain('uniform vec4 cutPlanes[SECTION_PLANES];');
     expect(fs).not.toMatch(/cutPlanes\[4\]/); expect(fs).not.toMatch(/(sliceT|crossT|crossOk)\[4\]/);
-    expect(has(fs, 'for(int i=0;i<SECTION_PLANES;i++){ crossT[i]=-1e30;if(i>=planeCount)continue;')).toBe(true); // the per-ray plane test skips the unused indices
+    // the per-ray plane test stops at planeCount (no 10-iteration pass with `continue`), skips a plane that neither clips nor shows a slice, and is compiled out of the NoEvents variant
+    expect(has(fs, 'for(int i=0;i<SECTION_PLANES;i++){ if(i>=planeCount)break; crossT[i]=-1e30;')).toBe(true);
+    expect(has(fs, 'if(!clip&&sliceOpacity<=0.0)continue;')).toBe(true);
+    expect(/#ifndef VRL_NO_EVENTS\n[^#]*float crossT\[SECTION_PLANES\];[^#]*#endif\n if\(t>endT\+1e-6\)discard;/.test(fs)).toBe(true); // the plane loop sits inside the guard, the discard test after it
     expect(has(fs, 'for(int i=0;i<SECTION_PLANES;i++){if(i>=planeCount)break;if(crossT[i]>=t-1e-5')).toBe(true);
     expect(has(fs, 'for(int i=1;i<SECTION_PLANES;i++){if(i>=nSlice)break;')).toBe(true);
     // the segment arrays are not planes: they stay 4

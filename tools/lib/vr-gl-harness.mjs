@@ -103,6 +103,24 @@ export async function renderBatch(args) {
   const M = args.scene.editN, editTex = args.scene.edit ? tex3(un(args.scene.edit), M, M, M, THREE.RGBAFormat, THREE.UnsignedByteType, L) : null;
   const clsRaw = tex3(un(args.scene.cls), N, N, N, THREE.RGBAFormat, THREE.UnsignedByteType, clsF);
   const combo = tex3(un(args.scene.combo), N, N, N, THREE.RGBAFormat, THREE.UnsignedByteType, clsF);
+  // the off-frame rebuild of the combined texture (docs/vr-combo-rebuild.js, vr-view.js uploadCombo / applyCombo), case.comboVariant:
+  // 'stale' = the combined bytes with every alpha 255 (an alpha that no longer fits the shown segments: the general loop must ignore it);
+  // 'patched' = that stale texture uploaded, then the right bytes sent in z slabs of 5 slices through renderer.copyTextureToTexture from a
+  // texture the renderer never saw, as the app does (a full re-send of the stale CPU bytes would show); 'alt' = args.scene.comboAlt (the alpha of another mask)
+  const comboVars = {}, comboVar = k => {
+    if (comboVars[k]) return comboVars[k];
+    const right = un(args.scene.combo), stale = right.slice(); for (let i = 3; i < stale.length; i += 4) stale[i] = 255;
+    let t;
+    if (k === 'stale') t = tex3(stale, N, N, N, THREE.RGBAFormat, THREE.UnsignedByteType, clsF);
+    else if (k === 'alt') t = tex3(un(args.scene.comboAlt), N, N, N, THREE.RGBAFormat, THREE.UnsignedByteType, clsF);
+    else if (k === 'patched') {
+      t = tex3(stale, N, N, N, THREE.RGBAFormat, THREE.UnsignedByteType, clsF); renderer.initTexture(t);
+      const src = new THREE.Data3DTexture(right, N, N, N); src.format = THREE.RGBAFormat; src.type = THREE.UnsignedByteType; src.unpackAlignment = 1;
+      const box = new THREE.Box3(), at = new THREE.Vector3();
+      for (let z = 0; z < N; z += 5) { box.min.set(0, 0, z); box.max.set(N, N, Math.min(N, z + 5)); at.set(0, 0, z); renderer.copyTextureToTexture(src, t, box, at); }
+    } else throw new Error('unknown comboVariant ' + k);
+    return (comboVars[k] = t);
+  };
   // the fourth segment's classification bytes (R8, VRL_CLS4) and the separate distance texture of the general loop (useDist), when the scene has them
   const cls4 = args.scene.cls4 ? tex3(un(args.scene.cls4), N, N, N, THREE.RedFormat, THREE.UnsignedByteType, clsF) : null;
   const distT = args.scene.dist ? tex3(un(args.scene.dist), N, N, N, THREE.RGBAFormat, THREE.UnsignedByteType, NN) : null;
@@ -127,6 +145,7 @@ export async function renderBatch(args) {
     const u = baseUniforms();
     for (const [k, v] of Object.entries(c.u || {})) { if (Array.isArray(v) && v.length && typeof v[0] === 'object') { const arr = v.map(a => V4(...a)); if (k === 'cutPlanes') while (arr.length < 10) arr.push(V4(0, 0, 1, 0)); /* the uniform array has 10 entries (three.js reads all of them) */ u[k] = { value: arr }; } else if (Array.isArray(v)) u[k] = { value: v.length === 4 ? V4(...v) : new THREE.Vector3(...v) }; else u[k] = { value: v }; }
     if (c.useClsRaw) u.clsTex = { value: clsRaw };
+    if (c.comboVariant) u.clsTex = { value: comboVar(c.comboVariant) };
     if (c.useDistTex) { if (!distT) throw new Error('useDistTex needs the scene distance bytes'); u.useDist = { value: 1 }; u.distInCls = { value: 0 }; u.distTex = { value: distT }; } // the general loop with its separate field
     if (args.scene.four) u.clsChan = { value: V4(0, 1, 2, 3) };
     if (c.noCls) { u.useCls = { value: 0 }; u.distInCls = { value: 0 }; }

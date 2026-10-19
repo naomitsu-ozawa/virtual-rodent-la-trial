@@ -18,11 +18,21 @@ const FAIL_LAPSE = 120;   // samples (60 s) after which a failed level may be tr
 // (>= 1 s each, > 4 s to the floor). After a jump in coverage (factor JUMP), JUMP_SAMPLES samples step down on the FIRST over sample and by
 // up to JUMP_SCALE at once; a drop in coverage by the same factor raises the resolution at once by the square root of the ratio (cost ~ pixels).
 export const JUMP = 1.3, JUMP_SAMPLES = 4, JUMP_SCALE = 0.5;
+// the ladder above reacts to a measured over sample, i.e. after the 0.5 s window in which the frames were
+// already slow (and after the covered pixels have jumped 1.3x between two windows; a steady zoom of 1.2x per window never counts as a jump). anticipate() is
+// called every frame with the volume's scale: when the scale grew by GROW_SCALE (area 1.25x) within GROW_WINDOW ms, the volume pass is about to cost
+// (growth)^2 as much, so the resolution is lowered AT ONCE by the inverse of the growth (clamped to GROW_MAX_DROP per call), never below the MID rung
+// (0.7: a slight blur; deeper rungs stay with the measured ladder), only when the last measurement says the predicted time would exceed the budget (or
+// there is none yet), and not while the data-resolution cap already holds the scale in use below the level (cost then follows the cap, not the zoom).
+// Recovery is the normal ladder. Scale constant, shrinking or growing slowly: no effect at all.
+export const GROW_SCALE = 1.12, GROW_WINDOW = 300, GROW_MAX_DROP = 0.6, GROW_SPACING = 30, GROW_RING = 16;
 
 export const autoFloor = idx => AUTO_FLOORS[idx] ?? AUTO_FLOORS[0];
 
 export function createAutoQuality({ min = AUTO_FLOORS[0], baseStep = 0, f = AUTO_MAX } = {}) {
-  const st = { f, stepIdx: baseStep, min, baseStep, over: 0, good: 0, penalty: 1, sinceUp: 99, stable: 0, failPos: null, sinceFail: 0, ctx: null, ceil: 1, cover: 0, jump: 0 };
+  const st = { f, stepIdx: baseStep, min, baseStep, over: 0, good: 0, penalty: 1, sinceUp: 99, stable: 0, failPos: null, sinceFail: 0, ctx: null, ceil: 1, cover: 0, jump: 0, lastVol: 0, lastRest: 0, lastBudget: 0, gAcc: 1, stale: false };
+  const gT = new Float64Array(GROW_RING), gS = new Float64Array(GROW_RING); let gN = 0, gHead = 0; // recent (time, scale) samples of anticipate()
+  const gReset = (now, scale) => { gHead = 0; gN = 1; gT[0] = now; gS[0] = scale; }; // measure the next growth from here (a continued zoom drops again, proportionally)
   // ceil = the data-resolution cap (vr-render-scale.js). The scale in use is min(level, ceil): rendering at the cap loses no detail,
   // so it may lie below the floor. The level (st.f) keeps its own place on the ladder; an over sample first brings it down to the cap.
   const eff = () => Math.min(st.f, st.ceil);
@@ -67,6 +77,28 @@ export function createAutoQuality({ min = AUTO_FLOORS[0], baseStep = 0, f = AUTO
     setFloor(m) { st.min = m; clampState(); },
     setBaseStep(i) { st.baseStep = i; clampState(); },
     setCeiling(c) { st.ceil = Math.min(AUTO_MAX, Math.max(0.01, +c || AUTO_MAX)); },
+    // called once per frame while the Auto resolution is on. scale = the volume holder's scale, now = ms. Returns true when the level was lowered.
+    anticipate(scale, now) {
+      if (!(scale > 0) || !Number.isFinite(now)) return false;
+      if (gN > 0 && now < gT[(gHead + gN - 1) % GROW_RING]) gN = 0; // the clock went back (a session restart): start again
+      if (gN === 0 || now - gT[(gHead + gN - 1) % GROW_RING] >= GROW_SPACING) { // at most one sample per GROW_SPACING ms
+        if (gN === GROW_RING) { gHead = (gHead + 1) % GROW_RING; gN--; }
+        const k = (gHead + gN) % GROW_RING; gT[k] = now; gS[k] = scale; gN++;
+      } else gS[(gHead + gN - 1) % GROW_RING] = scale; // the newest sample follows the frame
+      let ref = Infinity;
+      for (let i = 0; i < gN; i++) { const k = (gHead + i) % GROW_RING; if (now - gT[k] <= GROW_WINDOW && gS[k] < ref) ref = gS[k]; }
+      const ratio = scale / ref; // > 1: grown within the window
+      if (!(ratio >= GROW_SCALE)) return false;
+      const base = eff(), floor = Math.max(st.min, AUTO_MID);
+      if (st.ceil < st.f - 1e-6 || base <= floor + 1e-6) { gReset(now, scale); return false; } // capped by the data resolution, or already at / below the MID rung
+      const acc = st.gAcc * ratio * ratio; // the covered pixels (and so the volume pass) grow with the area: the growth since the last measurement
+      if (st.lastBudget > 0 && st.lastRest + st.lastVol * acc <= st.lastBudget * OVER) { st.gAcc = acc; gReset(now, scale); return false; } // measured headroom: no drop needed (yet)
+      const nf = Math.max(floor, base * Math.max(GROW_MAX_DROP, 1 / ratio));
+      gReset(now, scale);
+      if (!(nf < st.f - 1e-6)) { st.gAcc = acc; return false; }
+      st.gAcc = acc * (nf / base) ** 2; st.f = nf; st.good = 0; st.over = 0; st.stale = true; clampState();
+      return true;
+    },
     // sample: one 0.5 s window. volMs = GPU time of the low-resolution volume pass (0 when drawn directly),
     // mainMs = GPU time of the main pass (0 = no timer query: wall-clock interval only), interval = mean frame interval, budget = frame budget (ms)
     // cover = the screen pixels the volume covers (0 = unknown): a jump changes how fast the ladder moves (JUMP above)
@@ -81,6 +113,11 @@ export function createAutoQuality({ min = AUTO_FLOORS[0], baseStep = 0, f = AUTO
       const e0 = eff(), gpu = mainMs > 0;
       const total = mainMs + (e0 < AUTO_MAX ? volMs : 0);
       const vol = e0 < AUTO_MAX && volMs > 0 ? volMs : total, rest = e0 < AUTO_MAX && volMs > 0 ? mainMs : 0;
+      // a window in which anticipate() lowered the level mixes frames of two levels (at f = 1 the main pass also holds the volume,
+      // below it only the composite), so its timings describe neither: the ladder skips it (it would take a second, stale drop on top of the predicted
+      // one and lock the level it left via failPos) and anticipate() gets no headroom information from it. The next window measures the new level.
+      if (st.stale) { st.stale = false; st.over = 0; st.good = 0; st.gAcc = 1; st.lastVol = 0; st.lastRest = 0; st.lastBudget = 0; clampState(); return { f: eff(), stepIdx: st.stepIdx, changed: false, stepChanged: false }; }
+      st.gAcc = 1; if (gpu) { st.lastVol = vol; st.lastRest = rest; st.lastBudget = budget; } else { st.lastVol = 0; st.lastRest = 0; st.lastBudget = 0; } // for anticipate(); no timer = no headroom information
       const dropping = interval > budget * 1.5; // frames are being dropped anyway
       const isOver = gpu ? (total > budget * OVER || dropping) : interval > budget * 1.12;
       const before = { f: st.f, stepIdx: st.stepIdx };

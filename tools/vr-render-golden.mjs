@@ -90,9 +90,23 @@ const PROBE_NAMES = new Set(['noevents-allopaque-f100', 'combined-section-f100',
 const boxRuns = (list, sc) => [...list.filter(c => c.name.startsWith('xbox-')),
   ...list.map(c => boxCase(c, sc)), ...list.map(c => boxCase(c, sc, { boxEntry: 1 })),
   ...list.filter(c => PROBE_NAMES.has(c.name)).flatMap(c => [probeOf(c), probeOf(boxCase(c, sc))])];
+// the off-frame rebuild of the combined texture (docs/vr-combo-rebuild.js; vr-view.js uploadCombo / applyCombo), compared within the run:
+//  - patched: the texture holding a wrong alpha, then the right bytes sent in z slabs (copyTextureToTexture, as uploadCombo) = the normal image, pixel-identical;
+//  - interim: while a shown segment is added, the general loop without jumps (distInCls 0, useDist 0) reads the texture with an alpha that no longer fits:
+//    pixel-identical to the same loop on the plain classification bytes (the 距離場 diagnostic's path, golden full-cls-translucent);
+//  - hide: the jumps kept on an alpha built for more segments (a lower bound for fewer). That is the configuration of this golden set's own noevents-bonefat
+//    (alpha of 0b111, fat + bone shown) and of vr-cls-parity's fat-hidden case (checked against the CPU march there). Reported, not judged: the difference to
+//    the exact alpha of the shown segments (other jump lengths re-phase the samples,: dither on the fat sheets and specks)
+const byName = (list, n) => list.find(c => c.name === n), nsb = byName(jobs3, 'noevents-bonefat-f100'), ns4 = byName(jobs4, '4seg-noevents-f100');
+const REBUILD = [{ ...nsb, name: 'rb-patched', comboVariant: 'patched' }, { ...byName(jobs3, 'full-cls-translucent-f100'), name: 'rb-interim', useClsRaw: false, comboVariant: 'stale' }, { ...nsb, name: 'rb-hide-exact', comboVariant: 'alt' }];
+const REBUILD4 = [{ ...ns4, name: 'rb4-patched', comboVariant: 'patched' },
+  { name: 'rb4-interim', defines: ['VRL_CLS4'], f: 1, comboVariant: 'stale', u: { segA: allOpaque4, distInCls: 0, useDist: 0 } },
+  { name: 'rb4-interim-ref', defines: [], f: 1, useClsRaw: true, u: { segA: allOpaque4, distInCls: 0, useDist: 0 } }];
+const { combineClassificationDistance } = await import('../docs/distance-field.js');
+const comboAlt = combineClassificationDistance(scene.cls, scene.dist, 0b101); // bone + fat (noSoft): the exact alpha of noevents-bonefat (its golden uses the 0b111 one)
 const render = () => withPage(async (pg, info) => {
-  const r = await runBatch(pg, { sh, N, W, H, halfExt: HALF_EXT, scene: sceneArgs(scene), cases: [...jobs3, ...PROOF, ...boxRuns(BOX3, scene)], mode: 'color', filter: 'linear' });
-  const r4 = await runBatch(pg, { sh, N, W, H, halfExt: HALF_EXT, scene: sceneArgs(scene4), cases: [...jobs4, ...boxRuns(BOX4, scene4)], mode: 'color', filter: 'linear' });
+  const r = await runBatch(pg, { sh, N, W, H, halfExt: HALF_EXT, scene: { ...sceneArgs(scene), comboAlt: Buffer.from(comboAlt).toString('base64') }, cases: [...jobs3, ...PROOF, ...boxRuns(BOX3, scene), ...REBUILD], mode: 'color', filter: 'linear' });
+  const r4 = await runBatch(pg, { sh, N, W, H, halfExt: HALF_EXT, scene: sceneArgs(scene4), cases: [...jobs4, ...boxRuns(BOX4, scene4), ...REBUILD4], mode: 'color', filter: 'linear' });
   return { ...r, out: { ...r.out, ...r4.out }, glError: r.glError || r4.glError, info };
 });
 jobs.push(...jobs4);
@@ -152,6 +166,15 @@ for (const j of jobs) {
   console.log((boxFails.length ? 'FAIL ' : 'ok   ') + 'content-box proof: ' + (n - boxFails.length) + ' / ' + n + ' images pixel-identical to the full-box render' + (boxFails.length ? ': ' + boxFails.join(', ') : ''));
   console.log('     (reference, not judged) march also starting at the content box: ' + inDiffs.length + ' / ' + n + ' images differ, worst ' + worstIn.pixels + ' px / max channel diff ' + worstIn.maxDiff + (worstIn.name ? ' (' + worstIn.name + ')' : ''));
   if (boxFails.length) failed = true;
+}
+// the combined-texture rebuild proof
+{
+  const px = n => first.out[n], same = (a, b) => { const d = diffPixels(px(a), px(b)); const ok = !d.pixels && !d.maxDiff; console.log((ok ? 'ok   ' : 'FAIL ') + 'combo rebuild: ' + a + ' vs ' + b + ': changed pixels ' + d.pixels + ', max channel diff ' + d.maxDiff); return ok; };
+  let ok = same('rb-patched', 'noevents-bonefat-f100') & same('rb4-patched', '4seg-noevents-f100') & same('rb-interim', 'full-cls-translucent-f100') & same('rb4-interim', 'rb4-interim-ref');
+  const covered = p => { const c = new Uint8Array(W * H); for (let i = 0; i < c.length; i++) { const o = i * 4; if (Math.abs(p[o] - BGpx[0]) + Math.abs(p[o + 1] - BGpx[1]) + Math.abs(p[o + 2] - BGpx[2]) > 6) c[i] = 1; } return c; };
+  const a = covered(px('noevents-bonefat-f100')), b = covered(px('rb-hide-exact')), d = diffPixels(px('noevents-bonefat-f100'), px('rb-hide-exact')); let sil = 0; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) sil++;
+  console.log('     (reference, not judged) combo rebuild: hide with the superset alpha vs the exact alpha: silhouette pixels changed ' + sil + ', changed pixels ' + d.pixels + ', max channel diff ' + d.maxDiff);
+  if (!ok) { failed = true; fs.mkdirSync(outDir, { recursive: true }); for (const n of ['rb-patched', 'rb4-patched', 'rb-interim', 'rb4-interim', 'rb4-interim-ref', 'rb-hide-exact']) fs.writeFileSync(path.join(outDir, n + '.png'), encodePng(px(n), W, H)); }
 }
 if (update) console.log('goldens updated in ' + path.relative(ROOT, goldenDir) + ': review the images and commit them, stating why the picture changed');
 else if (failed) { console.error('vr-render-golden FAILED (actual / diff images in ' + path.relative(ROOT, outDir) + '). If the change is intended, rerun with --update, review and commit the goldens.'); process.exit(1); }
