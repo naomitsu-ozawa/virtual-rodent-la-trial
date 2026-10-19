@@ -12,17 +12,17 @@
 //   same events as the slider itself (input while moving, change on release), so the segment code runs exactly as for a slider.
 // - build 568: the VR board counts the VR data itself (vr-label-histogram.js) and reads only the display range and the scale from here; the VR
 //   consumer / texture pass of builds 557-566 (acquireHistogram, getHistogramView, ...) is gone.
-import { volume, current3DVolume, currentLanguage } from './state.js?v=20261019-build623';
-import { segmentState, SEGMENT_PRESET_ORDER, segmentNeedsVoxelMask, segmentEditGen, segmentSourceSignature } from './segments.js?v=20261019-build623';
-import { getFinalSegmentRuns } from './segment-runs.js?v=20261019-build623';
-import { sourceFilterStages, sourceFilterSignature } from './source-filters.js?v=20261019-build623';
-import { getHuMode, effectiveHuSignature, huModeToggle, segmentNeedsRuns } from './effective-hu.js?v=20261019-build623';
-import { readEffectiveSlice, rawHuVolume, filtersActive } from './effective-hu-source.js?v=20261019-build623';
-import { segmentRunsCacheKey } from './segment-cache-key.js?v=20261019-build623';
-import { setCtSliderRange, ctSliderFullBounds, segmentControl } from './segment-ui.js?v=20261019-build623';
-import { tr } from './i18n.js?v=20261019-build623';
-import { frameYield } from './utils.js?v=20261019-build623';
-import { createHist, binValues, binRuns, scaleHist, histInRange, rebinHist, histExtent, histStats, voxelsToMm3, huToX, xToHu, nearestLine, niceStep, windowFor, clampWindow, zoomWindow, normalizeRange } from './histogram.js?v=20261019-build623';
+import { volume, current3DVolume, currentLanguage } from './state.js?v=20261019-build624';
+import { segmentState, SEGMENT_PRESET_ORDER, segmentNeedsVoxelMask, segmentEditGen, segmentSourceSignature } from './segments.js?v=20261019-build624';
+import { getFinalSegmentRuns } from './segment-runs.js?v=20261019-build624';
+import { sourceFilterStages, sourceFilterSignature } from './source-filters.js?v=20261019-build624';
+import { getHuMode, effectiveHuSignature, huModeToggle, segmentNeedsRuns } from './effective-hu.js?v=20261019-build624';
+import { readEffectiveSlice, rawHuVolume, filtersActive } from './effective-hu-source.js?v=20261019-build624';
+import { segmentRunsCacheKey } from './segment-cache-key.js?v=20261019-build624';
+import { setCtSliderRange, ctSliderFullBounds, segmentControl } from './segment-ui.js?v=20261019-build624';
+import { tr } from './i18n.js?v=20261019-build624';
+import { frameYield } from './utils.js?v=20261019-build624';
+import { createHist, binValues, binRuns, scaleHist, histInRange, rebinHist, histExtent, histStats, voxelsToMm3, huToX, xToHu, nearestLine, niceStep, windowFor, clampWindow, zoomWindow, normalizeRange } from './histogram.js?v=20261019-build624';
 const MAX_RETRIES = 6, POLL_MS = 400, DRAFT_MIN_SLICES = 240, DRAFT_SLICES = 80, CACHE_MAX = 24, CHART_H = 150, GRAB_PX = 6, PAD = { l: 34, r: 8, t: 14, b: 20 };
 const RANGE_KEY = 'vrl-hist-range-v1';
 // the chart's display range ('auto' = robust to tails, 'full' = min..max, 'manual'): remembered per viewer, never required
@@ -387,6 +387,12 @@ export const getHistogramRange = () => st.range;
 export function setHistogramRange(range) { setRange(range); }
 export function onHistogramChange(fn) { st.listeners.add(fn); return () => st.listeners.delete(fn); }
 export function setHistogramLog(on) { st.log = !!on; draw(true); }
+// 体験会モード (event-fresh.js): back to the start state (自動 range, linear scale) and the remembered range of the previous visitor is forgotten
+export function resetHistogramView() {
+  st.log = false; st.range = normalizeRange(null); st.win = null; st.hover = null; st.drag = null;
+  try { localStorage.removeItem(RANGE_KEY); } catch { /* private window */ }
+  draw(true);
+}
 export function installSegmentHistogram() {
   const btn = document.getElementById('seg-hist-toggle'), box = document.getElementById('seg-hist-result');
   if (!btn || !box) return;

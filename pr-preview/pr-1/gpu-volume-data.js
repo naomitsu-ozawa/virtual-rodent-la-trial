@@ -1,18 +1,18 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { beginSharedMpr3DPreview } from './mpr3d-overlay.js?v=20261019-build623';
-import { gpuStepTimes, gpuFilterRuntime, gpuCounts } from './gpu-compute.js?v=20261019-build623';
-import { gpuVolumeRefresh, updateVolumeFilterBadge, set3DBusy } from './three-status.js?v=20261019-build623';
-import { sourceVolume, volume, sceneState, currentLanguage, threeRenderMode, ipadGpuTargetSide } from './state.js?v=20261019-build623';
-import { SEGMENT_PRESET_ORDER, gpuSegmentOrder, segmentEditState, segmentState, segmentHasProcessedMask, segmentAddsVoxels } from './segments.js?v=20261019-build623';
-import { request3DRender } from './scene3d.js?v=20261019-build623';
-import { footer, volumeCacheClearBtn } from './ui-shell.js?v=20261019-build623';
-import { subtractRunArrays, intersectRunArrays } from './run-length.js?v=20261019-build623';
-import { tr } from './i18n.js?v=20261019-build623';
-import { fmt, isTabletRuntime, isIPhoneRuntime } from './utils.js?v=20261019-build623';
-import { openVolumeCache, cacheKey, textureCacheHandle, pruneOtherFilterSettings } from './gpu-volume-cache.js?v=20261019-build623';
-import { datasetFingerprint } from './project-file.js?v=20261019-build623';
-import { getFilteredSourceAxialBlock, currentFilterSignature, volumeBlockDepth, volumeBlockBudget } from './source-filters.js?v=20261019-build623';
+import { beginSharedMpr3DPreview } from './mpr3d-overlay.js?v=20261019-build624';
+import { gpuStepTimes, gpuFilterRuntime, gpuCounts } from './gpu-compute.js?v=20261019-build624';
+import { gpuVolumeRefresh, updateVolumeFilterBadge, set3DBusy } from './three-status.js?v=20261019-build624';
+import { sourceVolume, volume, sceneState, currentLanguage, threeRenderMode, ipadGpuTargetSide } from './state.js?v=20261019-build624';
+import { SEGMENT_PRESET_ORDER, gpuSegmentOrder, segmentEditState, segmentState, segmentHasProcessedMask, segmentAddsVoxels } from './segments.js?v=20261019-build624';
+import { request3DRender } from './scene3d.js?v=20261019-build624';
+import { footer, volumeCacheClearBtn } from './ui-shell.js?v=20261019-build624';
+import { subtractRunArrays, intersectRunArrays } from './run-length.js?v=20261019-build624';
+import { tr } from './i18n.js?v=20261019-build624';
+import { fmt, isTabletRuntime, isIPhoneRuntime } from './utils.js?v=20261019-build624';
+import { openVolumeCache, cacheKey, textureCacheHandle, pruneOtherFilterSettings } from './gpu-volume-cache.js?v=20261019-build624';
+import { datasetFingerprint } from './project-file.js?v=20261019-build624';
+import { getFilteredSourceAxialBlock, currentFilterSignature, volumeBlockDepth, volumeBlockBudget } from './source-filters.js?v=20261019-build624';
 export const gpuVolumeApplied={seriesId:null,signature:''};
 export function gpuVolumeDataSignature(){
  const id=(sourceVolume||volume)?.series?.id??null,applied=gpuVolumeApplied.seriesId===id?gpuVolumeApplied.signature:'';
@@ -127,14 +127,15 @@ export async function refreshGpuVolumeData(){
   footer.textContent=(currentLanguage==='ja'?'3D再構築エラー（表示は途中まで更新）: ':'3D rebuild error (volume partly updated): ')+String(e?.message||e)+(gpuFilterRuntime.lastError?' · GPU: '+gpuFilterRuntime.lastError:'')}}
  finally{if(token===gpuVolumeRefresh.token){gpuVolumeRefresh.running=null;set3DBusy(false)}updateVolumeFilterBadge()}
 }
-export function gpuVolumeEditDescriptors(v=sourceVolume||volume){
+// avail (optional): which segments count as shown (default: active and enabled); VR in event mode also takes the ones the page keeps hidden (vr-view.js segAvail)
+export function gpuVolumeEditDescriptors(v=sourceVolume||volume,avail=seg=>!!(seg?.active&&seg.enabled)){
  const out={};if(!v)return out;
  for(const key of SEGMENT_PRESET_ORDER){
   const st=segmentEditState[key],seg=segmentState[key];if(!st)continue;
   // post-processed segments (Opening, thin-region suppression, ...) and segments below a voxel taker (build 459): the
   // volume shader only thresholds, so show the final voxels as a keep mask. maskOnly (Closing / hole filling can add
   // voxels outside the HU range): the shader decides by the mask alone, as the 2D views do.
-  if(seg?.active&&seg.enabled&&segmentHasProcessedMask(key)&&st.baseRuns?.length===v.slices){
+  if(avail(seg)&&segmentHasProcessedMask(key)&&st.baseRuns?.length===v.slices){
    let runs=st.keepRuns?intersectRunArrays(st.baseRuns,st.keepRuns,v.slices):st.baseRuns;
    if(st.excludeRuns)runs=subtractRunArrays(runs,st.excludeRuns,v.slices);
    out[key]={mode:'keep',runs,cutRuns:st.cutRuns,maskOnly:segmentAddsVoxels(seg)};continue;

@@ -8,9 +8,14 @@ export const isHand=s=>!!(s&&s.hand);
 
 // ---- One Euro filter (Casiez, Roussel, Vogel, CHI 2012) ----
 // Low-pass whose cutoff rises with the speed: cutoff = minCutoff + beta * speed * speedScale (Hz). speed = the length of the filtered
-// derivative over all n channels (units/s); speedScale converts it to the unit beta is tuned for (1000: metres -> mm, so beta 0.01 = +1 Hz
-// per 100 mm/s). minCutoff 1 Hz: the hand's jitter at rest is smoothed; a fast move raises the cutoff so the ray does not trail.
-export const ONE_EURO={minCutoff:1,beta:0.01,dCutoff:1};
+// derivative over all n channels (units/s); speedScale converts it to the unit beta is tuned for (1000: metres -> mm, so beta 0.05 = +5 Hz
+// per 100 mm/s). minCutoff: the hand's jitter at rest is smoothed; a fast move raises the cutoff so the ray does not trail.
+// build 626 (latency): the speed itself is low-passed at dCutoff. At 1 Hz (the paper's value) the cutoff only opened ~160 ms after a move had started and a
+// slow move (2-10 cm/s: fine placing) trailed by 35-70 ms; dCutoff 5 / beta 0.05 / minCutoff 1.2 halve that (tests/unit/vr-hand.test.js measures it) while
+// the rest jitter stays ~0.2 mm rms. Tunable on the device: localStorage vrl-hand-filter (see parseFilterTune).
+export const ONE_EURO={minCutoff:1.2,beta:0.05,dCutoff:5};
+// the palm anchor (what a fist holds): a held object is compared with the real hand by the eye, so it is filtered much less than the ray
+export const PALM_FILTER={minCutoff:5,beta:0.15,dCutoff:8};
 export const euroAlpha=(cutoffHz,dtS)=>{const r=2*Math.PI*cutoffHz*dtS;return r/(r+1)};
 export function createOneEuro(n,{minCutoff=ONE_EURO.minCutoff,beta=ONE_EURO.beta,dCutoff=ONE_EURO.dCutoff,speedScale=1}={}){
  const x=new Float64Array(n),dx=new Float64Array(n);let t=null;
@@ -63,9 +68,21 @@ export function createPinchHysteresis({on=PINCH_ON_M,off=PINCH_OFF_M}={}){
 
 // ---- delayed ray ----
 // Closing / opening the fingers moves the system's pinch ray just before the pinch is recognised (and just after it ends). The hand's ray is
-// therefore taken RAY_DELAY_MS in the past: the target under the ray at selectstart / selectend is where the ray was before the fingers moved.
-// A ring of the last `size` poses; at(t) = the newest pose at or before t (the oldest one when the record is shorter than the delay).
+// therefore taken in the past: the target under the ray at selectstart / selectend is where the ray was before the fingers moved.
+// build 626 (latency): the delay is needed only while the thumb and the index are close (a pinch is forming / ending); an open hand pointing around has
+// none. rayDelayMs(d): 0 at index-thumb distance d >= RAY_DELAY.farM, RAY_DELAY.maxMs at d <= nearM, linear between (an unknown distance: the full delay).
 export const RAY_DELAY_MS=60;
+export const RAY_DELAY={maxMs:RAY_DELAY_MS,farM:0.06,nearM:0.03};
+export function rayDelayMs(d,{maxMs=RAY_DELAY.maxMs,farM=RAY_DELAY.farM,nearM=RAY_DELAY.nearM}={}){
+ if(!(maxMs>0))return 0;
+ if(!Number.isFinite(d))return maxMs;
+ if(d<=nearM)return maxMs;
+ if(d>=farM||!(farM>nearM))return 0;
+ return maxMs*(farM-d)/(farM-nearM);
+}
+// the delay may rise at once (a pinch is forming) but falls at most `fall` ms per ms (the sampled time catches up smoothly: no jump of the ray when the fingers open)
+export const slewDelay=(cur,target,dtMs,fall=0.5)=>target>=cur?target:Math.max(target,cur-fall*Math.max(0,dtMs));
+// A ring of the last `size` poses; at(t) = the newest pose at or before t (the oldest one when the record is shorter than the delay).
 export function createPoseHistory(size=24){
  const T=new Float64Array(size),P=new Float64Array(size*7);let head=0,count=0;
  return{
@@ -179,8 +196,9 @@ export function grabScore(curls){
  return Number.isFinite(m)?m:NaN;
 }
 // GRAB: start below `on` held for holdMs (a hand passing through a fist while a pinch opens does not grab), end above `off` (hysteresis: no flicker).
-// Tunable on the device: localStorage vrl-hand-grab = '{"on":0.55,"off":0.7,"holdMs":100}'
-export const GRAB={on:0.55,off:0.7,holdMs:100};
+// build 626: holdMs 100 -> 60 (a closing hand passes through `on` only while it is really closing; the fist guard of the pinch is separate);
+// near: the reach (m) of the direct grab (nearGrab below). Tunable on the device: localStorage vrl-hand-grab = '{"on":0.55,"off":0.7,"holdMs":60,"near":0.05}'
+export const GRAB={on:0.55,off:0.7,holdMs:60,near:0.05};
 // update(score, now, blocked) -> 'start' | 'end' | null. NaN keeps the state (a start that was pending is dropped). blocked (the hand is busy: it drags
 // something) never starts a grab. release(): the grab was ended from outside (tracking lost / refused / ungrabbed): latched until the hand has opened
 // (score above off) once, so a hand that comes back as a fist does not take the volume at once.
@@ -217,19 +235,65 @@ export function fistForming(curls,max=FIST_GUARD_CURL){
 export const PALM_FROM_WRIST=0.55; // palm centre = wrist + this * (middle-finger knuckle - wrist)
 export const palmPoint=(w,k,out=[0,0,0])=>{for(let i=0;i<3;i++)out[i]=w[i]+PALM_FROM_WRIST*(k[i]-w[i]);return out};
 
+// ---- direct grab (build 626): a fist that forms with the palm in / near an object takes that object itself (no laser) ----
+// Distances in metres. Plain {x,y,z} (or three Vector3) in, numbers out; no allocation.
+// the distance from p to the box [min,max] (0 inside or on it); a flat board (min.z == max.z) is its rectangle
+export function boxDist(p,min,max){
+ const dx=Math.max(min.x-p.x,0,p.x-max.x),dy=Math.max(min.y-p.y,0,p.y-max.y),dz=Math.max(min.z-p.z,0,p.z-max.z);
+ return Math.sqrt(dx*dx+dy*dy+dz*dz);
+}
+// the distance from p to the box centred at the origin with half extents h = [hx,hy,hz]
+export function centeredBoxDist(p,h){
+ const dx=Math.max(Math.abs(p.x)-h[0],0),dy=Math.max(Math.abs(p.y)-h[1],0),dz=Math.max(Math.abs(p.z)-h[2],0);
+ return Math.sqrt(dx*dx+dy*dy+dz*dz);
+}
+// the distance from p (in the section frame's own space: local X = the plane normal, the square |y|,|z| <= h) to the square's OUTLINE (the thin frame
+// line): inside the square it is the distance to the nearest edge (and the offset off the plane), outside it is the distance to the square. The face of
+// the square is not a target: the volume it cuts through is, so the volume stays grabbable with the sections on.
+export function squareOutlineDist(p,h){
+ const ay=Math.abs(p.y),az=Math.abs(p.z),ax=Math.abs(p.x);
+ if(ay<=h&&az<=h){const e=h-Math.max(ay,az);return Math.sqrt(ax*ax+e*e)}
+ const dy=Math.max(ay-h,0),dz=Math.max(az-h,0);
+ return Math.sqrt(ax*ax+dy*dy+dz*dz);
+}
+// What a fist takes when several things are within `near`: the boards (menu, help, histogram, HU panel: the nearest, the listed order on a tie), else a
+// section (its frame / number tag; the nearest), else the volume (inside its box or within near). Sections rank above the volume on purpose: a palm inside the
+// box is at distance 0 from the volume and a section 2 cm away would never win otherwise. Each candidate is {kind,d,ref}; d = Infinity / NaN: not a candidate.
+export const NEAR_KINDS=['menu','help','hist','hu','section','volume'];
+const nearGroup=k=>k==='volume'?2:k==='section'?1:0;
+export function pickNearGrab(cands,near=GRAB.near){
+ let best=null,bg=9,bd=Infinity,bi=9;
+ for(let i=0;i<cands.length;i++){
+  const c=cands[i];if(!c||!(c.d<=near))continue;
+  const g=nearGroup(c.kind),oi=NEAR_KINDS.indexOf(c.kind);
+  if(!best||g<bg||(g===bg&&(c.d<bd-1e-6||(c.d<=bd+1e-6&&oi<bi)))){best=c;bg=g;bd=c.d;bi=oi}
+ }
+ return best;
+}
+
+// ---- tunables (localStorage), parsed from the JSON text (null / malformed / not an object: nothing) ----
+const numOr=(v,min,max)=>{if(v===null||v===undefined||v==='')return undefined;const n=+v;return Number.isFinite(n)&&n>=min&&n<=max?n:undefined};
+const pick=(v,spec)=>{const o={};if(!v||typeof v!=='object')return o;for(const k in spec){const n=numOr(v[k],spec[k][0],spec[k][1]);if(n!==undefined)o[k]=n}return o};
+const jsonOf=t=>{try{return typeof t==='string'?JSON.parse(t):t}catch{return null}};
+// vrl-hand-filter = '{"minCutoff":1.2,"beta":0.05,"dCutoff":5,"aMinCutoff":5,"aBeta":0.15,"aDCutoff":8,"delayMs":60,"delayFar":0.06,"delayNear":0.03}'
+// (delayMs 0: no delay at all; delayNear 10: the old fixed delay whatever the fingers do)
+export const parseFilterTune=t=>pick(jsonOf(t),{minCutoff:[0.05,60],beta:[0,5],dCutoff:[0.1,60],aMinCutoff:[0.05,60],aBeta:[0,5],aDCutoff:[0.1,60],delayMs:[0,200],delayFar:[0,1],delayNear:[0,10]});
+// vrl-hand-grab = '{"on":0.55,"off":0.7,"holdMs":60,"near":0.05}'
+export const parseGrabTune=t=>pick(jsonOf(t),{on:[0,1.5],off:[0,1.5],holdMs:[0,2000],near:[0,0.3]});
+
 // ---- texts (hands only; the controller texts stay in vr-view.js) ----
 export function handTexts(ja){
  return ja?{
-  helpBasic:['ピンチ（短く）：点を記録／点を選択（点で長くつまむ：移動・削除・色・距離）','グー（拳を握る）：ボリュームを掴んで移動・回転／板に向けて握ると板を移動','両手でグー：2つの拳の間隔で拡大・縮小','左手首の甲を顔に向ける：手首メニュー（A/X・B/Y・断面＋／－の代わり）','手首メニュー：右手のレーザーで指してピンチ','手首メニューの「メニュー」：メニューの開閉'],
-  helpSec:['枠の細い線・番号札：ピンチで選択／つまんだまま動かして移動・回転','ピンチ（短く）：断面や組織に点を記録／点に当てて選択、点で長くつまむ：リング','手首メニューの「断面＋／－」：選んだ断面を法線方向へ送る（押し続ける）','グー：ボリュームの移動・回転・板の移動／両手でグー：拡大・縮小','左手首の甲を顔に向ける：手首メニュー（断面の表示／非表示・追加）','手首メニューの「メニュー」：メニューの開閉'],
-  helpMenu:'ピンチ：メニューのボタン・スライダー／グー：メニュー板を移動',
-  helpMenuSimple:'ピンチ：メニューのボタン／グー：メニュー板を移動',
+  helpBasic:['ピンチ（短く）：点を記録／点を選択（点で長くつまむ：移動・削除・色・距離）','グー：ボリューム・板・メニューに手を重ねて握る＝掴む（遠くはレーザーで狙う）','両手でグー：2つの拳の間隔で拡大・縮小','左手首の甲を顔に向ける：手首メニュー（A/X・B/Y・断面＋／－の代わり）','手首メニュー：右手のレーザーで指してピンチ','手首メニューの「メニュー」：メニューの開閉'],
+  helpSec:['枠の細い線・番号札：ピンチで選択／つまんだまま動かして移動・回転','ピンチ（短く）：断面や組織に点を記録／点に当てて選択、点で長くつまむ：リング','手首メニューの「断面＋／－」：選んだ断面を法線方向へ送る（押し続ける）','グー：枠・ボリュームに手を重ねて握る＝掴んで移動・回転／両手でグー：拡大・縮小','左手首の甲を顔に向ける：手首メニュー（断面の表示／非表示・追加）','手首メニューの「メニュー」：メニューの開閉'],
+  helpMenu:'ピンチ：メニューのボタン・スライダー／グー：メニュー板に手を重ねて移動',
+  helpMenuSimple:'ピンチ：メニューのボタン／グー：メニュー板に手を重ねて移動',
   wrist:on=>[['よく使う','（リング）'],['メニュー','開く／閉じる'],['断面',on?'非表示にする':'表示する'],['断面を','追加'],['取り消し',''],['断面','－'],['断面','＋']],
  }:{
-  helpBasic:['Pinch (short): record / select a point (hold on a point: move, delete, colour, distance)','Fist: grab the volume and move / turn it; a fist aimed at a board moves the board','Two fists: the distance between them scales the volume','Back of the left wrist to your eyes: wrist menu (replaces A/X, B/Y, section + / -)','Wrist menu: point with the right hand and pinch','Wrist menu “Menu”: open / close the menu'],
-  helpSec:['Thin frame line / number tag: pinch selects, pinch and move to slide / rotate','Pinch (short): record a point on a section or tissue; on a point selects it; hold on a point: ring','Wrist menu “Section + / -”: slides the selected section along its normal (hold)','Fist: move / turn the volume, move a board; two fists: scale','Back of the left wrist to your eyes: wrist menu (show / hide / add sections)','Wrist menu “Menu”: open / close the menu'],
-  helpMenu:'Pinch: menu buttons and sliders; fist: move the menu board',
-  helpMenuSimple:'Pinch: menu buttons; fist: move the menu board',
+  helpBasic:['Pinch (short): record / select a point (hold on a point: move, delete, colour, distance)','Fist on / near the volume, a board or the menu: grab it (far away: aim the laser, fist)','Two fists: the distance between them scales the volume','Back of the left wrist to your eyes: wrist menu (replaces A/X, B/Y, section + / -)','Wrist menu: point with the right hand and pinch','Wrist menu “Menu”: open / close the menu'],
+  helpSec:['Thin frame line / number tag: pinch selects, pinch and move to slide / rotate','Pinch (short): record a point on a section or tissue; on a point selects it; hold on a point: ring','Wrist menu “Section + / -”: slides the selected section along its normal (hold)','Fist on a section frame or the volume: grab, move / turn; two fists: scale','Back of the left wrist to your eyes: wrist menu (show / hide / add sections)','Wrist menu “Menu”: open / close the menu'],
+  helpMenu:'Pinch: menu buttons and sliders; fist on the menu board: move it',
+  helpMenuSimple:'Pinch: menu buttons; fist on the menu board: move it',
   wrist:on=>[['Quick','ring'],['Menu','open / close'],['Sections',on?'hide':'show'],['Add','section'],['Undo',''],['Section','-'],['Section','+']],
  };
 }
