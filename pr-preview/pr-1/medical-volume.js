@@ -1,7 +1,7 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.webgpu.js';
 import dicomParser from 'https://esm.sh/dicom-parser@1.8.21';
-import { canvasBackground3dUnit } from './canvas-theme.js?v=20261019-build622';
-import { lightOffsetExpr, lightingWGSL, MATERIALS, materialKey } from './lighting.js?v=20261019-build622';
+import { canvasBackground3dUnit } from './canvas-theme.js?v=20261019-build623';
+import { lightOffsetExpr, lightingWGSL, MATERIALS, materialKey } from './lighting.js?v=20261019-build623';
 
 const UNCOMPRESSED_TS=new Set(['1.2.840.10008.1.2','1.2.840.10008.1.2.1','1.2.840.10008.1.2.2']);
 const safeWgsl=source=>source.replace(/\bmeta\b/g,'vrlMeta').replace(/\bactive\b/g,'vrlActive').replace(/\btarget\b/g,'vrlTarget');
@@ -1472,7 +1472,7 @@ struct O{@builtin(position) p:vec4<f32>,@location(0) uv:vec2<f32>};
  async pick(clientX,clientY,camera,obj,segmentState,segmentOrder,preferredKey=null){
   const result=await this.pickMany([{clientX,clientY}],camera,obj,segmentState,segmentOrder,preferredKey);return result[0]||null;
  }
- resetData(){this.dataGeneration=(this.dataGeneration|0)+1;this.setActive(false);this.texture?.destroy?.();this.brickBuffer?.destroy?.();this.texture=null;this.brickBuffer=null;this.bindGroup=null;this.seriesId=null;this.bricksReady=false;this.previewVolume=null;this.previewPlaneBuffers={coronal:null,sagittal:null};this.volume=null;this.textureDims=[1,1,1];this.reducedVolume=false;this.textureBytes=0;this.planSignature='';this.clearEditRuns();this.clearPreviewRuns();this.clearAppliedCutRuns()}
+ resetData(){this.dataGeneration=(this.dataGeneration|0)+1;this.setActive(false);this.texture?.destroy?.();this.brickBuffer?.destroy?.();this.texture=null;this.brickBuffer=null;this.bindGroup=null;this.seriesId=null;this.bricksReady=false;this.previewVolume=null;this.previewPlaneBuffers={coronal:null,sagittal:null};this.volume=null;this.textureDims=[1,1,1];this.reducedVolume=false;this.textureBytes=0;this.planSignature='';this.clearEditRuns();this.clearPreviewRuns();this.clearAppliedCutRuns();this.clearAnalysisRuns()} // build 627: the region index texture (r32uint, 67 MB at 512³) and the overlay buffer belong to the old grid too: released here, not at the next clearAnalysisRuns
  destroy(){this.resetData();this.regionTexture?.destroy?.();this._regionDummy?.destroy?.();this.uniformBuffer?.destroy?.();this.pickBuffer?.destroy?.();this.pickOutput?.destroy?.();this.editRowsBuffer?.destroy?.();this.editIntervalsBuffer?.destroy?.();this.previewRowsBuffer?.destroy?.();this.previewIntervalsBuffer?.destroy?.();this.analysisOverlayBuffer?.destroy?.();this.appliedCutRowsBuffer?.destroy?.();this.appliedCutIntervalsBuffer?.destroy?.();this.mprUniformBuffer?.destroy?.();this.canvas.remove()}
 }
 

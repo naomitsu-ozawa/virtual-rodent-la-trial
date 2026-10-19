@@ -25,3 +25,10 @@ export function resetSegmentStyles(state, defaults) {
   }
   return changed;
 }
+
+// build 627: runs fn each time another dataset is opened or the data is cleared (state.js setActiveSeries dispatches 'vrl-serieschange' only when the
+// series object changes: the same series card again does not). For modules that keep a copy of the dataset (the prepared VR data) and must let it go.
+// A throwing release must not stop the others / the series switch itself.
+export function onDatasetChange(fn, target = globalThis.document) {
+  target?.addEventListener?.('vrl-serieschange', () => { try { fn(); } catch (e) { console.warn('Releasing the previous dataset failed:', e); } });
+}

@@ -1,8 +1,8 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
 import dicomParser from 'https://esm.sh/dicom-parser@1.8.21';
-import { multi, safePair, num, safeTriple, numberOr, frameYield } from './utils.js?v=20261019-build622';
-import { analyzeSliceSpacing, excludeDuplicateSlices, seriesNormal, slicePosition } from './slice-spacing.js?v=20261019-build622';
+import { multi, safePair, num, safeTriple, numberOr, frameYield } from './utils.js?v=20261019-build623';
+import { analyzeSliceSpacing, excludeDuplicateSlices, seriesNormal, slicePosition } from './slice-spacing.js?v=20261019-build623';
 export async function parseDicomHeader(file){
  const attempts=[Math.min(file.size,256*1024),Math.min(file.size,1024*1024)];
  let lastError=null;

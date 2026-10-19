@@ -1,52 +1,53 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js';
-import { volumeTexturePlan, reduceSliceArea, packedRgSlice, packCtSlice, gpuRunsForTexture } from './medical-volume.js?v=20261019-build622';
-import { gpuVolumeTarget, gpuVolumeEditDescriptors } from './gpu-volume-data.js?v=20261019-build622';
-import { SEGMENT_PRESET_ORDER, gpuSegmentOrder, analysisRegionShown, segmentState, segmentEditState, segmentSourceSignature } from './segments.js?v=20261019-build622';
-import { sceneState, analysisRegions, activeSeries } from './state.js?v=20261019-build622';
-import { datasetFingerprint } from './project-file.js?v=20261019-build622';
-import { sectionRayHit, recordVrPoint, resolveTriggerTarget, createTriggerPress, dragShouldStart, DRAG_RECORD, sectionFollowStart, sectionFollowStep, snapPlaneCenterIntoBox, chooseSectionForRay, rayLocalPlaneX, squareBandContains, createHoverPulse, qMul, qInv, qRot, qAngleDeg, clampPlaneCenter, HAPTIC, normalizePointMode, surfaceVoxelFromHit, voxelToLocal, voxelSize, createStickGate, deleteSelected, createUndoStack, applyUndo, pointIsHidden } from './vr-point.js?v=20261019-build622';
-import { createVrPointMarkers, createSurfaceCursor } from './vr-point-markers.js?v=20261019-build622';
-import { buildClsData } from './point-cls.js?v=20261019-build622';
-import { createHiddenClsManager } from './hidden-cls-state.js?v=20261019-build622';
-import { WHEEL_ITEMS, DEFAULT_WHEEL, normalizeWheelItems, migrateWheelSectionFlip, setWheelItem, moveWheelItem, clearWheelItem, createRingMenu, createWheelStick, createButtonPress } from './vr-ring.js?v=20261019-build622';
-import { getComments, onCommentsChange, commentMatchesSeries, removeComment, restoreComment, updateCommentPosition, updateCommentText, updateCommentColor } from './comments.js?v=20261019-build622';
-import { POINT_PALETTE, pointColor, normalizeColor } from './point-colors.js?v=20261019-build622';
-import { buildDistanceBytes, combineClassificationDistance, fourthChannelBytes } from './distance-field.js?v=20261019-build622';
-import { marchClassificationHitInfo } from './vr-pick.js?v=20261019-build622';
-import { setBusySlot, reportBusyProgress } from './progress-modal.js?v=20261019-build622';
-import { tr } from './i18n.js?v=20261019-build622';
-import { wrapMenuText, stackMenuRows } from './vr-menu-text.js?v=20261019-build622';
-import { activeEventLevel, eventModeOn, missionLines, simpleMenuSegments, triggerModeRow, triggerMode, TRIGGER_AT_START, simpleMenuLayout, SIMPLE_MENU } from './event-mode.js?v=20261019-build622'; // build 626: 体験会モード - the chosen level's mission on the help board, the かんたん menu
-import { VIEW_TOGGLE_ID, VIEW_TOGGLE_BUTTON, SECTION_DELETE_ID, createViewToggle, createDoublePress, ringIdsFor } from './vr-view-toggle.js?v=20261019-build622';
-import { vrSpacingNote, vrVolumeText } from './vr-spacing-note.js?v=20261019-build622';
-import { NORM_LONG, physicalExtentsMm, longestMm, realMagnification, realHolderScale, startHolderScale, magnificationText, createScaleTag, clampScale, pinchScale, scaleLimits, oversizeNote, planeFrameLocalScale, planeTagLocalScale, scaleLineText } from './vr-real-scale.js?v=20261019-build622';
-import { createAutoQuality, autoFloor, STEP_LEVELS, marchStep } from './vr-auto-quality.js?v=20261019-build622';
-import { createVrHuLine } from './vr-hu-line.js?v=20261019-build622';
-import { huMenuTexts, voxelFromHits } from './vr-hu-line-core.js?v=20261019-build622';
-import { setHuLineDeferred } from './hu-line-model.js?v=20261019-build622';
-import { createVrMeasure, LABEL_LIT_SCALE } from './vr-measure.js?v=20261019-build622';
-import { MAX_SECTION_PLANES, nextPlaneColor, frameDepthTest, ARROW_LEN, ARROW_FLASH_MS, arrowFade, arrowShown, tagBehindTissue, sectionPage, pageOfPlane, SECTION_ROWS_PER_PAGE, FLING_UNDO_MS, FLING_DEBUG_MS, createVelocityTracker, flingDecision, flingDebugLines, capVelocity, flyStep, makeSectionSnapshot, restorePlan, createSectionUndo, undoButtonPlace } from './vr-section-frame.js?v=20261019-build622';
-import { createUndoButton } from './vr-undo-button.js?v=20261019-build622';
-import { createFlingDebugTag } from './vr-fling-debug.js?v=20261019-build622';
-import { isHand } from './vr-hand.js?v=20261019-build622'; // build 625: hand tracking (Quest 3): pure helpers
-import { createHandInput, HAND_LABEL_MOVE_M } from './vr-hand-view.js?v=20261019-build622'; // build 625: the hand's ray, wrist menu, fingertips
-import { LABEL_HIDE_DEFAULT, normalizeLabelHide, gpuOcclusionActive, depthVoxelSize, boardVisible, GHOST_ALPHA, occludedPass } from './vr-depth.js?v=20261019-build622';
-import { brickOccupancy, writeBrickOccupancy } from './vr-brick-occupancy.js?v=20261019-build622';
-import { createProbeGate } from './measure-label.js?v=20261019-build622';
-import { sliceIndex, sliceRange, boxFromRange, createSegScan, segScanStart, segScanStep, segsSubset, segsFromUniforms, contentKeyChanged, KEY_LEN } from './vr-content-box.js?v=20261019-build622'; // build 562: the proxy box = the box of what can be drawn
-import { setRegionLabel, setRegionLabelOffset, voxelFromLocalVr, clampVoxel, labelLocal, offsetForLocal, vrVoxelStep, rectEdgePoint, leaderVisible } from './analysis-label.js?v=20261019-build622';
-import { createVrSelfCheck, selfCheckTexts } from './vr-self-check.js?v=20261019-build622'; // build 552: 詳細 > 自己診断 (automated frame-time scenarios)
-import { eyeMetrics, capFromPpv, nextCap, foveaRect, outsideFovea, foveaWorth, qualityText, FOVEA_K, CAP_MIN } from './vr-render-scale.js?v=20261019-build622'; // build 560: data-resolution render scale + offscreen foveation
-import { getMeasureStart, startMeasure, cancelMeasure, pickMeasureEnd, onMeasureStartChange, removeMeasurement, restoreMeasurements, measurementsOfPoint, seriesSpacing } from './measurements.js?v=20261019-build622';
-import { APP_BUILD } from './version.js?v=20261019-build622';
-import { wc, ww } from './ui-shell.js?v=20261019-build622';
-import { VOLUME_FWD, VOLUME_DOWN, MENU_OFFSET, HELP_OFFSET, HU_PANEL_OFFSET, MENU_WIDTH, HELP_WIDTH, HIST_OFFSET, HIST_WIDTH } from './vr-layout.js?v=20261019-build622';
-import { onHistogramChange, getHistogramRange, getHistogramLog, setHistogramLog, setHistogramRange } from './histogram-ui.js?v=20261019-build622';
-import { createVrLabelHistogram, UNLABELED_COLOR, labelSlot, labelRegion } from './vr-label-histogram.js?v=20261019-build622';
-import { rangeRes } from './vr-histogram-layout.js?v=20261019-build622';
-import { getHuMode, setHuMode, HU_MODE_FILTERED, HU_MODE_RAW } from './effective-hu.js?v=20261019-build622';
-import { createVrHistogramPanel } from './vr-histogram-panel.js?v=20261019-build622';
-import { lightingGLSL, lightingVertexGLSL, materialVec, MATERIALS, materialKey } from './lighting.js?v=20261019-build622'; // build 619: one lighting model for the desktop volume, this VR / AR volume and the 3D-view meshes
+import { volumeTexturePlan, reduceSliceArea, packedRgSlice, packCtSlice, gpuRunsForTexture } from './medical-volume.js?v=20261019-build623';
+import { gpuVolumeTarget, gpuVolumeEditDescriptors } from './gpu-volume-data.js?v=20261019-build623';
+import { SEGMENT_PRESET_ORDER, gpuSegmentOrder, analysisRegionShown, segmentState, segmentEditState, segmentSourceSignature } from './segments.js?v=20261019-build623';
+import { sceneState, analysisRegions, activeSeries } from './state.js?v=20261019-build623';
+import { datasetFingerprint } from './project-file.js?v=20261019-build623';
+import { sectionRayHit, recordVrPoint, resolveTriggerTarget, createTriggerPress, dragShouldStart, DRAG_RECORD, sectionFollowStart, sectionFollowStep, snapPlaneCenterIntoBox, chooseSectionForRay, rayLocalPlaneX, squareBandContains, createHoverPulse, qMul, qInv, qRot, qAngleDeg, clampPlaneCenter, HAPTIC, normalizePointMode, surfaceVoxelFromHit, voxelToLocal, voxelSize, createStickGate, deleteSelected, createUndoStack, applyUndo, pointIsHidden } from './vr-point.js?v=20261019-build623';
+import { createVrPointMarkers, createSurfaceCursor } from './vr-point-markers.js?v=20261019-build623';
+import { buildClsData } from './point-cls.js?v=20261019-build623';
+import { createHiddenClsManager } from './hidden-cls-state.js?v=20261019-build623';
+import { onDatasetChange } from './dataset-reset.js?v=20261019-build623';
+import { WHEEL_ITEMS, DEFAULT_WHEEL, normalizeWheelItems, migrateWheelSectionFlip, setWheelItem, moveWheelItem, clearWheelItem, createRingMenu, createWheelStick, createButtonPress } from './vr-ring.js?v=20261019-build623';
+import { getComments, onCommentsChange, commentMatchesSeries, removeComment, restoreComment, updateCommentPosition, updateCommentText, updateCommentColor } from './comments.js?v=20261019-build623';
+import { POINT_PALETTE, pointColor, normalizeColor } from './point-colors.js?v=20261019-build623';
+import { buildDistanceBytes, combineClassificationDistance, fourthChannelBytes } from './distance-field.js?v=20261019-build623';
+import { marchClassificationHitInfo } from './vr-pick.js?v=20261019-build623';
+import { setBusySlot, reportBusyProgress } from './progress-modal.js?v=20261019-build623';
+import { tr } from './i18n.js?v=20261019-build623';
+import { wrapMenuText, stackMenuRows } from './vr-menu-text.js?v=20261019-build623';
+import { activeEventLevel, eventModeOn, missionLines, simpleMenuSegments, triggerModeRow, triggerMode, TRIGGER_AT_START, simpleMenuLayout, SIMPLE_MENU } from './event-mode.js?v=20261019-build623'; // build 626: 体験会モード - the chosen level's mission on the help board, the かんたん menu
+import { VIEW_TOGGLE_ID, VIEW_TOGGLE_BUTTON, SECTION_DELETE_ID, createViewToggle, createDoublePress, ringIdsFor } from './vr-view-toggle.js?v=20261019-build623';
+import { vrSpacingNote, vrVolumeText } from './vr-spacing-note.js?v=20261019-build623';
+import { NORM_LONG, physicalExtentsMm, longestMm, realMagnification, realHolderScale, startHolderScale, magnificationText, createScaleTag, clampScale, pinchScale, scaleLimits, oversizeNote, planeFrameLocalScale, planeTagLocalScale, scaleLineText } from './vr-real-scale.js?v=20261019-build623';
+import { createAutoQuality, autoFloor, STEP_LEVELS, marchStep } from './vr-auto-quality.js?v=20261019-build623';
+import { createVrHuLine } from './vr-hu-line.js?v=20261019-build623';
+import { huMenuTexts, voxelFromHits } from './vr-hu-line-core.js?v=20261019-build623';
+import { setHuLineDeferred } from './hu-line-model.js?v=20261019-build623';
+import { createVrMeasure, LABEL_LIT_SCALE } from './vr-measure.js?v=20261019-build623';
+import { MAX_SECTION_PLANES, nextPlaneColor, frameDepthTest, ARROW_LEN, ARROW_FLASH_MS, arrowFade, arrowShown, tagBehindTissue, sectionPage, pageOfPlane, SECTION_ROWS_PER_PAGE, FLING_UNDO_MS, FLING_DEBUG_MS, createVelocityTracker, flingDecision, flingDebugLines, capVelocity, flyStep, makeSectionSnapshot, restorePlan, createSectionUndo, undoButtonPlace } from './vr-section-frame.js?v=20261019-build623';
+import { createUndoButton } from './vr-undo-button.js?v=20261019-build623';
+import { createFlingDebugTag } from './vr-fling-debug.js?v=20261019-build623';
+import { isHand, wristScrollGain, wristScrollSign, wristScrollKeep } from './vr-hand.js?v=20261019-build623'; // build 625: hand tracking (Quest 3): pure helpers
+import { createHandInput, HAND_LABEL_MOVE_M } from './vr-hand-view.js?v=20261019-build623'; // build 625: the hand's ray, wrist menu, fingertips
+import { LABEL_HIDE_DEFAULT, normalizeLabelHide, gpuOcclusionActive, depthVoxelSize, boardVisible, GHOST_ALPHA, occludedPass } from './vr-depth.js?v=20261019-build623';
+import { brickOccupancy, writeBrickOccupancy } from './vr-brick-occupancy.js?v=20261019-build623';
+import { createProbeGate } from './measure-label.js?v=20261019-build623';
+import { sliceIndex, sliceRange, boxFromRange, createSegScan, segScanStart, segScanStep, segsSubset, segsFromUniforms, contentKeyChanged, KEY_LEN } from './vr-content-box.js?v=20261019-build623'; // build 562: the proxy box = the box of what can be drawn
+import { setRegionLabel, setRegionLabelOffset, voxelFromLocalVr, clampVoxel, labelLocal, offsetForLocal, vrVoxelStep, rectEdgePoint, leaderVisible } from './analysis-label.js?v=20261019-build623';
+import { createVrSelfCheck, selfCheckTexts } from './vr-self-check.js?v=20261019-build623'; // build 552: 詳細 > 自己診断 (automated frame-time scenarios)
+import { eyeMetrics, capFromPpv, nextCap, foveaRect, outsideFovea, foveaWorth, qualityText, FOVEA_K, CAP_MIN } from './vr-render-scale.js?v=20261019-build623'; // build 560: data-resolution render scale + offscreen foveation
+import { getMeasureStart, startMeasure, cancelMeasure, pickMeasureEnd, onMeasureStartChange, removeMeasurement, restoreMeasurements, measurementsOfPoint, seriesSpacing } from './measurements.js?v=20261019-build623';
+import { APP_BUILD } from './version.js?v=20261019-build623';
+import { wc, ww } from './ui-shell.js?v=20261019-build623';
+import { VOLUME_FWD, VOLUME_DOWN, MENU_OFFSET, HELP_OFFSET, HU_PANEL_OFFSET, MENU_WIDTH, HELP_WIDTH, HIST_OFFSET, HIST_WIDTH } from './vr-layout.js?v=20261019-build623';
+import { onHistogramChange, getHistogramRange, getHistogramLog, setHistogramLog, setHistogramRange } from './histogram-ui.js?v=20261019-build623';
+import { createVrLabelHistogram, UNLABELED_COLOR, labelSlot, labelRegion } from './vr-label-histogram.js?v=20261019-build623';
+import { rangeRes } from './vr-histogram-layout.js?v=20261019-build623';
+import { getHuMode, setHuMode, HU_MODE_FILTERED, HU_MODE_RAW } from './effective-hu.js?v=20261019-build623';
+import { createVrHistogramPanel } from './vr-histogram-panel.js?v=20261019-build623';
+import { lightingGLSL, lightingVertexGLSL, materialVec, MATERIALS, materialKey } from './lighting.js?v=20261019-build623'; // build 619: one lighting model for the desktop volume, this VR / AR volume and the 3D-view meshes
 
 const BG=new THREE.Color(0.035,0.045,0.05);
 const BRICK=8;
@@ -857,7 +858,7 @@ function buildRegionIndex(dims){
  }
  return{data:colors.length?data:null,ids:colors.length?ids:null,colors,segs,list};
 }
-let prepared=null,preparing=null;
+let prepared=null,preparing=null,prepareGen=0; // prepareGen (build 627): bumped by releaseVrPrepared, so a preparation that was running meanwhile is not stored
 // volume + brick textures for one grid (full 512 or the 256 copy)
 const makeVolumeTextures=d=>{
  const v=new THREE.Data3DTexture(d.data,...d.dims);v.format=THREE.RGFormat;v.type=THREE.UnsignedByteType;
@@ -893,7 +894,7 @@ const volumeUniforms=(vd,full,settings)=>({vol:{value:full.v},bricks:{value:full
 const segMode={};
 let gpuPrepared=null;
 export async function prepareVrGpu(P,mode='vr',settings=loadSettings()){
- disposeGpuPrepared();
+ disposeGpuPrepared();const gen=prepareGen;
  const ar=mode==='ar',renderer=new THREE.WebGLRenderer({antialias:false,alpha:ar,preserveDrawingBuffer:false});
  renderer.setPixelRatio(1);renderer.setSize(8,8,false);
  Object.assign(renderer.domElement.style,{position:'fixed',left:'0',top:'0',width:'1px',height:'1px',opacity:'0',pointerEvents:'none'});
@@ -927,14 +928,30 @@ export async function prepareVrGpu(P,mode='vr',settings=loadSettings()){
   const fence=gl.fenceSync?.(gl.SYNC_GPU_COMMANDS_COMPLETE,0);if(fence){gl.flush();const until=performance.now()+30000;
    while(performance.now()<until){const r=gl.clientWaitSync(fence,0,0);if(r===gl.ALREADY_SIGNALED||r===gl.CONDITION_SATISFIED||r===gl.WAIT_FAILED)break;await new Promise(res=>setTimeout(res,5))}gl.deleteSync(fence)}
   times.wait=performance.now()-t2;times.total=performance.now()-t0;
-  gpuPrepared=assets;return assets;
+  gpuPrepared=assets;
+  if(gen!==prepareGen){disposeGpuPrepared();return null} // build 627: the data was released (another dataset opened) while this ran: nothing to keep
+  return assets;
  }catch(e){console.warn('GPU preparation before VR failed; the session will prepare on its own.',e);try{renderer.dispose();renderer.domElement.remove()}catch{}return null}
 }
 export function disposeGpuPrepared(){
  const g=gpuPrepared;if(!g)return;gpuPrepared=null;
  for(const t of [g.full,g.half])if(t){t.v.dispose();t.b.dispose();t.combo?.dispose();t.cls4?.dispose()}
- g.edit?.dispose();g.region?.dispose();g.warm.forEach(m=>m.dispose());g.renderer.dispose();g.renderer.domElement.remove();
+ g.edit?.dispose();g.region?.dispose();g.warm.forEach(m=>m.dispose());g.renderer.dispose();
+ // build 627: dispose() alone leaves the WebGL context (and what it still holds) to the garbage collector: end it now
+ try{g.renderer.forceContextLoss?.()}catch{}
+ g.renderer.domElement.remove();
 }
+// build 627: another dataset was opened (or the data was cleared): the prepared VR data of the old one (the 256³ / 512³ rg8 arrays, bricks,
+// classification bytes, region index, and the page-side renderer with its textures) and the hidden-judgement volume are dropped now, not at the
+// next preparation (they were 100s of MB of CPU memory and a whole WebGL context's textures, for a headset session that may never come).
+// A running session keeps its own copies (it ends with the page's data); the next VR start prepares again for the new data.
+export function releaseVrPrepared(){
+ if(running)return false;
+ prepareGen++;prepared=null;preparing=null;disposeGpuPrepared();hiddenMgr.release();return true;
+}
+// what is held right now (tests / ?debug): the prepared CPU data, the building one, the page-side GPU assets
+export function vrPreparedState(){return{prepared:!!prepared,preparing:!!preparing,gpu:!!gpuPrepared,session:!!running}}
+if(typeof document!=='undefined')onDatasetChange(()=>releaseVrPrepared());
 export function vrReady(){return !!prepared&&prepared.key===vrDataKey()}
 const maxTexture3D=()=>{try{const c=document.createElement('canvas'),g=c.getContext('webgl2');const m=g?.getParameter(g.MAX_3D_TEXTURE_SIZE)||2048;g?.getExtension('WEBGL_lose_context')?.loseContext();return m}catch{return 2048}};
 // phases reported as {phase, done, total}; timings (ms) returned with the data
@@ -963,7 +980,8 @@ export async function prepareVrData(onProgress=()=>{}){
   return{key,vd,half,edit,cls,dist,region,times};
  })();
  preparing={key,promise};
- try{prepared=await promise;return prepared}finally{if(preparing?.promise===promise)preparing=null}
+ const gen=prepareGen;
+ try{const P=await promise;if(gen===prepareGen)prepared=P;return P}finally{if(preparing?.promise===promise)preparing=null} // released meanwhile (build 627): handed to the caller, not kept
 }
 // build 465: classification bytes for the 3D position-comment markers of the PC / iPad view (comment-3d.js), the same data and rule as VR's
 // hidden test. Only vd (<= 256 grid, no bricks) -> edit mask -> cls (no distance field / regions); reuses the VR preparation when it is ready
@@ -1085,8 +1103,10 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
   // build 468: no guide line any more (sections are not picked by nearness)
  }
  // build 625: hand tracking (optional 'hand-tracking'; vr-hand-view.js). Every hand branch below is guarded by isHand(c.userData.source); a controller never takes one
- const handIn=createHandInput(THREE,{renderer,scene,controllers,ja,getHead:()=>head,colorOf:c=>handColor(c),release:c=>c.userData.release?.(true),handInHolder:c=>handInHolder(c),sectionOn:()=>section.on,avail:id=>id==='undo'?wheelAvail('undo'):id==='add'?wheelAvail('section-add'):true});
+ const handIn=createHandInput(THREE,{renderer,scene,controllers,ja,getHead:()=>head,colorOf:c=>handColor(c),release:c=>c.userData.release?.(true),handInHolder:c=>handInHolder(c),sectionOn:()=>section.on,avail:id=>id==='undo'?wheelAvail('undo'):id==='add'?wheelAvail('section-add'):id==='secUp'||id==='secDown'?!!(section.on&&section.selected&&planes.includes(section.selected)):true,
+  grab:c=>{if(c.userData.wristOn)return false;gripStart(c);return true},ungrab:c=>gripEnd(c),busy:c=>!!(c.userData.drag||c.userData.lblDrag||histAxis===c||dragging?.c===c||huLine.isDragging())}); // build 625 phase 2: the fist = the grip (gripStart / gripEnd below); never starts while this hand drags something
  session.addEventListener('end',()=>handIn.dispose(),{once:true});
+ const holdOf=c=>handIn.holder(c); // build 625: what a grip holds is attached to this: a hand's palm anchor; a controller: itself (unchanged)
  const pulse=(c,v=0.35,ms=18)=>{if(isHand(c?.userData?.source)){handIn.flash(c,v,ms);return}try{c.userData.source?.gamepad?.hapticActuators?.[0]?.pulse?.(v,ms)}catch{}}; // build 625: a hand has no haptics: a visual swell instead
  const badge=makeBadge(L.badge); // build 468: a plain cue on the left controller (not a laser target)
  const leftHand=()=>controllers.find(c=>c.userData.source?.handedness==='left')||controllers[0];
@@ -1111,9 +1131,9 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
  const helpTarget=new THREE.Vector3();let helpMoving=false,helpPlaced=false,helpHeld=null,helpKey='';
  const computeHelpTarget=()=>helpTarget.copy(head).addScaledVector(headFwd,HELP_OFFSET.fwd).addScaledVector(headLeft,HELP_OFFSET.left).add(new THREE.Vector3(0,-HELP_OFFSET.down,0));
  const placeHelpNow=()=>{readHead();computeHelpTarget();help.mesh.position.copy(helpTarget);help.mesh.lookAt(head);helpPlaced=true;helpMoving=false};
- const helpHit=c=>{if(!help.mesh.visible||help.mesh.parent===c)return null;setRay(c);return raycaster.intersectObject(help.mesh,false)[0]||null};
+ const helpHit=c=>{if(!help.mesh.visible||help.mesh.parent===holdOf(c))return null;setRay(c);return raycaster.intersectObject(help.mesh,false)[0]||null};
  // build 556: the HU line's live panel (huLine / huHits: made below, used only once the loop runs). Not a target while held by this hand or while a line is being stretched
- const huPanelHit=c=>{const p=huLine.panel;if(!p.visible||p.parent===c||huLine.isDragging())return null;setRay(c);huHits.length=0;p.raycast(raycaster,huHits);return huHits[0]||null};
+ const huPanelHit=c=>{const p=huLine.panel;if(!p.visible||p.parent===holdOf(c)||huLine.isDragging())return null;setRay(c);huHits.length=0;p.raycast(raycaster,huHits);return huHits[0]||null};
  const histSlotKeys=()=>gpuSegmentOrder();
  const histColorOf=Lb=>{const s=labelSlot(Lb);if(s>=0)return segmentState[histSlotKeys()[s]]?.color||'#ffffff';const k=labelRegion(Lb);if(k>=0){const c=histP?.region?.colors?.[k];return c==null?UNLABELED_COLOR:'#'+(c>>>0).toString(16).padStart(6,'0')}return UNLABELED_COLOR};
  const histNameOf=Lb=>{const s=labelSlot(Lb);if(s>=0){const k=histSlotKeys()[s];return tr(k)||k}const k=labelRegion(Lb);if(k<0)return L.histNone;
@@ -1159,7 +1179,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
  const histAxisFollow=()=>{const c=histAxis;if(!c)return;setRay(c);hist.board.getWorldQuaternion(histQ);hist.board.getWorldPosition(histO);histN.set(0,0,1).applyQuaternion(histQ);histPlane.setFromNormalAndCoplanarPoint(histN,histO);
   if(raycaster.ray.intersectPlane(histPlane,histLocal)){histAxisOut.distance=raycaster.ray.origin.distanceTo(histLocal);hist.board.worldToLocal(histLocal);hist.moveAxisDrag(histLocal.x)}};
  const histAxisEnd=commit=>{if(!histAxis)return;histAxis=null;if(!commit){hist.cancelAxisDrag();return}const w=hist.endAxisDrag();if(w)setHistogramRange({mode:'manual',lo:w[0],hi:w[1]})};
- const histHit=c=>{if(!hist.isOpen||hist.group.parent===c)return null;setRay(c);histRes.length=0;return raycaster.intersectObject(hist.board,false,histRes)[0]||null}; // the laser stops on the board (it has no widgets)
+ const histHit=c=>{if(!hist.isOpen||hist.group.parent===holdOf(c))return null;setRay(c);histRes.length=0;return raycaster.intersectObject(hist.board,false,histRes)[0]||null}; // the laser stops on the board (it has no widgets)
  const unsubHist=onHistogramChange(()=>hist.invalidate()); // the PC display range / scale
  // build 555: the pass works at most ~2 ms at a time and then waits for the next XR frame (histYield, resolved in the frame loop; window rAF and idle
  // callbacks do not run during an XR session). The 100 ms timer keeps it going if XR frames stop (headset off).
@@ -1219,11 +1239,11 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
  // grab: one hand moves/rotates (holder follows the controller); two hands
  // scale by the change in hand distance
  const grabbing=new Set();let twoHand=null;const tmpA=new THREE.Vector3(),tmpB=new THREE.Vector3();
- const handDist=()=>{controllers[0].getWorldPosition(tmpA);controllers[1].getWorldPosition(tmpB);return tmpA.distanceTo(tmpB)};
+ const handDist=()=>{holdOf(controllers[0]).getWorldPosition(tmpA);holdOf(controllers[1]).getWorldPosition(tmpB);return tmpA.distanceTo(tmpB)};
  const regrab=()=>{
   scene.attach(holder);twoHand=null;
   if(grabbing.size===2)twoHand={d0:Math.max(handDist(),1e-3),s0:holder.scale.x};
-  else if(grabbing.size===1)[...grabbing][0].attach(holder);
+  else if(grabbing.size===1)holdOf([...grabbing][0]).attach(holder);
  };
  const MAX_PLANES=MAX_SECTION_PLANES,LONG_PRESS=600; // build 509: 10 planes (4 before); PLANE_COLORS: vr-section-frame.js
  // thumbstick scroll (build 364): world m/s along the selected plane's normal at full deflection
@@ -1475,6 +1495,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
  const HAND_CHIP={left:[0,-0.03,-0.03],right:[0,-0.03,-0.03]};
  const hoverLabelOf=c=>c.userData.hoverLabel||=Object.assign(makeLabel(),{hand:c});
  const evLabelOn=()=>evMenu&&triggerMode(evLabels,regionList.length>0)==='label'; // build 626: the trigger switch says 'label' (never without analysis results, never outside 体験会モード)
+ const analysisOn=()=>(ui.open&&ui.tab===5)||evLabelOn(); // the analysis state: the analysis tab is open, or (体験会モード) the かんたん menu's 解析モード; pinned cards can be grabbed / moved only then
  const labelMode=()=>(ui.open&&ui.tab===5)||!section.on||evLabelOn();
  const makeLabel=(pin=false)=>{
   const canvas=document.createElement('canvas');canvas.width=512;canvas.height=154;const tex=new THREE.CanvasTexture(canvas);tex.colorSpace=THREE.SRGBColorSpace;
@@ -1669,6 +1690,23 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
  const ringGeo=new THREE.BufferGeometry().setFromPoints(Array.from({length:33},(_,i)=>new THREE.Vector3(Math.cos(i/32*Math.PI*2)*0.025,Math.sin(i/32*Math.PI*2)*0.025,0)));
  const ring=new THREE.Line(ringGeo,new THREE.LineBasicMaterial({color:0xffffff}));ring.position.set(0,0.035,0.02);ring.rotation.x=-0.6;ring.visible=false;
  let dragging=null,shotRequested=false;
+
+ // build 625: the grip's actions (squeezestart / squeezeend of a controller, the fist of a hand): the bodies are the controller's own, unchanged; what is
+ // grabbed is attached to holdOf(c) (the controller itself / a hand's palm anchor)
+ const gripStart=c=>{
+   if(ui.open&&!menuHeld&&boardHits(c).menu){holdOf(c).attach(menu.mesh);menuHeld=c;menuMoving=false;settings.menuMode=1;saveSettings(settings);pulse(c);menu.refresh();return}
+   if(!helpHeld&&c.userData.helpHit){holdOf(c).attach(help.mesh);helpHeld=c;helpMoving=false;settings.help=2;saveSettings(settings);pulse(c);menu.refresh();return}
+   if(!histHeld&&c.userData.histHit){holdOf(c).attach(hist.group);histHeld=c;pulse(c);return} // build 555: the grip moves the histogram board (as the help board); never takes the volume
+   if(!huHeld&&boardHits(c).hu){holdOf(c).attach(huLine.panel);huHeld=c;pulse(c);return} // build 556: the HU live panel moves with the hand, not the volume behind it
+   grabbing.add(c);regrab(); // build 468: the grip always moves the volume (it never takes a section)
+ };
+ const gripEnd=c=>{
+   if(menuHeld===c){scene.attach(menu.mesh);menuHeld=null;readHead();menu.mesh.lookAt(head);pulse(c,0.2);return}
+   if(helpHeld===c){scene.attach(help.mesh);helpHeld=null;readHead();help.mesh.lookAt(head);pulse(c,0.2);return}
+   if(histHeld===c){scene.attach(hist.group);histHeld=null;readHead();hist.group.lookAt(head);pulse(c,0.2);return}
+   if(huHeld===c){scene.attach(huLine.panel);huHeld=null;readHead();huLine.panel.lookAt(head);pulse(c,0.2);return}
+   if(grabbing.delete(c))regrab();
+ };
  for(const c of controllers){
   for(const t of ['selectstart','selectend'])c.addEventListener(t,()=>handIn.eventPose(c)); // build 625: first: a hand's select handlers see its filtered / delayed ray (three just wrote the raw pose); nothing for a controller
   c.addEventListener('connected',e=>{c.userData.source=e.data;if(isHand(e.data)){handIn.connect(c,controllers.indexOf(c));if(badge.parent===c)c.remove(badge);help.refresh();return}if(c.userData.hs)handIn.drop(c);if(c.userData.source?.handedness==='left')c.add(badge)}); // build 625: a hand: no X badge, the hand help; the controller path as before
@@ -1680,30 +1718,24 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    if(huHeld===c){scene.attach(huLine.panel);huHeld=null} // build 558: the same for the HU line's live panel
    // build 625: everything else this input held is released too: a volume held by a lost controller / hand stayed attached to it and jumped on reconnect
    if(grabbing.delete(c))regrab();if(menuHeld===c){scene.attach(menu.mesh);menuHeld=null}if(helpHeld===c){scene.attach(help.mesh);helpHeld=null}if(dragging?.c===c){dragging=null;saveSettings(settings)}
-   c.userData.res=null;c.userData.bDown=false;if(ring.parent===c)ring.visible=false; // no stale target at the next press, no B/Y release (section toggle) on reconnect
+   c.userData.res=null;c.userData.wristScroll=null;c.userData.bDown=false;if(ring.parent===c)ring.visible=false; // no stale target at the next press, no B/Y release (section toggle) on reconnect
    if(e===true)return; // build 625: a hand whose tracking was lost > 200 ms (vr-hand-view.js): the same release, the input source stays
    c.userData.source=null;
    if(c.userData.hs){handIn.drop(c);help.refresh()} // build 625
   });
   c.addEventListener('squeezestart',()=>{
-   if(isHand(c.userData.source))return; // build 625: phase 1: a hand does not grab (the volume, the boards): moving / scaling stays with the controllers
-   if(ui.open&&!menuHeld&&boardHits(c).menu){c.attach(menu.mesh);menuHeld=c;menuMoving=false;settings.menuMode=1;saveSettings(settings);pulse(c);menu.refresh();return}
-   if(!helpHeld&&c.userData.helpHit){c.attach(help.mesh);helpHeld=c;helpMoving=false;settings.help=2;saveSettings(settings);pulse(c);menu.refresh();return}
-   if(!histHeld&&c.userData.histHit){c.attach(hist.group);histHeld=c;pulse(c);return} // build 555: the grip moves the histogram board (as the help board); never takes the volume
-   if(!huHeld&&boardHits(c).hu){c.attach(huLine.panel);huHeld=c;pulse(c);return} // build 556: the HU live panel moves with the hand, not the volume behind it
-   grabbing.add(c);regrab(); // build 468: the grip always moves the volume (it never takes a section)
+   if(isHand(c.userData.source))return; // build 625: a hand grabs with its fist (handIn: gripStart / gripEnd), not with a squeeze event
+   gripStart(c);
   });
   c.addEventListener('squeezeend',()=>{
-   if(menuHeld===c){scene.attach(menu.mesh);menuHeld=null;readHead();menu.mesh.lookAt(head);pulse(c,0.2);return}
-   if(helpHeld===c){scene.attach(help.mesh);helpHeld=null;readHead();help.mesh.lookAt(head);pulse(c,0.2);return}
-   if(histHeld===c){scene.attach(hist.group);histHeld=null;readHead();hist.group.lookAt(head);pulse(c,0.2);return}
-   if(huHeld===c){scene.attach(huLine.panel);huHeld=null;readHead();huLine.panel.lookAt(head);pulse(c,0.2);return}
-   if(grabbing.delete(c))regrab();
+   if(isHand(c.userData.source))return;
+   gripEnd(c);
   });
   // build 468 trigger: the menu / panels act on the press as before. Anything else: the target is resolved ONCE at the press (resolveTriggerTarget,
   // from last frame's candidates) and kept until the release. Short press (< 0.5 s) = the action of the target (record / label / select a point);
   // holding it = long press (a point: the point menu, stage 3); on a frame band, a number tag or empty space, moving the hand drags the section.
   c.addEventListener('selectstart',()=>{
+   if(isHand(c.userData.source)&&(handIn.grabbing(c)||handIn.fistLike(c)))return; // build 625: a pinch the system sees inside a fist (the thumb on the index), or while the hand is closing into one (middle / ring / little curled), is not a trigger
    endDrag(c);
    const bd=boardHits(c),h=bd.menu;
    if(h){const i=menu.hit(h.uv);if(i<0)return;const w=menu.widget(i);if(w.set){dragging={c,i};menu.drag(i,h.uv)}else menu.press(i);pulse(c);return}
@@ -1755,6 +1787,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    else if(k==='point'){if(getComments().some(x=>x.id===pr.res.ref.id))selectPoint(c,pr.res.ref.id)}
    else if(k==='move')placeMoved(c,pr.res.ref);
   });
+  c.addEventListener('selectend',()=>{c.userData.wristScroll=null}); // build 625: 断面 +/- of the wrist menu stops with the pinch (nothing for a controller)
  }
  // ===== build 468: ring menus =====
  const itemOf=id=>WHEEL_ITEMS.find(i=>i.id===id),itemName=id=>id===VIEW_TOGGLE_ID?tr(vt.vrView?'vrToggleToAr':'vrToggleToVr'):id===SECTION_DELETE_ID?tr('vrSecDeleteRing'):id?(ja?itemOf(id).ja:itemOf(id).en):null;
@@ -1893,6 +1926,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    case'section':setSection(!section.on);break;
    case'add':if(planes.length>=MAX_PLANES){pulse(c,0.15,30);flashMsg(L.maxPlanes,2000)}else{addPlane(c);pulse(c,0.6,50)}break;
    case'undo':wheelDo('undo',c);break;
+   case'secDown':case'secUp':if(section.on&&section.selected)c.userData.wristScroll={id,sign:wristScrollSign(id),t0:performance.now()};else pulse(c,0.15,30);break; // held: the loop below adds it to the thumbstick scroll
   }
   menu.refresh();
  };
@@ -2324,12 +2358,12 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
     const vis=section.on?planes.filter(p=>!draggedBy(p,c)):[];
     tab=tabHit(c,vis);
     setRay(c);pt=vpMarkers.pick(raycaster.ray.origin,raycaster.ray.direction);mlb=vpMeasure.pickLabel(raycaster.ray.origin,raycaster.ray.direction);
-    if(ui.open&&ui.tab===5&&pins.size)mlb=nearerLabel(mlb,pickPin(raycaster.ray.origin,raycaster.ray.direction,c.userData.pinRes||=makePinRes()));
+    if(analysisOn()&&pins.size)mlb=nearerLabel(mlb,pickPin(raycaster.ray.origin,raycaster.ray.direction,c.userData.pinRes||=makePinRes()));
     for(const p of vis){const bn=frameBandHit(c,p);if(bn&&(!band||bn.t<band.t))band=bn}
     if(surfaceActive()||labelMode()||anyOk){vh=volumeHit(c);c.userData.vhFrame=frameNo} // build 470: in 断面 mode too, to tell "laser on the 3D object" (no section grab) from empty space
     if(!surfaceActive()&&selOk){sh=sectionPointOf(c);c.userData.secFrame=frameNo}
    }
-   c.userData.volHit=vh;c.userData.secHit=sh;c.userData.helpHit=!!hh;c.userData.histHit=!!bd.hist;
+   c.userData.volHit=vh;c.userData.secHit=sh;c.userData.helpHit=!!hh;c.userData.histHit=!!bd.hist;c.userData.wristOn=!!bd.wrist; // build 625: a hand's fist on the wrist menu does not grab
    if(bd.hist&&!histHov&&histAxis!==c)histHov=histTargetOf(bd.hist); // build 570: the grab target under a laser is lit
    // build 484: how much nearer than the plane the object surface must be to hide it (0.75 voxel in world metres: the surface march and the plane meet at a cut face)
    let occEps=1e-4;if(vh&&(sh||tab)&&vrHalfExt&&vrDims&&mesh?.parent){const vs=voxelSize(vrHalfExt,vrDims);mesh.getWorldScale(tmpSs);occEps=0.75*Math.min(vs[0]*tmpSs.x,vs[1]*tmpSs.y,vs[2]*tmpSs.z)}
@@ -2340,7 +2374,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    if(mlb&&mlb.pin&&vh&&!(c.userData.lblDrag&&c.userData.press)&&tagBehindTissue(occlusionGpu(),mlb.distance,vh.distance,occEps))mlb=null;
    // where a moved point would land (the current mode's rule): the surface voxel or the selected section's voxel
    const placement=surfaceActive()?(vh&&vh.voxel?vh:null):(sh&&sh.voxel&&!(vh&&vh.distance<sh.distance-occEps)?sh:null);c.userData.placement=placement; // build 484: a plane behind the object surface is not a place to put a point
-   const res=rh&&!board&&wheelOwner!==c&&pw?.c!==c?{kind:'none',ref:null}:resolveTriggerTarget({board:board?bd:null,ringOwnOpen:wheelOwner===c||pw?.c===c,ringHighlight:c.userData.ringHl??null,moving:!!c.userData.moving,placement,tab,point:pt,mlabel:mlb,band,tissue:vh,plane:sh,occludeEps:occEps,mode:vrPointMode,analysis:(ui.open&&ui.tab===5)||evLabelOn(),canDrag:anyOk&&(surfaceActive()||labelMode()||!vh)});
+   const res=rh&&!board&&wheelOwner!==c&&pw?.c!==c?{kind:'none',ref:null}:resolveTriggerTarget({board:board?bd:null,ringOwnOpen:wheelOwner===c||pw?.c===c,ringHighlight:c.userData.ringHl??null,moving:!!c.userData.moving,placement,tab,point:pt,mlabel:mlb,band,tissue:vh,plane:sh,occludeEps:occEps,mode:vrPointMode,analysis:analysisOn(),canDrag:anyOk&&(surfaceActive()||labelMode()||!vh)});
    c.userData.res=res;if(res.kind==='point')hoverIds.add(res.ref.id);
    if(!c.userData.press&&!c.userData.drag&&!huLine.isDragging()){const hpz=c.userData.hoverPulse||=createHoverPulse({debounceMs:HAPTIC.hover.debounceMs});if(hpz.update(res.kind==='point'?res.ref.id:null,nowF))pulse(c,HAPTIC.hover.amp,HAPTIC.hover.ms)}
    updatePress(c,nowF);
@@ -2363,6 +2397,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    if(curSurf)placeSurfCursor(c,ref);else if(curSec)placeSecCursor(c,ref);else surfCursors[controllers.indexOf(c)].set(null);
    // thumbstick Y (xr-standard axes[3], up is negative), dead zone 0.15, squared response; both hands add up
    const ay=c.userData.source?.gamepad?.axes?.[3]||0,am=Math.abs(ay);if(am>0.15&&!c.userData.stickLock&&wheelOwner!==c&&pw?.c!==c)scroll+=Math.sign(ay)*((am-0.15)/0.85)**2;
+   {const ws=c.userData.wristScroll;if(ws){if(!isHand(c.userData.source)||!handIn.wristShown||!section.on||!section.selected||!wristScrollKeep(ws.id,bd.wrist?handIn.wristId(bd.wrist.slot):null,handIn.grabbing(c)))c.userData.wristScroll=null;else scroll+=ws.sign*wristScrollGain(nowF-ws.t0)}} // build 625: a hand holding 断面 ＋／－ on the wrist menu = the stick up / down
    if(dragging?.c===c){setRay(c);const hh=raycaster.intersectObject(menu.mesh,false)[0];if(hh)menu.drag(dragging.i,hh.uv)}
    // xr-standard buttons: 4 = A/X (build 468: short = quick ring, long = menu), 5 = B/Y the section
    const bt=c.userData.source?.gamepad?.buttons;

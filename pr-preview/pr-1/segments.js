@@ -1,15 +1,15 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { volume, incNextSegmentMaskVolumeId } from './state.js?v=20261019-build622';
-import { hexRgb } from './utils.js?v=20261019-build622';
-import { settings } from './app-settings.js?v=20261019-build622';
-import { buildThresholdMask, morphMask, fillMaskHoles, removeSmallMaskComponents } from './mask-ops.js?v=20261019-build622';
-import { thinSuppressActive, suppressThinMask } from './thin-suppress.js?v=20261019-build622';
-import { effectiveRanges } from './segment-exclusive.js?v=20261019-build622';
-import { maskFromAnalysisRuns } from './run-length.js?v=20261019-build622';
-import { sourceFilterStages } from './source-filters.js?v=20261019-build622';
-import { gpuSlotOrder, slotSignature } from './segment-slots.js?v=20261019-build622';
-import { segmentPresetDefaults } from './dataset-reset.js?v=20261019-build622';
+import { volume, incNextSegmentMaskVolumeId } from './state.js?v=20261019-build623';
+import { hexRgb } from './utils.js?v=20261019-build623';
+import { settings } from './app-settings.js?v=20261019-build623';
+import { buildThresholdMask, morphMask, fillMaskHoles, removeSmallMaskComponents } from './mask-ops.js?v=20261019-build623';
+import { thinSuppressActive, suppressThinMask } from './thin-suppress.js?v=20261019-build623';
+import { effectiveRanges } from './segment-exclusive.js?v=20261019-build623';
+import { maskFromAnalysisRuns } from './run-length.js?v=20261019-build623';
+import { sourceFilterStages } from './source-filters.js?v=20261019-build623';
+import { gpuSlotOrder, slotSignature } from './segment-slots.js?v=20261019-build623';
+import { segmentPresetDefaults } from './dataset-reset.js?v=20261019-build623';
 // build 531: 'contrast' (造影領域) is the fifth preset; at most GPU_SEGMENT_SLOTS (4) are enabled at once (segment-slots.js)
 export const SEGMENT_PRESET_ORDER=['bone','soft','fat','lung','contrast'];
 export const segmentEditState=Object.fromEntries(SEGMENT_PRESET_ORDER.map(key=>[key,{baseRuns:null,baseSignature:'',keepRuns:null,excludeRuns:null,cutRuns:null,finalRuns:null,revision:0,undo:[],redo:[],surfaceGroup:null,rawCutSurface:false}]));
