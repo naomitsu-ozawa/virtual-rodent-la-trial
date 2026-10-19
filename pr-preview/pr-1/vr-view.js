@@ -16,7 +16,7 @@ import { marchClassificationHitInfo } from './vr-pick.js?v=20261018-build621';
 import { setBusySlot, reportBusyProgress } from './progress-modal.js?v=20261018-build621';
 import { tr } from './i18n.js?v=20261018-build621';
 import { wrapMenuText, stackMenuRows } from './vr-menu-text.js?v=20261018-build621';
-import { activeEventLevel, eventModeOn, missionLines, simpleMenuSegments, simpleMenuLabelsRow, simpleMenuLabelsAtStart } from './event-mode.js?v=20261018-build621'; // build 626: 体験会モード - the chosen level's mission on the help board, the かんたん menu
+import { activeEventLevel, eventModeOn, missionLines, simpleMenuSegments, simpleMenuLabelsRow, simpleMenuLabelsAtStart, simpleMenuUndoRow, simpleMenuLayout, SIMPLE_MENU } from './event-mode.js?v=20261018-build621'; // build 626: 体験会モード - the chosen level's mission on the help board, the かんたん menu
 import { VIEW_TOGGLE_ID, VIEW_TOGGLE_BUTTON, SECTION_DELETE_ID, createViewToggle, createDoublePress, ringIdsFor } from './vr-view-toggle.js?v=20261018-build621';
 import { vrSpacingNote, vrVolumeText } from './vr-spacing-note.js?v=20261018-build621';
 import { NORM_LONG, physicalExtentsMm, longestMm, realMagnification, realHolderScale, startHolderScale, magnificationText, createScaleTag, clampScale, pinchScale, scaleLimits, oversizeNote, planeFrameLocalScale, planeTagLocalScale, scaleLineText } from './vr-real-scale.js?v=20261018-build621';
@@ -2007,19 +2007,24 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
   if(ui.tab!==10){const tw=(MENU_W-2*X)/L.tabs.length,TAB_IDS=[0,1,2,3,4,5,6,9]; // build 545: the 8th tab (HU線); build 558: it is tab 9 (7 is the quick ring editor, 8 the self-check page: neither in the bar)
    L.tabs.forEach((t,i)=>{const id=TAB_IDS[i];btn(X+i*tw,110,tw-12,t+(i===1&&section.on?' ●':'')+(id===9&&huLine.isArmed()?' ●':''),ui.tab===id,()=>{ui.tab=id},{size:L.tabs.length>7?24:28})})}
   const status=ui.flash&&performance.now()<ui.flashUntil?ui.flash:ui.status;
-  label(X,228,status,{color:'#ffd27a'});
+  label(X,ui.tab===10?SIMPLE_MENU.STATUS:228,status,{color:'#ffd27a'}); // the かんたん menu has no tab bar: its status line sits higher (SIMPLE_MENU)
   const y0=270;
   if(ui.tab===10){
-   // build 626: 体験会 かんたん menu - one big 表示 / 非表示 row per segment of the level (those the data has shown), the analysis labels when the data has results
-   const lv=activeEventLevel(),act=SEGMENT_PRESET_ORDER.filter(k=>segmentState[k]?.active&&segmentState[k]?.enabled),keys=simpleMenuSegments(lv,act);
-   label(X,170,lv?'Lv'+lv.lv+' '+tr(lv.nameKey):tr('evSimpleTitle'),{bold:true,size:32,color:'#ffd27a'});
-   const row=(y,name,color,on,set)=>{label(X,y+40,name,{color,bold:true,size:34});btn(440,y,250,tr('evShow'),on,()=>set(true),{size:32,color:on?color:undefined});btn(710,y,250,tr('evHide'),!on,()=>set(false),{size:32})};
-   if(!keys.length)label(X,y0+40,L.noSeg);
-   keys.forEach((key,i)=>{const seg=segmentState[key];row(y0+i*100,tr(key),seg.color||'#fff',segMode[key]!==2,v=>{segMode[key]=v?((segMode[key]|0)===2?0:segMode[key]|0):2})});
-   let y=y0+keys.length*100;
-   if(simpleMenuLabelsRow(lv,regionList.length>0)){row(y,tr('evLabels'),'#cfe3f0',evLabels,v=>{evLabels=v});y+=100}
-   btn(X,y+40,300,L.home,false,()=>{bringVolumeFront();placeMenuNow();placeHelpNow();if(hist.isOpen)placeHistNow();placeHuNow()},{size:28});
-   btn(X+320,y+40,400,tr('evAllSettings'),false,()=>{ui.tab=0},{size:28});
+   // build 626: 体験会 かんたん menu (layout and widget ids: event-mode.js simpleMenuLayout): 表示 / 非表示 per segment of the level (those the data has shown),
+   // 断面, the analysis labels and the analysis results (volumes), 正面に戻す / 元に戻す / すべての設定 / VR・AR 終了. No advanced settings here.
+   const lv=activeEventLevel(),act=SEGMENT_PRESET_ORDER.filter(k=>segmentState[k]?.active&&segmentState[k]?.enabled),keys=simpleMenuSegments(lv,act),sn=spacingNote();
+   const goHome=()=>{bringVolumeFront();placeMenuNow();placeHelpNow();if(hist.isOpen)placeHistNow();placeHuNow()};
+   const acts={section:v=>setSection(v),labels:v=>{evLabels=v},undo:()=>{undoLast()},home:goHome,all:()=>{ui.tab=0},exit:()=>session.end()};
+   for(const key of keys)acts['seg:'+key]=v=>{segMode[key]=v?((segMode[key]|0)===2?0:segMode[key]|0):2};
+   const simple=simpleMenuLayout({level:lv,segments:keys.map(k=>({key:k,name:tr(k),color:segmentState[k].color,on:segMode[k]!==2})),sectionOn:section.on,labels:{show:simpleMenuLabelsRow(lv,regionList.length>0),on:evLabels},
+    results:regionList.map(r=>({hex:'#'+r.color.toString(16).padStart(6,'0'),name:String(r.rid)+'. '+r.segmentKeys.map(k2=>tr(k2)).join('+'),text:vrVolumeText(r.mm3,sn)})),total:(sn?sn.mark+' ':'')+regionList.reduce((a,r)=>a+r.mm3,0).toFixed(2)+' mm³',
+    undo:{show:simpleMenuUndoRow(lv)}, // always pressable: with nothing to undo it only says so (undoLast)
+   
+    text:{show:tr('evShow'),hide:tr('evHide'),section:L.sec,labels:tr('evLabels'),results:L.anT,total:L.anTotal,noSeg:L.noSeg,home:L.home,undo:L.ptUndo,all:tr('evAllSettings'),exit:tr(mode==='ar'?'evExitAr':'evExitVr')}});
+   for(const it of simple){
+    if(it.type==='label')label(it.x,it.y,it.text,{bold:it.bold,size:it.size,color:it.color});
+    else{const m=/^(.+):(show|hide)$/.exec(it.id),action=m?()=>acts[m[1]]?.(m[2]==='show'):()=>acts[it.id]?.();w.push({...it,action})}
+   }
   }else if(ui.tab===0){
    const active=SEGMENT_PRESET_ORDER.filter(k=>segmentState[k]?.active&&segmentState[k]?.enabled); // build 531: only the shown ones (at most 4 rows; a switched-off segment has nothing to set)
    if(!active.length)label(X,y0+40,L.noSeg);
