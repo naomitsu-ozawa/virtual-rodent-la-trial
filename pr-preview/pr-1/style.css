@@ -1309,3 +1309,14 @@ html.vrl-ipad-ui .ws-settings-embed .settings-cache-list,html.vrl-ipad-ui .ws-se
 .event-reset-btn.is-armed{border-color:rgb(var(--ui-amber-bg2));background:rgb(var(--ui-amber-bg2));color:rgb(var(--ui-on-amber))}
 .event-reset-btn:disabled{cursor:default;opacity:.55}
 .event-level-after{margin:0}
+
+/* 設定 > デバッグ > テスト機能 (debug-switches-ui.js): collapsed by default, below the debug-mode switch */
+.debug-switches{margin-top:12px;border-top:1px solid rgb(var(--ui-b3));padding-top:8px}
+.debug-switches-title{cursor:pointer;min-height:44px;display:flex;align-items:center;font-weight:600}
+.debug-switches .settings-check>span{overflow-wrap:anywhere}
+.debug-switch-note{margin:0 0 6px 28px}
+.debug-switch-group{margin:10px 0 0;font-weight:600}
+.debug-switch-when{white-space:nowrap}
+.debug-switch-reload{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:8px 0}
+.debug-switch-reload[hidden]{display:none}
+.debug-switches>#dbg-reset{margin-top:8px}

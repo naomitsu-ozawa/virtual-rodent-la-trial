@@ -94,6 +94,22 @@ export function combineClassificationDistance(cls,dist,mask,out=null,{four=false
  }
  return res;
 }
+// only the alpha of combineClassificationDistance, one byte per voxel, for the voxels [i0, i1) into alpha[i0..i1): the smallest
+// distance over the shown segments (bit s of mask, any stored channel), 255 when none, the same rule as above. The classification channels of
+// the combined bytes do not depend on the mask, so a rebuild for a new mask only rewrites the alpha (vr-combo-rebuild.js; byte-identical to the
+// one-shot result, unit-tested). Self-contained (no outer names): it also runs as the source of the rebuild worker.
+export function combinedAlphaRange(dist,chan,mask,alpha,i0,i1){
+ const C=dist.C,d=dist.data;let c0=-1,c1=-1,c2=-1,c3=-1,k=0;
+ for(let s=0;s<4;s++)if(chan[s]>=0&&((mask>>s)&1)){const c=chan[s];if(k===0)c0=c;else if(k===1)c1=c;else if(k===2)c2=c;else c3=c;k++}
+ for(let i=i0;i<i1;i++){
+  const b=i*C;let m=255,v=0;
+  if(c0>=0){v=d[b+c0];if(v<m)m=v}
+  if(c1>=0){v=d[b+c1];if(v<m)m=v}
+  if(c2>=0){v=d[b+c2];if(v<m)m=v}
+  if(c3>=0){v=d[b+c3];if(v<m)m=v}
+  alpha[i]=m;
+ }
+}
 // the classification bytes of channel 3 (the fourth stored segment), one byte per voxel, for the VR shader's
 // second texture (VRL_CLS4); null when no segment uses channel 3
 export function fourthChannelBytes(cls){

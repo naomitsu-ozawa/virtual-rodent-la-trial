@@ -1,7 +1,8 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.webgpu.js';
 import dicomParser from 'https://esm.sh/dicom-parser@1.8.21';
-import { canvasBackground3dUnit } from './canvas-theme.js?v=20261019-build625';
-import { lightOffsetExpr, lightingWGSL, MATERIALS, materialKey } from './lighting.js?v=20261019-build625';
+import { canvasBackground3dUnit } from './canvas-theme.js?v=20261019-build626';
+import { lightOffsetExpr, lightingWGSL, MATERIALS, materialKey } from './lighting.js?v=20261019-build626';
+import { EDIT_MASK_MAX_BYTES, editMaskInfoWord, editMaskLayout, editMaskPlanes, fillEditMaskWords, sameU32 } from './edit-mask-texture.js?v=20261019-build626';
 
 const UNCOMPRESSED_TS=new Set(['1.2.840.10008.1.2','1.2.840.10008.1.2.1','1.2.840.10008.1.2.2']);
 const safeWgsl=source=>source.replace(/\bmeta\b/g,'vrlMeta').replace(/\bactive\b/g,'vrlActive').replace(/\btarget\b/g,'vrlTarget');
@@ -95,6 +96,11 @@ struct Uniforms{
 // hit. section.w = 1 when the texture is valid. analysisOverlay[0] is then the
 // start of the colour table (index k -> word), or 0 when there is no region.
 @group(0) @binding(11) var regionTex:texture_3d<u32>;
+// edit / applied-cut voxel bit mask (edit-mask-texture.js): the interval membership of editIntervals /
+// appliedCutIntervals for every voxel of the texture grid, so a masked sample costs one texture load instead of a binary
+// search. mprWindow.z = bits per voxel + 256 * log2(texture width) (0 = no texture: the row search below, unchanged),
+// mprWindow.w = plane table (3 bits per entry: edit slot s, then cut slot 4 + s).
+@group(0) @binding(12) var editMaskTex:texture_3d<u32>;
 
 struct VOut{@builtin(position) position:vec4<f32>};
 @vertex fn vs(@builtin(vertex_index) i:u32)->VOut{
@@ -134,24 +140,36 @@ fn maskVoxelAt(tc0:vec3<f32>)->vec3<u32>{
  let sz=u32(round(f32(tp.z)*f32(max(src.z-1u,1u))/f32(max(tex.z-1u,1u))));
  return min(vec3<u32>(sx,sy,sz),src-vec3<u32>(1u));
 }
+// bit "plane" of voxel p in editMaskTex (layout: edit-mask-texture.js; editMaskBit there is the CPU copy)
+fn editMaskBit(plane:u32,p:vec3<u32>)->bool{
+ let info=u32(u.mprWindow.z);let l=countTrailingZeros(info&255u);let lw=info>>8u;let lv=5u-l;
+ let wpr=(u32(u.textureDims.x)+(1u<<lv)-1u)>>lv;let i=p.y*wpr+(p.x>>lv);
+ let word=textureLoad(editMaskTex,vec3<i32>(i32(i&((1u<<lw)-1u)),i32(i>>lw),i32(p.z)),0).r;
+ return ((word>>(((p.x&((1u<<lv)-1u))<<l)+plane))&1u)!=0u;
+}
+// entry k: plane of edit slot k (k < 4) or of cut slot k - 4; an unused slot reads 0, so callers test editRows[0] / appliedCutRows[0] first
+fn editMaskPlane(k:u32)->u32{return (u32(u.mprWindow.w)>>(3u*k))&7u;}
 fn editAllows(seg:u32,tc0:vec3<f32>)->bool{
  let activeMask=editRows[0];if((activeMask&(1u<<seg))==0u){return true;}
  let keepMask=editRows[1];
  let dims=vec3<u32>(u32(u.textureDims.x),u32(u.textureDims.y),u32(u.textureDims.z));
  let tc=clamp(tc0,vec3<f32>(0.0),vec3<f32>(0.999999));
  let p=min(vec3<u32>(tc*vec3<f32>(dims)),dims-vec3<u32>(1u));
+ var inside=false;
+ // one load from the mask texture when it is there (the same voxel decision as the search below)
+ if(u.mprWindow.z>0.5){inside=editMaskBit(editMaskPlane(seg),p);}else{
  let rowCount=dims.y*dims.z;
  let base=2u+seg*(rowCount+1u);
  let row=p.z*dims.y+p.y;
  let start=editRows[base+row];
  let finish=editRows[base+row+1u];
- var inside=false;
  // intervals are sorted and disjoint per row: binary search for the last one
  // starting at or before p.x (a linear scan cost tens of reads per sample on
  // rows with many intervals, e.g. a processed fat segment)
  var lo=start;var hi=finish;
  loop{if(lo>=hi){break;}let mid=(lo+hi)/2u;if((editIntervals[mid]&65535u)<=p.x){lo=mid+1u;}else{hi=mid;}}
  if(lo>start){inside=p.x<=(editIntervals[lo-1u]>>16u);}
+ }
  let keep=(keepMask&(1u<<seg))!=0u;return select(!inside,inside,keep);
 }
 // a segment whose mask can hold voxels outside its HU range (Closing / hole filling added them, and a higher
@@ -231,6 +249,7 @@ fn appliedCutContains(seg:u32,tc0:vec3<f32>)->bool{
  let rowCount=dims.y*dims.z;
  let base=1u+seg*(rowCount+1u);
  let row=p.z*dims.y+p.y;
+ if(u.mprWindow.z>0.5){return editMaskBit(editMaskPlane(4u+seg),p);}
  let start=appliedCutRows[base+row];
  let finish=appliedCutRows[base+row+1u];
  var lo=start;var hi=finish;
@@ -262,6 +281,8 @@ fn rawSegmentIndexFor(v:f32)->i32{
 // whether voxels x and x+1 of a row lie inside the segment's edit intervals (one binary search)
 fn editInsidePair(seg:u32,row:u32,x:u32)->vec2<bool>{
  let dims=vec3<u32>(u32(u.textureDims.x),u32(u.textureDims.y),u32(u.textureDims.z));
+ // two bits of the mask texture (x + 1 past the row's end is outside, as in the search; the caller ignores it there)
+ if(u.mprWindow.z>0.5){let pl=editMaskPlane(seg);let p=vec3<u32>(x,row%dims.y,row/dims.y);return vec2<bool>(editMaskBit(pl,p),x+1u<dims.x&&editMaskBit(pl,p+vec3<u32>(1u,0u,0u)));}
  let rowCount=dims.y*dims.z;
  let base=2u+seg*(rowCount+1u);
  let start=editRows[base+row];
@@ -825,6 +846,8 @@ export function reduceSliceArea(packed,sw,xs,ys,tw,th,rowStride,out,rowSum=new F
 export function gpuRunsForTexture(runs,sourceDims,textureDims,{dilate=0}={}){
  const [sw,sh,sd]=sourceDims,[tw,th,td]=textureDims;
  if(!runs)return null;
+ // same grid, no dilation: the runs pass through as given. Every consumer (the row searches of volumeShader and the edit
+ // mask texture, which must agree with them) assumes each row's intervals sorted by x0 and disjoint, as the run builders emit them.
  if(sw===tw&&sh===th&&sd===td)return dilate?gpuDilateRuns(runs,tw,th,td,dilate):runs;
  const xMap=new Uint32Array(tw),yMap=new Uint32Array(th),zMap=new Uint32Array(td);
  for(let x=0;x<tw;x++)xMap[x]=tw<=1?0:Math.round(x*(sw-1)/(tw-1));
@@ -871,8 +894,8 @@ export function editBrickOccupancy(descs,gridDims,brickSize=8){
 }
 
 export class MedicalVolumeRenderer{
- constructor({device,host,rendererCanvas,onProgress,onStatus}){
-  this.device=device;this.host=host;this.rendererCanvas=rendererCanvas;this.onProgress=onProgress||(()=>{});this.onStatus=onStatus||(()=>{});
+ constructor({device,host,rendererCanvas,onProgress,onStatus,onRedraw}){
+  this.device=device;this.host=host;this.rendererCanvas=rendererCanvas;this.onProgress=onProgress||(()=>{});this.onStatus=onStatus||(()=>{});this.onRedraw=onRedraw||(()=>{}); // onRedraw = request a 3D frame (the edit mask texture became usable)
   this.canvas=document.createElement('canvas');this.canvas.className='gpu-medical-volume-canvas';
   Object.assign(this.canvas.style,{position:'absolute',inset:'0',width:'100%',height:'100%',display:'none',pointerEvents:'none',zIndex:'0'});
   this.host.style.position='relative';this.host.appendChild(this.canvas);
@@ -885,6 +908,7 @@ export class MedicalVolumeRenderer{
   const pickModule=this.device.createShaderModule({label:'VRL medical volume pick',code:safeWgsl(volumePickShader())});this.pickPipeline=this.device.createComputePipeline({label:'VRL medical volume pick',layout:'auto',compute:{module:pickModule,entryPoint:'main'}});this.pickBuffer=null;this.pickOutput=null;this.pickCapacity=0;
   const brickModule=this.device.createShaderModule({label:'VRL volume minmax bricks',code:safeWgsl(brickShader())});this.brickPipeline=this.device.createComputePipeline({label:'VRL volume minmax bricks',layout:'auto',compute:{module:brickModule,entryPoint:'main'}});this.brickBuffer=null;this.brickDims=[1,1,1];this.brickSize=8;
   const mprModule=this.device.createShaderModule({label:'VRL resident volume MPR',code:safeWgsl(mprPlaneShader())});this.mprPipeline=this.device.createComputePipeline({label:'VRL resident volume MPR',layout:'auto',compute:{module:mprModule,entryPoint:'main'}});this.mprUniformBuffer=this.device.createBuffer({size:48,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
+  this.editMaskTexture=null;this.editMaskBuilt=null;this.editMaskInfo='';this.editUpload=null;this.cutUpload=null;
   this.editRowsBuffer=null;this.editIntervalsBuffer=null;this.editSignature='';this.clearEditRuns();
   this.previewRowsBuffer=null;this.previewIntervalsBuffer=null;this.previewSignature='';this.clearPreviewRuns();
   this.appliedCutRowsBuffer=null;this.appliedCutIntervalsBuffer=null;this.appliedCutSignature='';this.clearAppliedCutRuns();
@@ -1042,11 +1066,13 @@ export class MedicalVolumeRenderer{
    {binding:6,resource:{buffer:this.previewRowsBuffer}},{binding:7,resource:{buffer:this.previewIntervalsBuffer}},
    {binding:8,resource:{buffer:this.appliedCutRowsBuffer}},{binding:9,resource:{buffer:this.appliedCutIntervalsBuffer}},
    {binding:11,resource:(this.regionTexture||this.regionDummy()).createView({dimension:'3d'})},
+   // the mask texture only once its out-of-memory scope came back clean (an invalid texture would invalidate the whole group)
+   {binding:12,resource:(this.editMaskTexture&&this.editMaskBuilt?.ready?this.editMaskTexture:this.regionDummy()).createView({dimension:'3d'})},
    {binding:10,resource:{buffer:this.analysisOverlayBuffer}}
   ]});
  }
  clearEditRuns(){
-  this.editRunsInfo='';
+  this.editRunsInfo='';this.editUpload=null;
   this.editRowsBuffer?.destroy?.();this.editIntervalsBuffer?.destroy?.();
   this.editRowsBuffer=this.device.createBuffer({label:'VRL edit rows empty',size:8,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST});
   this.editIntervalsBuffer=this.device.createBuffer({label:'VRL edit intervals empty',size:4,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST});
@@ -1160,6 +1186,7 @@ export class MedicalVolumeRenderer{
   this.previewSignature=key+':'+gridDims.join('x')+':'+cursor;this.rebuildBindGroup();
  }
  clearAppliedCutRuns(){
+  this.cutUpload=null;
   this.appliedCutRowsBuffer?.destroy?.();this.appliedCutIntervalsBuffer?.destroy?.();
   this.appliedCutRowsBuffer=this.device.createBuffer({label:'VRL applied cut rows empty',size:8,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST});
   this.appliedCutIntervalsBuffer=this.device.createBuffer({label:'VRL applied cut intervals empty',size:4,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST});
@@ -1199,9 +1226,14 @@ export class MedicalVolumeRenderer{
   const intervalsBuffer=this.device.createBuffer({label:'VRL applied cut intervals',size:intervals.byteLength,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST});
   this.device.queue.writeBuffer(rowsBuffer,0,offsets);this.device.queue.writeBuffer(intervalsBuffer,0,intervals);
   this.appliedCutRowsBuffer?.destroy?.();this.appliedCutIntervalsBuffer?.destroy?.();this.appliedCutRowsBuffer=rowsBuffer;this.appliedCutIntervalsBuffer=intervalsBuffer;
+  this.cutUpload={offsets,intervals,activeMask}; // what the mask texture is built from
   this.appliedCutSignature=gridDims.join('x')+':'+String(activeMask)+':'+String(cursor);this.rebuildBindGroup();
  }
+ // the row buffers, then the voxel bit mask texture from exactly what they hold (rebuilt only when that changed)
  setEditRuns(edits,segmentOrder,v){
+  try{this.setEditRows(edits,segmentOrder,v)}finally{this.updateEditMaskTexture()}
+ }
+ setEditRows(edits,segmentOrder,v){
   if(!v||!segmentOrder?.length){this.clearEditRuns();this.clearAppliedCutRuns();return}
   this.setAppliedCutRuns(edits,segmentOrder,v);
   const sourceDims=[v.columns,v.rows,v.slices],gridDims=this.textureDims.slice(),[w,h,d]=gridDims;
@@ -1238,9 +1270,57 @@ export class MedicalVolumeRenderer{
   const intervalsBuffer=this.device.createBuffer({label:'VRL edit intervals',size:intervals.byteLength,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST});
   this.device.queue.writeBuffer(rowsBuffer,0,offsets);this.device.queue.writeBuffer(intervalsBuffer,0,intervals);
   this.editRowsBuffer?.destroy?.();this.editIntervalsBuffer?.destroy?.();this.editRowsBuffer=rowsBuffer;this.editIntervalsBuffer=intervalsBuffer;
+  this.editUpload={offsets,intervals,activeMask};
   // diagnostics: what the GPU edit mask holds, per segment index (mode and interval count), for the status bar
   this.editRunsInfo=descs.map((desc,si)=>{if(!desc)return null;let n=0;for(let z=0;z<d;z++)n+=(desc.runs?.[z]?.length||0)/3;return si+':'+desc.mode+' '+n+'区間'}).filter(Boolean).join(' ');
   this.editSignature=gridDims.join('x')+':'+String(activeMask)+':'+String(keepMask)+':'+String(cursor);this.rebuildBindGroup();
+ }
+ // edit / applied-cut voxel bit mask (edit-mask-texture.js) for volumeShader. Built from the uploaded offsets /
+ // intervals (dilation and grid mapping included), so every bit is the row search's decision. Kept while the uploads are
+ // byte-identical (a re-sync with the same edits does not rebuild it). Staging buffer + one copyBufferToTexture as the
+ // region texture. It is used only after its out-of-memory error scope came back clean; a failure, the size cap
+ // or a missing texture keeps the row search (mprWindow.z = 0), which gives the same pixels.
+ updateEditMaskTexture(){
+  const edit=this.editUpload||null,cut=this.cutUpload||null,dims=this.textureDims.slice(),b=this.editMaskBuilt;
+  const same=(a,c)=>a===c||(!!a&&!!c&&a.activeMask===c.activeMask&&sameU32(a.offsets,c.offsets)&&sameU32(a.intervals,c.intervals));
+  if(b&&this.editMaskTexture&&b.dims.join('x')===dims.join('x')&&same(b.edit,edit)&&same(b.cut,cut)){b.edit=edit;b.cut=cut;return}
+  this.dropEditMaskTexture();
+  if(!edit&&!cut)return;
+  const planes=editMaskPlanes(edit?.activeMask||0,cut?.activeMask||0),layout=editMaskLayout(dims,planes.count);
+  if(!layout||typeof this.device?.createTexture!=='function')return;
+  const lim=this.device.limits||{},cap=Math.min(EDIT_MASK_MAX_BYTES,lim.maxBufferSize||Infinity),dimCap=lim.maxTextureDimension3D||2048,mb=(layout.bytes/1048576).toFixed(0);
+  if(layout.bytes>cap||layout.width>dimCap||layout.height>dimCap||layout.depth>dimCap){this.editMaskInfo='なし（'+mb+' MB）→ 区間検索';return}
+  let tex=null,staging=null,pushed=false;
+  try{
+   this.device.pushErrorScope?.('out-of-memory');pushed=!!this.device.pushErrorScope;
+   staging=this.device.createBuffer({label:'VRL edit mask staging',size:layout.bytes,usage:GPUBufferUsage.COPY_SRC,mappedAtCreation:true});
+   fillEditMaskWords(layout,planes.table,edit,cut,new Uint32Array(staging.getMappedRange()));
+   staging.unmap();
+   tex=this.device.createTexture({label:'VRL edit mask',size:{width:layout.width,height:layout.height,depthOrArrayLayers:layout.depth},dimension:'3d',format:'r32uint',usage:GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.COPY_DST});
+   const enc=this.device.createCommandEncoder({label:'VRL edit mask upload'});
+   enc.copyBufferToTexture({buffer:staging,bytesPerRow:layout.bytesPerRow,rowsPerImage:layout.height},{texture:tex},{width:layout.width,height:layout.height,depthOrArrayLayers:layout.depth});
+   this.device.queue.submit([enc.finish()]);
+   const created=tex,stagingBuf=staging,state={edit,cut,dims,layout,table:planes.table,ready:!pushed};
+   this.device.queue.onSubmittedWorkDone?.()?.then(()=>stagingBuf.destroy?.()).catch(()=>{});
+   this.editMaskTexture=tex;this.editMaskBuilt=state;this.editMaskInfo=layout.bits+'bit '+mb+' MB';this.rebuildBindGroup();
+   if(pushed){pushed=false;this.device.popErrorScope().then(err=>{if(this.editMaskTexture!==created)return;
+    if(err){console.warn('Edit mask texture not available; searching rows instead.',err.message);this.dropEditMaskTexture();this.editMaskInfo='なし（'+err.message+'）→ 区間検索'}
+    else{state.ready=true;this.rebuildBindGroup();this.onRedraw?.()}}).catch(()=>{})}
+  }catch(e){
+   console.warn('Edit mask texture not available; searching rows instead.',e);
+   if(pushed){try{this.device.popErrorScope().catch(()=>{})}catch{}}
+   if(this.editMaskTexture===tex){this.editMaskTexture=null;this.editMaskBuilt=null}
+   tex?.destroy?.();staging?.destroy?.();this.editMaskInfo='なし（'+String(e?.message||e)+'）→ 区間検索';this.rebuildBindGroup();
+  }
+ }
+ // the bind group is rebuilt when a texture was bound: a group holding the destroyed texture fails every later submit (3D stops drawing)
+ dropEditMaskTexture(){const had=this.editMaskTexture;this.editMaskTexture=null;this.editMaskBuilt=null;this.editMaskInfo='';if(had){this.rebuildBindGroup();had.destroy?.();this.onRedraw?.()}}
+ // mprWindow.z / .w of the frame: the layout word and plane table while the texture holds the current uploads, else 0 (row search)
+ editMaskUniform(){
+  // globalThis.__vrlEditMaskTex=false (console): the row search for an A/B of the frame time on the device
+  const b=this.editMaskBuilt;
+  if(globalThis.__vrlEditMaskTex!==false&&this.editMaskTexture&&b?.ready&&b.edit===(this.editUpload||null)&&b.cut===(this.cutUpload||null)&&b.dims.join('x')===this.textureDims.join('x'))return[editMaskInfoWord(b.layout),b.table];
+  return[0,0];
  }
  ensurePickCapacity(count){
   if(count<=this.pickCapacity&&this.pickBuffer&&this.pickOutput)return;
@@ -1362,7 +1442,7 @@ fn word(i:u32)->u32{
   const now=performance.now();if(now-(this._frameShownAt||0)<250)return;this._frameShownAt=now;
   const el=typeof document!=='undefined'&&document.getElementById('gpu-frame-time');if(!el)return;if(globalThis.__vrlSettings?.get?.('showPerf')===false){el.textContent='';return}
   const ms=this.lastFrameMs;const gap=this.frameGapMs,js=globalThis.__vrlThreeRenderMs;
-  el.textContent=' · 3D '+Math.round(ms)+' ms · 待ち '+Math.round(this.queueWaitMs||0)+' ms'+(js!=null?' · three '+Math.round(js)+' ms':'')+(gap!=null&&gap<2000?' · 間隔 '+Math.round(gap)+' ms ('+Math.round(1000/Math.max(gap,1))+' fps)'+this.gapStats():'')+(this.regionTexInfo?' · 領域tex '+this.regionTexInfo:'')+(this.editRunsInfo?' · 編集 '+this.editRunsInfo:'')+' · '+(this.renderW||this.canvas.width)+'×'+(this.renderH||this.canvas.height)+' · resize '+(this.resizeCount||0)+'/'+(globalThis.__vrlThreeResizes||0)+' · drag targets '+(this.lowTargetCount||0)+(this.interactive?' '+(document.documentElement.lang==='en'?'dragging':'操作中'):'');
+  el.textContent=' · 3D '+Math.round(ms)+' ms · 待ち '+Math.round(this.queueWaitMs||0)+' ms'+(js!=null?' · three '+Math.round(js)+' ms':'')+(gap!=null&&gap<2000?' · 間隔 '+Math.round(gap)+' ms ('+Math.round(1000/Math.max(gap,1))+' fps)'+this.gapStats():'')+(this.regionTexInfo?' · 領域tex '+this.regionTexInfo:'')+(this.editRunsInfo?' · 編集 '+this.editRunsInfo:'')+(this.editMaskInfo?' · 編集tex '+this.editMaskInfo:'')+' · '+(this.renderW||this.canvas.width)+'×'+(this.renderH||this.canvas.height)+' · resize '+(this.resizeCount||0)+'/'+(globalThis.__vrlThreeResizes||0)+' · drag targets '+(this.lowTargetCount||0)+(this.interactive?' '+(document.documentElement.lang==='en'?'dragging':'操作中'):'');
  }
  // frames in the last second while dragging: count, longest gap, gaps over 20 ms (a 60 Hz frame missed)
  gapStats(){
@@ -1416,7 +1496,8 @@ struct O{@builtin(position) p:vec4<f32>,@location(0) uv:vec2<f32>};
   const indices=mpr.indices||[0,0,0],visible=mpr.visible||[0,0,0];
   put(16,+indices[0]||0,+indices[1]||0,+indices[2]||0,Number.isFinite(+mpr.opacity)?Math.max(0,Math.min(1,+mpr.opacity)):0);
   put(17,visible[0]?1:0,visible[1]?1:0,visible[2]?1:0,globalThis.__vrlSettings?.refineMode?.()??1);
-  put(18,Number.isFinite(+mpr.windowCenter)?+mpr.windowCenter:0,Math.max(1,Number.isFinite(+mpr.windowWidth)?+mpr.windowWidth:1),0,0);
+  const em=this.editMaskUniform(); // edit mask texture layout (z) and plane table (w)
+  put(18,Number.isFinite(+mpr.windowCenter)?+mpr.windowCenter:0,Math.max(1,Number.isFinite(+mpr.windowWidth)?+mpr.windowWidth:1),em[0],em[1]);
   const section=mpr.section||{},plane=section.plane,active=section.active&&plane,mode=plane==='axial'?1:plane==='coronal'?2:plane==='sagittal'?3:0;
   let coord=0;
   if(active&&this.volume){
@@ -1472,7 +1553,7 @@ struct O{@builtin(position) p:vec4<f32>,@location(0) uv:vec2<f32>};
  async pick(clientX,clientY,camera,obj,segmentState,segmentOrder,preferredKey=null){
   const result=await this.pickMany([{clientX,clientY}],camera,obj,segmentState,segmentOrder,preferredKey);return result[0]||null;
  }
- resetData(){this.dataGeneration=(this.dataGeneration|0)+1;this.setActive(false);this.texture?.destroy?.();this.brickBuffer?.destroy?.();this.texture=null;this.brickBuffer=null;this.bindGroup=null;this.seriesId=null;this.bricksReady=false;this.previewVolume=null;this.previewPlaneBuffers={coronal:null,sagittal:null};this.volume=null;this.textureDims=[1,1,1];this.reducedVolume=false;this.textureBytes=0;this.planSignature='';this.clearEditRuns();this.clearPreviewRuns();this.clearAppliedCutRuns();this.clearAnalysisRuns()} // the region index texture (r32uint, 67 MB at 512³) and the overlay buffer belong to the old grid too: released here, not at the next clearAnalysisRuns
+ resetData(){this.dataGeneration=(this.dataGeneration|0)+1;this.setActive(false);this.dropEditMaskTexture();this.texture?.destroy?.();this.brickBuffer?.destroy?.();this.texture=null;this.brickBuffer=null;this.bindGroup=null;this.seriesId=null;this.bricksReady=false;this.previewVolume=null;this.previewPlaneBuffers={coronal:null,sagittal:null};this.volume=null;this.textureDims=[1,1,1];this.reducedVolume=false;this.textureBytes=0;this.planSignature='';this.clearEditRuns();this.clearPreviewRuns();this.clearAppliedCutRuns();this.clearAnalysisRuns()} // the region index texture (r32uint, 67 MB at 512³) and the overlay buffer belong to the old grid too: released here, not at the next clearAnalysisRuns
  destroy(){this.resetData();this.regionTexture?.destroy?.();this._regionDummy?.destroy?.();this.uniformBuffer?.destroy?.();this.pickBuffer?.destroy?.();this.pickOutput?.destroy?.();this.editRowsBuffer?.destroy?.();this.editIntervalsBuffer?.destroy?.();this.previewRowsBuffer?.destroy?.();this.previewIntervalsBuffer?.destroy?.();this.analysisOverlayBuffer?.destroy?.();this.appliedCutRowsBuffer?.destroy?.();this.appliedCutIntervalsBuffer?.destroy?.();this.mprUniformBuffer?.destroy?.();this.canvas.remove()}
 }
 
