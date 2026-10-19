@@ -28,6 +28,8 @@ import { createVrMeasure, LABEL_LIT_SCALE } from './vr-measure.js?v=20261018-bui
 import { MAX_SECTION_PLANES, nextPlaneColor, frameDepthTest, ARROW_LEN, ARROW_FLASH_MS, arrowFade, arrowShown, tagBehindTissue, sectionPage, pageOfPlane, SECTION_ROWS_PER_PAGE, FLING_UNDO_MS, FLING_DEBUG_MS, createVelocityTracker, flingDecision, flingDebugLines, capVelocity, flyStep, makeSectionSnapshot, restorePlan, createSectionUndo, undoButtonPlace } from './vr-section-frame.js?v=20261018-build621';
 import { createUndoButton } from './vr-undo-button.js?v=20261018-build621';
 import { createFlingDebugTag } from './vr-fling-debug.js?v=20261018-build621';
+import { isHand } from './vr-hand.js?v=20261018-build621'; // build 625: hand tracking (Quest 3): pure helpers
+import { createHandInput, HAND_LABEL_MOVE_M } from './vr-hand-view.js?v=20261018-build621'; // build 625: the hand's ray, wrist menu, fingertips
 import { LABEL_HIDE_DEFAULT, normalizeLabelHide, gpuOcclusionActive, depthVoxelSize, boardVisible, GHOST_ALPHA, occludedPass } from './vr-depth.js?v=20261018-build621';
 import { brickOccupancy, writeBrickOccupancy } from './vr-brick-occupancy.js?v=20261018-build621';
 import { createProbeGate } from './measure-label.js?v=20261018-build621';
@@ -1043,7 +1045,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
  // while the headset shows progress
  let session;
  step('session');
- try{session=await navigator.xr.requestSession(ar?'immersive-ar':'immersive-vr',{optionalFeatures:['local-floor']})}
+ try{session=await navigator.xr.requestSession(ar?'immersive-ar':'immersive-vr',{optionalFeatures:['local-floor','hand-tracking']})}
  catch(e){if(gpu)gpuPrepared=gpu;else{renderer.dispose();renderer.domElement.remove()}throw e}
  running={session};step('in-session');
  const scene=new THREE.Scene();scene.background=ar?null:BG.clone();
@@ -1082,7 +1084,10 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
   const dot=new THREE.Mesh(dotGeo,new THREE.MeshBasicMaterial({color:0xffffff,toneMapped:false,transparent:true}));dot.visible=false;scene.add(dot);c.userData.dot=dot; // transparent: drawn in the same pass as the rings, so renderOrder can put it over them
   // build 468: no guide line any more (sections are not picked by nearness)
  }
- const pulse=(c,v=0.35,ms=18)=>{try{c.userData.source?.gamepad?.hapticActuators?.[0]?.pulse?.(v,ms)}catch{}};
+ // build 625: hand tracking (optional 'hand-tracking'; vr-hand-view.js). Every hand branch below is guarded by isHand(c.userData.source); a controller never takes one
+ const handIn=createHandInput(THREE,{renderer,scene,controllers,ja,getHead:()=>head,colorOf:c=>handColor(c),release:c=>c.userData.release?.(true),handInHolder:c=>handInHolder(c),sectionOn:()=>section.on,avail:id=>id==='undo'?wheelAvail('undo'):id==='add'?wheelAvail('section-add'):true});
+ session.addEventListener('end',()=>handIn.dispose(),{once:true});
+ const pulse=(c,v=0.35,ms=18)=>{if(isHand(c?.userData?.source)){handIn.flash(c,v,ms);return}try{c.userData.source?.gamepad?.hapticActuators?.[0]?.pulse?.(v,ms)}catch{}}; // build 625: a hand has no haptics: a visual swell instead
  const badge=makeBadge(L.badge); // build 468: a plain cue on the left controller (not a laser target)
  const leftHand=()=>controllers.find(c=>c.userData.source?.handedness==='left')||controllers[0];
  const setRay=c=>{tmpM.identity().extractRotation(c.matrixWorld);raycaster.ray.origin.setFromMatrixPosition(c.matrixWorld);raycaster.ray.direction.set(0,0,-1).applyMatrix4(tmpM)};
@@ -1185,15 +1190,17 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
  const boardHits=c=>{
   const o=bhOut;o.menu=menuHit(c);o.help=helpHit(c);o.hist=histHit(c);o.wheel=ringHit(c,wheel);o.pwheel=ringHit(c,pointWheel);o.undoBtn=undoBtn.mesh.visible?(setRay(c),undoBtn.hit(raycaster)):null; // build 521: drawn without a depth test, like the rings: not hidden by tissue
   o.hu=huPanelHit(c); // build 556: the HU line's live panel (no depth test either)
+  o.wrist=handIn.wristHit(c,raycaster,setRay); // build 625: the wrist menu (a hand's ray only; null for a controller)
   // build 500: the boards are depth tested, so tissue in front of a board hides it (build 497): a board the volume surface covers along the ray is not hit (no invisible buttons, the laser goes on to the tissue).
   // The rings are drawn without a depth test and stay hit. (the surface hit is marched only when a board is under the ray)
   if(o.menu||o.help||o.hist){const tv=volumeHit(c)?.distance;if(!boardVisible(o.menu,tv))o.menu=null;if(!boardVisible(o.help,tv))o.help=null;if(!boardVisible(o.hist,tv))o.hist=null}
   let bd=Infinity,bk=null;for(const k of ['menu','help','hist','wheel','pwheel','undoBtn','hu']){const x=o[k];if(x&&x.distance<bd){bd=x.distance;bk=k}}
   for(const k of ['menu','help','hist','wheel','pwheel','undoBtn','hu'])if(k!==bk)o[k]=null;
+  if(o.wrist){if(bk&&bd<o.wrist.distance)o.wrist=null;else if(bk)o[bk]=null} // build 625: the wrist menu takes part in the nearest-board choice
   return o};
  help.onDraw(()=>{
-  const w=[],lines=section.on?L.helpSec.slice():L.helpBasic.slice();
-  if(ui.open)lines[lines.length-1]=L.helpMenu;
+  const hx=handIn.anyHand()?handIn.texts:null,w=[],lines=hx?(section.on?hx.helpSec:hx.helpBasic).slice():section.on?L.helpSec.slice():L.helpBasic.slice(); // build 625: hands: pinch / wrist menu lines
+  if(ui.open)lines[lines.length-1]=hx?(ui.tab===10?hx.helpMenuSimple:hx.helpMenu):L.helpMenu; // 体験会モード: the かんたん menu (tab 10) has buttons only, no sliders
   if(evH){w.push({type:'label',x:36,y:46,text:'Lv'+evLevel.lv+' '+tr(evLevel.nameKey)+' — '+tr('evMissionCap'),bold:true,size:28,color:'#ffd27a'});w.push({type:'label',x:36,y:90,text:'',lines:evLines,lh:32,size:24,color:'#ffe9b8'})}
   w.push({type:'label',x:36,y:60+evH,text:L.helpT,bold:true,size:36,color:'#fff'});
   lines.forEach((t,i)=>w.push({type:'label',x:36,y:140+evH+i*78,text:'・'+t,size:30}));
@@ -1324,7 +1331,8 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    // the higher threshold (DRAG_RECORD) where a tap would record a point; a long press there neither records nor drags
    const hp=handInHolder(c);holder.getWorldScale(tmpHs);
    const dp=Math.hypot(hp.p.x-pr.p0.x,hp.p.y-pr.p0.y,hp.p.z-pr.p0.z)*tmpHs.x;
-   if(dragShouldStart({dPosM:dp,dAngleDeg:qAngleDeg(qMul(hp.q,qInv(pr.q0))),heldMs:now-pr.t0},pr.dragRec?DRAG_RECORD:undefined))startDrag(c,pr,hp);
+   const th=isHand(c.userData.source)?handIn.dragTh(c,pr):(pr.dragRec?DRAG_RECORD:undefined); // build 625: a hand: 2 cm / 5 deg (3 cm / 7 deg on a record point), only after the delayed ray passed the pinch
+   if(th!==null&&dragShouldStart({dPosM:dp,dAngleDeg:qAngleDeg(qMul(hp.q,qInv(pr.q0))),heldMs:now-pr.t0},th))startDrag(c,pr,hp);
   }
   const dg=c.userData.drag;
   if(dg&&vrHalfExt&&volMoves){const hp=handInHolder(c),o=dg.pl.obj,f=sectionFollowStart({p0:hp.p,q0:hp.q,c0:o.position,Qp0:o.quaternion});dg.rel=f.rel;dg.Qrel=f.Qrel}
@@ -1661,16 +1669,23 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
  const ring=new THREE.Line(ringGeo,new THREE.LineBasicMaterial({color:0xffffff}));ring.position.set(0,0.035,0.02);ring.rotation.x=-0.6;ring.visible=false;
  let dragging=null,shotRequested=false;
  for(const c of controllers){
-  c.addEventListener('connected',e=>{c.userData.source=e.data;if(c.userData.source?.handedness==='left')c.add(badge)});
-  c.addEventListener('disconnected',()=>{
+  for(const t of ['selectstart','selectend'])c.addEventListener(t,()=>handIn.eventPose(c)); // build 625: first: a hand's select handlers see its filtered / delayed ray (three just wrote the raw pose); nothing for a controller
+  c.addEventListener('connected',e=>{c.userData.source=e.data;if(isHand(e.data)){handIn.connect(c,controllers.indexOf(c));if(badge.parent===c)c.remove(badge);help.refresh();return}if(c.userData.hs)handIn.drop(c);if(c.userData.source?.handedness==='left')c.add(badge)}); // build 625: a hand: no X badge, the hand help; the controller path as before
+  c.addEventListener('disconnected',c.userData.release=e=>{
    endDrag(c);huLine.cancelDragOf(c);c.userData.press=null;c.userData.lblDrag=null;c.userData.moving=null;c.userData.axPress?.reset();c.userData.stickLock=false;
    if(wheelOwner===c)closeWheel();if(pw?.c===c)closePointWheel();
    if(histAxis===c)histAxisEnd(false); // build 570: a drag by a hand that went away is dropped (the range stays as it was)
    if(histHeld===c){scene.attach(hist.group);histHeld=null} // build 555: a board held by a hand that went away stays where it was
    if(huHeld===c){scene.attach(huLine.panel);huHeld=null} // build 558: the same for the HU line's live panel
+   // build 625: everything else this input held is released too: a volume held by a lost controller / hand stayed attached to it and jumped on reconnect
+   if(grabbing.delete(c))regrab();if(menuHeld===c){scene.attach(menu.mesh);menuHeld=null}if(helpHeld===c){scene.attach(help.mesh);helpHeld=null}if(dragging?.c===c){dragging=null;saveSettings(settings)}
+   c.userData.res=null;c.userData.bDown=false;if(ring.parent===c)ring.visible=false; // no stale target at the next press, no B/Y release (section toggle) on reconnect
+   if(e===true)return; // build 625: a hand whose tracking was lost > 200 ms (vr-hand-view.js): the same release, the input source stays
    c.userData.source=null;
+   if(c.userData.hs){handIn.drop(c);help.refresh()} // build 625
   });
   c.addEventListener('squeezestart',()=>{
+   if(isHand(c.userData.source))return; // build 625: phase 1: a hand does not grab (the volume, the boards): moving / scaling stays with the controllers
    if(ui.open&&!menuHeld&&boardHits(c).menu){c.attach(menu.mesh);menuHeld=c;menuMoving=false;settings.menuMode=1;saveSettings(settings);pulse(c);menu.refresh();return}
    if(!helpHeld&&c.userData.helpHit){c.attach(help.mesh);helpHeld=c;helpMoving=false;settings.help=2;saveSettings(settings);pulse(c);menu.refresh();return}
    if(!histHeld&&c.userData.histHit){c.attach(hist.group);histHeld=c;pulse(c);return} // build 555: the grip moves the histogram board (as the help board); never takes the volume
@@ -1694,6 +1709,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    if(bd.wheel&&bd.wheel.slot!==null){confirmWheel(bd.wheel.slot,c);return}
    if(bd.pwheel&&bd.pwheel.slot!==null){confirmPoint(bd.pwheel.slot,c);return}
    if(bd.undoBtn){restoreSection(c);return} // build 521: 「元に戻す」 after a section was deleted
+   if(bd.wrist){wristDo(handIn.wristId(bd.wrist.slot),c);return} // build 625: a wrist-menu button (a hand's ray only)
    if(bd.hist){ // build 570: an end of the x axis = drag the display range; 「自動」 = auto. Anything else on the board: nothing (no segment lines / editing), and the press does not reach what is behind it
     const t=histTargetOf(bd.hist);
     if(t==='auto'){setHistogramRange({mode:'auto'});pulse(c)}else if(t&&!histAxis&&hist.startAxisDrag(t,histLocal.x)){histAxis=c;histAxisOut.distance=bd.hist.distance;pulse(c)}
@@ -1865,6 +1881,19 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
  const onAxLong=c=>{
   if(wheelOwner===c)closeWheel();if(pw?.c===c)closePointWheel();
   if(!ui.open){setMenuOpen(true);pulseTwice(c)}else{setMenuOpen(false);pulse(c,HAPTIC.menuClose.amp,HAPTIC.menuClose.ms)}
+ };
+ // build 625: the wrist menu of a tracked left hand (vr-hand-view.js), pressed with the other hand's ray + pinch: the same calls as A/X short / long,
+ // B/Y short / long and the ring's 取り消し; c = the pressing hand (the quick ring opens in front of it, a new section too)
+ const wristDo=(id,c)=>{
+  pulse(c,HAPTIC.select.amp,HAPTIC.select.ms);
+  switch(id){
+   case'ring':onAxShort(c);break;
+   case'menu':onAxLong(c);break;
+   case'section':setSection(!section.on);break;
+   case'add':if(planes.length>=MAX_PLANES){pulse(c,0.15,30);flashMsg(L.maxPlanes,2000)}else{addPlane(c);pulse(c,0.6,50)}break;
+   case'undo':wheelDo('undo',c);break;
+  }
+  menu.refresh();
  };
  const tmpRc=new THREE.Vector3(),tmpRd=new THREE.Vector3();
   const laserLit=(c,h)=>h&&h.slot!==null&&h.slot!==undefined?h.slot:null;
@@ -2282,11 +2311,13 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    if(scaleTag.mesh.visible){scaleTag.setText(magnificationText(realMagnification(holder.scale.x,lm),language)+(lim.locked?'\n'+(ja?'30cmに縮小・固定':'fitted to 30 cm, locked'):''));readHead();scaleTag.place(holder,vrHalfExt,head)}}
   let hover=-1,scroll=0,undoLit=false,histHov=null;const hoverIds=new Set();
   badge.visible=!(wheelOwner&&wheelOwner===leftHand()); // the cue hides while the left hand's ring is open
+  handIn.frame(js0); // build 625: hands only: the filtered / delayed ray, tracking loss, wrist menu, fingertips
   for(const c of controllers){
    // build 468: this hand's candidates (the press uses the values of the previous frame: c.userData.res); a section's plane is not a candidate
    // (only its thin frame band and number tag), so it can no longer take the laser from what is behind it
-   const bd=histAxis===c?histAxisBd:boardHits(c),h=bd.menu,hh=bd.help,rh=bd.wheel||bd.pwheel,board=h||hh||bd.hist||bd.undoBtn||bd.hu||(rh&&rh.slot!==null?rh:null),ray=c.userData.ray,nowF=performance.now();
+   const bd=histAxis===c?histAxisBd:boardHits(c),h=bd.menu,hh=bd.help,rh=bd.wheel||bd.pwheel,board=h||hh||bd.hist||bd.undoBtn||bd.hu||bd.wrist||(rh&&rh.slot!==null?rh:null),ray=c.userData.ray,nowF=performance.now();
    if(bd.undoBtn)undoLit=true;
+   if(bd.wrist)handIn.hover(bd.wrist.slot); // build 625
    let tab=null,pt=null,mlb=null,band=null,vh=null,sh=null;
    const selOk=!!(section.on&&section.selected&&!draggedBy(section.selected,c)),anyOk=section.on&&planes.some(p=>!draggedBy(p,c));
    if(!board&&!rh){
@@ -2318,7 +2349,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    // (it stands still then, so the record has no jump when the drag starts). The controller is recorded beside it only for the debug readout.
    {const dg=c.userData.drag,pr=c.userData.press,fv=c.userData.fv||=createVelocityTracker(),fh=c.userData.fvHand||=createVelocityTracker(),fp=dg?dg.pl:pr?pr.dragPl:null;
     if(twoHand||grabbing.size){fv.reset();fh.reset();if(dg)dg.volTouched=true}else if(fp){fp.obj.getWorldPosition(tmpFv);fv.push(js0,tmpFv);c.getWorldPosition(tmpFv);fh.push(js0,tmpFv)}}
-   {const ld=c.userData.lblDrag;if(ld&&c.userData.press){setRay(c);const o=raycaster.ray.origin,q=raycaster.ray.direction;tmpRc.set(o.x+q.x*ld.dist+ld.grab.x,o.y+q.y*ld.dist+ld.grab.y,o.z+q.z*ld.dist+ld.grab.z);if(ld.pin){if(!ld.moved&&!ld.done&&tmpRc.distanceTo(ld.pos0)>0.008)ld.moved=true;if(ld.moved&&!ld.done)dragPin(ld.id,tmpRc)}else vpMeasure.dragLabel(ld.id,tmpRc)}} // build 480: the grabbed label follows the laser
+   {const ld=c.userData.lblDrag;if(ld&&c.userData.press){setRay(c);const o=raycaster.ray.origin,q=raycaster.ray.direction;tmpRc.set(o.x+q.x*ld.dist+ld.grab.x,o.y+q.y*ld.dist+ld.grab.y,o.z+q.z*ld.dist+ld.grab.z);if(ld.pin){if(!ld.moved&&!ld.done&&tmpRc.distanceTo(ld.pos0)>(isHand(c.userData.source)?HAND_LABEL_MOVE_M:0.008))ld.moved=true;if(ld.moved&&!ld.done)dragPin(ld.id,tmpRc)}else vpMeasure.dragLabel(ld.id,tmpRc)}} // build 480: the grabbed label follows the laser
    const ref=res.ref,dist=board?board.distance:rh?rh.distance:(ref&&(res.kind==='point'||res.kind==='mlabel'||res.kind==='section'||res.kind==='record'||res.kind==='label'||res.kind==='move'||res.kind==='tissue')?(ref.t??ref.distance):null);
    const busy=!!c.userData.drag,rec=res.kind==='record'||res.kind==='move',cur=!busy&&rec&&!!ref?.voxel,curSurf=cur&&surfaceActive(),curSec=cur&&!surfaceActive();
    const hc=handColor(c),dot=c.userData.dot;ray.material.color.setHex(hc);dot.material.color.setHex(hc);dot.visible=dist!=null&&!cur&&!busy;
@@ -2326,6 +2357,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    // the laser looked as if it went on behind the ring. While this laser ends on a ring, the laser and the dot are drawn after it, on top.
    // build 497: the volume writes depth now, so a laser that ends on something drawn without a depth test INSIDE the volume (a point, a distance label, a section frame) would be cut at the tissue surface: those are on top too
    {const top=!!rh||res.kind==='point'||res.kind==='mlabel'||res.kind==='section'||!!bd.hu;ray.renderOrder=dot.renderOrder=bd.hu?11:top?8:0;ray.material.depthTest=dot.material.depthTest=!top} // build 556: on the HU live panel (renderOrder 10, no depth test) the laser and its dot are drawn after it
+   if(isHand(c.userData.source)){if(bd.wrist){ray.renderOrder=dot.renderOrder=8;ray.material.depthTest=dot.material.depthTest=false}if(!c.visible)dot.visible=false} // build 625: a hand: on the wrist menu (renderOrder 7, no depth test) the laser is on top; no end dot while its tracking is lost
    if(dist!=null){ray.scale.z=dist;ray.material.opacity=1;setRay(c);raycaster.ray.at(dist,dot.position);if(h){const i=menu.hit(h.uv);if(i>=0)hover=i}}
    else{ray.scale.z=0.6;ray.material.opacity=0.35}
    if(curSurf)placeSurfCursor(c,ref);else if(curSec)placeSecCursor(c,ref);else surfCursors[controllers.indexOf(c)].set(null);
@@ -2483,7 +2515,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    if(firstDrawMs<0)firstDrawMs=performance.now()-sessionAt;
   }
   menu.flush();
-  const hk=[section.on,ui.open].join();if(hk!==helpKey){helpKey=hk;help.refresh()}help.flush();
+  const hk=[section.on,ui.open,ui.open&&ui.tab===10].join();if(hk!==helpKey){helpKey=hk;help.refresh()}help.flush();
   sums.js+=performance.now()-js0;counts.js++;
   timed('main',()=>renderer.render(scene,camera));
   if(shotRequested){shotRequested=false;try{takeScreenshot()}catch(e){console.error(e)}}
