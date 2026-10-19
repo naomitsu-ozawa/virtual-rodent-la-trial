@@ -1,15 +1,15 @@
 // Settings dialog (build 280). Tabs: 描画 (rendering) and デバッグ (debug);
 // add a tab button + panel in ui-shell.js to extend it.
-import { settings } from './app-settings.js?v=20261018-build621';
-import { request3DRender } from './scene3d.js?v=20261018-build621';
-import { updateGpuStatus } from './gpu-compute.js?v=20261018-build621';
-import { volumeCache, updateVolumeCacheControl, volumeCacheBudget } from './gpu-volume-data.js?v=20261018-build621';
-import { tr } from './i18n.js?v=20261018-build621';
-import { askInline, armConfirm, noteInline } from './inline-ask.js?v=20261018-build621';
-import { fmt } from './utils.js?v=20261018-build621';
-import { gpuPreferenceSupported, gpuEffectivePreference, gpuHybridModeSupported, gpuEffectiveHybridMode } from './gpu-preference.js?v=20261018-build621';
-import { initGpuDiagnosticsUi } from './gpu-diagnostics-ui.js?v=20261018-build621';
-import { collectGpuDiagnostics } from './gpu-diagnostics-collect.js?v=20261018-build621';
+import { settings } from './app-settings.js?v=20261019-build622';
+import { request3DRender } from './scene3d.js?v=20261019-build622';
+import { updateGpuStatus } from './gpu-compute.js?v=20261019-build622';
+import { volumeCache, updateVolumeCacheControl, volumeCacheBudget } from './gpu-volume-data.js?v=20261019-build622';
+import { tr } from './i18n.js?v=20261019-build622';
+import { askInline, armConfirm, noteInline } from './inline-ask.js?v=20261019-build622';
+import { fmt } from './utils.js?v=20261019-build622';
+import { gpuPreferenceSupported, gpuEffectivePreference, gpuHybridModeSupported, gpuEffectiveHybridMode } from './gpu-preference.js?v=20261019-build622';
+import { initGpuDiagnosticsUi } from './gpu-diagnostics-ui.js?v=20261019-build622';
+import { collectGpuDiagnostics } from './gpu-diagnostics-collect.js?v=20261019-build622';
 export function initSettingsDialog(){
  const dlg=document.getElementById('settings-dialog'),open=document.getElementById('settings-open');if(!dlg||!open)return;
  // build 588: in the workspace UI the dialog's content lives in the 設定 panel (workspace-ui.js sets data-embedded): the same
