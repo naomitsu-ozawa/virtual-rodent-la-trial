@@ -27,6 +27,41 @@ export function simpleMenuSegments(level,shownKeys){const shown=[...(shownKeys||
 // the trigger pins labels instead of recording points, which Lv3 needs)
 export const simpleMenuLabelsRow=(level,hasResults)=>!!hasResults&&(level?level.labels===true:true);
 export const simpleMenuLabelsAtStart=level=>level?.labels===true;
+// its 元に戻す button (marks and distances are made and undone with the hand ring; this is the same undo on the board): for a level that
+// uses marks (Lv3), or with no level chosen
+export const simpleMenuUndoRow=level=>level?level.hints.includes('mark'):true;
+// the かんたん menu's board layout (1024 x 1180 px canvas), pure so that it can be tested and drawn without a headset. Widgets only carry an id;
+// vr-view.js maps the id to its action: 'seg:<key>:show|hide', 'section:show|hide', 'labels:show|hide', 'undo', 'home', 'all', 'exit'.
+// Every level gets: its segment rows, a 断面 row, the 解析結果のラベル row (Lv2 / no level, with results), the analysis results as a read-only list
+// (colour, name, volume; as many as fit above the buttons, then 合計), and the bottom row 正面に戻す / 元に戻す (Lv3) / すべての設定 / 終了.
+// Advanced settings (quality, foveation, HU window, ...) are not here: すべての設定 opens the full menu.
+export const SIMPLE_MENU=Object.freeze({W:1024,H:1180,X:40,STATUS:140,TOP:190,ROW:92,BTN_H:72,LIST_ROW:54,BOTTOM:1070});
+// There is no title line (the level is named on the help board); the board's status line sits at STATUS and the rows start at TOP.
+// o: {level, segments:[{key,name,color,on}], sectionOn, labels:{show,on}, results:[{hex,name,text}], total, undo:{show}, text:{...}}
+export function simpleMenuLayout(o){
+ const M=SIMPLE_MENU,t=o.text,w=[],X=M.X,label=(id,x,y,text,extra={})=>w.push({type:'label',id,x,y,text,...extra});
+ const btn=(id,x,y,wd,text,on,extra={})=>w.push({type:'button',id,x,y,w:wd,h:M.BTN_H,label:text,on,...extra});
+ const row=(id,y,name,color,on)=>{label(id+':name',X,y+40,name,{color,bold:true,size:34});btn(id+':show',440,y,250,t.show,on,{size:32,color:on?color:undefined});btn(id+':hide',710,y,250,t.hide,!on,{size:32})};
+ let y=M.TOP;
+ if(!o.segments.length){label('noseg',X,y+40,t.noSeg);y+=M.ROW}
+ for(const s of o.segments){row('seg:'+s.key,y,s.name,s.color||'#fff',s.on);y+=M.ROW}
+ row('section',y,t.section,'#cfe3f0',!!o.sectionOn);y+=M.ROW;
+ if(o.labels?.show){row('labels',y,t.labels,'#cfe3f0',!!o.labels.on);y+=M.ROW}
+ const res=o.results||[];
+ if(res.length){
+  label('results',X,y+30,t.results,{bold:true,size:28});
+  const top=y+56,cap=Math.max(0,Math.floor((M.BOTTOM-24-30-top)/M.LIST_ROW)),shown=res.slice(0,cap);
+  shown.forEach((r,i)=>{const ry=top+i*M.LIST_ROW;
+   w.push({type:'button',id:'result:'+i,x:X,y:ry,w:56,h:44,label:'',on:true,color:r.hex});
+   label('result:'+i+':name',X+76,ry+30,r.name,{size:28,bold:true,color:r.hex});label('result:'+i+':vol',X+520,ry+30,r.text,{size:28})});
+  const more=res.length-shown.length;
+  label('total',X,top+shown.length*M.LIST_ROW+26,t.total+' '+o.total+' · '+res.length+(more>0?'  (… +'+more+')':''),{size:24,color:'#9fb3c3'});
+ }
+ // bottom row: equal buttons, the exit one red
+ const items=[['home',t.home],...(o.undo?.show?[['undo',t.undo]]:[]),['all',t.all],['exit',t.exit]],gap=12,bw=Math.floor((M.W-2*X-(items.length-1)*gap)/items.length);
+ items.forEach(([id,text],i)=>btn(id,X+i*(bw+gap),M.BOTTOM,bw,text,id==='exit',{size:28,...(id==='exit'?{color:'#b33'}:{})}));
+ return w;
+}
 // greedy wrap that keeps Latin words whole (CJK text breaks between any two characters); measure(text) = width
 export function wrapWords(text,maxW,measure){
  const tokens=String(text).match(/[\x21-\x7e]+|\s+|[^\s\x21-\x7e]/g)||[],lines=[];let cur='';
