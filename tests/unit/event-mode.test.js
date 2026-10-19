@@ -368,11 +368,22 @@ describe('static wiring', () => {
     // who decides what the trigger does: label mode only when the switch says so AND the data has results (or the 解析 tab is open, as before)
     expect(src).toContain("const evLabelOn=()=>evMenu&&triggerMode(evLabels,regionList.length>0)==='label';");
     expect(src).toContain('const labelMode=()=>(ui.open&&ui.tab===5)||!section.on||evLabelOn();');
-    expect(src).toContain('analysis:(ui.open&&ui.tab===5)||evLabelOn(),canDrag:');
+    expect(src).toContain('analysis:analysisOn(),canDrag:');
     // evLabels is only ever switched from the かんたん menu (declared once, reset when the session's data arrives, and the two switch buttons)
     expect(src.match(/evLabels=/g).length).toBe(4);
     expect(src).toContain("regionList=P.region?.list||[];evLabels=TRIGGER_AT_START==='label';"); // reset to point mode when the session's data is known
     for (const k of ['evSimple', 'evShow', 'evHide', 'evMode', 'evModePoint', 'evModeAnalysis', 'evModeHintPoint', 'evModeHintAnalysis', 'evAllSettings', 'evExitVr', 'evExitAr']) for (const lang of ['ja', 'en']) expect(typeof I18N[lang][k], `${lang}.${k}`).toBe('string');
     expect(I18N.ja.evLabels).toBeUndefined();
+  });
+});
+
+// 解析モード (体験会モード): the pinned analysis cards must be pickable (grab / move / unpin) exactly as with the analysis tab open
+describe('analysis mode keeps the pinned label move', () => {
+  const src = readFileSync(new URL('../../docs/vr-view.js', import.meta.url), 'utf8');
+  it('pickPin is gated by analysisOn (tab 5 or 解析モード), not by the tab alone', () => {
+    expect(src).toMatch(/const analysisOn=\(\)=>\(ui\.open&&ui\.tab===5\)\|\|evLabelOn\(\)/);
+    expect(src).toMatch(/if\(analysisOn\(\)&&pins\.size\)mlb=nearerLabel\(mlb,pickPin\(/);
+    expect(src).not.toMatch(/ui\.open&&ui\.tab===5&&pins\.size/);
+    expect(src).toMatch(/analysis:analysisOn\(\),/);
   });
 });

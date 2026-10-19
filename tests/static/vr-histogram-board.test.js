@@ -12,9 +12,9 @@ describe('VR histogram board placement (vr-view.js)', () => {
     expect(frame).not.toBe(''); expect(frame).not.toMatch(/computeHistTarget|position\.(copy|set|lerp)/);
   });
   it('the grip on the board picks it up and puts it down (as the help board); the holding hand does not hit its own board', () => {
-    expect(src).toMatch(/c\.userData\.histHit\)\{c\.attach\(hist\.group\);histHeld=c/);
+    expect(src).toMatch(/c\.userData\.histHit\)\{holdOf\(c\)\.attach\(hist\.group\);histHeld=c/);
     expect(src).toMatch(/if\(histHeld===c\)\{scene\.attach\(hist\.group\);histHeld=null;readHead\(\);hist\.group\.lookAt\(head\)/);
-    expect(src).toMatch(/histHit=c=>\{if\(!hist\.isOpen\|\|hist\.group\.parent===c\)return null/);
+    expect(src).toMatch(/histHit=c=>\{if\(!hist\.isOpen\|\|hist\.group\.parent===holdOf\(c\)\)return null/);
   });
   it('「正面へ」 re-places it from both the 表示 tab and the ring', () => {
     expect(src).toMatch(/case'home':[^\n]*placeHistNow\(\)/);

@@ -30,10 +30,69 @@ describe('vr-view.js: hand tracking is optional and every hand branch is guarded
     expect(l).toMatch(/if\(isHand\(e\.data\)\)\{handIn\.connect\(c,controllers\.indexOf\(c\)\);[^}]*return\}/);
     expect(l.indexOf('return}')).toBeLessThan(l.indexOf("handedness==='left')c.add(badge)"));
   });
-  it('the grip is ignored for a hand (phase 1), first thing in squeezestart', () => {
-    const b = bodyAfter(src, "c.addEventListener('squeezestart',()=>{");
-    expect(b.trimStart().startsWith('if(isHand(c.userData.source))return;')).toBe(true);
-    expect(b).toContain('grabbing.add(c)');
+  it('squeezestart / squeezeend: a hand returns first (its fist is the grip, via handIn); a controller runs gripStart / gripEnd', () => {
+    const st = bodyAfter(src, "c.addEventListener('squeezestart',()=>{"), en = bodyAfter(src, "c.addEventListener('squeezeend',()=>{");
+    expect(st.trimStart().startsWith('if(isHand(c.userData.source))return;')).toBe(true); expect(st).toContain('gripStart(c);');
+    expect(en.trimStart().startsWith('if(isHand(c.userData.source))return;')).toBe(true); expect(en).toContain('gripEnd(c);');
+    expect(st).not.toContain('grabbing.add'); expect(en).not.toContain('grabbing.delete'); // the bodies live in gripStart / gripEnd
+  });
+  it('gripStart / gripEnd keep the controller bodies (menu, help, histogram, HU panel, then the volume); they attach to holdOf(c)', () => {
+    const gs = bodyAfter(src, 'const gripStart=c=>{'), ge = bodyAfter(src, 'const gripEnd=c=>{');
+    const order = ['ui.open&&!menuHeld&&boardHits(c).menu', '!helpHeld&&c.userData.helpHit', '!histHeld&&c.userData.histHit', '!huHeld&&boardHits(c).hu', 'grabbing.add(c);regrab();'].map(w => gs.indexOf(w));
+    expect(order.every(i => i >= 0)).toBe(true); expect([...order].sort((x, y) => x - y)).toEqual(order);
+    for (const w of ['holdOf(c).attach(menu.mesh)', 'holdOf(c).attach(help.mesh)', 'holdOf(c).attach(hist.group)', 'holdOf(c).attach(huLine.panel)']) expect(gs).toContain(w);
+    expect(gs).not.toMatch(/[^f(]c\.attach\(/); // never c.attach directly (a hand's boards go to its palm anchor)
+    for (const w of ['menuHeld===c', 'helpHeld===c', 'histHeld===c', 'huHeld===c', 'if(grabbing.delete(c))regrab();']) expect(ge).toContain(w);
+    expect(ge).toContain('scene.attach(menu.mesh)'); expect(ge).toContain('menu.mesh.lookAt(head)');
+    expect(src).toContain('const holdOf=c=>handIn.holder(c);');
+    // the single-hand grab and the two-hand distance (scale) use the same holder; two fists = two grips = pinchScale as for two controllers
+    expect(lineOf(src, 'else if(grabbing.size===1)')).toContain('holdOf([...grabbing][0]).attach(holder)');
+    expect(lineOf(src, 'const handDist=')).toContain('holdOf(controllers[0]).getWorldPosition(tmpA);holdOf(controllers[1]).getWorldPosition(tmpB)');
+    expect(src).toContain('if(twoHand)holder.scale.setScalar(pinchScale(twoHand.s0,twoHand.d0,handDist(),realLongMm()));');
+    for (const w of ['help.mesh.parent===holdOf(c)', 'p.parent===holdOf(c)', 'hist.group.parent===holdOf(c)']) expect(src).toContain(w);
+  });
+  it('a controller: holder(c) is c itself; a hand: its palm anchor, only once the anchor was placed', () => {
+    const b = bodyAfter(hv, 'holder(c){');
+    expect(b).toContain('isHand(c.userData.source)&&hs?.anchorOk?hs.anchor:c');
+    const f = new Function('isHand', 'c', 'const hs=c.userData.hs;' + b.replace('const hs=c.userData.hs;', ''));
+    const isHand = s => !!(s && s.hand), ctrl = { userData: { source: { gamepad: {} } } }, anchor = {};
+    expect(f(isHand, ctrl)).toBe(ctrl);
+    const h = { userData: { source: { hand: {} }, hs: { anchor, anchorOk: false } } }; expect(f(isHand, h)).toBe(h);
+    h.userData.hs.anchorOk = true; expect(f(isHand, h)).toBe(anchor);
+  });
+  it("the hand's fist: never on a controller (frame skips non-hands), refused on the wrist menu, dropped press, busy = drags", () => {
+    const g = bodyAfter(hv, 'const grabStep=(c,hs,now)=>{');
+    expect(g).toContain('hs.grab.update(fistScore(hs),now,!!busy(c))');
+    expect(g).toContain("if(c.userData.press)release(c);");
+    expect(g).toContain('if(grab(c)===false)hs.grab.release();');
+    expect(g).toContain("else if(ev==='end')ungrab(c);");
+    expect(bodyAfter(hv, 'frame(now){')).toContain('if(tick(c,hs,now)&&(c.visible||hs.grab.active))grabStep(c,hs,now);'); // after the isHand(s) continue
+    expect(bodyAfter(hv, 'frame(now){').indexOf('grabStep(')).toBeGreaterThan(bodyAfter(hv, 'frame(now){').indexOf('if(!isHand(s)){ctrl=true;continue}'));
+    expect(src).toContain('grab:c=>{if(c.userData.wristOn)return false;gripStart(c);return true}');
+    expect(src).toContain('ungrab:c=>gripEnd(c)');
+    expect(src).toContain('busy:c=>!!(c.userData.drag||c.userData.lblDrag||histAxis===c||dragging?.c===c||huLine.isDragging())');
+    expect(src).toContain('c.userData.wristOn=!!bd.wrist;');
+    // tracking loss: release() lets go of what the fist held and latches the detector; a lost hand does not grab
+    expect(bodyAfter(hv, 'const tick=(c,hs,now)=>{')).toContain("if(st==='cancel'){release(c);hs.rebased=null;hs.grab.release()}");
+    expect(bodyAfter(hv, 'const tick=(c,hs,now)=>{')).toContain('return false}');
+    // a grabbing hand is no trigger and does not show the wrist menu
+    expect(bodyAfter(hv, 'frame(now){')).toContain('left.userData.drag||hs.grab.active');
+  });
+  it('selectstart ignores a pinch the system sees inside a fist (first thing); selectend stops the wrist 断面 +/-', () => {
+    const b = bodyAfter(src, "c.addEventListener('selectstart',()=>{");
+    expect(b.trimStart().startsWith('if(isHand(c.userData.source)&&(handIn.grabbing(c)||handIn.fistLike(c)))return;')).toBe(true);
+    expect(src).toContain("c.addEventListener('selectend',()=>{c.userData.wristScroll=null});");
+    expect(bodyAfter(hv, 'grabbing(c){')).toContain('isHand(c.userData.source)');
+  });
+  it('wrist 断面 -/+: only from a hand, only with a selected section, added to the stick scroll (the same SCROLL_SPEED / clamp path)', () => {
+    const l = lineOf(src, "case'secDown':case'secUp':");
+    expect(l).toContain('if(section.on&&section.selected)c.userData.wristScroll={id,sign:wristScrollSign(id),t0:performance.now()}');
+    const sc = lineOf(src, 'const ws=c.userData.wristScroll');
+    expect(sc).toContain('!isHand(c.userData.source)||!handIn.wristShown||!section.on||!section.selected||!wristScrollKeep(ws.id,');
+    expect(sc).toContain('scroll+=ws.sign*wristScrollGain(nowF-ws.t0)');
+    expect(src).toContain('const ay=c.userData.source?.gamepad?.axes?.[3]||0,am=Math.abs(ay);if(am>0.15&&!c.userData.stickLock&&wheelOwner!==c&&pw?.c!==c)scroll+=Math.sign(ay)*((am-0.15)/0.85)**2;'); // the stick line itself is unchanged
+    expect(src).toContain('sp.obj.translateX(-scroll*SCROLL_SPEED*dt/ps)');
+    expect(src).toContain("id==='secUp'||id==='secDown'?!!(section.on&&section.selected&&planes.includes(section.selected))");
   });
   it("the hand's select pre-hook runs before vr-view's own select handlers and only re-applies a hand's pose", () => {
     const pre = src.indexOf("for(const t of ['selectstart','selectend'])c.addEventListener(t,()=>handIn.eventPose(c))");
@@ -47,7 +106,7 @@ describe('vr-view.js: hand tracking is optional and every hand branch is guarded
   });
   it('every other handIn / wrist use in vr-view.js is behind isHand() or comes from a hand-only call', () => {
     const own = ['import ', 'const handIn=createHandInput(', "session.addEventListener('end',()=>handIn.dispose()", "for(const t of ['selectstart','selectend'])"];
-    const handOnlyApi = ['handIn.frame(', 'handIn.wristHit(', 'handIn.hover(', 'handIn.wristId(', 'handIn.anyHand()', 'handIn.drop(c)', 'handIn.connect(', 'handIn.flash(', 'handIn.dragTh('];
+    const handOnlyApi = ['handIn.frame(', 'handIn.wristHit(', 'handIn.hover(', 'handIn.wristId(', 'handIn.anyHand()', 'handIn.drop(c)', 'handIn.connect(', 'handIn.flash(', 'handIn.dragTh(', 'handIn.holder(', 'handIn.grabbing(', 'handIn.wristShown'];
     for (const l of src.split('\n').filter(x => /handIn\.|bd\.wrist|o\.wrist|HAND_LABEL_MOVE_M/.test(x))) {
       if (own.some(w => l.includes(w))) continue;
       const ok = l.includes('isHand(') || l.includes('c.userData.hs') || handOnlyApi.some(w => l.includes(w)) || /bd\.wrist|o\.wrist/.test(l);

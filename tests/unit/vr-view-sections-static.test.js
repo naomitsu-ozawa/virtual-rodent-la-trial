@@ -17,7 +17,7 @@ describe('vr-view.js: sections are no longer grabbed (one-handed redesign, stage
     for (const w of ['resolveTriggerMode', 'resolveTrigger(', 'recordPoint(null)', 'L.ptRec', 'L.ptNeed']) expect(src.includes(w), w).toBe(false);
   });
   it('the grip handler only moves the volume', () => {
-    const a = src.indexOf("addEventListener('squeezestart'"), b = src.indexOf("addEventListener('selectstart'");
+    const a = src.indexOf('const gripStart=c=>{'), b = src.indexOf("addEventListener('selectstart'"); // build 625: the squeeze listeners call gripStart / gripEnd (the same bodies)
     const grip = src.slice(a, b);
     expect(grip).toContain('grabbing.add(c)');
     expect(grip).not.toMatch(/plane|Plane/);
@@ -72,7 +72,7 @@ describe('vr-view.js: review fixes (F1-F9)', () => {
   it('F6: a move to the same place pushes no undo', () => { expect(src).toContain('the same place: nothing to undo'); });
   it('F7 / F8: the selected point is checked, a stale drag ends at the press', () => {
     expect(src).toContain("getComments().some(x=>x.id===pr.res.ref.id))selectPoint");
-    expect(src).toMatch(/addEventListener\('selectstart',\(\)=>\{\s*endDrag\(c\);/);
+    expect(src).toMatch(/addEventListener\('selectstart',\(\)=>\{\s*(?:if\(isHand\(c\.userData\.source\)&&\(handIn\.grabbing\(c\)\|\|handIn\.fistLike\(c\)\)\)return;[^\n]*\n\s*)?endDrag\(c\);/); // build 625: a hand inside a fist first
   });
 });
 

@@ -1,4 +1,4 @@
-// build 625: hand tracking (Quest 3), phase 0 / 1: the pure part — no DOM and no three.js (unit-tested in tests/unit/vr-hand.test.js).
+// build 625: hand tracking (Quest 3), phase 0 / 1 / 2 (phase 2: the fist = the grip, 断面 +/- on the wrist menu): the pure part — no DOM and no three.js (unit-tested in tests/unit/vr-hand.test.js).
 // vr-hand-view.js does the three.js side (the filtered / delayed target ray written back into the controller group, the wrist menu, the
 // fingertip markers); vr-view.js only routes its events there. Every hand branch is guarded by isHand(source): an XRInputSource with .hand
 // (granted only with the optional 'hand-tracking' feature). Controllers never reach this code, and their behaviour is unchanged.
@@ -146,23 +146,90 @@ export function createWristMenuGate(opts={}){
  };
 }
 // the wrist menu's buttons, left to right: A/X short (the quick ring), A/X long (the menu), B/Y short (sections shown / hidden), B/Y long
-// (add a section), 取り消し (the ring's undo)
-export const WRIST_ITEMS=['ring','menu','section','add','undo'];
+// (add a section), 取り消し (the ring's undo), then 断面 － / ＋ (the selected section along its normal = the thumbstick up / down: hold to repeat)
+export const WRIST_ITEMS=['ring','menu','section','add','undo','secDown','secUp'];
 export const wristSlotFromU=u=>Number.isFinite(u)?Math.max(0,Math.min(WRIST_ITEMS.length-1,Math.floor(u*WRIST_ITEMS.length))):null;
+// 断面 －/＋ held on the wrist menu: the thumbstick's deflection (1 = full) after heldMs. A tap nudges (0.4), holding speeds up to full in 1 s.
+// ＋ = the thumbstick pushed up (the plane moves along +X, its normal), － = pulled back; the sign is returned by wristScrollSign.
+export const WRIST_SCROLL={start:0.4,rampMs:1000};
+export const wristScrollGain=heldMs=>{const f=Math.max(0,Math.min(1,(heldMs||0)/WRIST_SCROLL.rampMs));return WRIST_SCROLL.start+(1-WRIST_SCROLL.start)*f};
+// 断面 －/＋ keeps scrolling only while the ray stays on the SAME button, the hand is not a fist, and nothing the scroll needs went away
+export const wristScrollKeep=(heldId,hitId,fist)=>!!heldId&&hitId===heldId&&!fist;
+export const wristScrollSign=id=>id==='secUp'?-1:id==='secDown'?1:0; // the `scroll` sum of vr-view.js: thumbstick down = +, up = -
+
+// ---- grab (a fist) = the grip ----
+// A grip is a closed hand: all four fingers (index, middle, ring, pinky) curled into the palm. Pointing (index out) and pinching (thumb to index,
+// the index stays bent out) are not a fist, so the pinch stays the trigger and aiming never grabs.
+// curl of a finger = the straight distance metacarpal -> tip / the length of its bones (metacarpal -> proximal -> intermediate -> distal -> tip):
+// ~1 extended, ~0.5 half bent, ~0.3-0.45 curled into the palm. Independent of the hand's size and of the pose in space.
+export const GRAB_FINGERS=['index-finger','middle-finger','ring-finger','pinky-finger'];
+export const GRAB_JOINT_NAMES=GRAB_FINGERS.map(f=>[f+'-metacarpal',f+'-phalanx-proximal',f+'-phalanx-intermediate',f+'-phalanx-distal',f+'-tip']);
+const dist3=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y,a.z-b.z);
+// j: 5 points {x,y,z} (a missing joint: null / undefined) -> curl, NaN when a joint is missing or the finger has no length
+export function fingerCurl(j){
+ if(!j)return NaN;
+ let len=0;
+ for(let i=1;i<5;i++){if(!j[i]||!j[i-1])return NaN;len+=dist3(j[i-1],j[i])}
+ return len>1e-4?dist3(j[0],j[4])/len:NaN;
+}
+// the grab score of a hand = its least curled finger (NaN as soon as one finger is unknown): a fist needs all four
+export function grabScore(curls){
+ let m=-Infinity;
+ for(let i=0;i<curls.length;i++){const c=curls[i];if(!Number.isFinite(c))return NaN;if(c>m)m=c}
+ return Number.isFinite(m)?m:NaN;
+}
+// GRAB: start below `on` held for holdMs (a hand passing through a fist while a pinch opens does not grab), end above `off` (hysteresis: no flicker).
+// Tunable on the device: localStorage vrl-hand-grab = '{"on":0.55,"off":0.7,"holdMs":100}'
+export const GRAB={on:0.55,off:0.7,holdMs:100};
+// update(score, now, blocked) -> 'start' | 'end' | null. NaN keeps the state (a start that was pending is dropped). blocked (the hand is busy: it drags
+// something) never starts a grab. release(): the grab was ended from outside (tracking lost / refused / ungrabbed): latched until the hand has opened
+// (score above off) once, so a hand that comes back as a fist does not take the volume at once.
+export function createGrabHysteresis({on=GRAB.on,off=GRAB.off,holdMs=GRAB.holdMs}={}){
+ let active=false,since=null,latched=false;
+ return{
+  update(score,now,blocked=false){
+   if(!Number.isFinite(score)){since=null;return null}
+   if(active){if(score>off){active=false;since=null;return'end'}return null}
+   if(latched){if(score>off)latched=false;since=null;return null}
+   if(blocked||!(score<on)){since=null;return null}
+   if(since===null)since=now;
+   if(now-since>=holdMs){active=true;since=null;return'start'}
+   return null;
+  },
+  release(){active=false;since=null;latched=true},
+  reset(){active=false;since=null;latched=false},
+  get active(){return active},
+  get pending(){return since!==null},
+ };
+}
+// a hand holding something (a grab) is alive while its WRIST is tracked: turning the palm to the face can drop the target-ray pose (the pinch ray
+// needs the fingers' view) although the hand is still there; without a grab the target ray decides as before (it is the pointer)
+export const handAlive=(rayVisible,wristTracked,grabbing)=>!!rayVisible||(!!grabbing&&!!wristTracked);
+// the fist guard of a pinch: the thumb touches the index while the hand is still closing into a fist. middle / ring / little (curls[1..3]) already
+// below `max` = a fist is forming -> the pinch is not a trigger (an aiming pinch keeps those fingers open / relaxed, 0.7-1). Unknown curl: not forming.
+export const FIST_GUARD_CURL=0.6;
+export function fistForming(curls,max=FIST_GUARD_CURL){
+ if(!curls||curls.length<4)return false;
+ for(let i=1;i<4;i++){const c=curls[i];if(!Number.isFinite(c)||!(c<max))return false}
+ return true;
+}
+// the point a fist holds the volume at (and the distance of two fists = the scale, vr-view.js: pinchScale(s0, d0, handDist())): the palm centre
+export const PALM_FROM_WRIST=0.55; // palm centre = wrist + this * (middle-finger knuckle - wrist)
+export const palmPoint=(w,k,out=[0,0,0])=>{for(let i=0;i<3;i++)out[i]=w[i]+PALM_FROM_WRIST*(k[i]-w[i]);return out};
 
 // ---- texts (hands only; the controller texts stay in vr-view.js) ----
 export function handTexts(ja){
  return ja?{
-  helpBasic:['ピンチ（短く）：点を記録／点を選択（点で長くつまむ：移動・削除・色・距離）','左手首の甲を顔に向ける：手首メニュー（A/X・B/Y の代わり）','手首メニュー：右手のレーザーで指してピンチ','つまんだまま2cm動かす：断面を動かす','ボリュームの移動・回転・拡大縮小：コントローラーで','手首メニューの「メニュー」：メニューの開閉'],
-  helpSec:['枠の細い線・番号札：ピンチで選択／つまんだまま動かして移動・回転','ピンチ（短く）：断面や組織に点を記録／点に当てて選択','点で長くつまむ：移動・削除・色・距離のリング','左手首の甲を顔に向ける：手首メニュー（断面の表示／非表示・追加）','断面のスクロール・ボリュームの移動・拡大縮小：コントローラーで','手首メニューの「メニュー」：メニューの開閉'],
-  helpMenu:'ピンチ：メニューのボタン・スライダー（板の移動はコントローラーで）',
-  helpMenuSimple:'ピンチ：メニューのボタン（板の移動はコントローラーで）',
-  wrist:on=>[['よく使う','（リング）'],['メニュー','開く／閉じる'],['断面',on?'非表示にする':'表示する'],['断面を','追加'],['取り消し','']],
+  helpBasic:['ピンチ（短く）：点を記録／点を選択（点で長くつまむ：移動・削除・色・距離）','グー（拳を握る）：ボリュームを掴んで移動・回転／板に向けて握ると板を移動','両手でグー：2つの拳の間隔で拡大・縮小','左手首の甲を顔に向ける：手首メニュー（A/X・B/Y・断面＋／－の代わり）','手首メニュー：右手のレーザーで指してピンチ','手首メニューの「メニュー」：メニューの開閉'],
+  helpSec:['枠の細い線・番号札：ピンチで選択／つまんだまま動かして移動・回転','ピンチ（短く）：断面や組織に点を記録／点に当てて選択、点で長くつまむ：リング','手首メニューの「断面＋／－」：選んだ断面を法線方向へ送る（押し続ける）','グー：ボリュームの移動・回転・板の移動／両手でグー：拡大・縮小','左手首の甲を顔に向ける：手首メニュー（断面の表示／非表示・追加）','手首メニューの「メニュー」：メニューの開閉'],
+  helpMenu:'ピンチ：メニューのボタン・スライダー／グー：メニュー板を移動',
+  helpMenuSimple:'ピンチ：メニューのボタン／グー：メニュー板を移動',
+  wrist:on=>[['よく使う','（リング）'],['メニュー','開く／閉じる'],['断面',on?'非表示にする':'表示する'],['断面を','追加'],['取り消し',''],['断面','－'],['断面','＋']],
  }:{
-  helpBasic:['Pinch (short): record / select a point (hold on a point: move, delete, colour, distance)','Back of the left wrist to your eyes: wrist menu (replaces A/X, B/Y)','Wrist menu: point with the right hand and pinch','Pinch and move 2 cm: drag a section','Move / turn / scale the volume: with the controllers','Wrist menu “Menu”: open / close the menu'],
-  helpSec:['Thin frame line / number tag: pinch selects, pinch and move to slide / rotate','Pinch (short): record a point on a section or tissue; on a point selects it','Hold the pinch on a point: ring with move / delete / colour / distance','Back of the left wrist to your eyes: wrist menu (show / hide / add sections)','Scroll a section, move / scale the volume: with the controllers','Wrist menu “Menu”: open / close the menu'],
-  helpMenu:'Pinch: menu buttons and sliders (moving a board: with the controllers)',
-  helpMenuSimple:'Pinch: menu buttons (moving a board: with the controllers)',
-  wrist:on=>[['Quick','ring'],['Menu','open / close'],['Sections',on?'hide':'show'],['Add','section'],['Undo','']],
+  helpBasic:['Pinch (short): record / select a point (hold on a point: move, delete, colour, distance)','Fist: grab the volume and move / turn it; a fist aimed at a board moves the board','Two fists: the distance between them scales the volume','Back of the left wrist to your eyes: wrist menu (replaces A/X, B/Y, section + / -)','Wrist menu: point with the right hand and pinch','Wrist menu “Menu”: open / close the menu'],
+  helpSec:['Thin frame line / number tag: pinch selects, pinch and move to slide / rotate','Pinch (short): record a point on a section or tissue; on a point selects it; hold on a point: ring','Wrist menu “Section + / -”: slides the selected section along its normal (hold)','Fist: move / turn the volume, move a board; two fists: scale','Back of the left wrist to your eyes: wrist menu (show / hide / add sections)','Wrist menu “Menu”: open / close the menu'],
+  helpMenu:'Pinch: menu buttons and sliders; fist: move the menu board',
+  helpMenuSimple:'Pinch: menu buttons; fist: move the menu board',
+  wrist:on=>[['Quick','ring'],['Menu','open / close'],['Sections',on?'hide':'show'],['Add','section'],['Undo',''],['Section','-'],['Section','+']],
  };
 }

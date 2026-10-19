@@ -213,13 +213,13 @@ describe('vr-view.js wiring of the HU line (source guard; the file is a WebXR mo
     expect(src).toContain('()=>{bringVolumeFront();placeMenuNow();placeHelpNow();if(hist.isOpen)placeHistNow();placeHuNow()}'); // 表示 tab button
     expect(src).toContain('onPanelShow:()=>{if(!huPlaced&&poseAt)placeHuNow()}');
     // grip on the panel moves it (before the volume grab); release leaves it in the scene facing the head
-    const sq = src.slice(src.indexOf("addEventListener('squeezestart'"), src.indexOf("addEventListener('selectstart'"));
-    expect(sq.indexOf('boardHits(c).hu){c.attach(huLine.panel)')).toBeGreaterThan(0);
+    const sq = src.slice(src.indexOf('const gripStart=c=>{'), src.indexOf("addEventListener('selectstart'")); // build 625: gripStart / gripEnd hold the squeeze handlers' bodies
+    expect(sq.indexOf('boardHits(c).hu){holdOf(c).attach(huLine.panel)')).toBeGreaterThan(0); // holdOf(c) = c for a controller
     expect(sq.indexOf('boardHits(c).hu')).toBeLessThan(sq.indexOf('grabbing.add(c)'));
     expect(sq).toContain('if(huHeld===c){scene.attach(huLine.panel);huHeld=null;');
     // the laser stops on it (nearest board), the trigger there does nothing and never starts a line; while a line is stretched it is not a target
     const hit = src.slice(src.indexOf('const huPanelHit='), src.indexOf('const huPanelHit=') + 300);
-    expect(hit).toContain('huLine.isDragging())return null'); expect(hit).toContain('p.parent===c'); expect(hit).not.toMatch(/intersectObject|new THREE/);
+    expect(hit).toContain('huLine.isDragging())return null'); expect(hit).toContain('p.parent===holdOf(c)'); expect(hit).not.toMatch(/intersectObject|new THREE/);
     expect(src).toContain("for(const k of ['menu','help','hist','wheel','pwheel','undoBtn','hu'])");
     const press = src.slice(src.indexOf("addEventListener('selectstart'"), src.indexOf("addEventListener('selectend'"));
     expect(press.indexOf('if(bd.help||bd.hu)return;')).toBeGreaterThan(0);

@@ -2,7 +2,10 @@ import { describe, it, expect } from 'vitest';
 import {
   isHand, createOneEuro, euroAlpha, ONE_EURO, createPoseFilter, createPinchHysteresis, PINCH_ON_M, PINCH_OFF_M, createPoseHistory, RAY_DELAY_MS,
   createTrackingLoss, LOSS_CANCEL_MS, wristMenuMetrics, createWristMenuGate, WRIST_MENU, WRIST_ITEMS, wristSlotFromU, handTexts,
+  fingerCurl, grabScore, createGrabHysteresis, GRAB, GRAB_JOINT_NAMES, GRAB_FINGERS, palmPoint, PALM_FROM_WRIST, WRIST_SCROLL, wristScrollGain, wristScrollSign,
+  handAlive, fistForming, FIST_GUARD_CURL, wristScrollKeep,
 } from '../../docs/vr-hand.js';
+import { pinchScale } from '../../docs/vr-real-scale.js';
 import { DRAG_RECORD, DRAG_HAND, DRAG_RECORD_HAND, HAND_LABEL_MOVE_M, dragShouldStart } from '../../docs/vr-point.js';
 
 // build 625: hand tracking (Quest 3), the pure module
@@ -160,24 +163,34 @@ describe('wrist menu decision (synthetic joint poses)', () => {
     expect(g.update(wristMenuMetrics(wp, watch, head), r.t + 10, true)).toBe(false); // the left hand pinches / tracking lost
     expect(g.update(null, r.t + 20)).toBe(false);
   });
-  it('five buttons: ring, menu, sections, add, undo; u -> slot', () => {
-    expect(WRIST_ITEMS).toEqual(['ring', 'menu', 'section', 'add', 'undo']);
-    expect(wristSlotFromU(0)).toBe(0); expect(wristSlotFromU(0.19)).toBe(0); expect(wristSlotFromU(0.21)).toBe(1); expect(wristSlotFromU(0.99)).toBe(4); expect(wristSlotFromU(1)).toBe(4);
-    expect(wristSlotFromU(NaN)).toBe(null);
+  it('seven buttons: ring, menu, sections, add, undo, section -, section +; u -> slot', () => {
+    expect(WRIST_ITEMS).toEqual(['ring', 'menu', 'section', 'add', 'undo', 'secDown', 'secUp']);
+    expect(wristSlotFromU(0)).toBe(0); expect(wristSlotFromU(0.14)).toBe(0); expect(wristSlotFromU(0.15)).toBe(1); expect(wristSlotFromU(0.99)).toBe(6); expect(wristSlotFromU(1)).toBe(6);
+    expect(wristSlotFromU(5 / 7 + 0.01)).toBe(5); expect(wristSlotFromU(NaN)).toBe(null);
+  });
+  it('断面 -/+ held: a tap nudges (0.4), holding ramps to the full stick in 1 s; + = stick up (-), - = stick down (+)', () => {
+    expect(wristScrollGain(0)).toBeCloseTo(WRIST_SCROLL.start); expect(wristScrollGain(WRIST_SCROLL.rampMs / 2)).toBeCloseTo((1 + WRIST_SCROLL.start) / 2);
+    expect(wristScrollGain(WRIST_SCROLL.rampMs)).toBe(1); expect(wristScrollGain(1e6)).toBe(1); expect(wristScrollGain(-5)).toBeCloseTo(WRIST_SCROLL.start); expect(wristScrollGain(undefined)).toBeCloseTo(WRIST_SCROLL.start);
+    for (let t = 0; t < 1500; t += 50) expect(wristScrollGain(t + 50)).toBeGreaterThanOrEqual(wristScrollGain(t));
+    expect(wristScrollSign('secUp')).toBe(-1); expect(wristScrollSign('secDown')).toBe(1); expect(wristScrollSign('ring')).toBe(0);
   });
 });
 
 describe('hand texts and thresholds', () => {
-  it('ja / en: the help fits the board (6 lines), grab / scale are left to the controllers, five wrist labels', () => {
+  it('ja / en: the help fits the board (6 lines), the fist is documented (grab, boards, two fists), one wrist label per button', () => {
     for (const ja of [true, false]) {
       const t = handTexts(ja);
       expect(t.helpBasic.length).toBeLessThanOrEqual(6); expect(t.helpSec.length).toBeLessThanOrEqual(6);
-      expect(t.wrist(true)).toHaveLength(5); expect(t.wrist(false)[2][1]).not.toBe(t.wrist(true)[2][1]);
+      expect(t.wrist(true)).toHaveLength(WRIST_ITEMS.length); expect(t.wrist(false)[2][1]).not.toBe(t.wrist(true)[2][1]);
     }
     const j = handTexts(true), e = handTexts(false);
-    expect(j.helpBasic.join()).toContain('ピンチ'); expect(j.helpBasic.join()).toContain('手首メニュー'); expect(j.helpBasic.join()).toContain('コントローラーで');
-    expect(j.helpSec.join()).toContain('コントローラーで'); expect(e.helpBasic.join()).toContain('with the controllers');
-    expect(j.wrist(true).map(x => x[0])).toEqual(['よく使う', 'メニュー', '断面', '断面を', '取り消し']);
+    expect(j.helpBasic.join()).toContain('ピンチ'); expect(j.helpBasic.join()).toContain('手首メニュー'); expect(j.helpBasic.join()).toContain('グー'); expect(j.helpBasic.join()).toContain('両手でグー');
+    expect(j.helpMenuSimple).toContain('グー'); expect(e.helpMenuSimple).toContain('fist'); // 体験会モードのかんたんメニュー（ボタンのみ）
+    expect(j.helpSec.join()).toContain('断面＋／－'); expect(j.helpMenu).toContain('グー'); expect(e.helpBasic.join()).toContain('Fist'); expect(e.helpBasic.join()).toContain('Two fists');
+    expect(e.helpSec.join()).toContain('Section + / -'); expect(e.helpMenu).toContain('fist');
+    for (const x of [j, e]) expect(x.helpBasic.concat(x.helpSec, x.helpMenu).join()).not.toMatch(/コントローラーで|with the controllers/); // nothing is left to the controllers any more
+    expect(j.wrist(true).map(x => x[0])).toEqual(['よく使う', 'メニュー', '断面', '断面を', '取り消し', '断面', '断面']);
+    expect(j.wrist(true).slice(5).map(x => x[1])).toEqual(['－', '＋']);
   });
   it('the hand drag thresholds are at least 2 cm / 5 deg; the controller ones are unchanged', () => {
     expect(DRAG_RECORD).toEqual({ posM: 0.02, angDeg: 5, holdMs: Infinity });
@@ -186,5 +199,129 @@ describe('hand texts and thresholds', () => {
     expect(HAND_LABEL_MOVE_M).toBeGreaterThanOrEqual(0.02);
     expect(dragShouldStart({ dPosM: 0.015 })).toBe(true); expect(dragShouldStart({ dPosM: 0.015 }, DRAG_HAND)).toBe(false); // 1.5 cm drags a controller press, not a hand's
     expect(dragShouldStart({ dAngleDeg: 3 }, DRAG_HAND)).toBe(false); expect(dragShouldStart({ dAngleDeg: 5.5 }, DRAG_HAND)).toBe(true);
+  });
+});
+
+// ---- phase 2: the fist = the grip ----
+const P = (x, y = 0, z = 0) => ({ x, y, z });
+// a finger as 5 joints along +x from the metacarpal, bone length 4 cm each (extended) or folded back by `bend` (0 = straight line, 1 = folded back on itself)
+const finger = bend => {
+  const pts = [P(0)]; let ang = 0, x = 0, y = 0;
+  for (let i = 1; i < 5; i++) { if (i > 1) ang += bend * Math.PI * 0.35; x += 0.04 * Math.cos(ang); y += 0.04 * Math.sin(ang); pts.push(P(x, y)); }
+  return pts;
+};
+describe('fingerCurl', () => {
+  it('~1 extended, falls as the finger curls, independent of size and position', () => {
+    expect(fingerCurl(finger(0))).toBeCloseTo(1, 6);
+    const c = [0.25, 0.5, 0.8, 1].map(b => fingerCurl(finger(b)));
+    for (let i = 1; i < c.length; i++) expect(c[i]).toBeLessThan(c[i - 1]);
+    expect(c[0]).toBeGreaterThan(GRAB.off); expect(c[3]).toBeLessThan(GRAB.on);
+    const moved = finger(0.8).map(p => P(p.x * 1.4 + 3, p.y * 1.4 - 2, 7)); expect(fingerCurl(moved)).toBeCloseTo(fingerCurl(finger(0.8)), 9);
+  });
+  it('NaN when a joint is missing or the finger has no length', () => {
+    const f = finger(0.3); f[2] = null; expect(fingerCurl(f)).toBeNaN(); expect(fingerCurl(null)).toBeNaN(); expect(fingerCurl([])).toBeNaN();
+    expect(fingerCurl([P(0), P(0), P(0), P(0), P(0)])).toBeNaN();
+  });
+  it('joint names: four fingers x (metacarpal, proximal, intermediate, distal, tip), thumb left out', () => {
+    expect(GRAB_FINGERS).toEqual(['index-finger', 'middle-finger', 'ring-finger', 'pinky-finger']);
+    expect(GRAB_JOINT_NAMES).toHaveLength(4);
+    expect(GRAB_JOINT_NAMES[1]).toEqual(['middle-finger-metacarpal', 'middle-finger-phalanx-proximal', 'middle-finger-phalanx-intermediate', 'middle-finger-phalanx-distal', 'middle-finger-tip']);
+    expect(GRAB_JOINT_NAMES.flat().some(n => /thumb/.test(n))).toBe(false);
+  });
+});
+describe('grabScore: a fist needs all four fingers', () => {
+  it('is the least curled finger; NaN when one is unknown', () => {
+    expect(grabScore([0.3, 0.4, 0.35, 0.5])).toBe(0.5); expect(grabScore([0.3, 0.9, 0.3, 0.3])).toBe(0.9);
+    expect(grabScore([0.3, NaN, 0.3, 0.3])).toBeNaN(); expect(grabScore([])).toBeNaN();
+  });
+  it('a fist is below GRAB.on, pointing (index out) / an open hand / a pinch posture (index half bent out) are not', () => {
+    const fist = grabScore([1, 1, 1, 1].map(b => fingerCurl(finger(b))));
+    const pointing = grabScore([0, 1, 1, 1].map(b => fingerCurl(finger(b))));
+    const open = grabScore([0, 0, 0, 0].map(b => fingerCurl(finger(b))));
+    const pinch = grabScore([0.45, 0.8, 0.9, 0.9].map(b => fingerCurl(finger(b))));
+    expect(fist).toBeLessThan(GRAB.on); expect(pointing).toBeGreaterThan(GRAB.off); expect(open).toBeGreaterThan(GRAB.off); expect(pinch).toBeGreaterThan(GRAB.on);
+  });
+});
+describe('createGrabHysteresis', () => {
+  const run = (g, seq, t0 = 0, dt = 14) => { const ev = []; let t = t0; for (const sc of seq) { const e = g.update(sc, t); if (e) ev.push([e, t]); t += dt; } return { ev, t }; };
+  it('defaults: on 0.55 < off 0.7, 100 ms to start', () => { expect(GRAB).toEqual({ on: 0.55, off: 0.7, holdMs: 100 }); expect(GRAB.on).toBeLessThan(GRAB.off); });
+  it('starts only after the fist has been held holdMs; ends the moment it opens past off; the band between on and off keeps the state', () => {
+    const g = createGrabHysteresis();
+    expect(run(g, Array(5).fill(0.3)).ev).toEqual([]); // 56 ms: not yet
+    expect(g.pending).toBe(true); expect(g.active).toBe(false);
+    const r = run(g, Array(10).fill(0.3), 70); expect(r.ev).toHaveLength(1); expect(r.ev[0][0]).toBe('start'); expect(r.ev[0][1] - 0).toBeGreaterThanOrEqual(100); expect(g.active).toBe(true);
+    expect(run(g, [0.6, 0.65, 0.69, 0.6], r.t).ev).toEqual([]); expect(g.active).toBe(true); // between on and off: kept
+    const e = run(g, [0.71], r.t + 100); expect(e.ev).toEqual([['end', r.t + 100]]); expect(g.active).toBe(false);
+  });
+  it('a brief closing (< holdMs) never grabs; the timer restarts after an opening', () => {
+    const g = createGrabHysteresis();
+    expect(run(g, [0.3, 0.3, 0.3, 0.8, 0.3, 0.3, 0.3, 0.8]).ev).toEqual([]);
+    expect(g.pending).toBe(false);
+  });
+  it('NaN (joints lost) keeps an active grab and drops a pending one', () => {
+    const g = createGrabHysteresis(); run(g, Array(12).fill(0.3)); expect(g.active).toBe(true);
+    expect(run(g, [NaN, NaN, NaN], 500).ev).toEqual([]); expect(g.active).toBe(true);
+    const h = createGrabHysteresis(); run(h, [0.3, 0.3, 0.3]); expect(h.pending).toBe(true); h.update(NaN, 100); expect(h.pending).toBe(false);
+  });
+  it('blocked (the hand drags something) never starts a grab; the hold starts again once unblocked; a grab already running is not ended by it', () => {
+    const g = createGrabHysteresis(); let t = 0;
+    for (let i = 0; i < 20; i++, t += 14) expect(g.update(0.2, t, true)).toBe(null);
+    expect(g.pending).toBe(false); let ev = null; for (let i = 0; i < 12 && !ev; i++, t += 14) ev = g.update(0.2, t, false); expect(ev).toBe('start');
+    expect(g.update(0.2, t, true)).toBe(null); expect(g.active).toBe(true);
+  });
+  it('release() (tracking lost / refused / ended from outside) latches: no new grab until the hand has opened once', () => {
+    const g = createGrabHysteresis(); let t = 0; for (let i = 0; i < 12; i++, t += 14) g.update(0.2, t); expect(g.active).toBe(true);
+    g.release(); expect(g.active).toBe(false);
+    for (let i = 0; i < 30; i++, t += 14) expect(g.update(0.2, t)).toBe(null); // still a fist: nothing
+    expect(g.update(0.5, t)).toBe(null); t += 14; expect(g.update(0.8, t)).toBe(null); // open (above off): unlatched
+    let ev = null; for (let i = 0; i < 12 && !ev; i++, t += 14) ev = g.update(0.2, t); expect(ev).toBe('start');
+    g.release(); g.reset(); let e2 = null; for (let i = 0; i < 12 && !e2; i++, t += 14) e2 = g.update(0.2, t); expect(e2).toBe('start'); // reset() clears the latch
+  });
+  it('custom thresholds (localStorage vrl-hand-grab)', () => {
+    const g = createGrabHysteresis({ on: 0.4, off: 0.5, holdMs: 30 }); let ev = null;
+    for (let i = 0, t = 0; i < 4 && !ev; i++, t += 14) ev = g.update(0.45, t); expect(ev).toBe(null);
+    for (let i = 0, t = 100; i < 4 && !ev; i++, t += 14) ev = g.update(0.3, t); expect(ev).toBe('start');
+    expect(g.update(0.55, 300)).toBe('end');
+  });
+});
+describe('the fist anchor and two-fist scaling', () => {
+  it('the palm centre lies between the wrist and the middle-finger knuckle', () => {
+    const p = palmPoint([0, 0, 0], [0, 0, -0.1]); expect(p[2]).toBeCloseTo(-0.1 * PALM_FROM_WRIST, 9); expect(PALM_FROM_WRIST).toBeGreaterThan(0); expect(PALM_FROM_WRIST).toBeLessThan(1);
+    const out = [9, 9, 9]; expect(palmPoint([1, 2, 3], [1, 2, 3], out)).toBe(out); expect(out).toEqual([1, 2, 3]);
+  });
+  it('two fists: the volume scale follows the distance between the fists (the controllers\' pinchScale, unchanged)', () => {
+    expect(pinchScale(1, 0.2, 0.4, 0)).toBeCloseTo(2, 6); expect(pinchScale(1, 0.2, 0.1, 0)).toBeCloseTo(0.5, 6); expect(pinchScale(0.7, 0.3, 0.3, 0)).toBeCloseTo(0.7, 6);
+  });
+});
+
+describe('hand fixes: grab keeps alive by the wrist, fist guard, wrist scroll stop', () => {
+  it('handAlive: the ray decides, a grab is also kept alive by a tracked wrist', () => {
+    expect(handAlive(true, false, false)).toBe(true);
+    expect(handAlive(false, true, false)).toBe(false); // not grabbing: the ray alone (as before)
+    expect(handAlive(false, true, true)).toBe(true); // palm turned to the face, the wrist is still tracked
+    expect(handAlive(false, false, true)).toBe(false); // really lost
+  });
+  it('a grab with a lost ray but a tracked wrist never cancels; a lost wrist cancels after 200 ms', () => {
+    const l = createTrackingLoss(); let t = 0;
+    expect(l.update(handAlive(true, true, true), t)).toBe('ok');
+    for (let i = 0; i < 40; i++) { t += FRAME; expect(l.update(handAlive(false, true, true), t)).toBe('ok'); }
+    const out = []; for (let i = 0; i < 40; i++) { t += FRAME; out.push(l.update(handAlive(false, false, true), t)); }
+    expect(out).toContain('cancel');
+  });
+  it('fistForming: middle / ring / little curled = a forming fist; the index does not matter; open or unknown fingers do not', () => {
+    expect(FIST_GUARD_CURL).toBeGreaterThan(GRAB.on);
+    expect(fistForming([0.5, 0.4, 0.4, 0.45])).toBe(true);
+    expect(fistForming([0.9, 0.4, 0.4, 0.45])).toBe(true); // index still out
+    expect(fistForming([0.5, 0.9, 0.4, 0.4])).toBe(false); // an aiming pinch: middle open
+    expect(fistForming([0.5, 0.4, 0.75, 0.4])).toBe(false);
+    expect(fistForming([0.5, 0.4, NaN, 0.4])).toBe(false);
+    expect(fistForming(null)).toBe(false);
+  });
+  it('wristScrollKeep: only on the same button and not in a fist', () => {
+    expect(wristScrollKeep('secUp', 'secUp', false)).toBe(true);
+    expect(wristScrollKeep('secUp', 'secDown', false)).toBe(false);
+    expect(wristScrollKeep('secUp', null, false)).toBe(false); // the ray left the menu
+    expect(wristScrollKeep('secUp', 'secUp', true)).toBe(false); // the hand became a fist
+    expect(wristScrollKeep(undefined, undefined, false)).toBe(false);
   });
 });
