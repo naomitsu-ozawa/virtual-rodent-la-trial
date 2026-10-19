@@ -251,6 +251,9 @@ export function createTriggerPress({longMs=LONG_PRESS_MS}={}){
 // DRAG_RECORD: the press began where a tap would record a point (section mode, the laser on the selected plane); there the threshold is higher
 // (2 cm / 5 deg) so hand jitter in a tap does not drag, and holding still never starts a drag (holdMs Infinity: a long press just records nothing).
 export const DRAG_RECORD={posM:0.02,angDeg:5,holdMs:Infinity};
+// build 625: a tracked hand (pinch) shakes more than a controller: its drags start only after 2 cm / 5 deg (the controller's DRAG_RECORD) and,
+// where a pinch would record a point, after 3 cm / 7 deg; a pinned label moves after 2 cm (controller 8 mm). The controller values above stay.
+export const DRAG_HAND={posM:0.02,angDeg:5,holdMs:LONG_PRESS_MS},DRAG_RECORD_HAND={posM:0.03,angDeg:7,holdMs:Infinity},HAND_LABEL_MOVE_M=0.02;
 export function dragShouldStart({dPosM=0,dAngleDeg=0,heldMs=0}={},{posM=0.01,angDeg=1.5,holdMs=LONG_PRESS_MS}={}){
  return dPosM>posM||dAngleDeg>angDeg||heldMs>=holdMs;
 }
