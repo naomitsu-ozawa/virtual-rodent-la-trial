@@ -9,6 +9,19 @@ export const EVENT_LEVELS=Object.freeze([
  {id:'lv2',lv:2,sample:'sample2',nameKey:'evLv2Name',missionKey:'evLv2Mission',hints:['section','move','toggle']},
  {id:'lv3',lv:3,sample:'sample1',nameKey:'evLv3Name',missionKey:'evLv3Mission',hints:['section','move','mark','distance']},
 ].map(l=>Object.freeze({...l,hints:Object.freeze(l.hints)})));
+// The segments each practice dataset STARTS with shown (体験会: 骨梁 = 骨 / マウス頭部 = 骨 / マウス腹部 = 骨 + 軟部組織 / ラット腹部 = 骨 + 軟部組織). The state itself lives in the datasets' own
+// project files (docs/demo/sampleN/project.vrlab: a shown segment is active + enabled; the others stay in the list as active + not enabled, so they are loaded and prepared like the
+// rest and can be shown at any time, on the page and in VR), so a first load, every switch and the VR reset all start from it. tests/unit/event-mode.test.js checks the files against this table.
+export const EVENT_INITIAL_SEGMENTS=Object.freeze({sample4:Object.freeze(['bone']),sample3:Object.freeze(['bone']),sample2:Object.freeze(['bone','soft']),sample1:Object.freeze(['bone','soft'])});
+// The visibility a project file starts its segments with, against the page's current flags: which segments have to be switched off / on to get back to it (only segments active in BOTH:
+// adding / removing a segment is not a visitor's doing in event mode). Off first, on second: the page allows at most 4 shown segments at once. Pure (data-load.js restoreProjectAnnotations
+// applies it, vr-view.js 最初の状態に戻す then derives the VR-side modes from the page flags: initialVrModes).
+export function segmentVisibilityPlan(projectSegments,state,order=Object.keys(state||{})){
+ const off=[],on=[];
+ for(const k of order){const p=projectSegments?.[k],s=state?.[k];if(!p?.active||!s?.active)continue;
+  const want=!!p.enabled,have=!!s.enabled;if(want&&!have)on.push(k);else if(!want&&have)off.push(k)}
+ return{off,on};
+}
 export const levelById=id=>EVENT_LEVELS.find(l=>l.id===id)||null;
 export const levelForSample=sample=>EVENT_LEVELS.find(l=>l.sample===sample)||null;
 let chosen=null;
@@ -35,11 +48,11 @@ export const triggerModeRow=hasResults=>!!hasResults;
 export const TRIGGER_AT_START='point';
 export const triggerMode=(labelsOn,hasResults)=>hasResults&&labelsOn?'label':'point';
 // the かんたん menu's board layout (1024 x 1180 px canvas), pure so that it can be tested and drawn without a headset. Widgets only carry an id;
-// vr-view.js maps the id to its action: 'seg:<key>:show|hide', 'section:show|hide', 'trigger:point|label', 'undo', 'home', 'all', 'exit'.
+// vr-view.js maps the id to its action: 'seg:<key>:show|hide', 'section:show|hide', 'trigger:point|label', 'undo', 'home', 'reset', 'all', 'exit'.
 // Advanced settings (quality, foveation, HU window, ...) are not here: すべての設定 opens the full menu.
 export const SIMPLE_MENU=Object.freeze({W:1024,H:1180,X:40,STATUS:140,TOP:190,ROW:92,TRIG_ROW:108,BTN_H:72,LIST_ROW:50,BOTTOM:1070});
 // There is no title line and no level text; the board's status line sits at STATUS and the rows start at TOP.
-// o: {segments:[{key,name,color,on}], sectionOn, trigger:{show,label}, results:[{hex,name,text}], total, text:{...}}
+// o: {segments:[{key,name,color,on}], sectionOn, trigger:{show,label}, results:[{hex,name,text}], total, resetArmed, text:{...}}
 export function simpleMenuLayout(o){
  const M=SIMPLE_MENU,t=o.text,w=[],X=M.X,label=(id,x,y,text,extra={})=>w.push({type:'label',id,x,y,text,...extra});
  const btn=(id,x,y,wd,text,on,extra={})=>w.push({type:'button',id,x,y,w:wd,h:M.BTN_H,label:text,on,...extra});
@@ -67,11 +80,26 @@ export function simpleMenuLayout(o){
   const more=res.length-shown.length;
   label('total',X,top+shown.length*M.LIST_ROW+26,t.total+' '+o.total+' · '+res.length+(more>0?'  (… +'+more+')':''),{size:24,color:'#9fb3c3'});
  }
- // bottom row: equal buttons, the exit one red
- const items=[['home',t.home],['undo',t.undo],['all',t.all],['exit',t.exit]],gap=12,bw=Math.floor((M.W-2*X-(items.length-1)*gap)/items.length);
- items.forEach(([id,text],i)=>btn(id,X+i*(bw+gap),M.BOTTOM,bw,text,id==='exit',{size:28,...(id==='exit'?{color:'#b33'}:{})}));
+ // bottom row: 正面に戻す / 元に戻す / 最初の状態に戻す / すべての設定 / 終了 (the exit one red). The widths follow the texts (BOTTOM_WEIGHTS; a label wider than its
+ // button shrinks horizontally, vr-view.js); 最初の状態に戻す is the widest one: while armed it says 「もう一度押すとリセット」 (resetPress below).
+ const items=[['home',t.home],['undo',t.undo],['reset',o.resetArmed?t.resetAgain:t.reset],['all',t.all],['exit',t.exit]],gap=12,inner=M.W-2*X-(items.length-1)*gap,sum=items.reduce((a,[id])=>a+BOTTOM_WEIGHTS[id],0);
+ let bx=X;
+ items.forEach(([id,text],i)=>{
+  const bw=i===items.length-1?M.W-X-bx:Math.floor(inner*BOTTOM_WEIGHTS[id]/sum);
+  btn(id,bx,M.BOTTOM,bw,text,id==='exit'||(id==='reset'&&!!o.resetArmed),{size:id==='reset'?26:28,...(id==='exit'?{color:'#b33'}:id==='reset'&&o.resetArmed?{color:'#c77a00'}:{})});
+  bx+=bw+gap;
+ });
  return w;
 }
+export const BOTTOM_WEIGHTS=Object.freeze({home:205,undo:105,reset:270,all:180,exit:136}); // px of the 896 px row (the widest label of each, ja and en, needs at most 25 % shrink)
+// 最初の状態に戻す: a two-press confirm so that a visitor does not lose the data's state by accident. The first press arms the button for RESET_ARM_MS (its text changes);
+// a second press inside that window fires, a press after it only arms again. Pure: resetPress(armedUntil, now) -> {fire, armedUntil}; armedUntil 0 = not armed.
+export const RESET_ARM_MS=3000;
+export function resetPress(armedUntil,now){
+ if(armedUntil&&now<armedUntil)return{fire:true,armedUntil:0};
+ return{fire:false,armedUntil:now+RESET_ARM_MS};
+}
+export const resetArmed=(armedUntil,now)=>!!armedUntil&&now<armedUntil;
 // greedy wrap that keeps Latin words whole (CJK text breaks between any two characters); measure(text) = width
 export function wrapWords(text,maxW,measure){
  const tokens=String(text).match(/[\x21-\x7e]+|\s+|[^\s\x21-\x7e]/g)||[],lines=[];let cur='';

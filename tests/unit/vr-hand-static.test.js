@@ -1,5 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
+import * as THREE from 'three';
+import { NEAR_KINDS, pickNearGrab, boxDist, centeredBoxDist, squareOutlineDist } from '../../docs/vr-hand.js';
 
 // build 625: hand tracking. vr-view.js / vr-hand-view.js are WebXR files (not run in node): the guards are checked on the source, and the
 // disconnect release is run from its own source text against stand-ins for the closure variables.
@@ -64,12 +66,12 @@ describe('vr-view.js: hand tracking is optional and every hand branch is guarded
     const g = bodyAfter(hv, 'const grabStep=(c,hs,now)=>{');
     expect(g).toContain('hs.grab.update(fistScore(hs),now,!!busy(c))');
     expect(g).toContain("if(c.userData.press)release(c);");
-    expect(g).toContain('if(grab(c)===false)hs.grab.release();');
+    expect(g).toContain('if(grab(c,hs.near)===false)hs.grab.release();');
     expect(g).toContain("else if(ev==='end')ungrab(c);");
     expect(bodyAfter(hv, 'frame(now){')).toContain('if(tick(c,hs,now)&&(c.visible||hs.grab.active))grabStep(c,hs,now);'); // after the isHand(s) continue
     expect(bodyAfter(hv, 'frame(now){').indexOf('grabStep(')).toBeGreaterThan(bodyAfter(hv, 'frame(now){').indexOf('if(!isHand(s)){ctrl=true;continue}'));
-    expect(src).toContain('grab:c=>{if(c.userData.wristOn)return false;gripStart(c);return true}');
-    expect(src).toContain('ungrab:c=>gripEnd(c)');
+    expect(src).toContain('grab:(c,t)=>{if(t){gripStartNear(c,t);return true}if(c.userData.wristOn)return false;gripStart(c);return true}'); // no target near: the laser path, unchanged
+    expect(src).toContain('ungrab:c=>{if(c.userData.drag?.fist){endDrag(c);return}gripEnd(c)}');
     expect(src).toContain('busy:c=>!!(c.userData.drag||c.userData.lblDrag||histAxis===c||dragging?.c===c||huLine.isDragging())');
     expect(src).toContain('c.userData.wristOn=!!bd.wrist;');
     // tracking loss: release() lets go of what the fist held and latches the detector; a lost hand does not grab
@@ -106,7 +108,7 @@ describe('vr-view.js: hand tracking is optional and every hand branch is guarded
   });
   it('every other handIn / wrist use in vr-view.js is behind isHand() or comes from a hand-only call', () => {
     const own = ['import ', 'const handIn=createHandInput(', "session.addEventListener('end',()=>handIn.dispose()", "for(const t of ['selectstart','selectend'])"];
-    const handOnlyApi = ['handIn.frame(', 'handIn.wristHit(', 'handIn.hover(', 'handIn.wristId(', 'handIn.anyHand()', 'handIn.drop(c)', 'handIn.connect(', 'handIn.flash(', 'handIn.dragTh(', 'handIn.holder(', 'handIn.grabbing(', 'handIn.wristShown'];
+    const handOnlyApi = ['handIn.frame(', 'handIn.wristHit(', 'handIn.hover(', 'handIn.wristId(', 'handIn.anyHand()', 'handIn.drop(c)', 'handIn.connect(', 'handIn.flash(', 'handIn.dragTh(', 'handIn.holder(', 'handIn.grabbing(', 'handIn.reach(', 'handIn.wristShown'];
     for (const l of src.split('\n').filter(x => /handIn\.|bd\.wrist|o\.wrist|HAND_LABEL_MOVE_M/.test(x))) {
       if (own.some(w => l.includes(w))) continue;
       const ok = l.includes('isHand(') || l.includes('c.userData.hs') || handOnlyApi.some(w => l.includes(w)) || /bd\.wrist|o\.wrist/.test(l);
@@ -133,6 +135,113 @@ describe('vr-view.js: hand tracking is optional and every hand branch is guarded
     expect(src).toContain('c.userData.gate.update(c.userData.source?.gamepad?.axes?.[2]||0,ay,performance.now());'); // a hand has no gamepad axes: 0 -> the gate always allows recording
     expect(src).toContain('const ay=c.userData.source?.gamepad?.axes?.[3]||0');
     expect(src).toContain('const bt=c.userData.source?.gamepad,ax=bt?.axes?.[2]||0,ay=bt?.axes?.[3]||0;');
+  });
+});
+
+describe('direct grab (build 626): hands only, the controller path is untouched', () => {
+  it("the fist asks near() first; with a target the board / section / volume itself is taken, else the laser path (gripStart) runs as before", () => {
+    const g = bodyAfter(hv, 'const grabStep=(c,hs,now)=>{');
+    expect(g).toContain('hs.near=near?near(c,nearM):null;'); expect(g.indexOf('hs.near=near?near(c,nearM)')).toBeLessThan(g.indexOf('grab(c,hs.near)'));
+    expect(g).toContain('hs.aFilter.reset();palm(hs,now);'); // the anchor starts at the palm: the held object keeps its offset
+    expect(g).toContain('else hs.near=hs.grab.active||!near?null:near(c,nearM);');
+    expect(bodyAfter(hv, 'frame(now){')).toContain('else hs.near=null;');
+    expect(bodyAfter(hv, 'reach(c){').trimStart()).toMatch(/^return isHand\(c\.userData\.source\)\?/);
+  });
+  it('nearGrabTarget: never for a controller (holdOf(c)===c), only from the hand callback; the four boards keep the bodies of gripStart', () => {
+    const n = bodyAfter(src, 'const nearGrabTarget=(c,nm)=>{');
+    expect(n.trimStart().startsWith('const mine=holdOf(c);if(mine===c||!isHand(c.userData.source))return null;')).toBe(true);
+    expect(n).toContain('return pickNearGrab(o,nm);');
+    expect(src.match(/gripStartNear[(=]/g)).toHaveLength(2); // the definition and the hand callback
+    expect(src.match(/nearGrabTarget[(=]/g)).toHaveLength(2); // the definition and the hand callback
+    const st = bodyAfter(src, 'const gripStartNear=(c,t)=>{');
+    for (const w of ['holdOf(c).attach(menu.mesh)', 'holdOf(c).attach(help.mesh)', 'holdOf(c).attach(hist.group)', 'holdOf(c).attach(huLine.panel)', 'grabbing.add(c);regrab();', 'startFistSection(c,t.ref)']) expect(st).toContain(w);
+    expect(st).not.toMatch(/[^f(]c\.attach\(/); expect(st.trimEnd().endsWith('gripStart(c); // the object went away meanwhile: the laser decides, as before')).toBe(true);
+  });
+  it('the order of the candidates is the order of NEAR_KINDS (menu, help, hist, hu, section, volume)', () => {
+    const n = bodyAfter(src, 'const nearGrabTarget=(c,nm)=>{');
+    const at = ['o[0].d=boardDist(menu.mesh)', 'o[1].d=boardDist(help.mesh)', 'o[2].d=boardDist(hist.board)', 'o[3].d=boardDist(huLine.panel)', 'o[4].d=d', 'o[5].d=centeredBoxDist'].map(w => n.indexOf(w));
+    expect(at.every(i => i >= 0)).toBe(true); expect([...at].sort((a, b) => a - b)).toEqual(at);
+  });
+  it('a fist-held section: the same drag record as a pinch (fist: true), driven by the palm anchor, ended by ungrab without a throw; moved only while no volume moves', () => {
+    const f = bodyAfter(src, 'const startFistSection=(c,pl)=>{');
+    expect(f).toContain('fist:true'); expect(f).toContain('anchorInHolder(c)'); expect(f).not.toContain('handInHolder(c)'); expect(f).toContain('draggedBy(pl,c)');
+    const u = bodyAfter(src, 'const updateFistDrag=c=>{');
+    expect(u.trimStart().startsWith('const dg=c.userData.drag;if(!dg||!dg.fist||!vrHalfExt)return;')).toBe(true);
+    expect(u).toContain('if(twoHand||grabbing.has(c))'); expect(u).toContain('sectionFollowStep(');
+    expect(src).toContain('updatePress(c,nowF);updateFistDrag(c);');
+    expect(src).toContain('ungrab:c=>{if(c.userData.drag?.fist){endDrag(c);return}gripEnd(c)}');
+    expect(lineOf(src, 'const anchorInHolder=c=>{')).toBeTruthy();
+    expect(bodyAfter(src, 'const anchorInHolder=c=>{')).toContain('const a=holdOf(c);');
+  });
+  it('feedback: a section within reach glows in the hand colour (the existing glow), the fingertips turn green', () => {
+    expect(src).toContain("nr=handIn.reach(c)"); expect(src).toContain("(nr?.kind==='section'?nr.ref:null)");
+    expect(hv).toContain('REACH_TIP=0x39ff6a'); expect(hv).toContain('hs?.near?REACH_TIP');
+    expect(hv.indexOf('hs?.grab.active?GRAB_TIP')).toBeLessThan(hv.indexOf('hs?.near?REACH_TIP')); // holding (orange) wins over reach (green)
+  });
+  it('the tunables are read once, from localStorage guarded by try/catch', () => {
+    expect(hv).toContain("parseGrabTune(lsGet('vrl-hand-grab'))"); expect(hv).toContain("parseFilterTune(lsGet('vrl-hand-filter'))");
+    expect(lineOf(hv, 'const lsGet=')).toContain('try{return localStorage.getItem(k)}catch{return null}');
+  });
+});
+
+describe('nearGrabTarget run from its own source (units, scales, priorities)', () => {
+  // the block from the temporaries to the end of nearGrabTarget, run against stand-ins for the closure variables of vr-view.js
+  const a = src.indexOf('const tmpNp=new THREE.Vector3()'), b = src.indexOf('const startFistSection=(c,pl)=>{');
+  expect(a).toBeGreaterThan(0); expect(b).toBeGreaterThan(a);
+  const code = src.slice(a, b) + '\nreturn nearGrabTarget;';
+  const plane = (w, h, at) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h)); m.position.copy(at); m.updateMatrixWorld(true); return m; };
+  const make = () => {
+    const holder = new THREE.Group(); holder.scale.setScalar(0.1); holder.position.set(0, 1.3, -0.5); holder.updateMatrixWorld(true); // app units -> metres: 1 unit = 10 cm
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 2)); holder.add(mesh); holder.updateMatrixWorld(true);
+    const palm = new THREE.Object3D(), ctrl = { userData: { source: { hand: {} } } };
+    const x = {
+      THREE, isHand: s => !!(s && s.hand), NEAR_KINDS, pickNearGrab, boxDist, centeredBoxDist, squareOutlineDist,
+      holdOf: c => (c === ctrl ? palm : c), ui: { open: false }, menuHeld: null, helpHeld: null, histHeld: null, huHeld: null,
+      menu: { mesh: plane(0.5, 0.3, new THREE.Vector3(0.8, 1.3, -0.5)) }, help: { mesh: plane(0.4, 0.3, new THREE.Vector3(-0.8, 1.3, -0.5)) },
+      hist: { isOpen: false, group: new THREE.Group(), board: plane(0.4, 0.3, new THREE.Vector3(0, 2, -0.5)) },
+      huLine: { panel: plane(0.3, 0.2, new THREE.Vector3(0, 0.5, -0.5)), isDragging: () => false },
+      vrHalfExt: [1, 1, 1], section: { on: false }, planes: [], draggedBy: () => false, mesh,
+    };
+    x.menu.mesh.visible = false; x.help.mesh.visible = false; x.huLine.panel.visible = false;
+    x.near = new Function('ctx', 'with(ctx){' + code + '}')(x);
+    return { x, palm, ctrl, holder, mesh, at: (px, py, pz, nm = 0.05) => { palm.position.set(px, py, pz); palm.updateMatrixWorld(true); return x.near(ctrl, nm); } };
+  };
+  it('the volume: inside its box, or within 5 cm (world metres, whatever the volume scale) of it; farther: null (the laser decides)', () => {
+    const { at } = make();
+    expect(at(0, 1.3, -0.5).kind).toBe('volume'); // the middle
+    expect(at(0.1, 1.3, -0.5).kind).toBe('volume'); // exactly on the face (1 unit = 10 cm)
+    expect(at(0.14, 1.3, -0.5).kind).toBe('volume'); // 4 cm outside
+    expect(at(0.16, 1.3, -0.5)).toBe(null); // 6 cm outside
+  });
+  it("a controller (holdOf(c) is c) never gets a target", () => {
+    const { x, ctrl } = make(); x.holdOf = c => c;
+    expect(x.near(ctrl, 0.05)).toBe(null);
+  });
+  it('a board in reach wins over the volume it overlaps; a closed / held board is no candidate', () => {
+    const { x, at } = make();
+    x.menu.mesh.position.set(0.05, 1.3, -0.5); x.menu.mesh.updateMatrixWorld(true);
+    expect(at(0.05, 1.3, -0.46).kind).toBe('volume'); // the menu is closed
+    x.ui.open = true; x.menu.mesh.visible = true;
+    expect(at(0.05, 1.3, -0.46).kind).toBe('menu'); // 4 cm in front of the open menu, inside the volume box too
+    expect(at(0.05, 1.3, -0.30)).toBe(null); // 20 cm from the menu and 10 cm outside the volume box
+    x.menuHeld = {}; expect(at(0.05, 1.3, -0.46).kind).toBe('volume');
+  });
+  it('a section frame: the thin outline / the number tag within 5 cm wins over the volume; the middle of its face does not', () => {
+    const { x, holder, at } = make();
+    const obj = new THREE.Group(), handle = new THREE.Object3D(); handle.position.set(0, 0.15, 0.15); obj.add(handle); holder.add(obj); obj.position.set(0, 0, 0); holder.updateMatrixWorld(true);
+    const pl = { obj, handle, h: 0.12 }; x.planes.push(pl); x.section.on = true;
+    obj.scale.setScalar(10); holder.updateMatrixWorld(true); // the frame at its design size: world scale 0.1 x 10 = 1, so 12 cm half side in the world
+    const w = (y, z, xx = 0) => { const v = new THREE.Vector3(xx, y, z); obj.localToWorld(v); return v; };
+    let p = w(0.12, 0); expect(at(p.x, p.y, p.z)).toMatchObject({ kind: 'section' }); expect(at(p.x, p.y, p.z).ref).toBe(pl); // on the edge (inside the volume box too)
+    p = w(0, 0); expect(at(p.x, p.y, p.z).kind).toBe('volume'); // the middle of the face: 12 cm from the outline
+    p = w(0.12 - 0.03, 0); expect(at(p.x, p.y, p.z).kind).toBe('section'); // 3 cm inside the edge
+    p = w(0.12 - 0.08, 0); expect(at(p.x, p.y, p.z).kind).toBe('volume'); // 8 cm inside the edge
+    x.section.on = false; p = w(0.12, 0); expect(at(p.x, p.y, p.z).kind).toBe('volume'); // sections hidden: not a candidate
+    x.section.on = true; x.draggedBy = () => true; expect(at(p.x, p.y, p.z).kind).toBe('volume'); // held by the other hand
+  });
+  it('the reach follows the tuned near (vrl-hand-grab near)', () => {
+    const { at } = make();
+    expect(at(0.18, 1.3, -0.5, 0.05)).toBe(null); expect(at(0.18, 1.3, -0.5, 0.1).kind).toBe('volume');
   });
 });
 

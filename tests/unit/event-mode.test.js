@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { unzipSync, strFromU8 } from 'fflate';
-import { EVENT_LEVELS, EVENT_HINT_KEYS, levelById, levelForSample, chooseEventLevel, chosenEventLevel, eventModeOn, activeEventLevel, simpleMenuSegments, MAX_SEG_ROWS, triggerModeRow, triggerMode, TRIGGER_AT_START, simpleMenuLayout, SIMPLE_MENU, wrapWords, missionLines } from '../../docs/event-mode.js';
+import { EVENT_LEVELS, EVENT_HINT_KEYS, levelById, levelForSample, chooseEventLevel, chosenEventLevel, eventModeOn, activeEventLevel, simpleMenuSegments, MAX_SEG_ROWS, triggerModeRow, triggerMode, TRIGGER_AT_START, EVENT_INITIAL_SEGMENTS, segmentVisibilityPlan, simpleMenuLayout, SIMPLE_MENU, wrapWords, missionLines, resetPress, resetArmed, RESET_ARM_MS, BOTTOM_WEIGHTS } from '../../docs/event-mode.js';
 import { I18N } from '../../docs/i18n.js';
 import { SAMPLE_SETS } from '../../docs/sample-sets.js';
 
@@ -77,14 +77,15 @@ describe('the generic VR かんたん menu: segments and the trigger switch', ()
 // the かんたん menu board: simpleMenuLayout is the pure layout vr-view.js draws
 const TEXT = lang => {
   const t = I18N[lang], ja = lang === 'ja';
-  return { show: t.evShow, hide: t.evHide, section: ja ? '断面' : 'Sections', trigger: t.evMode, trigPoint: t.evModePoint, trigLabel: t.evModeAnalysis, trigHintPoint: t.evModeHintPoint, trigHintLabel: t.evModeHintAnalysis, results: ja ? '解析結果（体積）' : 'Analysis results (volume)', total: ja ? '合計' : 'Total', noSeg: 'none', home: ja ? '正面に戻す' : 'Bring to front', undo: ja ? '元に戻す' : 'Undo', all: t.evAllSettings, exit: t.evExitVr };
+  return { show: t.evShow, hide: t.evHide, section: ja ? '断面' : 'Sections', trigger: t.evMode, trigPoint: t.evModePoint, trigLabel: t.evModeAnalysis, trigHintPoint: t.evModeHintPoint, trigHintLabel: t.evModeHintAnalysis, results: ja ? '解析結果（体積）' : 'Analysis results (volume)', total: ja ? '合計' : 'Total', noSeg: 'none', home: ja ? '正面に戻す' : 'Bring to front', undo: ja ? '元に戻す' : 'Undo', reset: t.evReset, resetAgain: t.evResetAgain, all: t.evAllSettings, exit: t.evExitVr };
 };
 const SEG_NAMES = { ja: { bone: '骨', soft: '軟部組織', fat: '脂肪', lung: '肺', contrast: '造影剤' }, en: { bone: 'Bone', soft: 'Soft tissue', fat: 'Fat', lung: 'Lung', contrast: 'Contrast' } };
 const COLORS = { bone: '#f3f0e8', soft: '#d97f7f', fat: '#e7c85d', lung: '#7fb3d9', contrast: '#9b7fd9' };
 // the bundled projects (what the data shows when a level is opened)
 const bundled = sample => JSON.parse(strFromU8(unzipSync(new Uint8Array(readFileSync(new URL(`../../docs/demo/${sample}/project.vrlab`, import.meta.url))))['project.json']));
 const SEG_ORDER = ['bone', 'soft', 'fat', 'lung', 'contrast'];
-const shownOf = p => SEG_ORDER.filter(k => p.segments?.[k]?.active && p.segments?.[k]?.enabled);
+// the VR menu lists the segments of the data (active), shown or not: the ones the project starts hidden are rows too (vr-view.js segAvail in event mode)
+const shownOf = p => SEG_ORDER.filter(k => p.segments?.[k]?.active);
 // the board for a dataset: its shown segments and analysis results (what vr-view.js feeds in); labelsOn = the trigger switch
 function layoutFor(sample, lang = 'ja', over = {}) {
   const p = sample ? bundled(sample) : { segments: {}, analysis: {} }, keys = simpleMenuSegments(shownOf(p));
@@ -99,7 +100,7 @@ describe('the generic かんたん menu board per bundled dataset', () => {
   const rows = w => ids(buttons(w)).filter(i => /:show$|^trigger:point$/.test(i)).map(i => i.replace(/:show$/, ''));
   it('sample4 (Lv0 trabecular): bone, 断面; no trigger switch, no list', () => {
     const w = layoutFor('sample4');
-    expect(ids(buttons(w))).toEqual(['seg:bone:show', 'seg:bone:hide', 'section:show', 'section:hide', 'home', 'undo', 'all', 'exit']);
+    expect(ids(buttons(w))).toEqual(['seg:bone:show', 'seg:bone:hide', 'section:show', 'section:hide', 'home', 'undo', 'reset', 'all', 'exit']);
     expect(ids(w)).not.toContain('trigger:name');
     expect(ids(w)).not.toContain('results');
   });
@@ -122,7 +123,7 @@ describe('the generic かんたん menu board per bundled dataset', () => {
   });
   it('no dataset: the none-shown note, 断面 and the bottom row; the bottom row is the same everywhere', () => {
     expect(ids(layoutFor(null))).toEqual(expect.arrayContaining(['noseg', 'section:show', 'exit']));
-    for (const s of [...SAMPLES, null]) expect(ids(buttons(layoutFor(s))).slice(-4)).toEqual(['home', 'undo', 'all', 'exit']);
+    for (const s of [...SAMPLES, null]) expect(ids(buttons(layoutFor(s))).slice(-5)).toEqual(['home', 'undo', 'reset', 'all', 'exit']);
   });
   it('the exit button is last, red and filled; 元に戻す is always there', () => {
     for (const s of [...SAMPLES, null]) {
@@ -139,7 +140,7 @@ describe('the generic かんたん menu board per bundled dataset', () => {
   });
   it('no advanced settings and no level text on the board', () => {
     for (const s of [...SAMPLES, null]) for (const x of layoutFor(s)) {
-      expect(x.id).toMatch(/^(noseg|seg:\w+(:name|:show|:hide|)|section(:name|:show|:hide)|trigger:(name|point|label|hint)|results|result:\d+(:name|:vol)?|total|home|undo|all|exit)$/);
+      expect(x.id).toMatch(/^(noseg|seg:\w+(:name|:show|:hide|)|section(:name|:show|:hide)|trigger:(name|point|label|hint)|results|result:\d+(:name|:vol)?|total|home|undo|reset|all|exit)$/);
       expect(x.text || x.label || '').not.toMatch(/Lv\s?\d/);
     }
   });
@@ -238,7 +239,7 @@ describe('the かんたん menu board layout fits the canvas', () => {
       expect(x.y).toBeLessThan(M.H);
     }
     // the trigger line sits under its buttons, above the next row; the list stops above the bottom row
-    const bottomY = Math.min(...bs.filter(b => ['home', 'undo', 'all', 'exit'].includes(b.id)).map(b => b.y));
+    const bottomY = Math.min(...bs.filter(b => ['home', 'undo', 'reset', 'all', 'exit'].includes(b.id)).map(b => b.y));
     for (const x of w.filter(x => /^(result|total)/.test(x.id))) expect(x.y + (x.h || 0), `${name} ${x.id}`).toBeLessThan(bottomY);
     const h = w.find(x => x.id === 'trigger:hint'), tb = w.find(x => x.id === 'trigger:point');
     if (h) expect(h.y).toBeGreaterThan(tb.y + tb.h);
@@ -246,6 +247,7 @@ describe('the かんたん menu board layout fits the canvas', () => {
   for (const lang of ['ja', 'en']) for (const s of [...SAMPLES, null]) for (const labelsOn of [false, true]) {
     it(`${s ?? 'no dataset'} / ${lang} / ${labelsOn ? 'label' : 'point'} mode: inside the board, buttons do not overlap, texts fit`, () => {
       check(layoutFor(s, lang, { trigger: { show: s === 'sample1' || s === 'sample2', label: labelsOn } }), `${s}/${lang}`);
+      check(layoutFor(s, lang, { trigger: { show: s === 'sample1' || s === 'sample2', label: labelsOn }, resetArmed: true }), `${s}/${lang}/armed`);
     });
   }
   it('the most the bundled kinds of data can show (5 segments, the trigger switch, 4 results) fits, with all 4 results listed', () => {
@@ -274,7 +276,7 @@ describe('the かんたん menu board layout fits the canvas', () => {
     check(w, 'segcap');
   });
   it('the exact button labels (ja)', () => {
-    expect(buttons(layoutFor('sample2')).filter(b => b.label).map(b => b.label)).toEqual(['表示', '非表示', '表示', '非表示', '表示', '非表示', '表示', '非表示', '表示', '非表示', 'ポイントモード', '解析モード', '正面に戻す', '元に戻す', 'すべての設定', 'VRを終了']);
+    expect(buttons(layoutFor('sample2')).filter(b => b.label).map(b => b.label)).toEqual(['表示', '非表示', '表示', '非表示', '表示', '非表示', '表示', '非表示', '表示', '非表示', 'ポイントモード', '解析モード', '正面に戻す', '元に戻す', '最初の状態に戻す', 'すべての設定', 'VRを終了']);
   });
 });
 
@@ -362,15 +364,15 @@ describe('static wiring', () => {
     expect(block).toContain('trigger:{show:triggerModeRow(hasRes),label:evLabelOn()}');
     expect(block).not.toMatch(/activeEventLevel|level:|lv\b/); // nothing level-dependent
     // the actions behind the layout's widget ids: 断面 (B/Y's setSection), the trigger switch, 元に戻す (the ring's undo), すべての設定 -> the full menu, 終了 = the full menu's session.end()
-    expect(src).toContain("const acts={section:v=>setSection(v),'trigger:point':()=>{evLabels=false},'trigger:label':()=>{evLabels=true},undo:()=>{undoLast()},home:goHome,all:()=>{ui.tab=0},exit:()=>session.end()};");
+    expect(src).toContain("const acts={section:v=>setSection(v),'trigger:point':()=>{evLabels=false},'trigger:label':()=>{evLabels=true},undo:()=>{undoLast()},home:goHome,reset:pressReset,all:()=>{ui.tab=0},exit:()=>session.end()};");
     expect(src).toContain("exit:tr(mode==='ar'?'evExitAr':'evExitVr')");
     expect(src).toContain("btn(MENU_W-X-260,yb,260,L.exit,true,()=>session.end(),{color:'#b33'})"); // the full menu's own exit, unchanged
     // who decides what the trigger does: label mode only when the switch says so AND the data has results (or the 解析 tab is open, as before)
     expect(src).toContain("const evLabelOn=()=>evMenu&&triggerMode(evLabels,regionList.length>0)==='label';");
     expect(src).toContain('const labelMode=()=>(ui.open&&ui.tab===5)||!section.on||evLabelOn();');
     expect(src).toContain('analysis:analysisOn(),canDrag:');
-    // evLabels is only ever switched from the かんたん menu (declared once, reset when the session's data arrives, and the two switch buttons)
-    expect(src.match(/evLabels=/g).length).toBe(4);
+    // evLabels is only ever switched from the かんたん menu (declared once, reset when the session's data arrives, the two switch buttons, and 最初の状態に戻す)
+    expect(src.match(/evLabels=/g).length).toBe(5);
     expect(src).toContain("regionList=P.region?.list||[];evLabels=TRIGGER_AT_START==='label';"); // reset to point mode when the session's data is known
     for (const k of ['evSimple', 'evShow', 'evHide', 'evMode', 'evModePoint', 'evModeAnalysis', 'evModeHintPoint', 'evModeHintAnalysis', 'evAllSettings', 'evExitVr', 'evExitAr']) for (const lang of ['ja', 'en']) expect(typeof I18N[lang][k], `${lang}.${k}`).toBe('string');
     expect(I18N.ja.evLabels).toBeUndefined();
@@ -385,5 +387,194 @@ describe('analysis mode keeps the pinned label move', () => {
     expect(src).toMatch(/if\(analysisOn\(\)&&pins\.size\)mlb=nearerLabel\(mlb,pickPin\(/);
     expect(src).not.toMatch(/ui\.open&&ui\.tab===5&&pins\.size/);
     expect(src).toMatch(/analysis:analysisOn\(\),/);
+  });
+});
+
+// the VR menu's 「最初の状態に戻す」 (two-press confirm) and the layout's bottom row
+describe('最初の状態に戻す: the two-press confirm', () => {
+  it('the first press arms for RESET_ARM_MS and does not fire; the second inside the window fires and disarms', () => {
+    expect(RESET_ARM_MS).toBe(3000);
+    const a = resetPress(0, 1000);
+    expect(a).toEqual({ fire: false, armedUntil: 4000 });
+    expect(resetArmed(a.armedUntil, 1000)).toBe(true);
+    expect(resetArmed(a.armedUntil, 3999)).toBe(true);
+    expect(resetPress(a.armedUntil, 3999)).toEqual({ fire: true, armedUntil: 0 });
+    expect(resetArmed(0, 5000)).toBe(false);
+  });
+  it('a press after the window only arms again (no reset by two slow presses)', () => {
+    const a = resetPress(0, 1000), b = resetPress(a.armedUntil, 4000);
+    expect(b).toEqual({ fire: false, armedUntil: 7000 });
+    expect(resetArmed(a.armedUntil, 4000)).toBe(false);
+  });
+  it('after firing, the next press starts a new confirm', () => {
+    const a = resetPress(0, 0), f = resetPress(a.armedUntil, 100), n = resetPress(f.armedUntil, 200);
+    expect(f.fire).toBe(true); expect(n.fire).toBe(false); expect(n.armedUntil).toBe(3200);
+  });
+});
+describe('the bottom row with 最初の状態に戻す', () => {
+  const row = w => buttons(w).filter(b => b.y === SIMPLE_MENU.BOTTOM);
+  it('five buttons in a row inside the board, left to right: home, undo, reset, all, exit', () => {
+    for (const lang of ['ja', 'en']) {
+      const r = row(layoutFor('sample1', lang));
+      expect(ids(r)).toEqual(['home', 'undo', 'reset', 'all', 'exit']);
+      for (let i = 1; i < r.length; i++) expect(r[i].x).toBeGreaterThanOrEqual(r[i - 1].x + r[i - 1].w + 8);
+      const last = r[r.length - 1];
+      expect(last.x + last.w).toBe(SIMPLE_MENU.W - SIMPLE_MENU.X);
+      expect(r[0].x).toBe(SIMPLE_MENU.X);
+    }
+    expect(Object.values(BOTTOM_WEIGHTS).reduce((a, b) => a + b, 0)).toBe(SIMPLE_MENU.W - 2 * SIMPLE_MENU.X - 4 * 12);
+  });
+  it('the label is 「最初の状態に戻す」 / "Reset to start", and while armed 「もう一度押すとリセット」 / "Press again to reset" (button lit)', () => {
+    expect(I18N.ja.evReset).toBe('最初の状態に戻す'); expect(I18N.en.evReset).toBe('Reset to start');
+    expect(I18N.ja.evResetAgain).toBe('もう一度押すとリセット'); expect(I18N.en.evResetAgain).toBe('Press again to reset');
+    for (const lang of ['ja', 'en']) {
+      const idle = layoutFor('sample2', lang).find(x => x.id === 'reset'), armed = layoutFor('sample2', lang, { resetArmed: true }).find(x => x.id === 'reset');
+      expect(idle.label).toBe(I18N[lang].evReset); expect(idle.on).toBe(false);
+      expect(armed.label).toBe(I18N[lang].evResetAgain); expect(armed.on).toBe(true);
+      expect(armed.x).toBe(idle.x); expect(armed.w).toBe(idle.w); // the button does not move when it arms
+    }
+  });
+  it('the board has the same number of rows as before: the bottom row is still at BOTTOM and ends inside the canvas', () => {
+    for (const b of row(layoutFor('sample2'))) expect(b.y + b.h).toBeLessThanOrEqual(SIMPLE_MENU.H);
+  });
+});
+describe('最初の状態に戻す: wiring', () => {
+  const read = f => readFileSync(new URL('../../docs/' + f, import.meta.url), 'utf8');
+  it('vr-view.js: the button runs the in-place reset on the second press, from the same widget path as every other button (trigger and hand pinch)', () => {
+    const src = read('vr-view.js');
+    expect(src).toContain("const r=resetPress(ui.resetUntil||0,performance.now());ui.resetUntil=r.armedUntil;");
+    expect(src).toContain("if(r.fire)resetToStart();else{resetTimer=setTimeout(()=>{if(running)menu.refresh()},RESET_ARM_MS+80)}");
+    expect(src).toContain('resetArmed:resetArmed(ui.resetUntil||0,performance.now())');
+    expect(src).toContain("reset:tr('evReset'),resetAgain:tr('evResetAgain')");
+    const fn = src.match(/const resetToStart=\(\)=>\{[\s\S]*?\n \};/)[0];
+    // the page side first (points / distances / pinned labels from the project file), then the session's own state
+    expect(fn.indexOf("'vrl-event-project-reset'")).toBeGreaterThan(-1);
+    for (const part of ['endAllDrags()', 'closeWheel()', 'closePointWheel()', 'removePlane(pl)', 'section.on=false', 'secUndo.clear()', 'undo.clear()', 'cancelMeasure()', 'huLine.clear()', 'setHistOpen(false)', 'evLabels=TRIGGER_AT_START===\'label\'', 'vrWindow.c=', 'bringVolumeFront()', 'resetEventViewSettings(settings)', 'ui.tab=10', 'placeMenuNow()', 'placeHelpNow()', 'placeHuNow()']) expect(fn, part).toContain(part);
+    // nothing is decoded / uploaded / re-prepared and the session is not left
+    expect(fn).not.toMatch(/prepareVr|session\.end|selectSeries|startSample/);
+    // the module-level modes of the session (per-segment mode, point place, screenshots) go back with 'vrl-event-fresh'
+    expect(src).toContain("document.addEventListener('vrl-event-fresh',()=>{for(const k of Object.keys(segMode))delete segMode[k];vrPointMode='surface';shots.length=0;try{saveSettings(resetEventViewSettings(loadSettings()))}catch{}});");
+  });
+  it('app.js: a practice dataset is opened fresh in event mode only, before anything else; the VR reset restores from the open dataset\'s project', () => {
+    const src = read('app.js');
+    expect(src).toContain('const startSample=async setId=>{if(freshForEventSelection())pendingProject.value=null;sampleProjectNow.value=null;busy(true);resetVolume();');
+    expect(src).toContain("document.addEventListener('vrl-event-project-reset',e=>{if(eventModeOn()&&e.detail)e.detail.done=restoreProjectAnnotations(sampleProjectNow.value)});");
+    expect(src).toContain("document.addEventListener(EVENT_FRESH_EVENT,()=>{distance=5.2;camera.position.z=distance;request3DRender()})");
+  });
+  it('event-fresh.js gates on the event mode and resets the stores that outlive a dataset switch', () => {
+    const src = read('event-fresh.js');
+    expect(src).toContain('if (!eventModeOn(api)) return false;');
+    for (const part of ['setComments([])', 'resetCommentsSaved()', 'resetMeasurements()', 'setMarkersShown(true)', 'setHuMode(HU_MODE_FILTERED)', 'resetHistogramView()', "clearHuLine('event-reset')"]) expect(src, part).toContain(part);
+    expect(src).not.toMatch(/confirm\(|askInline/); // never asks
+  });
+});
+
+describe('最初の状態に戻す: segment visibility, window and view settings go back with it', () => {
+  const read = f => readFileSync(new URL('../../docs/' + f, import.meta.url), 'utf8');
+  const proj = { bone: { active: true, enabled: true }, soft: { active: true, enabled: true }, fat: { active: true, enabled: false }, lung: { active: false, enabled: false } };
+  it('segmentVisibilityPlan: what differs from the project file, off before on, only segments active on both sides', () => {
+    const order = ['bone', 'soft', 'fat', 'lung', 'contrast'];
+    expect(segmentVisibilityPlan(proj, { bone: { active: true, enabled: true }, soft: { active: true, enabled: true }, fat: { active: true, enabled: false } }, order)).toEqual({ off: [], on: [] });
+    expect(segmentVisibilityPlan(proj, { bone: { active: true, enabled: false }, soft: { active: true, enabled: true }, fat: { active: true, enabled: true } }, order)).toEqual({ off: ['fat'], on: ['bone'] });
+    // a segment the visitor added / removed is not touched (no entry in the file / not active on the page)
+    expect(segmentVisibilityPlan(proj, { bone: { active: true, enabled: true }, soft: { active: false, enabled: false }, lung: { active: true, enabled: true }, contrast: { active: true, enabled: true } }, order)).toEqual({ off: [], on: [] });
+    expect(segmentVisibilityPlan(undefined, { bone: { active: true, enabled: true } }, order)).toEqual({ off: [], on: [] });
+  });
+  it('the bundled project files: the plan from any visitor state returns exactly the initial segments', () => {
+    for (const [sample, shown] of Object.entries(EVENT_INITIAL_SEGMENTS)) {
+      const segs = JSON.parse(strFromU8(unzipSync(new Uint8Array(readFileSync(new URL(`../../docs/demo/${sample}/project.vrlab`, import.meta.url))))['project.json'])).segments;
+      const flipped = Object.fromEntries(Object.entries(segs).map(([k, g]) => [k, { active: g.active, enabled: !g.enabled }]));
+      const { off, on } = segmentVisibilityPlan(segs, flipped, Object.keys(segs));
+      const after = Object.fromEntries(Object.entries(flipped).map(([k, g]) => [k, off.includes(k) ? false : on.includes(k) ? true : g.enabled]));
+      expect(Object.keys(after).filter(k => segs[k].active && after[k]).sort(), sample).toEqual([...shown].sort());
+    }
+  });
+  it('data-load.js restoreProjectAnnotations puts the segments\' visibility and the CT window of the file back (off first, only what differs)', () => {
+    const src = read('data-load.js');
+    expect(src).toContain('const plan=segmentVisibilityPlan(project.segments,segmentState,SEGMENT_PRESET_ORDER);');
+    expect(src.indexOf("for(const k of plan.off)setControlChecked(segmentControl('enabled',k),false);")).toBeGreaterThan(-1);
+    expect(src.indexOf("for(const k of plan.off)")).toBeLessThan(src.indexOf('for(const k of plan.on)'));
+    expect(src).toContain('+wc.value!==+display.windowCenter');
+    expect(src).toContain('+ww.value!==+display.windowWidth');
+  });
+  it('vr-view.js: the reset derives every segment mode and the VR window from the restored page, and the full menu\'s view settings go back to their defaults (also on a new dataset)', () => {
+    const src = read('vr-view.js');
+    const fn = src.match(/const resetToStart=\(\)=>\{[\s\S]*?\n \};/)[0];
+    expect(fn.indexOf("'vrl-event-project-reset'")).toBeLessThan(fn.indexOf('initialVrModes()'));
+    expect(fn.indexOf("'vrl-event-project-reset'")).toBeLessThan(fn.indexOf('vrWindow.c=+wc.value'));
+    expect(fn).toContain('resetEventViewSettings(settings);saveSettings(settings);');
+    expect(src).toContain("const EVENT_VIEW_KEYS=['cut','cap','sliceAir','sliceTint','sliceOpacity','labelSize'];");
+    // the quality / device settings are not the visitor's
+    for (const k of ['vres', 'quality', 'foveation', 'rate', 'data', 'autoMin', 'refine', 'wheel']) expect(src.match(/const EVENT_VIEW_KEYS=\[[^\]]*\]/)[0]).not.toContain(`'${k}'`);
+    expect(src).toContain('const initialVrModes=()=>{if(!eventModeOn())return;for(const k of Object.keys(segMode))delete segMode[k];');
+  });
+});
+// 初期表示セグメント: what each practice dataset starts with shown (the project files are the truth, EVENT_INITIAL_SEGMENTS the agreed table)
+describe('initial segments of the practice datasets', () => {
+  const NAMES = { sample4: '骨梁', sample3: 'マウス頭部', sample2: 'マウス腹部', sample1: 'ラット腹部' };
+  it('the table: 骨梁 = 骨, マウス頭部 = 骨, マウス腹部 = 骨 + 軟部組織, ラット腹部 = 骨 + 軟部組織', () => {
+    expect(EVENT_INITIAL_SEGMENTS).toEqual({ sample4: ['bone'], sample3: ['bone'], sample2: ['bone', 'soft'], sample1: ['bone', 'soft'] });
+    for (const l of EVENT_LEVELS) expect(I18N.ja[l.nameKey], l.sample).toBe(NAMES[l.sample]); // the dataset names the table is about
+    expect(Object.isFrozen(EVENT_INITIAL_SEGMENTS)).toBe(true);
+  });
+  for (const s of ['sample4', 'sample3', 'sample2', 'sample1']) {
+    it(`${s}.project.vrlab: exactly the table's segments are shown; the other segments of the data stay in the list (active, hidden), loaded like the rest`, () => {
+      const p = bundled(s), segs = p.segments;
+      const shown = SEG_ORDER.filter(k => segs[k]?.active && segs[k]?.enabled);
+      expect(shown, s).toEqual(EVENT_INITIAL_SEGMENTS[s]);
+      for (const [k, g] of Object.entries(segs)) if (g.active && !EVENT_INITIAL_SEGMENTS[s].includes(k)) expect(g.enabled, `${s}/${k}`).toBe(false);
+      // a hidden segment is not dropped from the project (that would skip its masks and results): the ones the data had are all still active
+      expect(SEG_ORDER.filter(k => segs[k]?.active).length, s).toBe({ sample4: 1, sample3: 3, sample2: 4, sample1: 3 }[s]);
+      // the analysis results belong to segments that are still active (hidden with the segment, back with it)
+      for (const r of p.analysis?.regions || []) for (const k of r.segmentKeys) expect(segs[k]?.active, `${s} result of ${k}`).toBe(true);
+    });
+  }
+  it('the segment names in the bundled data (what the report says)', () => {
+    const names = s => SEG_ORDER.filter(k => bundled(s).segments[k]?.active);
+    expect(names('sample4')).toEqual(['bone']);
+    expect(names('sample3')).toEqual(['bone', 'soft', 'lung']);
+    expect(names('sample2')).toEqual(['bone', 'soft', 'fat', 'lung']);
+    expect(names('sample1')).toEqual(['bone', 'soft', 'fat']);
+  });
+  it('the missions still make sense from the start state (the rows they ask for are on the menu, hidden or not)', () => {
+    // Lv2 asks to hide the soft tissue and show the fat: soft starts shown, fat starts hidden
+    const p2 = bundled('sample2');
+    expect(p2.segments.soft.enabled).toBe(true); expect(p2.segments.fat.enabled).toBe(false);
+    expect(I18N.ja.evLv2Mission).toContain('軟部組織を隠して脂肪を表示しよう');
+    // Lv1 asks to show the soft tissue (starts hidden) and to look at the lung (starts hidden: it has to be shown too)
+    const p3 = bundled('sample3');
+    expect(p3.segments.soft.enabled).toBe(false); expect(p3.segments.lung.enabled).toBe(false);
+    for (const k of ['seg:bone', 'seg:soft', 'seg:lung']) expect(ids(layoutFor('sample3')), k).toContain(k + ':show');
+    for (const k of ['seg:bone', 'seg:soft', 'seg:fat', 'seg:lung']) expect(ids(layoutFor('sample2')), k).toContain(k + ':show');
+  });
+});
+describe('hidden segments in VR (event mode): prepared, listed, shown from the start state', () => {
+  const src = readFileSync(new URL('../../docs/vr-view.js', import.meta.url), 'utf8');
+  it('a segment the page keeps hidden counts as available in event mode only, in the data key, the classification, the results, the shown mask, the menus and the shader flags', () => {
+    expect(src).toContain('const segAvail=g=>!!g?.active&&(!!g.enabled||eventModeOn());');
+    expect(src).toContain('return [g.active?1:0,segAvail(g)?1:0,g.min,g.max,g.opening,');
+    expect(src).toContain('if(segAvail(seg)&&segMode[key]!==2)mask|=1<<i}return mask};');
+    expect(src).toContain('buildClsData(small,vd.calibration,edit,vrSegments(),gpuSegmentOrder())');
+    expect(src).toContain('gpuVolumeEditDescriptors(undefined,segAvail)');
+    expect(src).toContain('r.segmentKeys.some(k=>segAvail(segmentState[k]))');
+    expect(src).toContain('const act=SEGMENT_PRESET_ORDER.filter(k=>segAvail(segmentState[k])),keys=simpleMenuSegments(act)');
+    expect(src).toContain('segAvail(seg)&&segMode[key]!==2?1:0);');
+    // outside event mode the derived state is the real one
+    expect(src).toContain('const vrSegments=()=>eventModeOn()?Object.fromEntries(');
+    expect(src).toContain('const initialVrModes=()=>{if(!eventModeOn())return;');
+  });
+  it('the session starts with what the page shows (hidden -> 非表示), also after 最初の状態に戻す; a visitor\'s later choice is VR-local (segMode)', () => {
+    expect(src).toContain("evLabels=TRIGGER_AT_START==='label';initialVrModes();");
+    expect(src).toContain('initialVrModes();bringVolumeFront();ui.open=true;');
+    expect(src).toContain('if(g?.active&&!g.enabled)segMode[k]=2');
+  });
+  it('the processing masks of hidden segments are computed before the VR data is keyed and built; the page\'s own hidden-point judgement keeps the page\'s meaning', () => {
+    expect(src).toContain('export async function prepareVrData(onProgress=()=>{}){\n await ensureHiddenSegmentRuns();\n const key=vrDataKey();');
+    expect(src).toContain('!(eventModeOn()&&SEGMENT_PRESET_ORDER.some(k=>segmentState[k]?.active&&!segmentState[k].enabled))');
+  });
+  it('gpuVolumeEditDescriptors keeps its default (shown = active and enabled) for every other caller', () => {
+    const g = readFileSync(new URL('../../docs/gpu-volume-data.js', import.meta.url), 'utf8');
+    expect(g).toContain('export function gpuVolumeEditDescriptors(v=sourceVolume||volume,avail=seg=>!!(seg?.active&&seg.enabled)){');
+    expect(g).toContain('if(avail(seg)&&segmentHasProcessedMask(key)&&st.baseRuns?.length===v.slices){');
   });
 });

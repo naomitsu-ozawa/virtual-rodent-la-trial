@@ -4,6 +4,7 @@ import {
   createTrackingLoss, LOSS_CANCEL_MS, wristMenuMetrics, createWristMenuGate, WRIST_MENU, WRIST_ITEMS, wristSlotFromU, handTexts,
   fingerCurl, grabScore, createGrabHysteresis, GRAB, GRAB_JOINT_NAMES, GRAB_FINGERS, palmPoint, PALM_FROM_WRIST, WRIST_SCROLL, wristScrollGain, wristScrollSign,
   handAlive, fistForming, FIST_GUARD_CURL, wristScrollKeep,
+  PALM_FILTER, RAY_DELAY, rayDelayMs, slewDelay, boxDist, centeredBoxDist, squareOutlineDist, pickNearGrab, NEAR_KINDS, parseFilterTune, parseGrabTune,
 } from '../../docs/vr-hand.js';
 import { pinchScale } from '../../docs/vr-real-scale.js';
 import { DRAG_RECORD, DRAG_HAND, DRAG_RECORD_HAND, HAND_LABEL_MOVE_M, dragShouldStart } from '../../docs/vr-point.js';
@@ -35,7 +36,7 @@ describe('isHand', () => {
 });
 
 describe('One Euro filter', () => {
-  it('defaults: 1 Hz, beta 0.01', () => { expect(ONE_EURO).toEqual({ minCutoff: 1, beta: 0.01, dCutoff: 1 }); });
+  it('defaults (build 626): 1.2 Hz, beta 0.05, speed estimate at 5 Hz', () => { expect(ONE_EURO).toEqual({ minCutoff: 1.2, beta: 0.05, dCutoff: 5 }); });
   it('alpha grows with the cutoff and the time step', () => {
     expect(euroAlpha(1, 0.01)).toBeLessThan(euroAlpha(5, 0.01)); expect(euroAlpha(1, 0.01)).toBeLessThan(euroAlpha(1, 0.05));
     expect(euroAlpha(1, 0.01)).toBeGreaterThan(0); expect(euroAlpha(1, 1e6)).toBeLessThanOrEqual(1);
@@ -45,12 +46,12 @@ describe('One Euro filter', () => {
     for (let i = 0; i < 50; i++) f.filter([0.3, -1.2], i * FRAME, out);
     expect(out[0]).toBeCloseTo(0.3, 12); expect(out[1]).toBeCloseTo(-1.2, 12);
   });
-  it('jitter at rest is smoothed (1 Hz)', () => {
+  it('jitter at rest is smoothed (white noise: to ~0.35 of the input)', () => {
     const f = createOneEuro(1, { speedScale: 1000 }); let seed = 7; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647 - 0.5);
     const inp = [], outp = [];
     for (let i = 0; i < 400; i++) { const v = 0.002 * rnd(); inp.push(v); outp.push(f.filter([v], i * FRAME, [0])[0]); } // +-1 mm hand tremor
     const sd = a => { const s = a.slice(100), m = s.reduce((x, y) => x + y, 0) / s.length; return Math.sqrt(s.reduce((x, y) => x + (y - m) ** 2, 0) / s.length); };
-    expect(sd(outp)).toBeLessThan(sd(inp) * 0.35);
+    expect(sd(outp)).toBeLessThan(sd(inp) * 0.4);
   });
   it('a fast move trails less with beta (mm scale) than without', () => {
     const run = beta => { const f = createOneEuro(1, { beta, speedScale: 1000 }); let o = 0; for (let i = 0; i <= 36; i++) o = f.filter([i * FRAME / 1000 * 1.0], i * FRAME, [0])[0]; return 0.5 - o; }; // 1 m/s for 0.5 s
@@ -183,6 +184,8 @@ describe('hand texts and thresholds', () => {
       expect(t.helpBasic.length).toBeLessThanOrEqual(6); expect(t.helpSec.length).toBeLessThanOrEqual(6);
       expect(t.wrist(true)).toHaveLength(WRIST_ITEMS.length); expect(t.wrist(false)[2][1]).not.toBe(t.wrist(true)[2][1]);
     }
+    // build 626: the help board draws each line unwrapped: no line longer than the pre-existing longest (47 ja / 125 en before; now 39 / 98)
+    for (const [x, max] of [[handTexts(true), 47], [handTexts(false), 100]]) for (const l of x.helpBasic.concat(x.helpSec, x.helpMenu)) expect(l.length, l).toBeLessThanOrEqual(max);
     const j = handTexts(true), e = handTexts(false);
     expect(j.helpBasic.join()).toContain('ピンチ'); expect(j.helpBasic.join()).toContain('手首メニュー'); expect(j.helpBasic.join()).toContain('グー'); expect(j.helpBasic.join()).toContain('両手でグー');
     expect(j.helpMenuSimple).toContain('グー'); expect(e.helpMenuSimple).toContain('fist'); // 体験会モードのかんたんメニュー（ボタンのみ）
@@ -244,12 +247,12 @@ describe('grabScore: a fist needs all four fingers', () => {
 });
 describe('createGrabHysteresis', () => {
   const run = (g, seq, t0 = 0, dt = 14) => { const ev = []; let t = t0; for (const sc of seq) { const e = g.update(sc, t); if (e) ev.push([e, t]); t += dt; } return { ev, t }; };
-  it('defaults: on 0.55 < off 0.7, 100 ms to start', () => { expect(GRAB).toEqual({ on: 0.55, off: 0.7, holdMs: 100 }); expect(GRAB.on).toBeLessThan(GRAB.off); });
+  it('defaults (build 626): on 0.55 < off 0.7, 60 ms to start, reach 5 cm', () => { expect(GRAB).toEqual({ on: 0.55, off: 0.7, holdMs: 60, near: 0.05 }); expect(GRAB.on).toBeLessThan(GRAB.off); });
   it('starts only after the fist has been held holdMs; ends the moment it opens past off; the band between on and off keeps the state', () => {
     const g = createGrabHysteresis();
     expect(run(g, Array(5).fill(0.3)).ev).toEqual([]); // 56 ms: not yet
     expect(g.pending).toBe(true); expect(g.active).toBe(false);
-    const r = run(g, Array(10).fill(0.3), 70); expect(r.ev).toHaveLength(1); expect(r.ev[0][0]).toBe('start'); expect(r.ev[0][1] - 0).toBeGreaterThanOrEqual(100); expect(g.active).toBe(true);
+    const r = run(g, Array(10).fill(0.3), 70); expect(r.ev).toHaveLength(1); expect(r.ev[0][0]).toBe('start'); expect(r.ev[0][1] - 0).toBeGreaterThanOrEqual(GRAB.holdMs); expect(g.active).toBe(true);
     expect(run(g, [0.6, 0.65, 0.69, 0.6], r.t).ev).toEqual([]); expect(g.active).toBe(true); // between on and off: kept
     const e = run(g, [0.71], r.t + 100); expect(e.ev).toEqual([['end', r.t + 100]]); expect(g.active).toBe(false);
   });
@@ -323,5 +326,119 @@ describe('hand fixes: grab keeps alive by the wrist, fist guard, wrist scroll st
     expect(wristScrollKeep('secUp', null, false)).toBe(false); // the ray left the menu
     expect(wristScrollKeep('secUp', 'secUp', true)).toBe(false); // the hand became a fist
     expect(wristScrollKeep(undefined, undefined, false)).toBe(false);
+  });
+});
+
+
+// ---- build 626: latency ----
+// the lag of a filtered position behind a hand that moves at constant speed v (m/s), in ms, at the 72 Hz frame rate
+const steadyLagMs = (opts, v) => {
+  const f = createPoseFilter(opts), o = new Float64Array(7); let x = 0;
+  for (let i = 0; i < 400; i++) { x = v * i * FRAME / 1000; f.filter([x, 0, 0, 0, 0, 0, 1], i * FRAME, o); }
+  return (x - o[0]) / v * 1000;
+};
+// rms of the output for a hand at rest (8 Hz, 0.5 mm tremor + 0.5 mm noise), mm
+const restJitterMm = opts => {
+  const f = createPoseFilter(opts), o = new Float64Array(7); let seed = 5, s2 = 0, n = 0;
+  const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296 - 0.5);
+  for (let i = 0; i < 720; i++) { const j = 0.0005 * Math.sin(2 * Math.PI * 8 * i * FRAME / 1000) + 0.001 * 0.5 * rnd(); f.filter([j, 0, 0, 0, 0, 0, 1], i * FRAME, o); if (i > 72) { s2 += o[0] * o[0]; n++; } }
+  return Math.sqrt(s2 / n) * 1000;
+};
+const OLD_RAY = { minCutoff: 1, beta: 0.01, dCutoff: 1 }, OLD_PALM = { minCutoff: 3, beta: 0.05, dCutoff: 1 };
+describe('filter lag (build 626: the hand felt delayed)', () => {
+  it('the new ray filter trails at most ~half as long as the old one at every speed from a slow placing move to a fast sweep', () => {
+    for (const v of [0.02, 0.05, 0.1, 0.3, 1.0]) {
+      const o = steadyLagMs(OLD_RAY, v), n = steadyLagMs(ONE_EURO, v);
+      expect(n, 'v=' + v).toBeLessThan(o * 0.65);
+    }
+    expect(steadyLagMs(ONE_EURO, 0.3)).toBeLessThan(12); expect(steadyLagMs(ONE_EURO, 0.05)).toBeLessThan(30);
+  });
+  it('the palm anchor (what a fist holds) trails at most ~half as long as before and under 10 ms at 5 cm/s and above', () => {
+    for (const v of [0.02, 0.05, 0.1, 0.3, 1.0]) expect(steadyLagMs(PALM_FILTER, v), 'v=' + v).toBeLessThan(steadyLagMs(OLD_PALM, v) * 0.65);
+    for (const v of [0.05, 0.1, 0.3, 1.0]) expect(steadyLagMs(PALM_FILTER, v)).toBeLessThan(10);
+  });
+  it('the start of a move: after 150 ms of 0.5 m/s from rest the new filter is within 5 mm, the old one is not (the speed estimate no longer lags ~160 ms)', () => {
+    const at150 = opts => { const f = createPoseFilter(opts), o = new Float64Array(7); for (let i = 0; i < 72; i++) f.filter([0, 0, 0, 0, 0, 0, 1], i * FRAME, o); const t0 = 71 * FRAME; let lag = 0;
+      for (let i = 1; i * FRAME <= 150; i++) { const x = 0.5 * i * FRAME / 1000; f.filter([x, 0, 0, 0, 0, 0, 1], t0 + i * FRAME, o); lag = (x - o[0]) * 1000; } return lag; };
+    expect(at150(ONE_EURO)).toBeLessThan(5); expect(at150(OLD_RAY)).toBeGreaterThan(8);
+  });
+  it('jitter at rest stays suppressed: the ray under 0.3 mm rms, the held palm under 0.5 mm rms (for ~0.9 mm of tremor + noise)', () => {
+    expect(restJitterMm(ONE_EURO)).toBeLessThan(0.3); expect(restJitterMm(PALM_FILTER)).toBeLessThan(0.5);
+    expect(restJitterMm(ONE_EURO)).toBeLessThan(restJitterMm(PALM_FILTER)); // the ray is the calmer one
+  });
+});
+
+describe('ray delay only while the fingers are close (rayDelayMs / slewDelay)', () => {
+  it('0 for an open hand, the full delay with thumb and index within 3 cm, linear between; unknown distance: the full delay; delayMs 0: none', () => {
+    expect(RAY_DELAY).toEqual({ maxMs: 60, farM: 0.06, nearM: 0.03 });
+    expect(rayDelayMs(0.12)).toBe(0); expect(rayDelayMs(0.06)).toBe(0); expect(rayDelayMs(0.03)).toBe(60); expect(rayDelayMs(0.01)).toBe(60);
+    expect(rayDelayMs(0.045)).toBeCloseTo(30, 9); expect(rayDelayMs(NaN)).toBe(60); expect(rayDelayMs(0.01, { maxMs: 0 })).toBe(0);
+    expect(rayDelayMs(0.2, { nearM: 10 })).toBe(60); // delayNear 10 = the old fixed delay
+  });
+  it('the pinch itself (< 1.5 cm) always has the full delay, so selectstart still sees the ray from before the fingers moved', () => {
+    expect(rayDelayMs(0.015)).toBe(RAY_DELAY.maxMs); expect(rayDelayMs(0.025)).toBe(RAY_DELAY.maxMs);
+  });
+  it('slewDelay: rises at once, falls at half real time (no jump of the ray when the fingers open)', () => {
+    expect(slewDelay(0, 60, 14)).toBe(60); expect(slewDelay(60, 0, 14)).toBeCloseTo(53, 9); expect(slewDelay(2, 0, 14)).toBe(0); expect(slewDelay(60, 60, 14)).toBe(60); expect(slewDelay(30, 0, -5)).toBe(30);
+    let d = 60; for (let i = 0; i < 9; i++) d = slewDelay(d, 0, 14); expect(d).toBe(0); // 120 ms to get back to the live ray
+  });
+});
+
+describe('direct grab: distances and the choice (build 626)', () => {
+  it('boxDist: 0 inside, the distance outside (face, edge, corner); a flat board is its rectangle', () => {
+    const mn = { x: -1, y: -1, z: -1 }, mx = { x: 1, y: 1, z: 1 };
+    expect(boxDist({ x: 0.2, y: -0.5, z: 0.9 }, mn, mx)).toBe(0); expect(boxDist({ x: 1.3, y: 0, z: 0 }, mn, mx)).toBeCloseTo(0.3, 12);
+    expect(boxDist({ x: 2, y: 2, z: 0 }, mn, mx)).toBeCloseTo(Math.SQRT2, 12); expect(boxDist({ x: 2, y: 2, z: 2 }, mn, mx)).toBeCloseTo(Math.sqrt(3), 12);
+    const flat = { min: { x: -0.25, y: -0.15, z: 0 }, max: { x: 0.25, y: 0.15, z: 0 } };
+    expect(boxDist({ x: 0.1, y: 0.1, z: 0.04 }, flat.min, flat.max)).toBeCloseTo(0.04, 12); expect(boxDist({ x: 0.3, y: 0, z: 0 }, flat.min, flat.max)).toBeCloseTo(0.05, 12);
+  });
+  it('centeredBoxDist (the volume box, +-halfExt)', () => {
+    expect(centeredBoxDist({ x: 0, y: 0, z: 0 }, [1, 2, 3])).toBe(0); expect(centeredBoxDist({ x: 1, y: -2, z: 3 }, [1, 2, 3])).toBe(0);
+    expect(centeredBoxDist({ x: 1.04, y: 0, z: 0 }, [1, 2, 3])).toBeCloseTo(0.04, 12); expect(centeredBoxDist({ x: 4, y: 2, z: 7 }, [1, 2, 3])).toBeCloseTo(Math.hypot(3, 0, 4), 12);
+  });
+  it('squareOutlineDist: the thin frame line of a section (local X = the normal), not its face', () => {
+    const h = 0.12;
+    expect(squareOutlineDist({ x: 0, y: h, z: 0 }, h)).toBeCloseTo(0, 12); // on the edge
+    expect(squareOutlineDist({ x: 0.03, y: h, z: 0 }, h)).toBeCloseTo(0.03, 12); // off the plane by 3 cm at the edge
+    expect(squareOutlineDist({ x: 0, y: 0, z: 0 }, h)).toBeCloseTo(h, 12); // the middle of the face is h from the outline: the volume there stays the volume's
+    expect(squareOutlineDist({ x: 0, y: h - 0.02, z: 0.01 }, h)).toBeCloseTo(0.02, 12); // 2 cm inside the edge
+    expect(squareOutlineDist({ x: 0, y: h + 0.03, z: 0 }, h)).toBeCloseTo(0.03, 12); expect(squareOutlineDist({ x: 0.04, y: h + 0.03, z: -h - 0.04 }, h)).toBeCloseTo(Math.hypot(0.04, 0.03, 0.04), 12);
+  });
+  const C = (kind, d) => ({ kind, d, ref: null });
+  it('nothing within near: null (the laser decides); NaN / Infinity are not candidates; the reach is tunable', () => {
+    expect(pickNearGrab([C('menu', 0.2), C('section', Infinity), C('volume', NaN)], 0.05)).toBe(null);
+    expect(pickNearGrab([], 0.05)).toBe(null);
+    const v = C('volume', 0.07); expect(pickNearGrab([v], 0.05)).toBe(null); expect(pickNearGrab([v], 0.08)).toBe(v);
+    expect(pickNearGrab([C('volume', 0.05)], 0.05)).not.toBe(null); // at the margin: in
+  });
+  it('boards first (nearest, listed order on a tie), then a section, then the volume', () => {
+    const vol = C('volume', 0), sec = C('section', 0.04), menu = C('menu', 0.03), help = C('help', 0.01), hist = C('hist', 0.01), hu = C('hu', 0.04);
+    expect(pickNearGrab([vol, sec, menu, help, hist, hu])).toBe(help); // a tie of help and hist: the listed order
+    expect(pickNearGrab([vol, sec, menu, hist, help, hu])).toBe(help);
+    expect(pickNearGrab([vol, sec, menu, hu])).toBe(menu); // nearest board
+    expect(pickNearGrab([vol, sec])).toBe(sec); // a palm inside the box (0) still takes a section frame 4 cm away: sections rank above the volume
+    expect(pickNearGrab([vol, C('section', 0.2)])).toBe(vol); // a far section frame: the volume
+    expect(pickNearGrab([C('section', 0.04), C('section', 0.02)])).not.toBe(null);
+  });
+  it('NEAR_KINDS lists the priority order of the boards (the same as the laser grab) and ends with the section and the volume', () => {
+    expect(NEAR_KINDS).toEqual(['menu', 'help', 'hist', 'hu', 'section', 'volume']);
+  });
+  it('two fists on the volume: both hands pick the volume (the scale then follows their distance, as before)', () => {
+    const a = pickNearGrab([C('volume', 0)]), b = pickNearGrab([C('volume', 0.03)]);
+    expect(a.kind).toBe('volume'); expect(b.kind).toBe('volume');
+    expect(pinchScale(1, 0.2, 0.3, 0)).toBeCloseTo(1.5, 6);
+  });
+});
+
+describe('tunables from localStorage (parse only what is valid)', () => {
+  it('vrl-hand-filter', () => {
+    expect(parseFilterTune(null)).toEqual({}); expect(parseFilterTune('not json')).toEqual({}); expect(parseFilterTune('[1]')).toEqual({}); expect(parseFilterTune('{"beta":"x","dCutoff":null}')).toEqual({});
+    expect(parseFilterTune('{"minCutoff":2,"beta":0.1,"dCutoff":8,"aMinCutoff":6,"aBeta":0.2,"aDCutoff":9,"delayMs":0,"delayFar":0.08,"delayNear":0.02}')).toEqual({ minCutoff: 2, beta: 0.1, dCutoff: 8, aMinCutoff: 6, aBeta: 0.2, aDCutoff: 9, delayMs: 0, delayFar: 0.08, delayNear: 0.02 });
+    expect(parseFilterTune('{"minCutoff":0,"beta":-1,"delayMs":1e9}')).toEqual({}); // out of range: ignored (minCutoff 0 would freeze the ray)
+  });
+  it('vrl-hand-grab (the old keys keep working; near is new)', () => {
+    expect(parseGrabTune('{"on":0.5,"off":0.65,"holdMs":30,"near":0.08}')).toEqual({ on: 0.5, off: 0.65, holdMs: 30, near: 0.08 });
+    expect(parseGrabTune('{"on":0.55,"off":0.7,"holdMs":100}')).toEqual({ on: 0.55, off: 0.7, holdMs: 100 });
+    expect(parseGrabTune(null)).toEqual({}); expect(parseGrabTune('{"near":5}')).toEqual({});
   });
 });

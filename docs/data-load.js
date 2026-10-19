@@ -1,45 +1,47 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { SAMPLE_CACHE, DEFAULT_SAMPLE, sampleIndexUrl, sampleSliceUrl, sampleCacheKey } from './sample-sets.js?v=20261019-build623';
-import { mark3DStale, mark3DCurrent } from './three-state.js?v=20261019-build623';
-import { updateVolumeFilterBadge, set3DBusy, gpuVolumeRefresh } from './three-status.js?v=20261019-build623';
-import { currentLanguage, current3DVolume, volume, activeSeries, threeRenderMode, sceneState, sourceVolume, setActiveId, setActiveSeries, activeId, setSourceVolume, setVolume, setThreeRenderMode, ipadGpuTargetSide, setResidentGpuUploadSeriesId, setResidentMprReadbackDisabled, residentGpuUploadSeriesId, gpuPrewarmScheduled, gpuPrewarmIndex, setGpuPrewarmScheduled, incGpuPrewarmIndex, setFilterOrder, setCtRangeMode, setCtRangeProfile, ctRangeProfile, incSourceRenderRevision, setThreeDCancelRequested, setCurrent3DVolume, setMemoryGpuPreviewActive, incResidentMprEpoch, ctRangeMode, filterOrder, threeDDirty } from './state.js?v=20261019-build623';
-import { footer, resetFilterBtn, wc, ww, surfaceSmoothEnabled, surfaceSmoothStrength, planes, spikeHoleStrength, spikeHoleThreshold, nlmStrength, nlmSearchRadius, nlmPatchRadius, anisotropicStrength, anisotropicIterations, smoothingType, gaussianStrength, spatialPasses, sigmoidStrength, sigmoidCenter, sigmoidWidth, bilateralStrength, bilateralSpatial, bilateralIntensity, bilateralPasses, tvWeight, tvIterations, unsharpRadius, unsharpAmount, unsharpThreshold, list, selected, prog, volumeAnalysisToggle, threeLabel, state, renderModeToggle, gaussianBtn, spikeHoleBtn, nlmBtn, anisotropicBtn, sigmoidBtn, bilateralBtn, tvBtn, unsharpBtn, filterAddSelect, filterAddButton, ctRangeAuto, ctRangeFull, $, progLabel, bar, anisotropicKappa, tvEps } from './ui-shell.js?v=20261019-build623';
-import { commentsForProject, loadProjectComments, markCommentsSaved } from './comments.js?v=20261019-build623';
-import { normalizeAnalysisLabel } from './analysis-label.js?v=20261019-build623';
-import { measurementsForProject, loadProjectMeasurements, markMeasurementsSaved } from './measurements.js?v=20261019-build623';
-import { compareFingerprints, resolveProjectMatch, resolveProjectMatchAsync, legacySpacingUpgrade, datasetFingerprint, decodeRuns, packProject, PROJECT_EXTENSION, encodeRuns } from './project-file.js?v=20261019-build623';
-import { SEGMENT_PRESET_ORDER, segmentState, segmentEditState, segmentNeedsVoxelMask, segmentEditGen, segmentExclusive, applyExclusiveRanges, commitExclusiveRanges, SEGMENT_PRESET_DEFAULTS } from './segments.js?v=20261019-build623';
-import { materialKey } from './lighting.js?v=20261019-build623';
-import { FILTER_CATALOG_ORDER, addFilter, applyVolumeAfterFilterRebuild, invalidateSourceFilters, syncFilterControls, setFilterUnitControl, formatHU } from './filter-pipeline.js?v=20261019-build623';
-import { sourceRangeFromMetadata } from './dicom.js?v=20261019-build623';
-import { spacingCheckForProject, spacingWarningText, spacingWarningHtml as spacingHtml } from './slice-spacing.js?v=20261019-build623';
-import { sizeWarningHtml } from './vr-real-scale.js?v=20261019-build623';
-import { FILTER_UNITS, filterLegacyRange, resolveFilterParams } from './filter-units.js?v=20261019-build623';
-import { smoothingSync, applyDeviceSmoothing } from './settings.js?v=20261019-build623';
-import { setControlValue, applyCtRangeMode, removeSegmentPreset, addSegmentPreset, segmentControl, setControlChecked, clearAnalysisHighlight, scheduleSegment3D, updateSegmentOutputs, renderSegmentPresets, THIN_SLIDERS, configureThinSliders } from './segment-ui.js?v=20261019-build623';
-import { syncGpuVolumeEdits, gpuVolumeApplied, gpuVolumeTarget, gpuVolumePlanOptions, updateVolumeCacheControl, gpuVolumeDataSignature } from './gpu-volume-data.js?v=20261019-build623';
-import { renderAll, cancelSourceMprWarmup } from './mpr-render.js?v=20261019-build623';
-import { updateAnalysisEditorControls } from './edit-tools.js?v=20261019-build623';
-import { request3DRender } from './scene3d.js?v=20261019-build623';
-import { downloadBlob, esc, fmt, isIPadRuntime, isIPhoneRuntime, isTabletRuntime, niceCtStep, withTimeout } from './utils.js?v=20261019-build623';
-import { decode, prepareSourceMprCache } from './volume-io.js?v=20261019-build623';
-import { progress, clearMemoryFilterPreviewCache, surfaceEditsPending } from './rebuild-3d.js?v=20261019-build623';
-import { ensureMpr3DPreviewCache, syncMpr3DSliceSliders, syncMpr3DOverlayPresentation, disposeMprPlaneGroup } from './mpr3d-overlay.js?v=20261019-build623';
-import { tr } from './i18n.js?v=20261019-build623';
-import { setGpuComputeBackend, gpuFilterRuntime, gpuFilterPipeline } from './gpu-compute.js?v=20261019-build623';
+import { SAMPLE_CACHE, DEFAULT_SAMPLE, sampleIndexUrl, sampleSliceUrl, sampleCacheKey } from './sample-sets.js?v=20261019-build624';
+import { mark3DStale, mark3DCurrent } from './three-state.js?v=20261019-build624';
+import { updateVolumeFilterBadge, set3DBusy, gpuVolumeRefresh } from './three-status.js?v=20261019-build624';
+import { analysisRegions, currentLanguage, current3DVolume, volume, activeSeries, threeRenderMode, sceneState, sourceVolume, setActiveId, setActiveSeries, activeId, setSourceVolume, setVolume, setThreeRenderMode, ipadGpuTargetSide, setResidentGpuUploadSeriesId, setResidentMprReadbackDisabled, residentGpuUploadSeriesId, gpuPrewarmScheduled, gpuPrewarmIndex, setGpuPrewarmScheduled, incGpuPrewarmIndex, setFilterOrder, setCtRangeMode, setCtRangeProfile, ctRangeProfile, incSourceRenderRevision, setThreeDCancelRequested, setCurrent3DVolume, setMemoryGpuPreviewActive, incResidentMprEpoch, ctRangeMode, filterOrder, threeDDirty } from './state.js?v=20261019-build624';
+import { footer, resetFilterBtn, wc, ww, surfaceSmoothEnabled, surfaceSmoothStrength, planes, spikeHoleStrength, spikeHoleThreshold, nlmStrength, nlmSearchRadius, nlmPatchRadius, anisotropicStrength, anisotropicIterations, smoothingType, gaussianStrength, spatialPasses, sigmoidStrength, sigmoidCenter, sigmoidWidth, bilateralStrength, bilateralSpatial, bilateralIntensity, bilateralPasses, tvWeight, tvIterations, unsharpRadius, unsharpAmount, unsharpThreshold, list, selected, prog, volumeAnalysisToggle, threeLabel, state, renderModeToggle, gaussianBtn, spikeHoleBtn, nlmBtn, anisotropicBtn, sigmoidBtn, bilateralBtn, tvBtn, unsharpBtn, filterAddSelect, filterAddButton, ctRangeAuto, ctRangeFull, $, progLabel, bar, anisotropicKappa, tvEps } from './ui-shell.js?v=20261019-build624';
+import { commentsForProject, loadProjectComments, markCommentsSaved } from './comments.js?v=20261019-build624';
+import { normalizeAnalysisLabel, setRegionLabel } from './analysis-label.js?v=20261019-build624';
+import { resetUserState } from './event-fresh.js?v=20261019-build624';
+import { segmentVisibilityPlan } from './event-mode.js?v=20261019-build624';
+import { measurementsForProject, loadProjectMeasurements, markMeasurementsSaved } from './measurements.js?v=20261019-build624';
+import { compareFingerprints, resolveProjectMatch, resolveProjectMatchAsync, legacySpacingUpgrade, datasetFingerprint, decodeRuns, packProject, PROJECT_EXTENSION, encodeRuns } from './project-file.js?v=20261019-build624';
+import { SEGMENT_PRESET_ORDER, segmentState, segmentEditState, segmentNeedsVoxelMask, segmentEditGen, segmentExclusive, applyExclusiveRanges, commitExclusiveRanges, SEGMENT_PRESET_DEFAULTS } from './segments.js?v=20261019-build624';
+import { materialKey } from './lighting.js?v=20261019-build624';
+import { FILTER_CATALOG_ORDER, addFilter, applyVolumeAfterFilterRebuild, invalidateSourceFilters, syncFilterControls, setFilterUnitControl, formatHU } from './filter-pipeline.js?v=20261019-build624';
+import { sourceRangeFromMetadata } from './dicom.js?v=20261019-build624';
+import { spacingCheckForProject, spacingWarningText, spacingWarningHtml as spacingHtml } from './slice-spacing.js?v=20261019-build624';
+import { sizeWarningHtml } from './vr-real-scale.js?v=20261019-build624';
+import { FILTER_UNITS, filterLegacyRange, resolveFilterParams } from './filter-units.js?v=20261019-build624';
+import { smoothingSync, applyDeviceSmoothing } from './settings.js?v=20261019-build624';
+import { setControlValue, applyCtRangeMode, removeSegmentPreset, addSegmentPreset, segmentControl, setControlChecked, clearAnalysisHighlight, scheduleSegment3D, updateSegmentOutputs, renderSegmentPresets, THIN_SLIDERS, configureThinSliders } from './segment-ui.js?v=20261019-build624';
+import { syncGpuVolumeEdits, gpuVolumeApplied, gpuVolumeTarget, gpuVolumePlanOptions, updateVolumeCacheControl, gpuVolumeDataSignature } from './gpu-volume-data.js?v=20261019-build624';
+import { renderAll, cancelSourceMprWarmup } from './mpr-render.js?v=20261019-build624';
+import { updateAnalysisEditorControls } from './edit-tools.js?v=20261019-build624';
+import { request3DRender } from './scene3d.js?v=20261019-build624';
+import { downloadBlob, esc, fmt, isIPadRuntime, isIPhoneRuntime, isTabletRuntime, niceCtStep, withTimeout } from './utils.js?v=20261019-build624';
+import { decode, prepareSourceMprCache } from './volume-io.js?v=20261019-build624';
+import { progress, clearMemoryFilterPreviewCache, surfaceEditsPending } from './rebuild-3d.js?v=20261019-build624';
+import { ensureMpr3DPreviewCache, syncMpr3DSliceSliders, syncMpr3DOverlayPresentation, disposeMprPlaneGroup } from './mpr3d-overlay.js?v=20261019-build624';
+import { tr } from './i18n.js?v=20261019-build624';
+import { setGpuComputeBackend, gpuFilterRuntime, gpuFilterPipeline } from './gpu-compute.js?v=20261019-build624';
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.webgpu.js';
-import { GPU_IDLE_PREWARM_KINDS } from './gpu-shaders.js?v=20261019-build623';
-import { filterState, currentFilterSignature } from './source-filters.js?v=20261019-build623';
-import { dispose } from './surface-mesh.js?v=20261019-build623';
-import { residentMprJobs } from './mpr-orthogonal.js?v=20261019-build623';
-import { ensureSegmentBaseRuns } from './segment-runs.js?v=20261019-build623';
-import { APP_VERSION, APP_BUILD } from './version.js?v=20261019-build623';
-import { askInline } from './inline-ask.js?v=20261019-build623';
-import { setBusySlot, reportBusyProgress, setBusyLabel } from './progress-modal.js?v=20261019-build623';
-import { analysisRegionsForProject, restoreAnalysisRegions, clearAllSegmentEdits } from './analysis-ops.js?v=20261019-build623';
-import { resetLineProfileForDataset } from './line-profile-ui.js?v=20261019-build623';
-import { resetSegmentStyles } from './dataset-reset.js?v=20261019-build623';
+import { GPU_IDLE_PREWARM_KINDS } from './gpu-shaders.js?v=20261019-build624';
+import { filterState, currentFilterSignature } from './source-filters.js?v=20261019-build624';
+import { dispose } from './surface-mesh.js?v=20261019-build624';
+import { residentMprJobs } from './mpr-orthogonal.js?v=20261019-build624';
+import { ensureSegmentBaseRuns } from './segment-runs.js?v=20261019-build624';
+import { APP_VERSION, APP_BUILD } from './version.js?v=20261019-build624';
+import { askInline } from './inline-ask.js?v=20261019-build624';
+import { setBusySlot, reportBusyProgress, setBusyLabel } from './progress-modal.js?v=20261019-build624';
+import { analysisRegionsForProject, restoreAnalysisRegions, clearAllSegmentEdits } from './analysis-ops.js?v=20261019-build624';
+import { resetLineProfileForDataset } from './line-profile-ui.js?v=20261019-build624';
+import { resetSegmentStyles } from './dataset-reset.js?v=20261019-build624';
 export function updateRenderModeControl(v=volume){
  updateVolumeFilterBadge();
  if(!renderModeToggle)return;
@@ -448,6 +450,34 @@ export async function applyProject({project,files}){
  }
  clearAnalysisHighlight();renderAll();scheduleSegment3D();updateAnalysisEditorControls();updateVolumeFilterBadge();
  if(analysis.length)await restoreAnalysisRegions(analysis);
+}
+// 体験会モード, the VR 「最初の状態に戻す」 button: the annotations of the open practice data go back to what its project file holds, IN PLACE (no decode, no GPU upload:
+// the volume stays as it is, which is what a running XR session needs). resetUserState empties the points / distances / histogram / HU choice, then the project's
+// own points, distances (with their moved labels) and the pinned analysis labels (with their moved places) are put back, and so are the segments' visibility (enabled flags) and the
+// CT window the project file starts with (the VR menu can switch every segment and move its own window: those are VR-local and re-derived from the page's, vr-view.js resetToStart;
+// the page's own flags / window are put back here so that both sides start from the same file). Filters are not touched: nothing in VR changes them. Returns false when no data is open.
+export function restoreProjectAnnotations(parsed){
+ if(!activeSeries)return false;
+ resetUserState();
+ const project=parsed?.project;if(!project)return true; // no project file for this data: everything the visitor added is cleared, nothing to put back
+ let idMap={};
+ if(Array.isArray(project.comments))idMap=loadProjectComments(project.comments,datasetFingerprint(activeSeries));
+ if(Array.isArray(project.measurements))loadProjectMeasurements(project.measurements,idMap);
+ // the regions come back in the project's order (applyProject / restoreAnalysisRegions): each takes the next entry with its key
+ const entries=[...(project.analysis?.regions||[])];
+ for(const r of analysisRegions){
+  const i=entries.findIndex(e=>e.key===r.key&&!!e.merged===!!r.merged);if(i<0)continue;
+  const [e]=entries.splice(i,1);setRegionLabel(r,normalizeAnalysisLabel(e.label)); // no label in the file = unpinned
+ }
+ // segment visibility: off first, then on (at most 4 shown); only what differs is touched (no needless 3D work)
+ const plan=segmentVisibilityPlan(project.segments,segmentState,SEGMENT_PRESET_ORDER);
+ for(const k of plan.off)setControlChecked(segmentControl('enabled',k),false);
+ for(const k of plan.on)setControlChecked(segmentControl('enabled',k),true);
+ // the CT window of the file
+ const display=project.display||{};
+ if(Number.isFinite(+display.windowCenter)&&+wc.value!==+display.windowCenter)setControlValue(wc,display.windowCenter);
+ if(Number.isFinite(+display.windowWidth)&&+ww.value!==+display.windowWidth)setControlValue(ww,display.windowWidth);
+ return true;
 }
 // build 408: moved to utils.js (analysis-ops.js needs it without importing data-load.js)
 export { downloadBlob };
