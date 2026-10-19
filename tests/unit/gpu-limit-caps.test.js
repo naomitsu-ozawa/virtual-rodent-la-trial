@@ -13,11 +13,11 @@ const build = (forceCompat = false) => new Function('gpuForceCompat', 'navigator
   fnSrc(gpuSrc, 'requestVrlGpuAdapter') + fnSrc(gpuSrc, 'gpuLostAtCreation') + fnSrc(gpuSrc, 'requestVrlGpuDevice') + grab(gpuSrc, /export function gpuLostText[^\n]*\n/) +
   '\nreturn{gpuLostAtCreation,GPU_BUFFER_LIMIT_CAPS,capGpuBufferLimits,gpuLimitInfoText,gpuDeviceRequestDescriptor,requestVrlGpuDevice,requestVrlGpuAdapter,vrlGpuPreference,gpuLostText}');
 const quiet = { info() {}, warn() {} };
-// build 515: the GPU preference helpers (docs/gpu-preference.js, pure) are the real ones; the module's `navigator` is injected
-const prefDeps = [gpuEffectivePreference, gpuPreferenceSupported, gpuAdapterRequestOptions, gpuPreferenceInfoText, () => {}]; // the last one: logGpuError (build 520, in-memory log, not under test here)
+// the GPU preference helpers (docs/gpu-preference.js, pure) are the real ones; the module's `navigator` is injected
+const prefDeps = [gpuEffectivePreference, gpuPreferenceSupported, gpuAdapterRequestOptions, gpuPreferenceInfoText, () => {}]; // the last one: logGpuError
 const api = (forceCompat = false, navigator = {}, runtime = {}) => build()(forceCompat, navigator, runtime, quiet, ...prefDeps);
 
-// the request as it was up to build 502 (verbatim, for the "unchanged below the cap" checks)
+// the request as it was (verbatim, for the "unchanged below the cap" checks)
 function oldDescriptor(adapter, gpuForceCompat = false) {
   const requiredFeatures = []; if (!gpuForceCompat && adapter?.features?.has?.('core-features-and-limits')) requiredFeatures.push('core-features-and-limits');
   if (!requiredFeatures.includes('core-features-and-limits')) { const all = {}; for (const k in adapter?.limits || {}) { const v = adapter.limits[k]; if (typeof v === 'number' && Number.isFinite(v)) all[k] = v; } return { requiredFeatures, requiredLimits: all }; }
@@ -48,7 +48,7 @@ describe('device request: buffer limits capped at 4 GiB (min(adapter, cap))', ()
   for (const [name, p] of Object.entries(PROFILES)) {
     it(name, () => {
       const now = gpuDeviceRequestDescriptor(adapterOf(p)), before = oldDescriptor(adapterOf(p));
-      // every profile reports <= 4 GiB - 4, so the request is exactly the adapter's (as before build 508)
+      // every profile reports <= 4 GiB - 4, so the request is exactly the adapter's (as before)
       expect(over4G(p)).toBe(false);
       expect(now).toEqual(before);
     });
@@ -203,7 +203,7 @@ describe('device request retries with lower caps when refused', () => {
     expect(r.device.limits).toMatchObject({ maxBufferSize: 1 * GiB, maxStorageBufferBindingSize: 1 * GiB });
     expect(rt.limitInfo).toMatch(/^limits buf 1024MB\/bind 1024MB \(adapter 8192MB\/8192MB\) · retry 4096MB failed: .* → 2048MB failed: /);
   });
-  it('build 520: the retries and the cap that worked are recorded as data for the debug-mode GPU info tab', async () => {
+  it('the retries and the cap that worked are recorded as data for the debug-mode GPU info tab', async () => {
     const f = fakeGpu(nv8, 1 * GiB), rt = {};
     await api(false, { gpu: f.gpu }, rt).requestVrlGpuDevice();
     expect(rt.limitInfoLog).toHaveLength(2);
@@ -333,7 +333,7 @@ describe('device.lost text', () => {
   });
 });
 
-// build 515: the setting 「使う GPU」 (gpuPreference) reaches every requestAdapter call of the buffer-limit ladder
+// the setting 「使う GPU」 (gpuPreference) reaches every requestAdapter call of the buffer-limit ladder
 describe('GPU preference through the buffer-limit ladder', () => {
   const LINUX = { userAgent: 'Mozilla/5.0 (X11; Linux x86_64) Chrome/155', platform: 'Linux x86_64', maxTouchPoints: 0 };
   const MAC = { userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Chrome/155', platform: 'MacIntel', maxTouchPoints: 0 };

@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { unzipSync, strFromU8 } from 'fflate';
-import { EVENT_LEVELS, EVENT_HINT_KEYS, levelById, levelForSample, chooseEventLevel, chosenEventLevel, eventModeOn, activeEventLevel, simpleMenuSegments, MAX_SEG_ROWS, triggerModeRow, triggerMode, TRIGGER_AT_START, EVENT_INITIAL_SEGMENTS, segmentVisibilityPlan, simpleMenuLayout, SIMPLE_MENU, wrapWords, missionLines, resetPress, resetArmed, RESET_ARM_MS, BOTTOM_WEIGHTS } from '../../docs/event-mode.js';
+import { EVENT_LEVELS, EVENT_HINT_KEYS, levelById, levelForSample, chooseEventLevel, chosenEventLevel, eventModeOn, activeEventLevel, simpleMenuSegments, MAX_SEG_ROWS, triggerModeRow, triggerMode, TRIGGER_AT_START, EVENT_INITIAL_SEGMENTS, segmentVisibilityPlan, simpleMenuLayout, SIMPLE_MENU, SLICE_OPACITY_DEFAULT, sliceOpacityValue, wrapWords, missionLines, resetPress, resetArmed, RESET_ARM_MS, BOTTOM_WEIGHTS } from '../../docs/event-mode.js';
 import { I18N } from '../../docs/i18n.js';
 import { SAMPLE_SETS } from '../../docs/sample-sets.js';
 
-// build 626: 体験会モード. Levels -> bundled practice datasets (the names must match the practice-data chooser's buttons).
+// 体験会モード. Levels -> bundled practice datasets (the names must match the practice-data chooser's buttons).
 describe('event mode levels', () => {
   it('Lv0..Lv3 map to sample4 / sample3 / sample2 / sample1', () => {
     expect(EVENT_LEVELS.map(l => [l.id, l.lv, l.sample])).toEqual([['lv0', 0, 'sample4'], ['lv1', 1, 'sample3'], ['lv2', 2, 'sample2'], ['lv3', 3, 'sample1']]);
@@ -77,7 +77,7 @@ describe('the generic VR かんたん menu: segments and the trigger switch', ()
 // the かんたん menu board: simpleMenuLayout is the pure layout vr-view.js draws
 const TEXT = lang => {
   const t = I18N[lang], ja = lang === 'ja';
-  return { show: t.evShow, hide: t.evHide, section: ja ? '断面' : 'Sections', trigger: t.evMode, trigPoint: t.evModePoint, trigLabel: t.evModeAnalysis, trigHintPoint: t.evModeHintPoint, trigHintLabel: t.evModeHintAnalysis, results: ja ? '解析結果（体積）' : 'Analysis results (volume)', total: ja ? '合計' : 'Total', noSeg: 'none', home: ja ? '正面に戻す' : 'Bring to front', undo: ja ? '元に戻す' : 'Undo', reset: t.evReset, resetAgain: t.evResetAgain, all: t.evAllSettings, exit: t.evExitVr };
+  return { show: t.evShow, hide: t.evHide, section: ja ? '断面' : 'Sections', sliceOpacity: ja ? 'スライス不透明度' : 'Slice opacity', trigger: t.evMode, trigPoint: t.evModePoint, trigLabel: t.evModeAnalysis, trigHintPoint: t.evModeHintPoint, trigHintLabel: t.evModeHintAnalysis, results: ja ? '解析結果（体積）' : 'Analysis results (volume)', total: ja ? '合計' : 'Total', noSeg: 'none', home: ja ? '正面に戻す' : 'Bring to front', undo: ja ? '元に戻す' : 'Undo', reset: t.evReset, resetAgain: t.evResetAgain, all: t.evAllSettings, exit: t.evExitVr };
 };
 const SEG_NAMES = { ja: { bone: '骨', soft: '軟部組織', fat: '脂肪', lung: '肺', contrast: '造影剤' }, en: { bone: 'Bone', soft: 'Soft tissue', fat: 'Fat', lung: 'Lung', contrast: 'Contrast' } };
 const COLORS = { bone: '#f3f0e8', soft: '#d97f7f', fat: '#e7c85d', lung: '#7fb3d9', contrast: '#9b7fd9' };
@@ -140,7 +140,7 @@ describe('the generic かんたん menu board per bundled dataset', () => {
   });
   it('no advanced settings and no level text on the board', () => {
     for (const s of [...SAMPLES, null]) for (const x of layoutFor(s)) {
-      expect(x.id).toMatch(/^(noseg|seg:\w+(:name|:show|:hide|)|section(:name|:show|:hide)|trigger:(name|point|label|hint)|results|result:\d+(:name|:vol)?|total|home|undo|reset|all|exit)$/);
+      expect(x.id).toMatch(/^(noseg|seg:\w+(:name|:show|:hide|)|section(:name|:show|:hide)|sliceOpacity(:name)?|trigger:(name|point|label|hint)|results|result:\d+(:name|:vol)?|total|home|undo|reset|all|exit)$/);
       expect(x.text || x.label || '').not.toMatch(/Lv\s?\d/);
     }
   });
@@ -157,6 +157,49 @@ describe('the generic かんたん menu board per bundled dataset', () => {
     }
     expect(SIMPLE_MENU.TOP - SIMPLE_MENU.STATUS).toBeLessThanOrEqual(60);
     expect(SIMPLE_MENU.STATUS).toBeGreaterThan(90);
+  });
+});
+
+describe('the かんたん menu: slice-opacity slider (generic: every dataset, no level)', () => {
+  const slider = w => w.filter(x => x.type === 'slider');
+  it('one slider row for every bundled dataset and with no dataset, under the 断面 row, with its name', () => {
+    for (const lang of ['ja', 'en']) for (const s of [...SAMPLES, null]) {
+      const w = layoutFor(s, lang), sl = slider(w);
+      expect(sl.length, `${s}/${lang}`).toBe(1);
+      expect(sl[0].id).toBe('sliceOpacity');
+      expect(w.find(x => x.id === 'sliceOpacity:name').text).toBe(lang === 'ja' ? 'スライス不透明度' : 'Slice opacity');
+      const sec = buttons(w).find(b => b.id === 'section:show');
+      expect(sl[0].y).toBe(sec.y + SIMPLE_MENU.ROW);
+    }
+  });
+  it('the value comes from the setting (default 60 %), in 5 % steps, clamped, with its percent text', () => {
+    expect(SLICE_OPACITY_DEFAULT).toBe(0.6);
+    expect(slider(layoutFor('sample1'))[0]).toMatchObject({ value: 0.6, text: '60%' });
+    expect(slider(layoutFor('sample1', 'ja', { sliceOpacity: 0.3 }))[0]).toMatchObject({ value: 0.3, text: '30%' });
+    expect(slider(layoutFor('sample1', 'ja', { sliceOpacity: 0 }))[0]).toMatchObject({ value: 0, text: '0%' });
+    expect(sliceOpacityValue(0.62)).toBe(0.6);
+    expect(sliceOpacityValue(0.98)).toBe(1);
+    expect(sliceOpacityValue(1.7)).toBe(1);
+    expect(sliceOpacityValue(-1)).toBe(0);
+    expect(sliceOpacityValue(NaN)).toBe(0);
+  });
+  it('vr-view.js draws it with the full menu\'s slider widget and the full menu\'s setting (saved on release like any slider), and the hand help names the sliders', () => {
+    const src = readFileSync(new URL('../../docs/vr-view.js', import.meta.url), 'utf8');
+    expect(src).toContain("else if(it.type==='slider')w.push({...it,set:v=>{ui.sliceClear=false;settings.sliceOpacity=sliceOpacityValue(v)}});");
+    expect(src).toContain('sliceOpacity:settings.sliceOpacity,trigger:');
+    expect(src).toContain('sliceOpacity:L.sl,');
+    expect(src).toContain('ui.sliceClear=false;settings.sliceOpacity=Math.round(v*20)/20'); // the スライス tab's slider: same steps, and it also cancels the transparent toggle
+    const hand = readFileSync(new URL('../../docs/vr-hand.js', import.meta.url), 'utf8');
+    expect(hand).toMatch(/helpMenuSimple:'ピンチ：メニューのボタン・スライダー/);
+    expect(hand).toMatch(/helpMenuSimple:'Pinch: menu buttons and sliders/);
+  });
+  it('with the most the board can show (5 segments, trigger switch, results) nothing runs into the bottom row and a result row is still listed', () => {
+    for (const lang of ['ja', 'en']) {
+      const w = simpleMenuLayout({ segments: SEG_ORDER.map(k => ({ key: k, name: SEG_NAMES[lang][k], color: COLORS[k], on: true })), sectionOn: true, trigger: { show: true, label: false }, results: [{ hex: '#fff', name: '1. Fat', text: '1 mm³' }], total: '1 mm³', text: TEXT(lang) });
+      const bottom = Math.min(...buttons(w).filter(b => b.id === 'home').map(b => b.y));
+      expect(slider(w)[0].y + SIMPLE_MENU.BTN_H).toBeLessThan(bottom);
+      expect(buttons(w).filter(b => b.id.startsWith('result:')).length).toBeGreaterThan(0);
+    }
   });
 });
 
@@ -233,14 +276,21 @@ describe('the かんたん menu board layout fits the canvas', () => {
     // a row name stays left of its buttons (x 440), result names left of their volumes (x 560), everything inside the board
     for (const x of w.filter(x => x.type === 'label')) {
       const wd = measure(x.text, x.size || 30, x.bold);
-      if (/^(seg:\w+|section|trigger):name$/.test(x.id)) expect(x.x + wd, x.id).toBeLessThanOrEqual(430);
+      if (/^(seg:\w+|section|sliceOpacity|trigger):name$/.test(x.id)) expect(x.x + wd, x.id).toBeLessThanOrEqual(430);
       else if (/^result:\d+:name$/.test(x.id)) expect(x.x + wd, x.id).toBeLessThanOrEqual(x.x + 440);
       else expect(x.x + wd, `${name} ${x.id}`).toBeLessThanOrEqual(M.W - 20);
       expect(x.y).toBeLessThan(M.H);
     }
     // the trigger line sits under its buttons, above the next row; the list stops above the bottom row
     const bottomY = Math.min(...bs.filter(b => ['home', 'undo', 'reset', 'all', 'exit'].includes(b.id)).map(b => b.y));
+    for (const sl of w.filter(x => x.type === 'slider')) expect(sl.y + sl.h, `${name} slider above the bottom row`).toBeLessThan(bottomY);
     for (const x of w.filter(x => /^(result|total)/.test(x.id))) expect(x.y + (x.h || 0), `${name} ${x.id}`).toBeLessThan(bottomY);
+    // the slider: knob (26 px) and value text (30 px, 4 chars) stay inside the board and clear of every button
+    for (const sl of w.filter(x => x.type === 'slider')) {
+      const box = { x: sl.x - 26, y: sl.y, w: sl.w + 26 + 110, h: sl.h }; // knob radius left of the track; value text from x+w+30, up to ~80 px
+      expect(box.x, 'slider left').toBeGreaterThanOrEqual(0); expect(box.x + box.w, 'slider right').toBeLessThanOrEqual(M.W); expect(sl.y + sl.h, 'slider bottom').toBeLessThanOrEqual(M.H);
+      for (const b of bs) expect(overlap(box, rect(b)), `${name} slider / ${b.id}`).toBe(false);
+    }
     const h = w.find(x => x.id === 'trigger:hint'), tb = w.find(x => x.id === 'trigger:point');
     if (h) expect(h.y).toBeGreaterThan(tb.y + tb.h);
   };
@@ -343,13 +393,13 @@ describe('static wiring', () => {
     expect(src).toContain('evH=evLines.length?');
     expect(src).toContain(':[],evH=');
     expect(src).toMatch(/y:60\+evH,text:L\.helpT/);
-    expect(src).toMatch(/y:140\+evH\+i\*78/);
+    expect(src).toMatch(/y:140\+evH\+i\*HELP_LINE_PITCH/);
   });
   it('VR / AR start with the menu board closed, or open on the かんたん menu in event mode; A/X long press and the ring still open it', () => {
     const src = read('vr-view.js');
     expect(src).toContain("const evMenu=eventModeOn();let evLabels=TRIGGER_AT_START==='label';");
     expect(src).toContain('const menu=makeMenu(MENU_W,MENU_H,MENU_WIDTH);menu.mesh.visible=evMenu;scene.add(menu.mesh);');
-    expect(src).toContain('const ui={tab:evMenu?10:0,open:evMenu,');
+    expect(src).toContain('const ui={sliceClear:false,tab:evMenu?10:0,open:evMenu,');
     expect(src).toContain('const setMenuOpen=open=>{ui.open=open;menu.mesh.visible=open;if(open)placeMenuNow();menu.refresh()};');
     expect(src).toContain("if(!ui.open){setMenuOpen(true);pulseTwice(c)}");
     expect(src).toContain("case'menu':setMenuOpen(!ui.open);break;");
@@ -453,11 +503,12 @@ describe('最初の状態に戻す: wiring', () => {
     // nothing is decoded / uploaded / re-prepared and the session is not left
     expect(fn).not.toMatch(/prepareVr|session\.end|selectSeries|startSample/);
     // the module-level modes of the session (per-segment mode, point place, screenshots) go back with 'vrl-event-fresh'
-    expect(src).toContain("document.addEventListener('vrl-event-fresh',()=>{for(const k of Object.keys(segMode))delete segMode[k];vrPointMode='surface';shots.length=0;try{saveSettings(resetEventViewSettings(loadSettings()))}catch{}});");
+    expect(src).toContain("const onEventFresh=()=>{for(const k of Object.keys(segMode))delete segMode[k];vrPointMode='surface';shots.length=0;try{saveSettings(resetEventViewSettings(loadSettings()))}catch{}};");
+    expect(src).toContain("document.addEventListener('vrl-event-fresh',onEventFresh);");
   });
   it('app.js: a practice dataset is opened fresh in event mode only, before anything else; the VR reset restores from the open dataset\'s project', () => {
     const src = read('app.js');
-    expect(src).toContain('const startSample=async setId=>{if(freshForEventSelection())pendingProject.value=null;sampleProjectNow.value=null;busy(true);resetVolume();');
+    expect(src).toContain('const startSample=async setId=>{if(freshForEventSelection())pendingProject.value=null;sampleProjectNow.value=null;setOpenSample(setId);busy(true);resetVolume();');
     expect(src).toContain("document.addEventListener('vrl-event-project-reset',e=>{if(eventModeOn()&&e.detail)e.detail.done=restoreProjectAnnotations(sampleProjectNow.value)});");
     expect(src).toContain("document.addEventListener(EVENT_FRESH_EVENT,()=>{distance=5.2;camera.position.z=distance;request3DRender()})");
   });

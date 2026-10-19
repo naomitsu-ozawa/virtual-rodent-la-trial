@@ -1,4 +1,4 @@
-// build 627: what a newly opened dataset must not inherit from the previous one (the practice data switched without a page reload, another
+// what a newly opened dataset must not inherit from the previous one (the practice data switched without a page reload, another
 // series card). The reset itself runs in ONE place, data-load.js resetDatasetState, at the start of selectSeries: before the volume is configured
 // and before the new data's project (a bundled project.vrlab) is applied, so whatever that project sets wins. These are its pure parts (no DOM,
 // no app state; unit-tested in tests/unit/dataset-reset.test.js).
@@ -26,7 +26,7 @@ export function resetSegmentStyles(state, defaults) {
   return changed;
 }
 
-// build 627: runs fn each time another dataset is opened or the data is cleared (state.js setActiveSeries dispatches 'vrl-serieschange' only when the
+// runs fn each time another dataset is opened or the data is cleared (state.js setActiveSeries dispatches 'vrl-serieschange' only when the
 // series object changes: the same series card again does not). For modules that keep a copy of the dataset (the prepared VR data) and must let it go.
 // A throwing release must not stop the others / the series switch itself.
 export function onDatasetChange(fn, target = globalThis.document) {

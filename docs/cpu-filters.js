@@ -4,9 +4,9 @@
 // this module has no UI dependencies and is unit-tested
 // (tests/unit/cpu-filters.test.js). The loops are the former app.js
 // apply* bodies, unchanged apart from reading params instead of sliders.
-import { frameYield } from './utils.js?v=20261019-build624';
-import { boxBlur3D } from './mask-ops.js?v=20261019-build624';
-import { anisotropicLambda, spacingWeights, spacingRatios, bilateralRadii, nlmRadii } from './filter-units.js?v=20261019-build624';
+import { frameYield } from './utils.js?v=20261019-build625';
+import { boxBlur3D } from './mask-ops.js?v=20261019-build625';
+import { anisotropicLambda, spacingWeights, spacingRatios, bilateralRadii, nlmRadii } from './filter-units.js?v=20261019-build625';
 export async function cpuGaussian3D(v,params,onProgress=()=>{}){
  const {columns:w,rows:h,slices:d}=v,n=w*h*d,src=v.data;
  const strength=params.strength;
@@ -64,7 +64,7 @@ export async function cpuMedian3D(v,params,onProgress=()=>{}){
 export async function cpuSpikeHole(v,params,onProgress=()=>{}){
  const {columns:w,rows:h,slices:d}=v,src=v.data,out=new Float32Array(src);
  const strength=params.strength;
- // build 447: the threshold is an absolute HU value (params.thresholdHU), not a fraction of v.max - v.min
+ // the threshold is an absolute HU value (params.thresholdHU), not a fraction of v.max - v.min
  const threshold=+params.thresholdHU,edgeGuard=threshold*(.55+.35*strength);
  const correctionBlend=.20+.75*strength;
  let corrected=0;
@@ -88,7 +88,7 @@ export async function cpuSpikeHole(v,params,onProgress=()=>{}){
 }
 export async function cpuNlm3D(v,params,onProgress=()=>{}){
  const {columns:w,rows:h,slices:d}=v,src=v.data,out=new Float32Array(src);
- const hParam=+params.hHU,h2=hParam*hParam; // build 447: h in HU
+ const hParam=+params.hHU,h2=hParam*hParam; // h in HU
  const searchRadius=Math.max(1,Math.round(params.searchRadius)),patchRadius=Math.max(0,Math.round(params.patchRadius));
  // per-axis radii round(r * hmin/h_a) (params.sp, else from the volume spacing; isotropic = the same radius on every axis)
  const {sr:[srx,sry,srz],pr:[prx,pry,prz]}=nlmRadii(searchRadius,patchRadius,spacingRatios({sp:params.sp||spacingWeights(v.spacing)}));
@@ -157,7 +157,7 @@ export async function cpuAnisotropicDiffusion(v,params,onProgress=()=>{}){
 }
 export async function cpuBilateral3D(v,params,onProgress=()=>{}){
  const {columns:w,rows:h,slices:d}=v,n=w*h*d;
- // build 445: the intensity sigma is an absolute HU value (params.sigmaHU); it no longer depends on v.min / v.max
+ // the intensity sigma is an absolute HU value (params.sigmaHU); it no longer depends on v.min / v.max
  const strength=params.strength,spatialSigma=params.spatialSigma,intensitySigma=Math.max(1e-6,+params.sigmaHU),passes=Math.max(1,Math.round(params.passes));
  // spatial weight in mm: exp(-sum (d_a*h_a)^2 / (2 sigma^2 hmin^2)) = exp(-sum d_a^2 / w_a / (2 sigma^2)); radius per axis clamp(ceil(1.5 sigma hmin/h_a),0,3)
  const spw=params.sp||spacingWeights(v.spacing)||[1,1,1],[rx,ry,rz]=bilateralRadii(spatialSigma,spacingRatios({sp:spw})),[ix,iy,iz]=[1/spw[0],1/spw[1],1/spw[2]],sp2=2*spatialSigma*spatialSigma,int2=2*intensitySigma*intensitySigma;
@@ -186,7 +186,7 @@ export async function cpuTvDenoising3D(v,params,onProgress=()=>{}){
  const {columns:w,rows:h,slices:d}=v,n=w*h*d,src=v.data;
  const weight=params.weight,iterations=Math.max(1,Math.round(params.iterations)),lambda=Math.min(.18,.02+weight*.45);
  let a=new Float32Array(src),b=new Float32Array(n);
- const eps=+params.epsHU; // build 447: HU
+ const eps=+params.epsHU; // HU
  // per-axis weights (hmin/h)^2: params.sp if given, else from the volume spacing; null = isotropic = all 1 (lambda unchanged, weights <= 1)
  const sp=params.sp||spacingWeights(v.spacing)||[1,1,1],weights=[sp[0],sp[0],sp[1],sp[1],sp[2],sp[2]];
  for(let iter=0;iter<iterations;iter++){

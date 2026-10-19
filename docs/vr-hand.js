@@ -1,4 +1,4 @@
-// build 625: hand tracking (Quest 3), phase 0 / 1 / 2 (phase 2: the fist = the grip, 断面 +/- on the wrist menu): the pure part — no DOM and no three.js (unit-tested in tests/unit/vr-hand.test.js).
+// hand tracking (Quest 3), phase 0 / 1 / 2 (phase 2: the fist = the grip, 断面 +/- on the wrist menu): the pure part — no DOM and no three.js (unit-tested in tests/unit/vr-hand.test.js).
 // vr-hand-view.js does the three.js side (the filtered / delayed target ray written back into the controller group, the wrist menu, the
 // fingertip markers); vr-view.js only routes its events there. Every hand branch is guarded by isHand(source): an XRInputSource with .hand
 // (granted only with the optional 'hand-tracking' feature). Controllers never reach this code, and their behaviour is unchanged.
@@ -10,7 +10,7 @@ export const isHand=s=>!!(s&&s.hand);
 // Low-pass whose cutoff rises with the speed: cutoff = minCutoff + beta * speed * speedScale (Hz). speed = the length of the filtered
 // derivative over all n channels (units/s); speedScale converts it to the unit beta is tuned for (1000: metres -> mm, so beta 0.05 = +5 Hz
 // per 100 mm/s). minCutoff: the hand's jitter at rest is smoothed; a fast move raises the cutoff so the ray does not trail.
-// build 626 (latency): the speed itself is low-passed at dCutoff. At 1 Hz (the paper's value) the cutoff only opened ~160 ms after a move had started and a
+// the speed itself is low-passed at dCutoff. At 1 Hz (the paper's value) the cutoff only opened ~160 ms after a move had started and a
 // slow move (2-10 cm/s: fine placing) trailed by 35-70 ms; dCutoff 5 / beta 0.05 / minCutoff 1.2 halve that (tests/unit/vr-hand.test.js measures it) while
 // the rest jitter stays ~0.2 mm rms. Tunable on the device: localStorage vrl-hand-filter (see parseFilterTune).
 export const ONE_EURO={minCutoff:1.2,beta:0.05,dCutoff:5};
@@ -55,21 +55,128 @@ export function createPoseFilter({minCutoff=ONE_EURO.minCutoff,beta=ONE_EURO.bet
 }
 
 // ---- pinch with hysteresis (index tip - thumb tip distance, metres) ----
-// on below PINCH_ON_M, off again only above PINCH_OFF_M (no flicker at the edge). A missing distance keeps the state.
-export const PINCH_ON_M=0.015,PINCH_OFF_M=0.025;
-export function createPinchHysteresis({on=PINCH_ON_M,off=PINCH_OFF_M}={}){
- let pinched=false;
+// the hand's own pinch is the trigger (createPinchFusion below), the system's select is only a second input.
+// on below PINCH.on for onFrames frames in a row, off again only above PINCH.off for offFrames frames in a row: a wrist swing that blurs the
+// fingertips for a frame neither ends a pinch nor starts one. A missing distance (joints not tracked) keeps the state and the counters.
+// on 1.8 cm: the fingertip joints sit inside the finger pads, so touching pads read ~1-1.5 cm; off 3 cm: clearly opened.
+// Tunable on the device: localStorage vrl-hand-pinch (parsePinchTune).
+export const PINCH={on:0.018,off:0.03,onFrames:2,offFrames:2};
+export const PINCH_ON_M=PINCH.on,PINCH_OFF_M=PINCH.off;
+export function createPinchHysteresis({on=PINCH.on,off=PINCH.off,onFrames=PINCH.onFrames,offFrames=PINCH.offFrames}={}){
+ let pinched=false,n=0;
  return{
-  update(d){if(!Number.isFinite(d))return pinched;if(pinched){if(d>off)pinched=false}else if(d<on)pinched=true;return pinched},
-  reset(){pinched=false},
+  update(d){
+   if(!Number.isFinite(d))return pinched;
+   const flip=pinched?d>off:d<on;
+   if(!flip){n=0;return pinched}
+   if(++n>=(pinched?offFrames:onFrames)){pinched=!pinched;n=0}
+   return pinched;
+  },
+  reset(){pinched=false;n=0},
   get pinched(){return pinched},
  };
+}
+
+// ---- one pinch = one press: the hand's own pinch OR the system's select ----
+// own(d, now, guard) once per frame with the fingertip distance; os(down, now, guard) on the system's selectstart / selectend. Each returns
+// 'start' | 'end' | null, and the starts / ends alternate (one press per pinch, whichever input sees it first):
+//  - a press starts on the first of the two; the other one joining it is absorbed
+//  - once the own detector has seen the pinch (ownEngaged) only the own detector ends it: the system's selectend during a wrist swing does not
+//  - a press only the system saw (fingertips not < on, e.g. joints poorly tracked) ends on the system's selectend
+//  - guard (a fist forming / the hand holding something): no press; latched until both inputs are released (the pinch inside the fist never fires later)
+//  - a system select that starts again within osGapMs after a press ended is the tail of the same pinch, not a new one
+//  - cancel(): the press was dropped from outside (tracking lost, the fist took over): no 'end' is reported, latched as for guard
+// own:false / os:false switch an input off (os:false: the system's select is ignored; own:false: the system's select alone, as before).
+export const PINCH_FUSION={own:1,os:1,osGapMs:100};
+export function createPinchFusion({own:useOwn=PINCH_FUSION.own,os:useOs=PINCH_FUSION.os,osGapMs=PINCH_FUSION.osGapMs,...hyst}={}){
+ const h=createPinchHysteresis(hyst);
+ let pressed=false,ownEngaged=false,osDown=false,latched=false,endAt=-Infinity,src=null;
+ const begin=(by,now,guard)=>{if(guard){latched=true;return null}pressed=true;src=by;ownEngaged=by==='own';return'start'};
+ const finish=now=>{pressed=false;ownEngaged=false;src=null;endAt=now;return'end'};
+ return{
+  own(d,now,guard=false){
+   if(!useOwn)return null;
+   const was=h.pinched,on=h.update(d);
+   if(latched){if(!on&&!osDown)latched=false;return null}
+   if(pressed){if(on)ownEngaged=true;else if(ownEngaged)return finish(now);return null}
+   return on&&!was?begin('own',now,guard):null;
+  },
+  os(down,now,guard=false){
+   osDown=!!down;
+   if(!useOs)return null;
+   if(down){
+    if(latched||pressed)return null;
+    if(now-endAt<osGapMs)return null;
+    if(useOwn&&h.pinched)return null; // the own detector holds this pinch already (its press was dropped / refused): not a new one
+    return begin('os',now,guard);
+   }
+   if(latched){if(!h.pinched||!useOwn)latched=false;return null}
+   return pressed&&!ownEngaged?finish(now):null;
+  },
+  cancel(){if(pressed){pressed=false;ownEngaged=false;src=null}latched=true},
+  reset(){h.reset();pressed=false;ownEngaged=false;osDown=false;latched=false;endAt=-Infinity;src=null},
+  get pressed(){return pressed},
+  get source(){return src},
+  get pinched(){return h.pinched},
+ };
+}
+
+// ---- the pose a pinch drags with ----
+// The system's pinch ray of a hand is aimed from the shoulder (and lags it), so turning the wrist hardly turns it, and the 60 ms ray delay
+// (rayDelayMs: thumb and index are close for the whole pinch) trailed every drag. While a pinch is held, the hand's group gets instead the
+// ray of the press carried by the hand itself, like a controller: the palm anchor's motion since the press (its position and the turn of the
+// wrist) is applied to the ray pose of the press. start() at the press (no jump: the output equals that ray until the hand moves), step()
+// every frame. gain scales the hand's travel (1 = 1:1), rot the share of the wrist's turn (1 = all of it, 0 = the direction stays as pressed).
+// Poses are [px,py,pz,qx,qy,qz,qw] in the same (XR reference) space. No allocation per step.
+export const DRAG_CARRY={carry:1,gain:1,rot:1,blendMs:120};
+const qMulA=(a,ai,b,bi,o,oi)=>{ // o[oi..] = a[ai..] * b[bi..] (quaternions x,y,z,w); o may alias neither input
+ const ax=a[ai],ay=a[ai+1],az=a[ai+2],aw=a[ai+3],bx=b[bi],by=b[bi+1],bz=b[bi+2],bw=b[bi+3];
+ o[oi]=aw*bx+ax*bw+ay*bz-az*by;o[oi+1]=aw*by-ax*bz+ay*bw+az*bx;o[oi+2]=aw*bz+ax*by-ay*bx+az*bw;o[oi+3]=aw*bw-ax*bx-ay*by-az*bz;return o;
+};
+// unit quaternion slerp from identity toward q by t (the shorter way); o: 4 numbers
+const qPow=(q,t,o)=>{
+ let x=q[0],y=q[1],z=q[2],w=q[3];if(w<0){x=-x;y=-y;z=-z;w=-w}
+ if(t===1){o[0]=x;o[1]=y;o[2]=z;o[3]=w;return o}
+ const s=Math.hypot(x,y,z);if(s<1e-12||t===0){o[0]=0;o[1]=0;o[2]=0;o[3]=1;return o}
+ const a=Math.atan2(s,w)*t,k=Math.sin(a)/s;o[0]=x*k;o[1]=y*k;o[2]=z*k;o[3]=Math.cos(a);return o;
+};
+export function createDragCarry(){
+ const r0=new Float64Array(7),a0=new Float64Array(7),ia=new Float64Array(4),d=new Float64Array(4),dr=new Float64Array(4),v=[0,0,0],tq=new Float64Array(4);let on=false;
+ const take=(ray,anchor)=>{for(let i=0;i<7;i++){r0[i]=ray[i];a0[i]=anchor[i]}ia[0]=-a0[3];ia[1]=-a0[4];ia[2]=-a0[5];ia[3]=a0[6];on=true};
+ return{
+  start(ray,anchor){take(ray,anchor)},
+  // the palm was lost and is back: the output stays where it is (cur) and follows the hand from this anchor on (no jump)
+  rebase(cur,anchor){take(cur,anchor)},
+  step(anchor,out,{gain=DRAG_CARRY.gain,rot=DRAG_CARRY.rot}={}){
+   if(!on){for(let i=0;i<7;i++)out[i]=r0[i];return out}
+   tq[0]=anchor[3];tq[1]=anchor[4];tq[2]=anchor[5];tq[3]=anchor[6];
+   qMulA(tq,0,ia,0,d,0); // the wrist's turn since the press, in the reference space
+   qPow(d,Math.max(0,Math.min(1,rot)),dr);
+   // the ray origin's offset from the palm, turned with the hand
+   const ox=r0[0]-a0[0],oy=r0[1]-a0[1],oz=r0[2]-a0[2],x=dr[0],y=dr[1],z=dr[2],w=dr[3],tx=2*(y*oz-z*oy),ty=2*(z*ox-x*oz),tz=2*(x*oy-y*ox);
+   v[0]=ox+w*tx+y*tz-z*ty;v[1]=oy+w*ty+z*tx-x*tz;v[2]=oz+w*tz+x*ty-y*tx;
+   for(let i=0;i<3;i++)out[i]=a0[i]+gain*(anchor[i]-a0[i])+v[i];
+   qMulA(dr,0,r0,3,out,3);
+   const l=Math.hypot(out[3],out[4],out[5],out[6])||1;for(let i=3;i<7;i++)out[i]/=l;
+   return out;
+  },
+  stop(){on=false},
+  get active(){return on},
+ };
+}
+// a -> b by k (0: a, 1: b): positions lerped, orientations nlerp'd on one hemisphere (the release: the carried ray goes back to the system's)
+export function blendPose(a,b,k,out){
+ const t=Math.max(0,Math.min(1,k)),s=a[3]*b[3]+a[4]*b[4]+a[5]*b[5]+a[6]*b[6]<0?-1:1;
+ for(let i=0;i<3;i++)out[i]=a[i]+(b[i]-a[i])*t;
+ for(let i=3;i<7;i++)out[i]=a[i]+(s*b[i]-a[i])*t;
+ const l=Math.hypot(out[3],out[4],out[5],out[6])||1;for(let i=3;i<7;i++)out[i]/=l;
+ return out;
 }
 
 // ---- delayed ray ----
 // Closing / opening the fingers moves the system's pinch ray just before the pinch is recognised (and just after it ends). The hand's ray is
 // therefore taken in the past: the target under the ray at selectstart / selectend is where the ray was before the fingers moved.
-// build 626 (latency): the delay is needed only while the thumb and the index are close (a pinch is forming / ending); an open hand pointing around has
+// the delay is needed only while the thumb and the index are close (a pinch is forming / ending); an open hand pointing around has
 // none. rayDelayMs(d): 0 at index-thumb distance d >= RAY_DELAY.farM, RAY_DELAY.maxMs at d <= nearM, linear between (an unknown distance: the full delay).
 export const RAY_DELAY_MS=60;
 export const RAY_DELAY={maxMs:RAY_DELAY_MS,farM:0.06,nearM:0.03};
@@ -196,7 +303,7 @@ export function grabScore(curls){
  return Number.isFinite(m)?m:NaN;
 }
 // GRAB: start below `on` held for holdMs (a hand passing through a fist while a pinch opens does not grab), end above `off` (hysteresis: no flicker).
-// build 626: holdMs 100 -> 60 (a closing hand passes through `on` only while it is really closing; the fist guard of the pinch is separate);
+// holdMs 100 -> 60 (a closing hand passes through `on` only while it is really closing; the fist guard of the pinch is separate);
 // near: the reach (m) of the direct grab (nearGrab below). Tunable on the device: localStorage vrl-hand-grab = '{"on":0.55,"off":0.7,"holdMs":60,"near":0.05}'
 export const GRAB={on:0.55,off:0.7,holdMs:60,near:0.05};
 // update(score, now, blocked) -> 'start' | 'end' | null. NaN keeps the state (a start that was pending is dropped). blocked (the hand is busy: it drags
@@ -220,22 +327,26 @@ export function createGrabHysteresis({on=GRAB.on,off=GRAB.off,holdMs=GRAB.holdMs
   get pending(){return since!==null},
  };
 }
-// a hand holding something (a grab) is alive while its WRIST is tracked: turning the palm to the face can drop the target-ray pose (the pinch ray
-// needs the fingers' view) although the hand is still there; without a grab the target ray decides as before (it is the pointer)
-export const handAlive=(rayVisible,wristTracked,grabbing)=>!!rayVisible||(!!grabbing&&!!wristTracked);
-// the fist guard of a pinch: the thumb touches the index while the hand is still closing into a fist. middle / ring / little (curls[1..3]) already
-// below `max` = a fist is forming -> the pinch is not a trigger (an aiming pinch keeps those fingers open / relaxed, 0.7-1). Unknown curl: not forming.
-export const FIST_GUARD_CURL=0.6;
-export function fistForming(curls,max=FIST_GUARD_CURL){
+// a hand holding something (a grab,: or a pinch) is alive while its WRIST is tracked: turning the palm to the face / a fast wrist swing can
+// drop the target-ray pose (the pinch ray needs the fingers' view) although the hand is still there; otherwise the target ray decides as before
+export const handAlive=(rayVisible,wristTracked,holding)=>!!rayVisible||(!!holding&&!!wristTracked);
+// the fist guard of a pinch: the thumb touches the index while the hand is closing into a fist. A fist is forming when the index AND middle /
+// ring / little are all curled: curls[0] < index and curls[1..3] < others. Unknown curl: not forming.
+// was middle / ring / little < 0.6 whatever the index did, which refused a normal pinch: those three fingers relax / tuck while
+// pinching (MCP 50 / PIP 70 / DIP 35 deg gives ~0.57) — measured in tests/unit/vr-hand.test.js. The index of a tip-to-tip pinch stays ~0.65-0.8
+// (it reaches out to the thumb), while closing into a fist it curls with the others (< 0.55 = GRAB.on). Tunable: vrl-hand-pinch guardIndex / guardOthers.
+export const FIST_GUARD={index:0.6,others:0.5};
+export function fistForming(curls,{index=FIST_GUARD.index,others=FIST_GUARD.others}={}){
  if(!curls||curls.length<4)return false;
- for(let i=1;i<4;i++){const c=curls[i];if(!Number.isFinite(c)||!(c<max))return false}
+ if(!Number.isFinite(curls[0])||!(curls[0]<index))return false;
+ for(let i=1;i<4;i++){const c=curls[i];if(!Number.isFinite(c)||!(c<others))return false}
  return true;
 }
 // the point a fist holds the volume at (and the distance of two fists = the scale, vr-view.js: pinchScale(s0, d0, handDist())): the palm centre
 export const PALM_FROM_WRIST=0.55; // palm centre = wrist + this * (middle-finger knuckle - wrist)
 export const palmPoint=(w,k,out=[0,0,0])=>{for(let i=0;i<3;i++)out[i]=w[i]+PALM_FROM_WRIST*(k[i]-w[i]);return out};
 
-// ---- direct grab (build 626): a fist that forms with the palm in / near an object takes that object itself (no laser) ----
+// ---- direct grab: a fist that forms with the palm in / near an object takes that object itself (no laser) ----
 // Distances in metres. Plain {x,y,z} (or three Vector3) in, numbers out; no allocation.
 // the distance from p to the box [min,max] (0 inside or on it); a flat board (min.z == max.z) is its rectangle
 export function boxDist(p,min,max){
@@ -280,6 +391,11 @@ const jsonOf=t=>{try{return typeof t==='string'?JSON.parse(t):t}catch{return nul
 export const parseFilterTune=t=>pick(jsonOf(t),{minCutoff:[0.05,60],beta:[0,5],dCutoff:[0.1,60],aMinCutoff:[0.05,60],aBeta:[0,5],aDCutoff:[0.1,60],delayMs:[0,200],delayFar:[0,1],delayNear:[0,10]});
 // vrl-hand-grab = '{"on":0.55,"off":0.7,"holdMs":60,"near":0.05}'
 export const parseGrabTune=t=>pick(jsonOf(t),{on:[0,1.5],off:[0,1.5],holdMs:[0,2000],near:[0,0.3]});
+// vrl-hand-pinch = '{"on":0.018,"off":0.03,"onFrames":2,"offFrames":2,"own":1,"os":1,"osGapMs":100,"guardIndex":0.6,"guardOthers":0.5}'
+// (own 0: the system's select alone, as before; os 0: the own pinch alone; guardIndex 0: no fist guard)
+export const parsePinchTune=t=>pick(jsonOf(t),{on:[0.003,0.08],off:[0.003,0.12],onFrames:[1,10],offFrames:[1,10],own:[0,1],os:[0,1],osGapMs:[0,1000],guardIndex:[0,1.5],guardOthers:[0,1.5]});
+// vrl-hand-drag = '{"carry":1,"gain":1,"rot":1,"blendMs":120}' (carry 0: a pinch drags with the system's (delayed) ray, as before)
+export const parseDragTune=t=>pick(jsonOf(t),{carry:[0,1],gain:[0,5],rot:[0,1],blendMs:[0,1000]});
 
 // ---- texts (hands only; the controller texts stay in vr-view.js) ----
 export function handTexts(ja){
@@ -287,13 +403,13 @@ export function handTexts(ja){
   helpBasic:['ピンチ（短く）：点を記録／点を選択（点で長くつまむ：移動・削除・色・距離）','グー：ボリューム・板・メニューに手を重ねて握る＝掴む（遠くはレーザーで狙う）','両手でグー：2つの拳の間隔で拡大・縮小','左手首の甲を顔に向ける：手首メニュー（A/X・B/Y・断面＋／－の代わり）','手首メニュー：右手のレーザーで指してピンチ','手首メニューの「メニュー」：メニューの開閉'],
   helpSec:['枠の細い線・番号札：ピンチで選択／つまんだまま動かして移動・回転','ピンチ（短く）：断面や組織に点を記録／点に当てて選択、点で長くつまむ：リング','手首メニューの「断面＋／－」：選んだ断面を法線方向へ送る（押し続ける）','グー：枠・ボリュームに手を重ねて握る＝掴んで移動・回転／両手でグー：拡大・縮小','左手首の甲を顔に向ける：手首メニュー（断面の表示／非表示・追加）','手首メニューの「メニュー」：メニューの開閉'],
   helpMenu:'ピンチ：メニューのボタン・スライダー／グー：メニュー板に手を重ねて移動',
-  helpMenuSimple:'ピンチ：メニューのボタン／グー：メニュー板に手を重ねて移動',
+  helpMenuSimple:'ピンチ：メニューのボタン・スライダー／グー：メニュー板に手を重ねて移動',
   wrist:on=>[['よく使う','（リング）'],['メニュー','開く／閉じる'],['断面',on?'非表示にする':'表示する'],['断面を','追加'],['取り消し',''],['断面','－'],['断面','＋']],
  }:{
   helpBasic:['Pinch (short): record / select a point (hold on a point: move, delete, colour, distance)','Fist on / near the volume, a board or the menu: grab it (far away: aim the laser, fist)','Two fists: the distance between them scales the volume','Back of the left wrist to your eyes: wrist menu (replaces A/X, B/Y, section + / -)','Wrist menu: point with the right hand and pinch','Wrist menu “Menu”: open / close the menu'],
   helpSec:['Thin frame line / number tag: pinch selects, pinch and move to slide / rotate','Pinch (short): record a point on a section or tissue; on a point selects it; hold on a point: ring','Wrist menu “Section + / -”: slides the selected section along its normal (hold)','Fist on a section frame or the volume: grab, move / turn; two fists: scale','Back of the left wrist to your eyes: wrist menu (show / hide / add sections)','Wrist menu “Menu”: open / close the menu'],
   helpMenu:'Pinch: menu buttons and sliders; fist on the menu board: move it',
-  helpMenuSimple:'Pinch: menu buttons; fist on the menu board: move it',
+  helpMenuSimple:'Pinch: menu buttons and sliders; fist on the menu board: move it',
   wrist:on=>[['Quick','ring'],['Menu','open / close'],['Sections',on?'hide':'show'],['Add','section'],['Undo',''],['Section','-'],['Section','+']],
  };
 }

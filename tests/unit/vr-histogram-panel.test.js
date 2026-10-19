@@ -35,7 +35,7 @@ function mk({ range = { mode: 'manual', lo: -200, hi: 400 }, reduced = false, re
   return { panel, getView, view, prog };
 }
 
-describe('VR histogram board (build 567): one stacked histogram of the whole volume', () => {
+describe('VR histogram board: one stacked histogram of the whole volume', () => {
   it('is hidden and does nothing until opened', () => {
     const { panel, getView } = mk(); panel.update(0);
     expect(panel.group.visible).toBe(false); expect(panel.drawCount).toBe(0); expect(getView).not.toHaveBeenCalled();
@@ -86,7 +86,7 @@ describe('VR histogram board (build 567): one stacked histogram of the whole vol
   it('no segment range lines / segment editing: only the x axis ends and 「自動」 react; the board, the progress quad, three highlight quads and the drag overlay', () => {
     const { panel } = mk(); panel.setOpen(true); panel.update(1000);
     for (const k of ['grab', 'dragTo', 'release', 'setLine', 'commitLine']) expect(k in panel).toBe(false);
-    expect(panel.group.children.length).toBe(6); // + build 571: the drag overlay
+    expect(panel.group.children.length).toBe(6); // +: the drag overlay
     // every highlight quad lies on the board (the right end's grab zone reaches past the edge; its quad is clipped)
     const hw = W / 2, hh = W * 640 / 1024 / 2, eps = 1e-9;
     for (const m of panel.group.children.slice(2)) {
@@ -98,19 +98,19 @@ describe('VR histogram board (build 567): one stacked histogram of the whole vol
   });
   // board metres of a canvas px point
   const at = (px, py) => [pxToLocalX(px, W), pxToLocalY(py, W)];
-  it('build 570: the laser target: the x axis ends (plot edges down to the end labels) and 「自動」; nothing before data is shown', () => {
+  it('the laser target: the x axis ends (plot edges down to the end labels) and 「自動」; nothing before data is shown', () => {
     const { panel } = mk({ ready: false }); panel.setOpen(true); panel.update(1000); expect(panel.axisTargetAt(...at(PLOT.x, PLOT.y + 50))).toBeNull();
     const b = mk(); b.panel.setOpen(true); b.panel.update(1000);
     expect(b.panel.axisTargetAt(...at(PLOT.x + 5, PLOT.y + 100))).toBe('lo'); expect(b.panel.axisTargetAt(...at(PLOT.x + PLOT.w - 5, X_AXIS_Y))).toBe('hi');
     expect(b.panel.axisTargetAt(...at(PLOT.x + PLOT.w / 2, PLOT.y + 100))).toBeNull();
     expect(b.panel.axisTargetAt(...at(AUTO_BTN.x + 10, AUTO_BTN.y + 10))).toBe('auto');
   });
-  it('build 570: hover lights only that zone (a quad, no redraw)', () => {
+  it('hover lights only that zone (a quad, no redraw)', () => {
     const { panel } = mk(); panel.setOpen(true); panel.update(1000); const n = panel.drawCount, quads = panel.group.children.slice(2);
     panel.setAxisHover('hi'); expect(quads.filter(q => q.visible).length).toBe(1); panel.update(2000); expect(panel.drawCount).toBe(n);
     panel.setAxisHover(null); expect(quads.some(q => q.visible)).toBe(false);
   });
-  it('build 570 / 571: dragging the right end narrows / widens the window at the grab-time scale; only the small overlay follows, at most every DRAG_REDRAW_MS; release returns the window', () => {
+  it('dragging the right end narrows / widens the window at the grab-time scale; only the small overlay follows, at most every DRAG_REDRAW_MS; release returns the window', () => {
     const { panel } = mk({ range: { mode: 'manual', lo: -200, hi: 400 } }); panel.setOpen(true); panel.update(1000); const n0 = panel.drawCount;
     expect(panel.overlay.visible).toBe(false); expect(panel.overlayCanvas.width * panel.overlayCanvas.height).toBeLessThan(PANEL_W * PANEL_H / 5);
     const [x0] = at(PLOT.x + PLOT.w, 0); expect(panel.startAxisDrag('hi', x0)).toBe(true); expect(panel.axisDragging).toBe('hi');
@@ -126,13 +126,13 @@ describe('VR histogram board (build 567): one stacked histogram of the whole vol
     expect(panel.endAxisDrag()).toEqual([-200, -150]); expect(panel.axisDragging).toBeNull(); expect(panel.endAxisDrag()).toBeNull();
     t += 14; panel.update(t); expect(panel.drawCount).toBe(n0 + 2); expect(panel.overlay.visible).toBe(false); // the release: the whole board once more
   });
-  it('build 571: the drag redraw reuses its arrays (rebinned columns, the shown window)', () => {
+  it('the drag redraw reuses its arrays (rebinned columns, the shown window)', () => {
     const { panel } = mk({ range: { mode: 'manual', lo: -200, hi: 400 } }); panel.setOpen(true); panel.update(1000);
     panel.startAxisDrag('hi', at(PLOT.x + PLOT.w, 0)[0]); panel.update(1014); const w0 = panel.window;
     panel.moveAxisDrag(at(PLOT.x + PLOT.w / 2, 0)[0]); panel.update(1014 + DRAG_REDRAW_MS); expect(panel.window).toBe(w0); expect(panel.window).toEqual([-200, 100]);
     panel.dispose();
   });
-  it('build 570: the left end clamps at -1024; a drag that did not move commits nothing; close / cancel / dispose clear the drag', () => {
+  it('the left end clamps at -1024; a drag that did not move commits nothing; close / cancel / dispose clear the drag', () => {
     const { panel } = mk({ range: { mode: 'manual', lo: -200, hi: 400 } }); panel.setOpen(true); panel.update(1000);
     const [x0] = at(PLOT.x, 0); panel.startAxisDrag('lo', x0); panel.moveAxisDrag(x0 - 10); expect(panel.dragWindow[0]).toBe(-1024);
     panel.cancelAxisDrag(); expect(panel.axisDragging).toBeNull();

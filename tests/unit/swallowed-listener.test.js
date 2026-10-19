@@ -3,8 +3,8 @@ import { readFileSync } from 'node:fs';
 import * as espree from 'espree';
 
 // Regression: two statements had been appended on the same line after a `//` comment, so they never ran
-//  - comment-ui.js (build 481): onMeasureStartChange(()=>{syncPulse();renderMeasures()}) -> the distance START never pulsed / never refreshed the list
-//  - data-load.js (build 436): sigmoidCenter.disabled=!filterState.sigmoid in configure()
+//  - comment-ui.js: onMeasureStartChange(()=>{syncPulse();renderMeasures()}) -> the distance START never pulsed / never refreshed the list
+//  - data-load.js: sigmoidCenter.disabled=!filterState.sigmoid in configure()
 // These parse the real source and check the statements are code (not comment text) inside the right function.
 const parse = f => espree.parse(readFileSync(new URL('../../docs/' + f, import.meta.url), 'utf8'), { ecmaVersion: 'latest', sourceType: 'module', comment: true, range: true });
 const walk = (n, cb) => { if (!n || typeof n.type !== 'string') return; cb(n); for (const k of Object.keys(n)) { const v = n[k]; if (Array.isArray(v)) v.forEach(x => walk(x, cb)); else if (v && typeof v === 'object') walk(v, cb); } };

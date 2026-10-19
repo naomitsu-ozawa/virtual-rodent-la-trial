@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { MedicalVolumeRenderer } from '../../docs/medical-volume.js';
 import { onDatasetChange } from '../../docs/dataset-reset.js';
 
-// build 627: what the previous practice dataset left behind on a switch (memory, GPU and CPU). The release itself is spread over modules that cannot
+// what the previous practice dataset left behind on a switch (memory, GPU and CPU). The release itself is spread over modules that cannot
 // all be imported in node (vr-view.js pulls the whole DOM shell), so the pieces are tested here with mocks and the wiring by source checks; the real
 // switch is covered by tests/e2e/dataset-switch-reset.spec.js.
 beforeAll(() => {

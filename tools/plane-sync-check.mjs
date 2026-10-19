@@ -1,11 +1,11 @@
-// Shared plane selection (build 420): practice data; choosing axial / coronal / sagittal in the section analysis,
+// Shared plane selection: practice data; choosing axial / coronal / sagittal in the section analysis,
 // the workspace 2D tabs, the 3D plane buttons and the main view must make all the others follow.
 //   PW_CHROMIUM=/opt/pw-browsers/chromium node tools/plane-sync-check.mjs
 import { chromium } from '@playwright/test';
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
 const root=path.resolve('docs'),nm=path.resolve('node_modules');const errors=[];
 const srv=http.createServer((q,r)=>{const p=path.join(root,decodeURIComponent(q.url.split('?')[0]));
- // build 437: the practice data's bundled project (docs/demo/sample1/project.vrlab) is applied on load; the checks start
+ // the practice data's bundled project (docs/demo/sample1/project.vrlab) is applied on load; the checks start
  // from the bare data unless SAMPLE_PROJECT=1
  if(p.endsWith('project.vrlab')&&!process.env.SAMPLE_PROJECT){r.writeHead(404);r.end();return}
  fs.readFile(p.endsWith('/')?p+'index.html':p,(e,b)=>{if(e){r.writeHead(404);r.end();return}r.writeHead(200,{'content-type':p.endsWith('.js')?'text/javascript':p.endsWith('.css')?'text/css':'text/html'});r.end(b)})}).listen(8765);
@@ -33,7 +33,7 @@ const state=()=>pg.evaluate(async()=>{const v=new URL(document.querySelector('sc
  return{section:st.sectionViewOpen?st.sectionViewPlane:null,reverse:st.sectionViewReverse,overlay:['axial','coronal','sagittal'].filter(k=>mo.mpr3DVisibility[k]),tab,main,view}});
 const steps=[['section analysis: coronal','[data-section-view="coronal"]','coronal'],['workspace tab: sagittal','[data-ipad-mpr="sagittal"]','sagittal'],['3D plane button: axial (off → on)',null,'axial'],['main view: coronal','[data-view-main="coronal"]','coronal']];
 const out=[];let bad=false;
-// build 422: with the section closed, choose sagittal in the 2D tab, then open the section analysis: it must open on sagittal
+// with the section closed, choose sagittal in the 2D tab, then open the section analysis: it must open on sagittal
 await pg.evaluate(()=>document.querySelector('[data-ipad-mpr="sagittal"]')?.click());await pg.waitForTimeout(500);
 await pg.evaluate(()=>document.getElementById('section-view-toggle')?.click());await pg.waitForTimeout(800);
 {const s=await state();const ok=s.section==='sagittal'&&s.reverse===true&&s.tab==='sagittal';if(!ok)bad=true;out.push({label:'open section analysis after choosing sagittal',expect:'sagittal',...s,ok})}

@@ -4,7 +4,7 @@ import { OrderedChunkSmoother, smoothingInFlight } from '../../docs/smooth-chunk
 import { smoothWorkerCount, runSmoothMessage } from '../../docs/smooth-workers.js';
 import { makeMask, voxelFaces } from '../helpers/voxel-mesh.js';
 
-// build 612: the smoothing jobs of a cancelled or superseded build do not run (they would hold the workers for nothing),
+// the smoothing jobs of a cancelled or superseded build do not run (they would hold the workers for nothing),
 // and its drain() still settles. Node has no Worker: a fake one runs the worker's job (runSmoothMessage) a few
 // milliseconds after each message.
 let started = 0;

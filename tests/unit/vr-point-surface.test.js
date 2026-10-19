@@ -36,7 +36,7 @@ describe('surface mode: the mode value', () => {
 
 describe('trigger resolution per mode (board > ring > move > tag > nearest of point / band / target)', () => {
   it('断面: only a plane hit records; a tissue hit alone does nothing', () => {
-    expect(resolveTriggerTarget({ tissue: { t: 1 }, mode: 'section' }).kind).toBe('tissue'); // build 484: stops the laser, records nothing
+    expect(resolveTriggerTarget({ tissue: { t: 1 }, mode: 'section' }).kind).toBe('tissue'); // stops the laser, records nothing
     expect(resolveTriggerTarget({ plane: { t: 1 }, mode: 'section' }).kind).toBe('record');
   });
   it('表面: only a tissue hit records; a plane hit alone does nothing (the plane never steals the ray)', () => {
@@ -142,7 +142,7 @@ describe('point cursor (a small dot only: no ring, no glow; both modes)', () => 
     expect(cur.group.visible).toBe(true);
     expect(cur.group.position.toArray().map(v => +v.toFixed(6))).toEqual([centre.x, centre.y, centre.z].map(v => +v.toFixed(6)));
     expect(cur.core.position.length()).toBe(0); // the core is at the group's origin = the voxel centre
-    expect(cur.group.children.length).toBe(1); // the dot only (build 470: no ring)
+    expect(cur.group.children.length).toBe(1); // the dot only
     expect(cur.group.children.every(m => m.material.blending !== THREE.AdditiveBlending)).toBe(true);
     expect(localToVoxel(centre, halfExt, dims)).toEqual(h.voxel); // the shown centre is inside the recorded voxel
     cur.set(null);

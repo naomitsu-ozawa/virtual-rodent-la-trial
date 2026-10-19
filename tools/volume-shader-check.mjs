@@ -2,14 +2,14 @@
 // volumeShader): renders a synthetic phantom with the real WGSL through
 // SwiftShader WebGPU, saves the image, and compares two versions of the file
 // pixel by pixel. SwiftShader time is a CPU proxy (relative only).
-//   PW_CHROMIUM=/opt/pw-browsers/chromium node tools/volume-shader-check.mjs [fileA] [fileB] [outDir]   (ROLL=1: the viewer upside down = the volume turned half a circle about the view axis; build 612)
+//   PW_CHROMIUM=/opt/pw-browsers/chromium node tools/volume-shader-check.mjs [fileA] [fileB] [outDir]   (ROLL=1: the viewer upside down = the volume turned half a circle about the view axis)
 // fileA defaults to docs/medical-volume.js; fileB (optional) is compared with
 // it, e.g. a copy from git: git show HEAD:docs/medical-volume.js > /tmp/old.js
 import { chromium } from '@playwright/test';
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
 import { lightingWGSL, lightOffsetExpr, materialVec } from '../docs/lighting.js';
 const fileA=process.argv[2]||'docs/medical-volume.js',fileB=process.argv[3]||null,outDir=process.argv[4]||'.',refine=+(process.env.REFINE??1),overlap=+(process.env.OVERLAP??1),mpr=+(process.env.MPR??0),analysis=+(process.env.ANALYSIS??0);
-// build 612: the shader text is cut from the source, so the two placeholders of the shared lighting (docs/lighting.js) are resolved here
+// the shader text is cut from the source, so the two placeholders of the shared lighting (docs/lighting.js) are resolved here
 const resolveLighting=t=>t.replace('${lightingWGSL()}',lightingWGSL()).replace("${lightOffsetExpr('u.camRightTan.xyz','u.camUpAspect.xyz')}",lightOffsetExpr('u.camRightTan.xyz','u.camUpAspect.xyz'));
 const safeWgsl=source=>source.replace(/\bmeta\b/g,'vrlMeta').replace(/\bactive\b/g,'vrlActive').replace(/\btarget\b/g,'vrlTarget');
 const shaderOf=file=>{const s=fs.readFileSync(file,'utf8'),a=s.indexOf('export function volumeShader(){'),b=s.indexOf('export function brickShader(){',a);const body=s.slice(a,b),i=body.indexOf('`')+1,j=body.lastIndexOf('`');return safeWgsl(resolveLighting(body.slice(i,j)))};
@@ -24,10 +24,10 @@ const uniformBytes=(()=>{const m=/struct Uniforms\{([\s\S]*?)\};/.exec(shaderOf(
  while(at<members.length){re.lastIndex=at;const x=re.exec(members);if(!x){console.error('FAIL: unexpected Uniforms member near: '+members.slice(at,at+40));process.exit(1)}n+=x[2]?+x[2]:1;at=re.lastIndex}
  return n*16})();
 const shaders={A:shaderOf(fileA),B:fileB?shaderOf(fileB):null};
-// IDCAP=1 (build 416): a third pass per file returns, for every pixel whose ray reaches the section cap, the voxel at
+// IDCAP=1: a third pass per file returns, for every pixel whose ray reaches the section cap, the voxel at
 // the cap point (linear index + 1), the segment the cap shows (capSegmentIndex) and whether it takes a result colour;
 // the page compares them with the phantom's voxel truth (that voxel's HU in the segment range, inside the region)
-// IDHIT=1 (build 417): instead, every surface hit of a segment with results returns the voxel its colour is taken
+// IDHIT=1: instead, every surface hit of a segment with results returns the voxel its colour is taken
 // from (linear index + 1), the segment and whether it is coloured; compared with that voxel's truth
 const HITLINE='var overlay=0u;if(anyRegion&&!isCutPreview){overlay=analysisOverlayAt(tcv);}';
 const idHit=code=>{const old='var overlay=0u;if(anyRegion&&!isCutPreview){if(regionByTexture){overlay=regionOverlayNear(tc,dir,inward);}else{overlay=analysisOverlayAt(tcv);}}';
@@ -83,10 +83,10 @@ const result=await pg.evaluate(async ({segM,uniformBytes,shaders,counting,refine
   for(let z=0;z<N;z++)for(let y=0;y<N;y++){let x0=-1;for(let x=0;x<=N;x++){const inR=x<N&&Math.hypot(x-64,y-64,z-64)<regionR;if(inR&&x0<0)x0=x;if(!inR&&x0>=0){runs.push([z*N+y,x0,x-1]);counts[z*N+y]++;x0=-1}}}
   const header=2+rowCount,data=new Uint32Array(header+runs.length*2),cursor=new Uint32Array(rowCount);data[0]=1;let at=header;for(let r=0;r<rowCount;r++){data[1+r]=at;cursor[r]=at;at+=counts[r]*2}data[1+rowCount]=at;
   const word=(0x00c8ff|0x1000000|0x80000000)>>>0;for(const [row,x0,x1] of runs){const c=cursor[row];data[c]=((x1&65535)<<16)|(x0&65535);data[c+1]=word;cursor[row]=c+2}
-  // build 374 layout: colour table after the pairs, data[0] = its start; region index texture (4 bits per voxel)
+  // layout: colour table after the pairs, data[0] = its start; region index texture (4 bits per voxel)
   const tableStart=header+runs.length*2,data2=new Uint32Array(tableStart+16);data2.set(data);data2[0]=tableStart;data2[tableStart]=0xff;data2[tableStart+1]=word;
   overlayBuf=storage(data2);
-  // build 376 (as setAnalysisRuns): staging buffer at the 256-byte row pitch, one copyBufferToTexture (tw = 16 words here, so rows are padded)
+  // staging buffer at the 256-byte row pitch, one copyBufferToTexture (tw = 16 words here, so rows are padded)
   const tw=N/8,bytesPerRow=Math.ceil(tw*4/256)*256,rowWords=bytesPerRow/4,staging=device.createBuffer({size:bytesPerRow*N*N,usage:GPUBufferUsage.COPY_SRC,mappedAtCreation:true}),words=new Uint32Array(staging.getMappedRange());
   for(const [row,x0,x1] of runs){for(let x=x0;x<=x1;x++){const wi=row*rowWords+(x>>3),sh=(x&7)*4;words[wi]=(words[wi]&~(15<<sh))|(1<<sh)}}
   staging.unmap();
@@ -103,8 +103,8 @@ const result=await pg.evaluate(async ({segM,uniformBytes,shaders,counting,refine
  // segments: bone opaque, soft tissue 35 % (rays continue through it)
  put(8,300,3000,1,1);put(9,0.91,0.86,0.72,1);put(10,-200,299,0.35,1);put(11,0.85,0.55,0.42,1);put(12,0,0,0,0);put(13,0,0,0,0);put(14,0,0,0,0);put(15,0,0,0,0);
  put(16,64,64,64,mpr?0.6:0);put(17,mpr,0,0,refine);put(18,40,400,0,0);put(19,section?1:0,sectionZ,sectionSign,analysis&&regionTexOn?1:0);put(20,section?1:0,0.85,0,28);put(21,N,N,N,1);put(22,0.05,0.06,0.08,1);
- for(let s=0;s<4&&23+s<uni.length/4;s++)put(23+s,...segM); // build 620: segMat (the standard material in every slot), when the struct has it
- // SECTION=1 (build 410): axial section at z = SECTION_Z (app units), SECTION_SIGN picks the kept side, cap at 85 %
+ for(let s=0;s<4&&23+s<uni.length/4;s++)put(23+s,...segM); // segMat (the standard material in every slot), when the struct has it
+ // SECTION=1: axial section at z = SECTION_Z (app units), SECTION_SIGN picks the kept side, cap at 85 %
  const uniBuf=device.createBuffer({size:uni.byteLength,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});device.queue.writeBuffer(uniBuf,0,uni);
  const sampler=device.createSampler({magFilter:'linear',minFilter:'linear'});
  const targets={rgba8unorm:device.createTexture({size:{width:W,height:H},format:'rgba8unorm',usage:GPUTextureUsage.RENDER_ATTACHMENT|GPUTextureUsage.COPY_SRC}),rgba32float:device.createTexture({size:{width:W,height:H},format:'rgba32float',usage:GPUTextureUsage.RENDER_ATTACHMENT|GPUTextureUsage.COPY_SRC})};

@@ -1,4 +1,4 @@
-// Line profile panel (build 537, PC only; nothing here touches the GPU shaders or VR).
+// Line profile panel.
 // "HU線プロファイル" arms a two-point pick on the MPR / 2D slice views (press-drag-release, or click then click): the line is sampled
 // at about the smallest voxel spacing with trilinear interpolation of the effective HU (line-profile.js) and shown in the analysis dock (analysis-dock.js)
 // as a plot (HU vs distance, hover = value + marker on the line in the view), a histogram of the sampled values and the same
@@ -6,27 +6,27 @@
 // - The HU values come through readEffectiveSlice (effective-hu.js): the FILTERED axial planes the 2D cards show (default) or the raw
 //   source values (toggle "フィルター後 / 元の値", shared with the histogram); at most two slices at a time, never a full copy; async,
 //   with progress and cancel. The line is recomputed when the filter settings or the toggle change.
-// - build 541: the two end points live in the shared model hu-line-model.js (voxel coordinates), so a line drawn on a slice shows in 3D and
+// -: the two end points live in the shared model hu-line-model.js (voxel coordinates), so a line drawn on a slice shows in 3D and
 //   vice versa (hu-line-3d.js). While the line is dragged (2D or 3D) the plot / histogram / stats show a COARSE live preview (hu-line-live.js:
 //   at most 192 samples from data already in memory, about 13 Hz, never blocking); on release the full read replaces it.
 // - The 3D analysis overlay is pointer-events:none (style.css); the dock re-enables it. Interactive elements here also stop the pointer
 //   events so the 3D view does not rotate (the Phase 1 lesson).
-import { volume, currentLanguage } from './state.js?v=20261019-build624';
-import { planes } from './ui-shell.js?v=20261019-build624';
-import { tr } from './i18n.js?v=20261019-build624';
-import { frameYield } from './utils.js?v=20261019-build624';
-import { sourceFilterStages, sourceFilterSignature } from './source-filters.js?v=20261019-build624';
-import { getHuMode, onHuModeChange, effectiveHuSignature, huModeToggle } from './effective-hu.js?v=20261019-build624';
-import { readEffectiveSlice, rawHuVolume, filtersActive } from './effective-hu-source.js?v=20261019-build624';
-import { setExtraOverlayPainter, requestOverlayDraw } from './crosshair-ui.js?v=20261019-build624';
-import { clientToFraction, voxelFromPlanePoint, planePointFromVoxel, sliceIndexFor, formatHu } from './crosshair.js?v=20261019-build624';
-import { distanceMm, formatMm } from './measurements.js?v=20261019-build624';
-import { rebinHist } from './histogram.js?v=20261019-build624';
-import { lineSamples, sampleLine, profileStats, nearestSample } from './line-profile.js?v=20261019-build624';
-import { getHuLine, setHuLine, clearHuLine, onHuLineChange, getHuLineHover, setHuLineHover, onHuLineHoverChange, isHuLineDeferred, onHuLineDeferChange, lineOnPlane, planeFraction, voxelOnSlice } from './hu-line-model.js?v=20261019-build624';
-import { liveProfile, createLiveScheduler } from './hu-line-live.js?v=20261019-build624';
-import { peekEffectiveReaders } from './effective-hu-source.js?v=20261019-build624';
-import { isHuLine3dArmed, setHuLine3dArmed, onHuLine3dArmedChange, huLine3dAvailable } from './hu-line-3d.js?v=20261019-build624';
+import { volume, currentLanguage } from './state.js?v=20261019-build625';
+import { planes } from './ui-shell.js?v=20261019-build625';
+import { tr } from './i18n.js?v=20261019-build625';
+import { frameYield } from './utils.js?v=20261019-build625';
+import { sourceFilterStages, sourceFilterSignature } from './source-filters.js?v=20261019-build625';
+import { getHuMode, onHuModeChange, effectiveHuSignature, huModeToggle } from './effective-hu.js?v=20261019-build625';
+import { readEffectiveSlice, rawHuVolume, filtersActive } from './effective-hu-source.js?v=20261019-build625';
+import { setExtraOverlayPainter, requestOverlayDraw } from './crosshair-ui.js?v=20261019-build625';
+import { clientToFraction, voxelFromPlanePoint, planePointFromVoxel, sliceIndexFor, formatHu } from './crosshair.js?v=20261019-build625';
+import { distanceMm, formatMm } from './measurements.js?v=20261019-build625';
+import { rebinHist } from './histogram.js?v=20261019-build625';
+import { lineSamples, sampleLine, profileStats, nearestSample } from './line-profile.js?v=20261019-build625';
+import { getHuLine, setHuLine, clearHuLine, onHuLineChange, getHuLineHover, setHuLineHover, onHuLineHoverChange, isHuLineDeferred, onHuLineDeferChange, lineOnPlane, planeFraction, voxelOnSlice } from './hu-line-model.js?v=20261019-build625';
+import { liveProfile, createLiveScheduler } from './hu-line-live.js?v=20261019-build625';
+import { peekEffectiveReaders } from './effective-hu-source.js?v=20261019-build625';
+import { isHuLine3dArmed, setHuLine3dArmed, onHuLine3dArmedChange, huLine3dAvailable } from './hu-line-3d.js?v=20261019-build625';
 
 const PLOT_H = 130, HIST_H = 90, PAD = { l: 38, r: 8, t: 12, b: 20 }, DRAG_PX = 6;
 const st = {
@@ -48,7 +48,7 @@ function setProgress(text, fraction) {
   if (st.status) st.status.textContent = text || '';
 }
 async function compute() {
-  if (isHuLineDeferred()) { st.deferred = true; return; } // an immersive session is on (build 546): the read waits until it ends
+  if (isHuLineDeferred()) { st.deferred = true; return; } // an immersive session is on: the read waits until it ends
   cancelJob(false);
   const v = rawVolume(), L = getHuLine();
   if (!v || !L) return;
@@ -87,7 +87,7 @@ function recomputeIfStale() {
 function clearLine() { st.a = st.plane = null; st.stage = 'idle'; clearHuLine('panel'); if (getHuLine() == null) resetResult(); }
 function resetResult() { sched.cancel(); cancelJob(false); st.liveOn = false; st.result = null; st.message = ''; st.hover = -1; draw(); requestOverlayDraw(); }
 
-// ---- live preview (build 541) ----
+// ---- live preview ----
 const sched = createLiveScheduler(seq => runLive(seq));
 function runLive(seq) {
   const v = rawVolume(), L = getHuLine();
@@ -145,7 +145,7 @@ export function lineProfilePointerEnd(p, e) {
   return true;
 }
 
-// ---- the line on the slice view (build 541: from the shared model: solid where it lies on the slice, dashed projection + crossing mark otherwise) ----
+// ---- the line on the slice view ----
 function paintLine(ctx, p, g) {
   const L = getHuLine();
   if (!ctx || !st.open || !L || !volume) return;
@@ -313,7 +313,7 @@ function setOpen(on) {
   else { setHuLine3dArmed(false); sched.cancel(); cancelJob(false); st.stage = 'idle'; st.a = st.plane = null; st.liveOn = false; st.result = null; st.hover = -1; clearHuLine('panel'); }
   requestOverlayDraw();
 }
-// build 627: another dataset is being opened (data-load.js resetDatasetState): the old line goes now, in every view (2D, 3D, VR read the shared
+// another dataset is being opened (data-load.js resetDatasetState): the old line goes now, in every view (2D, 3D, VR read the shared
 // model), the panel closes and a pick in progress is dropped. The 600 ms poll below used to be the only reset: a load faster than its period, or a
 // line in the model while the panel was closed (drawn in VR), stayed on the new data.
 export function resetLineProfileForDataset() {

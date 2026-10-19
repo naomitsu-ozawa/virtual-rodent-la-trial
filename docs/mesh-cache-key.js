@@ -3,17 +3,17 @@
 //
 // A key must hold EVERY input that can change the mesh: a missing input would show an old mesh for new settings, which is a
 // wrong result, not a slow one. The functions below therefore throw on a missing input instead of leaving it out of the key.
-import { cacheKey } from './gpu-volume-cache.js?v=20261019-build624';
-import { datasetFingerprint } from './project-file.js?v=20261019-build624';
-import { segmentKeyFields } from './segment-cache-key.js?v=20261019-build624';
-import { packRuns } from './run-pack.js?v=20261019-build624';
+import { cacheKey } from './gpu-volume-cache.js?v=20261019-build625';
+import { datasetFingerprint } from './project-file.js?v=20261019-build625';
+import { segmentKeyFields } from './segment-cache-key.js?v=20261019-build625';
+import { packRuns } from './run-pack.js?v=20261019-build625';
 
 // Version of the mesh GENERATION. Raise it whenever a change makes the same inputs build a different mesh: the surface
 // extraction (GPU surface nets / run faces), the smoothing (constrained-smooth.js), the chunking and halo, the vertex merge or
 // the normals (surface-mesh.js, mesh-geometry.js, the GPU mesh kernel in gpu-compute.js / gpu-shaders.js).
 // Entries of an older version are never read and are deleted at the next store.
-// 2 (build 612): the constrained smoothing replaced Taubin / the isosurface / the GPU blur, halos by strength, seam copy.
-// 3 (build 612): the normals of a smoothed chunk from the whole chunk with its halo (no one-sided normals at the seams).
+// 2: the constrained smoothing replaced Taubin / the isosurface / the GPU blur, halos by strength, seam copy.
+// 3: the normals of a smoothed chunk from the whole chunk with its halo (no one-sided normals at the seams).
 export const MESH_FORMAT=3;
 
 // What the dataset fingerprint (ids, size, spacing) does not tell: the size of every slice file and how its pixels are decoded.

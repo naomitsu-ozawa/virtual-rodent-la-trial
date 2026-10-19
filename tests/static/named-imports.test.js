@@ -5,7 +5,7 @@ import * as acorn from 'acorn';
 
 // A named import of something the target module does not export is a
 // SyntaxError when the module graph loads, so the whole app fails to start.
-// Build 255 removed an export that app.js still imported, and CI did not notice.
+// removed an export that app.js still imported, and CI did not notice.
 const DOCS = join(import.meta.dirname, '..', '..', 'docs');
 const files = readdirSync(DOCS).filter(f => f.endsWith('.js'));
 const parse = f => acorn.parse(readFileSync(join(DOCS, f), 'utf8'), { ecmaVersion: 'latest', sourceType: 'module' });

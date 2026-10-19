@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-// build 509: (1) the section frame is hidden behind tissue under 「実際に隠す」 (depth tested, no ghost; on top while lit / without GPU occlusion);
+// (1) the section frame is hidden behind tissue under 「実際に隠す」 (depth tested, no ghost; on top while lit / without GPU occlusion);
 // (2) the section limit is 10 (was 4). vr-section-frame.js is pure; vr-view.js (WebXR) and its shader are checked on the source, the run in the XR stub (see the PR).
 const ver = JSON.parse(readFileSync(new URL('../../docs/version.json', import.meta.url), 'utf8')).version, tag = '?v=' + ver.replace(/\./g, '').replace(/-(\d+)$/, '-build$1');
 const load = f => import(/* @vite-ignore */ '../../docs/' + f + '.js' + tag);
@@ -15,7 +15,7 @@ describe('the section limit is 10', () => {
   it('MAX_SECTION_PLANES = 10 and there is a distinct colour for every plane', () => {
     expect(MAX_SECTION_PLANES).toBe(10);
     expect(PLANE_COLORS.length).toBe(10); expect(new Set(PLANE_COLORS).size).toBe(10);
-    expect(PLANE_COLORS.slice(0, 4)).toEqual([0xf2d27a, 0x8ec5ff, 0xf5a3c7, 0x9be3b0]); // the build 400 palette keeps its first four
+    expect(PLANE_COLORS.slice(0, 4)).toEqual([0xf2d27a, 0x8ec5ff, 0xf5a3c7, 0x9be3b0]); // the palette keeps its first four
     for (const c of PLANE_COLORS) { expect(c).toBeGreaterThan(0); expect(c).toBeLessThanOrEqual(0xffffff); }
   });
   it('nextPlaneColor: the first colour nobody uses; a removed plane gives its colour back; 10 planes use all 10 colours', () => {
@@ -87,7 +87,7 @@ describe('the section frame under the depth occlusion', () => {
   it('frameDepthTest: tested (= hidden behind tissue) only with the GPU occlusion and while not lit; lit or no occlusion = on top', () => {
     expect(frameDepthTest(true, false)).toBe(true);
     expect(frameDepthTest(true, true)).toBe(false);   // laser on the band / tag, grabbed, dragged
-    expect(frameDepthTest(false, false)).toBe(false); // 「薄くする」 / no standard depth: as before build 509
+    expect(frameDepthTest(false, false)).toBe(false); // 「薄くする」 / no standard depth: as before
     expect(frameDepthTest(false, true)).toBe(false);
     expect(frameDepthTest(undefined, undefined)).toBe(false);
     // the same rule as the labels / markers (vr-depth.js occludedPass)
@@ -108,14 +108,14 @@ describe('the section frame under the depth occlusion', () => {
     // a thin frame / tag must not write depth: with the test on they would clip the labels drawn after them
     expect(has(src, 'new THREE.LineBasicMaterial({color,transparent:true,depthTest:false,depthWrite:false}),h=0.12')).toBe(true);
     expect(has(src, 'side:THREE.DoubleSide,depthTest:false,depthWrite:false}));\n  handle.rotation.y')).toBe(true);
-    expect(has(src, 'arrow=new THREE.LineSegments(')).toBe(true); // build 511: the arrow has its own material (it fades), never depth tested, so it is not in the lines above
+    expect(has(src, 'arrow=new THREE.LineSegments(')).toBe(true); // the arrow has its own material (it fades), never depth tested, so it is not in the lines above
   });
-  it('build 511 arrow: short, own material without depth test, visible only while lit / grabbed (fade), shown for a moment after the flip, not pickable', () => {
+  it('arrow: short, own material without depth test, visible only while lit / grabbed (fade), shown for a moment after the flip, not pickable', () => {
     expect(ARROW_LEN).toBeGreaterThanOrEqual(0.03); expect(ARROW_LEN).toBeLessThanOrEqual(0.04); // was 0.09; the frame is 0.24 wide
     expect(has(src, 'const aL=ARROW_LEN,amat=new THREE.LineBasicMaterial({color,transparent:true,opacity:0,depthTest:false,depthWrite:false});')).toBe(true);
     expect(has(src, 'new THREE.Vector3(aL,0,0),new THREE.Vector3(0.72*aL,-0.22*aL,0)]),amat);')).toBe(true);
     expect(has(src, 'pl.aOp=arrowFade(pl.aOp,gc!==undefined||performance.now()<pl.aFlash,dt);pl.amat.opacity=pl.aOp')).toBe(true); // gc = lit (laser on the band / tag) or grabbed (the glow set)
-    expect(has(src, 'pl.arrow.visible=arrowShown(settings.cut,pl.cut,pl.aOp);pl.arrow.scale.x=-pl.side;')).toBe(true); // the flip (side) still turns it
+    expect(has(src, 'pl.arrow.visible=arrowShown(settings.cut,pl.cut,pl.aOp)&&!fHide;pl.arrow.scale.x=-pl.side;')).toBe(true); // the flip (side) still turns it
     expect(has(src, 'pl.side=-pl.side;pl.aFlash=performance.now()+ARROW_FLASH_MS')).toBe(true);
     expect(has(src, 'pl.mat.dispose();pl.amat.dispose();')).toBe(true);
     expect(src.includes('arrow.visible=settings.cut===2&&pl.cut')).toBe(false); // the old always-on condition is gone

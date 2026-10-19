@@ -137,7 +137,7 @@ describe('leader line end on the card edge', () => {
   });
 });
 
-describe('PC pin: the anchor is on the result surface facing the camera (build 524)', () => {
+describe('PC pin: the anchor is on the result surface facing the camera', () => {
   const box = { x0: 10, x1: 29, y0: 20, y1: 29, z0: 30, z1: 39 }; // a result: voxels of this box
   const contains = (i, j, k) => i >= box.x0 && i <= box.x1 && j >= box.y0 && j <= box.y1 && k >= box.z0 && k <= box.z1;
   const inside = { i: 20, j: 25, k: 35 };
@@ -164,7 +164,7 @@ describe('PC pin: the anchor is on the result surface facing the camera (build 5
   });
 });
 
-describe('wiring (static): build 524 fixes', () => {
+describe('wiring (static): fixes', () => {
   const read = f => readFileSync(new URL('../../docs/' + f, import.meta.url), 'utf8');
   it('VR: a tap on a pinned card unpins, cards are hit-testable only in the analysis tab and not through tissue, same numbers as the panel, no flicker, scratch objects', () => {
     const vr = read('vr-view.js');

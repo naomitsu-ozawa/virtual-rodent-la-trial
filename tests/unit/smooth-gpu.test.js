@@ -5,7 +5,7 @@ import { buildSmoothTopology, smoothIterationPlan, smoothParamsWords } from '../
 import { constrainedSmoothPositions, constrainedSmoothSchedule } from '../../docs/constrained-smooth.js';
 import { makeMask, voxelFaces, weld } from '../helpers/voxel-mesh.js';
 
-// build 612: the constrained smoothing on the GPU (smooth-gpu.js). CI has no GPU, so the WGSL kernels are run here on the
+// the constrained smoothing on the GPU (smooth-gpu.js). CI has no GPU, so the WGSL kernels are run here on the
 // CPU: their bodies are valid JavaScript, each is run once per vertex with only the buffers it declares, in the order of the
 // dispatch plan (smooth-gpu-plan.js), and the result is compared with the CPU kernel (constrained-smooth.js).
 const mesh = (w, h, d, inside, boundary = true) => weld(voxelFaces(makeMask(w, h, d, inside), w, h, d, { boundary }).positions);

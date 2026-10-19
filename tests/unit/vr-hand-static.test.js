@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import * as THREE from 'three';
 import { NEAR_KINDS, pickNearGrab, boxDist, centeredBoxDist, squareOutlineDist } from '../../docs/vr-hand.js';
 
-// build 625: hand tracking. vr-view.js / vr-hand-view.js are WebXR files (not run in node): the guards are checked on the source, and the
+// hand tracking. vr-view.js / vr-hand-view.js are WebXR files (not run in node): the guards are checked on the source, and the
 // disconnect release is run from its own source text against stand-ins for the closure variables.
 const src = readFileSync(new URL('../../docs/vr-view.js', import.meta.url), 'utf8');
 const hv = readFileSync(new URL('../../docs/vr-hand-view.js', import.meta.url), 'utf8');
@@ -68,22 +68,22 @@ describe('vr-view.js: hand tracking is optional and every hand branch is guarded
     expect(g).toContain("if(c.userData.press)release(c);");
     expect(g).toContain('if(grab(c,hs.near)===false)hs.grab.release();');
     expect(g).toContain("else if(ev==='end')ungrab(c);");
-    expect(bodyAfter(hv, 'frame(now){')).toContain('if(tick(c,hs,now)&&(c.visible||hs.grab.active))grabStep(c,hs,now);'); // after the isHand(s) continue
+    expect(bodyAfter(hv, 'frame(now){')).toContain('if(tick(c,hs,now)&&(c.visible||hs.grab.active||hs.pinch.pressed)){grabStep(c,hs,now);carryStep(c,hs,now);pinchStep(c,hs,now)}'); // after the isHand(s) continue
     expect(bodyAfter(hv, 'frame(now){').indexOf('grabStep(')).toBeGreaterThan(bodyAfter(hv, 'frame(now){').indexOf('if(!isHand(s)){ctrl=true;continue}'));
     expect(src).toContain('grab:(c,t)=>{if(t){gripStartNear(c,t);return true}if(c.userData.wristOn)return false;gripStart(c);return true}'); // no target near: the laser path, unchanged
     expect(src).toContain('ungrab:c=>{if(c.userData.drag?.fist){endDrag(c);return}gripEnd(c)}');
     expect(src).toContain('busy:c=>!!(c.userData.drag||c.userData.lblDrag||histAxis===c||dragging?.c===c||huLine.isDragging())');
     expect(src).toContain('c.userData.wristOn=!!bd.wrist;');
     // tracking loss: release() lets go of what the fist held and latches the detector; a lost hand does not grab
-    expect(bodyAfter(hv, 'const tick=(c,hs,now)=>{')).toContain("if(st==='cancel'){release(c);hs.rebased=null;hs.grab.release()}");
+    expect(bodyAfter(hv, 'const tick=(c,hs,now)=>{')).toContain("if(st==='cancel'){release(c);hs.rebased=null;hs.grab.release();dropPinch(hs)}");
     expect(bodyAfter(hv, 'const tick=(c,hs,now)=>{')).toContain('return false}');
     // a grabbing hand is no trigger and does not show the wrist menu
     expect(bodyAfter(hv, 'frame(now){')).toContain('left.userData.drag||hs.grab.active');
   });
   it('selectstart ignores a pinch the system sees inside a fist (first thing); selectend stops the wrist 断面 +/-', () => {
-    const b = bodyAfter(src, "c.addEventListener('selectstart',()=>{");
-    expect(b.trimStart().startsWith('if(isHand(c.userData.source)&&(handIn.grabbing(c)||handIn.fistLike(c)))return;')).toBe(true);
-    expect(src).toContain("c.addEventListener('selectend',()=>{c.userData.wristScroll=null});");
+    const b = bodyAfter(src, "c.addEventListener('selectstart',e=>{");
+    expect(b.trimStart().startsWith('if(isHand(c.userData.source)&&(!e.handPinch||handIn.grabbing(c)||handIn.fistLike(c)))return;')).toBe(true);
+    expect(src).toContain("c.addEventListener('selectend',e=>{if(isHand(c.userData.source)&&!e.handPinch)return;c.userData.wristScroll=null});");
     expect(bodyAfter(hv, 'grabbing(c){')).toContain('isHand(c.userData.source)');
   });
   it('wrist 断面 -/+: only from a hand, only with a selected section, added to the stick scroll (the same SCROLL_SPEED / clamp path)', () => {
@@ -97,10 +97,10 @@ describe('vr-view.js: hand tracking is optional and every hand branch is guarded
     expect(src).toContain("id==='secUp'||id==='secDown'?!!(section.on&&section.selected&&planes.includes(section.selected))");
   });
   it("the hand's select pre-hook runs before vr-view's own select handlers and only re-applies a hand's pose", () => {
-    const pre = src.indexOf("for(const t of ['selectstart','selectend'])c.addEventListener(t,()=>handIn.eventPose(c))");
+    const pre = src.indexOf("for(const t of ['selectstart','selectend'])c.addEventListener(t,e=>handIn.eventPose(c,e))");
     expect(pre).toBeGreaterThan(0);
-    expect(pre).toBeLessThan(src.indexOf("c.addEventListener('selectstart',()=>{"));
-    expect(bodyAfter(hv, 'eventPose(c){')).toMatch(/^if\(!isHand\(c\.userData\.source\)\)return;/);
+    expect(pre).toBeLessThan(src.indexOf("c.addEventListener('selectstart',e=>{"));
+    expect(bodyAfter(hv, 'eventPose(c,e){')).toMatch(/^if\(!isHand\(c\.userData\.source\)\)return;/);
   });
   it('drag thresholds: a hand uses its own (handIn.dragTh) behind isHand(); a controller keeps pr.dragRec?DRAG_RECORD:undefined', () => {
     expect(lineOf(src, 'const th=')).toContain('const th=isHand(c.userData.source)?handIn.dragTh(c,pr):(pr.dragRec?DRAG_RECORD:undefined);');
@@ -138,7 +138,33 @@ describe('vr-view.js: hand tracking is optional and every hand branch is guarded
   });
 });
 
-describe('direct grab (build 626): hands only, the controller path is untouched', () => {
+describe('the own pinch and the carried pinch drag are hands only (controllers unchanged)', () => {
+  const code = t => t.split('\n').map(l => l.replace(/\/\/.*$/, '')).join('\n');
+  it("a controller's select runs exactly as before: every new first line is behind isHand(); the controller bodies follow unchanged", () => {
+    const st = bodyAfter(src, "c.addEventListener('selectstart',e=>{"), en = bodyAfter(src.slice(src.indexOf("c.addEventListener('selectend',e=>{\n")), "c.addEventListener('selectend',e=>{");
+    expect(st.trimStart().split('\n')[1].trim()).toBe('endDrag(c);'); // the controller body starts right after the hand line, as before
+    expect(en.trimStart().startsWith('if(isHand(c.userData.source)&&!e.handPinch)return;')).toBe(true);
+    expect(en.trimStart().split('\n')[1].trim().startsWith('if(histAxis===c){histAxisEnd(true);pulse(c,0.2);return}')).toBe(true);
+    // the only handPinch readers in vr-view.js are those three hand guards
+    expect(code(src).match(/handPinch/g)).toHaveLength(3);
+    for (const l of src.split('\n').filter(x => x.includes('e.handPinch'))) expect(l).toContain('isHand(c.userData.source)&&');
+  });
+  it("vr-hand-view.js dispatches the hand's selectstart / selectend only from pinchEdge, reached from a hand's frame step or a hand's system select", () => {
+    const h = code(hv);
+    expect(h.match(/dispatchEvent\(/g)).toHaveLength(2);
+    expect(h.match(/dispatchEvent\(\{type:'select(start|end)',handPinch:true/g)).toHaveLength(2);
+    const pe = bodyAfter(hv, 'const pinchEdge=(c,hs,ev,now)=>{'); expect(pe).toContain("type:'selectstart',handPinch:true"); expect(pe).toContain("type:'selectend',handPinch:true");
+    expect(h.match(/pinchEdge\(c,hs,ev,now\)/g)).toHaveLength(2); // pinchStep (frame: after the isHand continue) and eventPose (returns first for a controller)
+    expect(bodyAfter(hv, 'eventPose(c,e){')).toContain('if(e?.handPinch||');
+  });
+  it('the carried ray is written only in hand steps; tunables read once, guarded', () => {
+    expect(hv).toContain("parsePinchTune(lsGet('vrl-hand-pinch'))"); expect(hv).toContain("parseDragTune(lsGet('vrl-hand-drag'))");
+    expect(bodyAfter(hv, 'const lsGet=k=>')).toContain('try{return localStorage.getItem(k)}catch{return null}');
+    expect(code(hv).match(/carryStep\(/g)).toHaveLength(1); // the call in frame()'s hand branch (after the isHand continue)
+  });
+});
+
+describe('direct grab: hands only, the controller path is untouched', () => {
   it("the fist asks near() first; with a target the board / section / volume itself is taken, else the laser path (gripStart) runs as before", () => {
     const g = bodyAfter(hv, 'const grabStep=(c,hs,now)=>{');
     expect(g).toContain('hs.near=near?near(c,nearM):null;'); expect(g.indexOf('hs.near=near?near(c,nearM)')).toBeLessThan(g.indexOf('grab(c,hs.near)'));
@@ -245,7 +271,7 @@ describe('nearGrabTarget run from its own source (units, scales, priorities)', (
   });
 });
 
-describe('disconnect releases everything the input held (build 625 fix, controllers too)', () => {
+describe('disconnect releases everything the input held', () => {
   const body = bodyAfter(src, "c.addEventListener('disconnected',c.userData.release=e=>{");
   // run the handler's own text with stand-ins for vr-view's closure variables (sloppy-mode `with`: assignments land on ctx)
   const run = (ctx, e) => new Function('ctx', 'e', 'with(ctx){' + body + '}')(ctx, e);
@@ -298,7 +324,7 @@ describe('help board: event-mode mission + hand wording together', () => {
     expect(draw).toContain('handIn.anyHand()?handIn.texts:null');
     expect(draw).toContain('if(evH){');
     expect(draw).toContain('y:60+evH');
-    expect(draw).toContain('140+evH+i*78');
+    expect(draw).toContain('140+evH+i*HELP_LINE_PITCH');
   });
   it('the かんたん menu (tab 10, buttons only) gets the no-slider hand line, and the board redraws when it opens', () => {
     expect(draw).toContain('ui.tab===10?hx.helpMenuSimple:hx.helpMenu');

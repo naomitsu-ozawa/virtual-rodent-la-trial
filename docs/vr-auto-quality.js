@@ -2,7 +2,7 @@ export const AUTO_MAX = 1;
 export const AUTO_MID = 0.7;
 export const AUTO_FLOORS = [0.5, 0.35, 0.25]; // settings.autoMin index: 最低 50 % (default) / 35 % / 25 %
 export const STEP_LEVELS = [1, 1.5, 2];
-// build 561: the base ray-march step is STEP_VOXELS of the smallest voxel side of the texture actually in use (was: of the full grid,
+// the base ray-march step is STEP_VOXELS of the smallest voxel side of the texture actually in use (was: of the full grid,
 // so the 256³ copy of 512³ data marched at 0.425 of its own voxel = twice the samples of the 512 case). Hits are bisection-refined and
 // every colour / alpha contribution is per event (surface crossing, slice, cut face), not per step, so no opacity correction is needed.
 export const STEP_VOXELS = 0.85;
@@ -14,7 +14,7 @@ const UP_N = 3;     // consecutive samples with headroom before anything is rais
 const UP_N_BLIND = 6; // same with the wall-clock interval only (it is capped by the refresh rate: no headroom information)
 const FAIL_MARGIN = 0.03; // a level this close to (or better than) one that failed under the same view is not retried
 const FAIL_LAPSE = 120;   // samples (60 s) after which a failed level may be tried again
-// build 560 (zoom): the covered pixels jump when the volume is magnified or brought close; the ladder used to need 2 over samples per rung
+// the covered pixels jump when the volume is magnified or brought close; the ladder used to need 2 over samples per rung
 // (>= 1 s each, > 4 s to the floor). After a jump in coverage (factor JUMP), JUMP_SAMPLES samples step down on the FIRST over sample and by
 // up to JUMP_SCALE at once; a drop in coverage by the same factor raises the resolution at once by the square root of the ratio (cost ~ pixels).
 export const JUMP = 1.3, JUMP_SAMPLES = 4, JUMP_SCALE = 0.5;
@@ -23,7 +23,7 @@ export const autoFloor = idx => AUTO_FLOORS[idx] ?? AUTO_FLOORS[0];
 
 export function createAutoQuality({ min = AUTO_FLOORS[0], baseStep = 0, f = AUTO_MAX } = {}) {
   const st = { f, stepIdx: baseStep, min, baseStep, over: 0, good: 0, penalty: 1, sinceUp: 99, stable: 0, failPos: null, sinceFail: 0, ctx: null, ceil: 1, cover: 0, jump: 0 };
-  // build 560: ceil = the data-resolution cap (vr-render-scale.js). The scale in use is min(level, ceil): rendering at the cap loses no detail,
+  // ceil = the data-resolution cap (vr-render-scale.js). The scale in use is min(level, ceil): rendering at the cap loses no detail,
   // so it may lie below the floor. The level (st.f) keeps its own place on the ladder; an over sample first brings it down to the cap.
   const eff = () => Math.min(st.f, st.ceil);
   const maxIdx = () => Math.max(STEP_LEVELS.length - 1, st.baseStep);
@@ -69,7 +69,7 @@ export function createAutoQuality({ min = AUTO_FLOORS[0], baseStep = 0, f = AUTO
     setCeiling(c) { st.ceil = Math.min(AUTO_MAX, Math.max(0.01, +c || AUTO_MAX)); },
     // sample: one 0.5 s window. volMs = GPU time of the low-resolution volume pass (0 when drawn directly),
     // mainMs = GPU time of the main pass (0 = no timer query: wall-clock interval only), interval = mean frame interval, budget = frame budget (ms)
-    // cover (build 560) = the screen pixels the volume covers (0 = unknown): a jump changes how fast the ladder moves (JUMP above)
+    // cover = the screen pixels the volume covers (0 = unknown): a jump changes how fast the ladder moves (JUMP above)
   update({ volMs = 0, mainMs = 0, interval = 0, budget, ctx = null, cover = 0 }) {
       // the view changed (size, shown segments, section): what failed before says nothing about it
       if (ctx !== st.ctx) { st.ctx = ctx; st.failPos = null; }

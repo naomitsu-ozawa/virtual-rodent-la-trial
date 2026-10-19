@@ -1,4 +1,4 @@
-// VR self-check (build 552, zoom scenarios build 554), pure part: frame-interval ring buffer, statistics, pass / fail judgement and the Japanese / English result text.
+// VR self-check, pure part: frame-interval ring buffer, statistics, pass / fail judgement and the Japanese / English result text.
 // No DOM, no three.js, no XR: tests/unit/vr-self-check.test.js runs it on synthetic frame series (with hitches).
 // The runner that drives scenarios inside the headset is vr-self-check.js.
 
@@ -38,7 +38,7 @@ export function computeStats(intervalsMs, targetHz = DEFAULT_HZ) {
   return {
     frames: n, targetHz: hz, budgetMs,
     meanFps: 1000 * n / sum, p5Fps: 1000 / rank(s, 0.95), low1Fps: 1000 / rank(s, 0.99),
-    worstMs: s[n - 1], p50Ms: rank(s, 0.5), p95Ms: rank(s, 0.95), overCount: over, overRatio: over / n, seconds: sum / 1000, // build 562: raw interval percentiles (ms)
+    worstMs: s[n - 1], p50Ms: rank(s, 0.5), p95Ms: rank(s, 0.95), overCount: over, overRatio: over / n, seconds: sum / 1000, // raw interval percentiles (ms)
   };
 }
 
@@ -68,7 +68,7 @@ export function formatLine(r, ja = true) {
     if (r.verdict.reasons.includes('frames')) t += ja ? ' コマ不足 ' + s.frames : ' too few frames ' + s.frames;
     else if (r.verdict.reasons.includes('over')) t += (ja ? ' 遅れ ' : ' late ') + f1(s.overRatio * 100) + '%';
   }
-  // build 560: the zoom scenarios also measure the first second right after the size change (not judged): 「· 直後 61.2fps 遅れ 8.0%」
+  // the zoom scenarios also measure the first second right after the size change (not judged): 「· 直後 61.2fps 遅れ 8.0%」
   const tr = r.phases?.transition?.stats;
   if (tr && tr.frames) t += (ja ? ' · 直後 ' : ' · right after ') + f1(tr.meanFps) + 'fps' + (tr.overCount ? (ja ? ' 遅れ ' : ' late ') + f1(tr.overRatio * 100) + '%' : '');
   return t;
@@ -93,7 +93,7 @@ export function criteriaText(hz, ja = true) {
     : 'Pass: p5 fps >= ' + Math.round(P5_FPS_RATIO * 100) + '% of ' + hz + ' Hz and frames slower than ' + OVER_FRAME_FACTOR + 'x the budget <= ' + Math.round(OVER_FRAME_MAX_RATIO * 100) + '%';
 }
 
-// build 554: zoom summary. Scenarios that ran at a magnification carry r.zoom = { order, name, nameEn, rot } (order = the magnification, 1000 = close-up; name = 「2倍」 ...).
+// zoom summary. Scenarios that ran at a magnification carry r.zoom = { order, name, nameEn, rot } (order = the magnification, 1000 = close-up; name = 「2倍」 ...).
 // One line per kind (still / rotating): the first level that fails ("2倍から NG"), or the last level that was measured when all pass. [] when none measured.
 export function zoomSummaries(results, ja = true) {
   const zn = z => (ja ? z.name : z.nameEn || z.name);
@@ -107,7 +107,7 @@ export function zoomSummaries(results, ja = true) {
   return out;
 }
 
-// build 562: the measurement details of one scenario for the pasted text (not the VR panel, which is narrow): raw frame intervals (p50 / p95 / worst ms,
+// the measurement details of one scenario for the pasted text (not the VR panel, which is narrow): raw frame intervals (p50 / p95 / worst ms,
 // frames over 1.5 x budget), the data grid, the content box (% of the data box per axis) and the ray probe taken right after the measurement
 // (samples per ray: mean / p95 over the covered pixels of a 48 x 48 diag-5 render; share of rays ended by a hit; share of the path skipped by jumps).
 // '' when there is nothing to add
@@ -117,12 +117,12 @@ export function detailLine(r, ja = true) {
   parts.push((ja ? '間隔 p50 ' : 'interval p50 ') + f1(s.p50Ms) + ' / p95 ' + f1(s.p95Ms) + (ja ? ' / 最大 ' : ' / worst ') + f1(s.worstMs) + ' ms · ' + (ja ? '1.5倍超 ' + s.overCount + ' コマ' : 'over 1.5x ' + s.overCount));
   if (i.grid) parts.push((ja ? '格子 ' : 'grid ') + i.grid);
   if (i.boxPct) parts.push((ja ? '内容ボックス ' : 'content box ') + i.boxPct.join('×') + '%');
-  if (Number.isFinite(i.boxMs)) parts.push((ja ? '箱の再構築 ' : 'box rebuild ') + i.boxMs.toFixed(2) + ' ms / ' + (i.boxFrames | 0) + (ja ? ' フレーム' : ' frames')); // build 564: the last segment scan (spread over frames)
+  if (Number.isFinite(i.boxMs)) parts.push((ja ? '箱の再構築 ' : 'box rebuild ') + i.boxMs.toFixed(2) + ' ms / ' + (i.boxFrames | 0) + (ja ? ' フレーム' : ' frames')); // the last segment scan (spread over frames)
   if (p) parts.push((ja ? '反復 平均 ' : 'samples mean ') + Math.round(p.mean) + ' / p95 ' + Math.round(p.p95) + (ja ? ' · hit終了 ' : ' · hit end ') + Math.round(p.hit * 100) + '% · ' + (ja ? '跳躍 ' : 'jump ') + Math.round(p.skip * 100) + '%' + (ja ? '（' + p.px + ' 画素）' : ' (' + p.px + ' px)'));
   return '   ' + parts.join(' · ');
 }
 
-// text for pasting (PC side): header, one line per scenario (+ its detail line, build 562), zoom summary, verdict
+// text for pasting (PC side): header, one line per scenario (+ its detail line), zoom summary, verdict
 export function resultText(res, ja = true) {
   return [res.head, ...res.results.flatMap(r => { const d = detailLine(r, ja); return d ? [formatLine(r, ja), d] : [formatLine(r, ja)]; }), ...zoomSummaries(res.results, ja).map(z => z.text), verdictLine(res.results, ja)].join('\n');
 }

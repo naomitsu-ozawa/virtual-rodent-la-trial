@@ -1,4 +1,4 @@
-// Where the distance label goes (build 480): by default NEAR its line (a small offset from the midpoint, perpendicular to the line), and wherever the user dragged it
+// Where the distance label goes: by default NEAR its line (a small offset from the midpoint, perpendicular to the line), and wherever the user dragged it
 // (measurements.js labelOffset: voxel units from the midpoint). Pure functions (no DOM, no three.js); screen coordinates in px (x right, y down).
 const norm=(x,y)=>{const l=Math.hypot(x,y);return l>1e-9?{x:x/l,y:y/l}:null};
 
@@ -16,7 +16,7 @@ export function planeLabelPlacement(a,b,{w=48,h=14,gap=4,x0=-1e9,y0=-1e9,iw=2e9,
  return{x:c.x,y:c.y,mx,my};
 }
 
-// ---- focus (build 485) ----
+// ---- focus ----
 // Which distance label is lit (the PC hover / the touch or mouse drag): hover and drag are kept apart so a drag keeps the label lit when the pointer leaves it.
 // onChange(now,prev) is called ONLY when the lit label changes (so a redraw / class toggle happens once per change, never per move event). Pure: no DOM.
 export function createFocusTracker(onChange){
@@ -50,7 +50,7 @@ export function nearLabelWorld(a,b,head,dist){
  return{x:mid.x+n[0]*dist,y:mid.y+n[1]*dist,z:mid.z+n[2]*dist};
 }
 
-// ---- depth cue (build 493) ----
+// ---- depth cue ----
 // The distance line, its leader and its label are drawn over the volume without a depth test (the volume writes no depth), so what lies BEHIND the visible surface of
 // the volume looked as if it floated in front of it. The surface is judged on the CPU, with the rule the point markers already use (vr-point.js pointIsHidden: march
 // from the thing towards the eye over the classification of the shown segments), and a hidden part is drawn FAINT ("x-ray"), never removed, so it stays findable.
@@ -68,7 +68,7 @@ export function lineSamplePoints(a,b,n=LINE_SAMPLES){
 export const fadeAlpha=(hidden,lit=false)=>hidden&&!lit?OCCLUDED_ALPHA:1;
 // the per-sample opacity factors of the line: hidden:Set of probe keys (null = nothing hidden)
 export const lineAlphas=(id,hidden,n=LINE_SAMPLES)=>{const out=[];for(let i=0;i<=n;i++)out.push(hidden&&hidden.has(probeKey(id,i))?OCCLUDED_ALPHA:1);return out};
-// build 494: where the 3D samples (i/n along the line in 3D) fall along the DRAWN 2D segment. With a perspective camera the screen fraction is not the 3D fraction
+// where the 3D samples (i/n along the line in 3D) fall along the DRAWN 2D segment. With a perspective camera the screen fraction is not the 3D fraction
 // (f = u*wb / ((1-u)*wa + u*wb), w = the depth in front of the camera), and the drawn segment is the part in front of the near plane (clipSegmentNear), so the
 // gradient stops of the line must sit at these offsets, not at i/n. da / db = the camera depths (-z, camera space) of the UNCLIPPED ends a / b. -> n+1 offsets in
 // [0,1], non-decreasing (samples outside the clipped range snap to 0 / 1), or null when the whole segment is behind the near plane. ortho: the screen fraction is linear.
@@ -89,7 +89,7 @@ export function lineStopOffsets(da,db,near=0.01,ortho=false,n=LINE_SAMPLES){
 }
 // a fresh element id with a prefix: a counter (ids of measurements come from project files: any characters, not unique after sanitising)
 export function createIdMaker(prefix){let n=0;return()=>prefix+(++n)}
-// build 494: skip the judgement of the distances' probes while nothing it depends on changed (VR, vr-view.js updateHidden: pointIsHidden over the shown segments' classification,
+// skip the judgement of the distances' probes while nothing it depends on changed (VR, vr-view.js updateHidden: pointIsHidden over the shown segments' classification,
 // from the probe to the eye). The inputs: key = a string of everything discrete (the probes' places, the volume's matrix, the shown segments, the section planes ...), refs =
 // objects compared by identity (the classification bytes), eye = {x,y,z} (world): re-judged once it moved by more than eyeTol (m) from where it was LAST judged
 // (a slow drift adds up), so the small sway of a still head costs nothing. reset() makes the next check run.

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createJobTracker } from '../../docs/progress-modal.js';
 
-// build 405: slot bookkeeping of the central progress modal
+// slot bookkeeping of the central progress modal
 const make=()=>{let t=0;const tr=createJobTracker({now:()=>t,delay:400,escapeMs:10000});return{tr,at:v=>{t=v}}};
 
 describe('progress modal tracker', () => {

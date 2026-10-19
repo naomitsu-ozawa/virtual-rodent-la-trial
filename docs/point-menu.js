@@ -1,13 +1,13 @@
-// The point menu of the PC / iPad (build 477): opened by a long press on a point (touch, or press-and-hold with the mouse) or a right-click, on the 2D
+// The point menu of the PC / iPad: opened by a long press on a point (touch, or press-and-hold with the mouse) or a right-click, on the 2D
 // marks and on the 3D dots. The same items as the VR point ring (距離 / 色 / 削除; 移動 has no placement tool on the PC) and the same flow:
 // 距離 makes the point the START (a pulsing mark + 「終点のポイントを選んでください」), the next point picked is the END, a tap on empty space / Esc / 取消 cancels.
 // This module is the shared DOM part (the menu + a small hint pill that is always visible while a start is armed); the views (comment-ui.js 2D, comment-3d.js 3D)
 // detect the long press (measurements.js createLongPress) and call openPointMenu.
-import { tr } from './i18n.js?v=20261019-build624';
-import { getComments, updateCommentColor, onCommentsChange } from './comments.js?v=20261019-build624';
-import { POINT_PALETTE, pointColor, autoPointColor, inkOn, paletteName } from './point-colors.js?v=20261019-build624';
-import { currentLanguage } from './state.js?v=20261019-build624';
-import { POINT_MENU_ITEMS, startMeasure, cancelMeasure, getMeasureStart, onMeasureStartChange, pickMeasureEnd, measurementsOfPoint, setLabelOffset } from './measurements.js?v=20261019-build624';
+import { tr } from './i18n.js?v=20261019-build625';
+import { getComments, updateCommentColor, onCommentsChange } from './comments.js?v=20261019-build625';
+import { POINT_PALETTE, pointColor, autoPointColor, inkOn, paletteName } from './point-colors.js?v=20261019-build625';
+import { currentLanguage } from './state.js?v=20261019-build625';
+import { POINT_MENU_ITEMS, startMeasure, cancelMeasure, getMeasureStart, onMeasureStartChange, pickMeasureEnd, measurementsOfPoint, setLabelOffset } from './measurements.js?v=20261019-build625';
 let menu=null,openId=null,pill=null,pillText=null,installed=false;
 const handlers={delete:null};
 export const setPointMenuHandlers=h=>Object.assign(handlers,h);

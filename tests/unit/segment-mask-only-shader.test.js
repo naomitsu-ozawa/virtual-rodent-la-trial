@@ -42,7 +42,7 @@ describe('shaders: membership tests honour the mask-only bit', () => {
   it('no membership test is HU range && editAllows any more (they all use segMember)', () => {
     for (const s of src) expect(s.replace(/fn segMember[\s\S]*?\n}\n/, '')).not.toMatch(/v>=a\.x&&v<=a\.y&&editAllows/);
   });
-  it('the brick classification does not skip a mask-only segment on HU range alone: it uses the brick occupancy (build 525)', () => {
+  it('the brick classification does not skip a mask-only segment on HU range alone: it uses the brick occupancy', () => {
     const brickClass = src[0].match(/fn brickClass\([\s\S]*?\n}\n/)[0];
     expect(brickClass).toMatch(/var cand=a\.y>=mm\.x&&a\.x<=mm\.y;if\(\(editRows\[1\]&\(16u<<s\)\)!=0u\)\{cand=\(occ&\(1u<<s\)\)!=0u;\}/);
     // the nibble is read after the row index (2 + 4 * (rowCount + 1) words), eight bricks per word, only when a mask-only bit is set
@@ -54,16 +54,16 @@ describe('shaders: membership tests honour the mask-only bit', () => {
     const vr = readFileSync(new URL('../../docs/vr-view.js', import.meta.url), 'utf8');
     expect(vr).toMatch(/uniform int editMaskOnly;/);
     expect(vr).toMatch(/\(\(editMaskOnly>>s\)&1\)==1\|\|\(v>=a\.x&&v<=a\.y\)/);
-    // the classification builder moved to point-cls.js (shared with the PC 3D point markers, build 465)
+    // the classification builder moved to point-cls.js (shared with the PC 3D point markers)
     const cls = readFileSync(new URL('../../docs/point-cls.js', import.meta.url), 'utf8');
     expect(cls).toMatch(/else if\(maskOnly&&f<191\)f=191/);
   });
 });
 
-// build 525 (issue #132): while a mask-only segment is shown, every brick used to be "mixed" (no empty-space skip at all).
+// while a mask-only segment is shown, every brick used to be "mixed" (no empty-space skip at all).
 // setEditRuns now appends one nibble per 8^3 texture-grid brick after the row index: bit s = the brick holds a voxel of
 // segment s's final mask. brickClass gates the mask-only candidates with it. Non-mask-only edits get no tail (unchanged).
-describe('mask-only brick occupancy (build 525)', () => {
+describe('mask-only brick occupancy', () => {
   const { editBrickOccupancy, gpuRunsForTexture } = MV;
   const nibble = (words, b) => (words[b >> 3] >>> ((b & 7) * 4)) & 15;
   it('is null without a mask-only segment', () => {

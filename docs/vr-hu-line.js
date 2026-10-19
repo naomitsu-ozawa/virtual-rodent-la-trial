@@ -1,14 +1,14 @@
-import { getHuLine, setHuLine, clearHuLine, onHuLineChange } from './hu-line-model.js?v=20261019-build624';
-import { lineSamples, sampleLine, profileStats } from './line-profile.js?v=20261019-build624';
-import { liveProfile, LIVE_MAX_SAMPLES } from './hu-line-live.js?v=20261019-build624';
-import { getHuMode, onHuModeChange, resolveHuMode } from './effective-hu.js?v=20261019-build624';
-import { readEffectiveSlice, rawHuVolume, peekEffectiveReaders } from './effective-hu-source.js?v=20261019-build624';
-import { sourceFilterStages } from './source-filters.js?v=20261019-build624';
-import { frameYield } from './utils.js?v=20261019-build624';
-import { HAPTIC } from './vr-point.js?v=20261019-build624';
-import { createHuPanelGate, HU_MIN_LENGTH_VOXELS, voxelToLocalInto, voxelDistanceMm, sameGrid, liveFromTexture, readErrorText, PANEL_W, PANEL_H, PANEL_WORLD_W, panelLayout, huRange, plotPoints, panelTexts, huMenuTexts, backgroundKey, ribbonInto, quadIndex, atlasLayout, glyphsInto, GRAPH_MAX_POINTS, GLYPHS } from './vr-hu-line-core.js?v=20261019-build624';
+import { getHuLine, setHuLine, clearHuLine, onHuLineChange } from './hu-line-model.js?v=20261019-build625';
+import { lineSamples, sampleLine, profileStats } from './line-profile.js?v=20261019-build625';
+import { liveProfile, LIVE_MAX_SAMPLES } from './hu-line-live.js?v=20261019-build625';
+import { getHuMode, onHuModeChange, resolveHuMode } from './effective-hu.js?v=20261019-build625';
+import { readEffectiveSlice, rawHuVolume, peekEffectiveReaders } from './effective-hu-source.js?v=20261019-build625';
+import { sourceFilterStages } from './source-filters.js?v=20261019-build625';
+import { frameYield } from './utils.js?v=20261019-build625';
+import { HAPTIC } from './vr-point.js?v=20261019-build625';
+import { createHuPanelGate, HU_MIN_LENGTH_VOXELS, voxelToLocalInto, voxelDistanceMm, sameGrid, liveFromTexture, readErrorText, PANEL_W, PANEL_H, PANEL_WORLD_W, panelLayout, huRange, plotPoints, panelTexts, huMenuTexts, backgroundKey, ribbonInto, quadIndex, atlasLayout, glyphsInto, GRAPH_MAX_POINTS, GLYPHS } from './vr-hu-line-core.js?v=20261019-build625';
 
-// build 558: the self-check's HU線 scenario (HU_LINE_SELF_CHECK) is in vr-hu-line-core.js (registered when that module loads); its hooks here are
+// the self-check's HU線 scenario (HU_LINE_SELF_CHECK) is in vr-hu-line-core.js (registered when that module loads); its hooks here are
 // setArmed(on, quiet), isReading(), snapshot() and restoreState(s) (vr-view.js builds selfCheck.env.huLine from them)
 const LINE_COLOR = 0x35e0ff, START_COLOR = 0x7dffb0, TUBE_R_M = 0.0010, DOT_R_M = 0.0026; // thin tube (1 mm radius at real size) + end markers, in world metres
 
@@ -27,14 +27,14 @@ export function createVrHuLine(THREE, env) {
   const grp = new THREE.Group(); grp.visible = false; grp.name = 'vr-hu-line';
   for (const [o, ro] of [[halo, 7], [tube, 8], [dotA, 9], [dotB, 9]]) { o.renderOrder = ro; o.frustumCulled = false; grp.add(o); }
 
-  // ---- the live panel (world-fixed, build 556): a CanvasTexture redrawn only when new samples arrive ----
+  // ---- the live panel (world-fixed): a CanvasTexture redrawn only when new samples arrive ----
   const canvas = document.createElement('canvas'); canvas.width = PANEL_W; canvas.height = PANEL_H;
   const ctx = canvas.getContext('2d'), tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace; tex.generateMipmaps = false; tex.minFilter = THREE.LinearFilter; tex.magFilter = THREE.LinearFilter;
   const panel = new THREE.Mesh(new THREE.PlaneGeometry(PANEL_WORLD_W, PANEL_WORLD_W * PANEL_H / PANEL_W), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false, toneMapped: false, side: THREE.DoubleSide }));
   panel.renderOrder = 10; panel.frustumCulled = false; panel.visible = false; panel.name = 'vr-hu-panel';
 
-  // build 563: the graph (ribbon quads) and the numbers (atlas quads) over the background canvas; children of the panel, so the grip, 正面に戻す,
+  // the graph (ribbon quads) and the numbers (atlas quads) over the background canvas; children of the panel, so the grip, 正面に戻す,
   // the laser hit (the panel itself, not recursive) and the screenshot hide of vr-view.js treat them with it. Drawn after the panel (renderOrder).
   let bgKey = '', bgDraws = 0, panelUpdates = 0, textWrites = 0;
   const GRAPH_COLOR = 0x35e0ff, GRAPH_HALF_PX = 1.5, Z_GRAPH = 0.0004, Z_TEXT = 0.0006;
@@ -91,7 +91,7 @@ export function createVrHuLine(THREE, env) {
     ctx.strokeStyle = failedNow ? '#ff8a7a' : live ? '#ffd23d' : '#35e0ff'; ctx.lineWidth = 4; ctx.stroke();
     ctx.textBaseline = 'middle';
     ctx.fillStyle = '#e9f3fb'; ctx.font = 'bold 26px system-ui,sans-serif'; ctx.textAlign = 'left'; ctx.fillText(tx.head, L.head.x, L.head.y + L.head.t1, L.head.w - 130);
-    if (tx.status) { // build 566: the state on its own line (one line with the title was squeezed to about half width); the font shrinks to fit, never below 15 px
+    if (tx.status) { // the state on its own line (one line with the title was squeezed to about half width); the font shrinks to fit, never below 15 px
       let px = 20; ctx.font = px + 'px system-ui,sans-serif';
       while (px > 15 && (ctx.measureText?.(tx.status)?.width || 0) > L.head.w) { px--; ctx.font = px + 'px system-ui,sans-serif'; }
       ctx.fillStyle = failedNow ? '#ff8a7a' : live ? '#ffd23d' : '#9fb3c3'; ctx.fillText(tx.status, L.head.x, L.head.y + L.head.t2, L.head.w);
@@ -141,7 +141,7 @@ export function createVrHuLine(THREE, env) {
     const v = rawHuVolume(); if (!v || !g) return;
     const dims = { columns: v.columns, rows: v.rows, slices: v.slices }, tex = env.texture?.() || null;
     let r = null;
-    if (tex?.data) { // build 566: the VR texture's CPU copy whenever it exists, also of the other kind (then approximate, labelled): the line is a
+    if (tex?.data) { // the VR texture's CPU copy whenever it exists, also of the other kind (then approximate, labelled): the line is a
       // 3D line, an oblique one crosses slices the 2D caches do not hold (each would be a NaN gap in the graph)
       const samples = lineSamples(g.a, g.b, v.spacing, LIVE_MAX_SAMPLES), t = liveFromTexture(samples, tex, dims, modeKey());
       r = { samples, values: t.values, approx: t.approx, unfiltered: t.unfiltered };
@@ -254,16 +254,16 @@ export function createVrHuLine(THREE, env) {
     isArmed: () => armed,
     hasLine: () => !!getHuLine(),
     isDragging: () => !!g,
-    setArmed(on, quiet = false) { // quiet (build 558): no flash message (the self-check arms it for its synthetic drag)
+    setArmed(on, quiet = false) { // quiet: no flash message (the self-check arms it for its synthetic drag)
       const v = !!on; if (v === armed) return;
       armed = v; if (!v) { cancelDrag(); if (panelOn) hidePanel(); }
       if (!quiet) env.flash(armed ? t().armedFlash : t().disarmFlash); env.refresh();
     },
     clear() { cancelDrag(); token++; fullBusy = false; res = null; clearHuLine('vr'); hideLine(); hidePanel(); env.flash(t().clearedFlash); env.refresh(); },
     start, end, update, cancelDrag,
-    cancelDragOf(c) { if (g && g.c === c) cancelDrag(); }, // build 559: the controller that holds the drag went away
-    isReading: () => fullBusy, // build 558: the full read after a release is running
-    // build 558 (self-check): snapshot() before the synthetic drag, restoreState(s) after it (also on cancel / error). The restore drops the drag and any
+    cancelDragOf(c) { if (g && g.c === c) cancelDrag(); }, // the controller that holds the drag went away
+    isReading: () => fullBusy, // the full read after a release is running
+    // snapshot() before the synthetic drag, restoreState(s) after it (also on cancel / error). The restore drops the drag and any
     // pending read, puts the shared line back as it was (source 'self-check': the PC views and this module follow it; no line = cleared), re-reads it
     // when its panel was showing, and puts the armed state back without a flash.
     snapshot: () => ({ armed, line: getHuLine(), panel: panelOn }),
@@ -279,9 +279,9 @@ export function createVrHuLine(THREE, env) {
     },
     onModelChanged: showModelLine,
     stats: () => res?.stats || null,
-    // build 563: how the panel was redrawn (tests / self-check): background canvas draws, panel updates (one per sample), number-field rewrites
+    // how the panel was redrawn (tests / self-check): background canvas draws, panel updates (one per sample), number-field rewrites
     panelCounts: () => ({ background: bgDraws, updates: panelUpdates, texts: textWrites }),
-    // build 566 (tests): what the panel shows now: the title (head + state), live / approx / unfiltered, the number of samples and of NaN gaps
+    // what the panel shows now: the title (head + state), live / approx / unfiltered, the number of samples and of NaN gaps
     panelState: () => ({ title: bgKey.split('|')[0], live: !!res?.live, approx: !!res?.approx, unfiltered: !!res?.unfiltered, failed, n: res ? res.values.length : 0, nan: res ? Array.from(res.values).filter(x => !Number.isFinite(x)).length : 0 }),
     dispose() {
       disposed = true; token++; offLine(); offMode(); hidePanel(); panel.parent?.remove(panel); grp.parent?.remove(grp);

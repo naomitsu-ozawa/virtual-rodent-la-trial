@@ -1,4 +1,4 @@
-// Surface smoothing of the welded voxel-face mesh (build 612): constrained, coherence-damped Laplacian smoothing.
+// Surface smoothing of the welded voxel-face mesh: constrained, coherence-damped Laplacian smoothing.
 //
 // Every vertex starts on the voxel lattice and stays inside a box of +-half a voxel around that lattice point (Gibson 1998,
 // constrained elastic surface nets): a staircase can relax into the slope it stands for, but a surface can never move by

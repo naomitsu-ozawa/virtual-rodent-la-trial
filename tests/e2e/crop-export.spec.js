@@ -4,7 +4,7 @@ import { unzipSync } from 'fflate';
 import dicomParser from 'dicom-parser';
 import { makeCtSlice } from '../helpers/synthetic-dicom.js';
 
-// Build 573: crop a cube out of the loaded series and export it as DICOM. The in-repo practice data slot (demo/sample1) is stubbed with a
+// crop a cube out of the loaded series and export it as DICOM. The in-repo practice data slot (demo/sample1) is stubbed with a
 // synthetic 64x64x40 series (isotropic 0.1 mm); showDirectoryPicker is removed so the .zip path runs (the headless browser has no picker).
 // The zip is unpacked here and every voxel is compared with the source values: an axis-aligned crop must be an exact copy, and a
 // 90 degree turn with nearest interpolation must reproduce exact source values.
@@ -120,7 +120,7 @@ test('crop export: the box is drawn in the slice views and follows the position 
   if (process.env.CROP_SHOT) { await page.locator('[data-ipad-drawer-tab="crop"]').click(); await page.locator('[data-dock-tool="crop"]').click(); await page.screenshot({ path: process.env.CROP_SHOT }); }
 });
 
-// ---- build 576: rotate by dragging next to a corner in a slice view (no rotation sliders) ----
+// ---- rotate by dragging next to a corner in a slice view (no rotation sliders) ----
 test('crop export: drag-rotate in the axial view, snapping back to 0 gives the exact byte copy', async ({ page }) => {
   test.setTimeout(240_000);
   const errors = []; page.on('pageerror', e => errors.push(e.message));

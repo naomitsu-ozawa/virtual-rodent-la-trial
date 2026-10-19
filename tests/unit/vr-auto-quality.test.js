@@ -124,7 +124,7 @@ describe('ladder', () => {
   });
 });
 
-// build 483: the wall-clock fallback cycled 81 % -> 70 % -> 81 % ... for ever (a small overrun shows as a halved rate)
+// the wall-clock fallback cycled 81 % -> 70 % -> 81 % ... for ever (a small overrun shows as a halved rate)
 describe('failed level is remembered', () => {
   const budget = 1000 / 72;
   const quant = load => Math.ceil(load / budget - 1e-9) * budget; // the display halves the rate on a small overrun
@@ -162,7 +162,7 @@ describe('failed level is remembered', () => {
   });
 });
 
-// build 560: the data-resolution cap as a ceiling, and the faster reaction to a jump in the covered pixels (zoom)
+// the data-resolution cap as a ceiling, and the faster reaction to a jump in the covered pixels (zoom)
 describe('ceiling (data-resolution cap) and coverage jumps', () => {
   const B = 1000 / 72, over = { volMs: 0, mainMs: 0, interval: B * 1.4, budget: B }, ok = { volMs: 0, mainMs: 0, interval: B, budget: B };
   it('the scale in use is min(level, ceiling); the level is kept and comes back when the ceiling lifts', () => {
@@ -198,7 +198,7 @@ describe('ceiling (data-resolution cap) and coverage jumps', () => {
   });
 });
 
-// build 561: the base march step is STEP_VOXELS (0.85) of the smallest voxel side of the texture in use, not of the full grid
+// the base march step is STEP_VOXELS (0.85) of the smallest voxel side of the texture in use, not of the full grid
 describe('marchStep (per-texture ray-march step)', () => {
   const he = [1.65, 1.2, 0.9];
   it('is 0.85 of the smallest voxel side', () => {
@@ -229,7 +229,7 @@ describe('marchStep (per-texture ray-march step)', () => {
   });
 });
 
-// build 561 (review of build 560): cover must be the screen coverage, independent of the ladder's own scale. Fed cover x eff², a step down looked
+// cover must be the screen coverage, independent of the ladder's own scale. Fed cover x eff², a step down looked
 // like "shrunk" (raised at once, failPos cleared) and the next sample like "grew" (jump cut): 0.70 -> 0.60 -> 0.70 ... every 0.5 s.
 describe('auto quality settles with a constant screen coverage (no self-feedback)', () => {
   const B = 1000 / 72, C = 4e6;

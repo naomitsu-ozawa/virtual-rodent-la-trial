@@ -191,7 +191,7 @@ describe('hidden behind tissue: from the point to the head, a shown-segment voxe
 });
 
 describe('marker style (exposed solid + white rim, hidden dot, on / off the section, halos)', () => {
-  it('exposed = solid with a rim; hidden = a dot without a rim; the SAME small size in every state (build 471)', () => {
+  it('exposed = solid with a rim; hidden = a dot without a rim; the SAME small size in every state', () => {
     const e = markerStyle({}), h = markerStyle({ hidden: true });
     expect(e).toMatchObject({ fill: 'solid', rim: true, scale: 0.4 });
     expect(h).toMatchObject({ fill: 'dot', rim: false, scale: 0.4 });
@@ -226,7 +226,7 @@ describe('markers in the scene: hidden / section / halo / pick', () => {
     m.update({ fingerprint: fp, dims, halfExt, mesh, head: new THREE.Vector3(0, 0, 3), section: plane });
     const sph = scene.children.filter(o => o.geometry?.type === 'SphereGeometry' && o.renderOrder === 4), lines = scene.children.filter(o => o.isLine);
     expect(sph).toHaveLength(2);
-    expect(sph[0].scale.x).toBeCloseTo(sph[1].scale.x, 9); // a on, b off: the same small size (build 471)
+    expect(sph[0].scale.x).toBeCloseTo(sph[1].scale.x, 9); // a on, b off: the same small size
     expect(lines.map(l => l.visible)).toEqual([false, true]);
     const pos = lines[1].geometry.attributes.position; // foot is on x = 0.5 (object) -> the line is horizontal in x
     expect(pos.getY(0)).toBeCloseTo(pos.getY(1), 9); expect(pos.getX(0)).not.toBeCloseTo(pos.getX(1), 3);

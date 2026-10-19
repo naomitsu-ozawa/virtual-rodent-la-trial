@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { wrapMenuText, stackMenuRows } from '../../docs/vr-menu-text.js';
 
-// build 528/529: the 詳細 tab's long lines wrap at ' · ' and the rows are stacked above the first button row
+// the 詳細 tab's long lines wrap at ' · ' and the rows are stacked above the first button row
 const measure = t => t.length * 16; // 16 px per character
 describe('wrapMenuText', () => {
   it('keeps a short line whole', () => { expect(wrapMenuText('72 fps · JS 1.1 ms', 944, measure)).toEqual(['72 fps · JS 1.1 ms']); });

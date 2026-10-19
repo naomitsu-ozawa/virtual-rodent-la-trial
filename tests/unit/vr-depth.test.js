@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as THREE from 'three';
 import { readFileSync } from 'node:fs';
-// build 497: the volume writes depth (gl_FragDepth) and the distance labels / lines / leaders are depth tested + drawn again as a faint ghost behind the tissue.
+// the volume writes depth (gl_FragDepth) and the distance labels / lines / leaders are depth tested + drawn again as a faint ghost behind the tissue.
 // vr-depth.js is pure; vr-measure.js is checked with a three.js scene (no GL); vr-view.js (WebXR, not run in node) and its shader are checked on the source.
 const ver = JSON.parse(readFileSync(new URL('../../docs/version.json', import.meta.url), 'utf8')).version, tag = '?v=' + ver.replace(/\./g, '').replace(/-(\d+)$/, '-build$1');
 const load = f => import(/* @vite-ignore */ '../../docs/' + f + '.js' + tag);
@@ -23,7 +23,7 @@ describe('the setting 「ラベルの隠れ方」', () => {
   });
   it('vr-view.js: DEFAULTS carry it, the settings merge keeps a saved 0 and gives old saves the default, and the 位置 tab offers the two choices', () => {
     expect(src).toMatch(/const DEFAULTS=\{[^}]*labelHide:LABEL_HIDE_DEFAULT/);
-    expect(has(src, "const v={...DEFAULTS,...JSON.parse(n||o||'{}')")).toBe(true); // a key missing in an old save takes the default, a saved 0 wins
+    expect(has(src, "const st=JSON.parse(n||o||'{}'),v={...DEFAULTS,...st")).toBe(true); // a key missing in an old save takes the default, a saved 0 wins
     expect(has(src, "lbHide:'ラベルの隠れ方',lbHideV:['実際に隠す','薄くする']")).toBe(true);
     expect(src).toMatch(/choice\(y0\+104,L\.lbHide,L\.lbHideV\.map\(\(t,i\)=>\(\{label:t,value:1-i\}\)\),normalizeLabelHide\(settings\.labelHide\)/);
   });
@@ -33,7 +33,7 @@ describe('the setting 「ラベルの隠れ方」', () => {
   });
   it('vr-view.js: the CPU probes of the distances are skipped while the GPU occlusion is on', () => {
     expect(has(src, 'mps=gpuOcc?[]:vpMeasure.probes()')).toBe(true);
-    expect(has(src, 'pts=gpuOcc?[]:vpMarkers.centres()')).toBe(true); // build 502: nor the point markers' (their depth test + ghost do it)
+    expect(has(src, 'pts=gpuOcc?[]:vpMarkers.centres()')).toBe(true); // nor the point markers' (their depth test + ghost do it)
     expect(has(src, 'preview:previewArg,occlusion:occlusionGpu()})')).toBe(true); // the markers get the same switch
     expect(has(src, 'if(!mps.length){if(vpMeasHidden.size)vpMeasHidden=new Set();measGate.reset();return}')).toBe(true);
     expect(has(src, 'occlusion:occlusionGpu()})')).toBe(true);
@@ -69,7 +69,7 @@ describe('the depth formula (the same as the fragment shader)', () => {
     expect(has(src, 'gDepthT+depthBias(dir)')).toBe(true);
     expect(biasedT(0.4, [0, 0, 1], [0.1, 0.1, 0.5], 0.1)).toBeCloseTo(0.4 + 0.5 * 0.5 + 1.5 * 0.1, 12);
   });
-  it('isotropic data keeps at least the build 497 bias (2 voxels) along any ray; an anisotropic spacing grows it along the coarse axis (points sit at voxel centres)', () => {
+  it('isotropic data keeps at least the bias (2 voxels) along any ray; an anisotropic spacing grows it along the coarse axis (points sit at voxel centres)', () => {
     const v = 0.03, iso = [v, v, v], dirs = [[1, 0, 0], [0, 1, 0], [0, 0, 1], [0.6, 0, 0.8], [1 / Math.sqrt(3), 1 / Math.sqrt(3), 1 / Math.sqrt(3)], [-0.48, 0.64, -0.6]];
     for (const d of dirs) { const b = depthBias(d, iso, v); expect(b, d.join()).toBeGreaterThanOrEqual(2 * v - 1e-12); expect(b, d.join()).toBeLessThanOrEqual(2.4 * v); }
     // 0.1 / 0.1 / 0.5 mm: voxelMin = 0.1, the z voxel is 5x. Along z a point at a voxel centre can lie 0.25 inside the surface: the bias must cover that (+ the 1.5 voxelMin of the march)
@@ -89,7 +89,7 @@ describe('the depth formula (the same as the fragment shader)', () => {
   });
 });
 
-describe('the menu / help boards (build 500): a board covered by the tissue is not hit', () => {
+describe('the menu / help boards: a board covered by the tissue is not hit', () => {
   it('boardVisible: a hit is visible unless the volume surface along the same ray is nearer; no board hit = not visible', () => {
     expect(boardVisible({ distance: 1.0 }, null)).toBe(true); expect(boardVisible({ distance: 1.0 }, undefined)).toBe(true);
     expect(boardVisible({ distance: 1.0 }, 1.5)).toBe(true); // the board is in front of the tissue
@@ -123,23 +123,23 @@ describe('the fragment shader writes depth (source checks)', () => {
   it('the volume and composite materials write depth in the opaque pass (CustomBlending is kept), the low-res target has a depth texture the composite writes back', () => {
     expect(has(src, 'material.transparent=false;material.depthWrite=true;material.blending=THREE.CustomBlending;')).toBe(true);
     expect(has(src, 'base.transparent=false;base.depthWrite=true;base.blending=THREE.CustomBlending;')).toBe(true);
-    expect(has(src, 'depthBuffer:true,depthTexture:new THREE.DepthTexture(w,h)')).toBe(true); // build 560: both offscreen targets (centre / periphery) come from newLowTarget
+    expect(has(src, 'depthBuffer:true,depthTexture:new THREE.DepthTexture(w,h)')).toBe(true); // both offscreen targets (centre / periphery) come from newLowTarget
     expect(has(src, 'renderer.clear(true,true,false)')).toBe(true);
-    expect(has(src, 'd=texture(depthImg,uv).r;')).toBe(true); expect(has(src, 'gl_FragDepth=d;')).toBe(true); // build 560: the depth of the sample that is shown (centre or periphery)
+    expect(has(src, 'd=texture(depthImg,uv).r;')).toBe(true); expect(has(src, 'gl_FragDepth=d;')).toBe(true); // the depth of the sample that is shown (centre or periphery)
     expect(has(src, 'cu.depthImg.value=lowTarget.depthTexture')).toBe(true); expect(has(src, 'cu.depthImg2.value=periTarget.depthTexture')).toBe(true);
     expect((src.match(/toneMapped:false,depthWrite:true,transparent:false/g) || []).length).toBe(2); // both composite materials (warm-up and session)
   });
 });
 
 describe('collateral: what lies inside the volume stays visible (source checks)', () => {
-  it('the section frame starts without a depth test (build 509: switched per frame, see vr-section-frame.test.js) and never writes depth; the glow has no depth test; all are drawn after the volume; the boards (menu / help), the hand cue and the laser keep the depth test (they are outside the volume)', () => {
+  it('the section frame starts without a depth test and never writes depth; the glow has no depth test; all are drawn after the volume; the boards (menu / help), the hand cue and the laser keep the depth test (they are outside the volume)', () => {
     expect(has(src, "new THREE.LineBasicMaterial({color,transparent:true,depthTest:false,depthWrite:false}),h=0.12")).toBe(true);
     expect(has(src, 'frameLine.renderOrder=2')).toBe(true); expect(has(src, 'arrow.renderOrder=2')).toBe(true); expect(has(src, 'glow.renderOrder=3')).toBe(true);
     expect(src).toMatch(/MeshBasicMaterial\(\{color:0xffffff,transparent:true,opacity:0\.95,side:THREE\.DoubleSide,depthTest:false,depthWrite:false/);
     expect(has(src, 'new THREE.MeshBasicMaterial({map:tex,transparent:true,toneMapped:false}));let widgets=[]')).toBe(true); // the boards: a board BEHIND the volume must stay covered by it
-    expect(has(src, "{const top=!!rh||res.kind==='point'||res.kind==='mlabel'||res.kind==='section'||!!bd.hu;ray.renderOrder=dot.renderOrder=bd.hu?11:top?8:0;")).toBe(true); // the laser ends on a point / label / frame inside the volume (build 556: or on the HU live panel): drawn on top
+    expect(has(src, "{const top=!!rh||res.kind==='point'||res.kind==='mlabel'||res.kind==='section'||!!bd.hu;ray.renderOrder=dot.renderOrder=bd.hu?11:top?8:0;")).toBe(true); // the laser ends on a point / label / frame inside the volume: drawn on top
   });
-  it('the cursors, rings and the scale tag already have no depth test (the point markers do since build 502, only with the GPU occlusion: see vr-point-markers.test.js)', () => {
+  it('the cursors, rings and the scale tag already have no depth test (the point markers do, only with the GPU occlusion: see vr-point-markers.test.js)', () => {
     for (const f of ['vr-ring', 'vr-real-scale']) {
       const t = readFileSync(new URL('../../docs/' + f + '.js', import.meta.url), 'utf8');
       expect(t.includes('depthTest:false') || t.includes('depthTest: false'), f).toBe(true);
@@ -188,7 +188,7 @@ describe('vr-measure.js: depth test + ghost, lit on top, fade mode unchanged', (
     settle({ ...base, occlusion: true, hidden: hid }); expect(label.material.opacity).toBe(1); expect(line.geometry.attributes.color.getW(3)).toBe(1);
     const o = label.position.clone().add(new THREE.Vector3(0, 0, 0.5)); expect(v.pickLabel(o, new THREE.Vector3(0, 0, -1))?.id).toBe(m.id); v.dispose();
   });
-  it('occlusion off (薄くする): no depth test, no ghost, the CPU fade as in build 493-494', () => {
+  it('occlusion off (薄くする): no depth test, no ghost, the CPU fade-494', () => {
     const { m, v, base, label, line, leader, settle } = make();
     settle({ ...base, occlusion: true }); settle({ ...base, occlusion: false, hidden: new Set([probeKey(m.id, LABEL_MID)]) });
     for (const o of [label, line, leader]) { expect(o.material.depthTest, o.type).toBe(false); expect(o.children[0].material.visible, o.type).toBe(false); }
@@ -199,8 +199,8 @@ describe('vr-measure.js: depth test + ghost, lit on top, fade mode unchanged', (
   });
 });
 
-describe('GHOST_ALPHA and the pass rule (build 502)', () => {
-  it('the ghost is 0.15 (fainter than build 497-500: 0.3); one constant, every ghosted object takes it', async () => {
+describe('GHOST_ALPHA and the pass rule', () => {
+  it('the ghost is 0.15 (fainter than-500: 0.3); one constant, every ghosted object takes it', async () => {
     expect(GHOST_ALPHA).toBe(0.15);
     const { occludedPass } = await load('vr-depth');
     expect(occludedPass(true, false)).toBe(true); expect(occludedPass(true, true)).toBe(false); expect(occludedPass(false, false)).toBe(false); expect(occludedPass(false, true)).toBe(false); expect(occludedPass(undefined, false)).toBe(false);
@@ -214,7 +214,7 @@ describe('GHOST_ALPHA and the pass rule (build 502)', () => {
   });
 });
 
-describe('vr-point-markers.js: depth test + ghost, lit on top, fade mode unchanged (build 502)', () => {
+describe('vr-point-markers.js: depth test + ghost, lit on top, fade mode unchanged', () => {
   const ctx = new Proxy({}, { get: (t, k) => (k in t ? t[k] : () => {}), set: (t, k, v) => { t[k] = v; return true } });
   beforeEach(() => { vi.stubGlobal('document', { createElement: () => ({ width: 0, height: 0, getContext: () => ctx }) }); setComments([]); setMarkersShown(true) });
   afterEach(() => vi.unstubAllGlobals());

@@ -1,10 +1,10 @@
-// Two-point distances between recorded points (build 477). A measurement = {id, a, b}: the ids of two position comments (points).
+// Two-point distances between recorded points. A measurement = {id, a, b}: the ids of two position comments (points).
 // The distance is NOT stored: it is computed from the two voxel positions and the volume's voxel spacing (the adopted spacing, series.spacingX/Y/Z),
 // so moving a point changes the value by itself. Pure data + a small in-memory store, no DOM / three.js (the VR and PC / iPad views share it).
 // Saved in the project as `measurements` (an unknown field for older apps: they ignore it, so the project version is not bumped).
-import { getComments, onCommentsChange, commentVoxel, commentMatchesSeries } from './comments.js?v=20261019-build624';
-import { compareFingerprints } from './project-file.js?v=20261019-build624';
-import { spacingWarningText } from './slice-spacing.js?v=20261019-build624';
+import { getComments, onCommentsChange, commentVoxel, commentMatchesSeries } from './comments.js?v=20261019-build625';
+import { compareFingerprints } from './project-file.js?v=20261019-build625';
+import { spacingWarningText } from './slice-spacing.js?v=20261019-build625';
 export const MEASURE_MAX=500;
 
 // ---- distance ----
@@ -33,7 +33,7 @@ export const pointsShareSeries=(a,b)=>!!a?.series&&!!b?.series&&compareFingerpri
 // the note for a series' spacing check: 'warn' (z approximate: ⚠), 'info' (the tag spacing is unverified) or null
 export const spacingLevel=s=>spacingWarningText(s?.spacingCheck)?.level||null;
 
-// ---- the label offset (build 480) ----
+// ---- the label offset ----
 // The label of a distance starts NEAR the line (each view's default placement) and can be moved by the user at any time (a drag in the 3D / 2D views, a grab in VR).
 // A moved label is stored as `labelOffset` {i,j,k}: the vector from the line's midpoint to the label, in VOXEL units (floats), so it is the same in every view and survives
 // a reload; no field = the default placement. Anything invalid is dropped (-> default).

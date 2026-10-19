@@ -1,4 +1,4 @@
-// Analysis result colour in 2D (build 419): practice data, fat segment, its largest component as the result; each
+// Analysis result colour in 2D: practice data, fat segment, its largest component as the result; each
 // plane (axial / coronal / sagittal at the volume centre) is painted without and with the result, and the changed
 // pixels must be exactly the result's voxels on that plane (runsPlaneMask), no more, no fewer.
 //   PW_CHROMIUM=/opt/pw-browsers/chromium node tools/result-2d-check.mjs
@@ -6,7 +6,7 @@ import { chromium } from '@playwright/test';
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
 const root=path.resolve('docs'),nm=path.resolve('node_modules');const errors=[];
 const srv=http.createServer((q,r)=>{const p=path.join(root,decodeURIComponent(q.url.split('?')[0]));
- // build 437: the practice data's bundled project (docs/demo/sample1/project.vrlab) is applied on load; the checks start
+ // the practice data's bundled project (docs/demo/sample1/project.vrlab) is applied on load; the checks start
  // from the bare data unless SAMPLE_PROJECT=1
  if(p.endsWith('project.vrlab')&&!process.env.SAMPLE_PROJECT){r.writeHead(404);r.end();return}
  fs.readFile(p.endsWith('/')?p+'index.html':p,(e,b)=>{if(e){r.writeHead(404);r.end();return}r.writeHead(200,{'content-type':p.endsWith('.js')?'text/javascript':p.endsWith('.css')?'text/css':'text/html'});r.end(b)})}).listen(8765);

@@ -5,7 +5,7 @@ import { buildClsData } from '../../docs/point-cls.js';
 import { histCount, HIST_MIN, HIST_BINS } from '../../docs/histogram.js';
 import { accToHist } from '../../docs/histogram-texture.js';
 
-// build 567: the label of a voxel on the VR board is the one the VR shader draws (vr-view.js segmentIndexAt: segmentIndexFromQ on the classification
+// the label of a voxel on the VR board is the one the VR shader draws (vr-view.js segmentIndexAt: segmentIndexFromQ on the classification
 // path, the HU test + edit mask on the HU path; regionColor), from the data the VR session uses, never a guess.
 // a "volume" of HU values, packed as the VR texture (rg8, u16 = HU + 1024)
 function grid(hus, dims = [hus.length, 1, 1], calibration = [1, -1024, 0]) {
@@ -57,7 +57,7 @@ describe('labels: the VR shader rule (classification path)', () => {
 });
 
 // ---- reference implementations (independent of the module's kernels) ----
-// build 565's pipeline: raw u16 counts per label, then per label: whole counts per bin, x w once, accToHist; the total = the sum of those
+// 's pipeline: raw u16 counts per label, then per label: whole counts per bin, x w once, accToHist; the total = the sum of those
 function refHists(labelOf, g, w) {
   const u = u16(g), [sl, ic, bi] = g.calibration, raw = Array.from({ length: LABELS }, () => new Map());
   for (let i = 0; i < u.length; i++) { const m = raw[labelOf(i)]; m.set(u[i], (m.get(u[i]) || 0) + 1); }
@@ -111,7 +111,7 @@ const segs = { bone: { active: true, enabled: true, min: 300, max: 2000 }, soft:
 const RANGES = [300, 2000, -100, 400, 0, 0, 0, 0];
 const voxelXYZ = (i, D) => [i % D[0], Math.floor(i / D[0]) % D[1], Math.floor(i / (D[0] * D[1]))];
 
-describe('build 568: counted straight into HU bins (worker and main thread), identical to the build 565 pipeline', () => {
+describe('counted straight into HU bins (worker and main thread), identical to the pipeline', () => {
   it('classification path, a slope and offset calibration, a non-integer weight, regions: worker == main thread == the old raw-count pipeline', async () => {
     const n = 10, { g } = volume(n, [n, n, n], [0.5, -1500, 32]);
     const edit = { data: new Uint8Array(n * n * n * 4).fill(255), dims: g.dims, active: 1, maskOnly: 0 }; for (let i = 0; i < n * n * n; i += 2) edit.data[i * 4] = 0;
@@ -140,7 +140,7 @@ describe('build 568: counted straight into HU bins (worker and main thread), ide
   });
 });
 
-describe('build 568: the HU path (512 data, or 詳細 cls off) follows the shader: HU ranges, mask-only, the edit texture (trilinear / nearest), regions', () => {
+describe('the HU path (512 data, or 詳細 cls off) follows the shader: HU ranges, mask-only, the edit texture (trilinear / nearest), regions', () => {
   // a grid twice the size of the 256-style edit / region grid along x and y (and odd in z: 7 -> 3), as 512 data against the 256 edit mask
   const D = [12, 10, 7], E = [6, 5, 3], { g, hus } = volume(0, D);
   const ne = E[0] * E[1] * E[2], editData = new Uint8Array(ne * 4);
@@ -208,12 +208,12 @@ describe('the pass: time slicing, progress, cancellation, redraws', () => {
     const { g } = volume(6), cls = buildClsData(g, g.calibration, { data: null, dims: g.dims, active: 0, maskOnly: 0 }, segs);
     const h = createVrLabelHistogram({ makeWorker: fakeWorker, yieldFn: async () => {} }); let n = 0; h.onChange(() => n++);
     await h.run({ key: 'a', grid: g, cls, region: null, shownMask: 0b11 }); expect(n).toBe(2);
-    // build 569: the self-check's reruns (same key, same result) do not redraw the board; the result object is kept
+    // the self-check's reruns (same key, same result) do not redraw the board; the result object is kept
     const first = h.result; await h.rerun(); await h.rerun(); expect(n).toBe(2); expect(h.result).toBe(first);
     // a real change redraws once
     await h.run({ key: 'b', grid: g, cls, region: null, shownMask: 0b01 }); expect(n).toBe(3); expect(h.result.key).toBe('b');
   });
-  it('build 569: after an error, the same good result again is a change (the board leaves the error)', async () => {
+  it('after an error, the same good result again is a change (the board leaves the error)', async () => {
     const { g } = volume(6), cls = buildClsData(g, g.calibration, { data: null, dims: g.dims, active: 0, maskOnly: 0 }, segs);
     const h = createVrLabelHistogram({ makeWorker: fakeWorker, yieldFn: async () => {} }); let n = 0; h.onChange(() => n++);
     const input = { key: 'a', grid: g, cls, region: null, shownMask: 0b11 };
@@ -230,7 +230,7 @@ describe('the pass: time slicing, progress, cancellation, redraws', () => {
   });
 });
 
-describe('the laser drag of range lines is gone (build 563 -> 567)', () => {
+describe('the laser drag of range lines is gone', () => {
   const src = f => readFileSync(new URL('../../docs/' + f, import.meta.url), 'utf8');
   it('no drag code in the board, the VR view or the PC histogram exports', () => {
     expect(src('vr-view.js')).not.toMatch(/histDragHit|histDrag\b|endHistDrag|hist\.grab|hist\.dragTo|hist\.release|setHistogramLine|commitHistogramLine|DRAG_GAP_MS/);

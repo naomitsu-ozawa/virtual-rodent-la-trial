@@ -2,7 +2,7 @@
 // HU volume (Int16) of N^3 voxels, index (z*N+y)*N+x, x and z up the index, y down (as the shader's texCoord).
 // Ramps are gentle (about 100 HU per voxel at the bone edge) so that the byte threshold (128) moves the surface by whole voxels:
 // a perturbed threshold is visible. complex=true adds what makes fat hard for the shader: thin sheets with holes and hashed single-voxel specks.
-// four=true (build 528): a fourth segment with its own HU band (-800..-300, outside the other three ranges): a lung-like ball of -600 HU with a
+// four=true: a fourth segment with its own HU band (-800..-300, outside the other three ranges): a lung-like ball of -600 HU with a
 // 3-voxel ramp, off-centre in the soft tissue, so that a four-channel classification (chan 0..3) can be rendered and checked
 export function makePhantom(N, { complex = true, four = false } = {}) {
   const hu = new Int16Array(N * N * N), c = N / 2, sc = N / 64;
@@ -32,7 +32,7 @@ export function makePhantom(N, { complex = true, four = false } = {}) {
   return hu;
 }
 export const SEGMENTS = { bone: { active: true, enabled: true, min: 300, max: 3000 }, soft: { active: true, enabled: true, min: -200, max: 299 }, fat: { active: true, enabled: true, min: -250, max: -50 }, lung: { active: false, enabled: false, min: -950, max: -500 } };
-export const SEGMENTS4 = { ...SEGMENTS, lung: { active: true, enabled: true, min: -800, max: -300 } }; // build 528: four enabled segments
+export const SEGMENTS4 = { ...SEGMENTS, lung: { active: true, enabled: true, min: -800, max: -300 } }; // four enabled segments
 export const SHOWN_MASK4 = 0b1111;
 export const CALIB = [1, -1024, 0]; // slope, intercept, bias: u16 = HU + 1024
 export const HALF_EXT = [1.65, 1.3, 1.0]; // anisotropic on purpose: an axis mix-up between the shader and vr-pick shows

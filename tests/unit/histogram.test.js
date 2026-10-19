@@ -43,7 +43,7 @@ describe('rebin for display', () => {
     expect(rebinHist(h, 0, 9, 10).every(v => v === 1)).toBe(true);
     expect(rebinHist(h, 5, 9, 1)[0]).toBe(5);
   });
-  it('build 571: writes into a reused array (its first `columns` entries) when one is given', () => {
+  it('writes into a reused array (its first `columns` entries) when one is given', () => {
     const h = binValues(createHist(), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]), out = new Float64Array(8).fill(7);
     expect(rebinHist(h, 0, 9, 5, out)).toBe(out); expect(Array.from(out.subarray(0, 5))).toEqual([2, 2, 2, 2, 2]);
     expect(rebinHist(h, 0, 9, 5, out)).toBe(out); expect(Array.from(out.subarray(0, 5))).toEqual([2, 2, 2, 2, 2]); // cleared, not added up
@@ -125,7 +125,7 @@ describe('voxelsToMm3', () => {
   });
 });
 
-describe('build 559: a cancelled stale job does not clear the running job progress', () => {
+describe('a cancelled stale job does not clear the running job progress', () => {
   it('runJob finally clears progress only for the current job or when no job runs', () => {
     const s = readFileSync(new URL('../../docs/histogram-ui.js', import.meta.url), 'utf8');
     expect(s).toContain("if (st.job === job) { st.job = null; setProgress('', null); } else if (!st.job) setProgress('', null);");

@@ -158,7 +158,7 @@ describe('segsFromUniforms / contentKeyChanged', () => {
   });
 });
 
-describe('build 564: the rebuild never blocks a frame', () => {
+describe('the rebuild never blocks a frame', () => {
   const src = readFileSync(new URL('../../docs/vr-content-box.js', import.meta.url), 'utf8');
   const body = name => { const i = src.indexOf('export function ' + name + '('); return src.slice(i, src.indexOf('\n}\n', i)); };
   function randomGrid(seed, dims) {
@@ -225,7 +225,7 @@ describe('build 564: the rebuild never blocks a frame', () => {
   });
 });
 
-describe('render-scale cap on the content box (build 562, approved rule change)', () => {
+describe('render-scale cap on the content box', () => {
   const I = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1], model = (s, x, y, z) => [s, 0, 0, 0, 0, s, 0, 0, 0, 0, s, 0, x, y, z, 1];
   const persp = (n = 0.05, f = 100) => [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, -(f + n) / (f - n), -1, 0, 0, -2 * f * n / (f - n), 0]; // 90 deg
   const HALF = [1, 1, 1], DIMS = [256, 256, 256];

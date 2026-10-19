@@ -6,7 +6,7 @@ import { FILTER_UNITS, isValidUnitValue, filterLegacyRange, legacyFilterValueHU,
 import { segmentRunsCacheKey } from '../../docs/segment-cache-key.js';
 import { packProject, unpackProject } from '../../docs/project-file.js';
 
-// Builds 445-447: filter strengths that used to be fractions of (v.max - v.min) are absolute HU values.
+// 447: filter strengths that used to be fractions of (v.max - v.min) are absolute HU values.
 const read = p => readFileSync(p, 'utf8');
 const sf = read('docs/source-filters.js');
 
@@ -50,7 +50,7 @@ describe('the five filters no longer depend on v.min / v.max (CPU)', () => {
   });
 });
 
-describe('worker kernels (build 447)', () => {
+describe('worker kernels', () => {
   it('take no min / max and use the HU parameters', () => {
     const fns = ['spike', 'nlm', 'anisotropic', 'tv', 'unsharp', 'sigmoid', 'bilateral', 'stage'];
     for (const n of fns) {
@@ -191,7 +191,7 @@ describe('UI controls match the table', () => {
   });
 });
 
-describe('0 and other small values are values, not "missing" (build 448)', () => {
+describe('0 and other small values are values, not "missing"', () => {
   it('Unsharp 0 HU survives a save / load round trip', () => {
     const { project } = unpackProject(packProject({ filters: { order: [{ key: 'unsharp', params: { radius: '1', amount: '0.8', thresholdHU: 0 } }] } }, {}));
     const r = resolveFilterParams('unsharp', project.filters.order[0].params, practice);

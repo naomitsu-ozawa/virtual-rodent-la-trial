@@ -13,7 +13,7 @@ const parse = src => new WgslReflect(src);
 const FILTER_KINDS = [...GPU_PREWARM_KINDS, 'faceExtract'];
 
 describe('compute shaders (docs/gpu-shaders.js)', () => {
-  // gpuFilterPipeline rewrites gid.x for 2D dispatch grids (build 263)
+  // gpuFilterPipeline rewrites gid.x for 2D dispatch grids
   it.each(FILTER_KINDS)('%s parses with the 2D-grid index rewrite', kind => {
     const src = normalizeVrlWgsl(gpuFilterShader(kind, 64)).replaceAll('gid.x', '(gid.x+gid.y*' + (65535 * 64) + 'u)');
     expect(() => parse(src)).not.toThrow();
@@ -27,7 +27,7 @@ describe('compute shaders (docs/gpu-shaders.js)', () => {
     expect(r.entry.compute.map(e => e.name)).toContain('main');
   });
 
-  // build 447: the strength parameters are absolute HU values at fixed indexes (params[0..]); the volume range
+  // the strength parameters are absolute HU values at fixed indexes (params[0..]); the volume range
   // (min / max) is no longer passed, so no shader may compute a range from the params
   it.each(['sigmoid', 'spikeHole', 'anisotropic', 'tv', 'unsharpCombine', 'bilateral', 'nlm'])('%s does not use a volume range', kind => {
     const src = gpuFilterShader(kind, 64);
@@ -43,7 +43,7 @@ describe('compute shaders (docs/gpu-shaders.js)', () => {
     expect(gpuFilterShader('unsharpCombine', 64)).toMatch(/let threshold=params\[1\];/);
   });
 
-  // build 448: what a kernel reads from params[] must match what runGpuSourceFilters writes there (a wrong order or an extra
+  // what a kernel reads from params[] must match what runGpuSourceFilters writes there (a wrong order or an extra
   // value gives wrong results on the GPU only, and the kernels alone cannot show it)
   describe('params[] layout: dispatch (gpu-compute.js) vs kernel (gpu-shaders.js)', () => {
     const LAYOUT = {
@@ -88,7 +88,7 @@ describe('render shaders (docs/medical-volume.js)', () => {
     expect(r.entry.vertex.length).toBe(1);
     expect(r.entry.fragment.length).toBe(1);
   });
-  // build 460: the MPR planes drawn inside the 3D volume colour by the same membership as the volume itself (mask + edits)
+  // the MPR planes drawn inside the 3D volume colour by the same membership as the volume itself (mask + edits)
   it('volumeShader colours the in-volume MPR planes with segmentIndexFor, not a bare HU interval', () => {
     const src = volumeShader();
     expect(src).toMatch(/segmentIndexFor\(planeValue,/);

@@ -1,7 +1,7 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.webgpu.js';
 import dicomParser from 'https://esm.sh/dicom-parser@1.8.21';
-import { canvasBackground3dUnit } from './canvas-theme.js?v=20261019-build624';
-import { lightOffsetExpr, lightingWGSL, MATERIALS, materialKey } from './lighting.js?v=20261019-build624';
+import { canvasBackground3dUnit } from './canvas-theme.js?v=20261019-build625';
+import { lightOffsetExpr, lightingWGSL, MATERIALS, materialKey } from './lighting.js?v=20261019-build625';
 
 const UNCOMPRESSED_TS=new Set(['1.2.840.10008.1.2','1.2.840.10008.1.2.1','1.2.840.10008.1.2.2']);
 const safeWgsl=source=>source.replace(/\bmeta\b/g,'vrlMeta').replace(/\bactive\b/g,'vrlActive').replace(/\btarget\b/g,'vrlTarget');
@@ -89,7 +89,7 @@ struct Uniforms{
 // the fragment stage stays within 8 storage buffers: [0]=1 when non-empty,
 // [1..rowCount+1]=offsets into this array, then (x0|x1<<16, rgb|flags) pairs.
 @group(0) @binding(10) var<storage,read> analysisOverlay:array<u32>;
-// build 374: region index per voxel, 4 bits each, 8 voxels per u32 along x
+// region index per voxel, 4 bits each, 8 voxels per u32 along x
 // (0 none, 1..14 = shown region, 15 = more regions: search the row). One
 // texture load replaces the binary search of the row's run pairs at every
 // hit. section.w = 1 when the texture is valid. analysisOverlay[0] is then the
@@ -154,7 +154,7 @@ fn editAllows(seg:u32,tc0:vec3<f32>)->bool{
  if(lo>start){inside=p.x<=(editIntervals[lo-1u]>>16u);}
  let keep=(keepMask&(1u<<seg))!=0u;return select(!inside,inside,keep);
 }
-// build 459: a segment whose mask can hold voxels outside its HU range (Closing / hole filling added them, and a higher
+// a segment whose mask can hold voxels outside its HU range (Closing / hole filling added them, and a higher
 // segment's added voxels are removed from it) is decided by the mask alone, as the 2D views do: bit 4+s of editRows[1]
 fn segMember(s:u32,v:f32,a:vec4<f32>,tc:vec3<f32>)->bool{
  if(a.w<=0.5){return false;}
@@ -169,7 +169,7 @@ fn previewContains(seg:u32,tc0:vec3<f32>)->bool{
  let row=p.z*dims.y+p.y;
  let start=previewRows[1u+row];
  let finish=previewRows[2u+row];
- // build 373: binary search for the last interval starting at or before p.x
+ // binary search for the last interval starting at or before p.x
  // (a fat region has hundreds of intervals per row; the linear scan ran once
  // per hit pixel and dominated the frame when zoomed in)
  var lo=start;var hi=finish;
@@ -191,7 +191,7 @@ fn analysisOverlayRow(tc0:vec3<f32>)->u32{
  let row=p.z*dims.y+p.y;
  let start=analysisOverlay[1u+row];
  let finish=analysisOverlay[2u+row];
- // build 373: pairs (x0|x1<<16, colour) sorted by x0 per row (setAnalysisRuns): binary search
+ // pairs (x0|x1<<16, colour) sorted by x0 per row (setAnalysisRuns): binary search
  var lo=start/2u;var hi=finish/2u;
  loop{if(lo>=hi){break;}let mid=(lo+hi)/2u;if((analysisOverlay[mid*2u]&65535u)<=p.x){lo=mid+1u;}else{hi=mid;}}
  if(lo>start/2u){let i=(lo-1u)*2u;if(p.x<=(analysisOverlay[i]>>16u)){return analysisOverlay[i+1u];}}
@@ -206,7 +206,7 @@ fn analysisOverlayAt(tc0:vec3<f32>)->u32{
  }
  return analysisOverlayRow(tc0);
 }
-// build 375: region colour near a surface hit from the index texture alone:
+// region colour near a surface hit from the index texture alone:
 // the hit voxel first, then the candidates insideVoxelTc would try (the hit
 // lies between the inside and the outside voxel). No HU fetches; a coloured
 // hit costs one texture load.
@@ -250,7 +250,7 @@ fn appliedCutNormal(seg:u32,tc0:vec3<f32>)->vec3<f32>{
  if(l<1e-6){return vec3<f32>(0.0,0.0,1.0);}
  return g/l;
 }
-// build 368: the segment tests take the HU value, so one texture fetch per
+// the segment tests take the HU value, so one texture fetch per
 // sample serves both the raw index and the edited index (was two fetches)
 fn rawSegmentIndexFor(v:f32)->i32{
  for(var s:u32=0u;s<4u;s=s+1u){
@@ -259,7 +259,7 @@ fn rawSegmentIndexFor(v:f32)->i32{
  }
  return -1;
 }
-// build 380: whether voxels x and x+1 of a row lie inside the segment's edit intervals (one binary search)
+// whether voxels x and x+1 of a row lie inside the segment's edit intervals (one binary search)
 fn editInsidePair(seg:u32,row:u32,x:u32)->vec2<bool>{
  let dims=vec3<u32>(u32(u.textureDims.x),u32(u.textureDims.y),u32(u.textureDims.z));
  let rowCount=dims.y*dims.z;
@@ -273,9 +273,9 @@ fn editInsidePair(seg:u32,row:u32,x:u32)->vec2<bool>{
  if(!in1&&lo<finish){in1=(editIntervals[lo]&65535u)==x+1u;}
  return vec2<bool>(in0,in1);
 }
-// build 380: an excluded voxel must not leak into the neighbouring samples through the
+// an excluded voxel must not leak into the neighbouring samples through the
 // trilinear interpolation (a deleted noisy blob stayed as a ghost cloud of face-aligned
-// slivers; the same since build 360). For a segment with an exclude-mode mask, a sample
+// slivers; the same). For a segment with an exclude-mode mask, a sample
 // that passed the raw range and its own voxel's mask is re-evaluated with the excluded
 // corner voxels of its interpolation cell replaced by air. Keep-mode (processed) masks
 // are unchanged.
@@ -319,7 +319,7 @@ fn segmentIndexFor(v:f32,tc0:vec3<f32>)->i32{
  return -1;
 }
 fn rawSegmentIndexAt(tc0:vec3<f32>)->i32{return rawSegmentIndexFor(huAt(tc0));}
-// build 372: the voxel the run tables (analysis regions, cut preview) count as
+// the voxel the run tables (analysis regions, cut preview) count as
 // inside. The surface hit lies on the trilinear iso-surface, between an
 // outside and an inside voxel centre, so its floor voxel is the outside one
 // about half of the time and a region-coloured surface came out speckled /
@@ -339,7 +339,7 @@ fn insideVoxelTc(tc0:vec3<f32>,dir:vec3<f32>,inward:vec3<f32>,seg:u32)->vec3<f32
  let a=u.segments[seg*2u];
  let di=objToTc(inward);let dr=objToTc(dir);
  var cand=array<vec3<f32>,6>(tc0,tc0+di*0.5,tc0+di*1.0,tc0+dr*0.5,tc0+dr*1.0,tc0+di*1.5);
- // build 417: the candidate must be a member of the segment, its own edit / processing mask entry included
+ // the candidate must be a member of the segment, its own edit / processing mask entry included
  for(var k:u32=0u;k<6u;k=k+1u){let v=huVoxel(cand[k]);if(segMember(seg,v,a,cand[k])){return cand[k];}}
  return tc0;
 }
@@ -353,7 +353,7 @@ fn capSegmentIndex(tc0:vec3<f32>)->i32{
  return -1;
 }
 fn brickMayContain(p:vec3<f32>)->bool{return brickClass(p)>0;}
-// build 368: 0 = no enabled segment in the brick, 1 = mixed, 2+s = every
+// 0 = no enabled segment in the brick, 1 = mixed, 2+s = every
 // sample in the brick is segment s (its range holds the brick's min..max, no
 // earlier enabled segment overlaps, no edit / cut mask on s): a ray already
 // inside s crosses such a brick without sampling
@@ -362,7 +362,7 @@ fn brickClass(p:vec3<f32>)->i32{
  let voxel=vec3<u32>(tc*dims);let bx=voxel.x/u32(bs);let by=voxel.y/u32(bs);let bz=voxel.z/u32(bs);let bcx=u32(u.calibration.z);let bcy=u32(u.calibration.w);
  let brick=bz*bcx*bcy+by*bcx+bx;let mm=brickMinMax[brick];
  let masks=editRows[0]|appliedCutRows[0];
- // build 525 (issue #132): a mask-only segment (bit 4+s) is decided by its mask, not the HU range, so the brick's HU
+ // a mask-only segment (bit 4+s) is decided by its mask, not the HU range, so the brick's HU
  // min/max say nothing about it; before, every brick was mixed while such a segment was shown (no empty-space skip at
  // all). setEditRuns appends one nibble per brick after the row index: bit s set when the brick holds a voxel of
  // segment s's final mask. Only bricks with that bit are candidates for s (same mixed treatment as before inside them).
@@ -373,7 +373,7 @@ fn brickClass(p:vec3<f32>)->i32{
  return 0;
 }
 fn brickExitDistance(p:vec3<f32>,dir:vec3<f32>)->f32{
- // build 368: on the texture grid, like brickMayContain (was the source grid: shorter skips on reduced textures)
+ // on the texture grid, like brickMayContain (was the source grid: shorter skips on reduced textures)
  let tc=clamp(texCoord(p),vec3<f32>(0.0),vec3<f32>(0.999999));let dims=max(u.textureDims.xyz,vec3<f32>(1.0));let bs=max(u.viewport.w,1.0);let voxel=vec3<u32>(tc*dims);
  let b=voxel/u32(bs);let voxelSize=2.0*u.halfStep.xyz/dims;var best=1e20;
  if(abs(dir.x)>1e-8){let edge=select(f32(b.x*u32(bs)),min(f32((b.x+1u)*u32(bs)),dims.x),dir.x>0.0);let q=-u.halfStep.x+edge*voxelSize.x;let dt=(q-p.x)/dir.x;if(dt>1e-7){best=min(best,dt);}}
@@ -427,7 +427,7 @@ ${lightingWGSL()}
   let q=(x-u.camOrigin.x)/dir.x;if(q>=t&&q<=endT){sagittalT=q;}
  }
  var previousT=t;var lastIndex:i32=-1;var previousCutIdx:i32=-1;var acc=vec4<f32>(0.0);
- // build 368: brickEnd = t where the current non-empty brick is left; the
+ // brickEnd = t where the current non-empty brick is left; the
  // brick min/max is read once per brick instead of once per sample
  var brickEnd=-1.0;var prevHv=-1e9;var uniformSeg:i32=-1;
  for(var iter:u32=0u;iter<4096u;iter=iter+1u){
@@ -441,9 +441,9 @@ ${lightingWGSL()}
    // inside a uniform brick of the segment the ray is already in: nothing can
    // change until the brick is left, so no sample; the cap and MPR planes
    // inside [t, nextT] are still composited below, lastIndex is kept
-   // build 377: resume on the ray's own sample grid (first grid point past the brick) instead of brickEnd + 0.05 step: the
+   // resume on the ray's own sample grid (first grid point past the brick) instead of brickEnd + 0.05 step: the
    // latter re-phased every ray at the brick exit, so the sub-voxel shell left along an exclusion edit rendered as solid
-   // brick-sized tiles (harness: build 360 vs 368 with an exclusion edit); on the ray's grid it dithers as in build 360
+   // brick-sized tiles (harness: vs 368 with an exclusion edit); on the ray's grid it dithers
    canSample=false;uniformJump=true;nextT=t+max(ceil((brickEnd-t)/step),1.0)*step;if(nextT<=brickEnd){nextT=nextT+step;}prevHv=-1e9;
   }
   var capDrawn=false;
@@ -484,7 +484,7 @@ ${lightingWGSL()}
    }else if(idx!=lastIndex){
     if(idx>=0){
      var lo=previousT;var hi=t;
-     // surface search (build 368). mprVisible.w = 1: when the boundary is an
+     // surface search. mprVisible.w = 1: when the boundary is an
      // HU iso-value (no edit / cut mask on the segment, previous sample
      // measured and outside the range) two secant guesses on the HU plus one
      // bisection (3 fetches) replace the six bisections
@@ -513,7 +513,7 @@ ${lightingWGSL()}
      let a=u.segments[u32(idx)*2u];
      // inward = towards the segment's range: up the gradient when entered from below its minimum, else down
      let inward=select(-n,n,hvPrev<-1e8||hvPrev<a.x);
-     // build 612: the one shared lighting model (lighting.js): a headlight above / right of the VIEWER (the camera axes in volume space, so a
+     // the one shared lighting model (lighting.js): a headlight above / right of the VIEWER (the camera axes in volume space, so a
      // turned volume keeps its light), one-sided diffuse, mild depth cue. The first surface the ray meets: the gradient is turned to face the viewer
      // (it has no fixed orientation). A hit BEHIND a translucent layer (acc.a > 0): the OUTWARD normal (-inward), not turned, so an inner / far wall that
      // faces away gets only the ambient floor. n itself is not changed (inward and the cut normal below use it).
@@ -521,7 +521,7 @@ ${lightingWGSL()}
      let later=acc.a>0.0;
      let shade=vrlShade(select(n,-inward,later),viewDir,${lightOffsetExpr('u.camRightTan.xyz','u.camUpAspect.xyz')},vrlDepth01(hi,u.camOrigin.xyz,u.halfStep.xyz),select(0.0,1.0,later),u.segMat[u32(idx)].xyz);
      let diffuse=shade.x;let spec=shade.y;
-     // build 375: regions only on the segments that have one (mask word at the colour table start); with the index texture the lookup needs no inside-voxel search
+     // regions only on the segments that have one (mask word at the colour table start); with the index texture the lookup needs no inside-voxel search
      let anyRegion=analysisOverlay[0]!=0u&&(analysisOverlay[analysisOverlay[0]]&(1u<<u32(idx)))!=0u;
      var tcv=tc;if(previewRows[0]!=0u||anyRegion){tcv=insideVoxelTc(tc,dir,inward,u32(idx));}
      let isCutPreview=previewContains(u32(idx),tcv);
@@ -560,7 +560,7 @@ ${lightingWGSL()}
    var planeColor=vec3<f32>(g);
    let isSectionPlane=u.section.x>0.5&&i32(round(u.section.x))-1==which;
    if(!isSectionPlane){
-    // build 460: the same membership as the 2D and 3D views (processed mask and manual edits included), one segment per voxel
+    // the same membership as the 2D and 3D views (processed mask and manual edits included), one segment per voxel
     let planeSeg=segmentIndexFor(planeValue,texCoord(planePoint));
     if(planeSeg>=0){
      let a=u.segments[u32(planeSeg)*2u];
@@ -576,7 +576,7 @@ ${lightingWGSL()}
   // after a uniform-brick jump the last point inside the brick is the previous (inside) sample of the next surface search
   previousT=select(t,max(t,nextT-step*0.1),uniformJump);t=nextT;
  }
- let bg=u.background.rgb; // build 451: the theme's dark 3D background (--ui-canvas-bg-3d)
+ let bg=u.background.rgb; // the theme's dark 3D background (--ui-canvas-bg-3d)
  return vec4<f32>(acc.rgb+bg*(1.0-acc.a),1.0);
 }`;
 }
@@ -595,7 +595,7 @@ fn huAt(x:u32,y:u32,z:u32)->f32{
 fn main(@builtin(global_invocation_id) gid:vec3<u32>){
  let bxCount=meta[3];let byCount=meta[4];let bzCount=meta[5];let total=bxCount*byCount*bzCount;let i=gid.x;if(i>=total){return;}
  let bx=i%bxCount;let by=(i/bxCount)%byCount;let bz=i/(bxCount*byCount);let bs=meta[6];
- // build 368: one voxel of overlap, so every trilinear sample inside the brick lies within [min,max] (uniform bricks can then be crossed without sampling)
+ // one voxel of overlap, so every trilinear sample inside the brick lies within [min,max] (uniform bricks can then be crossed without sampling)
  let x0=select(bx*bs-1u,0u,bx==0u);let y0=select(by*bs-1u,0u,by==0u);let z0=select(bz*bs-1u,0u,bz==0u);let x1=min((bx+1u)*bs+1u,meta[0]);let y1=min((by+1u)*bs+1u,meta[1]);let z1=min((bz+1u)*bs+1u,meta[2]);
  var lo=1e30;var hi=-1e30;
  for(var z=z0;z<z1;z=z+1u){for(var y=y0;y<y1;y=y+1u){for(var x=x0;x<x1;x=x+1u){let v=huAt(x,y,z);lo=min(lo,v);hi=max(hi,v);}}}
@@ -659,7 +659,7 @@ fn editAllows(seg:u32,tc0:vec3<f32>)->bool{
  if(lo>start){inside=p.x<=(editIntervals[lo-1u]>>16u);}
  let keep=(keepMask&(1u<<seg))!=0u;return select(!inside,inside,keep);
 }
-// build 459: a segment whose mask can hold voxels outside its HU range (Closing / hole filling added them, and a higher
+// a segment whose mask can hold voxels outside its HU range (Closing / hole filling added them, and a higher
 // segment's added voxels are removed from it) is decided by the mask alone, as the 2D views do: bit 4+s of editRows[1]
 fn segMember(s:u32,v:f32,a:vec4<f32>,tc:vec3<f32>)->bool{
  if(a.w<=0.5){return false;}
@@ -849,7 +849,7 @@ export function gpuRunsForTexture(runs,sourceDims,textureDims,{dilate=0}={}){
  }
  return dilate?gpuDilateRuns(out,tw,th,td,dilate):out;
 }
-// build 525 (issue #132): per-brick occupancy of the mask-only segments, for the brick classification of volumeShader
+// per-brick occupancy of the mask-only segments, for the brick classification of volumeShader
 // (brickClass): one nibble per 8^3 brick of the TEXTURE grid (runs = gpuRunsForTexture output), bit s set when the brick
 // holds at least one voxel of segment s's mask; eight bricks per u32, brick index (bz*bcy+by)*bcx+bx as in the shader.
 // Only segments with maskOnly contribute; null when there is none (the row-index buffer then has no tail, as before).
@@ -905,7 +905,7 @@ export class MedicalVolumeRenderer{
  }
  // One upload at a time: a new ensure() waits until the previous one has settled, so their device error scopes never
  // interleave (a series switch while the previous series' filtered refresh was still uploading failed the new upload
- // with the old texture's "destroyed texture" validation errors and left 3D blank, build 607).
+ // with the old texture's "destroyed texture" validation errors and left 3D blank).
  ensure(v,options){
   const run=(this.ensureQueue||Promise.resolve()).then(()=>this.ensureNow(v,options));
   this.ensureQueue=run.catch(()=>{});
@@ -959,7 +959,7 @@ export class MedicalVolumeRenderer{
   this.device.pushErrorScope?.('validation');
   try{
    texture=inPlace?this.texture:this.device.createTexture({label:plan.reduced?'VRL mobile reduced DICOM volume':'VRL DICOM volume',size:{width:tw,height:th,depthOrArrayLayers:td},dimension:'3d',format:'rg8unorm',
-    // build 334: RENDER_ATTACHMENT so Dawn (Chrome) lazy-clears the new texture with a
+    // RENDER_ATTACHMENT so Dawn (Chrome) lazy-clears the new texture with a
     // render-target clear. Without it, Dawn's D3D12 backend (Windows) clears a color texture
     // by uploading a zero buffer the size of the whole subresource (d3d12/TextureD3D12.cpp
     // ClearTexture): 3.74 GB for Full here, over the 2 GB maxBufferSize -> "Buffer size
@@ -973,7 +973,7 @@ export class MedicalVolumeRenderer{
     const rowBytes=tw*2,rowStride=Math.ceil(rowBytes/256)*256,reducedSlice=new Uint8Array(rowStride*th);
     const spans=(n,t)=>{const a=new Uint32Array(t+1);for(let i=0;i<=t;i++)a[i]=Math.min(n,Math.round(i*n/t));for(let i=0;i<t;i++)if(a[i+1]<=a[i])a[i+1]=Math.min(n,a[i]+1);return a};
     const xs=spans(s.columns,tw),ys=spans(s.rows,th),rowSum=new Float64Array(tw),rowCnt=new Uint32Array(tw);
-    // build 311: slices packed and reduced on the GPU by the filter pass
+    // slices packed and reduced on the GPU by the filter pass
     const packedSlice=!cache?.hit&&dataSignature&&typeof v.packedSliceProvider==='function'?v.packedSliceProvider({tw,th,xs,ys,zMap,rowStride,slope:first.slope||1,intercept:first.intercept||0,bias:signed?32768:0}):null;
     for(let tz=0;tz<td;tz++){
      let upload=reducedSlice;
@@ -1070,7 +1070,7 @@ export class MedicalVolumeRenderer{
  // miss most texels (speckled colouring); dilate by one texel as the cut
  // preview does.
  // textureSignature: changes only when the set of regions (ids, runs) changes; colour and focus live in the
- // overlay buffer, so a focus or colour change keeps the region index texture (build 377: each rebuild allocated
+ // overlay buffer, so a focus or colour change keeps the region index texture (each rebuild allocated
  // and uploaded 67 MB at 512³ on every tap)
  setAnalysisRuns(regions,v,signature='',textureSignature=signature){
   if(signature&&signature===this.analysisOverlaySignature)return;
@@ -1081,7 +1081,7 @@ export class MedicalVolumeRenderer{
   for(const g of grids)if(g)for(let z=0;z<d;z++){const rec=g[z];if(rec)for(let i=0;i<rec.length;i+=3)counts[z*h+rec[i]]++}
   const header=2+rowCount;let total=0;for(let r=0;r<rowCount;r++)total+=counts[r];
   if(!total){this.clearAnalysisRuns();this.analysisOverlaySignature=signature;return}
-  // colour table after the pairs: word for region index k (1..14); data[0] points at it (build 374)
+  // colour table after the pairs: word for region index k (1..14); data[0] points at it
   const tableStart=header+total*2,data=new Uint32Array(tableStart+16),cursor=new Uint32Array(rowCount);data[0]=tableStart;let at=header;
   for(let r=0;r<rowCount;r++){data[1+r]=at;cursor[r]=at;at+=counts[r]*2}
   data[1+rowCount]=at;
@@ -1090,16 +1090,16 @@ export class MedicalVolumeRenderer{
    for(let z=0;z<d;z++){const rec=g[z];if(rec)for(let i=0;i<rec.length;i+=3){const row=z*h+rec[i],c=cursor[row];data[c]=((rec[i+2]&65535)<<16)|(rec[i+1]&65535);data[c+1]=word>>>0;cursor[row]=c+2}}
   }
   for(let ri=0;ri<Math.min(grids.length,14);ri++)data[tableStart+1+ri]=(((regions[ri].color>>>0)&0xffffff)|(regions[ri].focused?0x1000000:0)|0x80000000)>>>0;
-  // build 375: data[tableStart] = mask of the segment indices that have a shown region (unknown segment: all); hits on other segments skip the lookup
+  // data[tableStart] = mask of the segment indices that have a shown region (unknown segment: all); hits on other segments skip the lookup
   let segMask=0;for(let ri=0;ri<grids.length;ri++){if(!grids[ri])continue;const segs=regions[ri].segments;if(!segs?.length||segs.some(i=>!(i>=0&&i<8)))segMask=0xff;else for(const i of segs)segMask|=1<<i}
   data[tableStart]=segMask;
-  // build 373: the shader binary-searches each row, so its pairs must be sorted by x0 (regions were appended in region order)
+  // the shader binary-searches each row, so its pairs must be sorted by x0 (regions were appended in region order)
   for(let r=0;r<rowCount;r++){const a=data[1+r],b=data[2+r];if(b-a<=2)continue;const pairs=[];for(let c=a;c<b;c+=2)pairs.push([data[c],data[c+1]]);pairs.sort((x,y)=>(x[0]&65535)-(y[0]&65535));for(let k=0;k<pairs.length;k++){data[a+k*2]=pairs[k][0];data[a+k*2+1]=pairs[k][1]}}
   if(data.byteLength>this.device.limits.maxStorageBufferBindingSize)throw new Error('GPU analysis overlay exceeds storage buffer limit');
   const buffer=this.device.createBuffer({label:'VRL analysis overlay',size:data.byteLength,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST});
   this.device.queue.writeBuffer(buffer,0,data);
-  // build 374: region index texture (4 bits per voxel, 8 per u32 along x; 67 MB at 512³, 8 MB at 256³). Regions past the 14th read 15 = search the row.
-  // build 376: filled in a mapped staging buffer and copied with one copyBufferToTexture at the 256-byte row pitch the
+  // region index texture (4 bits per voxel, 8 per u32 along x; 67 MB at 512³, 8 MB at 256³). Regions past the 14th read 15 = search the row.
+  // filled in a mapped staging buffer and copied with one copyBufferToTexture at the 256-byte row pitch the
   // spec requires there (the iPad waited ~120 ms per frame for seconds after a writeTexture of the same data, and the
   // colouring showed stripes meanwhile: a row-wise or chunked upload). Upload time and size go to the status bar.
   if(textureSignature&&this.regionTexture&&textureSignature===this.regionTexSignature){
@@ -1217,7 +1217,7 @@ export class MedicalVolumeRenderer{
    for(let z=0;z<d;z++)total+=(desc.runs?.[z]?.length||0)/3;
   }
   if(!activeMask){this.clearEditRuns();return}
-  // build 525 (issue #132): brick occupancy of the mask-only segments after the row index (brickClass reads it there)
+  // brick occupancy of the mask-only segments after the row index (brickClass reads it there)
   const occupancy=editBrickOccupancy(descs,gridDims,this.brickSize);
   const offsets=new Uint32Array(2+4*(rowCount+1)+(occupancy?occupancy.length:0)),intervals=new Uint32Array(Math.max(1,total));offsets[0]=activeMask;offsets[1]=keepMask;let cursor=0;
   if(occupancy)offsets.set(occupancy,2+4*(rowCount+1));
@@ -1238,7 +1238,7 @@ export class MedicalVolumeRenderer{
   const intervalsBuffer=this.device.createBuffer({label:'VRL edit intervals',size:intervals.byteLength,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST});
   this.device.queue.writeBuffer(rowsBuffer,0,offsets);this.device.queue.writeBuffer(intervalsBuffer,0,intervals);
   this.editRowsBuffer?.destroy?.();this.editIntervalsBuffer?.destroy?.();this.editRowsBuffer=rowsBuffer;this.editIntervalsBuffer=intervalsBuffer;
-  // build 379 diagnostics: what the GPU edit mask holds, per segment index (mode and interval count), for the status bar
+  // diagnostics: what the GPU edit mask holds, per segment index (mode and interval count), for the status bar
   this.editRunsInfo=descs.map((desc,si)=>{if(!desc)return null;let n=0;for(let z=0;z<d;z++)n+=(desc.runs?.[z]?.length||0)/3;return si+':'+desc.mode+' '+n+'区間'}).filter(Boolean).join(' ');
   this.editSignature=gridDims.join('x')+':'+String(activeMask)+':'+String(keepMask)+':'+String(cursor);this.rebuildBindGroup();
  }
@@ -1307,7 +1307,7 @@ export class MedicalVolumeRenderer{
   };
   return run();
  }
- // build 359: raw copy of the resident texture for the VR view (same rg8
+ // raw copy of the resident texture for the VR view (same rg8
  // packed u16 bytes as uploaded), slice by slice in chunks, so VR need not
  // read and filter the DICOM files again. Returns null when it cannot.
  async readPackedTexture(onProgress=()=>{}){
@@ -1348,7 +1348,7 @@ fn word(i:u32)->u32{
  setActive(active){if(!active&&typeof document!=='undefined'){const el=document.getElementById('gpu-frame-time');if(el)el.textContent=''}
   this.active=!!active;this.canvas.style.display=this.active?'block':'none';
  }
- // build 373: while dragging, the pixel budget of the tier is scaled by the
+ // while dragging, the pixel budget of the tier is scaled by the
  // measured GPU time of the volume pass: over 10 ms (a 60 Hz frame cannot
  // hold it with the present) one step down, under 5 ms one step up; steps
  // 1 / 0.7 / 0.5 / 0.35, at most every 300 ms, kept between drags
@@ -1401,7 +1401,7 @@ struct O{@builtin(position) p:vec4<f32>,@location(0) uv:vec2<f32>};
  }
  render(camera,obj,segmentState,segmentOrder,mpr={}){
   if(!this.active||!this.texture||!this.bindGroup||!obj)return;
-  this.lastMpr=mpr; // build 542: a pick re-renders the frame; it must be the frame on screen (section / MPR planes included), not an uncut one
+  this.lastMpr=mpr; // a pick re-renders the frame; it must be the frame on screen (section / MPR planes included), not an uncut one
   this.resize();camera.updateMatrixWorld(true);obj.updateMatrixWorld(true);
   const inv=this.tmpInv.copy(obj.matrixWorld).invert(),origin=camera.getWorldPosition(this.tmpOrigin).applyMatrix4(inv),q=camera.getWorldQuaternion(this.tmpQuat);
   const right=this.tmpRight.set(1,0,0).applyQuaternion(q).transformDirection(inv),up=this.tmpUp.set(0,1,0).applyQuaternion(q).transformDirection(inv),forward=this.tmpForward.set(0,0,-1).applyQuaternion(q).transformDirection(inv);
@@ -1425,25 +1425,25 @@ struct O{@builtin(position) p:vec4<f32>,@location(0) uv:vec2<f32>};
    else if(mode===2)coord=(1-(idx+.5)/Math.max(h,1)*2)*this.halfExtents[1];
    else if(mode===3)coord=((idx+.5)/Math.max(w,1)*2-1)*this.halfExtents[0];
   }
-  // build 434: kept side = sign·(axis − coord) ≥ 0, the same rule as section-view.js sectionLocalNormal: coronal and
+  // kept side = sign·(axis − coord) ≥ 0, the same rule as section-view.js sectionLocalNormal: coronal and
   // sagittal base normals point to −y / −x (the 3D plane views now face those planes from the other side, as 2D draws them)
   put(19,active?mode:0,coord,(section.reverse?-1:1)*(mode===2||mode===3?-1:1),this.regionTexture?1:0);
   put(20,section.capEnabled?1:0,Number.isFinite(+section.capOpacity)?Math.max(0,Math.min(1,+section.capOpacity)):.85,section.hatch?1:0,28);
   put(21,this.textureDims[0],this.textureDims[1],this.textureDims[2],globalThis.__vrlSettings?.interpLevel?.()??1);
   const bg=canvasBackground3dUnit();put(22,bg[0],bg[1],bg[2],1); // the 3D background follows the theme; no re-upload of the volume
-  // build 620: the material preset of each segment slot (lighting.js MATERIALS: ambient, spec, shininess), appended after background (segMat)
+  // the material preset of each segment slot (lighting.js MATERIALS: ambient, spec, shininess), appended after background (segMat)
   for(let s=0;s<4;s++){const m=MATERIALS[materialKey(segmentState[segmentOrder[s]]?.material)];put(23+s,m.ambient,m.spec,m.shininess,0)}
   this.device.queue.writeBuffer(this.uniformBuffer,0,data);
   const low=(this.renderW&&(this.renderW!==this.canvas.width||this.renderH!==this.canvas.height))?this.lowTarget(this.renderW,this.renderH):null;
   const encoder=this.device.createCommandEncoder({label:'VRL volume frame'}),canvasView=this.context.getCurrentTexture().createView(),view=low?low.view:canvasView,pass=encoder.beginRenderPass({colorAttachments:[{view,clearValue:{r:canvasBackground3dUnit()[0],g:canvasBackground3dUnit()[1],b:canvasBackground3dUnit()[2],a:1},loadOp:'clear',storeOp:'store'}]});
   pass.setPipeline(this.pipeline);pass.setBindGroup(0,this.bindGroup);pass.draw(3);pass.end();
   if(low){const bp=encoder.beginRenderPass({colorAttachments:[{view:canvasView,loadOp:'clear',clearValue:{r:0,g:0,b:0,a:1},storeOp:'store'}]});bp.setPipeline(this.blitPipeline);bp.setBindGroup(0,low.group);bp.draw(3);bp.end()}
-  // diagnostics (build 279: 640x343 took longer than 1516x813, so the time is
+  // diagnostics (640x343 took longer than 1516x813, so the time is
   // not the ray casting alone): wait = GPU work queued before this frame,
   // lastFrameMs = this volume pass after that, gap = time between frames
   const fq=this.device.queue,measure=!this._frameTimerPending&&fq.onSubmittedWorkDone,now=performance.now();
   if(this._lastRenderAt){this.frameGapMs=now-this._lastRenderAt;
-   // build 375: per-second frame statistics for the status bar (a single gap sample hid the dropped frames)
+   // per-second frame statistics for the status bar (a single gap sample hid the dropped frames)
    if(this.interactive&&this.frameGapMs<250){const g=this._gaps=this._gaps||[];g.push(now,this.frameGapMs);while(g.length&&g[0]<now-1000)g.splice(0,2)}}
   this._lastRenderAt=now;
   let before=null;if(measure){this._frameTimerPending=true;before=fq.onSubmittedWorkDone().then(()=>performance.now())}
@@ -1472,7 +1472,7 @@ struct O{@builtin(position) p:vec4<f32>,@location(0) uv:vec2<f32>};
  async pick(clientX,clientY,camera,obj,segmentState,segmentOrder,preferredKey=null){
   const result=await this.pickMany([{clientX,clientY}],camera,obj,segmentState,segmentOrder,preferredKey);return result[0]||null;
  }
- resetData(){this.dataGeneration=(this.dataGeneration|0)+1;this.setActive(false);this.texture?.destroy?.();this.brickBuffer?.destroy?.();this.texture=null;this.brickBuffer=null;this.bindGroup=null;this.seriesId=null;this.bricksReady=false;this.previewVolume=null;this.previewPlaneBuffers={coronal:null,sagittal:null};this.volume=null;this.textureDims=[1,1,1];this.reducedVolume=false;this.textureBytes=0;this.planSignature='';this.clearEditRuns();this.clearPreviewRuns();this.clearAppliedCutRuns();this.clearAnalysisRuns()} // build 627: the region index texture (r32uint, 67 MB at 512³) and the overlay buffer belong to the old grid too: released here, not at the next clearAnalysisRuns
+ resetData(){this.dataGeneration=(this.dataGeneration|0)+1;this.setActive(false);this.texture?.destroy?.();this.brickBuffer?.destroy?.();this.texture=null;this.brickBuffer=null;this.bindGroup=null;this.seriesId=null;this.bricksReady=false;this.previewVolume=null;this.previewPlaneBuffers={coronal:null,sagittal:null};this.volume=null;this.textureDims=[1,1,1];this.reducedVolume=false;this.textureBytes=0;this.planSignature='';this.clearEditRuns();this.clearPreviewRuns();this.clearAppliedCutRuns();this.clearAnalysisRuns()} // the region index texture (r32uint, 67 MB at 512³) and the overlay buffer belong to the old grid too: released here, not at the next clearAnalysisRuns
  destroy(){this.resetData();this.regionTexture?.destroy?.();this._regionDummy?.destroy?.();this.uniformBuffer?.destroy?.();this.pickBuffer?.destroy?.();this.pickOutput?.destroy?.();this.editRowsBuffer?.destroy?.();this.editIntervalsBuffer?.destroy?.();this.previewRowsBuffer?.destroy?.();this.previewIntervalsBuffer?.destroy?.();this.analysisOverlayBuffer?.destroy?.();this.appliedCutRowsBuffer?.destroy?.();this.appliedCutIntervalsBuffer?.destroy?.();this.mprUniformBuffer?.destroy?.();this.canvas.remove()}
 }
 

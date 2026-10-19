@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { chamferDistanceBytes, buildDistanceBytes, combineClassificationDistance } from '../../docs/distance-field.js';
 
-// build 369: the VR sphere tracing jumps by (byte - 3) voxels, so the byte
+// the VR sphere tracing jumps by (byte - 3) voxels, so the byte
 // must never exceed the true distance to the other class, and should not be
 // much smaller either (the jumps would be short)
 function sphereVolume(N,r){
@@ -46,7 +46,7 @@ describe('distance field (chamfer 3-4-5 lower bound)',()=>{
   expect(r.data[0]).toBeLessThan(8);
  });
 
- it('combines classification channels with the smallest enabled distance in alpha (build 384)',()=>{
+ it('combines classification channels with the smallest enabled distance in alpha',()=>{
   const cls={data:new Uint8Array([200,10, 10,200, 128,128]),C:2,chan:[0,1,-1,-1]};
   const dist={data:new Uint8Array([5,9, 2,7, 255,255]),C:2,chan:[0,1,-1,-1]};
   const both=combineClassificationDistance(cls,dist,0b11);
@@ -62,10 +62,10 @@ describe('distance field (chamfer 3-4-5 lower bound)',()=>{
  });
 });
 
-// build 528: four stored segments share the combined texture (channels 0..2 + the distance alpha over every shown
+// four stored segments share the combined texture (channels 0..2 + the distance alpha over every shown
 // segment, the fourth included); the fourth segment's bytes go to their own texture
 import { fourthChannelBytes } from '../../docs/distance-field.js';
-describe('combineClassificationDistance with four stored channels (build 528)', () => {
+describe('combineClassificationDistance with four stored channels', () => {
  const cls={C:4,chan:[0,1,2,3],data:Uint8Array.from([200,10,20,30, 5,6,7,8])},dist={C:4,chan:[0,1,2,3],data:Uint8Array.from([9,4,7,2, 1,3,5,6])};
  it('is null without the option (as before)',()=>{expect(combineClassificationDistance(cls,dist,0b1111)).toBeNull()});
  it('keeps channels 0..2 and takes the alpha over the shown segments, the fourth included',()=>{

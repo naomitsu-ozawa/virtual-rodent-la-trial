@@ -91,7 +91,7 @@ export async function textureCacheHandle(cache,key,{slices,bytesPerSlice,info}){
  };
 }
 
-// settings > cache > auto-prune (build 296): entries of the same dataset (and
+// settings > cache > auto-prune: entries of the same dataset (and
 // the same 3D resolution for volumes) made with another filter setting are
 // dropped when a new one is stored. Entries without this info (older builds)
 // are left to the LRU budget.

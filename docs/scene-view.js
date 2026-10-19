@@ -3,19 +3,19 @@
 // verbatim from app.js; each factory takes the locals they used as parameters.
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.webgpu.js';
 import { WebGLRenderer } from 'https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js';
-import { frameYield } from './utils.js?v=20261019-build624';
-import { tr } from './i18n.js?v=20261019-build624';
-import { analysisCutScreen, analysisEditTargetMode, analysisEditTool, current3DVolume, sceneState, sectionViewOpen, sectionViewPlane, setAnalysisCutScreen, setAnalysisEditTargetKey, threeRenderMode, volume } from './state.js?v=20261019-build624';
-import { planes, sectionPosition, threeEditOverlay, viewport } from './ui-shell.js?v=20261019-build624';
-import { adoptRendererGpuDevice, adoptSplitGpuDevices, requestVrlGpuDevice, requestVrlPrimaryGpuDevice, requestVrlSplitRenderDevice, resetSplitGpuDevices } from './gpu-compute.js?v=20261019-build624';
-import { request3DRender } from './scene3d.js?v=20261019-build624';
-import { logGpuError } from './gpu-diagnostics.js?v=20261019-build624';
-import { canvasBackground3d, onCanvasThemeChange } from './canvas-theme.js?v=20261019-build624';
-import { updateMpr3DPlanePositions } from './mpr3d-overlay.js?v=20261019-build624';
-import { gpuSegmentOrder, segmentState } from './segments.js?v=20261019-build624';
-import { rebindWebGpuSectionClipGroup, sectionLocalPoint, updateSectionClipPlaneWorld, updateSectionViewUi, sectionLocalStep } from './section-view.js?v=20261019-build624';
-import { renderSectionPlaneLive } from './mpr-render.js?v=20261019-build624';
-import { cutPointerVoxel } from './analysis-ops.js?v=20261019-build624';
+import { frameYield } from './utils.js?v=20261019-build625';
+import { tr } from './i18n.js?v=20261019-build625';
+import { analysisCutScreen, analysisEditTargetMode, analysisEditTool, current3DVolume, sceneState, sectionViewOpen, sectionViewPlane, setAnalysisCutScreen, setAnalysisEditTargetKey, threeRenderMode, volume } from './state.js?v=20261019-build625';
+import { planes, sectionPosition, threeEditOverlay, viewport } from './ui-shell.js?v=20261019-build625';
+import { adoptRendererGpuDevice, adoptSplitGpuDevices, requestVrlGpuDevice, requestVrlPrimaryGpuDevice, requestVrlSplitRenderDevice, resetSplitGpuDevices } from './gpu-compute.js?v=20261019-build625';
+import { request3DRender } from './scene3d.js?v=20261019-build625';
+import { logGpuError } from './gpu-diagnostics.js?v=20261019-build625';
+import { canvasBackground3d, onCanvasThemeChange } from './canvas-theme.js?v=20261019-build625';
+import { updateMpr3DPlanePositions } from './mpr3d-overlay.js?v=20261019-build625';
+import { gpuSegmentOrder, segmentState } from './segments.js?v=20261019-build625';
+import { rebindWebGpuSectionClipGroup, sectionLocalPoint, updateSectionClipPlaneWorld, updateSectionViewUi, sectionLocalStep } from './section-view.js?v=20261019-build625';
+import { renderSectionPlaneLive } from './mpr-render.js?v=20261019-build625';
+import { cutPointerVoxel } from './analysis-ops.js?v=20261019-build625';
 // Orientation axes widget attached to the camera (bottom-left XYZ).
 export function makeAxisWidget(camera){
  const axisWidget=new THREE.Group();axisWidget.name='orientation_axes';camera.add(axisWidget);
@@ -36,10 +36,10 @@ export async function create3DRenderer(){
  let renderer,backend='WEBGL';
  if('gpu' in navigator){
   try{
-   // build 517: 「ハイブリッド環境での処理」 = primary GPU only (Linux hybrid): the display GPU creates the one device, no NVIDIA
+   // 「ハイブリッド環境での処理」 = primary GPU only (Linux hybrid): the display GPU creates the one device, no NVIDIA
    // device; null (not Linux / not that hybrid / setting 'hybrid') leaves the request exactly as before
    const core=await requestVrlPrimaryGpuDevice()||await requestVrlGpuDevice();
-   // build 516: Linux hybrid (display Intel / compute NVIDIA) only: the renderer gets its own device on the display adapter and
+   // Linux hybrid (display Intel / compute NVIDIA) only: the renderer gets its own device on the display adapter and
    // compute keeps the NVIDIA device (gpu-split.js). Everywhere else this returns null at once and the code below is the old path.
    const split=await requestVrlSplitRenderDevice({computeAdapter:core.adapter});
    if(split){
@@ -47,7 +47,7 @@ export async function create3DRenderer(){
      const splitRenderer=new THREE.WebGPURenderer({antialias:true,alpha:true,device:split.device});splitRenderer.setPixelRatio(Math.min(devicePixelRatio,2));await splitRenderer.init();
      adoptSplitGpuDevices(splitRenderer,core,split);renderer=splitRenderer;backend='WEBGPU';
     }catch(splitError){
-     // the render device is unusable: back to one shared device (the NVIDIA one), as before build 516. build 517: whatever the
+     // the render device is unusable: back to one shared device (the NVIDIA one), as before.: whatever the
      // split had recorded (also after a half-done adoptSplitGpuDevices) is reset and the reason is shown in the status.
      console.warn('GPU split render device failed; using one shared device.',splitError);logGpuError('GPU split render device init',splitError);try{split.device.destroy?.()}catch{}
      resetSplitGpuDevices('render device init failed: '+String(splitError?.message||splitError).slice(0,160));
@@ -64,7 +64,7 @@ export async function create3DRenderer(){
  if(!renderer){
   renderer=new WebGLRenderer({antialias:true,alpha:false});renderer.setPixelRatio(Math.min(devicePixelRatio,2));backend='WEBGL';
  }
- // build 450: the background follows the theme (WebGL clear colour; the WebGPU canvas is transparent over the card's CSS backdrop)
+ // the background follows the theme (WebGL clear colour; the WebGPU canvas is transparent over the card's CSS backdrop)
  const applyThemeBackground=()=>{if(backend==='WEBGL'){const c=canvasBackground3d();if(c)renderer.setClearColor(new THREE.Color('rgb('+c.join(',')+')'),1)}};
  applyThemeBackground();onCanvasThemeChange(()=>{applyThemeBackground();request3DRender()});
  return{renderer,backend};

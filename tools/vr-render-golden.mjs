@@ -1,4 +1,4 @@
-// VR render golden check (build 484 guard). Renders a small deterministic synthetic scene (bone ball / plate / rod, soft tissue, complex
+// VR render golden check. Renders a small deterministic synthetic scene (bone ball / plate / rod, soft tissue, complex
 // high-opacity fat: thin sheets with holes and single-voxel specks) with the REAL fragment shader of docs/vr-view.js on headless Chromium /
 // SwiftShader, in the shader variants the app uses, at 100 % and through the low-resolution path (f < 1: offscreen target + composite pass),
 // and compares every image with the committed golden PNG in tests/golden/vr-render/.
@@ -24,7 +24,7 @@ const zero = [0, 0, 1, 0];
 const noSoft = [[300, 3000, 1, 1], [-200, 299, 1, 0], [-250, -50, 1, 1], [0, 0, 0, 0]]; // soft tissue off: bone and (complex) fat show
 const translucent = [[300, 3000, 1, 1], [-200, 299, 0.35, 1], [-250, -50, 0.5, 1], [0, 0, 0, 0]]; // the app's soft-tissue default 0.35; fat 0.5 so that rays pile up opacity through many sheets (ACC_STOP matters)
 const cut = [[-pl[0], -pl[1], -pl[2], 0.05], zero, zero, zero]; // the half towards the camera is removed
-const boneOnly = [[300, 3000, 1, 1], [-200, 299, 1, 0], [-250, -50, 1, 0], [0, 0, 0, 0]]; // build 526: only the (mask-only) bone is shown, so empty bricks exist to skip
+const boneOnly = [[300, 3000, 1, 1], [-200, 299, 1, 0], [-250, -50, 1, 0], [0, 0, 0, 0]]; // only the (mask-only) bone is shown, so empty bricks exist to skip
 const CASES = [
   { name: 'noevents-bonefat', defines: [...OPQ, 'VRL_NO_EVENTS'], u: { segA: noSoft } },
   { name: 'noevents-allopaque', defines: [...OPQ, 'VRL_NO_EVENTS'], u: { segA: allOpaque } },
@@ -34,13 +34,13 @@ const CASES = [
   { name: 'full-cls-translucent', defines: [], useClsRaw: true, u: { segA: translucent, distInCls: 0, useDist: 0 } },
   { name: 'full-hu', defines: [], noCls: true, u: { segA: translucent } },
   { name: 'noevents-regions', defines: [...OPQ, 'VRL_NO_EVENTS', 'VRL_REGIONS'], u: { segA: noSoft } },
-  { name: 'full-hu-maskonly', defines: [], noCls: true, maskOnly: true, u: { segA: boneOnly } }, // build 526 (issue #132): HU path with a mask-only bone (the scene's edit mask), brick occupancy in use
-  // build 612 (shared lighting, docs/lighting.js): the viewer rolled by 180 degrees about its view axis = the volume turned upside down. The light is a headlight
+  { name: 'full-hu-maskonly', defines: [], noCls: true, maskOnly: true, u: { segA: boneOnly } }, // HU path with a mask-only bone (the scene's edit mask), brick occupancy in use
+  // the viewer rolled by 180 degrees about its view axis = the volume turned upside down. The light is a headlight
   // above the VIEWER, so these two must look like the unrolled cases turned by 180 degrees (shadows on the same sides of the shapes), never lit from below
   { name: 'noevents-bonefat-rolled', defines: [...OPQ, 'VRL_NO_EVENTS'], camUp: [0, -1, 0], u: { segA: noSoft } },
   { name: 'combined-section-rolled', defines: OPQ, camUp: [0, -1, 0], u: { segA: allOpaque, cutPlanes: cut, planeCount: 1, planeCut: 1, capOn: 1, sliceOpacity: 0.7 } },
 ];
-// build 528: four enabled segments (chan 0..3) on their own phantom (a -600 HU ball in the soft tissue as the fourth segment): the VRL_CLS4 variants the app uses
+// four enabled segments (chan 0..3) on their own phantom (a -600 HU ball in the soft tissue as the fourth segment): the VRL_CLS4 variants the app uses
 // then (the fourth segment's bytes in a second R8 texture) and, for reference, the general loop with the separate field those data used to run on
 const allOpaque4 = [[300, 3000, 1, 1], [-200, 299, 1, 1], [-250, -50, 1, 1], [-800, -300, 1, 1]], noSoft4 = [[300, 3000, 1, 1], [-200, 299, 1, 0], [-250, -50, 1, 1], [-800, -300, 1, 1]];
 const CASES4 = [
@@ -48,10 +48,10 @@ const CASES4 = [
   { name: '4seg-noevents-nosoft', defines: [...OPQ, 'VRL_NO_EVENTS', 'VRL_CLS4'], u: { segA: noSoft4 } },
   { name: '4seg-combined-section', defines: [...OPQ, 'VRL_CLS4'], u: { segA: allOpaque4, cutPlanes: cut, planeCount: 1, planeCut: 1, capOn: 1, sliceOpacity: 0.7 } },
   { name: '4seg-full-general', defines: [], useClsRaw: true, useDistTex: true, u: { segA: allOpaque4 } },
-  { name: '4seg-full4', defines: ['VRL_CLS4'], u: { segA: allOpaque4 } }, // build 529: the full4 variant (screenshots, diag modes): its runtime tight branch
+  { name: '4seg-full4', defines: ['VRL_CLS4'], u: { segA: allOpaque4 } }, // the full4 variant (screenshots, diag modes): its runtime tight branch
   { name: '4seg-full4-noskip', defines: ['VRL_CLS4'], u: { segA: allOpaque4, diag: 4 } }, // and its general loop (診断 スキップなし) reading the fourth segment from cls4Tex
 ];
-// build 526: the same scene with the pre-526 bricks (every brick a candidate of the mask-only segment = no empty-space skip) and the diag 5 probe
+// the same scene with the pre-526 bricks (every brick a candidate of the mask-only segment = no empty-space skip) and the diag 5 probe
 // (R = samples / 1024): the occupancy must skip (fewer samples) without losing a mask voxel (the drawn silhouette is the same; the skip re-phases
 // the samples, so single pixels inside the silhouette may differ by dither)
 const moCase = CASES.find(c => c.name === 'full-hu-maskonly'), PROOF = [
@@ -62,9 +62,9 @@ const PROOF_MAX_SILHOUETTE = +opt('--max-silhouette', 24), PROOF_SAMPLE_RATIO = 
 const jobs = CASES.flatMap(c => [{ ...c, name: c.name + '-f100', f: 1 }, { ...c, name: c.name + '-f' + Math.round(F_LOW * 100), f: F_LOW }]);
 const jobs4 = CASES4.flatMap(c => [{ ...c, name: c.name + '-f100', f: 1 }, { ...c, name: c.name + '-f' + Math.round(F_LOW * 100), f: F_LOW }]);
 
-const jobs3 = jobs.slice(); // the three-segment jobs (and the build 526 proof) go to the first scene; jobs gets the four-segment ones appended for the comparison loop
+const jobs3 = jobs.slice(); // the three-segment jobs (and the proof) go to the first scene; jobs gets the four-segment ones appended for the comparison loop
 const sh = grabShaders(shaderFile), scene = await buildScene(N), scene4 = await buildScene(N, { four: true });
-// build 562: content-box proof (not goldens: compared within the run). The app discards a ray that misses the content box (docs/vr-content-box.js) and
+// content-box proof (not goldens: compared within the run). The app discards a ray that misses the content box (docs/vr-content-box.js) and
 // ends the march at its exit; the proxy and the ray parameter stay the full box's, so every image must be pixel-identical to the full-box render: each golden
 // case, plus cases where the box is much smaller than the data box (bone only; bone only with a CT slice, whose air threshold reaches the body).
 // The diag-5 probe (R = samples / 1024 per pixel) sums the samples over all pixels, full box vs content box (the work saved). Not failing, reported
@@ -127,7 +127,7 @@ for (const j of jobs) {
     fs.writeFileSync(path.join(outDir, j.name + '-diff.png'), encodePng(dp, W, H));
   }
 }
-// build 526: the mask-only occupancy proof (not a golden: compared within the run)
+// the mask-only occupancy proof (not a golden: compared within the run)
 {
   const px = n => first.out[n], covered = p => { const c = new Uint8Array(W * H); for (let i = 0; i < c.length; i++) { const o = i * 4; if (Math.abs(p[o] - BGpx[0]) + Math.abs(p[o + 1] - BGpx[1]) + Math.abs(p[o + 2] - BGpx[2]) > 6) c[i] = 1; } return c; };
   const a = covered(px('proof-occ')), b = covered(px('proof-mixed')); let sil = 0, drawn = 0; for (let i = 0; i < a.length; i++) { if (a[i] !== b[i]) sil++; if (b[i]) drawn++; }
@@ -137,7 +137,7 @@ for (const j of jobs) {
   console.log((bad ? 'FAIL ' : 'ok   ') + 'mask-only occupancy proof: occupied bricks ' + scene.occupied + ' / ' + scene.brickN ** 3 + ', silhouette pixels changed ' + sil + ' of ' + drawn + ' drawn (max ' + PROOF_MAX_SILHOUETTE + '), samples per ray ' + (sOcc * 1024 / 255).toFixed(1) + ' with occupancy vs ' + (sMixed * 1024 / 255).toFixed(1) + ' with every brick mixed (ratio ' + ratio.toFixed(3) + ', max ' + PROOF_SAMPLE_RATIO + '); colour diff inside the silhouette ' + d.pixels + ' px / max ' + d.maxDiff);
   if (bad) { failed = true; fs.mkdirSync(outDir, { recursive: true }); for (const n of ['proof-occ', 'proof-mixed']) fs.writeFileSync(path.join(outDir, n + '.png'), encodePng(px(n), W, H)); }
 }
-// build 562: the content-box proof
+// the content-box proof
 {
   const boxFails = [], inDiffs = []; let worstIn = { pixels: 0, maxDiff: 0 }, n = 0;
   for (const [list, sc] of [[BOX3, scene], [BOX4, scene4]]) for (const c of list) {

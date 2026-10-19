@@ -95,7 +95,7 @@ describe('vr-real-scale', () => {
 });
 const displayed = s => s * NORM_LONG;
 
-// build 490: the section frame (a child of the holder) keeps its world size above the default 16.5 cm display
+// the section frame (a child of the holder) keeps its world size above the default 16.5 cm display
 import { FRAME_REF_SCALE, FRAME_SQUARE_MAX, frameWorldScale, frameSquareWorldScale, planeFrameLocalScale, planeTagLocalScale } from '../../docs/vr-real-scale.js';
 describe('section frame size cap', () => {
   const HALF = 0.12, HANDLE = 0.034, GLOW = 0.0015; // design sizes in vr-view.js (frame half side, number tag, glow half width), metres at the default display
@@ -136,7 +136,7 @@ describe('section frame size cap', () => {
     expect(tagWorld(s, HANDLE)).toBeCloseTo(HANDLE * s / DEFAULT_SCALE, 12);
     expect(frameWorldScale(s)).toBeCloseTo(s / DEFAULT_SCALE, 12);
     expect(planeTagLocalScale(s)).toBeCloseTo(1, 12);
-    for (let t = 0.005; t <= FRAME_REF_SCALE; t += 0.001) expect(planeFrameLocalScale(t)).toBeCloseTo(1 / FRAME_REF_SCALE, 9); // same as the build 490 value 1/max(s, ref)
+    for (let t = 0.005; t <= FRAME_REF_SCALE; t += 0.001) expect(planeFrameLocalScale(t)).toBeCloseTo(1 / FRAME_REF_SCALE, 9); // same as the value 1/max(s, ref)
   });
   it('is monotone and continuous at both caps', () => {
     let prev = 0, prevTag = 0;

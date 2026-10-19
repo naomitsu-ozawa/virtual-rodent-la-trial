@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { SEGMENT_STYLE_FIELDS, segmentPresetDefaults, resetSegmentStyles } from '../../docs/dataset-reset.js';
 
-// build 627: the segment presets' own settings go back to the defaults for every segment the next dataset does not use
+// the segment presets' own settings go back to the defaults for every segment the next dataset does not use
 const preset = (color, extra = {}) => ({ active: false, enabled: false, color, opacity: 1, min: 0, max: 1, opening: 0, closing: 0, minComponent: 0, holeFill: false, surfaceMm: 0, thicknessMm: 0, material: 'standard', _maskCache: null, _maskCacheKey: '', ...extra });
 const fresh = () => ({ bone: preset('#f3f0e8'), contrast: preset('#c026d3') });
 

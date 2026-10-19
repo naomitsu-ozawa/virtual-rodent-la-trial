@@ -1,4 +1,4 @@
-// Colour themes (build 449). Six themes: three light, three dark. The colours themselves are the CSS tokens in themes.css
+// Colour themes. Six themes: three light, three dark. The colours themselves are the CSS tokens in themes.css
 // (selected by <html data-theme="...">); this module only knows the ids, names and the choice.
 // The IMAGE AREA (MPR, 3D, volume rendering, segment colours, window / level) is never changed by a theme: see themes.css.
 export const THEME_STORAGE_KEY='vrl-theme';
@@ -14,7 +14,7 @@ export const THEMES=[
 ];
 export const THEME_IDS=THEMES.map(t=>t.id);
 export const isThemeId=id=>THEME_IDS.includes(id);
-// themes that were renamed (build 450: the blue ones became gray): a saved old id is read as the new one
+// themes that were renamed: a saved old id is read as the new one
 export const THEME_ALIASES={'light-cool':'light-gray','dark-navy':'dark-gray'};
 export const normalizeThemeId=id=>THEME_ALIASES[id]||id;
 export const themeMode=id=>THEMES.find(t=>t.id===id)?.mode||'dark';

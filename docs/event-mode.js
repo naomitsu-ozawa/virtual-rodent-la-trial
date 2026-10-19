@@ -1,4 +1,4 @@
-// build 626: 体験会モード (hands-on event mode). Pure: no DOM, no THREE, unit-tested (tests/unit/event-mode.test.js).
+// 体験会モード (hands-on event mode). Pure: no DOM, no THREE, unit-tested (tests/unit/event-mode.test.js).
 // Four levels, each one of the bundled practice datasets (docs/demo/sampleN, the same set ids as the practice-data chooser);
 // texts are i18n keys (i18n.js). The switch is settings.eventMode (app-settings.js, per device, default off); the chosen
 // level lives only in this page (a reload starts with none chosen) and follows whichever practice dataset was opened last.
@@ -48,11 +48,14 @@ export const triggerModeRow=hasResults=>!!hasResults;
 export const TRIGGER_AT_START='point';
 export const triggerMode=(labelsOn,hasResults)=>hasResults&&labelsOn?'label':'point';
 // the かんたん menu's board layout (1024 x 1180 px canvas), pure so that it can be tested and drawn without a headset. Widgets only carry an id;
-// vr-view.js maps the id to its action: 'seg:<key>:show|hide', 'section:show|hide', 'trigger:point|label', 'undo', 'home', 'reset', 'all', 'exit'.
+// vr-view.js maps the id to its action: 'seg:<key>:show|hide', 'section:show|hide', 'sliceOpacity' (the one slider: the same widget and setting as the full menu's スライス tab), 'trigger:point|label', 'undo', 'home', 'reset', 'all', 'exit'.
 // Advanced settings (quality, foveation, HU window, ...) are not here: すべての設定 opens the full menu.
-export const SIMPLE_MENU=Object.freeze({W:1024,H:1180,X:40,STATUS:140,TOP:190,ROW:92,TRIG_ROW:108,BTN_H:72,LIST_ROW:50,BOTTOM:1070});
+export const SIMPLE_MENU=Object.freeze({W:1024,H:1180,X:40,STATUS:140,TOP:180,ROW:82,TRIG_ROW:104,BTN_H:72,LIST_ROW:46,BOTTOM:1086});
 // There is no title line and no level text; the board's status line sits at STATUS and the rows start at TOP.
-// o: {segments:[{key,name,color,on}], sectionOn, trigger:{show,label}, results:[{hex,name,text}], total, resetArmed, text:{...}}
+// o: {segments:[{key,name,color,on}], sectionOn, sliceOpacity (0..1, the slider's value; default SLICE_OPACITY_DEFAULT), trigger:{show,label}, results:[{hex,name,text}], total, resetArmed, text:{...}}
+// The slice-opacity slider row (always there, for every dataset: it only shows once a section is) sits under the 断面 row; its steps are 5 % (sliceOpacityValue).
+export const SLICE_OPACITY_DEFAULT=0.6;
+export const sliceOpacityValue=v=>Math.round(Math.min(1,Math.max(0,+v||0))*20)/20;
 export function simpleMenuLayout(o){
  const M=SIMPLE_MENU,t=o.text,w=[],X=M.X,label=(id,x,y,text,extra={})=>w.push({type:'label',id,x,y,text,...extra});
  const btn=(id,x,y,wd,text,on,extra={})=>w.push({type:'button',id,x,y,w:wd,h:M.BTN_H,label:text,on,...extra});
@@ -63,6 +66,9 @@ export function simpleMenuLayout(o){
  for(const s of segs.slice(0,MAX_SEG_ROWS)){row('seg:'+s.key,y,s.name,s.color||'#fff',s.on);y+=M.ROW}
  if(segs.length>MAX_SEG_ROWS){label('seg:more',X,y+8,'… +'+(segs.length-MAX_SEG_ROWS),{size:24,color:'#9fb3c3'});y+=40}
  row('section',y,t.section,'#cfe3f0',!!o.sectionOn);y+=M.ROW;
+ const so=sliceOpacityValue(o.sliceOpacity??SLICE_OPACITY_DEFAULT);
+ label('sliceOpacity:name',X,y+40,t.sliceOpacity,{color:'#cfe3f0',bold:true,size:34});
+ w.push({type:'slider',id:'sliceOpacity',x:440,y,w:330,h:M.BTN_H,value:so,text:Math.round(so*100)+'%'});y+=M.ROW;
  if(o.trigger?.show){
   // the trigger switch: the lit button is what the trigger does now, the line below says it in words
   const lab=!!o.trigger.label;

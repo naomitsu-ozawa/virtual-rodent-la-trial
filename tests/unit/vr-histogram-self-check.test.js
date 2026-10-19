@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 const tag = readFileSync(new URL('../../docs/vr-histogram-panel.js', import.meta.url), 'utf8').match(/'\.\/vr-self-check\.js(\?v=[^']+)'/)[1];
 const { listVrSelfChecks, createVrSelfCheck } = await import('../../docs/vr-self-check.js' + tag);
 
-// build 557: the VR self-check 「ヒストグラム」 scenario keeps the histogram pass running while the frame rate is measured
+// the VR self-check 「ヒストグラム」 scenario keeps the histogram pass running while the frame rate is measured
 let clock = 0;
 afterEach(() => vi.restoreAllMocks());
 // a fake env.histogram whose pass takes passFrames frames; a fake ctx whose measure() runs `frames` frames of 14 ms

@@ -185,7 +185,7 @@ describe('crosshair state API', () => {
 
 describe('drawing layer', () => {
   const ui = readFileSync('docs/crosshair-ui.js', 'utf8'), shell = readFileSync('docs/ui-shell.js', 'utf8');
-  it('lines carry the dark outline of PR #92 (readable in all six themes) and live on their own canvas, not the slice canvas', () => {
+  it('lines carry the dark outline of an earlier change (readable in all six themes) and live on their own canvas, not the slice canvas', () => {
     expect(ui).toContain("ctx.strokeStyle='rgba(0,0,0,.6)';ctx.lineWidth=7;path()");
     expect(ui).toContain("ctx.strokeStyle=COLOR;ctx.lineWidth=3;path()");
     expect(ui).not.toMatch(/planes\[[^\]]+\]\.canvas\.getContext/); // never draws on the .mpr-canvas that theme-image-check compares

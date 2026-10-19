@@ -7,7 +7,7 @@ import {
 } from '../../docs/gpu-diagnostics.js';
 import { initGpuDiagnosticsUi } from '../../docs/gpu-diagnostics-ui.js';
 
-// build 520: the GPU info tab and its diagnostic report (PR #123's idea, ported onto the build 518 code) exist only in debug mode.
+// the GPU info tab and its diagnostic report (an earlier change's idea, ported onto the code) exist only in debug mode.
 // gpu-diagnostics.js and gpu-diagnostics-ui.js import no GPU / DOM code, so they load here as they are; the DOM-bound wiring
 // (gpu-diagnostics-collect.js) is checked from its source.
 const read = p => readFileSync(p, 'utf8');

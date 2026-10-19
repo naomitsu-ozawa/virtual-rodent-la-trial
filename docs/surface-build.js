@@ -1,33 +1,33 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { mark3DStale, mark3DCurrent } from './three-state.js?v=20261019-build624';
-import { set3DBusy } from './three-status.js?v=20261019-build624';
-import { sceneState, deferAutomatic3D, threeDCancelRequested, currentLanguage, analysisEditTool, threeRenderMode, current3DVolume, volume, incSourceRenderRevision, sourceRenderRevision, sectionViewOpen, sectionViewPlane } from './state.js?v=20261019-build624';
-import { request3DRender } from './scene3d.js?v=20261019-build624';
-import { threeLabel, footer, surfaceSmoothStrength } from './ui-shell.js?v=20261019-build624';
-import { surfaceSmoothingActive } from './settings.js?v=20261019-build624';
-import { frameYield, isDesktopRuntime } from './utils.js?v=20261019-build624';
-import { gpuFilterRuntime, setGpuComputeBackend, ensureGpuFilterDevice, runGpuSourceFilters, gpuStagesSupported } from './gpu-compute.js?v=20261019-build624';
-import { setProcessingBusy } from './busy.js?v=20261019-build624';
-import { SEGMENT_PRESET_ORDER, segmentEditState, segmentEditActive, segmentState, segmentHasProcessedMask } from './segments.js?v=20261019-build624';
-import { dispose, buildEditableRunsGroup, geometryFromSourcePositions } from './surface-mesh.js?v=20261019-build624';
-import { SmoothedSurfaceStream, smoothChunkHalo } from './smooth-chunks.js?v=20261019-build624';
-import { smoothMethod } from './smooth-workers.js?v=20261019-build624';
+import { mark3DStale, mark3DCurrent } from './three-state.js?v=20261019-build625';
+import { set3DBusy } from './three-status.js?v=20261019-build625';
+import { sceneState, deferAutomatic3D, threeDCancelRequested, currentLanguage, analysisEditTool, threeRenderMode, current3DVolume, volume, incSourceRenderRevision, sourceRenderRevision, sectionViewOpen, sectionViewPlane } from './state.js?v=20261019-build625';
+import { request3DRender } from './scene3d.js?v=20261019-build625';
+import { threeLabel, footer, surfaceSmoothStrength } from './ui-shell.js?v=20261019-build625';
+import { surfaceSmoothingActive } from './settings.js?v=20261019-build625';
+import { frameYield, isDesktopRuntime } from './utils.js?v=20261019-build625';
+import { gpuFilterRuntime, setGpuComputeBackend, ensureGpuFilterDevice, runGpuSourceFilters, gpuStagesSupported } from './gpu-compute.js?v=20261019-build625';
+import { setProcessingBusy } from './busy.js?v=20261019-build625';
+import { SEGMENT_PRESET_ORDER, segmentEditState, segmentEditActive, segmentState, segmentHasProcessedMask } from './segments.js?v=20261019-build625';
+import { dispose, buildEditableRunsGroup, geometryFromSourcePositions } from './surface-mesh.js?v=20261019-build625';
+import { SmoothedSurfaceStream, smoothChunkHalo } from './smooth-chunks.js?v=20261019-build625';
+import { smoothMethod } from './smooth-workers.js?v=20261019-build625';
 // the GPU path of the surface smoothing registers itself with smooth-workers.js
-import './smooth-gpu.js?v=20261019-build624';
-import { renderAll } from './mpr-render.js?v=20261019-build624';
-import { getFinalSegmentRuns, decodeSourceSegmentMasks } from './segment-runs.js?v=20261019-build624';
+import './smooth-gpu.js?v=20261019-build625';
+import { renderAll } from './mpr-render.js?v=20261019-build625';
+import { getFinalSegmentRuns, decodeSourceSegmentMasks } from './segment-runs.js?v=20261019-build625';
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.webgpu.js';
-import { createSurfaceMaterial } from './mesh-material.js?v=20261019-build624';
-import { updateSectionClipPlaneWorld } from './section-view.js?v=20261019-build624';
-import { makeVolume3DCoordinates, Float32FaceBuilder, appendSourceFacesFromCompactTile, makeSource3DCoordinates, appendSourceSliceFacesFast } from './mesh-geometry.js?v=20261019-build624';
-import { fitSourceTile, readMemoryRegion, sourceFilterStages, sourceFilterRuntime, sourceFilterHalo, readSourceRegion, runSourceFilterWorker } from './source-filters.js?v=20261019-build624';
-import { compactFaceFlags, valuesToFaceFlags } from './mask-ops.js?v=20261019-build624';
-import { meshCacheContext, runSurfaceCacheable, runSurfaceCacheKey, baseCacheKey, meshEntryInfo, loadCachedMeshes, storeBuiltMeshes, meshCacheStats } from './mesh-cache-apply.js?v=20261019-build624';
+import { createSurfaceMaterial } from './mesh-material.js?v=20261019-build625';
+import { updateSectionClipPlaneWorld } from './section-view.js?v=20261019-build625';
+import { makeVolume3DCoordinates, Float32FaceBuilder, appendSourceFacesFromCompactTile, makeSource3DCoordinates, appendSourceSliceFacesFast } from './mesh-geometry.js?v=20261019-build625';
+import { fitSourceTile, readMemoryRegion, sourceFilterStages, sourceFilterRuntime, sourceFilterHalo, readSourceRegion, runSourceFilterWorker } from './source-filters.js?v=20261019-build625';
+import { compactFaceFlags, valuesToFaceFlags } from './mask-ops.js?v=20261019-build625';
+import { meshCacheContext, runSurfaceCacheable, runSurfaceCacheKey, baseCacheKey, meshEntryInfo, loadCachedMeshes, storeBuiltMeshes, meshCacheStats } from './mesh-cache-apply.js?v=20261019-build625';
 export function applySectionClippingMaterials(root=sceneState?.obj){
  if(!root||!sceneState)return;
  const active=sectionViewOpen&&!!sectionViewPlane&&sceneState.backend!=='WEBGPU';
- // build 596: only a material whose planes change is marked for update (on WebGPU every material was rebuilt each time the
+ // only a material whose planes change is marked for update (on WebGPU every material was rebuilt each time the
  // section view opened or reversed, though WebGPU clips with the ClippingGroup and the material planes stay null)
  root.traverse(o=>{if(!o.isMesh)return;const mats=Array.isArray(o.material)?o.material:[o.material];for(const m of mats){if(!m)continue;const want=active?sceneState.sectionClipPlane:null,had=m.clippingPlanes?.length?m.clippingPlanes[0]:null;if(want===had&&(m.clippingPlanes?.length||0)===(want?1:0))continue;m.clippingPlanes=want?[want]:null;m.clipShadows=false;m.needsUpdate=true}});
 }
@@ -43,9 +43,9 @@ export function syncSectionClipParent(){
   applySectionClippingMaterials(sceneState.obj);
  }
 }
-// chunk size of the base surface in floats; tests set override to make a small volume take several chunks (build 612)
+// chunk size of the base surface in floats; tests set override to make a small volume take several chunks
 export const baseSurfaceChunkFloats={override:0};
-// slices and floats of faces per chunk of the base surface. Build 612: while smoothing, a desktop chunk is twice as long
+// slices and floats of faces per chunk of the base surface.: while smoothing, a desktop chunk is twice as long
 // (128 slices / 24M floats): every chunk is smoothed with halo slices on both sides, half as much again at 64 slices; the
 // iPad / iPhone keep 32 slices / 6M floats (memory)
 export function baseSurfaceChunking(){
@@ -74,7 +74,7 @@ export function gpuCapacityError(error){
  const m=String(error?.message||error||'').toLowerCase();
  return m.includes('out of memory')||m.includes('allocation')||m.includes('buffer limit')||m.includes('binding size')||m.includes('maxstoragebufferbindingsize')||m.includes('maxbuffersize');
 }
-// build 600/601: the surface-nets corners on a tile's edge read the (blurred) field up to two voxels outside the tile, which
+// the surface-nets corners on a tile's edge read the (blurred) field up to two voxels outside the tile, which
 // is only the same as the neighbouring tile's when the box holds those voxels with their whole filter support
 export const SURFACE_FIELD_HALO=2;
 export function sourceFilterSurfaceHalo(stages){return sourceFilterHalo(stages)+SURFACE_FIELD_HALO}
@@ -101,7 +101,7 @@ export async function processSourceRegionFaces(series,target,stages,key,revision
 export async function getFilteredSourceAxialFaceBlock(zStart,coreDepth,series,segments,keyPrefix='3d-face-block'){
  const stages=sourceFilterStages();
  const revision=sourceFilterRuntime.revision,w=series.columns,h=series.rows,d=series.slices.length,halo=sourceFilterSurfaceHalo(stages),outDepth=Math.min(d-zStart,coreDepth),tiles=[],[tileStartX,tileStartY]=gpuMeshTileStart(),[tx,ty]=fitSourceTile(w,h,outDepth,halo,tileStartX,tileStartY),queue=[];
- // build 612: never GPU-resident with surface smoothing on: the constrained smoothing runs on the read-back vertices
+ // never GPU-resident with surface smoothing on: the constrained smoothing runs on the read-back vertices
  const gpuResident=surfaceSmoothingActive()?false:shouldUseGpuResidentSurface(w,h,d,tx,ty,coreDepth,segments?.length||0);
  for(let y=0;y<h;y+=ty)for(let x=0;x<w;x+=tx)queue.push({x,y,z:zStart,width:Math.min(tx,w-x),height:Math.min(ty,h-y),depth:outDepth});
  while(queue.length){
@@ -134,7 +134,7 @@ export async function processMemoryMeshRegion(v,target,segments,gpuResident=true
 }
 export async function getMemoryGpuMeshBlock(v,zStart,coreDepth,segments){
  const outDepth=Math.min(v.slices-zStart,coreDepth),tiles=[],[tileStartX,tileStartY]=gpuMeshTileStart(),[tx,ty]=fitSourceTile(v.columns,v.rows,outDepth,SURFACE_FIELD_HALO,tileStartX,tileStartY),queue=[];
- // build 612: never GPU-resident with surface smoothing on: the constrained smoothing runs on the read-back vertices
+ // never GPU-resident with surface smoothing on: the constrained smoothing runs on the read-back vertices
  const gpuResident=surfaceSmoothingActive()?false:shouldUseGpuResidentSurface(v.columns,v.rows,v.slices,tx,ty,coreDepth,segments?.length||0);
  for(let y=0;y<v.rows;y+=ty)for(let x=0;x<v.columns;x+=tx)queue.push({x,y,z:zStart,width:Math.min(tx,v.columns-x),height:Math.min(ty,v.rows-y),depth:outDepth});
  while(queue.length){
@@ -182,7 +182,7 @@ export function setSegmentSurfaceShown(key,on){
  request3DRender();
 }
 export function segmentUsesRunSurface(key,v=current3DVolume||volume){
- // build 460: in-memory volumes too (the HU-interval mesh of the GPU block builder cannot subtract the higher segments' voxels)
+ // in-memory volumes too (the HU-interval mesh of the GPU block builder cannot subtract the higher segments' voxels)
  return segmentEditActive(key)||!!(v&&segmentState[key]?.active&&segmentState[key]?.enabled&&segmentHasProcessedMask(key));
 }
 export async function refreshEditedSegmentSurface(key,v=current3DVolume||volume,expectedRevision=null){
@@ -193,7 +193,7 @@ export async function refreshEditedSegmentSurface(key,v=current3DVolume||volume,
   setBaseSegmentSurfaceVisibility(key,true);request3DRender();renderAll();return true;
  }
  const runs=await getFinalSegmentRuns(key,v);if(!isCurrent())return false;
- // build 608: the same data, settings and runs build the same mesh: restore it from the device cache (a miss builds as before)
+ // the same data, settings and runs build the same mesh: restore it from the device cache (a miss builds as before)
  let group=null,cacheKey=null;const mctx=runSurfaceCacheable(key,v)?await meshCacheContext():null;
  if(mctx){try{cacheKey=await runSurfaceCacheKey(v,key,runs);if(!isCurrent())return false;const hit=await loadCachedMeshes(mctx,cacheKey);if(hit&&isCurrent()){group=new THREE.Group();for(const m of hit.meshes)group.add(m);meshCacheStats.hits++}else if(hit){for(const m of hit.meshes)dispose(m)}else meshCacheStats.misses++}catch(e){console.warn('Mesh cache lookup failed.',e);cacheKey=null}}
  if(!group){
@@ -255,7 +255,7 @@ export async function render3DSourceBacked(v){
   threeLabel.textContent=(sceneState.backend||'3D')+' · full resolution';set3DBusy(false);request3DRender();mark3DCurrent();return true;
  }
  const {chunkDepth,meshFloatLimit}=baseSurfaceChunking(),coords=makeSource3DCoordinates(series);
- // build 612: with surface smoothing every segment's faces go through a SmoothedSurfaceStream: chunks smoothed with halo
+ // with surface smoothing every segment's faces go through a SmoothedSurfaceStream: chunks smoothed with halo
  // slices on both sides and their seams copied (one watertight surface at every strength; the strong-smoothing merge of
  // the whole segment is gone)
  const smoothStream=surfaceSmoothingActive()&&streamActive.length?new SmoothedSurfaceStream({keys:streamActive.map(({key})=>key),coords,strength:+surfaceSmoothStrength.value,slices:series.slices.length,Builder:Float32FaceBuilder,isCurrent:()=>revision===sourceRenderRevision,onGeometry:(key,geometry,z)=>{if(revision===sourceRenderRevision)addSegmentMesh(key,geometry,z);else geometry.dispose()}}):null;
@@ -264,7 +264,7 @@ export async function render3DSourceBacked(v){
  const abandon=()=>{smoothStream?.cancel();dispose(group);return null};
  const materialParamsByKey=new Map(streamActive.map(({key,seg})=>[key,{color:seg.color,transparent:seg.opacity<.999,opacity:seg.opacity,roughness:key==='bone'?.55:.8,metalness:0,side:THREE.DoubleSide,depthWrite:seg.opacity>.55,flatShading:!surfaceSmoothingActive()}]));
  let residentTileCount=0,cpuTileCount=0;
- // build 608: the base surface of the same data, filters and segment settings is restored from the device cache. The route says
+ // the base surface of the same data, filters and segment settings is restored from the device cache. The route says
  // how this build chunks and smooths (GPU block / CPU stream, chunk sizes): it is part of the key
  const baseRoute=()=>{const g=streamActive.length>0&&(sourceFilterStages().length>0||('gpu' in navigator&&!gpuFilterRuntime.disabled));return{gpuMesh:g,filtered:sourceFilterStages().length>0,chunkDepth,meshFloatLimit,blockDepth:g?gpuMeshBlockDepth():0,tileStart:g?gpuMeshTileStart():null,smooth:surfaceSmoothingActive(),halo:surfaceSmoothingActive()?smoothChunkHalo(+surfaceSmoothStrength.value):0,method:surfaceSmoothingActive()?smoothMethod():'',touch:navigator.maxTouchPoints>0}};
  let restored=false,baseKey=null,route0='';const mctx=streamActive.length?await meshCacheContext():null;
@@ -332,7 +332,7 @@ export async function render3DMemoryGpu(v){
   sceneState.obj=group;sceneState.scene.add(group);syncSectionClipParent();if(sectionViewOpen&&sectionViewPlane){updateSectionClipPlaneWorld();applySectionClippingMaterials(group)}set3DBusy(false);request3DRender();mark3DCurrent();return true;
  }
  const {chunkDepth,meshFloatLimit}=baseSurfaceChunking(),coords=makeVolume3DCoordinates(v),materialParamsByKey=new Map(active.map(({key,seg})=>[key,{color:seg.color,transparent:seg.opacity<.999,opacity:seg.opacity,roughness:key==='bone'?.55:.8,metalness:0,side:THREE.DoubleSide,depthWrite:seg.opacity>.55,flatShading:!surfaceSmoothingActive()}]));
- // build 612: smoothed chunk by chunk with halos and seam copy, as render3DSourceBacked
+ // smoothed chunk by chunk with halos and seam copy, as render3DSourceBacked
  const smoothStream=surfaceSmoothingActive()?new SmoothedSurfaceStream({keys:active.map(({key})=>key),coords,strength:+surfaceSmoothStrength.value,slices:v.slices,Builder:Float32FaceBuilder,isCurrent:()=>revision===sourceRenderRevision,onGeometry:(key,geometry,z)=>{if(revision===sourceRenderRevision)addSegmentMesh(key,geometry,z);else geometry.dispose()}}):null;
  const positionsByKey=smoothStream?smoothStream.builders:new Map(active.map(({key})=>[key,new Float32FaceBuilder()]));
  // a superseded build stops its queued smoothing jobs too (they would hold the workers / the GPU for nothing)

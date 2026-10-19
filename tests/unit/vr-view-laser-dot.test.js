@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 
-// build 474 regression: an edit put "scene.add(dot);c.userData.dot=dot;" after a // comment on the same line,
+// regression: an edit put "scene.add(dot);c.userData.dot=dot;" after a // comment on the same line,
 // so c.userData.dot was undefined and the per-frame loop threw (dot.material) -> VR/AR showed nothing.
 const src = readFileSync(new URL('../../docs/vr-view.js', import.meta.url), 'utf8');
 const codeOf = line => { const i = line.indexOf('//'); return i < 0 ? line : line.slice(0, i); };

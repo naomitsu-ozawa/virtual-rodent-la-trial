@@ -6,7 +6,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 // renderPlane(p, revision, idx) returns immediately unless `revision` equals
 // the current planeRenderRevision[p]. Calling it without a revision silently
 // draws nothing — this hid every 2D filter preview (GPU and full-resolution
-// paths) from at least build 150 until 191. Use safeRenderPlane(p) or pass
+// paths) from at least until 191. Use safeRenderPlane(p) or pass
 // ++planeRenderRevision[p] and the slice index.
 describe('renderPlane call sites', () => {
   const files = readdirSync('docs').filter(f => f.endsWith('.js'));

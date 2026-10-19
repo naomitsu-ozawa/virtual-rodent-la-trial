@@ -1,6 +1,6 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Self-contained: depends only on the imports below (no module state).
-import { ANISO_LAMBDA_MIN, ANISO_LAMBDA_MAX } from './filter-units.js?v=20261019-build624';
+import { ANISO_LAMBDA_MIN, ANISO_LAMBDA_MAX } from './filter-units.js?v=20261019-build625';
 export const AIRDIST_X_MAX_N=64;
 export function gpuFilterShader(kind,workgroupSize){
  const header=`
@@ -47,7 +47,7 @@ fn main(@builtin(global_invocation_id) gid:vec3<u32>){
  let dims=vec3<i32>(i32(meta[0]),i32(meta[1]),i32(meta[2]));
  let mode=meta[6];var inSeg=false;
  if(axis==0u&&mode==0u){let v=src[i];inSeg=v>=params[0]&&v<=params[1];}else if(axis==0u&&mode==1u){inSeg=src[i]>0.5;}else{inSeg=src[i]>=0.0;}
- // build 313: visit offsets by increasing |k| and stop once (k*s)^2 >= g:
+ // visit offsets by increasing |k| and stop once (k*s)^2 >= g:
  // every term is >= (k*s)^2, so the rest cannot lower g. Air voxels (g=0 at
  // k=0) now read one value instead of 2n+1. Same result as the full scan.
  var g=1.0e30;
@@ -65,7 +65,7 @@ fn main(@builtin(global_invocation_id) gid:vec3<u32>){
  }
  dst[i]=select(-(g+1.0),g,inSeg);
 }`;
- // build 316: the x pass of airDist (axis 0) with the row neighbours staged in
+ // the x pass of airDist (axis 0) with the row neighbours staged in
  // workgroup memory. The x pass was the slowest (3.8 s of 5.8 s): body voxels
  // with no air within n along x never hit the early break, so each read all
  // 2n+1 values from the storage buffer. Each workgroup now loads its span
@@ -98,7 +98,7 @@ fn main(@builtin(global_invocation_id) gid:vec3<u32>,@builtin(local_invocation_i
  dst[i]=select(-(g+1.0),g,inSeg);
 }`;
  // n passes of the 3-tap gaussian along one axis fused into one (2n+1)-tap
- // pass (build 286: 4 passes x 3 axes were 12 full-volume dispatches); weights
+ // pass; weights
  // come from gaussianPassKernel(), meta[4]=axis, meta[5]=radius n
  if(kind==='gaussianK')return header+`
 @compute @workgroup_size(${workgroupSize})
@@ -111,7 +111,7 @@ fn main(@builtin(global_invocation_id) gid:vec3<u32>){
  }
  dst[i]=acc;
 }`;
- // build 311: filtered block -> packed rg8 (u16) volume texture slices on the
+ // filtered block -> packed rg8 (u16) volume texture slices on the
  // GPU: in-plane area average over xs/ys spans, CT value -> raw u16, two texels
  // per u32 word; rows padded to meta[6] words (256-byte copy alignment)
  if(kind==='packReduce')return `
@@ -159,7 +159,7 @@ fn main(@builtin(global_invocation_id) gid:vec3<u32>){
 @compute @workgroup_size(${workgroupSize})
 fn main(@builtin(global_invocation_id) gid:vec3<u32>){
  let i=gid.x;if(i>=meta[3]){return;}let c=params[1];let hw=max(1.0,params[2]*0.5);let g=max(0.0,params[0])*6.0;
- // build 436: see cpuSigmoid (centre and values outside centre ± width/2 kept, strength 0 = none). tanh written as
+ // see cpuSigmoid (centre and values outside centre ± width/2 kept, strength 0 = none). tanh written as
  // 1 − 2/(exp(2a)+1): no inf/inf on drivers whose tanh overflows; |g·t| ≤ 6 here anyway
  let x=src[i];let t=(x-c)/hw;
  if(g>0.0001&&t>-1.0&&t<1.0){let a=1.0-2.0/(exp(2.0*g*t)+1.0);let b=1.0-2.0/(exp(2.0*g)+1.0);dst[i]=c+hw*a/b;}else{dst[i]=x;}
@@ -196,7 +196,7 @@ fn main(@builtin(global_invocation_id) gid:vec3<u32>){
  diff=src[i-plane]-center;flux+=wz*(diff/sqrt(diff*diff+eps*eps));diff=src[i+plane]-center;flux+=wz*(diff/sqrt(diff*diff+eps*eps));
  dst[i]=center+lambda*flux;
 }`;
- // Separable unsharp mask (build 271): the clipped box mean is a product of 1D
+ // Separable unsharp mask: the clipped box mean is a product of 1D
  // means, so x and y passes ('boxMean') then a z pass fused with the sharpening
  // ('unsharpCombine', original CT at binding 4) give the same result as the cube
  // loop (since removed) with 3(2r+1) reads per voxel instead of (2r+1)³.
@@ -216,7 +216,7 @@ fn main(@builtin(global_invocation_id) gid:vec3<u32>){
  dst[i]=sum/max(count,0.000001);
 }`;
  // unsharpCombine: src = x/y box mean, binding 4 = original; meta[5]=taps K; params = amount, thresholdHU
- // (the Unsharp stage's param layout; build 447: no volume range), A of the z axis (see boxMean).
+ // (the Unsharp stage's param layout;: no volume range), A of the z axis (see boxMean).
  if(kind==='unsharpCombine')return header+`
 @group(0) @binding(4) var<storage, read> orig: array<f32>;
 @compute @workgroup_size(${workgroupSize})
@@ -539,7 +539,7 @@ export function gaussianPassKernel(strength,passes){
  return k;
 }
 
-// build 612: the constrained surface smoothing (constrained-smooth.js) on the GPU, one kernel per pass of an iteration
+// the constrained surface smoothing (constrained-smooth.js) on the GPU, one kernel per pass of an iteration
 // (smooth-gpu.js dispatches them in the order of smoothDispatchPlan, smooth-gpu-plan.js). Each runs once per vertex i.
 // The bodies are written so that they are valid JavaScript as well (no type annotations or literal suffixes, scalar
 // arithmetic only): the unit test runs them on the CPU, pass by pass, against constrainedSmoothPositions.

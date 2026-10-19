@@ -1,4 +1,4 @@
-// Per-segment HU histogram panel of the 3D view's analysis overlay (build 534, PC only; nothing here touches the GPU shaders or VR).
+// Per-segment HU histogram panel of the 3D view's analysis overlay.
 // - The voxels of a segment are its FINAL runs (getFinalSegmentRuns: filter-aware, post-processing, edits, voxel takers above).
 //   A segment that is a plain HU range on unfiltered data needs no pass of its own: it is a slice of the whole-volume histogram.
 // - The HU values are read slice by slice through readEffectiveSlice (effective-hu.js): the FILTERED axial planes (what the 2D cards show)
@@ -6,23 +6,23 @@
 //   3.5 GB study is never copied. The pass yields to the UI by time, can be cancelled, restarts when the segment settings change
 //   and reads every N-th slice first (a draft) on long volumes. Results: Uint32Array(4096) per segment (histogram.js), cached by
 //   the segment cache key (segment-cache-key.js).
-// - The chart's x range (build 551) is display only (stats are always over all the data): 自動 = a percentile window of the shown segments together (a thin bone tail does not
+// - The chart's x range is display only (stats are always over all the data): 自動 = a percentile window of the shown segments together (a thin bone tail does not
 //   squeeze the rest), 全体 = min..max, or typed / wheel-zoomed; kept in localStorage. A range line outside it is marked at the edge and still draggable there.
 // - The HU range of every shown segment is a vertical line; dragging it moves the segment's min / max slider through the very
 //   same events as the slider itself (input while moving, change on release), so the segment code runs exactly as for a slider.
-// - build 568: the VR board counts the VR data itself (vr-label-histogram.js) and reads only the display range and the scale from here; the VR
-//   consumer / texture pass of builds 557-566 (acquireHistogram, getHistogramView, ...) is gone.
-import { volume, current3DVolume, currentLanguage } from './state.js?v=20261019-build624';
-import { segmentState, SEGMENT_PRESET_ORDER, segmentNeedsVoxelMask, segmentEditGen, segmentSourceSignature } from './segments.js?v=20261019-build624';
-import { getFinalSegmentRuns } from './segment-runs.js?v=20261019-build624';
-import { sourceFilterStages, sourceFilterSignature } from './source-filters.js?v=20261019-build624';
-import { getHuMode, effectiveHuSignature, huModeToggle, segmentNeedsRuns } from './effective-hu.js?v=20261019-build624';
-import { readEffectiveSlice, rawHuVolume, filtersActive } from './effective-hu-source.js?v=20261019-build624';
-import { segmentRunsCacheKey } from './segment-cache-key.js?v=20261019-build624';
-import { setCtSliderRange, ctSliderFullBounds, segmentControl } from './segment-ui.js?v=20261019-build624';
-import { tr } from './i18n.js?v=20261019-build624';
-import { frameYield } from './utils.js?v=20261019-build624';
-import { createHist, binValues, binRuns, scaleHist, histInRange, rebinHist, histExtent, histStats, voxelsToMm3, huToX, xToHu, nearestLine, niceStep, windowFor, clampWindow, zoomWindow, normalizeRange } from './histogram.js?v=20261019-build624';
+// -: the VR board counts the VR data itself (vr-label-histogram.js) and reads only the display range and the scale from here; the VR
+//   consumer / texture pass of-566 (acquireHistogram, getHistogramView, ...) is gone.
+import { volume, current3DVolume, currentLanguage } from './state.js?v=20261019-build625';
+import { segmentState, SEGMENT_PRESET_ORDER, segmentNeedsVoxelMask, segmentEditGen, segmentSourceSignature } from './segments.js?v=20261019-build625';
+import { getFinalSegmentRuns } from './segment-runs.js?v=20261019-build625';
+import { sourceFilterStages, sourceFilterSignature } from './source-filters.js?v=20261019-build625';
+import { getHuMode, effectiveHuSignature, huModeToggle, segmentNeedsRuns } from './effective-hu.js?v=20261019-build625';
+import { readEffectiveSlice, rawHuVolume, filtersActive } from './effective-hu-source.js?v=20261019-build625';
+import { segmentRunsCacheKey } from './segment-cache-key.js?v=20261019-build625';
+import { setCtSliderRange, ctSliderFullBounds, segmentControl } from './segment-ui.js?v=20261019-build625';
+import { tr } from './i18n.js?v=20261019-build625';
+import { frameYield } from './utils.js?v=20261019-build625';
+import { createHist, binValues, binRuns, scaleHist, histInRange, rebinHist, histExtent, histStats, voxelsToMm3, huToX, xToHu, nearestLine, niceStep, windowFor, clampWindow, zoomWindow, normalizeRange } from './histogram.js?v=20261019-build625';
 const MAX_RETRIES = 6, POLL_MS = 400, DRAFT_MIN_SLICES = 240, DRAFT_SLICES = 80, CACHE_MAX = 24, CHART_H = 150, GRAB_PX = 6, PAD = { l: 34, r: 8, t: 14, b: 20 };
 const RANGE_KEY = 'vrl-hist-range-v1';
 // the chart's display range ('auto' = robust to tails, 'full' = min..max, 'manual'): remembered per viewer, never required
@@ -124,7 +124,7 @@ async function runJob(sig) {
     finish();
   } catch (e) {
     // __SUPERSEDED__: another computation of the same tiles took the worker slot (or the settings moved under the segment code): not a result,
-    // so the pass starts again on a later poll (until build 551 it stopped here for good, silently: the VR board said 「計算中」 for ever)
+    // so the pass starts again on a later poll (it stopped here for good, silently: the VR board said 「計算中」 for ever)
     const msg = String(e?.message || e);
     if (!job.cancelled) {
       if (msg === '__SUPERSEDED__' && st.retries < MAX_RETRIES) { st.retries++; st.lastRun = ''; }
@@ -378,12 +378,12 @@ function restart() {
 const active = () => st.open;
 function emit() { for (const fn of st.listeners) { try { fn(); } catch (e) { console.error(e); } } }
 
-// ---- for the VR board (build 567/568: vr-view.js reads the display range and the scale; it counts the VR data itself, vr-label-histogram.js) ----
+// ---- for the VR board ----
 // onHistogramChange(fn) is called whenever the drawn chart may have changed (the range / the scale)
 export const getHistogramLog = () => st.log;
 // the chart's display range (自動 / 全体 / 手動), for the VR board's x axis (the same object until it is set again)
 export const getHistogramRange = () => st.range;
-// build 570: the VR board sets the display range (the end drag of its x axis = 手動, its 「自動」 button = auto): the same as the PC card's own controls
+// the VR board sets the display range (the end drag of its x axis = 手動, its 「自動」 button = auto): the same as the PC card's own controls
 export function setHistogramRange(range) { setRange(range); }
 export function onHistogramChange(fn) { st.listeners.add(fn); return () => st.listeners.delete(fn); }
 export function setHistogramLog(on) { st.log = !!on; draw(true); }

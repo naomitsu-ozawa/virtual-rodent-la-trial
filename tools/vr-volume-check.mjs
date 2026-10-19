@@ -9,9 +9,9 @@ import http from 'node:http'; import fs from 'node:fs'; import path from 'node:p
 import { resolveLighting } from './lib/vr-gl-harness.mjs';
 import { materialVec } from '../docs/lighting.js';
 const fileA=process.argv[2]||'docs/vr-view.js',fileB=process.argv[3]||null,outDir=process.argv[4]||'.';
-const grab=(src,name)=>{const m=src.match(new RegExp('const '+name+'=`([\\s\\S]*?)`;'));if(!m)throw new Error('shader '+name+' not found');return resolveLighting(m[1])}; // build 612: the shared lighting placeholders
-// REGION=1 (build 409): a synthetic analysis result — colour index 1 on the half x < N/2 of the volume (cyan), with VRL_REGIONS
-// REGION=fat (build 437): the result only on the fat voxels of that half (a fat result, regionSeg = fat); REGZERO=1: no
+const grab=(src,name)=>{const m=src.match(new RegExp('const '+name+'=`([\\s\\S]*?)`;'));if(!m)throw new Error('shader '+name+' not found');return resolveLighting(m[1])}; // the shared lighting placeholders
+// REGION=1: a synthetic analysis result — colour index 1 on the half x < N/2 of the volume (cyan), with VRL_REGIONS
+// REGION=fat: the result only on the fat voxels of that half (a fat result, regionSeg = fat); REGZERO=1: no
 // result voxels (same shader); SEGS=nofat: fat hidden. Fat hidden, REGION=fat vs REGZERO=1 must render the same image.
 const DEFS=[...(process.env.DEFINES||'').split(',').filter(Boolean),...(process.env.REGION?['VRL_REGIONS']:[])].map(d=>'#define '+d+'\n').join('');
 const load=f=>{const s=fs.readFileSync(f,'utf8');return{vs:grab(s,'vertexShader'),fs:DEFS+grab(s,'fragmentShader')}};
@@ -50,12 +50,12 @@ const result=await pg.evaluate(async ({segM,A,B,countA,countB,refine,useDist,bon
  const INTERCEPT=useVol?-4000:-1024;
  const vol=new THREE.Data3DTexture(data,N,N,N);vol.format=THREE.RGFormat;vol.type=THREE.UnsignedByteType;vol.minFilter=vol.magFilter=THREE.LinearFilter;vol.unpackAlignment=1;vol.needsUpdate=true;
  // bricks 8³ with one voxel of overlap (vr-view computeBricks)
- const BS=8,bx=N/BS,mm=new Float32Array(bx*bx*bx*4); // build 526: four floats per brick (B = mask-only occupancy, unused here)
+ const BS=8,bx=N/BS,mm=new Float32Array(bx*bx*bx*4); // four floats per brick (B = mask-only occupancy, unused here)
  for(let k=0;k<bx;k++)for(let j=0;j<bx;j++)for(let i=0;i<bx;i++){let lo=1e9,hi=-1e9;
   for(let z=Math.max(0,k*BS-1);z<Math.min(N,(k+1)*BS+1);z++)for(let y=Math.max(0,j*BS-1);y<Math.min(N,(j+1)*BS+1);y++)for(let x=Math.max(0,i*BS-1);x<Math.min(N,(i+1)*BS+1);x++){const v=hu(x,y,z);if(v<lo)lo=v;if(v>hi)hi=v}
   const o=((k*bx+j)*bx+i)*4;mm[o]=lo;mm[o+1]=hi}
  const bricks=new THREE.Data3DTexture(mm,bx,bx,bx);bricks.format=THREE.RGBAFormat;bricks.type=THREE.FloatType;bricks.minFilter=bricks.magFilter=THREE.NearestFilter;bricks.unpackAlignment=1;bricks.needsUpdate=true;
- // classification (vr-view build 356): per segment 0.5 + (HU distance inside the range)/2048, one byte per channel
+ // classification (vr-view): per segment 0.5 + (HU distance inside the range)/2048, one byte per channel
  const SEG=[seg.bone,seg.soft,seg.fat],C=4,cls=cached?new Uint8Array(await (await fetch('/cls.bin')).arrayBuffer()):new Uint8Array(N*N*N*C);
  const excluded=(x,y,z)=>edit&&z>=64&&y>=44&&y<=84&&x>=44&&x<=84;
  if(!cached)for(let z=0;z<N;z++)for(let y=0;y<N;y++)for(let x=0;x<N;x++){const v=hu(x,y,z),o=((z*N+y)*N+x)*C;for(let s=0;s<3;s++){const [a,c]=SEG[s],d=Math.min(v-a,c-v);cls[o+s]=(s===0&&excluded(x,y,z))?0:Math.max(0,Math.min(255,Math.round(127.5+d/2048*255)))}}
@@ -102,7 +102,7 @@ const png=(px,w,h)=>{const raw=Buffer.alloc((w*4+1)*h);for(let y=0;y<h;y++){raw[
  const chunk=(t,d)=>{const l=Buffer.alloc(4);l.writeUInt32BE(d.length);const td=Buffer.concat([Buffer.from(t),d]);const c=Buffer.alloc(4);c.writeUInt32BE(crc(td));return Buffer.concat([l,td,c])};
  const ihdr=Buffer.alloc(13);ihdr.writeUInt32BE(w,0);ihdr.writeUInt32BE(h,4);ihdr[8]=8;ihdr[9]=6;
  return Buffer.concat([Buffer.from([137,80,78,71,13,10,26,10]),chunk('IHDR',ihdr),chunk('IDAT',zlib.deflateSync(raw)),chunk('IEND',Buffer.alloc(0))])};
-// BG=r,g,b (build 403): composite the premultiplied result over this background before the PNGs and the A/B
+// BG=r,g,b: composite the premultiplied result over this background before the PNGs and the A/B
 // comparison, so a change of alpha alone (e.g. a transparent slice over black) is counted
 const BG=process.env.BG?process.env.BG.split(',').map(Number):null;
 if(BG)for(const k of Object.keys(out)){const r=out[k];if(!r?.px)continue;const p=r.px;for(let i=0;i<p.length;i+=4){const ia=1-p[i+3]/255;for(let j=0;j<3;j++)p[i+j]=Math.min(255,Math.round(p[i+j]+BG[j]*ia))}}

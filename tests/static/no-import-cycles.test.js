@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
 
 // The docs/*.js modules must form a DAG. Cycles appeared during the app.js
-// split when functions were appended to existing modules (build 238: scene3d
+// split when functions were appended to existing modules (scene3d
 // <-> mpr-render / edit-tools, ...). They happened to work because only
 // functions were used across the cycle, but a top-level read across one would
 // throw (TDZ) depending on evaluation order. Keep low-level modules free of

@@ -4,7 +4,7 @@ import { effectiveRanges, nextUp, nextDown } from '../../docs/segment-exclusive.
 const segs = o => Object.fromEntries(Object.entries(o).map(([k, [a, b, active = true]]) => [k, { userMin: a, userMax: b, active }]));
 const inSeg = (r, v) => v >= r.min && v <= r.max;
 
-describe('non-overlapping segments (build 438)', () => {
+describe('non-overlapping segments', () => {
   it('off keeps the user ranges', () => {
     const r = effectiveRanges(segs({ fat: [-250, 81], soft: [-93, 248] }), ['fat', 'soft'], 'off');
     expect(r.fat).toMatchObject({ min: -250, max: 81 });
@@ -47,9 +47,9 @@ describe('non-overlapping segments (build 438)', () => {
   });
 });
 
-// build 459: voxel takers (post-processing / manual edits) are not taken by range; the segments below list them as sources
+// voxel takers (post-processing / manual edits) are not taken by range; the segments below list them as sources
 const segsT = o => Object.fromEntries(Object.entries(o).map(([k, [a, b, opt = {}]]) => [k, { userMin: a, userMax: b, active: true, ...opt }]));
-describe('voxel takers and sources (build 459)', () => {
+describe('voxel takers and sources', () => {
   it('takes omitted: every segment is plain and the result is the old one, with no sources', () => {
     const r = effectiveRanges(segs({ bone: [354, 61530], fat: [-250, 81], soft: [-93, 248] }), ['bone', 'fat', 'soft'], 'priority');
     for (const k of ['bone', 'fat', 'soft']) { expect(r[k].sources).toEqual([]); expect(r[k]).toMatchObject({ min: r[k].legacy.min, max: r[k].legacy.max }); }

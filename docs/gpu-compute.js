@@ -1,17 +1,17 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { installGpuLedger } from './mem-ledger.js?v=20261019-build624';
-import { gpuSplitCandidate, gpuSplitDecision, gpuVendorKey, gpuAdapterVendorKey, gpuSplitStatusParts, gpuHybridStatusText, gpuStatusDetailed, webglDisplayGpu } from './gpu-split.js?v=20261019-build624';
-import { gpuPlatformOs, gpuEffectivePreference, gpuPreferenceSupported, gpuAdapterRequestOptions, gpuPreferenceInfoText, gpuEffectiveHybridMode } from './gpu-preference.js?v=20261019-build624';
-import { setGpuPrewarmIndex, setGpuPrewarmScheduled, sceneState } from './state.js?v=20261019-build624';
+import { installGpuLedger } from './mem-ledger.js?v=20261019-build625';
+import { gpuSplitCandidate, gpuSplitDecision, gpuVendorKey, gpuAdapterVendorKey, gpuSplitStatusParts, gpuHybridStatusText, gpuStatusDetailed, webglDisplayGpu } from './gpu-split.js?v=20261019-build625';
+import { gpuPlatformOs, gpuEffectivePreference, gpuPreferenceSupported, gpuAdapterRequestOptions, gpuPreferenceInfoText, gpuEffectiveHybridMode } from './gpu-preference.js?v=20261019-build625';
+import { setGpuPrewarmIndex, setGpuPrewarmScheduled, sceneState } from './state.js?v=20261019-build625';
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.webgpu.js';
-import { normalizeVrlWgsl, gpuFilterShader, GPU_PREWARM_KINDS, gaussianPassKernel, AIRDIST_X_MAX_N } from './gpu-shaders.js?v=20261019-build624';
-import { spacingParams, spacingRatios, bilateralRadii, nlmRadii, unsharpAxes } from './filter-units.js?v=20261019-build624';
-import { isDesktopRuntime, frameYield } from './utils.js?v=20261019-build624';
-import { runsSliceToMask } from './run-length.js?v=20261019-build624';
-import { status } from './ui-shell.js?v=20261019-build624';
-import { updateLinuxWebgpuNote } from './linux-webgpu-note.js?v=20261019-build624';
-import { logGpuError } from './gpu-diagnostics.js?v=20261019-build624';
+import { normalizeVrlWgsl, gpuFilterShader, GPU_PREWARM_KINDS, gaussianPassKernel, AIRDIST_X_MAX_N } from './gpu-shaders.js?v=20261019-build625';
+import { spacingParams, spacingRatios, bilateralRadii, nlmRadii, unsharpAxes } from './filter-units.js?v=20261019-build625';
+import { isDesktopRuntime, frameYield } from './utils.js?v=20261019-build625';
+import { runsSliceToMask } from './run-length.js?v=20261019-build625';
+import { status } from './ui-shell.js?v=20261019-build625';
+import { updateLinuxWebgpuNote } from './linux-webgpu-note.js?v=20261019-build625';
+import { logGpuError } from './gpu-diagnostics.js?v=20261019-build625';
 export const gpuFilterRuntime={device:null,adapter:null,initPromise:null,disabled:false,pipelines:new Map(),warned:false,lastBackend:'CPU',lastError:'',adapterLabel:'',retryAfter:0,initAttempts:0,bufferPool:new Map(),bufferPoolBytes:0,sharedRendererDevice:false,workgroupSize:128,lastShaderKind:'',split:null,renderDevice:null,renderError:'',renderInfo:'',pendingCompute:null};
 export function gpuAdapterLabel(adapter){
  try{
@@ -19,7 +19,7 @@ export function gpuAdapterLabel(adapter){
   return [...new Set([info.vendor,info.architecture,info.device,info.description].filter(Boolean).map(v=>String(v).trim()).filter(Boolean))].join(' ');
  }catch{return''}
 }
-// build 508: device.lost reason ('destroyed' / 'unknown') and the browser's message, for the status bar
+// device.lost reason ('destroyed' / 'unknown') and the browser's message, for the status bar
 export function gpuLostText(info){return 'WebGPU device lost'+(info?.reason?' ('+info.reason+')':'')+(info?.message?': '+info.message:'')}
 export function gpuDeviceMode(device){return device?.features?.has?.('core-features-and-limits')?'CORE':'COMPAT'}
 export function gpuComputeWorkgroupSize(device=gpuFilterRuntime.device){
@@ -52,12 +52,12 @@ export function gpuDeviceRequestDescriptor(adapter,cap=GPU_BUFFER_LIMIT_CAPS[0])
  const maxStorageBufferBindingSize=Number(adapter?.limits?.maxStorageBufferBindingSize)||0;if(maxStorageBufferBindingSize>0)requiredLimits.maxStorageBufferBindingSize=maxStorageBufferBindingSize;
  return{requiredFeatures,requiredLimits:capGpuBufferLimits(requiredLimits,cap)};
 }
-// build 515: the setting 「使う GPU」 (settings > 描画; 'auto' / 'high-performance' / 'low-power'). It is honoured only on
+// the setting 「使う GPU」 (settings > 描画; 'auto' / 'high-performance' / 'low-power'). It is honoured only on
 // Linux / Windows; on Mac, iPad and everything else this is 'auto', the request the app always made. Read once per device
 // request, so every buffer-limit retry (below) asks for the same GPU.
 export const vrlGpuPreference=()=>gpuEffectivePreference(globalThis.__vrlSettings?.get?.('gpuPreference'),navigator);
 // the requestAdapter option sets, in order: 'auto' = {high-performance, core}, {high-performance}, (none), then the
-// compatibility adapters of build 440 (a Linux OpenGL ES backend rather than none); see gpu-preference.js
+// compatibility adapters of (a Linux OpenGL ES backend rather than none); see gpu-preference.js
 export async function requestVrlGpuAdapter(preference=vrlGpuPreference(),role='compute'){
  let adapter=null;
  const opts=gpuAdapterRequestOptions(gpuForceCompat,preference);
@@ -66,8 +66,8 @@ export async function requestVrlGpuAdapter(preference=vrlGpuPreference(),role='c
   try{adapter=await(opts[i]?navigator.gpu.requestAdapter(opts[i]):navigator.gpu.requestAdapter())}catch{}
   if(adapter){request.option=opts[i];request.optionIndex=i}
  }
- // build 516: the extra render-device request of the split mode must not overwrite the compute device's record
- // build 520: role 'probe' = the debug-mode GPU info tab asking once when the app never did; it keeps its own record
+ // the extra render-device request of the split mode must not overwrite the compute device's record
+ // role 'probe' = the debug-mode GPU info tab asking once when the app never did; it keeps its own record
  gpuFilterRuntime[role==='render'?'renderAdapterRequest':role==='probe'?'probeAdapterRequest':'adapterRequest']=request;
  return adapter;
 }
@@ -75,7 +75,7 @@ export async function requestVrlGpuAdapter(preference=vrlGpuPreference(),role='c
 // GPU process first (a loss reported at creation arrives before it), then a short settle for the promise itself.
 export async function gpuLostAtCreation(device,settleMs=20,workMs=500){
  if(!device?.lost)return null;
- // build 517: the round trip is bounded (500 ms): a driver that never answers must not stall the start-up of any platform
+ // the round trip is bounded (500 ms): a driver that never answers must not stall the start-up of any platform
  let wait=0;
  try{await Promise.race([device.queue?.onSubmittedWorkDone?.(),new Promise(r=>{wait=setTimeout(r,workMs)})])}catch{}
  clearTimeout(wait);
@@ -85,12 +85,12 @@ export async function gpuLostAtCreation(device,settleMs=20,workMs=500){
  return info;
 }
 export async function requestVrlGpuDevice({preference:wanted,role='compute',accept=null}={}){
- // build 508: a refused request is retried with the next lower buffer-limit cap; an adapter serves
+ // a refused request is retried with the next lower buffer-limit cap; an adapter serves
  // one request only, so each attempt asks for it again (same adapter order as before)
  const retries=[];let lastError=null;
- // build 515: the chosen GPU is resolved once and every attempt below asks for it
+ // the chosen GPU is resolved once and every attempt below asks for it
  const preference=wanted||vrlGpuPreference(),render=role==='render',infoKey=render?'renderPrefInfo':'prefInfo',limitKey=render?'renderLimitInfo':'limitInfo',retryKey=render?'renderLimitRetries':'limitRetries';
- // build 517: a rung whose request would be identical to the one that just failed (the adapter's limits are already at or
+ // a rung whose request would be identical to the one that just failed (the adapter's limits are already at or
  // below this cap) is skipped, so a refusing driver is not asked the same thing again
  let lastAdapter=null,lastKey='';
  const descriptorKey=d=>JSON.stringify([d.requiredFeatures,d.requiredLimits]);
@@ -99,20 +99,20 @@ export async function requestVrlGpuDevice({preference:wanted,role='compute',acce
   const adapter=await requestVrlGpuAdapter(preference,role);
   gpuFilterRuntime[infoKey]=gpuPreferenceInfoText(gpuFilterRuntime[render?'renderAdapterRequest':'adapterRequest'],adapter);
   if(!adapter)throw lastError||new Error('WebGPU adapter unavailable (core and compatibility)');
-  // build 516: the split render device only wants the display (Intel) adapter; any other adapter ends the request (no retry)
+  // the split render device only wants the display (Intel) adapter; any other adapter ends the request (no retry)
   if(accept&&!accept(adapter))throw Object.assign(new Error('adapter not accepted: '+(gpuAdapterLabel(adapter)||'unknown')),{adapterRejected:true});
   const descriptor=gpuDeviceRequestDescriptor(adapter,cap),capText=cap>0?Math.round(cap/2**20)+'MB':'default';
   lastAdapter=adapter;lastKey=descriptorKey(descriptor);
   try{
    const device=await adapter.requestDevice(descriptor);
-   // build 514: a device that is already lost at / right after creation (Chrome resolves requestDevice with a device
+   // a device that is already lost at / right after creation (Chrome resolves requestDevice with a device
    // whose lost promise settles at once, e.g. "Device failed at creation" / VK_ERROR_OUT_OF_DEVICE_MEMORY) counts as a
    // failed request too: destroy it and take the next cap. Only this window is checked; later failures (the GPU
    // self-verification, device loss during use) never lower the cap.
    const lostAtCreation=await gpuLostAtCreation(device);
    if(lostAtCreation){try{device.destroy?.()}catch{};throw new Error('device lost at creation'+(lostAtCreation.reason?' ('+lostAtCreation.reason+')':'')+(lostAtCreation.message?': '+lostAtCreation.message:''))}
    gpuFilterRuntime[limitKey]=gpuLimitInfoText(adapter,descriptor,retries);gpuFilterRuntime[retryKey]=retries.length;console.info('VRL WebGPU '+(render?'render ':'')+'device: '+gpuFilterRuntime[limitKey]);
-   // build 520: records for the debug-mode GPU info tab (data only): the retries as a list and the cap that finally worked
+   // records for the debug-mode GPU info tab (data only): the retries as a list and the cap that finally worked
    gpuFilterRuntime[limitKey+'Log']=retries.slice();gpuFilterRuntime[limitKey+'CapUsed']=capText;
    return{adapter,device};
   }catch(e){
@@ -128,14 +128,14 @@ export function updateGpuStatus(){
  const rt=gpuFilterRuntime,render=sceneState?.backend||'INIT';
  const compute=rt.lastBackend||(rt.device?'WEBGPU READY':'CPU');
  const adapter=rt.adapterLabel?(' · '+rt.adapterLabel):'';
- // build 517: the extra diagnostics (160-character error, limits, GPU preference, hybrid / split notes) appear only when
+ // the extra diagnostics (160-character error, limits, GPU preference, hybrid / split notes) appear only when
  // something out of the ordinary happened (retry, detected hybrid, explicit GPU preference, debug); otherwise the text is
  // exactly the one of builds up to 515 (Mac, iPad, single-GPU machines)
  const detailed=gpuStatusDetailed(rt,!!globalThis.__vrlSettings?.debugOn?.());
  const errText=rt.lastError||'',showErr=/FAIL|ERROR|LOST/.test(compute)&&!!errText,cutAt=detailed?160:96;
  const failure=showErr?(' · '+errText.slice(0,cutAt)+(detailed&&errText.length>cutAt?'…':'')):'';
- // build 516: GPU split (display Intel / compute NVIDIA): "Render WEBGPU intel (display) · Compute WEBGPU … nvidia (split)";
- // build 517: a volume label in split mode reads "Volume WEBGPU RESIDENT intel (display)"; '' parts otherwise
+ // GPU split (display Intel / compute NVIDIA): "Render WEBGPU intel (display) · Compute WEBGPU … nvidia (split)";
+ // a volume label in split mode reads "Volume WEBGPU RESIDENT intel (display)"; '' parts otherwise
  const sp=gpuSplitStatusParts(rt.split,compute,rt.hybridMode==='primary'?rt.hybridVendor:''),renderFail=rt.renderError?(' · Render error: '+rt.renderError):'';
  const line=failureText=>'Render '+render+sp.render+' · '+sp.computeName+' '+sp.computeLabel+sp.compute+failureText+renderFail+adapter;
  status.removeAttribute('data-i18n');
@@ -143,7 +143,7 @@ export function updateGpuStatus(){
  const computeGpu=compute.startsWith('WEBGPU'),gpuActive=render==='WEBGPU'||computeGpu;
  status.className=gpuActive?'status status-ok':'status status-warning';
  status.title=errText+(rt.renderError?(errText?'\n':'')+'Render: '+rt.renderError:'');
- // the top chip is truncated; the bar under the views shows the full text (build 517: the error once, in full, in place)
+ // the top chip is truncated; the bar under the views shows the full text
  const bar=document.getElementById('gpu-status-bar'),barText=document.getElementById('gpu-status-text');
  if(bar&&barText){
   let text=detailed&&showErr&&errText.length>cutAt?line(' · '+errText):status.textContent;
@@ -178,7 +178,7 @@ export function installGpuErrorListener(device,role='compute'){
    return create(desc);
   };
   device.addEventListener?.('uncapturederror',event=>{
-   // build 516: an error on the split render device (presenting, three.js, the volume renderer) is a render error, never a compute FAIL
+   // an error on the split render device (presenting, three.js, the volume renderer) is a render error, never a compute FAIL
    if(role==='render'){gpuFilterRuntime.renderError='uncaptured: '+String(event?.error?.message||event?.message||'uncaptured WebGPU error');logGpuError('render device · uncaptured error',gpuFilterRuntime.renderError);console.error('Virtual Rodent Lab WebGPU render-device error:',event?.error||event);updateGpuStatus();return}
    const message=String(event?.error?.message||event?.message||'uncaptured WebGPU error'),kind=gpuFilterRuntime.lastShaderKind?(' ['+gpuFilterRuntime.lastShaderKind+']'):'';
    gpuFilterRuntime.lastError='uncaptured'+kind+': '+message+(/zero/i.test(message)&&gpuFilterRuntime.zeroTexture?' ['+gpuFilterRuntime.zeroTexture+']':'');
@@ -241,7 +241,7 @@ export function acquireGpuWorkBuffer(device,bytes){
  if(bucket?.length){const buffer=bucket.pop();gpuFilterRuntime.bufferPoolBytes-=size;return{buffer,size}}
  return{buffer:device.createBuffer({size,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC|GPUBufferUsage.COPY_DST}),size};
 }
-// build 318: during a block loop (segment processing) the two work buffers of a
+// during a block loop (segment processing) the two work buffers of a
 // block are kept for the next block even above the pool limit. Before, a 1024²×38
 // block (256 MB bucket on the Mac) was destroyed and re-created per block, and
 // WebGPU zero-fills every new buffer on first use: measured as dist:touch 2.2 s.
@@ -296,10 +296,10 @@ export function adoptRendererGpuDevice(renderer,adapter=null,explicitDevice=null
  void verifyGpuComputeDevice(device).then(async ok=>{if(gpuFilterRuntime.device===device&&ok){await verifyGpuPipelineSet();if(gpuFilterRuntime.device===device)setGpuComputeBackend('WEBGPU '+gpuDeviceMode(device)+' FULL VERIFIED · WG'+gpuFilterRuntime.workgroupSize)}}).catch(e=>{if(gpuFilterRuntime.device===device){gpuFilterRuntime.lastError='verify ['+(gpuFilterRuntime.lastShaderKind||'self-test')+']: '+String(e?.message||e);setGpuComputeBackend('WEBGPU RENDER ONLY · COMPUTE FAIL',gpuFilterRuntime.lastError)}});
  updateGpuStatus();return true;
 }
-// build 517: the setting 「ハイブリッド環境での処理」 ('hybrid' = the split of build 516, 'primary' = display GPU for everything).
+// the setting 「ハイブリッド環境での処理」 ('hybrid' = the split of, 'primary' = display GPU for everything).
 // Linux only; 'hybrid' everywhere else, whatever is stored (see gpu-preference.js).
 export const vrlHybridMode=()=>gpuEffectiveHybridMode(globalThis.__vrlSettings?.get?.('gpuHybridMode'),navigator);
-// build 516: the GPU split (see gpu-split.js for the cause and the rule). Returns {adapter,device,split} for the render device
+// the GPU split (see gpu-split.js for the cause and the rule). Returns {adapter,device,split} for the render device
 // on the display (low-power) adapter, or null when this is not the display-Intel / compute-NVIDIA hybrid case on Linux, or the
 // render device cannot be created: the caller then keeps one shared device, exactly as before. Cost of the check: Mac, iPad,
 // Windows and every other machine return at the platform / compute-adapter test (no extra requestAdapter, no WebGL context).
@@ -312,7 +312,7 @@ export async function requestVrlSplitRenderDevice({nav=globalThis.navigator,comp
   gpuFilterRuntime.splitNote='display '+(displayVendor||'unknown')+', compute '+computeVendor;
   // cheap pre-check before the extra adapter request: the display GPU itself must be Intel
   if(!gpuSplitDecision({os,computeVendor,displayVendor,lowPowerVendor:'intel'}).split)return null;
-  // build 517: display Intel + compute NVIDIA = the hybrid case; the status shows the split notes from here on
+  // display Intel + compute NVIDIA = the hybrid case; the status shows the split notes from here on
   gpuFilterRuntime.hybridSeen=true;
   let decision=null;
   const accept=adapter=>{decision=gpuSplitDecision({os,computeVendor,displayVendor,lowPowerVendor:gpuAdapterVendorKey(adapter)});return decision.split};
@@ -325,7 +325,7 @@ export async function requestVrlSplitRenderDevice({nav=globalThis.navigator,comp
   return null;
  }
 }
-// build 517: 「ハイブリッド環境での処理」 = 「プライマリ GPU のみ」. Linux only, and only when the hybrid case is detected before any
+// 「ハイブリッド環境での処理」 = 「プライマリ GPU のみ」. Linux only, and only when the hybrid case is detected before any
 // device exists (the high-performance adapter is NVIDIA, the display GPU read through WebGL is Intel, the low-power adapter is
 // Intel): then the one device of the app is created on the low-power (display) adapter and serves render and compute, as on a
 // one-GPU machine; no NVIDIA device is created. Returns {adapter,device}, or null when the setting is 'hybrid', this is not
@@ -368,7 +368,7 @@ export function adoptSplitGpuDevices(renderer,compute,render){
  console.info('VRL GPU split: render on '+gpuFilterRuntime.renderAdapterLabel+' (display), compute on '+gpuAdapterLabel(compute.adapter)+' · '+render.split.reason);
  updateGpuStatus();return true;
 }
-// build 517: the split render device could not be brought up (renderer init failed, or adoptSplitGpuDevices threw half-way):
+// the split render device could not be brought up (renderer init failed, or adoptSplitGpuDevices threw half-way):
 // forget everything the split recorded so the single shared device that follows starts from a clean state, and say why.
 export function resetSplitGpuDevices(note=''){
  const rt=gpuFilterRuntime;
@@ -382,7 +382,7 @@ export async function ensureGpuFilterDevice(){
  if(gpuFilterRuntime.device)return gpuFilterRuntime.device;
  // Safari/iPad can refuse a second adapter request even while the Three.js WebGPU
  // renderer already owns a valid GPUDevice. Reuse that renderer device first.
- // build 516: not in split mode, where the renderer's device is the display (Intel) one and compute has its own device
+ // not in split mode, where the renderer's device is the display (Intel) one and compute has its own device
  const rendererDevice=gpuFilterRuntime.split?.active?null:sceneState?.renderer?.backend?.device;
  if(rendererDevice&&typeof rendererDevice.createBuffer==='function'){
   adoptRendererGpuDevice(sceneState.renderer,gpuFilterRuntime.adapter,rendererDevice);
@@ -392,12 +392,12 @@ export async function ensureGpuFilterDevice(){
  const now=performance.now();if(gpuFilterRuntime.retryAfter>now)return null;
  gpuFilterRuntime.initPromise=(async()=>{
   gpuFilterRuntime.initAttempts++;setGpuComputeBackend('WEBGPU CHECKING');
-  // build 517: `device` lives outside the try so the failure path can destroy a device that failed its verification
+  // `device` lives outside the try so the failure path can destroy a device that failed its verification
   let device=null;
   try{
-   // build 516: split mode hands over the compute device that create3DRenderer already requested
+   // split mode hands over the compute device that create3DRenderer already requested
    const handed=gpuFilterRuntime.pendingCompute;gpuFilterRuntime.pendingCompute=null;
-   // build 517: 「ハイブリッド環境での処理」 = primary GPU only: the display GPU serves compute too (null elsewhere)
+   // 「ハイブリッド環境での処理」 = primary GPU only: the display GPU serves compute too (null elsewhere)
    const got=handed||await requestVrlPrimaryGpuDevice()||await requestVrlGpuDevice(),adapter=got.adapter;
    device=got.device;
    // a new device never inherits pipelines compiled on another one
@@ -408,7 +408,7 @@ export async function ensureGpuFilterDevice(){
    return device;
   }catch(e){
    gpuFilterRuntime.device=null;gpuFilterRuntime.adapter=null;gpuFilterRuntime.sharedRendererDevice=false;gpuFilterRuntime.retryAfter=performance.now()+5000;
-   // build 517: pipelines / pooled buffers of the failed device must not reach the next one, and the device is released
+   // pipelines / pooled buffers of the failed device must not reach the next one, and the device is released
    // (never the renderer's own device)
    gpuFilterRuntime.pipelines.clear();clearGpuBufferPool();setGpuPrewarmIndex(0);setGpuPrewarmScheduled(false);
    if(device&&device!==sceneState?.renderer?.backend?.device)try{device.destroy()}catch{}
@@ -423,10 +423,10 @@ const GPU_MAX_GROUPS=65535;
 // step-time accumulator for ?debug status lines (segment-runs.js resets and reads it)
 export const gpuStepTimes=new Map(),gpuRunInfo={};
 // ?debug: wait for the GPU after the filter and distance passes to time them separately
-// ?debug or the settings dialog's debug switch (build 280)
+// ?debug or the settings dialog's debug switch
 const GPU_TIMING_DEBUG=()=>!!globalThis.__vrlSettings?.debugOn?.()||(typeof location!=='undefined'&&/[?&]debug(\b|=|&|$)/.test(location.search));
 export function addGpuStepTime(name,ms){gpuStepTimes.set(name,(gpuStepTimes.get(name)||0)+ms)}
-// build 293 read diagnostics: modules without a gpu-compute import report here;
+// read diagnostics: modules without a gpu-compute import report here;
 // counts (cache hits/misses) are kept apart from the times
 export const gpuCounts=new Map();
 globalThis.__vrlTime=(name,ms)=>addGpuStepTime(name,ms);globalThis.__vrlCount=name=>gpuCounts.set(name,(gpuCounts.get(name)||0)+1);
@@ -545,7 +545,7 @@ export async function runGpuSourceFilters(data,w,h,d,stages,target,segments=null
    await dispatch('nlm',[srx,sry,srz],[p.hHU,prx,pry,prz]);
   }
   else return null;
-  // ?debug: GPU time of each filter stage (build 284, per-filter speed work)
+  // ?debug: GPU time of each filter stage
   // (the GPU_TIMING_DEBUG submits below, up to the distance passes, are diagnostics only and are not validation-checked;
   // a pending error of the recorded commands is still reported by the next checked submit)
   if(GPU_TIMING_DEBUG()&&/[?&]stagetimes/.test(location.search)){const t=performance.now();device.queue.submit([encoder.finish()]);await device.queue.onSubmittedWorkDone();addGpuStepTime('f:'+(stage.key==='gaussian'&&p.mode==='median'?'median':stage.key),performance.now()-t);encoder=device.createCommandEncoder({label:'VRL filter stage'})}
@@ -564,10 +564,10 @@ export async function runGpuSourceFilters(data,w,h,d,stages,target,segments=null
   // optional distance-to-air field (airLayers): the segments are then ranges of
   // squared distance, read from the field instead of the CT values
   const airl=faceContext.airLayers;
-  // build 315 diagnostics (?debug&stagetimes): GPU time of each airDist axis pass
+  // diagnostics (?debug&stagetimes): GPU time of each airDist axis pass
   const axisSync=GPU_TIMING_DEBUG()&&/[?&]stagetimes/.test(location.search);
   if(axisSync){const t=performance.now();device.queue.submit([encoder.finish()]);await device.queue.onSubmittedWorkDone();addGpuStepTime('pre-dist',performance.now()-t);encoder=device.createCommandEncoder({label:'VRL airDist axes'})}
-  // build 317 diagnostics: clear the output buffer first ('dist:touch'), so a first-write
+  // diagnostics: clear the output buffer first ('dist:touch'), so a first-write
   // cost of that buffer is split from the x pass's own GPU time
   if(axisSync&&airl){const t=performance.now();encoder.clearBuffer(next);device.queue.submit([encoder.finish()]);await device.queue.onSubmittedWorkDone();addGpuStepTime('dist:touch',performance.now()-t);encoder=device.createCommandEncoder({label:'VRL airDist axes'})}
   if(airl)for(let axis=0;axis<3;axis++){await dispatch(axis===0&&airl.n[0]<=AIRDIST_X_MAX_N?'airDistX':'airDist',[axis,airl.n[axis],0],[airl.min,airl.max,airl.spacing[axis]]);if(axisSync){const t=performance.now();device.queue.submit([encoder.finish()]);await device.queue.onSubmittedWorkDone();addGpuStepTime('dist:'+'xyz'[axis]+'(n='+airl.n[axis]+')',performance.now()-t);encoder=device.createCommandEncoder({label:'VRL airDist axes'})}}
@@ -643,8 +643,8 @@ export async function runGpuSourceFilters(data,w,h,d,stages,target,segments=null
   const targetCount=target.width*target.height*target.depth,meta=new Uint32Array(28);
   meta[0]=w;meta[1]=h;meta[2]=d;meta[3]=target.x;meta[4]=target.y;meta[5]=target.z;meta[6]=target.width;meta[7]=target.height;meta[8]=target.depth;meta[9]=targetCount;meta[10]=Math.min(segments.length,4);
   meta[11]=faceContext.boxX;meta[12]=faceContext.boxY;meta[13]=faceContext.boxZ;meta[14]=faceContext.globalW;meta[15]=faceContext.globalH;meta[16]=faceContext.globalD;
-  // build 600/601: spacing for the gradient normals (meta[21..23]) and the field blur weight (meta[24])
-  // build 612: no field blur: the surface smoothing (constrained-smooth.js, on the CPU) starts from the voxel faces
+  // spacing for the gradient normals (meta[21..23]) and the field blur weight (meta[24])
+  // no field blur: the surface smoothing (constrained-smooth.js, on the CPU) starts from the voxel faces
   {const mf=new Float32Array(meta.buffer);mf[21]=faceContext.spacingX||1;mf[22]=faceContext.spacingY||1;mf[23]=faceContext.spacingZ||1;mf[24]=0}
   const thresholds=new Float32Array(8);for(let i=0;i<meta[10];i++){thresholds[i*2]=segments[i].seg.min;thresholds[i*2+1]=segments[i].seg.max}
   const mb=gpuSmallBuffer(device,meta),tb=gpuSmallBuffer(device,thresholds);small.push(mb,tb);
@@ -661,8 +661,8 @@ export async function runGpuSourceFilters(data,w,h,d,stages,target,segments=null
   }
   if(vertexBytes<=maxOut){
    let offset=0;for(let i=0;i<4;i++){meta[17+i]=offset;offset+=counts[i]}device.queue.writeBuffer(mb,0,meta);device.queue.writeBuffer(counters,0,new Uint32Array(4));
-   // build 612: the GPU writes the voxel faces as they are (the lattice positions) also with surface smoothing on: the
-   // constrained smoothing starts from them (the blurred-field corners of builds 600-611, meshCornerInit / meshWriteSmooth,
+   // the GPU writes the voxel faces as they are (the lattice positions) also with surface smoothing on: the
+   // constrained smoothing starts from them (the blurred-field corners of-611, meshCornerInit / meshWriteSmooth,
    // flattened gentle slopes only so far and moved thin structures; they are gone)
    const vertexCount=totalFaces*6,allowGpuResident=faceContext?.gpuResident!==false;
    const residentPosition=allowGpuResident?createGpuResidentFloat3Attribute(device,vertexCount,'VRL GPU resident position'):null,gpuResident=!!residentPosition;
@@ -691,7 +691,7 @@ export async function runGpuSourceFilters(data,w,h,d,stages,target,segments=null
   encoder=device.createCommandEncoder({label:'VRL compact face extraction'});
   // Oversized vertex output falls through to compact-face extraction using the already filtered GPU buffer.
  }
- // build 311: texture-ready output for the GPU volume (faceContext.pack):
+ // texture-ready output for the GPU volume (faceContext.pack):
  // packed/reduced rg8 slices for pack.zList (box-local z) plus full-res float
  // planes only for pack.previewZ (the 3D C/S preview), instead of reading the
  // whole filtered block back as floats
@@ -760,7 +760,7 @@ export async function runGpuSourceFilters(data,w,h,d,stages,target,segments=null
  }
  const readback=mk({size:targetBytes,usage:GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ});
  encoder.copyBufferToBuffer(targetBuffer,0,readback,0,targetBytes);await gpuSubmitChecked(device,'extract',encoder,checks);
- // build 307 diagnostics: GPU filter work (everything queued for this block,
+ // diagnostics: GPU filter work (everything queued for this block,
  // incl. the upload) vs copying the result back into JS
  const tWait=performance.now();await readback.mapAsync(GPUMapMode.READ);addGpuStepTime('gpu:wait',performance.now()-tWait);
  const tCopy=performance.now(),copy=readback.getMappedRange().slice(0),result=segments?.length?new Uint32Array(copy):new Float32Array(copy);readback.unmap();addGpuStepTime('gpu:copy',performance.now()-tCopy);globalThis.__vrlCount?.('filter blocks');

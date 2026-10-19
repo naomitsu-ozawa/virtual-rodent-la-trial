@@ -272,7 +272,7 @@ describe('slice spacing check', () => {
   });
 });
 
-describe('old projects (spacing rule changed in build 469)', () => {
+describe('old projects (spacing rule changed)', () => {
   // old data: first two slices 0.1 apart by mistake, the rest 0.5 -> old Z = 0.1, new Z = 0.42
   const zs = [0, 0.1, 0.6, 1.1, 1.6, 2.1];
   const cur = () => datasetFingerprint(series(zs));
@@ -289,7 +289,7 @@ describe('old projects (spacing rule changed in build 469)', () => {
     let asked = null;
     const r = resolveProjectMatch(saved(), cur(), t => { asked = t; return true; }, 'ja');
     expect(r.action).toBe('apply');
-    expect(asked).toContain('build 469 からスライス間隔の決め方が変わりました');
+    expect(asked).toContain('からスライス間隔の決め方が変わりました');
     expect(asked).toContain('保存時 0.1 mm → 新しい間隔 0.42 mm（+320%）');
     expect(asked).toContain('新しい間隔で開きますか？');
     expect(asked).toContain('体積が 320% 変わります。以前の結果は再計算が必要です');

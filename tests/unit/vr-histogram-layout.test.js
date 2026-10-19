@@ -19,7 +19,7 @@ describe('canvas px -> board metres', () => {
   });
 });
 
-describe('build 567: what was removed is gone', () => {
+describe('what was removed is gone', () => {
   it('no range lines, no VR window lines, no laser drag, no stats table', () => {
     for (const k of ['lineLayout', 'edgeLabelText', 'labelCenterX', 'plotMetrics', 'snapshotRanges', 'localXToHu', 'GRAB_TOL_M', 'DRAG_START_M', 'DRAG_GAP_MS',
       'LINE_W_M', 'LINE_WIN_W_M', 'LABEL_W_M', 'TABLE', 'tableColumns', 'statsCells', 'tableRows', 'SETTLE_MS', 'subtitleText']) expect(Layout[k]).toBeUndefined();
@@ -36,7 +36,7 @@ describe('bars and ticks', () => {
   });
   it('count labels are short', () => { expect(countLabel(950)).toBe('950'); expect(countLabel(1500)).toBe('1.5k'); expect(countLabel(12345)).toBe('12k'); expect(countLabel(2500000)).toBe('2.5M'); expect(countLabel(0)).toBe('0'); });
   it('y ticks: 0 and a few round steps (linear), powers of ten (log), all within the plot', () => {
-    { const o = [9, 9, 9, 9, 9, 9, 9, 9, 9]; expect(yTicks(12345, false, o)).toBe(o); expect(o).toEqual(yTicks(12345, false)); } // build 571: a reused array
+    { const o = [9, 9, 9, 9, 9, 9, 9, 9, 9]; expect(yTicks(12345, false, o)).toBe(o); expect(o).toEqual(yTicks(12345, false)); } // a reused array
     const lin = yTicks(12345, false); expect(lin[0]).toBe(0); expect(lin.length).toBeGreaterThanOrEqual(3); expect(lin.length).toBeLessThanOrEqual(7);
     expect(lin.every(v => v <= 12345)).toBe(true); expect(lin.every((v, i) => !i || v > lin[i - 1])).toBe(true);
     const lg = yTicks(2e6, true); expect(lg[0]).toBe(0); expect(lg.slice(1).every(v => Math.log10(v) % 1 === 0)).toBe(true); expect(lg.length).toBeLessThanOrEqual(6);
@@ -109,7 +109,7 @@ describe('redraw policy', () => {
   });
 });
 
-describe('build 570: the x-axis end drag (display range from VR)', () => {
+describe('the x-axis end drag (display range from VR)', () => {
   it('px <-> board metres round trip', () => {
     expect(localToPxX(pxToLocalX(300, W), W)).toBeCloseTo(300); expect(localToPxY(pxToLocalY(200, W), W)).toBeCloseTo(200);
   });

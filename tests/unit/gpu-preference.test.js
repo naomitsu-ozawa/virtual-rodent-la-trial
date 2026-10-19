@@ -2,7 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { gpuPlatformOs, gpuPreferenceSupported, gpuEffectivePreference, gpuAdapterRequestOptions, gpuPreferenceInfoText, gpuEffectiveHybridMode } from '../../docs/gpu-preference.js';
 
-// build 515: the setting 「使う GPU」 (gpuPreference). Shown and honoured on Linux / Windows only; Mac / iPad stay on 'auto',
+// the setting 「使う GPU」 (gpuPreference). Shown and honoured on Linux / Windows only; Mac / iPad stay on 'auto',
 // the request the app made before the setting existed.
 const nav = (userAgent, platform, maxTouchPoints = 0) => ({ userAgent, platform, maxTouchPoints });
 const LINUX = nav('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/155 Safari/537.36', 'Linux x86_64');
@@ -77,7 +77,7 @@ describe('persistence (app-settings)', () => {
     settings.set('gpuPreference', 'low-power');
     expect(JSON.parse(ls.m.get('vrl.settings.v1')).gpuPreference).toBe('low-power');
   });
-  it("build 517: 'gpuHybridMode' defaults to hybrid, is saved with the other settings and restored; honoured on Linux only", async () => {
+  it("'gpuHybridMode' defaults to hybrid, is saved with the other settings and restored; honoured on Linux only", async () => {
     const ls = store(); vi.stubGlobal('localStorage', ls); vi.resetModules();
     const { settings, SETTINGS_DEFAULTS } = await import('../../docs/app-settings.js');
     expect(SETTINGS_DEFAULTS.gpuHybridMode).toBe('hybrid');

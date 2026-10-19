@@ -2,7 +2,7 @@ import { chromium } from '@playwright/test';
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
 const root=path.resolve('docs'),nm=path.resolve('node_modules');const errors=[];
 const srv=http.createServer((q,r)=>{const p=path.join(root,decodeURIComponent(q.url.split('?')[0]));
- // build 437: the practice data's bundled project (docs/demo/sample1/project.vrlab) is applied on load; the checks start
+ // the practice data's bundled project (docs/demo/sample1/project.vrlab) is applied on load; the checks start
  // from the bare data unless SAMPLE_PROJECT=1
  if(p.endsWith('project.vrlab')&&!process.env.SAMPLE_PROJECT){r.writeHead(404);r.end();return}
  fs.readFile(p.endsWith('/')?p+'index.html':p,(e,b)=>{if(e){r.writeHead(404);r.end();return}r.writeHead(200,{'content-type':p.endsWith('.js')?'text/javascript':p.endsWith('.css')?'text/css':'text/html'});r.end(b)})}).listen(8765);
@@ -46,7 +46,7 @@ const r=await pg.evaluate(async(FILTER)=>{
  await ops.addAnalysisRegion(vol,{key:'bone',segmentKeys:['bone'],runsBySlice:boxA,voxels:nA,mm3:1});
  await ops.addAnalysisRegion(vol,{key:'bone',segmentKeys:['bone'],runsBySlice:boxB,voxels:nB,mm3:1});
  st.analysisRegions[1].visible=false;
- // build 523: the first result has a MOVED label (anchor + offset, voxel units), the second a label at its default place; an old project has none
+ // the first result has a MOVED label (anchor + offset, voxel units), the second a label at its default place; an old project has none
  al.setRegionLabel(st.analysisRegions[0],{anchor:{i:210,j:205,k:205},offset:{i:12.5,j:-8,k:30}});al.setRegionLabel(st.analysisRegions[1],{anchor:{i:102,j:102,k:302}});
  const before=st.analysisRegions.map(r=>({color:r.color,visible:r.visible,voxels:r.voxels,key:r.key,label:r.label||null}));
  const {project,binaries}=dl.gatherProject(),bytes=pf.packProject(project,binaries),un=pf.unpackProject(bytes);
@@ -63,7 +63,7 @@ const r=await pg.evaluate(async(FILTER)=>{
  // VR: the visible result goes into the region index (one colour), and the programs with VRL_REGIONS compile
  const vr=await im('vr-view.js');const P=await vr.prepareVrData();const g=await vr.prepareVrGpu(P,'vr');
  const rids=(P.region?.list||[]).map(e=>e.rid),reg={ids:P.region?.ids?P.region.ids.reduce((a,x)=>a+(x===1?1:0),0):0,data:!!P.region?.data,colors:P.region?.colors?.length||0,list:P.region?.list?.length||0,set:P.region?.data?P.region.data.reduce((a,x)=>a+(x?1:0),0):0,gpu:!!g,programs:g?.warm?.length||0};
- // FILTER: a real filter change afterwards must still clear the results (build 418: they no longer match the data)
+ // FILTER: a real filter change afterwards must still clear the results
  let afterChange=null;if(FILTER){const el=document.getElementById('gaussian-strength');const nv=String(+el.value===+el.max?+el.min:+el.max);el.value=nv;el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));
   await new Promise(r=>setTimeout(r,2000));for(let t=Date.now();Date.now()-t<240000;){await new Promise(r=>setTimeout(r,500));if(!window.__vrlBusyModal?.().active)break}
   await new Promise(r=>setTimeout(r,3000));afterChange=st.analysisRegions.length}
@@ -71,7 +71,7 @@ const r=await pg.evaluate(async(FILTER)=>{
 },!!process.env.FILTER);
 console.log(JSON.stringify(r));
 const ok=!r.error&&r.cleared===0&&JSON.stringify(r.before)===JSON.stringify(r.after)&&r.files.length===2&&JSON.stringify(r.trimmed)===(r.filter?JSON.stringify(r.after.map(x=>x.voxels)):'[1000,125]')&&r.reg.data&&r.reg.colors===1&&r.reg.list===1&&r.reg.gpu&&r.reg.ids===r.reg.set&&(!r.filter||r.afterChange===0)
- // build 523: the labels (moved / default) survive save -> load and an edit's trim; VR's list knows each result's region id
+ // the labels (moved / default) survive save -> load and an edit's trim; VR's list knows each result's region id
  &&!!r.before[0].label?.offset&&!!r.before[1].label&&!r.before[1].label.offset&&JSON.stringify(r.trimLabels)===JSON.stringify(r.before.map(x=>x.label))&&r.rids.length===1&&r.rids[0]===r.regionIds[0];
 await b.close();srv.close();
 if(errors.length||!ok){console.error('analysis project check FAILED');process.exit(1)}console.log('analysis project check OK');

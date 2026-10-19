@@ -12,7 +12,7 @@ function airDistPasses(values, w, h, d, min, max, sp, n, pruned = true) {
     for (let z = 0; z < d; z++) for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
       const i = idx(x, y, z), inSeg = axis === 0 ? (src[i] >= min && src[i] <= max) : src[i] >= 0;
       let g = 1e30;
-      // build 313 shader order: |k| ascending, stop once (k*s)^2 >= g
+      // shader order: |k| ascending, stop once (k*s)^2 >= g
       for (let m = 0; m <= 2 * n[axis]; m++) {
         const k = m % 2 === 0 ? m / 2 : -(m + 1) / 2;
         if (pruned && (k * sp[axis]) ** 2 >= g) break;
@@ -30,7 +30,7 @@ function airDistPasses(values, w, h, d, min, max, sp, n, pruned = true) {
 }
 
 describe('airDist separable distance field', () => {
-  it('pruned scan equals the full scan (build 313)', () => {
+  it('pruned scan equals the full scan', () => {
     const w = 16, h = 13, d = 10, sp = [0.04, 0.04, 0.08], N = w * h * d;
     let s = 9; const rnd = () => (s = (s * 1103515245 + 12345) % 2147483648) / 2147483648;
     const values = new Float32Array(N); for (let i = 0; i < N; i++) { const r = rnd(); values[i] = r < 0.25 ? -1000 : r < 0.75 ? -600 : 50; }
@@ -99,7 +99,7 @@ describe('GPU opening (thin-part removal) mirror', () => {
 });
 
 
-// JS mirror of 'airDistX' (build 316): the axis-0 pass reading its neighbours
+// JS mirror of 'airDistX': the axis-0 pass reading its neighbours
 // from a per-workgroup tile [base-n, base+WG+n) of the flat buffer instead of
 // the storage buffer. Must equal the axis-0 pass of airDist for any WG / width.
 function airDistXTiled(src, w, h, d, min, max, s, n, WG, mode = 0, r2 = 0) {
@@ -143,7 +143,7 @@ function airDistAxis0(src, w, h, d, min, max, s, n, mode = 0, r2 = 0) {
   }
   return out;
 }
-describe('airDistX tiled x pass (build 316)', () => {
+describe('airDistX tiled x pass', () => {
   it.each([[16, 64, 4], [37, 64, 8], [100, 128, 8], [13, 256, 64], [300, 64, 30]])('w=%i WG=%i n=%i equals the untiled pass', (w, WG, n) => {
     const h = 5, d = 3, N = w * h * d;
     let s = 7; const rnd = () => (s = (s * 1103515245 + 12345) % 2147483648) / 2147483648;

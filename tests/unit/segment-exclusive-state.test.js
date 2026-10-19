@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { installDomStub, importApp } from '../helpers/dom-stub.js';
 import { segmentRunsCacheKey } from '../../docs/segment-cache-key.js';
 
-// build 459: dependencies between segments (which segments follow a higher one) and the keys that must change with them
+// dependencies between segments (which segments follow a higher one) and the keys that must change with them
 installDomStub();
 let S, R;
 beforeAll(async () => { S = await importApp('segments'); R = await importApp('segment-runs'); });
