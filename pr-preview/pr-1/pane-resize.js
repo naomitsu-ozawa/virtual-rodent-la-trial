@@ -1,4 +1,4 @@
-// Resizable panes (build 586, workspace UI only): drag handles on the borders between the panes.
+// Resizable panes: drag handles on the borders between the panes.
 //   left    : the left column (tool rail + panel) | the views          (landscape: width)
 //   bottom  : the views / the panel below them                          (portrait: panel height)
 //   split   : the 3D view | the 2D column in 分割                        (landscape: 2D width, portrait: 2D height)

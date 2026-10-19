@@ -1,16 +1,16 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { setAnalysisRegions, setAnalysisFocusedRegionId, setNextAnalysisRegionId, setNextAnalysisColorIndex, sceneState, analysisRegions, analysisFocusedRegionId, currentLanguage, volumeAnalysisBusy, volume, current3DVolume, activeSeries } from './state.js?v=20261019-build624';
-import { analysisSummary, analysisRegionList, analysisMergeButton, analysisClearButton, planes } from './ui-shell.js?v=20261019-build624';
-import { tr } from './i18n.js?v=20261019-build624';
-import { spacingWarningHtml } from './slice-spacing.js?v=20261019-build624';
-import { analysisRegionById, updateAnalysisEditorControls } from './edit-tools.js?v=20261019-build624';
-import { analysisColorCss, schedulePlaneRender } from './mpr-render.js?v=20261019-build624';
-import { analysisRegionShown, analysisRegionSegmentsShown } from './segments.js?v=20261019-build624';
-import { request3DRender } from './scene3d.js?v=20261019-build624';
-import { dispose } from './surface-mesh.js?v=20261019-build624';
-import { setRegionLabel, setRegionLabelOffset, hasOffset, clampVoxel, onAnalysisLabelsChange, surfaceAnchor, voxelFromLocal3d } from './analysis-label.js?v=20261019-build624';
-import { analysisRunsContain } from './run-length.js?v=20261019-build624';
+import { setAnalysisRegions, setAnalysisFocusedRegionId, setNextAnalysisRegionId, setNextAnalysisColorIndex, sceneState, analysisRegions, analysisFocusedRegionId, currentLanguage, volumeAnalysisBusy, volume, current3DVolume, activeSeries } from './state.js?v=20261019-build625';
+import { analysisSummary, analysisRegionList, analysisMergeButton, analysisClearButton, planes } from './ui-shell.js?v=20261019-build625';
+import { tr } from './i18n.js?v=20261019-build625';
+import { spacingWarningHtml } from './slice-spacing.js?v=20261019-build625';
+import { analysisRegionById, updateAnalysisEditorControls } from './edit-tools.js?v=20261019-build625';
+import { analysisColorCss, schedulePlaneRender } from './mpr-render.js?v=20261019-build625';
+import { analysisRegionShown, analysisRegionSegmentsShown } from './segments.js?v=20261019-build625';
+import { request3DRender } from './scene3d.js?v=20261019-build625';
+import { dispose } from './surface-mesh.js?v=20261019-build625';
+import { setRegionLabel, setRegionLabelOffset, hasOffset, clampVoxel, onAnalysisLabelsChange, surfaceAnchor, voxelFromLocal3d } from './analysis-label.js?v=20261019-build625';
+import { analysisRunsContain } from './run-length.js?v=20261019-build625';
 export function analysisRegionRepresentativeVoxel(region){
  if(!region?.runsBySlice)return null;
  const nonEmpty=[];for(let z=0;z<region.runsBySlice.length;z++)if(region.runsBySlice[z]?.length)nonEmpty.push(z);
@@ -18,7 +18,7 @@ export function analysisRegionRepresentativeVoxel(region){
  const z=nonEmpty[Math.floor(nonEmpty.length/2)],rec=region.runsBySlice[z],i=Math.floor((rec.length/3)/2)*3;
  return{x:Math.floor((rec[i+1]+rec[i+2])/2),y:rec[i],z};
 }
-// move=false keeps the slice positions (build 441: re-applying the focus look after a lasso unselect)
+// move=false keeps the slice positions
 export function setAnalysisFocusedRegion(id,voxel=null,move=true){
  const region=analysisRegionById(id);setAnalysisFocusedRegionId(region?.id??null);
  for(const r of analysisRegions){
@@ -36,8 +36,8 @@ export function setAnalysisFocusedRegion(id,voxel=null,move=true){
  for(const p of Object.keys(planes))schedulePlaneRender(p);
  request3DRender();renderAnalysisResults();
 }
-// build 523: pin the label of a result / remove it; the place is then moved by dragging it (3D view, VR).
-// build 524: the anchor is on the result's SURFACE as the 3D camera sees it (the entry point of the ray from the eye to a voxel inside the result), not inside it: in VR a card inside bone is a ghost behind the tissue.
+// pin the label of a result / remove it; the place is then moved by dragging it (3D view, VR).
+// the anchor is on the result's SURFACE as the 3D camera sees it (the entry point of the ray from the eye to a voxel inside the result), not inside it: in VR a card inside bone is a ghost behind the tissue.
 // Without a 3D camera / object (or when the ray finds nothing) it falls back to the representative voxel.
 export function labelAnchorFor(region,vol=current3DVolume||volume){
  const v=analysisRegionRepresentativeVoxel(region);if(!v)return null;
@@ -84,12 +84,12 @@ export function renderAnalysisResults(statusText=null){
    volumeRow.append(volumeLabel,volumeValue);
    const meta=document.createElement('div');meta.textContent=focused.segmentKeys.map(k=>tr(k)||k).join(' + ')+' · '+focused.voxels.toLocaleString()+' voxels';meta.style.cssText='font-size:10px;line-height:1.35;color:rgb(var(--ui-t4));overflow-wrap:anywhere';
    card.append(title,volumeRow,meta);
-   // build 469: spacing used for the volume, plus the slice-spacing warning whenever one applies
+   // spacing used for the volume, plus the slice-spacing warning whenever one applies
    const v=current3DVolume||volume,sp=v?.spacing;
    if(sp){const used=document.createElement('div');used.textContent=(currentLanguage==='ja'?'ボクセル間隔 (x, y, z): ':'Voxel spacing (x, y, z): ')+sp.map(n=>(+n).toFixed(4).replace(/0+$/,'').replace(/\.$/,'')).join(' × ')+' mm';used.className='analysis-spacing-used';used.style.cssText='font-size:10px;line-height:1.35;color:rgb(var(--ui-t4));overflow-wrap:anywhere';card.append(used)}
    const warnHtml=spacingWarningHtml((v?.series||activeSeries)?.spacingCheck,currentLanguage,s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'));
    if(warnHtml)card.insertAdjacentHTML('beforeend',warnHtml);
-   // build 523: the label of this result on the 3D view (and in VR): pinned here or in VR, moved by a drag, put back here or by a double click / tap
+   // the label of this result on the 3D view (and in VR): pinned here or in VR, moved by a drag, put back here or by a double click / tap
    {const actions=document.createElement('div');actions.className='analysis-label-actions';
     const pin=document.createElement('button');pin.type='button';pin.className='analysis-label-pin';pin.textContent=tr(focused.label?'analysisLabelUnpin':'analysisLabelPin');pin.onclick=()=>toggleAnalysisLabel(focused);actions.append(pin);
     if(focused.label&&hasOffset(focused.label)){const rs=document.createElement('button');rs.type='button';rs.className='analysis-label-reset';rs.textContent=tr('analysisLabelReset');rs.onclick=()=>setRegionLabelOffset(focused,null);actions.append(rs)}

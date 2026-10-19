@@ -1,10 +1,10 @@
-// GPU diagnostics (build 520): the data of the debug-only 「GPU情報」 tab and its copyable report. No DOM and no GPU access (its only imports are the
+// GPU diagnostics: the data of the debug-only 「GPU情報」 tab and its copyable report. No DOM and no GPU access (its only imports are the
 // pure gpu-preference.js / gpu-split.js), so unit tests load it as is. gpu-diagnostics-ui.js gathers the values from gpuFilterRuntime and passes them
 // in as plain data; this module only formats them (and keeps a small in-memory error log).
 // The tab is shown, and anything that probes the GPU runs, only in debug mode (settings > デバッグ, or ?debug).
 
-import { gpuPlatformOs } from './gpu-preference.js?v=20261019-build624';
-import { gpuVendorKey, gpuAdapterVendorKey } from './gpu-split.js?v=20261019-build624';
+import { gpuPlatformOs } from './gpu-preference.js?v=20261019-build625';
+import { gpuVendorKey, gpuAdapterVendorKey } from './gpu-split.js?v=20261019-build625';
 // ---- visibility ----------------------------------------------------------------------------------------------------
 // The one rule: the GPU info tab (and the status-bar click that opens it) exists only while debug mode is on, on every
 // platform (Mac, iPad, Windows, Linux, Android alike). `nav` is accepted so a test can state "any platform" explicitly.

@@ -1,4 +1,4 @@
-// One lighting model for every 3D view (build 612): the desktop WebGPU volume (medical-volume.js), the VR / AR volume (vr-view.js) and the
+// One lighting model for every 3D view: the desktop WebGPU volume (medical-volume.js), the VR / AR volume (vr-view.js) and the
 // 3D-view surface meshes (app.js, three.js lights). Before this the two volume shaders lit a surface with a light offset given in VOLUME
 // coordinates (0.35, 0.5, 0.25): it turned with the volume, so a grabbed / flipped volume was lit from below (shadow on top), and
 // abs(dot(n, l)) lit back faces as bright as front faces (far surfaces glowed).
@@ -21,7 +21,7 @@
 //    brought to linear with pow(., DISPLAY_GAMMA) and the sRGB output encoding gives back the same numbers (the same highlight, the same depth cue).
 // The shader helpers below are generated from these constants (one source for all languages); shadePoint() is the same arithmetic in JS
 // (unit tests, and the reference for the mesh material).
-// build 620: per-segment material presets (MATERIALS): AMBIENT / SPEC / SHININESS are the 'standard' preset; vrlShade takes them as an argument
+// per-segment material presets (MATERIALS): AMBIENT / SPEC / SHININESS are the 'standard' preset; vrlShade takes them as an argument
 // mat = vec3(ambient, spec, shininess) per segment (the desktop uniform u.segMat, the VR uniform segM, the mesh uniform per segment); the light
 // direction and DEPTH_FADE stay shared constants.
 export const LIGHT_UP = 0.5;
@@ -30,7 +30,7 @@ export const AMBIENT = 0.28;
 export const SPEC = 0.18;
 export const SHININESS = 20;
 export const DEPTH_FADE = 0.2;
-// build 620: material presets of a segment (ambient floor, highlight strength, highlight sharpness). standard = the constants above (the default:
+// material presets of a segment (ambient floor, highlight strength, highlight sharpness). standard = the constants above (the default:
 // renders exactly as before); solid: crisper, more contrast; plaster: matte and soft, no highlight; plastic: a strong, sharp highlight
 export const MATERIALS = {
   standard: { ambient: AMBIENT, spec: SPEC, shininess: SHININESS },
@@ -88,7 +88,7 @@ export function shadePoint(n, viewDir, off, depth, keep = false, mat = MATERIALS
 // viewer; mat = vec3(ambient, spec, shininess) of the segment (materialVec). vrlDepth01(t, o, halfBox) with t the ray parameter of the hit (the ray direction is a unit vector) and o the eye in volume space (the box is
 // centred on the origin); vrlDepthD(t, dist, r): the same with the eye's distance to the centre and the bounding radius given (the meshes)
 export function lightingGLSL() {
-  return `// build 612: shared lighting model (lighting.js)
+  return `// shared lighting model (lighting.js)
 vec2 vrlShade(vec3 n,vec3 viewDir,vec3 lightOff,float depth01,float keep,vec3 mat){
  if(keep<0.5&&dot(n,viewDir)<0.0)n=-n;
  vec3 l=normalize(viewDir+lightOff);
@@ -107,7 +107,7 @@ export function lightingVertexGLSL(invModel = 'invModel') {
 }
 // WGSL (desktop WebGPU volume): same functions
 export function lightingWGSL() {
-  return `// build 612: shared lighting model (lighting.js)
+  return `// shared lighting model (lighting.js)
 fn vrlShade(n0:vec3<f32>,viewDir:vec3<f32>,lightOff:vec3<f32>,depth01:f32,keep:f32,mat:vec3<f32>)->vec2<f32>{
  var n=n0;if(keep<0.5&&dot(n,viewDir)<0.0){n=-n;}
  let l=normalize(viewDir+lightOff);
@@ -129,7 +129,7 @@ export function boxRadius(columns, rows, slices, spacing) {
 // TSL node (WebGPU node materials): the display colour of the lit surface in LINEAR working space, = pow(colour * diffuse + spec, DISPLAY_GAMMA).
 // TSL is the module three/tsl passed in (this file imports nothing); depth = { center, radius } uniform nodes: the distance of the eye to the volume's centre
 // and its bounding radius, updated every frame. The normal is normalView (view space, flat shading and DoubleSide handled by three.js), turned to face the viewer.
-// build 620: mat = a vec3 uniform node (ambient, spec, shininess) of the mesh's segment (materialVec), so the mesh matches its volume; standard when omitted.
+// mat = a vec3 uniform node (ambient, spec, shininess) of the mesh's segment (materialVec), so the mesh matches its volume; standard when omitted.
 export function meshColorNode(TSL, depth, mat = null) {
   const { materialColor, positionView, normalView, positionViewDirection, vec3, vec4, float, dot, normalize, max, pow, clamp, select, length } = TSL;
   const v = positionViewDirection, n0 = normalView;
@@ -144,13 +144,13 @@ export function meshColorNode(TSL, depth, mat = null) {
   return vec4(pow(max(display, 0), DISPLAY_GAMMA), 1);
 }
 // WebGL fallback (a core MeshStandardMaterial, onBeforeCompile): the fragment source of the standard material with the same evaluation in place of its
-// lights (there are none in the scene). Declares the vec2 uniform vrlMeshDepth (eye distance to the centre, bounding radius) and (build 620) the vec3 uniform
+// lights (there are none in the scene). Declares the vec2 uniform vrlMeshDepth (eye distance to the centre, bounding radius) and the vec3 uniform
 // vrlMeshMat (the segment's material: ambient, spec, shininess). The emissive part
 // (the highlight of edited / selected regions) is added after, in linear, as before.
 export function patchStandardFragment(src) {
   const anchor = '#include <opaque_fragment>';
   if (!src.includes(anchor) || !src.includes('void main()')) throw new Error('lighting.js: the standard fragment shader has no opaque_fragment / main anchor');
-  const code = `{ // build 612: the shared lighting model in place of the scene lights
+  const code = `{ // the shared lighting model in place of the scene lights
  vec3 vrlV=normalize(vViewPosition);
  vec2 vrlS=vrlShade(normal,vrlV,vec3(${f(VIEW_LIGHT_OFFSET[0])},${f(VIEW_LIGHT_OFFSET[1])},0.0),vrlDepthD(length(vViewPosition),vrlMeshDepth.x,vrlMeshDepth.y),0.0,vrlMeshMat);
  outgoingLight=pow(max(diffuseColor.rgb*vrlS.x+vec3(vrlS.y),0.0),vec3(${f(DISPLAY_GAMMA)}))+totalEmissiveRadiance;

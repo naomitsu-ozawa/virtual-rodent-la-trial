@@ -1,4 +1,4 @@
-// The parts of a smoothed chunk around the kernel (build 612): the lattice snap, the weld, the pinned flags and the vertex
+// The parts of a smoothed chunk around the kernel: the lattice snap, the weld, the pinned flags and the vertex
 // normals. They run in the smoothing workers (smooth-workers.js) together with the kernel, so a chunk costs the main thread
 // only its seam copy and core cut (smooth-chunks.js finishChunk), not ~0.5 s of weld and normals per chunk.
 // Self-contained on purpose, like constrained-smooth.js: the workers run these functions from their source text, so they

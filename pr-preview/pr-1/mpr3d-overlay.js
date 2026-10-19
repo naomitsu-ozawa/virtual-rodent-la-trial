@@ -1,11 +1,11 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { volume, mpr3DWindowLutKey, mpr3DWindowLutTable, setMpr3DWindowLutKey, residentGpuUploadSeriesId, sceneState, threeRenderMode, mpr3DSurfaceOpacity, sectionViewOpen, sectionViewPlane, sectionAutoPlane, setSectionAutoPlane, sectionCapEnabled, sectionCapOpacity, sectionCapHatch, sectionSliceImageVisible } from './state.js?v=20261019-build624';
-import { wc, ww, planes, mpr3DSliceSliders, $, mprVolumeOpacity, mprSurfaceOpacity } from './ui-shell.js?v=20261019-build624';
-import { sourceFilterStages, getFilteredSourceAxialBlock, getCachedSourceSlice, sourceFilterSignature } from './source-filters.js?v=20261019-build624';
-import { residentGpuMprAvailable } from './mpr-orthogonal.js?v=20261019-build624';
-import { frameYield } from './utils.js?v=20261019-build624';
-import { request3DRender } from './scene3d.js?v=20261019-build624';
+import { volume, mpr3DWindowLutKey, mpr3DWindowLutTable, setMpr3DWindowLutKey, residentGpuUploadSeriesId, sceneState, threeRenderMode, mpr3DSurfaceOpacity, sectionViewOpen, sectionViewPlane, sectionAutoPlane, setSectionAutoPlane, sectionCapEnabled, sectionCapOpacity, sectionCapHatch, sectionSliceImageVisible } from './state.js?v=20261019-build625';
+import { wc, ww, planes, mpr3DSliceSliders, $, mprVolumeOpacity, mprSurfaceOpacity } from './ui-shell.js?v=20261019-build625';
+import { sourceFilterStages, getFilteredSourceAxialBlock, getCachedSourceSlice, sourceFilterSignature } from './source-filters.js?v=20261019-build625';
+import { residentGpuMprAvailable } from './mpr-orthogonal.js?v=20261019-build625';
+import { frameYield } from './utils.js?v=20261019-build625';
+import { request3DRender } from './scene3d.js?v=20261019-build625';
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.webgpu.js';
 export const mpr3DVisibility={axes:true,axial:false,coronal:false,sagittal:false};
 export function restoreSectionAutoPlane(){
@@ -77,7 +77,7 @@ export async function ensureMpr3DPreviewCache(){
  const signature=mpr3DPreviewSignature(v,stages);
  if(mpr3DPreviewCache.signature===signature&&mpr3DPreviewCache.planes.coronal&&mpr3DPreviewCache.planes.sagittal)return true;
  if(mpr3DPreviewCache.building&&mpr3DPreviewCache.buildingSignature===signature)return false;
- // build 308: a filtered 3D rebuild is filling this preview from its own blocks
+ // a filtered 3D rebuild is filling this preview from its own blocks
  if(stages.length&&sharedPreview&&sharedPreview.signature===signature)return false;
  const token=++mpr3DPreviewCache.token,plan=mpr3DPreviewPlan(v),maxSide=plan.side,w=v.columns,h=v.rows,d=v.slices,min=Number.isFinite(v.min)?v.min:-1024,max=Number.isFinite(v.max)&&v.max>min?v.max:min+1,scale=255/(max-min);
  const dims={axial:null,coronal:[Math.min(w,maxSide),Math.min(d,maxSide)],sagittal:[Math.min(h,maxSide),Math.min(d,maxSide)]};
@@ -245,7 +245,7 @@ export function refreshMpr3DPlaneTexture(p){
  request3DRender();
 }
 
-// build 308: build the filtered C/S preview from the filtered blocks the GPU
+// build the filtered C/S preview from the filtered blocks the GPU
 // volume rebuild already makes (it used to filter the whole volume a second
 // time in small tiled blocks: 1564 GPU filter calls instead of ~120).
 let sharedPreview=null;

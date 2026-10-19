@@ -1,4 +1,4 @@
-// VR/AR, debug mode only (build 522): a small board with the measured values of the last section release (throw to delete): verdict, frame / hand speed, direction cos,
+// VR/AR, debug mode only: a small board with the measured values of the last section release (throw to delete): verdict, frame / hand speed, direction cos,
 // samples / span / time to the release (text from vr-section-frame.js flingDebugLines). Not a laser target. THREE is passed in (no import, no DOM at module level), as with
 // vr-undo-button.js. Hidden (mesh.visible=false) until show(); vr-view.js creates it only while the debug mode is on and hides it after FLING_DEBUG_MS.
 export const FLING_DEBUG_W_M = 0.2, FLING_DEBUG_H_M = 0.07;

@@ -1,13 +1,13 @@
-// Chunked surface smoothing (build 612). A segment surface too large to hold at once is built in chunks of slices; each
+// Chunked surface smoothing. A segment surface too large to hold at once is built in chunks of slices; each
 // chunk is smoothed together with SMOOTH_CHUNK_HALO slices of its neighbours on both sides and keeps only the triangles of
 // its own slices. The vertices on the plane between two chunks then come out of both smoothings almost alike (1e-4 voxel)
 // but not bit for bit, and a crack of that size is an open edge in an STL: the seam copy gives the vertices of a chunk's
 // first plane the positions the previous chunk gave them, so the assembled surface is watertight.
 // Free of DOM-bound imports so the unit tests can use it directly.
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.webgpu.js';
-import { constrainedSmoothPositions, constrainedSmoothSchedule } from './constrained-smooth.js?v=20261019-build624';
-import { snapToLattice, prepareSmoothChunk, vertexNormals } from './smooth-prepare.js?v=20261019-build624';
-import { smoothChunkInPool, smoothInFlightLimit, smoothInFlightFloats } from './smooth-workers.js?v=20261019-build624';
+import { constrainedSmoothPositions, constrainedSmoothSchedule } from './constrained-smooth.js?v=20261019-build625';
+import { snapToLattice, prepareSmoothChunk, vertexNormals } from './smooth-prepare.js?v=20261019-build625';
+import { smoothChunkInPool, smoothInFlightLimit, smoothInFlightFloats } from './smooth-workers.js?v=20261019-build625';
 export { snapToLattice };
 
 // slices of the neighbouring chunks smoothed with a chunk: the constrained smoothing reaches farther the stronger it is.

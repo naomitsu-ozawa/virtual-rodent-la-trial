@@ -1,4 +1,4 @@
-// VR/AR: the floating 「元に戻す」 board shown for a few seconds after a section was deleted (build 521). A small canvas board, laser-clickable (the trigger of either hand).
+// VR/AR: the floating 「元に戻す」 board shown for a few seconds after a section was deleted. A small canvas board, laser-clickable (the trigger of either hand).
 // THREE is passed in (no import, no DOM at module level), as with vr-ring.js createRingMenu. Hidden (mesh.visible=false) until show(); the drawing is redone only when its inputs change.
 export const UNDO_BOARD_W_M = 0.13, UNDO_BOARD_H_M = 0.05;
 const W = 320, H = Math.round(W * UNDO_BOARD_H_M / UNDO_BOARD_W_M), STEPS = 20; // the countdown bar moves in 20 steps (a redraw per step, not per frame)

@@ -1,4 +1,4 @@
-// VR ring menu, stage 1 (build 468): pure functions only (item catalog, settings, stick selection, button press); no three.js, no DOM.
+// VR ring menu, stage 1: pure functions only (item catalog, settings, stick selection, button press); no three.js, no DOM.
 // The drawing (createRingMenu) comes in a later stage. Angles: 0 = up, clockwise, in degrees.
 export const WHEEL_SLOTS=6;
 // id is saved in the settings: never change one. when: when the item is usable (checked by vr-view.js)
@@ -14,7 +14,7 @@ export const WHEEL_ITEMS=[
  {id:'snap-coronal',ja:'断面を冠状に',en:'Coronal',when:'section-selected'},
  {id:'snap-sagittal',ja:'断面を矢状に',en:'Sagittal',when:'section-selected'},
  {id:'section-clip',ja:'断面で切る／切らない',en:'Clip on/off',when:'section-selected'},
- {id:'section-flip',ja:'切り口反転',en:'Flip cut',when:'section-flip'}, // build 496: the same action as the 向きを反転 button of the 断面 tab (one-side cut mode only)
+ {id:'section-flip',ja:'切り口反転',en:'Flip cut',when:'section-flip'}, // the same action as the 向きを反転 button of the 断面 tab (one-side cut mode only)
  {id:'home',ja:'正面に戻す',en:'Bring to front',when:'always'},
  {id:'screenshot',ja:'スクリーンショット',en:'Screenshot',when:'always'},
  {id:'menu',ja:'全体メニュー',en:'Full menu',when:'always'},
@@ -50,7 +50,7 @@ export function setWheelItem(items,slot,id){
  if(at>=0)a[at]=a[slot];
  a[slot]=id;return a;
 }
-// One-time migration (build 498): a layout saved before 切り口反転 existed never shows it. settings = the stored VR settings ({wheel, wheelMig}).
+// One-time migration: a layout saved before 切り口反転 existed never shows it. settings = the stored VR settings ({wheel, wheelMig}).
 // When wheelMig < 1: set it to 1 and, if 'section-flip' is not in the ring and a slot is empty (null), put it in the first empty slot.
 // No empty slot: the layout stays as it is. Once wheelMig >= 1 nothing is ever added again (a user who removed it keeps it removed).
 export const WHEEL_MIGRATION=1;
@@ -192,7 +192,7 @@ export function createRingMenu(THREE,{size=WHEEL_BOARD_M}={}){
   // labels: names (null = empty slot), enabled: usable, on: shown as "on" (e.g. the current mode)
   setItems(l,e,o){labels=l;enabled=e;on=o||[];draw()},
   setHighlight(k){if(k!==hl){hl=k;draw()}},
-  // build 474: the slot under a uv of the board: an annular sector (RING_IN_PX..RING_OUT_PX, within its angular share minus the gap) of a filled, usable item; else null
+  // the slot under a uv of the board: an annular sector (RING_IN_PX..RING_OUT_PX, within its angular share minus the gap) of a filled, usable item; else null
   slotFromUv(uv){
    const dx=uv.x*N-N/2,dy=(1-uv.y)*N-N/2,r=Math.hypot(dx,dy),n=labels.length;
    if(!n||r<RING_IN_PX||r>RING_OUT_PX+HL_GROW)return null;

@@ -1,20 +1,20 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { segmentState, segmentNeedsGlobalMask, sourceMprMemoryView, sourceMemoryUsable, getProcessedSegmentMask, segmentEditState, segmentSourcesOf, segmentSourceSignature, segmentHasManualEditsUpstream, segmentEditGen, segmentKeyOf, segmentAddsVoxels } from './segments.js?v=20261019-build624';
-import { activeId, filterRebuildRevision, current3DVolume, volume, currentLanguage } from './state.js?v=20261019-build624';
-import { sourceFilterRuntime, sourceFilterSignature, sourceFilterStages, sourceFilterHalo, readSourceRegion, runSourceFilterWorker, fitSourceTile, getCachedSourceSlice } from './source-filters.js?v=20261019-build624';
-import { gpuOpenRuns, gpuCounts, gpuStepTimes, gpuRunInfo, addGpuStepTime, ensureGpuFilterDevice, gpuValidationScope, setGpuComputeBackend, runGpuSourceFilters, gpuFilterRuntime, gpuStagesSupported, beginGpuBufferRetention, endGpuBufferRetention } from './gpu-compute.js?v=20261019-build624';
-import { isNativeDicomTransferSyntax } from './dicom.js?v=20261019-build624';
-import { extractSourceThresholdRuns } from './medical-volume.js?v=20261019-build624';
-import { valuesToSegmentBits } from './mask-ops.js?v=20261019-build624';
-import { state } from './ui-shell.js?v=20261019-build624';
+import { segmentState, segmentNeedsGlobalMask, sourceMprMemoryView, sourceMemoryUsable, getProcessedSegmentMask, segmentEditState, segmentSourcesOf, segmentSourceSignature, segmentHasManualEditsUpstream, segmentEditGen, segmentKeyOf, segmentAddsVoxels } from './segments.js?v=20261019-build625';
+import { activeId, filterRebuildRevision, current3DVolume, volume, currentLanguage } from './state.js?v=20261019-build625';
+import { sourceFilterRuntime, sourceFilterSignature, sourceFilterStages, sourceFilterHalo, readSourceRegion, runSourceFilterWorker, fitSourceTile, getCachedSourceSlice } from './source-filters.js?v=20261019-build625';
+import { gpuOpenRuns, gpuCounts, gpuStepTimes, gpuRunInfo, addGpuStepTime, ensureGpuFilterDevice, gpuValidationScope, setGpuComputeBackend, runGpuSourceFilters, gpuFilterRuntime, gpuStagesSupported, beginGpuBufferRetention, endGpuBufferRetention } from './gpu-compute.js?v=20261019-build625';
+import { isNativeDicomTransferSyntax } from './dicom.js?v=20261019-build625';
+import { extractSourceThresholdRuns } from './medical-volume.js?v=20261019-build625';
+import { valuesToSegmentBits } from './mask-ops.js?v=20261019-build625';
+import { state } from './ui-shell.js?v=20261019-build625';
 import dicomParser from 'https://esm.sh/dicom-parser@1.8.21';
-import { analysisRunsVoxelCount, unionRunArrays, maskToAnalysisRuns, postprocessSourceRuns, thinSuppressSourceRuns, intersectRunArrays, subtractRunArrays } from './run-length.js?v=20261019-build624';
-import { frameYield } from './utils.js?v=20261019-build624';
-import { BODY_MIN_HU } from './thin-suppress.js?v=20261019-build624';
-import { setProcessingBusy } from './busy.js?v=20261019-build624';
-import { reportBusyProgress } from './progress-modal.js?v=20261019-build624';
-import { segmentRunsCacheKey, segmentRunsCacheInfo, loadCachedSegmentRuns, storeCachedSegmentRuns } from './run-cache.js?v=20261019-build624';
+import { analysisRunsVoxelCount, unionRunArrays, maskToAnalysisRuns, postprocessSourceRuns, thinSuppressSourceRuns, intersectRunArrays, subtractRunArrays } from './run-length.js?v=20261019-build625';
+import { frameYield } from './utils.js?v=20261019-build625';
+import { BODY_MIN_HU } from './thin-suppress.js?v=20261019-build625';
+import { setProcessingBusy } from './busy.js?v=20261019-build625';
+import { reportBusyProgress } from './progress-modal.js?v=20261019-build625';
+import { segmentRunsCacheKey, segmentRunsCacheInfo, loadCachedSegmentRuns, storeCachedSegmentRuns } from './run-cache.js?v=20261019-build625';
 export async function processSourceRegionMasks(series,target,stages,key,revision,segments){
  const halo=sourceFilterHalo(stages),x0=Math.max(0,target.x-halo),y0=Math.max(0,target.y-halo),z0=Math.max(0,target.z-halo),x1=Math.min(series.columns,target.x+target.width+halo),y1=Math.min(series.rows,target.y+target.height+halo),z1=Math.min(series.slices.length,target.z+target.depth+halo);
  const box={x:x0,y:y0,z:z0,width:x1-x0,height:y1-y0,depth:z1-z0},data=await readSourceRegion(series,box,revision,true);
@@ -77,7 +77,7 @@ const segmentReadAhead=new Map();
 async function timedRead(series,box,revision){const t=performance.now(),data=await readSourceRegion(series,box,revision,true);addGpuStepTime('read',performance.now()-t);return data}
 export async function sourceSegmentRunBlockGpu(v,key,seg,zStart,depth,analysisRevision,extraSegs=[],airLayers=null){
  const series=v.series,stages=sourceFilterStages(),coreDepth=Math.min(depth,series.slices.length-zStart),device=await ensureGpuFilterDevice();if(!device)throw new Error('__GPU_ANALYSIS_UNAVAILABLE__');
- // no workgroup-count limit here: the filter and RLE passes dispatch 2D grids (build 263)
+ // no workgroup-count limit here: the filter and RLE passes dispatch 2D grids
  let rawError=null;
  if(!airLayers&&!stages.length&&series.slices.slice(zStart,zStart+coreDepth).every(meta=>isNativeDicomTransferSyntax(meta.ts))){
   try{
@@ -90,7 +90,7 @@ export async function sourceSegmentRunBlockGpu(v,key,seg,zStart,depth,analysisRe
   }catch(e){rawError=e;console.warn('Raw DICOM GPU RLE unavailable; retrying decoded CT on WebGPU.',e)}
  }
  const halo=sourceFilterHalo(stages)+(airLayers?airLayers.n[2]:0),boxFor=zs=>{const c=Math.min(depth,series.slices.length-zs),a=Math.max(0,zs-halo),b=Math.min(series.slices.length,zs+c+halo);return{x:0,y:0,z:a,width:series.columns,height:series.rows,depth:b-a}},box=boxFor(zStart),z0=box.z;
- // build 312: the next block's slices are read while this block runs on the GPU
+ // the next block's slices are read while this block runs on the GPU
  const keyOf=bx=>series.id+'|'+analysisRevision+'|'+bx.z+'|'+bx.depth;let data;
  const ahead=segmentReadAhead.get(keyOf(box));segmentReadAhead.clear();
  data=ahead?await ahead:await timedRead(series,box,analysisRevision);
@@ -113,12 +113,12 @@ export function segmentBaseSignature(key,v){
 }
 export function thresholdRunsFromMemory(v,seg,key=segmentKeyOf(seg)){
  const w=v.columns,h=v.rows,d=v.slices,out=new Array(d),plane=w*h;
- // build 459: with voxel takers above the runs are the mask minus their final voxels
+ // with voxel takers above the runs are the mask minus their final voxels
  if(segmentNeedsGlobalMask(seg)||(key&&segmentSourcesOf(key).length))return maskToAnalysisRuns(getProcessedSegmentMask(v,seg,key),w,h,d);
  for(let z=0;z<d;z++){const rec=[],base=z*plane;for(let y=0;y<h;y++){let x=0,row=base+y*w;while(x<w){while(x<w&&(v.data[row+x]<seg.min||v.data[row+x]>seg.max))x++;if(x>=w)break;const x0=x;while(x+1<w&&v.data[row+x+1]>=seg.min&&v.data[row+x+1]<=seg.max)x++;rec.push(y,x0,x);x++}}out[z]=new Uint32Array(rec)}
  return out;
 }
-// excludeRuns (build 459): the final voxels of the voxel takers above (run arrays); the segment's own range is not cut by
+// excludeRuns: the final voxels of the voxel takers above (run arrays); the segment's own range is not cut by
 // them, so they are subtracted here, after the air-boundary exclusion (a per-voxel test) and before the shape-dependent
 // processing, and once more after Closing / hole filling, which can add voxels the higher segment holds.
 export async function sourceRunsForSegment(v,key,seg,onProgress=null,alive=()=>true,excludeRuns=null){
@@ -130,7 +130,7 @@ export async function sourceRunsForSegment(v,key,seg,onProgress=null,alive=()=>t
  const d=v.slices,w=v.columns,h=v.rows,revision=sourceFilterRuntime.revision,blockDepth=sourceAnalysisBlockDepth(w,h);
  // thresholded runs before post-processing, kept per segment so changing only
  // a post-processing setting (thin-region sliders, Opening, ...) skips this pass
- // Air-boundary exclusion on the GPU (build 258): one pass computes each segment
+ // Air-boundary exclusion on the GPU: one pass computes each segment
  // voxel's distance to air and returns the segment split into distance layers
  // (1..AIR_LAYERS voxels, and farther). A slider change then only unions layers,
  // with no GPU pass. Falls back to the CPU route when the GPU is unavailable.
@@ -238,7 +238,7 @@ async function thresholdSourceRuns(v,key,seg,onProgress,alive,extraSegs=[],airLa
  const d=v.slices,w=v.columns,h=v.rows,sets=[seg,...extraSegs].map(()=>Array.from({length:d},()=>new Uint32Array(0))),revision=sourceFilterRuntime.revision;
  let blockDepth=sourceAnalysisBlockDepth(w,h);
  // air layers: the z halo (filters + ball) dwarfs a 4-slice core on the iPad, so
- // take as many slices as the storage-buffer limit allows (2D dispatch, build 263)
+ // take as many slices as the storage-buffer limit allows (2D dispatch)
  if(airLayers){
   const device=await ensureGpuFilterDevice(),limit=Number(device?.limits?.maxStorageBufferBindingSize)||134217728,halo=sourceFilterHalo(sourceFilterStages())+airLayers.n[2];
   const fit=Math.floor(limit/(w*h*4))-2*halo-1;if(fit>blockDepth)blockDepth=Math.min(32,fit);
@@ -303,7 +303,7 @@ export function setSegmentStatus(key,text,kind=''){
  const el=document.querySelector('[data-seg-status="'+key+'"]');if(!el)return;
  el.textContent=text||'';el.classList.toggle('is-hidden',!text);el.classList.toggle('is-error',kind==='error');el.classList.toggle('is-done',kind==='done');
 }
-// ?debug or the settings dialog's debug switch (build 280)
+// ?debug or the settings dialog's debug switch
 const STATUS_DEBUG=()=>!!globalThis.__vrlSettings?.debugOn?.()||(typeof location!=='undefined'&&/[?&]debug(\b|=|&|$)/.test(location.search));
 function timingTextBase(key){const list=segmentTimings.get(key),steps=[...gpuStepTimes];return (list?.length?' · '+list.map(([n,ms])=>n+' '+(ms/1000).toFixed(1)+'s').join(', '):'')+(steps.length?' · ['+steps.map(([n,ms])=>n+' '+(ms/1000).toFixed(1)+'s').join(', ')+']':'')+(gpuRunInfo.core?' · core '+gpuRunInfo.core+' halo '+gpuRunInfo.halo+' · '+gpuRunInfo.filters:'')}
 function timingText(key){return timingTextBase(key)+(gpuCounts.size?' · '+[...gpuCounts].map(([n,c])=>n+' '+c).join(', '):'')}
@@ -313,7 +313,7 @@ function segmentStatusProgress(key,seg){
  return (done,total,phase='threshold')=>{
   const i=Math.max(0,phases.indexOf(phase)),pct=total?Math.round(100*done/total):0,sec=Math.round((performance.now()-t0)/1000);
   setSegmentStatus(key,(ja?'処理中 ':'Processing ')+(i+1)+'/'+phases.length+' '+(labels[phase]||phase)+' '+pct+'% · '+sec+(ja?'秒':'s'));
-  // build 405: the same phase in the progress modal (only while a visible job holds the 'processing' slot)
+  // the same phase in the progress modal (only while a visible job holds the 'processing' slot)
   reportBusyProgress('processing',done,total,(i+1)+'/'+phases.length+' '+(labels[phase]||phase));
  };
 }
@@ -324,7 +324,7 @@ export async function ensureSegmentBaseRuns(key,v=current3DVolume||volume,onProg
  // waits for it (and receives its progress) instead of starting a second pass.
  if(st.pendingBase?.signature===sig){if(onProgress)st.pendingBase.listeners.add(onProgress);return st.pendingBase.promise}
  const pending={signature:sig,listeners:new Set(onProgress?[onProgress]:[]),promise:null},report=(done,total,phase)=>{for(const fn of pending.listeners)fn(done,total,phase)};
- // build 590: registered before it starts: an in-memory pass has no await and finishes inside this call (its result was
+ // registered before it starts: an in-memory pass has no await and finishes inside this call (its result was
  // then never stored as baseRuns and the pending entry stayed, so the GPU volume never got the processed mask)
  st.pendingBase=pending;
  pending.promise=(async()=>{
@@ -334,7 +334,7 @@ export async function ensureSegmentBaseRuns(key,v=current3DVolume||volume,onProg
   try{
    // Source-backed volumes: reuse runs stored on the device by an earlier
    // session with the same data, filters and segment settings (run-cache.js).
-   // build 459: the final voxels of the voxel takers above are subtracted (Ref = what they finally hold, as drawn)
+   // the final voxels of the voxel takers above are subtracted (Ref = what they finally hold, as drawn)
    const seg=segmentState[key],sources=segmentSourcesOf(key),needExclude=sources.length>0&&v.sourceBacked&&!sourceMemoryUsable(v);
    // the device cache cannot hold a result that depends on manual edits (they are not part of its key)
    const cacheable=!segmentHasManualEditsUpstream(key),extra=sources.length?{sources:segmentSourceSignature(key,false)}:null;
@@ -358,7 +358,7 @@ export async function ensureSegmentBaseRuns(key,v=current3DVolume||volume,onProg
    if(statusProgress){
     const stats=postprocessStats.get(key),pct=(a,b)=>(100*a/Math.max(1,b)).toFixed(1)+'%',sec=Math.round((performance.now()-t0)/1000)+(ja?'秒':'s');
     let text=(ja?'処理完了 · ':'Done · ')+sec+(stats?.before?' · '+(ja?'残り ':'kept ')+pct(stats.after,stats.before):'');
-    // device-check numbers only with ?debug (builds 246-262 diagnostics)
+    // device-check numbers only with ?debug
     if(STATUS_DEBUG()&&stats){
      text+=' · '+stats.after+'/'+stats.before+' vox'+(stats.gpuAir?' · GPU':'')
       +(stats.body!=null?' · '+(ja?'体 ':'body ')+pct(stats.body,stats.total)+' · '+(ja?'体内 ':'in body ')+(stats.insideBody==null?'—':pct(stats.insideBody,stats.before)):'')

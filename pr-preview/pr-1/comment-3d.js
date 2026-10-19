@@ -1,34 +1,34 @@
-// Position comments on the 3D view (Issue #88): a numbered dot per comment of the open series, drawn as small HTML elements in a layer
+// Position comments on the 3D view: a numbered dot per comment of the open series, drawn as small HTML elements in a layer
 // over the 3D viewport, NOT inside the WebGPU / WebGL scene. One code path serves every 3D mode (GPU volume, surface mesh, WebGL
 // fallback) because they all share the same scene object and camera; the dots cost no GPU work and stay crisp at any DPR.
 // Position: the voxel {i,j,k} -> the scene's local coordinates with voxelToLocal3D (the mapping of the 3D MPR planes), then the
 // object's world matrix and the camera, so rotation / zoom / pan follow by themselves. Updated after every 3D frame (the 3D loop only
 // renders on request, so a change of the comments, the switch or the series asks for a render).
-// Look (build 465, the same colours and shapes as VR, vr-point-markers.js): an EXPOSED point is a solid dot with a white rim; a point HIDDEN
+// Look: an EXPOSED point is a solid dot with a white rim; a point HIDDEN
 // behind tissue is a smaller dot in the VR hidden colour (never removed: a lesion inside dense tissue must stay findable); the number is a
 // small chip beside the dot. The hidden rule is VR's vr-point.js pointIsHidden over
 // the classification bytes of the shown segments (vr-view.js hiddenClsFor, built lazily, in the background), eye = the camera, the section
 // view's cut plane included; refreshed at most about 10 times a second while the view moves and once more when it stops
 // (comment-3d-hidden.js). Until the bytes are ready, or when no segment is shown / no source data is in memory, every point is exposed.
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.webgpu.js';
-import { sceneState, volume, activeSeries, volumeAnalysisMode, analysisEditTool, sectionViewOpen, sectionViewPlane, analysisRegions } from './state.js?v=20261019-build624';
-import { tr } from './i18n.js?v=20261019-build624';
-import { datasetFingerprint } from './project-file.js?v=20261019-build624';
-import { voxelToLocal3D } from './crosshair.js?v=20261019-build624';
-import { pointColor, darkFill, inkOn } from './point-colors.js?v=20261019-build624';
-import { getComments, onCommentsChange, commentMatchesSeries, commentTarget, getMarkersShown, onMarkersShownChange } from './comments.js?v=20261019-build624';
-import { getMeasurements, setLabelOffset, onMeasurementsChange, measurementMm, measureLabel, seriesSpacing, spacingLevel, getMeasureStart, onMeasureStartChange, createLongPress } from './measurements.js?v=20261019-build624';
-import { openPointMenu, endMeasureAt, cancelMeasureUi } from './point-menu.js?v=20261019-build624';
-import { request3DRender } from './scene3d.js?v=20261019-build624';
-import { gpuVolumeTarget } from './gpu-volume-data.js?v=20261019-build624';
-import { analysisRegionShown, segmentState, segmentEditState, SEGMENT_PRESET_ORDER, gpuSegmentOrder } from './segments.js?v=20261019-build624';
-import { sectionLocalPoint, sectionLocalNormal } from './section-view.js?v=20261019-build624';
-import { planeLabelPlacement, clampLabelCenter, stepDelta, createFocusTracker, LINE_SAMPLES, probeKey, labelPart, lineSamplePoints, lineAlphas, lineStopOffsets, createIdMaker } from './measure-label.js?v=20261019-build624';
-import { planeRelations, boxHalfExtent, clipSegmentNear } from './comment-3d-section.js?v=20261019-build624';
-import { computeHiddenIds, shownChannels, sectionPlaneLocal, createHiddenThrottle } from './comment-3d-hidden.js?v=20261019-build624';
-import { setRegionLabelOffset, onAnalysisLabelsChange, leaderVisible, labelLocal, offsetForLocal, rectEdgePoint, pcVoxelStep } from './analysis-label.js?v=20261019-build624';
+import { sceneState, volume, activeSeries, volumeAnalysisMode, analysisEditTool, sectionViewOpen, sectionViewPlane, analysisRegions } from './state.js?v=20261019-build625';
+import { tr } from './i18n.js?v=20261019-build625';
+import { datasetFingerprint } from './project-file.js?v=20261019-build625';
+import { voxelToLocal3D } from './crosshair.js?v=20261019-build625';
+import { pointColor, darkFill, inkOn } from './point-colors.js?v=20261019-build625';
+import { getComments, onCommentsChange, commentMatchesSeries, commentTarget, getMarkersShown, onMarkersShownChange } from './comments.js?v=20261019-build625';
+import { getMeasurements, setLabelOffset, onMeasurementsChange, measurementMm, measureLabel, seriesSpacing, spacingLevel, getMeasureStart, onMeasureStartChange, createLongPress } from './measurements.js?v=20261019-build625';
+import { openPointMenu, endMeasureAt, cancelMeasureUi } from './point-menu.js?v=20261019-build625';
+import { request3DRender } from './scene3d.js?v=20261019-build625';
+import { gpuVolumeTarget } from './gpu-volume-data.js?v=20261019-build625';
+import { analysisRegionShown, segmentState, segmentEditState, SEGMENT_PRESET_ORDER, gpuSegmentOrder } from './segments.js?v=20261019-build625';
+import { sectionLocalPoint, sectionLocalNormal } from './section-view.js?v=20261019-build625';
+import { planeLabelPlacement, clampLabelCenter, stepDelta, createFocusTracker, LINE_SAMPLES, probeKey, labelPart, lineSamplePoints, lineAlphas, lineStopOffsets, createIdMaker } from './measure-label.js?v=20261019-build625';
+import { planeRelations, boxHalfExtent, clipSegmentNear } from './comment-3d-section.js?v=20261019-build625';
+import { computeHiddenIds, shownChannels, sectionPlaneLocal, createHiddenThrottle } from './comment-3d-hidden.js?v=20261019-build625';
+import { setRegionLabelOffset, onAnalysisLabelsChange, leaderVisible, labelLocal, offsetForLocal, rectEdgePoint, pcVoxelStep } from './analysis-label.js?v=20261019-build625';
 
-// build 523: analysis result labels (analysis-label.js, region.label): a chip (colour, number, segments, volume) at its anchor, MOVABLE by a drag (mouse / pen / touch) in the camera-facing plane through the label's
+// analysis result labels (analysis-label.js, region.label): a chip (colour, number, segments, volume) at its anchor, MOVABLE by a drag (mouse / pen / touch) in the camera-facing plane through the label's
 // depth; a moved label keeps a leader line to its anchor and is judged hidden-behind-tissue like a dragged distance label (the same pass). Stored in voxel units: the same place in VR and on the PC, saved in the project.
 let host=null,layer=null,bubble=null,bubbleId=null,bubbleTimer=0;
 let rels=new Map(),relSig='',svg=null,cuesOn=false;
@@ -69,7 +69,7 @@ function refreshHidden(obj,camera,pts,plane){
  if(!anyShown||!pts.length){const had=hiddenIds.size>0;hiddenIds=new Set();return had}
  if(vrModFailed)return false; // the builder could not be loaded: every point stays exposed
  if(!vrMod){ // the classification builder lives in vr-view.js: loaded once, on the first need; until then the previous judgement stays
-  if(!vrModLoading){vrModLoading=true;import('./vr-view.js?v=20261019-build624').then(m=>{vrMod=m;throttle.reset();refreshSoon()},()=>{vrModFailed=true;if(hiddenIds.size){hiddenIds=new Set();refreshSoon()}})}
+  if(!vrModLoading){vrModLoading=true;import('./vr-view.js?v=20261019-build625').then(m=>{vrMod=m;throttle.reset();refreshSoon()},()=>{vrModFailed=true;if(hiddenIds.size){hiddenIds=new Set();refreshSoon()}})}
   return false;
  }
  const prep=vrMod.hiddenClsFor(()=>{throttle.reset();refreshSoon()});
@@ -100,11 +100,11 @@ function projectPair(obj,camera,W,H,a,b,out){
  return out.every(Number.isFinite);
 }
 const seg4=[0,0,0,0],pairDepth=[0,0],nextGradId=createIdMaker('mg3d-');
-// build 477: distances. A line between the two points (the SVG layer, clipped at the near plane) and the value at its midpoint (a small label); the start of a
+// distances. A line between the two points (the SVG layer, clipped at the near plane) and the value at its midpoint (a small label); the start of a
 // distance in the making gets a pulsing ring (.is-measure-start) and a hint next to it. Follows the points live (they are recomputed every frame).
 const measEls=new Map(); // measurement id -> {line,label,text}
-// build 485: the lit label (mouse hover / a drag, touch included): the class is toggled only when the lit label changes
-// build 523: keys 'M:<measurement id>' / 'A:<region id>' (distance labels and analysis labels share the tracker)
+// the lit label (mouse hover / a drag, touch included): the class is toggled only when the lit label changes
+// keys 'M:<measurement id>' / 'A:<region id>' (distance labels and analysis labels share the tracker)
 const alEls=new Map(); // region id -> {label,leader,dot,...}
 const litEntry=key=>key==null?null:key.startsWith('A:')?alEls.get(+key.slice(2)):measEls.get(key.slice(2));
 const labelFocus=createFocusTracker((n,p)=>{for(const [key,on] of [[p,false],[n,true]]){const e=litEntry(key);if(e){e.label.classList.toggle('is-lit',on);e.leader.classList.toggle('is-lit',on)}}});
@@ -149,7 +149,7 @@ function drawMeasures(obj,camera,W,H,pts,keep,dims){
   }else{e.line.style.display='none';e.leader.style.display='none';e.label.hidden=true}
  }
 }
-// ---- build 523: analysis result labels ----
+// ---- analysis result labels ----
 const shownRegion=r=>analysisRegionShown(r)&&!!r.runsBySlice&&r.voxels>0;
 const regionCss=c=>'#'+((Number(c)>>>0)&0xffffff).toString(16).padStart(6,'0');
 function analysisLabelRegions(){return analysisRegions.filter(r=>r.label&&shownRegion(r))}
@@ -201,7 +201,7 @@ function drawAnalysisLabels(obj,camera,W,H,regs,keep,dims){
 }
 function pruneAnalysisLabels(keep){for(const [id,e] of [...alEls])if(!keep.has(id)){e.label.remove();e.leader.remove();e.dot.remove();alEls.delete(id)}}
 function pruneMeasures(keep){for(const [id,e] of [...measEls])if(!keep.has(id)){e.line.remove();e.leader.remove();e.label.remove();e.grad?.remove();measEls.delete(id)}}
-// build 493: depth cue. The overlay is drawn over the 3D canvas, so what lies behind the volume's surface is drawn FAINT (x-ray; judged with the points' rule, see refreshHidden): the label and
+// depth cue. The overlay is drawn over the 3D canvas, so what lies behind the volume's surface is drawn FAINT (x-ray; judged with the points' rule, see refreshHidden): the label and
 // its leader as a whole (CSS .is-behind; .is-lit / .is-dragging keep them fully visible), the line part by part (an SVG gradient along it, stop-opacity per sample).
 function depthCue(e,m,s4,camera){
  const lh=hiddenIds.has(probeKey(m.id,labelPart(m.labelOffset)));
@@ -279,7 +279,7 @@ export function updateComment3dMarkers(){
    let m=els.get(c.id);
    if(!m){const el=document.createElement('div');el.className='comment-marker-3d';el.setAttribute('role','img');layer.appendChild(el);m={el,x:0,y:0,vis:false,no:0,label:'',back:null,on:false,line:null,hex:''};els.set(c.id,m)}
    m.x=x;m.y=y;m.vis=vis;
-   const hex=pointColor(c);if(m.hex!==hex){ // build 472: the point's colour (own or auto) overrides the CSS variables of this one element; the number chip inherits them
+   const hex=pointColor(c);if(m.hex!==hex){ // the point's colour (own or auto) overrides the CSS variables of this one element; the number chip inherits them
     m.hex=hex;const st=m.el.style,fill='#'+darkFill(hex).toString(16).padStart(6,'0');st.setProperty('--vr-point-dot',hex);st.setProperty('--vr-point-fill',fill);st.setProperty('--vr-point-ink',inkOn(hex));if(m.line)m.line.style.stroke=hex}
    if(m.no!==n+1){m.no=n+1;m.el.textContent='';const sp=document.createElement('span');sp.className='comment-marker-3d-no';sp.textContent=String(n+1);m.el.appendChild(sp)} // the dot is the element (its centre = the point); the number sits beside it
    const label=tr('commentMarker3d')+' '+(n+1);if(m.label!==label){m.label=label;m.el.setAttribute('aria-label',label)}
@@ -289,7 +289,7 @@ export function updateComment3dMarkers(){
   });
   // hidden behind tissue: judged at most ~10 times a second (the positions above follow every frame), plus once more after the view stops
   const plane=sectionViewOpen&&sectionViewPlane?sectionPlaneLocal(sectionLocalPoint(),sectionLocalNormal()):null;
-  // build 493: the distances' probes (line samples, a dragged label) are judged in the same pass; their places are part of the signature (a moved point / label is judged again)
+  // the distances' probes (line samples, a dragged label) are judged in the same pass; their places are part of the signature (a moved point / label is judged again)
   const probes=measureProbes(pts,dims).concat(analysisProbes(als,dims)),judged=probes.length?pts.concat(probes):pts;
   const sig=hiddenSignature(obj,camera,pts.map(p=>p.id).concat(probes.map(p=>p.id+'@'+p.local.x.toFixed(3)+','+p.local.y.toFixed(3)+','+p.local.z.toFixed(3))),plane,fp),now=performance.now(),st=throttle.step(now,sig!==hiddenSig);
   clearTimeout(hiddenTimer);hiddenTimer=0;
@@ -312,7 +312,7 @@ export function updateComment3dMarkers(){
 }
 // tap on a dot (not a drag): the pointer handlers of the 3D view are untouched (listeners are only added, nothing is stopped); taps in
 // the analysis / edit modes, where a tap already means something, and taps that moved are ignored.
-// build 480: dragging a distance label. The labels do not take pointer events themselves: a CAPTURE-phase listener on the view finds the label under a press on the 3D canvas, so
+// dragging a distance label. The labels do not take pointer events themselves: a CAPTURE-phase listener on the view finds the label under a press on the 3D canvas, so
 // (1) a point under the press always wins (its tap / long press / menu), (2) a press on a label never reaches the 3D view's own rotate / pan handlers, (3) no label element
 // sits over a dot. The new place is stored as labelOffset (voxel units from the midpoint: the same in VR and the 2D views, saved in the project). A double tap / click on a label
 // puts it back at its default place.
@@ -327,7 +327,7 @@ function labelAt(x,y){
 // the analysis labels can be moved in the analysis mode too (a press on a label wins over the analysis click), but not while an edit tool owns the pointer
 const analysisGate=()=>analysisEditTool==='select';
 const regionOf=id=>analysisRegions.find(r=>r.id===id)||null;
-let labelDragging=false; // build 524: while a label is dragged every other pointerdown on the canvas (a second finger) is stopped at the capture phase, so it cannot rotate / pan the camera
+let labelDragging=false; // while a label is dragged every other pointerdown on the canvas (a second finger) is stopped at the capture phase, so it cannot rotate / pan the camera
 function installLabelDrag(nearestDot,gate){
  const allowed=(h,x,y)=>h.kind==='a'?analysisGate()&&!(gate()&&nearestDot(x,y)!=null):gate()&&nearestDot(x,y)==null; // a point wins over a label
  host.addEventListener('pointermove',ev=>{ // hover (mouse / pen): the label under the pointer lights up
@@ -370,7 +370,7 @@ function installTap(){
   closeBubble3d();clearTimeout(d?.timer);
   d=e.target?.tagName==='CANVAS'?{id:e.pointerId,x:e.clientX,y:e.clientY,lp:createLongPress({ms:450}),timer:0}:null;
   if(!d)return;d.lp.down(e.clientX,e.clientY,performance.now());
-  // build 477: long press on a dot (touch long press / mouse press-and-hold; a right-click opens it too) = the point menu
+  // long press on a dot (touch long press / mouse press-and-hold; a right-click opens it too) = the point menu
   const hit=(e.button===0||e.pointerType==='touch')&&gate()?nearest(e.clientX,e.clientY):null;
   if(hit!=null){const mine=d;mine.timer=setTimeout(()=>{if(d===mine&&mine.lp.tick(performance.now())==='long')openPointMenu({id:hit,x:mine.x,y:mine.y})},500)}
  });

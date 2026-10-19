@@ -1,4 +1,4 @@
-import { clampVoxel, sameVoxel, withSliceIndex } from './crosshair.js?v=20261019-build624';
+import { clampVoxel, sameVoxel, withSliceIndex } from './crosshair.js?v=20261019-build625';
 // Shared mutable application state, moved out of app.js by
 // tools/state-codemod.mjs. Read these bindings directly (imports are live);
 // write them only through the setters (imported bindings are read-only).
@@ -39,13 +39,15 @@ export let sectionCapOpacity=.85;
 export function setSectionCapOpacity(v){return sectionCapOpacity=v}
 export let sectionCapHatch=true;
 export function setSectionCapHatch(v){return sectionCapHatch=v}
-export let mpr3DSurfaceOpacity=.64;
+// the slice (section / MPR plane) opacity at start = the VR start value (vr-view.js DEFAULTS.sliceOpacity); 体験会モードのリセットもここへ戻す
+export const MPR3D_SURFACE_OPACITY_DEFAULT=.6;
+export let mpr3DSurfaceOpacity=MPR3D_SURFACE_OPACITY_DEFAULT;
 export function setMpr3DSurfaceOpacity(v){return mpr3DSurfaceOpacity=v}
 export let mpr3DVolumeOpacity=.24;
 export function setMpr3DVolumeOpacity(v){return mpr3DVolumeOpacity=v}
 export let analysisRegions=[];
 export function setAnalysisRegions(v){return analysisRegions=v}
-// build 428: the filter signature of the data the results were made on (null: none known); a 'vrl-filters-changed' with
+// the filter signature of the data the results were made on (null: none known); a 'vrl-filters-changed' with
 // the same signature (the rebuild a project load starts) keeps them, a different one clears them
 export let analysisFilterSignature=null;
 export function setAnalysisFilterSignature(v){return analysisFilterSignature=v}
@@ -102,10 +104,10 @@ export let cutControlPreviewRaf=0;
 export function setCutControlPreviewRaf(v){return cutControlPreviewRaf=v}
 export let smoothingRefreshTimer=null;
 export function setSmoothingRefreshTimer(v){return smoothingRefreshTimer=v}
-import { settings } from './app-settings.js?v=20261019-build624';
-// 3D volume in-plane size, remembered in the settings (build 280); full size
+import { settings } from './app-settings.js?v=20261019-build625';
+// 3D volume in-plane size, remembered in the settings; full size
 // (0) is desktop-only, so an iPad falls back to 512
-export let ipadGpuTargetSide=(()=>{const v=+settings.get('gpuSide');const touch=typeof navigator!=='undefined'&&/Android|OculusBrowser|Quest/i.test(navigator.userAgent||''),ipad=typeof navigator!=='undefined'&&(/iPad/i.test(navigator.userAgent||'')||((navigator.maxTouchPoints||0)>1&&/Mac/i.test(navigator.platform||'')));return v===768?768:v===0&&!ipad&&!touch?0:512})(); // build 368/371: full size stays desktop-only; iPad, Android tablets and the Quest browser fall back to 512
+export let ipadGpuTargetSide=(()=>{const v=+settings.get('gpuSide');const touch=typeof navigator!=='undefined'&&/Android|OculusBrowser|Quest/i.test(navigator.userAgent||''),ipad=typeof navigator!=='undefined'&&(/iPad/i.test(navigator.userAgent||'')||((navigator.maxTouchPoints||0)>1&&/Mac/i.test(navigator.platform||'')));return v===768?768:v===0&&!ipad&&!touch?0:512})(); // full size stays desktop-only; iPad, Android tablets and the Quest browser fall back to 512
 export function setIpadGpuTargetSide(v){return ipadGpuTargetSide=v}
 export let residentMprReadbackDisabled=false;
 export function setResidentMprReadbackDisabled(v){return residentMprReadbackDisabled=v}
@@ -136,7 +138,7 @@ export function incCutResultPreviewRevision(prefix){return prefix?++cutResultPre
 export let cutResultPreviewTimer=null;
 export function setCutResultPreviewTimer(v){return cutResultPreviewTimer=v}
 
-// Linked crosshair (build 458). One shared position in VOXEL indices {i,j,k} (integers inside volume.columns/rows/slices; see
+// Linked crosshair. One shared position in VOXEL indices {i,j,k} (integers inside volume.columns/rows/slices; see
 // crosshair.js for why not millimetres). JSON-ready: a later stage can store it in a comment or the project file.
 // The three MPR views listen with onCrosshairChange (or the 'vrl-crosshairchange' DOM event on document).
 //   setCrosshair({i,j,k}[,source]) -> the stored (clamped) position, or null when there is no volume / bad input

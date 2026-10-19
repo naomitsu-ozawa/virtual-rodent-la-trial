@@ -1,4 +1,4 @@
-// Filter parameters in absolute HU (builds 445-447).
+// Filter parameters in absolute HU.
 // Before, the strength of several filters was a fraction of (v.max - v.min), and v.min / v.max differed between load
 // paths and devices (DICOM metadata range vs the range of the decoded data, rewritten by prepareSourceMprCache), so the
 // same project gave different results. Now each of these parameters is an absolute HU value, saved in the project file

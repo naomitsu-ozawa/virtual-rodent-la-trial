@@ -1,8 +1,8 @@
-// Position cues of the 3D position-comment markers relative to the ACTIVE section (the PC section view's plane), the same as VR (Issue #88,
+// Position cues of the 3D position-comment markers relative to the ACTIVE section (the PC section view's plane), the same as VR (
 // vr-point-markers.js): a point ON the plane is drawn bigger (SECTION_EMPHASIS, x1.4 in VR), a point off it gets a thin line down to its foot
 // on the plane; no active section = neither. Pure (no three.js, no DOM). The rule is VR's vr-point.js sectionRelation (on the section = the
 // plane passes through the point's voxel: distance <= half the voxel's thickness along the normal), reused here, not copied.
-import { sectionRelation } from './vr-point.js?v=20261019-build624';
+import { sectionRelation } from './vr-point.js?v=20261019-build625';
 
 export const SECTION_EMPHASIS=1.4;
 

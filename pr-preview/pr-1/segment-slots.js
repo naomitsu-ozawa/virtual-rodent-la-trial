@@ -1,9 +1,9 @@
-// GPU segment slots (build 531). The WebGPU volume shader, the VR shader and the classification / edit-mask data hold FOUR
+// GPU segment slots. The WebGPU volume shader, the VR shader and the classification / edit-mask data hold FOUR
 // segment slots (WGSL / GLSL arrays, RGBA channels, 4-bit masks). With the fifth preset (contrast, 造影領域) the app has more
 // presets than slots: at most GPU_SEGMENT_SLOTS of them may be enabled (shown) at once, and this module maps the enabled ones
 // to slots 0..3. Pure (no DOM, no app state): the segment state is passed in.
 //
-// Rule: slot i holds order[i] (bone, soft, fat, lung) exactly as before build 531, so a project that never enables the extra
+// Rule: slot i holds order[i] (bone, soft, fat, lung) exactly as before, so a project that never enables the extra
 // preset gets the same slots (and the same shader input) as ever. An ENABLED preset beyond the first GPU_SEGMENT_SLOTS of the
 // order (contrast) takes the slot of the first preset of the base that is not enabled. The result always has GPU_SEGMENT_SLOTS
 // keys, so callers keep passing "the order" to the renderer / the data builders (they read slot i = key i).
