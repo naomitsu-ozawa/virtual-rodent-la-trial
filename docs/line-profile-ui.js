@@ -313,6 +313,15 @@ function setOpen(on) {
   else { setHuLine3dArmed(false); sched.cancel(); cancelJob(false); st.stage = 'idle'; st.a = st.plane = null; st.liveOn = false; st.result = null; st.hover = -1; clearHuLine('panel'); }
   requestOverlayDraw();
 }
+// build 627: another dataset is being opened (data-load.js resetDatasetState): the old line goes now, in every view (2D, 3D, VR read the shared
+// model), the panel closes and a pick in progress is dropped. The 600 ms poll below used to be the only reset: a load faster than its period, or a
+// line in the model while the panel was closed (drawn in VR), stayed on the new data.
+export function resetLineProfileForDataset() {
+  if (st.open && st.el) setOpen(false);
+  else { setHuLine3dArmed(false); sched.cancel(); cancelJob(false); st.stage = 'idle'; st.a = st.plane = null; st.liveOn = false; st.result = null; st.hover = -1; }
+  clearHuLine('dataset'); // also the plot's hover marker (no emit when there was no line)
+  requestOverlayDraw();
+}
 export function installLineProfile() {
   const btn = document.getElementById('line-profile-toggle'), box = document.getElementById('line-profile-result');
   if (!btn || !box) return;

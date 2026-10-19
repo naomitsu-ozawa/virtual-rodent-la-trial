@@ -9,6 +9,7 @@ import { effectiveRanges } from './segment-exclusive.js?v=20261018-build621';
 import { maskFromAnalysisRuns } from './run-length.js?v=20261018-build621';
 import { sourceFilterStages } from './source-filters.js?v=20261018-build621';
 import { gpuSlotOrder, slotSignature } from './segment-slots.js?v=20261018-build621';
+import { segmentPresetDefaults } from './dataset-reset.js?v=20261018-build621';
 // build 531: 'contrast' (造影領域) is the fifth preset; at most GPU_SEGMENT_SLOTS (4) are enabled at once (segment-slots.js)
 export const SEGMENT_PRESET_ORDER=['bone','soft','fat','lung','contrast'];
 export const segmentEditState=Object.fromEntries(SEGMENT_PRESET_ORDER.map(key=>[key,{baseRuns:null,baseSignature:'',keepRuns:null,excludeRuns:null,cutRuns:null,finalRuns:null,revision:0,undo:[],redo:[],surfaceGroup:null,rawCutSurface:false}]));
@@ -19,6 +20,8 @@ export const segmentState={
  lung:{active:false,enabled:false,color:'#6fb8d6',opacity:1,min:0,max:1,opening:0,closing:0,minComponent:0,holeFill:false,surfaceMm:0,thicknessMm:0,material:'standard',_maskCache:null,_maskCacheKey:''},
  contrast:{active:false,enabled:false,color:'#c026d3',opacity:1,min:0,max:1,opening:0,closing:0,minComponent:0,holeFill:false,surfaceMm:0,thicknessMm:0,material:'standard',_maskCache:null,_maskCacheKey:''}
 };
+// build 627: the presets' own settings as defined above (dataset-reset.js): a segment the next dataset does not use goes back to them
+export const SEGMENT_PRESET_DEFAULTS=segmentPresetDefaults(segmentState);
 export function analysisRegionSegmentsShown(r){return !r?.segmentKeys?.length||r.segmentKeys.some(k=>segmentState[k]?.enabled)}
 export function analysisRegionShown(r){return !!r&&r.visible!==false&&analysisRegionSegmentsShown(r)}
 // build 531: the segment slots the GPU views (WebGPU volume, VR / AR) use: slot i = the key at index i (segment-slots.js). Every call

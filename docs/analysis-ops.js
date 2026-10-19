@@ -4,7 +4,7 @@ import './three-state.js?v=20261018-build621';
 import { labelForProject, normalizeAnalysisLabel } from './analysis-label.js?v=20261018-build621';
 import { set3DBusy, set3DBusyLabel } from './three-status.js?v=20261018-build621';
 import { meshSegmentRanges, refreshEditedSegmentSurface, segmentUsesRunSurface, ensureGpuResidentCpuPositions } from './surface-build.js?v=20261018-build621';
-import { sceneState, setAnalysisFilterSignature, currentLanguage, setAnalysisEditTool, setAnalysisEditTargetKey, setAnalysisEditTargetMode, setAnalysisCutStroke, setAnalysisCutScreen, setAnalysisPendingCut, current3DVolume, volume, volumeAnalysisMode, analysisRegions, threeRenderMode, threeDDirty, analysisFocusedRegionId, volumeAnalysisBusy, setVolumeAnalysisBusy, setAnalysisRegions, incNextAnalysisRegionId, nextAnalysisColorIndex, incNextAnalysisColorIndex, setNextAnalysisColorIndex, analysisEditTargetKey, sourceVolume, setAnalysisFocusedRegionId, analysisEditTool, analysisEditTargetMode } from './state.js?v=20261018-build621';
+import { activeSeries, sceneState, setAnalysisFilterSignature, currentLanguage, setAnalysisEditTool, setAnalysisEditTargetKey, setAnalysisEditTargetMode, setAnalysisCutStroke, setAnalysisCutScreen, setAnalysisPendingCut, current3DVolume, volume, volumeAnalysisMode, analysisRegions, threeRenderMode, threeDDirty, analysisFocusedRegionId, volumeAnalysisBusy, setVolumeAnalysisBusy, setAnalysisRegions, incNextAnalysisRegionId, nextAnalysisColorIndex, incNextAnalysisColorIndex, setNextAnalysisColorIndex, analysisEditTargetKey, sourceVolume, setAnalysisFocusedRegionId, analysisEditTool, analysisEditTargetMode } from './state.js?v=20261018-build621';
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.webgpu.js';
 import { createSurfaceMaterial } from './mesh-material.js?v=20261018-build621';
 import { eachGeometryTriangleRange, makeSource3DCoordinates, makeVolume3DCoordinates, Float32FaceBuilder, appendAnalysisRunBoundaryFaces, groupToBinaryStl } from './mesh-geometry.js?v=20261018-build621';
@@ -373,12 +373,13 @@ export function analysisRegionsForProject(){
  return analysisRegions.filter(r=>r.runsBySlice&&r.voxels>0).map(r=>({key:r.key,segmentKeys:[...(r.segmentKeys||[])],color:Number(r.color??ANALYSIS_REGION_COLORS[0]),visible:r.visible!==false,selected:!!r.selected,merged:!!r.merged,groupId:r.groupId||null,label:labelForProject(r),runsBySlice:r.runsBySlice})); // build 523: label = the pinned label {anchor,offset?} (voxel units); omitted when there is none
 }
 export async function restoreAnalysisRegions(list,v=current3DVolume||volume){
- if(!v||!list?.length)return;const vox=v.spacing[0]*v.spacing[1]*v.spacing[2];
+ if(!v||!list?.length)return;const vox=v.spacing[0]*v.spacing[1]*v.spacing[2],series=activeSeries;
  for(const e of list){
   const voxels=analysisRunsVoxelCount(e.runsBySlice);if(!voxels)continue;
   const id=incNextAnalysisRegionId(false),region={id,regionId:'r'+id,groupId:e.groupId||null,key:e.key,segmentKeys:e.segmentKeys,runsBySlice:e.runsBySlice,voxels,mm3:voxels*vox,merged:!!e.merged,selected:!!e.selected,focused:false,visible:e.visible!==false,meshGroup:null,color:e.color};
   {const lb=normalizeAnalysisLabel(e.label);if(lb)region.label=lb}
   analysisRegions.push(region);await attachAnalysisRegion(region,v);
+  if(activeSeries!==series)return; // build 627: another dataset was opened meanwhile (its reset emptied the list): the rest belongs to the old data
  }
  // build 428: the project's filters are already replayed: the results belong to them
  setAnalysisFilterSignature(currentFilterSignature());

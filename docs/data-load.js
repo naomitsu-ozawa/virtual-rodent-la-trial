@@ -9,7 +9,7 @@ import { commentsForProject, loadProjectComments, markCommentsSaved } from './co
 import { normalizeAnalysisLabel } from './analysis-label.js?v=20261018-build621';
 import { measurementsForProject, loadProjectMeasurements, markMeasurementsSaved } from './measurements.js?v=20261018-build621';
 import { compareFingerprints, resolveProjectMatch, resolveProjectMatchAsync, legacySpacingUpgrade, datasetFingerprint, decodeRuns, packProject, PROJECT_EXTENSION, encodeRuns } from './project-file.js?v=20261018-build621';
-import { SEGMENT_PRESET_ORDER, segmentState, segmentEditState, segmentNeedsVoxelMask, segmentEditGen, segmentExclusive, applyExclusiveRanges, commitExclusiveRanges } from './segments.js?v=20261018-build621';
+import { SEGMENT_PRESET_ORDER, segmentState, segmentEditState, segmentNeedsVoxelMask, segmentEditGen, segmentExclusive, applyExclusiveRanges, commitExclusiveRanges, SEGMENT_PRESET_DEFAULTS } from './segments.js?v=20261018-build621';
 import { materialKey } from './lighting.js?v=20261018-build621';
 import { FILTER_CATALOG_ORDER, addFilter, applyVolumeAfterFilterRebuild, invalidateSourceFilters, syncFilterControls, setFilterUnitControl, formatHU } from './filter-pipeline.js?v=20261018-build621';
 import { sourceRangeFromMetadata } from './dicom.js?v=20261018-build621';
@@ -37,7 +37,9 @@ import { ensureSegmentBaseRuns } from './segment-runs.js?v=20261018-build621';
 import { APP_VERSION, APP_BUILD } from './version.js?v=20261018-build621';
 import { askInline } from './inline-ask.js?v=20261018-build621';
 import { setBusySlot, reportBusyProgress, setBusyLabel } from './progress-modal.js?v=20261018-build621';
-import { analysisRegionsForProject, restoreAnalysisRegions } from './analysis-ops.js?v=20261018-build621';
+import { analysisRegionsForProject, restoreAnalysisRegions, clearAllSegmentEdits } from './analysis-ops.js?v=20261018-build621';
+import { resetLineProfileForDataset } from './line-profile-ui.js?v=20261018-build621';
+import { resetSegmentStyles } from './dataset-reset.js?v=20261018-build621';
 export function updateRenderModeControl(v=volume){
  updateVolumeFilterBadge();
  if(!renderModeToggle)return;
@@ -166,8 +168,26 @@ function smallSeriesGpuVolume(s){
  if(s.sourceBacked||isTabletRuntime()||isIPhoneRuntime()||/Mac/i.test(navigator.platform||''))return false;
  const mv=sceneState?.medicalVolume;return !!mv?.support(openSourceBackedVolume(s),gpuVolumePlanOptions()).ok;
 }
+// build 627: the ONE place where the per-dataset state is reset when another dataset is opened (another practice dataset without a page reload,
+// another series card, the series a project points to). It runs at the start of selectSeries, before configure() and before the new data's
+// project is applied (applyPendingProject at the end of selectSeries), so what that project sets wins; what it does not set is not inherited.
+//   cleared here: the HU line (the shared model: 2D slices, 3D overlay, VR line + panel) with the line-profile panel and a pick in progress;
+//     the segments' manual edits, undo / redo and the 3D edit tool / target (voxel runs in the old grid); the inactive segment presets'
+//     own settings (colour, opacity, post-processing, material: dataset-reset.js)
+//   cleared elsewhere on the same switch: crosshair (state.js setSourceVolume), analysis regions + their focus / selection (clear3DForSeriesChange;
+//     a project restore still running for the old data stops: analysis-ops.js restoreAnalysisRegions), crop box, a measurement start and the
+//     3D HU line pick (their 'vrl-serieschange' listeners), segment ranges / overlap order (configureSegments), window, slices, filters (configure,
+//     app.js resetVolume on a new load), the section view (resetVolume)
+//   kept on purpose: position comments and distances (stored per dataset fingerprint, merged by projects), settings, theme, language, the
+//     histogram's display range, the analysis dock layout, the Filtered / Raw HU choice
+export function resetDatasetState(){
+ resetLineProfileForDataset();
+ clearAllSegmentEdits();
+ for(const key of resetSegmentStyles(segmentState,SEGMENT_PRESET_DEFAULTS)){const el=segmentControl('material',key);if(el)el.value=segmentState[key].material} // the other controls follow configureSegments
+}
 export async function selectSeries(s){
- setActiveId(s.id);setActiveSeries(s);clear3DForSeriesChange();const sourceBacked=s.sourceBacked||smallSeriesGpuVolume(s);
+ // build 627: per-dataset reset only for another series (the same card again re-decodes the same data and keeps its edits, as before)
+ const prevSeries=activeSeries;setActiveId(s.id);setActiveSeries(s);clear3DForSeriesChange();if(s!==prevSeries)resetDatasetState();const sourceBacked=s.sourceBacked||smallSeriesGpuVolume(s);
  requestIPadSettingsTab('display');
  for(const n of list.children)n.classList.toggle('is-selected',n.dataset.id===activeId);
  selected.innerHTML='<strong>'+esc(s.description)+'</strong><span>'+esc(s.modality)+' · '+s.slices.length+' slices · '+s.columns+'×'+s.rows+(sourceBacked?' · full resolution':'')+'</span>'+spacingWarningHtml(s)+'<span class="ready-badge">CT volume loading…</span>';

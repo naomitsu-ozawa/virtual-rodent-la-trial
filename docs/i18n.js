@@ -30,6 +30,11 @@ export const I18N={
   original:'元のキャリブレーション済みCT値',processingReset:'処理をリセットしました。元のキャリブレーション済みCT値を復元しました',
   ipadSettings:'設定',ipadClose:'閉じる',ipadData:'データ',ipadDisplay:'表示・Seg',ipadEdit:'3D編集',ipadView3d:'3D',ipadView2d:'2D',ipadViewSplit:'分割',
   linuxGpuNote:'Linux: WebGPUを使えません。理由を見る',linuxGpuNoteText:'LinuxのChromeでは、起動オプション --enable-features=ForceEnableWebGpuInterop を付けないとWebGPUが使えない場合があります。Wayland環境のみ対応で、X11では使えません。',
+  // build 626: 体験会モード (event-mode.js / event-mode-ui.js)
+  setEventMode:'体験会モード',setEventModeNote:'オンにすると「データ」パネルにレベル選択（Lv0〜Lv3）を表示します。レベルを押すとその練習データを読み込み、VR／ARではそのミッションを「操作方法」に表示します。',evTitle:'体験会：レベルを選ぶ',evSelected:'選択中',evLoading:'読み込み中…',evAfter:'読み込みが終わったら「VRで見る」または「ARで見る」を押してください（「表示」パネルの上）。',evMissionCap:'ミッション',
+  evLv0Name:'骨梁',evLv0Mission:'骨の中のスポンジ構造を断面で観察しよう',evLv1Name:'マウス頭部',evLv1Mission:'断面で頭の中を観察しよう → 軟部組織を表示して、肺の構造を確かめよう',evLv2Name:'マウス腹部',evLv2Mission:'断面でおなかの中を観察しよう → 軟部組織を隠して脂肪を表示し、解析済みの脂肪を観察しよう',evLv3Name:'ラット腹部',evLv3Mission:'断面で腹腔を観察しよう → 腎臓を探して、長さを測ろう',
+  evHintSection:'断面：B/Y',evHintMove:'動かす：スティック上下',evHintToggle:'表示切り替え：A/X 長押しでメニュー',evHintMark:'印：トリガー',evHintDistance:'距離：印を長押し→距離',
+  evSimple:'かんたん',evSimpleTitle:'かんたんメニュー',evShow:'表示',evHide:'非表示',evLabels:'解析結果のラベル',evAllSettings:'すべての設定',
  },
  en:{
   subtitle:'Browser-based DICOM CT viewer for mouse and laboratory-animal imaging',
@@ -59,6 +64,11 @@ export const I18N={
   original:'Original calibrated CT values',processingReset:'Processing reset. Original calibrated CT values restored.',
   ipadSettings:'Settings',ipadClose:'Close',ipadData:'Data',ipadDisplay:'Display / Seg',ipadEdit:'3D edit',ipadView3d:'3D',ipadView2d:'2D',ipadViewSplit:'Split',
   linuxGpuNote:'Linux: WebGPU is unavailable. Show why',linuxGpuNoteText:'On Linux, Chrome may need the launch option --enable-features=ForceEnableWebGpuInterop to enable WebGPU. It works on Wayland only, not on X11.',
+  // build 626: event mode (event-mode.js / event-mode-ui.js)
+  setEventMode:'Event mode',setEventModeNote:'Shows a level choice (Lv0-Lv3) in the Data panel. A level loads its practice data; in VR / AR its mission is shown on the Controls board.',evTitle:'Event: choose a level',evSelected:'Selected',evLoading:'Loading…',evAfter:'When loading has finished, press "View in VR" or "View in AR" (top of the Display panel).',evMissionCap:'Mission',
+  evLv0Name:'Trabecular bone',evLv0Mission:'Look at the sponge-like structure inside the bone in a section',evLv1Name:'Mouse head',evLv1Mission:'Look inside the head with a section → show the soft tissue and check the structure of the lungs',evLv2Name:'Mouse abdomen',evLv2Mission:'Look inside the belly with a section → hide the soft tissue, show the fat and look at the analysed fat',evLv3Name:'Rat abdomen',evLv3Mission:'Look at the abdominal cavity with a section → find a kidney and measure its length',
+  evHintSection:'Section: B/Y',evHintMove:'Move: stick up / down',evHintToggle:'Show / hide: hold A/X for the menu',evHintMark:'Mark: trigger',evHintDistance:'Distance: hold a mark → Distance',
+  evSimple:'Simple',evSimpleTitle:'Simple menu',evShow:'Show',evHide:'Hide',evLabels:'Analysis labels',evAllSettings:'All settings',
  }
 };
 export const tr=key=>I18N[currentLanguage][key]??key;

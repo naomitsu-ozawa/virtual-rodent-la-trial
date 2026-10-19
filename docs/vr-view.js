@@ -16,6 +16,7 @@ import { marchClassificationHitInfo } from './vr-pick.js?v=20261018-build621';
 import { setBusySlot, reportBusyProgress } from './progress-modal.js?v=20261018-build621';
 import { tr } from './i18n.js?v=20261018-build621';
 import { wrapMenuText, stackMenuRows } from './vr-menu-text.js?v=20261018-build621';
+import { activeEventLevel, eventModeOn, missionLines, simpleMenuSegments, simpleMenuLabelsRow, simpleMenuLabelsAtStart } from './event-mode.js?v=20261018-build621'; // build 626: 体験会モード - the chosen level's mission on the help board, the かんたん menu
 import { VIEW_TOGGLE_ID, VIEW_TOGGLE_BUTTON, SECTION_DELETE_ID, createViewToggle, createDoublePress, ringIdsFor } from './vr-view-toggle.js?v=20261018-build621';
 import { vrSpacingNote, vrVolumeText } from './vr-spacing-note.js?v=20261018-build621';
 import { NORM_LONG, physicalExtentsMm, longestMm, realMagnification, realHolderScale, startHolderScale, magnificationText, createScaleTag, clampScale, pinchScale, scaleLimits, oversizeNote, planeFrameLocalScale, planeTagLocalScale, scaleLineText } from './vr-real-scale.js?v=20261018-build621';
@@ -1064,8 +1065,11 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    r:'Volume resolution',auto:'Auto',am:'Auto floor',amv:['Min 50%','Min 35%','Min 25%'],dt:'Data',q:'Detail',qv:['Normal','Coarse','Coarsest'],f:'Foveation',fv:['Off','Mid','High'],hz:'Refresh rate',diag:'Diagnostics',dv:['Normal','Box only','Loop count','No shading','No skipping'],
    hist:'HU histogram',histTitle:'HU histogram',histAuto:'Auto',histApprox:'approx.',histBusy:'Calculating',histX:'HU',histY:'Voxels',histYLog:'Voxels (log)',histNone:'Unlabeled',histEmpty:'No data',histLin:'Linear',histLog:'Log',
    stHeld:'Section: being moved',stFixed:'Section: fixed',stNone:'Grip to grab, both hands to scale',preparing:'Preparing VR volume… ',uploading:'Uploading the image to the GPU… (the view may pause for a few seconds)',compiling:'Preparing the renderer… (almost there)',failed:'VR failed: ',shotDone:'Screenshot taken (save it on the page after exit)',filtered:' filtered'};
- const menu=makeMenu(MENU_W,MENU_H,MENU_WIDTH);scene.add(menu.mesh);
- const ui={tab:0,open:true,status:L.preparing,fpsLine:'',sizeLine:'',flash:'',flashUntil:0,benchLine:'',qualityLine:''};
+ // build 626: the menu board starts closed (only the volume and the help board at launch); A/X long press or the ring's メニュー opens it as before.
+ // 体験会モード: it starts open on the かんたん menu (tab 10: show / hide of the level's segments, the analysis labels, すべての設定 -> the full menu)
+ const evMenu=eventModeOn();let evLabels=evMenu&&simpleMenuLabelsAtStart(activeEventLevel()); // Lv2: result labels from the start (laser = label, trigger = pin)
+ const menu=makeMenu(MENU_W,MENU_H,MENU_WIDTH);menu.mesh.visible=evMenu;scene.add(menu.mesh);
+ const ui={tab:evMenu?10:0,open:evMenu,status:L.preparing,fpsLine:'',sizeLine:'',flash:'',flashUntil:0,benchLine:'',qualityLine:''};
  const holder=new THREE.Group();holder.position.set(0,1.3,-VOLUME_FWD);scene.add(holder);
  let refreshEdits=()=>{},disposeEdits=()=>{},useData=()=>{},disposeExtra=()=>{},refreshCombo=()=>{},refreshContentBox=()=>{},cbStat={ms:0,frames:0,bricks:0,sliceMs:0,segBricks:0,sliceBricks:0},comboT=null,comboMask=-1,cls4On=false,variants=null,rayVariants=null,mesh=null,material=null,volPick=null,regionList=[],volTex=null,brickTex=null,compMaterial=null,rayMesh=null,lowTarget=null,periTarget=null;const volScene=new THREE.Scene();volScene.matrixWorldAutoUpdate=false;let baseStep=0.002,baseScale=0.165/3.3,info='';
  const raycaster=new THREE.Raycaster(),tmpM=new THREE.Matrix4();
@@ -1094,7 +1098,11 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
  // help board (build 367): the controls for the current state, front-right,
  // mirrored from the menu; follows lazily, or fixed, or hidden (settings.help);
  // no widgets, but the grip moves it like the menu
- const help=makeMenu(820,560,HELP_WIDTH);help.mesh.visible=false;scene.add(help.mesh);
+ // build 626: 体験会モード (event-mode.js): the chosen level's mission above the controls - the board grows by the mission block (same width,
+ // so the text keeps its size); with the mode off or no level chosen evH is 0 and the board is as before
+ const evLevel=activeEventLevel(),evText=evLevel?tr(evLevel.missionKey):'';
+ const evLines=evText?(()=>{const c=document.createElement('canvas').getContext('2d');c.font='24px system-ui,sans-serif';return missionLines(evText,820-72,z=>c.measureText(z).width).slice(0,5)})():[],evH=evLines.length?64+evLines.length*32:0;
+ const help=makeMenu(820,560+evH,HELP_WIDTH);help.mesh.visible=false;scene.add(help.mesh);
  const helpTarget=new THREE.Vector3();let helpMoving=false,helpPlaced=false,helpHeld=null,helpKey='';
  const computeHelpTarget=()=>helpTarget.copy(head).addScaledVector(headFwd,HELP_OFFSET.fwd).addScaledVector(headLeft,HELP_OFFSET.left).add(new THREE.Vector3(0,-HELP_OFFSET.down,0));
  const placeHelpNow=()=>{readHead();computeHelpTarget();help.mesh.position.copy(helpTarget);help.mesh.lookAt(head);helpPlaced=true;helpMoving=false};
@@ -1186,8 +1194,9 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
  help.onDraw(()=>{
   const w=[],lines=section.on?L.helpSec.slice():L.helpBasic.slice();
   if(ui.open)lines[lines.length-1]=L.helpMenu;
-  w.push({type:'label',x:36,y:60,text:L.helpT,bold:true,size:36,color:'#fff'});
-  lines.forEach((t,i)=>w.push({type:'label',x:36,y:140+i*78,text:'・'+t,size:30}));
+  if(evH){w.push({type:'label',x:36,y:46,text:'Lv'+evLevel.lv+' '+tr(evLevel.nameKey)+' — '+tr('evMissionCap'),bold:true,size:28,color:'#ffd27a'});w.push({type:'label',x:36,y:90,text:'',lines:evLines,lh:32,size:24,color:'#ffe9b8'})}
+  w.push({type:'label',x:36,y:60+evH,text:L.helpT,bold:true,size:36,color:'#fff'});
+  lines.forEach((t,i)=>w.push({type:'label',x:36,y:140+evH+i*78,text:'・'+t,size:30}));
   return w;
  });
  // build 366: the XR camera sits at the origin (floor height) until the first
@@ -1457,7 +1466,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
  const LABEL_SIZES=[0.5,0.7,1],labelScale=()=>LABEL_SIZES[settings.labelSize]??LABEL_SIZES[0];
  const HAND_CHIP={left:[0,-0.03,-0.03],right:[0,-0.03,-0.03]};
  const hoverLabelOf=c=>c.userData.hoverLabel||=Object.assign(makeLabel(),{hand:c});
- const labelMode=()=>(ui.open&&ui.tab===5)||!section.on;
+ const labelMode=()=>(ui.open&&ui.tab===5)||!section.on||evLabels; // build 626: evLabels = the かんたん menu's 解析結果のラベル (off unless 体験会モード)
  const makeLabel=(pin=false)=>{
   const canvas=document.createElement('canvas');canvas.width=512;canvas.height=154;const tex=new THREE.CanvasTexture(canvas);tex.colorSpace=THREE.SRGBColorSpace;
   const m=new THREE.Mesh(new THREE.PlaneGeometry(LABEL_W,LABEL_H),new THREE.MeshBasicMaterial({map:tex,transparent:true,toneMapped:false,depthTest:false,depthWrite:false}));m.renderOrder=5;m.visible=false;
@@ -1992,14 +2001,26 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
   // header
   label(X,52,L.title,{bold:true,size:36,color:'#fff'});
   btn(780,18,200,L.close,false,()=>setMenuOpen(false),{size:28});
+  if(evMenu&&ui.tab!==10)btn(560,18,200,tr('evSimple'),false,()=>{ui.tab=10},{size:28}); // build 626: back to the かんたん menu
   // tabs
   // build 409: six tabs (解析 added) share the width
-  {const tw=(MENU_W-2*X)/L.tabs.length,TAB_IDS=[0,1,2,3,4,5,6,9]; // build 545: the 8th tab (HU線); build 558: it is tab 9 (7 is the quick ring editor, 8 the self-check page: neither in the bar)
+  if(ui.tab!==10){const tw=(MENU_W-2*X)/L.tabs.length,TAB_IDS=[0,1,2,3,4,5,6,9]; // build 545: the 8th tab (HU線); build 558: it is tab 9 (7 is the quick ring editor, 8 the self-check page: neither in the bar)
    L.tabs.forEach((t,i)=>{const id=TAB_IDS[i];btn(X+i*tw,110,tw-12,t+(i===1&&section.on?' ●':'')+(id===9&&huLine.isArmed()?' ●':''),ui.tab===id,()=>{ui.tab=id},{size:L.tabs.length>7?24:28})})}
   const status=ui.flash&&performance.now()<ui.flashUntil?ui.flash:ui.status;
   label(X,228,status,{color:'#ffd27a'});
   const y0=270;
-  if(ui.tab===0){
+  if(ui.tab===10){
+   // build 626: 体験会 かんたん menu - one big 表示 / 非表示 row per segment of the level (those the data has shown), the analysis labels when the data has results
+   const lv=activeEventLevel(),act=SEGMENT_PRESET_ORDER.filter(k=>segmentState[k]?.active&&segmentState[k]?.enabled),keys=simpleMenuSegments(lv,act);
+   label(X,170,lv?'Lv'+lv.lv+' '+tr(lv.nameKey):tr('evSimpleTitle'),{bold:true,size:32,color:'#ffd27a'});
+   const row=(y,name,color,on,set)=>{label(X,y+40,name,{color,bold:true,size:34});btn(440,y,250,tr('evShow'),on,()=>set(true),{size:32,color:on?color:undefined});btn(710,y,250,tr('evHide'),!on,()=>set(false),{size:32})};
+   if(!keys.length)label(X,y0+40,L.noSeg);
+   keys.forEach((key,i)=>{const seg=segmentState[key];row(y0+i*100,tr(key),seg.color||'#fff',segMode[key]!==2,v=>{segMode[key]=v?((segMode[key]|0)===2?0:segMode[key]|0):2})});
+   let y=y0+keys.length*100;
+   if(simpleMenuLabelsRow(lv,regionList.length>0)){row(y,tr('evLabels'),'#cfe3f0',evLabels,v=>{evLabels=v});y+=100}
+   btn(X,y+40,300,L.home,false,()=>{bringVolumeFront();placeMenuNow();placeHelpNow();if(hist.isOpen)placeHistNow();placeHuNow()},{size:28});
+   btn(X+320,y+40,400,tr('evAllSettings'),false,()=>{ui.tab=0},{size:28});
+  }else if(ui.tab===0){
    const active=SEGMENT_PRESET_ORDER.filter(k=>segmentState[k]?.active&&segmentState[k]?.enabled); // build 531: only the shown ones (at most 4 rows; a switched-off segment has nothing to set)
    if(!active.length)label(X,y0+40,L.noSeg);
    active.forEach((key,i)=>{const seg=segmentState[key],y=y0+i*76,m=segMode[key]|0;label(X,y+36,tr(key),{color:seg.color||'#fff',bold:true,size:28});
@@ -2283,7 +2304,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    if(mlb&&mlb.pin&&vh&&!(c.userData.lblDrag&&c.userData.press)&&tagBehindTissue(occlusionGpu(),mlb.distance,vh.distance,occEps))mlb=null;
    // where a moved point would land (the current mode's rule): the surface voxel or the selected section's voxel
    const placement=surfaceActive()?(vh&&vh.voxel?vh:null):(sh&&sh.voxel&&!(vh&&vh.distance<sh.distance-occEps)?sh:null);c.userData.placement=placement; // build 484: a plane behind the object surface is not a place to put a point
-   const res=rh&&!board&&wheelOwner!==c&&pw?.c!==c?{kind:'none',ref:null}:resolveTriggerTarget({board:board?bd:null,ringOwnOpen:wheelOwner===c||pw?.c===c,ringHighlight:c.userData.ringHl??null,moving:!!c.userData.moving,placement,tab,point:pt,mlabel:mlb,band,tissue:vh,plane:sh,occludeEps:occEps,mode:vrPointMode,analysis:ui.open&&ui.tab===5,canDrag:anyOk&&(surfaceActive()||labelMode()||!vh)});
+   const res=rh&&!board&&wheelOwner!==c&&pw?.c!==c?{kind:'none',ref:null}:resolveTriggerTarget({board:board?bd:null,ringOwnOpen:wheelOwner===c||pw?.c===c,ringHighlight:c.userData.ringHl??null,moving:!!c.userData.moving,placement,tab,point:pt,mlabel:mlb,band,tissue:vh,plane:sh,occludeEps:occEps,mode:vrPointMode,analysis:(ui.open&&ui.tab===5)||evLabels,canDrag:anyOk&&(surfaceActive()||labelMode()||!vh)});
    c.userData.res=res;if(res.kind==='point')hoverIds.add(res.ref.id);
    if(!c.userData.press&&!c.userData.drag&&!huLine.isDragging()){const hpz=c.userData.hoverPulse||=createHoverPulse({debounceMs:HAPTIC.hover.debounceMs});if(hpz.update(res.kind==='point'?res.ref.id:null,nowF))pulse(c,HAPTIC.hover.amp,HAPTIC.hover.ms)}
    updatePress(c,nowF);

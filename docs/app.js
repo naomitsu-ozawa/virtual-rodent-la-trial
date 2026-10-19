@@ -5,6 +5,7 @@ import * as memSourceFilters from './source-filters.js?v=20261018-build621';
 import * as memState from './state.js?v=20261018-build621';
 import * as memGpu from './gpu-compute.js?v=20261018-build621';
 import { initSettingsDialog } from './settings-ui.js?v=20261018-build621';
+import { initEventModeUi } from './event-mode-ui.js?v=20261018-build621';
 import { logGpuError } from './gpu-diagnostics.js?v=20261018-build621';
 import { initThemeUi } from './theme-ui.js?v=20261018-build621';
 import { mark3DCurrent, mark3DStale, set3DState } from './three-state.js?v=20261018-build621';
@@ -404,6 +405,8 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape'&&samplePicker()?.cla
 sampleDialogClose.onclick=()=>sampleDialog.close?sampleDialog.close():sampleDialog.removeAttribute('open');
 sampleDialog.addEventListener('click',e=>{if(e.target===sampleDialog)sampleDialog.close?.()});
 for(const b of sampleChoiceButtons)b.onclick=()=>{const id=b.dataset.sampleSet;setSamplePicker(false);if(sampleDialog.open){if(sampleDialog.close)sampleDialog.close();else sampleDialog.removeAttribute('open')}void startSample(id)};
+// build 626: 体験会モード - a level card (event-mode-ui.js) opens its practice dataset through the same startSample as the chooser; done lets the card wait for it
+document.addEventListener('vrl-event-sample',e=>{const id=e.detail?.sampleSet;if(typeof id==='string'&&/^sample\d+$/.test(id))e.detail.done=startSample(id)});
 wc.oninput=ww.oninput=()=>{renderMainMprPreview();if(threeRenderMode==='volume')request3DRender()};
 wc.onchange=ww.onchange=()=>renderAll();
 // auto range: a slider is no longer re-centred after every release (it jumped to mid-track); it is re-centred only when
@@ -581,7 +584,7 @@ function renderSeries(series){detectedSeries.list=series;list.replaceChildren();
 
 
 initIPadWorkspaceUi();installAnalysisDock();installPaneResize();
-initIPadGpuQualityControl();initSettingsDialog();initThemeUi();
+initIPadGpuQualityControl();initSettingsDialog();initThemeUi();initEventModeUi();
 
 
 /* Full-resolution source-backed filters: exact local processing in bounded tiles. */

@@ -20,6 +20,7 @@ export const SETTINGS_DEFAULTS={
  gpuHybridMode:'hybrid', // build 517: Linux hybrid (display Intel / NVIDIA) only: 'hybrid' (display Intel, compute NVIDIA; the build 516 split) / 'primary' (everything on the display GPU); ignored off Linux, applies after a reload
  surfaceSmooth:true,  // device default of the 表面平滑化 checkbox: applied at start and to data / projects without a saved value (the project file stays the primary store)
  surfaceSmoothStrength:'0.60', // device default of its strength slider (0-6), same rule
+ eventMode:false,     // build 626: 体験会モード (設定 > 外観): level choice in the データ panel + the level's mission on the VR help board (event-mode-ui.js)
  gpuPreference:'auto'  // build 515: GPU for WebGPU: 'auto' (as before) / 'high-performance' / 'low-power'; honoured only on Linux / Windows (gpu-preference.js), applies after a reload
 };
 // pixel budgets (MP) per interaction tier / at rest; 'max' = no budget
