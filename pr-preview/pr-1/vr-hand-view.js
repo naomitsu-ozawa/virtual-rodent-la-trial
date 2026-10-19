@@ -6,8 +6,8 @@
 //  - the wrist menu (the back of the left wrist turned to the eyes) and the fingertip markers (index tip, thumb tip; white while pinched)
 //  - pulse(): a hand has no haptics; the end dot and the fingertips swell for a moment instead
 // Per frame: no allocation (reused vectors / typed arrays; the wrist menu's canvas is redrawn only when its state key changes).
-import { isHand, createPoseFilter, createPoseHistory, createPinchHysteresis, createTrackingLoss, createWristMenuGate, wristMenuMetrics, createOneEuro, RAY_DELAY_MS, WRIST_ITEMS, wristSlotFromU, handTexts } from './vr-hand.js?v=20261018-build621';
-import { DRAG_HAND, DRAG_RECORD_HAND, HAND_LABEL_MOVE_M } from './vr-point.js?v=20261018-build621';
+import { isHand, createPoseFilter, createPoseHistory, createPinchHysteresis, createTrackingLoss, createWristMenuGate, wristMenuMetrics, createOneEuro, RAY_DELAY_MS, WRIST_ITEMS, wristSlotFromU, handTexts } from './vr-hand.js?v=20261019-build622';
+import { DRAG_HAND, DRAG_RECORD_HAND, HAND_LABEL_MOVE_M } from './vr-point.js?v=20261019-build622';
 export { HAND_LABEL_MOVE_M };
 
 const TIP_R=0.0045,WRIST_W=0.20,WRIST_H=0.04,WRIST_LIFT=0.055,CW=1000,CH=200;

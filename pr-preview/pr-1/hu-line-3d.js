@@ -7,14 +7,14 @@
 // canvas handlers (rotate / pan / comment taps) see it; moves and releases are followed on the document. The line is an SVG overlay
 // projected like the comment / measure lines (voxelToLocal3D -> object matrix -> camera), updated after every 3D frame.
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.webgpu.js';
-import { sceneState, volume, current3DVolume, threeRenderMode, analysisEditTool, sectionViewOpen, sectionViewPlane } from './state.js?v=20261018-build621';
-import { voxelToLocal3D } from './crosshair.js?v=20261018-build621';
-import { surfacePointerVoxel } from './analysis-ops.js?v=20261018-build621';
-import { segmentState, gpuSegmentOrder } from './segments.js?v=20261018-build621';
-import { sectionLocalPoint, sectionLocalNormal } from './section-view.js?v=20261018-build621';
-import { request3DRender } from './scene3d.js?v=20261018-build621';
-import { getHuLine, setHuLine, clearHuLine, onHuLineChange, getHuLineHover, onHuLineHoverChange, localToVoxel, voxelInside, rayPlaneT } from './hu-line-model.js?v=20261018-build621';
-import { createLiveScheduler } from './hu-line-live.js?v=20261018-build621';
+import { sceneState, volume, current3DVolume, threeRenderMode, analysisEditTool, sectionViewOpen, sectionViewPlane } from './state.js?v=20261019-build622';
+import { voxelToLocal3D } from './crosshair.js?v=20261019-build622';
+import { surfacePointerVoxel } from './analysis-ops.js?v=20261019-build622';
+import { segmentState, gpuSegmentOrder } from './segments.js?v=20261019-build622';
+import { sectionLocalPoint, sectionLocalNormal } from './section-view.js?v=20261019-build622';
+import { request3DRender } from './scene3d.js?v=20261019-build622';
+import { getHuLine, setHuLine, clearHuLine, onHuLineChange, getHuLineHover, onHuLineHoverChange, localToVoxel, voxelInside, rayPlaneT } from './hu-line-model.js?v=20261019-build622';
+import { createLiveScheduler } from './hu-line-live.js?v=20261019-build622';
 const DRAG_PX = 6, CYAN = '#35e0ff', ORANGE = '#ffb13b';
 let host = null, svg = null, armed = false;
 const armedListeners = new Set();

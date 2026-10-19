@@ -1,4 +1,4 @@
-import { clampVoxel, sameVoxel, withSliceIndex } from './crosshair.js?v=20261018-build621';
+import { clampVoxel, sameVoxel, withSliceIndex } from './crosshair.js?v=20261019-build622';
 // Shared mutable application state, moved out of app.js by
 // tools/state-codemod.mjs. Read these bindings directly (imports are live);
 // write them only through the setters (imported bindings are read-only).
@@ -102,7 +102,7 @@ export let cutControlPreviewRaf=0;
 export function setCutControlPreviewRaf(v){return cutControlPreviewRaf=v}
 export let smoothingRefreshTimer=null;
 export function setSmoothingRefreshTimer(v){return smoothingRefreshTimer=v}
-import { settings } from './app-settings.js?v=20261018-build621';
+import { settings } from './app-settings.js?v=20261019-build622';
 // 3D volume in-plane size, remembered in the settings (build 280); full size
 // (0) is desktop-only, so an iPad falls back to 512
 export let ipadGpuTargetSide=(()=>{const v=+settings.get('gpuSide');const touch=typeof navigator!=='undefined'&&/Android|OculusBrowser|Quest/i.test(navigator.userAgent||''),ipad=typeof navigator!=='undefined'&&(/iPad/i.test(navigator.userAgent||'')||((navigator.maxTouchPoints||0)>1&&/Mac/i.test(navigator.platform||'')));return v===768?768:v===0&&!ipad&&!touch?0:512})(); // build 368/371: full size stays desktop-only; iPad, Android tablets and the Quest browser fall back to 512
