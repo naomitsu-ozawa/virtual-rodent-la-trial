@@ -4,9 +4,9 @@
 const SETTINGS_KEY='vrl.settings.v1';
 // when: 'reload' = read at page load (reload button). store: 'settings' (vrl.settings.v1 JSON)
 export const DEBUG_SWITCHES=[
- {id:'vrMediump',group:'light',store:'settings',when:'reload',label:'dbgVrPrec',note:'dbgVrPrecNote'},
+ {id:'vrHighp',group:'light',store:'settings',when:'reload',label:'dbgVrPrec',note:'dbgVrPrecNote'},
 ];
-export const DEBUG_SETTING_DEFAULTS={vrMediump:false};
+export const DEBUG_SETTING_DEFAULTS={vrHighp:false};
 const ls=()=>{try{return globalThis.localStorage||null}catch{return null}};
 const objOf=t=>{try{const o=JSON.parse(t);return o&&typeof o==='object'&&!Array.isArray(o)?o:null}catch{return null}};
 // the stored value of a switch (without the URL), as a boolean
