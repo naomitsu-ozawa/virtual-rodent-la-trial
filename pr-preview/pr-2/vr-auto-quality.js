@@ -14,6 +14,11 @@ const UP_N = 3;     // consecutive samples with headroom before anything is rais
 const UP_N_BLIND = 6; // same with the wall-clock interval only (it is capped by the refresh rate: no headroom information)
 const FAIL_MARGIN = 0.03; // a level this close to (or better than) one that failed under the same view is not retried
 const FAIL_LAPSE = 120;   // samples (60 s) after which a failed level may be tried again
+// a rise that fails is a stutter of its own (the frames of the probe are slow until two over samples have been seen). Two changes:
+// the first over sample right after a rise (RISE_FAST windows) takes the level back at once, and each failed probe doubles the time the failed level is
+// kept out (60 s, 120 s, ... up to FAIL_LAPSE_MAX = 8 min): a view whose cost has no room above the settled level is probed less and less often instead
+// of every minute for ever. A change of the view (ctx) starts again at 60 s.
+const RISE_FAST = 2, FAIL_LAPSE_MAX = 960;
 // the covered pixels jump when the volume is magnified or brought close; the ladder used to need 2 over samples per rung
 // (>= 1 s each, > 4 s to the floor). After a jump in coverage (factor JUMP), JUMP_SAMPLES samples step down on the FIRST over sample and by
 // up to JUMP_SCALE at once; a drop in coverage by the same factor raises the resolution at once by the square root of the ratio (cost ~ pixels).
@@ -30,7 +35,7 @@ export const GROW_SCALE = 1.12, GROW_WINDOW = 300, GROW_MAX_DROP = 0.6, GROW_SPA
 export const autoFloor = idx => AUTO_FLOORS[idx] ?? AUTO_FLOORS[0];
 
 export function createAutoQuality({ min = AUTO_FLOORS[0], baseStep = 0, f = AUTO_MAX } = {}) {
-  const st = { f, stepIdx: baseStep, min, baseStep, over: 0, good: 0, penalty: 1, sinceUp: 99, stable: 0, failPos: null, sinceFail: 0, ctx: null, ceil: 1, cover: 0, jump: 0, lastVol: 0, lastRest: 0, lastBudget: 0, gAcc: 1, stale: false };
+  const st = { f, stepIdx: baseStep, min, baseStep, over: 0, good: 0, penalty: 1, sinceUp: 99, stable: 0, failPos: null, sinceFail: 0, lapse: FAIL_LAPSE, ctx: null, ceil: 1, cover: 0, jump: 0, lastVol: 0, lastRest: 0, lastBudget: 0, gAcc: 1, stale: false };
   const gT = new Float64Array(GROW_RING), gS = new Float64Array(GROW_RING); let gN = 0, gHead = 0; // recent (time, scale) samples of anticipate()
   const gReset = (now, scale) => { gHead = 0; gN = 1; gT[0] = now; gS[0] = scale; }; // measure the next growth from here (a continued zoom drops again, proportionally)
   // ceil = the data-resolution cap (vr-render-scale.js). The scale in use is min(level, ceil): rendering at the cap loses no detail,
@@ -110,8 +115,8 @@ export function createAutoQuality({ min = AUTO_FLOORS[0], baseStep = 0, f = AUTO
     // cover = the screen pixels the volume covers (0 = unknown): a jump changes how fast the ladder moves (JUMP above)
   update({ volMs = 0, mainMs = 0, interval = 0, budget, ctx = null, cover = 0 }) {
       // the view changed (size, shown segments, section): what failed before says nothing about it
-      if (ctx !== st.ctx) { st.ctx = ctx; st.failPos = null; }
-      if (st.failPos !== null && ++st.sinceFail >= FAIL_LAPSE) st.failPos = null;
+      if (ctx !== st.ctx) { st.ctx = ctx; st.failPos = null; st.lapse = FAIL_LAPSE; }
+      if (st.failPos !== null && ++st.sinceFail >= st.lapse) st.failPos = null;
       let grew = false, shrunk = 0;
       if (cover > 0 && st.cover > 0) { const r = cover / st.cover; if (r >= JUMP) grew = true; else if (r <= 1 / JUMP) shrunk = r; }
       if (cover > 0) st.cover = cover;
@@ -131,7 +136,7 @@ export function createAutoQuality({ min = AUTO_FLOORS[0], baseStep = 0, f = AUTO
       st.sinceUp++;
       if (isOver) {
         st.over++; st.good = 0; st.stable = 0;
-        if (st.over >= (st.jump > 0 ? 1 : DOWN_N)) {
+        if (st.over >= (st.jump > 0 || st.sinceUp <= RISE_FAST ? 1 : DOWN_N)) { // a rise that is over on its first window is taken back at once
           let scale = gpu ? Math.sqrt(Math.max(1, budget * UNDER - rest) / vol) : Math.sqrt(budget / interval);
           scale = Math.min(0.92, Math.max(st.jump > 0 ? JUMP_SCALE : 0.7, scale));
           if (dropping) scale = Math.min(scale, 0.85);
@@ -139,7 +144,7 @@ export function createAutoQuality({ min = AUTO_FLOORS[0], baseStep = 0, f = AUTO
           const c = down(scale);
           if (c) {
             st.failPos = posOf(before); st.sinceFail = 0; // this level is too heavy for the present view: do not climb back to it
-            if (st.sinceUp <= 4) st.penalty = Math.min(4, st.penalty * 2); // a rise just before was too optimistic: wait longer next time
+            if (st.sinceUp <= 4) { st.penalty = Math.min(4, st.penalty * 2); st.lapse = Math.min(FAIL_LAPSE_MAX, st.lapse * 2); } // a rise just before was too optimistic: wait longer next time, and keep this level out longer
             st.f = c.f; st.stepIdx = c.stepIdx; changed = true;
           }
           st.over = 0;
