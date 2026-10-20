@@ -119,7 +119,60 @@ describe('createComboRebuild', () => {
     rb.request(0b01); await tickUntilDone(rb); rb.request(0b10); await tickUntilDone(rb);
     expect(log.filter(t => t === 'init').length).toBe(1);
     expect(log.filter(t => t === 'slab').length).toBe(Math.ceil(dist.data.length / 40000));
-    expect(log.filter(t => t === 'build').length).toBe(2);
+    expect(log.filter(t => t === 'build').length).toBe(3); // 0b01 -> 0b10 is a swap: the union 0b11 first
     expect(Buffer.compare(Buffer.from(data), Buffer.from(combineClassificationDistance(cls, dist, 0b10)))).toBe(0);
+  });
+
+  // every per-frame step within budgetMs; the worker's alpha buffer is reused
+  it('sends distance slabs and writes alpha within the frame budget, at most one upload per frame', async () => {
+    const { cls, dist } = scene(dims, 2, [0, 1, -1, -1], 23), data = combineClassificationDistance(cls, dist, 0b11), log = [];
+    let clock = 0, calls = 0;
+    const perTick = [], rb = createComboRebuild({ dist, chan: cls.chan, dims, data, mask: 0b11, upload: () => { calls++; }, makeWorker: fakeWorker(log), slabBytes: 10000, uploadBytes: SLICE * 6, budgetMs: 4, now: () => (clock += 0.75) }); // every clock read advances it: two slabs fit in 4 ms, a third would not
+    rb.request(0b01);
+    while (rb.busy && perTick.length < 5000) { const s0 = log.filter(t => t === 'slab').length, u0 = calls; rb.tick(); perTick.push({ slabs: log.filter(t => t === 'slab').length - s0, uploads: calls - u0 }); await new Promise(r => setTimeout(r, 0)); }
+    expect(rb.busy).toBe(false);
+    expect(Math.max(...perTick.map(p => p.slabs))).toBeGreaterThan(1); // several slabs while time is left ...
+    expect(Math.max(...perTick.map(p => p.slabs))).toBeLessThanOrEqual(2); // ... none started that would overrun the budget
+    expect(Math.max(...perTick.map(p => p.uploads))).toBe(1);
+    expect(Buffer.compare(Buffer.from(data), Buffer.from(combineClassificationDistance(cls, dist, 0b01)))).toBe(0);
+  });
+
+  it('a slab that cannot be written within the budget is finished on the next frames, then uploaded once', async () => {
+    const { cls, dist } = scene(dims, 2, [0, 1, -1, -1], 29), data = combineClassificationDistance(cls, dist, 0b11), uploads = [];
+    let clock = 0;
+    const rb = createComboRebuild({ dist, chan: cls.chan, dims, data, mask: 0b11, upload: (z0, z1) => uploads.push([z0, z1]), makeWorker: () => null, uploadBytes: 48 * 48 * 4 * 40, budgetMs: 2, now: () => (clock += 5) });
+    rb.request(0b10);
+    let frames = 0; while (rb.busy && frames < 5000) { rb.tick(); frames++; }
+    expect(uploads).toEqual([[0, 40]]); // the whole texture is one slab here: one upload, after several frames of writing
+    expect(Buffer.compare(Buffer.from(data), Buffer.from(combineClassificationDistance(cls, dist, 0b10)))).toBe(0);
+  });
+
+  it('a swap (a set disjoint from the texture) goes through the union first: something drawable all along, the exact bytes at the end', async () => {
+    for (const via of ['main thread', 'worker']) {
+      const { cls, dist } = scene(dims, 4, [0, 1, 2, -1], 37), data = combineClassificationDistance(cls, dist, 0b001), safes = [];
+      const rb = createComboRebuild({ dist, chan: cls.chan, dims, data, mask: 0b001, upload: () => {}, makeWorker: via === 'worker' ? fakeWorker() : () => null, budgetMs: 1e9, uploadBytes: SLICE * 6 });
+      rb.request(0b010); // bone only -> soft only
+      let k = 0; while (rb.busy && k++ < 5000) { safes.push(rb.safeMask); rb.tick(); await new Promise(r => setTimeout(r, 0)); }
+      expect(rb.busy).toBe(false);
+      expect(safes.every(m => m !== 0)).toBe(true); // never nothing to draw with the jumps
+      expect(safes).toContain(0b001); expect(safes).toContain(0b011); // the old set while the union uploads, then the union
+      expect(rb.contentMask).toBe(0b010); expect(rb.safeMask).toBe(0b010);
+      expect(Buffer.compare(Buffer.from(data), Buffer.from(combineClassificationDistance(cls, dist, 0b010)))).toBe(0);
+      // a request during the union step replaces the target; the same target again changes nothing
+      rb.request(0b100); rb.tick(); rb.request(0b100); rb.request(0b001); rb.request(0b100);
+      await tickUntilDone(rb);
+      expect(rb.contentMask).toBe(0b100);
+      expect(Buffer.compare(Buffer.from(data), Buffer.from(combineClassificationDistance(cls, dist, 0b100)))).toBe(0);
+    }
+  });
+
+  it("the worker's alpha buffer goes back to it after the upload and serves the next build", async () => {
+    const { cls, dist } = scene(dims, 2, [0, 1, -1, -1], 31), data = combineClassificationDistance(cls, dist, 0b11), log = [];
+    const rb = createComboRebuild({ dist, chan: cls.chan, dims, data, mask: 0b11, upload: () => {}, makeWorker: fakeWorker(log), slabBytes: 1 << 20 });
+    rb.request(0b01); await tickUntilDone(rb);
+    expect(log.filter(t => t === 'spare').length).toBe(1);
+    rb.request(0b10); await tickUntilDone(rb); rb.request(0b11); await tickUntilDone(rb);
+    expect(log.filter(t => t === 'spare').length).toBe(4); // 0b01 -> 0b10 is a swap: two builds
+    expect(Buffer.compare(Buffer.from(data), Buffer.from(combineClassificationDistance(cls, dist, 0b11)))).toBe(0);
   });
 });

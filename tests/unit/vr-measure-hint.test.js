@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 const ver = JSON.parse(readFileSync(new URL('../../docs/version.json', import.meta.url), 'utf8')).version, tag = '?v=' + ver.replace(/\./g, '').replace(/-(\d+)$/, '-build$1');
 const load = f => import(/* @vite-ignore */ '../../docs/' + f + '.js' + tag);
 const M = await load('vr-measure');
-const { createVrMeasure, hintAlpha, hintPlace, HINT_DIST_M, HINT_ELEV, HINT_ALPHA, HINT_FADED_ALPHA, HINT_FADE_AFTER_MS, HINT_FADE_MS } = M;
+const { createVrMeasure, hintAlpha, hintPlace, hintHandPlace, HINT_HAND_UP_M, HINT_HAND_SCALE, HINT_DIST_M, HINT_ELEV, HINT_ALPHA, HINT_FADED_ALPHA, HINT_FADE_AFTER_MS, HINT_FADE_MS } = M;
 const { setComments, addComment, createComment, setMarkersShown } = await load('comments');
 const { resetMeasurements } = await load('measurements');
 const { datasetFingerprint } = await load('project-file');
@@ -88,6 +88,47 @@ describe('the hint in the scene', () => {
     expect(hint.material.opacity).toBe(HINT_ALPHA);
     v.update({ ...base, gaze: null, startId: 'p1', now: 20000 }); expect(hint.material.opacity).toBeCloseTo(HINT_FADED_ALPHA, 9);
     v.dispose();
+  });
+});
+
+describe('hint above the controller that placed the start point', () => {
+  it('pure place: HINT_HAND_UP_M (8-10 cm) straight above the hand; null without a usable position', () => {
+    expect(HINT_HAND_UP_M).toBeGreaterThanOrEqual(0.08); expect(HINT_HAND_UP_M).toBeLessThanOrEqual(0.1);
+    expect(hintHandPlace({ x: 0.3, y: 1.1, z: -0.4 })).toEqual({ x: 0.3, y: 1.1 + HINT_HAND_UP_M, z: -0.4 });
+    expect(hintHandPlace(null)).toBeNull(); expect(hintHandPlace({ x: NaN, y: 1, z: 0 })).toBeNull();
+  });
+  const ctx = new Proxy({}, { get: (t, k) => (k in t ? t[k] : () => {}), set: (t, k, v) => { t[k] = v; return true } });
+  beforeEach(() => vi.stubGlobal('document', { createElement: () => ({ width: 0, height: 0, getContext: () => ctx }) }));
+  afterEach(() => vi.unstubAllGlobals());
+  const dims = { columns: 16, rows: 16, slices: 12 }, halfExt = [8, 8, 6];
+  it('follows the hand, faces the head, small, translucent + fading, not in the probe list; falls back to the head-locked place without a hand', () => {
+    pt('p1', 2, 3, 1);
+    const scene = new THREE.Scene(), mesh = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 2)), holder = new THREE.Group();
+    holder.position.set(0, 1.3, -0.6); holder.scale.setScalar(0.05); holder.add(mesh); scene.add(holder); scene.updateMatrixWorld(true);
+    const head = new THREE.Vector3(0, 1.6, 0), gaze = new THREE.Vector3(0, -0.3, -1).normalize();
+    const base = { fingerprint: fp, dims, halfExt, mesh, head, spacing: [0.1, 0.2, 0.5], hint: '終点', gaze, startId: 'p1' };
+    const n0 = scene.children.length, v = createVrMeasure(THREE, scene);
+    const hand = new THREE.Vector3(0.25, 1.2, -0.35);
+    v.update({ ...base, handPos: hand, now: 1000 });
+    const hint = scene.children.slice(n0).filter(o => o.isMesh && o.renderOrder === 6)[0];
+    expect(hint.visible).toBe(true);
+    expect(hint.position.distanceTo(new THREE.Vector3(hand.x, hand.y + HINT_HAND_UP_M, hand.z))).toBeLessThan(1e-9);
+    expect(hint.scale.x).toBeCloseTo(HINT_HAND_SCALE, 9); expect(HINT_HAND_SCALE).toBeLessThan(1);
+    expect(hint.material.opacity).toBe(HINT_ALPHA);
+    const toHead = new THREE.Vector3().subVectors(head, hint.position).normalize(), n = new THREE.Vector3(0, 0, 1).applyQuaternion(hint.quaternion);
+    expect(n.dot(toHead)).toBeGreaterThan(0.999); // faces the head
+    hand.set(-0.2, 1.0, -0.3); v.update({ ...base, handPos: hand, now: 6000 }); // the hand moves: the hint follows, faded
+    expect(hint.position.y).toBeCloseTo(1.0 + HINT_HAND_UP_M, 9); expect(hint.material.opacity).toBeCloseTo(HINT_FADED_ALPHA, 9);
+    v.update({ ...base, handPos: null, now: 6100 }); // no pose: the head-locked place as before, full size
+    const want = hintPlace(head, gaze);
+    expect(hint.position.distanceTo(new THREE.Vector3(want.x, want.y, want.z))).toBeLessThan(1e-9); expect(hint.scale.x).toBe(1);
+    v.dispose();
+  });
+  it('vr-view.js hands the starting controller\'s world position to the measure update (and remembers it only for that start id)', () => {
+    const src = readFileSync(new URL('../../docs/vr-view.js', import.meta.url), 'utf8');
+    expect(src).toContain('measureHintHand={c,id};');
+    expect(src).toContain('measureHintHand?.id===msId');
+    expect(src).toContain('handPos:mh?tmpHintHand:null,');
   });
 });
 

@@ -253,7 +253,7 @@ describe('vr-view.js wiring (static)', () => {
     expect(src).toMatch(/boxEntry:\{value:0\}/); // the app never starts the march at the content box
   });
   it('the box is refreshed with the per-frame uniforms (only rebuilt on a change), follows the grid, and the cap reads it', () => {
-    expect(src).toMatch(/refreshCombo\(\);refreshContentBox\(\);/); expect(src).toMatch(/cbGrid=i===1&&P\.half\?P\.half:vd;cbKey\.fill\(NaN\);cbSegOk=false/);
+    expect(src).toMatch(/comboTick\(\);refreshCombo\(\);\n(?:[^\n]*\n){1,9}?[^\n]*vis=comboShaderMask\(\)[^\n]*\n(?:[^\n]*\n){5}   refreshContentBox\(\);/); // after the shader's segA of the frame is set expect(src).toMatch(/cbGrid=i===1&&P\.half\?P\.half:vd;cbKey\.fill\(NaN\);cbSegOk=false/);
     expect(src).toMatch(/contentKeyChanged\(cbKey,segs,cbGrid\.dims\)/);
     expect(src).toMatch(/eyeMetrics\([^;]*,rsEye,rsBox\)/);
   });

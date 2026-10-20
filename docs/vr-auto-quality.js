@@ -22,7 +22,7 @@ export const JUMP = 1.3, JUMP_SAMPLES = 4, JUMP_SCALE = 0.5;
 // already slow (and after the covered pixels have jumped 1.3x between two windows; a steady zoom of 1.2x per window never counts as a jump). anticipate() is
 // called every frame with the volume's scale: when the scale grew by GROW_SCALE (area 1.25x) within GROW_WINDOW ms, the volume pass is about to cost
 // (growth)^2 as much, so the resolution is lowered AT ONCE by the inverse of the growth (clamped to GROW_MAX_DROP per call), never below the MID rung
-// (0.7: a slight blur; deeper rungs stay with the measured ladder), only when the last measurement says the predicted time would exceed the budget (or
+// (0.7 of the data-resolution cap: a slight blur; deeper rungs stay with the measured ladder), only when the last measurement says the predicted time would exceed the budget (or
 // there is none yet), and not while the data-resolution cap already holds the scale in use below the level (cost then follows the cap, not the zoom).
 // Recovery is the normal ladder. Scale constant, shrinking or growing slowly: no effect at all.
 export const GROW_SCALE = 1.12, GROW_WINDOW = 300, GROW_MAX_DROP = 0.6, GROW_SPACING = 30, GROW_RING = 16;
@@ -37,22 +37,28 @@ export function createAutoQuality({ min = AUTO_FLOORS[0], baseStep = 0, f = AUTO
   // so it may lie below the floor. The level (st.f) keeps its own place on the ladder; an over sample first brings it down to the cap.
   const eff = () => Math.min(st.f, st.ceil);
   const maxIdx = () => Math.max(STEP_LEVELS.length - 1, st.baseStep);
+  // the resolution rungs are RELATIVE to the data-resolution cap, like "100 % = full data detail" itself. At maximum zoom the cap lies at
+  // 0.4 .. 0.6 (256^3 data), i.e. below the floor (0.5) and the MID rung (0.7): every resolution rung was then dead (scale in use = min(level, cap) = cap), only
+  // the step 1 -> 2 could act, and the ladder stopped at 50 .. 60 fps with nothing left to give. capRel scales the MID rung and the floor with the cap, so
+  // the rungs act below it (the cost follows eff^2). Without a cap (ceil = 1) nothing changes at all.
+  const capRel = () => Math.min(1, st.ceil);
+  const lowest = () => Math.max(0.05, st.min * capRel());
   const clampState = () => {
     st.min = Math.min(AUTO_MID, Math.max(0.05, st.min));
     st.stepIdx = Math.min(maxIdx(), Math.max(st.baseStep, st.stepIdx));
-    st.f = Math.min(AUTO_MAX, Math.max(st.min, st.f));
+    st.f = Math.min(AUTO_MAX, Math.max(lowest(), st.f));
   };
   clampState();
   // position on the ladder, growing with the load saved: resolution first (1 - f), then one unit per step level
   const posOf = c => (1 - c.f) + (c.stepIdx - st.baseStep);
-  const mid = () => Math.max(st.min, AUTO_MID);
+  const mid = () => Math.max(lowest(), AUTO_MID * capRel());
   // the next rung down from the present state, or null at the bottom
   const down = scale => {
     if (st.stepIdx < maxIdx()) {
       if (st.f > mid() + 1e-6) return { f: Math.max(mid(), st.f * scale), stepIdx: st.stepIdx };
       return { f: st.f, stepIdx: st.stepIdx + 1 };
     }
-    if (st.f > st.min + 1e-6) return { f: Math.max(st.min, st.f * scale), stepIdx: st.stepIdx };
+    if (st.f > lowest() + 1e-6) return { f: Math.max(lowest(), st.f * scale), stepIdx: st.stepIdx };
     return null;
   };
   // the next rung up (reverse order), or null at the top
@@ -70,13 +76,13 @@ export function createAutoQuality({ min = AUTO_FLOORS[0], baseStep = 0, f = AUTO
   };
   return {
     get f() { return eff(); },
-    get level() { return st.f; },
+    get level() { return Math.min(AUTO_MAX, st.f / capRel()); }, // the readout: relative to the cap (100 % = full data detail), as the rungs are; = st.f without a cap
     get ceiling() { return st.ceil; },
     get stepIdx() { return st.stepIdx; },
     get state() { return { f: st.f, stepIdx: st.stepIdx, over: st.over, good: st.good, penalty: st.penalty }; },
     setFloor(m) { st.min = m; clampState(); },
     setBaseStep(i) { st.baseStep = i; clampState(); },
-    setCeiling(c) { st.ceil = Math.min(AUTO_MAX, Math.max(0.01, +c || AUTO_MAX)); },
+    setCeiling(c) { st.ceil = Math.min(AUTO_MAX, Math.max(0.01, +c || AUTO_MAX)); clampState(); }, // the floor follows the cap (lowest())
     // called once per frame while the Auto resolution is on. scale = the volume holder's scale, now = ms. Returns true when the level was lowered.
     anticipate(scale, now) {
       if (!(scale > 0) || !Number.isFinite(now)) return false;
@@ -89,7 +95,7 @@ export function createAutoQuality({ min = AUTO_FLOORS[0], baseStep = 0, f = AUTO
       for (let i = 0; i < gN; i++) { const k = (gHead + i) % GROW_RING; if (now - gT[k] <= GROW_WINDOW && gS[k] < ref) ref = gS[k]; }
       const ratio = scale / ref; // > 1: grown within the window
       if (!(ratio >= GROW_SCALE)) return false;
-      const base = eff(), floor = Math.max(st.min, AUTO_MID);
+      const base = eff(), floor = mid(); // the MID rung, relative to the data-resolution cap like the ladder's (= 0.7 without a cap)
       if (st.ceil < st.f - 1e-6 || base <= floor + 1e-6) { gReset(now, scale); return false; } // capped by the data resolution, or already at / below the MID rung
       const acc = st.gAcc * ratio * ratio; // the covered pixels (and so the volume pass) grow with the area: the growth since the last measurement
       if (st.lastBudget > 0 && st.lastRest + st.lastVol * acc <= st.lastBudget * OVER) { st.gAcc = acc; gReset(now, scale); return false; } // measured headroom: no drop needed (yet)
