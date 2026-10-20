@@ -14,8 +14,8 @@
 //    While a pinch is held the group carries the press's ray with the palm anchor (createDragCarry: 1:1, the wrist's turn included, no 60 ms delay)
 //    instead of the system's ray; after the release it blends back to the system's ray in blendMs.
 // Per frame: no allocation (reused vectors / typed arrays; the wrist menu's canvas is redrawn only when its state key changes).
-import { isHand, handAlive, fistForming, FIST_GUARD, createGrabHysteresis, grabScore, fingerCurl, GRAB_JOINT_NAMES, GRAB, palmPoint, createPoseFilter, createPoseHistory, createPinchFusion, createDragCarry, blendPose, DRAG_CARRY, parsePinchTune, parseDragTune, createTrackingLoss, createWristMenuGate, wristMenuMetrics, createOneEuro, RAY_DELAY, rayDelayMs, slewDelay, PALM_FILTER, ONE_EURO, parseFilterTune, parseGrabTune, WRIST_ITEMS, wristSlotFromU, handTexts, AIM_RAY, AIM_RAY_META, AIM_FILTER, AIM_HOLD, aimRayPose, fingerAimPose, indexBend, thumbSideOf, createAimHold, turnToward, parseRayTune } from './vr-hand.js?v=20261020-build629';
-import { DRAG_HAND, DRAG_RECORD_HAND, HAND_LABEL_MOVE_M } from './vr-point.js?v=20261020-build629';
+import { isHand, handAlive, fistForming, FIST_GUARD, createGrabHysteresis, grabScore, fingerCurl, GRAB_JOINT_NAMES, GRAB, palmPoint, createPoseFilter, createPoseHistory, createPinchFusion, createDragCarry, blendPose, DRAG_CARRY, parsePinchTune, parseDragTune, createTrackingLoss, createWristMenuGate, wristMenuMetrics, createOneEuro, RAY_DELAY, rayDelayMs, slewDelay, PALM_FILTER, ONE_EURO, parseFilterTune, parseGrabTune, WRIST_ITEMS, wristSlotFromU, handTexts, AIM_RAY, AIM_RAY_META, AIM_FILTER, AIM_HOLD, aimRayPose, fingerAimPose, indexBend, thumbSideOf, createAimHold, turnToward, parseRayTune } from './vr-hand.js?v=20261020-build630';
+import { DRAG_HAND, DRAG_RECORD_HAND, HAND_LABEL_MOVE_M } from './vr-point.js?v=20261020-build630';
 export { HAND_LABEL_MOVE_M };
 
 const TIP_R=0.0045,WRIST_W=0.28,WRIST_H=0.04,WRIST_LIFT=0.055,CW=1400,CH=200,GRAB_TIP=0xffa000,REACH_TIP=0x39ff6a; // 7 buttons of 4 cm; the fingertips: orange = holding, green = something is within reach of a fist
