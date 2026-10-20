@@ -36,7 +36,7 @@ describe('mesh <-> cache descriptors', () => {
     expect([...a.geometry.getAttribute('normal').array]).toEqual([...group.children[0].geometry.getAttribute('normal').array]);
     expect([...a.geometry.index.array]).toEqual([0, 1, 2, 2, 1, 3]);
     expect(a.geometry.boundingSphere.radius).toBeCloseTo(group.children[0].geometry.boundingSphere.radius, 6);
-    expect(a.material.isMeshStandardNodeMaterial || a.material.isMeshStandardMaterial).toBe(true); // build 612: the shared lighting material (mesh-material.js)
+    expect(a.material.isMeshStandardNodeMaterial || a.material.isMeshStandardMaterial).toBe(true); // the shared lighting material (mesh-material.js)
     // the raw soup: no index, no normals, no editSurface flag, the fixed bounding sphere of the builder
     expect(b.userData).toEqual({ segmentKey: 'bone', displayScale: 0.37 });
     expect(b.geometry.index).toBeNull();

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { clampPane } from '../../docs/pane-resize.js';
 
-describe('clampPane (build 586: resizable panes)', () => {
+describe('clampPane', () => {
   it('keeps the size between the minimum and the room the other side needs', () => {
     expect(clampPane('left', 500, 1600)).toBe(500);
     expect(clampPane('left', 100, 1600)).toBe(240);

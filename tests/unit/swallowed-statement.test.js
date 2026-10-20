@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
 import { lineComments, swallowedStatement } from '../helpers/line-comments.js';
 
-// Build 474 regression (see vr-view-laser-dot.test.js): an edit put "scene.add(dot);c.userData.dot=dot;" after a // comment on the same line, so the
-// statements never ran and VR/AR showed nothing. This guard scans every docs/*.js for the same accident anywhere (builds 436 and 481 had it too, unnoticed).
+// regression (see vr-view-laser-dot.test.js): an edit put "scene.add(dot);c.userData.dot=dot;" after a // comment on the same line, so the
+// statements never ran and VR/AR showed nothing. This guard scans every docs/*.js for the same accident anywhere.
 
 // Known live defects on main, found when this guard was written. App behaviour was deliberately not changed in that PR, so they are listed here.
 // FIX = move the swallowed statement onto its own line (that changes the app: bump the build), then DELETE the entry (a stale entry fails the test below).
@@ -15,11 +15,11 @@ const found = f => lineComments(readFileSync('docs/' + f, 'utf8')).map(c => ({ .
 
 describe('swallowedStatement (the detector)', () => {
   const run = (src) => lineComments(src).map(swallowedStatement).filter(Boolean);
-  it('flags the build 474 shape', () => {
+  it('flags the shape', () => {
     expect(run('foo();// laser end dot, hide it themscene.add(dot);c.userData.dot=dot;')).toHaveLength(1);
     expect(run('// full-line comment themscene.add(dot);')).toHaveLength(1);
   });
-  it('flags a statement glued after a comment end (builds 436 / 481)', () => {
+  it('flags a statement glued after a comment end', () => {
     expect(run('a=1; // (was the window centre)sigmoidCenter.disabled=!filterState.sigmoid;')).toHaveLength(1);
     expect(run('x(); // no DOM rebuild per moveonMeasureStartChange(()=>{syncPulse()});')).toHaveLength(1);
     expect(run('x(); // note;y.z=1')).toHaveLength(1);

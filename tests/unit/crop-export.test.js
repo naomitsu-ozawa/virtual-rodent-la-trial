@@ -203,7 +203,7 @@ describe('source reading and helpers', () => {
   });
 });
 
-// ---- review fixes (build 574): one regression test per finding ----
+// ---- review fixes: one regression test per finding ----
 const strOf = (ds, t) => ds.string('x' + t.toLowerCase());
 const rot = (o = {}) => box({ angles: { x: 0, y: 0, z: 30 }, interp: 'cubic', ...o });
 const rawPx = (ds, Ctor = Uint16Array) => { const e = ds.elements.x7fe00010; return new Ctor(ds.byteArray.slice(e.dataOffset, e.dataOffset + e.length).buffer); };
@@ -413,7 +413,7 @@ describe('(7) attributes, descriptions and sinks', () => {
   });
 });
 
-describe('review fixes (build 575)', () => {
+describe('review fixes', () => {
   it('PixelSpacing is copied verbatim from slice 0 (16-char DS values are not re-formatted)', async () => {
     const sp = '1.23456789012345', s = await makeSeries({ spacing: [sp, sp], thickness: 0.5, dz: 0.5 }), sink = memorySink();
     await exportCrop({ series: s, box: box(), sink });

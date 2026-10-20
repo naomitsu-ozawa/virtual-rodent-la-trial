@@ -9,7 +9,7 @@ import { SECTION_DELETE_ID, VIEW_TOGGLE_ID, ringIdsFor } from '../../docs/vr-vie
 import { DEFAULT_WHEEL } from '../../docs/vr-ring.js';
 import { I18N } from '../../docs/i18n.js';
 
-// build 521: delete a section by throwing it away (fling), 「元に戻す」 for a few seconds, and the 断面を削除 ring item.
+// delete a section by throwing it away (fling), 「元に戻す」 for a few seconds, and the 断面を削除 ring item.
 const read = f => readFileSync(new URL('../../docs/' + f, import.meta.url), 'utf8');
 const src = read('vr-view.js');
 
@@ -38,7 +38,7 @@ describe('createVelocityTracker', () => {
     for (let i = 1; i <= 18; i++) tr.push(1198 + i * 11, { x: 0.001 * i, y: 0, z: 0 }); // then nearly still for 198 ms
     expect(tr.velocity(1198 + 18 * 11).speed).toBeLessThan(0.2);
   });
-  it('build 522: the PEAK over the window (the trigger is let go a little after the fastest part): a flick that ended 60 ms before the release still reads fast', () => {
+  it('the PEAK over the window (the trigger is let go a little after the fastest part): a flick that ended 60 ms before the release still reads fast', () => {
     const tr = createVelocityTracker();
     sweep(tr, { dir: X, speed: 4, ms: 120, t0: 1000 });                       // fast, ends at t = 1110
     for (let i = 1; i <= 5; i++) tr.push(1110 + i * 11, { x: 0, y: 0, z: 0 });   // still 55 ms
@@ -51,7 +51,7 @@ describe('createVelocityTracker', () => {
     tr.push(1011, { x: 0.05, y: 0, z: 0 }); expect(tr.velocity(1011)).toBeNull(); // span 11 ms < 30 ms
     expect(tr.measure(1011).why).toBe('span');
     tr.push(1040, { x: 0.12, y: 0, z: 0 }); expect(tr.velocity(1040)).not.toBeNull();
-    expect(tr.velocity(1040 + 80)).not.toBeNull(); // build 522: 80 ms is one slow frame plus the release event (was the limit of 50 ms)
+    expect(tr.velocity(1040 + 80)).not.toBeNull(); // 80 ms is one slow frame plus the release event (was the limit of 50 ms)
     expect(tr.measure(1040 + FLING_STALE_MS + 1)).toMatchObject({ v: null, why: 'stale' }); // no frame sample for more than FLING_STALE_MS
   });
   it('reset forgets everything', () => { const tr = createVelocityTracker(); sweep(tr, { dir: X, speed: 2 }); tr.reset(); expect(tr.size).toBe(0); expect(tr.velocity(1200)).toBeNull(); });
@@ -232,7 +232,7 @@ describe('vr-view.js wiring (static)', () => {
     expect(src).toContain('secUndo.push(snap,performance.now())');
   });
   it('the undo board is laser-clickable: part of boardHits, handled in selectstart before the help board, hidden until a delete', () => {
-    expect(src).toContain("for(const k of ['menu','help','hist','wheel','pwheel','undoBtn','hu'])"); // build 543: + the histogram board, build 556: + the HU line's live panel
+    expect(src).toContain("for(const k of ['menu','help','hist','wheel','pwheel','undoBtn','hu'])"); // + the histogram board,: + the HU line's live panel
     expect(src).toContain('if(bd.undoBtn){restoreSection(c);return}');
     expect(src.indexOf('if(bd.undoBtn){restoreSection(c);return}')).toBeLessThan(src.indexOf('if(bd.help||bd.hu)return;'));
     expect(read('vr-undo-button.js')).toContain('mesh.visible = false');

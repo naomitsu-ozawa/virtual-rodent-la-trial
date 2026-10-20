@@ -1,15 +1,16 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { volume, incNextSegmentMaskVolumeId } from './state.js?v=20261018-build621';
-import { hexRgb } from './utils.js?v=20261018-build621';
-import { settings } from './app-settings.js?v=20261018-build621';
-import { buildThresholdMask, morphMask, fillMaskHoles, removeSmallMaskComponents } from './mask-ops.js?v=20261018-build621';
-import { thinSuppressActive, suppressThinMask } from './thin-suppress.js?v=20261018-build621';
-import { effectiveRanges } from './segment-exclusive.js?v=20261018-build621';
-import { maskFromAnalysisRuns } from './run-length.js?v=20261018-build621';
-import { sourceFilterStages } from './source-filters.js?v=20261018-build621';
-import { gpuSlotOrder, slotSignature } from './segment-slots.js?v=20261018-build621';
-// build 531: 'contrast' (造影領域) is the fifth preset; at most GPU_SEGMENT_SLOTS (4) are enabled at once (segment-slots.js)
+import { volume, incNextSegmentMaskVolumeId } from './state.js?v=20261020-build630';
+import { hexRgb } from './utils.js?v=20261020-build630';
+import { settings } from './app-settings.js?v=20261020-build630';
+import { buildThresholdMask, morphMask, fillMaskHoles, removeSmallMaskComponents } from './mask-ops.js?v=20261020-build630';
+import { thinSuppressActive, suppressThinMask } from './thin-suppress.js?v=20261020-build630';
+import { effectiveRanges } from './segment-exclusive.js?v=20261020-build630';
+import { maskFromAnalysisRuns } from './run-length.js?v=20261020-build630';
+import { sourceFilterStages } from './source-filters.js?v=20261020-build630';
+import { gpuSlotOrder, slotSignature } from './segment-slots.js?v=20261020-build630';
+import { segmentPresetDefaults } from './dataset-reset.js?v=20261020-build630';
+// 'contrast' (造影領域) is the fifth preset; at most GPU_SEGMENT_SLOTS (4) are enabled at once (segment-slots.js)
 export const SEGMENT_PRESET_ORDER=['bone','soft','fat','lung','contrast'];
 export const segmentEditState=Object.fromEntries(SEGMENT_PRESET_ORDER.map(key=>[key,{baseRuns:null,baseSignature:'',keepRuns:null,excludeRuns:null,cutRuns:null,finalRuns:null,revision:0,undo:[],redo:[],surfaceGroup:null,rawCutSurface:false}]));
 export const segmentState={
@@ -19,13 +20,15 @@ export const segmentState={
  lung:{active:false,enabled:false,color:'#6fb8d6',opacity:1,min:0,max:1,opening:0,closing:0,minComponent:0,holeFill:false,surfaceMm:0,thicknessMm:0,material:'standard',_maskCache:null,_maskCacheKey:''},
  contrast:{active:false,enabled:false,color:'#c026d3',opacity:1,min:0,max:1,opening:0,closing:0,minComponent:0,holeFill:false,surfaceMm:0,thicknessMm:0,material:'standard',_maskCache:null,_maskCacheKey:''}
 };
+// the presets' own settings as defined above (dataset-reset.js): a segment the next dataset does not use goes back to them
+export const SEGMENT_PRESET_DEFAULTS=segmentPresetDefaults(segmentState);
 export function analysisRegionSegmentsShown(r){return !r?.segmentKeys?.length||r.segmentKeys.some(k=>segmentState[k]?.enabled)}
 export function analysisRegionShown(r){return !!r&&r.visible!==false&&analysisRegionSegmentsShown(r)}
-// build 531: the segment slots the GPU views (WebGPU volume, VR / AR) use: slot i = the key at index i (segment-slots.js). Every call
+// the segment slots the GPU views (WebGPU volume, VR / AR) use: slot i = the key at index i (segment-slots.js). Every call
 // that hands the segment order to a renderer or a data builder passes this, never SEGMENT_PRESET_ORDER.
 export function gpuSegmentOrder(){return gpuSlotOrder(SEGMENT_PRESET_ORDER,segmentState)}
 export function gpuSegmentSignature(){return slotSignature(SEGMENT_PRESET_ORDER,segmentState)}
-// build 438: non-overlapping segments (segment-exclusive.js). order = the segment cards top → bottom (priority);
+// non-overlapping segments (segment-exclusive.js). order = the segment cards top → bottom (priority);
 // mode 'priority' (new data) or 'off' (projects saved before 438). seg.userMin / userMax = the sliders; seg.min / max =
 // the range in use. pending = keys whose range in use changed since the last commit (invalidated on slider release).
 export const segmentExclusive={order:['contrast','bone','fat','soft','lung'],mode:'priority',pending:new Set(),invalidate:null};
@@ -125,7 +128,7 @@ export function getProcessedSegmentMask(v,seg,key=segmentKeyOf(seg)){
  if(E&&segmentAddsVoxels(seg))clearMask(mask,E);
  seg._maskCache=mask;seg._maskCacheKey=ck;return mask;
 }
-// build 433: the in-memory MPR copy holds the unfiltered CT; segments are defined on the filtered data (build 418),
+// the in-memory MPR copy holds the unfiltered CT; segments are defined on the filtered data,
 // so it may stand in for the source only while no filter is active (before, Opening & co. ignored the filters)
 export function sourceMemoryUsable(v){return !!v?.mprData&&!sourceFilterStages().length}
 export function sourceMprMemoryView(v){

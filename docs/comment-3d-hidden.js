@@ -1,8 +1,8 @@
-// Hidden / exposed judgement of the 3D position-comment markers in the PC / iPad view (Issue #88). Pure (no three.js, no DOM): comment-3d.js
+// Hidden / exposed judgement of the 3D position-comment markers in the PC / iPad view. Pure (no three.js, no DOM): comment-3d.js
 // feeds it the points, the camera and the classification bytes. The RULE is VR's, not a copy: vr-point.js pointIsHidden (march half a voxel at a
 // time from the point towards the eye; a voxel of a shown segment (>= 128) on the kept side of every cutting plane before the eye = hidden;
 // the point's own voxel is skipped; segment opacity ignored; nothing shown = exposed). On PC the eye is the camera position.
-import { pointIsHidden } from './vr-point.js?v=20261018-build621';
+import { pointIsHidden } from './vr-point.js?v=20261020-build630';
 
 export const HIDDEN_INTERVAL_MS=100; // while the view moves the judgement is refreshed about 10 times a second, never every frame
 

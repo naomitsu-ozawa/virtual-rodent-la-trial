@@ -186,15 +186,15 @@ describe('vr-view.js wiring of the HU line (source guard; the file is a WebXR mo
     expect(iHu).toBeGreaterThan(press.indexOf("res.kind==='ring-close'"));
     expect(iHu).toBeLessThan(press.indexOf('const pr={t0:now'));
     expect(press).toContain('huLine.isArmed()');
-    expect(src.slice(se, se + 200)).toContain('huLine.end(c)');
+    expect(src.slice(se, se + 400)).toContain('huLine.end(c)'); // after the hand guard line (a hand's system selectend) and the histogram end
   });
   it('is updated in the frame loop, disposed on exit, and has its own tab id that collides neither with the quick-ring editor (7) nor the self-check page (8)', () => {
     expect(src).toContain('huLine.update(js0)'); expect(src).toContain('huLine.dispose()');
     expect(src).toContain('setHuLineDeferred(true)'); expect(src).toContain('setHuLineDeferred(false)');
-    expect(src).toContain('TAB_IDS=[0,1,2,3,4,5,6,9]'); expect(src).toContain('ui.tab===9'); expect(src).toContain('ui.tab===8'); expect(src).toContain('ui.tab===7'); // build 558: 8 is the self-check page (#151)
+    expect(src).toContain('TAB_IDS=[0,1,2,3,4,5,6,9]'); expect(src).toContain('ui.tab===9'); expect(src).toContain('ui.tab===8'); expect(src).toContain('ui.tab===7'); // 8 is the self-check page (#151)
   });
   it('the pick reuses the controller loop\'s hit (no second march) and runs after that loop', () => {
-    const iUpd = src.indexOf('huLine.update(js0)'), iLoop = src.indexOf('for(const c of controllers){\n   // build 468: this hand');
+    const iUpd = src.indexOf('huLine.update(js0)'), iLoop = src.indexOf('for(const c of controllers){\n   // this hand');
     expect(iLoop).toBeGreaterThan(0); expect(iUpd).toBeGreaterThan(src.indexOf('c.userData.gate.update(')); // after the whole controller loop body
     expect(src).toContain('u.vhFrame===frameNo?u.volHit:volumeHit(c)'); expect(src).toContain('c.userData.vhFrame=frameNo'); expect(src).toContain('c.userData.secHit=sh');
   });
@@ -203,46 +203,46 @@ describe('vr-view.js wiring of the HU line (source guard; the file is a WebXR mo
     expect(src).toContain('!huLine.isDragging()){const hpz=');
     expect(src).toContain('ctx.fillText(w.label,w.x+w.w/2,w.y+w.h/2+1,Math.max(10,w.w-8))');
   });
-  it('build 556: the live panel is a world-fixed board (not on the controller): placed once, grip moves it, 正面に戻す re-places it, no follow', () => {
+  it('the live panel is a world-fixed board (not on the controller): placed once, grip moves it, 正面に戻す re-places it, no follow', () => {
     const m = readFileSync(new URL('../../docs/vr-hu-line.js', import.meta.url), 'utf8');
     expect(m).not.toMatch(/\bc\.add\(panel\)|PANEL_POS|PANEL_TILT/); // never parented to a hand
     expect(m).toContain('function hidePanel() { panel.visible = panelOn = false; }'); // hiding keeps its place in the scene
     expect(src).toContain('scene.add(huLine.panel)');
     expect(src).not.toMatch(/lazyFollow\(huLine\.panel/);
-    expect(src).toContain("case'home':bringVolumeFront();placeMenuNow();placeHelpNow();if(hist.isOpen)placeHistNow();placeHuNow();break;"); // quick ring 正面に戻す (build 558: + the HU histogram board)
+    expect(src).toContain("case'home':bringVolumeFront();placeMenuNow();placeHelpNow();if(hist.isOpen)placeHistNow();placeHuNow();break;"); // quick ring 正面に戻す
     expect(src).toContain('()=>{bringVolumeFront();placeMenuNow();placeHelpNow();if(hist.isOpen)placeHistNow();placeHuNow()}'); // 表示 tab button
     expect(src).toContain('onPanelShow:()=>{if(!huPlaced&&poseAt)placeHuNow()}');
     // grip on the panel moves it (before the volume grab); release leaves it in the scene facing the head
-    const sq = src.slice(src.indexOf("addEventListener('squeezestart'"), src.indexOf("addEventListener('selectstart'"));
-    expect(sq.indexOf('boardHits(c).hu){c.attach(huLine.panel)')).toBeGreaterThan(0);
+    const sq = src.slice(src.indexOf('const gripStart=c=>{'), src.indexOf("addEventListener('selectstart'")); // gripStart / gripEnd hold the squeeze handlers' bodies
+    expect(sq.indexOf('boardHits(c).hu){holdOf(c).attach(huLine.panel)')).toBeGreaterThan(0); // holdOf(c) = c for a controller
     expect(sq.indexOf('boardHits(c).hu')).toBeLessThan(sq.indexOf('grabbing.add(c)'));
     expect(sq).toContain('if(huHeld===c){scene.attach(huLine.panel);huHeld=null;');
     // the laser stops on it (nearest board), the trigger there does nothing and never starts a line; while a line is stretched it is not a target
     const hit = src.slice(src.indexOf('const huPanelHit='), src.indexOf('const huPanelHit=') + 300);
-    expect(hit).toContain('huLine.isDragging())return null'); expect(hit).toContain('p.parent===c'); expect(hit).not.toMatch(/intersectObject|new THREE/);
+    expect(hit).toContain('huLine.isDragging())return null'); expect(hit).toContain('p.parent===holdOf(c)'); expect(hit).not.toMatch(/intersectObject|new THREE/);
     expect(src).toContain("for(const k of ['menu','help','hist','wheel','pwheel','undoBtn','hu'])");
     const press = src.slice(src.indexOf("addEventListener('selectstart'"), src.indexOf("addEventListener('selectend'"));
     expect(press.indexOf('if(bd.help||bd.hu)return;')).toBeGreaterThan(0);
     expect(press.indexOf('if(bd.help||bd.hu)return;')).toBeLessThan(press.indexOf('huLine.start(c)'));
-    // build 567 / 570: on the histogram board the press only grabs an x-axis end or presses 「自動」 (display range), and always returns: it never reaches what is behind it
+    // on the histogram board the press only grabs an x-axis end or presses 「自動」 (display range), and always returns: it never reaches what is behind it
     const hb = press.indexOf('if(bd.hist){'); expect(hb).toBeGreaterThan(0); expect(hb).toBeLessThan(press.indexOf('huLine.start(c)'));
     expect(press.slice(hb, press.indexOf('return}', hb) + 7)).toMatch(/hist\.startAxisDrag\(t,histLocal\.x\)[\s\S]*return\}$/);
     expect(press).not.toMatch(/hist\.grab\(|setHistogramLine|commitHistogramLine/);
     expect(src).toContain('board=h||hh||bd.hist||bd.undoBtn||bd.hu||');
-    // build 558: the histogram board (#147) is grabbed first, then the HU line panel, both before the volume
+    // the histogram board (#147) is grabbed first, then the HU line panel, both before the volume
     expect(sq.indexOf('c.userData.histHit')).toBeGreaterThan(0); expect(sq.indexOf('c.userData.histHit')).toBeLessThan(sq.indexOf('boardHits(c).hu'));
     expect(src).toContain("ray.renderOrder=dot.renderOrder=bd.hu?11:top?8:0"); // the laser end is drawn over the panel
   });
-  it('build 556: the initial place is above eye level, above the volume, at board distance, and the panel is readable there', async () => {
+  it('the initial place is above eye level, above the volume, at board distance, and the panel is readable there', async () => {
     const { HU_PANEL_OFFSET, VOLUME_FWD, VOLUME_DOWN, HELP_OFFSET } = await import('../../docs/vr-layout.js');
     const { PANEL_WORLD_W } = await import('../../docs/vr-hu-line-core.js');
     const h = PANEL_WORLD_W * PANEL_H / PANEL_W, bottom = -HU_PANEL_OFFSET.down - h / 2; // metres above eye level
     expect(bottom).toBeGreaterThan(-VOLUME_DOWN + 0.15); // clears the top of a 30 cm volume (the largest)
-    expect(HU_PANEL_OFFSET.left).toBeLessThanOrEqual(0); expect(HU_PANEL_OFFSET.fwd).toBeGreaterThan(VOLUME_FWD); // build 558: centred (left 0)
+    expect(HU_PANEL_OFFSET.left).toBeLessThanOrEqual(0); expect(HU_PANEL_OFFSET.fwd).toBeGreaterThan(VOLUME_FWD); // centred (left 0)
     expect(-HU_PANEL_OFFSET.down - h / 2).toBeGreaterThan(-HELP_OFFSET.down + 0.15); // above the help board
     expect(20 * PANEL_WORLD_W / PANEL_W).toBeGreaterThanOrEqual(0.0115); // smallest text >= 1.15 cm (help board: 30 px x 0.32 m / 820 px)
   });
-  it('build 558: at the initial places the HU line panel and the HU histogram board (#147) do not overlap as seen from the head, and neither covers the volume', async () => {
+  it('at the initial places the HU line panel and the HU histogram board (#147) do not overlap as seen from the head, and neither covers the volume', async () => {
     const { HU_PANEL_OFFSET, HIST_OFFSET, HIST_WIDTH, VOLUME_FWD, VOLUME_DOWN } = await import('../../docs/vr-layout.js');
     const { PANEL_WORLD_W } = await import('../../docs/vr-hu-line-core.js');
     const { boardHeightM } = await import('../../docs/vr-histogram-layout.js');
@@ -272,7 +272,7 @@ describe('vr-view.js wiring of the HU line (source guard; the file is a WebXR mo
   });
 });
 
-describe('build 559: a drag does not get stuck when its controller disconnects', () => {
+describe('a drag does not get stuck when its controller disconnects', () => {
   it('the HU-line API has cancelDragOf(c), only for the dragging controller, and vr-view calls it on disconnect and hides the panel in screenshots', () => {
     const m = readFileSync(new URL('../../docs/vr-hu-line.js', import.meta.url), 'utf8');
     expect(m).toMatch(/cancelDragOf\(c\)\s*\{\s*if \(g && g\.c === c\) cancelDrag\(\);?\s*\}/);
@@ -283,7 +283,7 @@ describe('build 559: a drag does not get stuck when its controller disconnects',
   });
 });
 
-describe('build 563: the live panel as geometry (graph ribbon, digit atlas quads, background key)', () => {
+describe('the live panel as geometry (graph ribbon, digit atlas quads, background key)', () => {
   it('the background key changes with the state (live / final / reading / empty / language), never with the numbers', () => {
     const st = { mean: 10, min: 0, max: 20, count: 5 }, base = { stats: st, lengthMm: 40, modeKey: 'raw', live: true, approx: false, busy: false, empty: false, failed: false };
     const k = o => { const tx = panelTexts('ja', { ...base, ...o }); return backgroundKey(tx, !!(o.live ?? base.live), true); };

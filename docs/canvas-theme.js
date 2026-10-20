@@ -1,4 +1,4 @@
-// Canvas backgrounds follow the theme (builds 450-451). --ui-canvas-bg-3d is a DARK colour in every theme, tinted like the theme
+// Canvas backgrounds follow the theme. --ui-canvas-bg-3d is a DARK colour in every theme, tinted like the theme
 // (the 3D view keeps a dark background so the volume reads the same; a light background changes how grey levels look);
 // --ui-canvas-bg-2d (around a 2D slice) follows the theme fully.
 // The 3D background is used by: the GPU volume view (MedicalVolumeRenderer: clear colour and the colour a ray gets when it

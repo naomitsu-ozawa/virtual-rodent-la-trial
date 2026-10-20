@@ -1,8 +1,8 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { dicomCodecModulePromise, setDicomCodecModulePromise } from './state.js?v=20261018-build621';
-import { fmt, frameYield, isIPhoneRuntime, isTabletRuntime, isDesktopRuntime } from './utils.js?v=20261018-build621';
-import { isNativeDicomTransferSyntax, COMPRESSED_DICOM_TRANSFER_SYNTAXES, encapsulatedFrameBytes, dicomImageFrameInfo } from './dicom.js?v=20261018-build621';
+import { dicomCodecModulePromise, setDicomCodecModulePromise } from './state.js?v=20261020-build630';
+import { fmt, frameYield, isIPhoneRuntime, isTabletRuntime, isDesktopRuntime } from './utils.js?v=20261020-build630';
+import { isNativeDicomTransferSyntax, COMPRESSED_DICOM_TRANSFER_SYNTAXES, encapsulatedFrameBytes, dicomImageFrameInfo } from './dicom.js?v=20261020-build630';
 import dicomParser from 'https://esm.sh/dicom-parser@1.8.21';
 export function sourceMprCacheLimit(){
  if(isIPhoneRuntime())return 512*1024*1024;
@@ -97,7 +97,7 @@ export async function decodeCompressedDicomSlice(meta,opts){
  else if(meta.ts==='1.2.840.10008.1.2.4.90'||meta.ts==='1.2.840.10008.1.2.4.91')decoded=await decoders.JPEG2000(pixelData,frame);
  else decoded=await decoders.HTJ2K(pixelData,frame);
  const stored=decoded?.pixelData;if(!stored||stored.length<meta.rows*meta.columns)throw new Error('Compressed DICOM decoder returned incomplete pixel data');
- if(opts?.stored)return stored; // crop export (build 574): the stored integers as decoded, before RescaleSlope / Intercept
+ if(opts?.stored)return stored; // crop export: the stored integers as decoded, before RescaleSlope / Intercept
  const n=meta.rows*meta.columns,out=new Float32Array(n);for(let i=0;i<n;i++)out[i]=Number(stored[i])*meta.slope+meta.intercept;
  return out;
 }
@@ -114,7 +114,7 @@ export async function decodeSourceSlice(meta){
   if(!el)throw new Error('Pixel Data missing');bytes=all;offset=el.dataOffset;
  }
  const little=meta.ts!=='1.2.840.10008.1.2.2',view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength),n=meta.rows*meta.columns,out=new Float32Array(n),td=performance.now();
- // build 294: typed-array fast path (DataView per pixel was 6.9 s per rebuild)
+ // typed-array fast path (DataView per pixel was 6.9 s per rebuild)
  if(meta.bits===16&&little&&((bytes.byteOffset+offset)&1)===0&&bytes.byteLength-offset>=n*2){
   const a=meta.signed?new Int16Array(bytes.buffer,bytes.byteOffset+offset,n):new Uint16Array(bytes.buffer,bytes.byteOffset+offset,n),sl=meta.slope,ic=meta.intercept;
   for(let i=0;i<n;i++)out[i]=a[i]*sl+ic;

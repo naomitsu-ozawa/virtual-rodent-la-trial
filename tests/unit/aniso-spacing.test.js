@@ -5,7 +5,7 @@ import { gpuFilterShader } from '../../docs/gpu-shaders.js';
 import { spacingParams, spacingWeights, withSpacingWeights, SPACING_AWARE_KEYS, sourceFilterSignature, anisotropicLambda } from '../../docs/filter-units.js';
 
 // Per-axis weights w_a = (hmin / h_a)^2 for Anisotropic diffusion. Isotropic data: nothing is added to the stage params, so
-// the signature and the result are those of the build before (PR #94).
+// the signature and the result are those of the build before.
 const sf = readFileSync(new URL('../../docs/source-filters.js', import.meta.url), 'utf8');
 const gc = readFileSync(new URL('../../docs/gpu-compute.js', import.meta.url), 'utf8');
 const workerAll = (() => {

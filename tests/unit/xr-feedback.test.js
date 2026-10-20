@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { createXrFeedback } from '../../docs/xr-feedback.js';
 
-// build 612: busy state of the VR / AR buttons + a status line from the press until the session is shown
+// busy state of the VR / AR buttons + a status line from the press until the session is shown
 const el = (i18n, text) => {
   const attrs = new Map(i18n ? [['data-i18n', i18n]] : []);
   return {

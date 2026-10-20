@@ -1,8 +1,8 @@
-// HU histogram helpers for the VR volume texture's CPU copy (build 557). Pure functions, no DOM, no app state (unit-tested: tests/unit/histogram-texture.test.js).
+// HU histogram helpers for the VR volume texture's CPU copy. Pure functions, no DOM, no app state (unit-tested: tests/unit/histogram-texture.test.js).
 // The VR texture data (vr-view.js prepared.vd / half) is rg8-packed u16 [tw, th, td], HU = (u16 - bias) * slope + intercept.
-// build 568: the VR board counts that data itself (vr-label-histogram.js: binned in its worker); the PC consumer / texture pass that used the
+// the VR board counts that data itself (vr-label-histogram.js: binned in its worker); the PC consumer / texture pass that used the
 // rest of this file is gone (histogram-ui.js), so only what is still used stays here.
-import { HIST_BINS, createHist } from './histogram.js?v=20261018-build621';
+import { HIST_BINS, createHist } from './histogram.js?v=20261020-build630';
 
 // does the texture hold the values the effective mode asks for? (filtered mode with filters on needs a filtered texture, raw needs a raw one)
 export const textureMatchesMode = (tex, modeKey) => !!tex && !!tex.data && !!tex.dims && (modeKey === 'filtered') === !!tex.filtered;

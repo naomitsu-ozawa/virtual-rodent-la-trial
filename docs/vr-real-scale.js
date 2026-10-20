@@ -1,4 +1,4 @@
-// build 489 (Issue #88 item 3): real-size (実寸) reference for the VR / AR volume.
+// real-size (実寸) reference for the VR / AR volume.
 // The volume is built normalised to NORM_LONG (3.3 units) on its longest side and the holder's scale maps that to metres
 // (displayed longest side = holder scale x 3.3 m; the default 16.5 cm = 0.05 x 3.3). The magnification shown here is
 // displayed size / physical size (voxel spacing x dimensions, anisotropic spacing included), never the raw holder scale
@@ -51,7 +51,7 @@ export function realHolderScale(longMm) {
   return clampScale(realScaleOf(longMm), longMm);
 }
 
-// build 492: the scale when VR / AR starts (and on Home): 1x (real size). Oversize data -> fitted to 0.30 m (locked); unknown physical size
+// the scale when VR / AR starts (and on Home): 1x (real size). Oversize data -> fitted to 0.30 m (locked); unknown physical size
 // (no spacing) -> the old default fit (fallbackScale, 16.5 cm display), because there is no real size to show.
 export function startHolderScale(longMm, fallbackScale) {
   const r = realHolderScale(longMm);
@@ -67,10 +67,10 @@ export function pinchScale(s0, d0, d, longMm) {
   return clampScale(s0 * d / Math.max(d0, 1e-3), longMm);
 }
 
-// build 490: the section frame (outline, grab band, number tag, glow) is UI, not volume: it is a child of the holder, so it used to grow with the zoom
+// the section frame (outline, grab band, number tag, glow) is UI, not volume: it is a child of the holder, so it used to grow with the zoom
 // (24 cm square at 16.5 cm display -> 44 cm at 30 cm). Its world size is capped at the size it has at the default 16.5 cm display (holder scale 0.05):
 // above that scale the frame's local scale is shrunk by the same factor, so its world size is constant; below it, it follows the volume as before.
-// build 491: the capped square was smaller than the volume at max zoom (24 cm frame around a 30 cm volume: too tight to use). The square (outline, glow,
+// the capped square was smaller than the volume at max zoom (24 cm frame around a 30 cm volume: too tight to use). The square (outline, glow,
 // grab band, arrow) now has its own cap of 1.5x the design size (36 cm edge, ~3 cm margin around a 30 cm volume); the number tag keeps the 1x cap (3.4 cm).
 export const FRAME_REF_SCALE = 0.05;
 export const FRAME_SQUARE_MAX = 1.5;
@@ -106,7 +106,7 @@ export const magnificationText = (m, lang) => {
   return lang === 'ja' ? '×' + t + '（実寸比）' : '×' + t + ' (real size)';
 };
 
-// build 512: the scale shown in the 詳細 tab line. It used to print the raw holder scale ("×0.02" at real size, because the volume is built 3.3 units
+// the scale shown in the 詳細 tab line. It used to print the raw holder scale ("×0.02" at real size, because the volume is built 3.3 units
 // long), which reads as "not 1x" next to the 「×1（実寸比）」 tag. Now the same real-size magnification as the tag; the raw holder scale only when
 // the physical size is unknown (no spacing), where there is no real size to compare with.
 export const scaleLineText = (holderScale, longMm, lang) => magnificationText(realMagnification(holderScale, longMm), lang) || '×' + holderScale.toFixed(2);

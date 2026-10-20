@@ -1,4 +1,4 @@
-// VR data-resolution render scale (build 560). Quest 3 report: 72 fps at 1x / 2x, 50 fps at 4x, 40 fps at max (30 cm) and 15 fps with the
+// VR data-resolution render scale. Quest 3 report: 72 fps at 1x / 2x, 50 fps at 4x, 40 fps at max (30 cm) and 15 fps with the
 // max size held at the face, image quality fixed at 100 %. The volume is ray-marched with an object-space step, so the cost of one pixel does
 // not depend on the zoom; the cost follows the screen pixels the volume covers. Zoomed in, one voxel of the data spans many screen pixels:
 // rendering every one of them shows nothing more than the data holds. Each frame the 8 corners of the volume box are projected with each
@@ -23,7 +23,7 @@ const SX = [-1, 1, -1, 1, -1, 1, -1, 1], SY = [-1, -1, 1, 1, -1, -1, 1, 1], SZ =
 // view = the eye camera's matrixWorldInverse elements, proj = its projectionMatrix elements, vw / vh = the eye viewport in framebuffer pixels.
 // Writes into out (reused): { cover: covered px (screen bbox of the box, clipped), ppvCenter, ppvFar, depthCenter, depthFar, inside: the box reaches the eye,
 // cx, cy: the optical axis in viewport px (fovea centre), x0 y0 x1 y1: the covered rect (clipped; the whole viewport when inside) }. Returns out.
-// build 562: box = { c: [3], h: [3] } (object space centre / half extents), the content box the volume pass draws (vr-content-box.js): the corners, the
+// box = { c: [3], h: [3] } (object space centre / half extents), the content box the volume pass draws (vr-content-box.js): the corners, the
 // covered pixels, the far corner (PPV_FAR) and the centre depth come from it instead of the full data box (approved rule change: the far corner of the
 // empty air around the body no longer holds the cap up). The voxel size still comes from half / dims (the grid). null = the full box (as before).
 export function eyeMetrics(m, half, dims, view, proj, vw, vh, out = {}, box = null) {

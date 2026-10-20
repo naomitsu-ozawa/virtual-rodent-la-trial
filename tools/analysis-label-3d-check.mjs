@@ -1,4 +1,4 @@
-// Analysis labels on the PC 3D view (build 523): opens the practice data, adds a result, pins its label (region.label) and checks in the real page that
+// Analysis labels on the PC 3D view: opens the practice data, adds a result, pins its label (region.label) and checks in the real page that
 //  - the chip is drawn at the anchor's screen position (default: just above it, no leader), the anchor dot is there
 //  - a mouse drag on the chip moves it in the camera-facing plane (the camera does not rotate), stores a voxel-unit offset, shows the leader line,
 //    and the chip then sits at anchor + offset as the camera independently computes it
@@ -100,11 +100,11 @@ await pg.evaluate(()=>document.querySelector('.analysis-label-pin').click());awa
 ok('remove-label button removes the chip',(await state()).label===null&&(await state()).chips===0);
 await pg.evaluate(()=>document.querySelector('.analysis-label-pin').click());await pg.waitForTimeout(400);
 const s5=await state();ok('pin button pins it again (at a voxel of the result)',s5.label&&!s5.label.offset&&s5.chips===1,JSON.stringify(s5));
-// build 524: the PC pin is on the result's SURFACE facing the camera (not an inside voxel): the default camera looks from +z (= +k), so the anchor is on the k = 209 face
+// the PC pin is on the result's SURFACE facing the camera (not an inside voxel): the default camera looks from +z (= +k), so the anchor is on the k = 209 face
 ok('pinned anchor is on the surface facing the camera (k near the top face 209, i / j inside the result)',s5.label&&s5.label.anchor.k>=208.4&&s5.label.anchor.k<=209.6&&s5.label.anchor.i>=199.5&&s5.label.anchor.i<=219.5&&s5.label.anchor.j>=199.5&&s5.label.anchor.j<=209.5,JSON.stringify(s5.label));
-// build 524: the chip number is the region id, as the panel's 「解析領域 N」
+// the chip number is the region id, as the panel's 「解析領域 N」
 ok('chip number = region id',await pg.evaluate(async()=>{const v=new URL(document.querySelector('script[src*="app.js"]').src).search,st=await import('./state.js'+v),e=document.querySelector('.analysis-label-3d:not([hidden])');return !!e&&e.textContent.startsWith(st.analysisRegions[0].id+'.')}));
-// build 524: merging two results keeps the (first) label
+// merging two results keeps the (first) label
 const mg=await pg.evaluate(async()=>{
  const v=new URL(document.querySelector('script[src*="app.js"]').src).search,im=f=>import('./'+f+v);
  const [st,ops]=await Promise.all([im('state.js'),im('analysis-ops.js')]),vol=st.current3DVolume||st.volume,runs=new Array(vol.slices).fill(null);

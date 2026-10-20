@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-// build 604: the tabs of the 設定 panel (描画 / キャッシュ / 外観 / デバッグ) did nothing in the workspace UI - the dialog's
+// the tabs of the 設定 panel (描画 / キャッシュ / 外観 / デバッグ) did nothing in the workspace UI - the dialog's
 // content is moved into the panel, but the tab handlers looked the tabs up inside the (now empty) dialog.
 test.beforeEach(async ({ page }, testInfo) => {
   testInfo.pageErrors = [];

@@ -13,7 +13,7 @@ import { lightingGLSL, lightingVertexGLSL, materialVec } from '../../docs/lighti
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 // ---- shader sources ----
-// build 612: the shaders include the shared lighting helpers of docs/lighting.js through two template placeholders; the raw text grabbed from the
+// the shaders include the shared lighting helpers of docs/lighting.js through two template placeholders; the raw text grabbed from the
 // source has to resolve them (the app does it when the template literal is evaluated). Any other placeholder left over is an error.
 export function resolveLighting(text) {
   const out = text.replace('${lightingGLSL()}', lightingGLSL()).replace("${lightingVertexGLSL('invModel')}", lightingVertexGLSL('invModel'));
@@ -37,12 +37,12 @@ export async function buildScene(N, opts = {}) {
     import(pathToFileURL(path.join(ROOT, 'docs/vr-brick-occupancy.js')))]);
   const hu = makePhantom(N, opts), n = N * N * N, vol = new Uint8Array(n * 2);
   for (let i = 0; i < n; i++) { const q = hu[i] + 1024; vol[i * 2] = q & 255; vol[i * 2 + 1] = q >> 8; }
-  // opts.four (build 528): four enabled segments (SEGMENTS4): chan 0..3, the combined texture with {four:true} and the fourth channel's own bytes (cls4) for VRL_CLS4
+  // opts.four: four enabled segments (SEGMENTS4): chan 0..3, the combined texture with {four:true} and the fourth channel's own bytes (cls4) for VRL_CLS4
   const four = !!opts.four, cls = buildClsData({ dims: [N, N, N], data: vol }, CALIB, { data: null, dims: [N, N, N], active: 0, maskOnly: 0 }, four ? SEGMENTS4 : SEGMENTS);
   if (cls.C !== 4 || cls.chan.join() !== (four ? '0,1,2,3' : '0,1,2,-1')) throw new Error('unexpected classification layout ' + cls.C + ' ' + cls.chan);
   const dist = await buildDistanceBytes(cls, [N, N, N]);
   const combo = combineClassificationDistance(cls, dist, four ? SHOWN_MASK4 : SHOWN_MASK, null, { four }), cls4 = four ? fourthChannelBytes(cls) : null;
-  // bricks 8^3 with one voxel of overlap (vr-view computeBricks), HU min/max, for the general loop; four floats per brick (build 526:
+  // bricks 8^3 with one voxel of overlap (vr-view computeBricks), HU min/max, for the general loop; four floats per brick (
   // the B channel is the mask-only occupancy nibble, the app's brickOccupancy on the edit grid below)
   const BS = 8, bx = N / BS, bricks = new Float32Array(bx * bx * bx * 4);
   for (let k = 0; k < bx; k++) for (let j = 0; j < bx; j++) for (let i = 0; i < bx; i++) {
@@ -50,7 +50,7 @@ export async function buildScene(N, opts = {}) {
     for (let z = Math.max(0, k * BS - 1); z < Math.min(N, (k + 1) * BS + 1); z++) for (let y = Math.max(0, j * BS - 1); y < Math.min(N, (j + 1) * BS + 1); y++) for (let x = Math.max(0, i * BS - 1); x < Math.min(N, (i + 1) * BS + 1); x++) { const v = hu[(z * N + y) * N + x]; if (v < lo) lo = v; if (v > hi) hi = v; }
     const o = ((k * bx + j) * bx + i) * 4; bricks[o] = lo; bricks[o + 1] = hi;
   }
-  // mask-only edit of the bone segment (build 526, issue #132) on a HALF grid (the app rasterises the mask on the <= 256 grid and samples it by
+  // mask-only edit of the bone segment on a HALF grid (the app rasterises the mask on the <= 256 grid and samples it by
   // normalised coordinate, so at 512^3 one brick is 4^3 edit voxels): the bone ball "closed" to a ball of 12 voxels (its ramp and a shell of
   // soft tissue filled in), plus a detached 8-voxel cube of soft tissue reaching bricks with no bone HU at all. With editMaskOnly the bone segment
   // is exactly this mask; a brick skip that ignored the mask would lose the cube and the shell.
@@ -103,7 +103,25 @@ export async function renderBatch(args) {
   const M = args.scene.editN, editTex = args.scene.edit ? tex3(un(args.scene.edit), M, M, M, THREE.RGBAFormat, THREE.UnsignedByteType, L) : null;
   const clsRaw = tex3(un(args.scene.cls), N, N, N, THREE.RGBAFormat, THREE.UnsignedByteType, clsF);
   const combo = tex3(un(args.scene.combo), N, N, N, THREE.RGBAFormat, THREE.UnsignedByteType, clsF);
-  // build 528: the fourth segment's classification bytes (R8, VRL_CLS4) and the separate distance texture of the general loop (useDist), when the scene has them
+  // the off-frame rebuild of the combined texture (docs/vr-combo-rebuild.js, vr-view.js uploadCombo / applyCombo), case.comboVariant:
+  // 'stale' = the combined bytes with every alpha 255 (an alpha that no longer fits the shown segments: the general loop must ignore it);
+  // 'patched' = that stale texture uploaded, then the right bytes sent in z slabs of 5 slices through renderer.copyTextureToTexture from a
+  // texture the renderer never saw, as the app does (a full re-send of the stale CPU bytes would show); 'alt' = args.scene.comboAlt (the alpha of another mask)
+  const comboVars = {}, comboVar = k => {
+    if (comboVars[k]) return comboVars[k];
+    const right = un(args.scene.combo), stale = right.slice(); for (let i = 3; i < stale.length; i += 4) stale[i] = 255;
+    let t;
+    if (k === 'stale') t = tex3(stale, N, N, N, THREE.RGBAFormat, THREE.UnsignedByteType, clsF);
+    else if (k === 'alt') t = tex3(un(args.scene.comboAlt), N, N, N, THREE.RGBAFormat, THREE.UnsignedByteType, clsF);
+    else if (k === 'patched') {
+      t = tex3(stale, N, N, N, THREE.RGBAFormat, THREE.UnsignedByteType, clsF); renderer.initTexture(t);
+      const src = new THREE.Data3DTexture(right, N, N, N); src.format = THREE.RGBAFormat; src.type = THREE.UnsignedByteType; src.unpackAlignment = 1;
+      const box = new THREE.Box3(), at = new THREE.Vector3();
+      for (let z = 0; z < N; z += 5) { box.min.set(0, 0, z); box.max.set(N, N, Math.min(N, z + 5)); at.set(0, 0, z); renderer.copyTextureToTexture(src, t, box, at); }
+    } else throw new Error('unknown comboVariant ' + k);
+    return (comboVars[k] = t);
+  };
+  // the fourth segment's classification bytes (R8, VRL_CLS4) and the separate distance texture of the general loop (useDist), when the scene has them
   const cls4 = args.scene.cls4 ? tex3(un(args.scene.cls4), N, N, N, THREE.RedFormat, THREE.UnsignedByteType, clsF) : null;
   const distT = args.scene.dist ? tex3(un(args.scene.dist), N, N, N, THREE.RGBAFormat, THREE.UnsignedByteType, NN) : null;
   const dummy = tex3(new Uint8Array(4), 1, 1, 1, THREE.RGBAFormat, THREE.UnsignedByteType, L);
@@ -125,12 +143,13 @@ export async function renderBatch(args) {
   const hitFs = src => { const a = ' float contribution=(1.0-acc.a)*alpha;acc=vec4(acc.rgb+lit*contribution,acc.a+contribution);hitEnd=true;'.trim(), i = src.indexOf(a); if (i < 0) throw new Error('parity anchor (the hit shading of the tight loop) not found in the fragment shader'); return src.replace(a, 'outColor=vec4(hp,float(idx)+1.0);return;'); };
   const mkMat = (c, ray, hit) => {
     const u = baseUniforms();
-    for (const [k, v] of Object.entries(c.u || {})) { if (Array.isArray(v) && v.length && typeof v[0] === 'object') { const arr = v.map(a => V4(...a)); if (k === 'cutPlanes') while (arr.length < 10) arr.push(V4(0, 0, 1, 0)); /* build 509: the uniform array has 10 entries (three.js reads all of them) */ u[k] = { value: arr }; } else if (Array.isArray(v)) u[k] = { value: v.length === 4 ? V4(...v) : new THREE.Vector3(...v) }; else u[k] = { value: v }; }
+    for (const [k, v] of Object.entries(c.u || {})) { if (Array.isArray(v) && v.length && typeof v[0] === 'object') { const arr = v.map(a => V4(...a)); if (k === 'cutPlanes') while (arr.length < 10) arr.push(V4(0, 0, 1, 0)); /* the uniform array has 10 entries (three.js reads all of them) */ u[k] = { value: arr }; } else if (Array.isArray(v)) u[k] = { value: v.length === 4 ? V4(...v) : new THREE.Vector3(...v) }; else u[k] = { value: v }; }
     if (c.useClsRaw) u.clsTex = { value: clsRaw };
-    if (c.useDistTex) { if (!distT) throw new Error('useDistTex needs the scene distance bytes'); u.useDist = { value: 1 }; u.distInCls = { value: 0 }; u.distTex = { value: distT }; } // the general loop with its separate field (build 528 bench / parity)
+    if (c.comboVariant) u.clsTex = { value: comboVar(c.comboVariant) };
+    if (c.useDistTex) { if (!distT) throw new Error('useDistTex needs the scene distance bytes'); u.useDist = { value: 1 }; u.distInCls = { value: 0 }; u.distTex = { value: distT }; } // the general loop with its separate field
     if (args.scene.four) u.clsChan = { value: V4(0, 1, 2, 3) };
     if (c.noCls) { u.useCls = { value: 0 }; u.distInCls = { value: 0 }; }
-    if (c.maskOnly) { if (!editTex) throw new Error('case ' + c.name + ' needs the scene edit mask'); u.editMask = { value: 1 }; u.editMaskOnly = { value: 1 }; u.editTex = { value: editTex }; } // build 526: bone decided by the mask alone
+    if (c.maskOnly) { if (!editTex) throw new Error('case ' + c.name + ' needs the scene edit mask'); u.editMask = { value: 1 }; u.editMaskOnly = { value: 1 }; u.editTex = { value: editTex }; } // bone decided by the mask alone
     if (c.bricksMixed) { if (!bricksMixed) throw new Error('case ' + c.name + ' needs the scene bricksMixed'); u.bricks = { value: bricksMixed }; } // every brick a mask-only candidate (pre-526)
     const m = new THREE.ShaderMaterial({ glslVersion: THREE.GLSL3, vertexShader: sh.vs, fragmentShader: hit ? hitFs(sh.fs) : sh.fs, side: THREE.BackSide, toneMapped: false, uniforms: u, defines: Object.fromEntries((c.defines || []).map(d => [d, ''])) });
     if (ray || hit) { m.blending = THREE.NoBlending; m.transparent = false; } else { m.transparent = false; m.depthWrite = true; m.blending = THREE.CustomBlending; m.blendSrc = THREE.OneFactor; m.blendDst = THREE.OneMinusSrcAlphaFactor; }
@@ -141,7 +160,7 @@ export async function renderBatch(args) {
     renderer.setRenderTarget(target); renderer.setClearColor(new THREE.Color(...clear), alpha); renderer.clear(true, true, false); renderer.render(sc, cam); mat.dispose();
   };
   const read = (rt, Type) => { const px = new Type(W * H * 4); renderer.readRenderTargetPixels(rt, 0, 0, W, H, px); return px; };
-  // mode 'depth' (build 500): the window depth (0..1, the depth buffer's own value; 1 = nothing drawn) of every pixel after the volume pass (f >= 1) or after the composite pass (f < 1), as W*H Float32
+  // mode 'depth': the window depth (0..1, the depth buffer's own value; 1 = nothing drawn) of every pixel after the volume pass (f >= 1) or after the composite pass (f < 1), as W*H Float32
   // (row 0 = bottom). The depth texture is copied to a float colour target by a full-screen pass and read back.
   const readDepth = rt => {
     const fr = new THREE.WebGLRenderTarget(W, H, { depthBuffer: false, type: THREE.FloatType, minFilter: NN, magFilter: NN });
@@ -152,22 +171,22 @@ export async function renderBatch(args) {
     fr.dispose(); m.dispose(); return d;
   };
   for (const c of args.cases) {
-    // build 612: c.camUp rolls the viewer about its view axis (the equivalent of turning the volume): the shared headlight must stay above the VIEWER; no camUp = the default up, the same matrix as before
+    // c.camUp rolls the viewer about its view axis (the equivalent of turning the volume): the shared headlight must stay above the VIEWER; no camUp = the default up, the same matrix as before
     cam.up.set(...(c.camUp || [0, 1, 0])); cam.lookAt(0, 0, 0); cam.updateMatrixWorld();
     if (mode === 'hit') {
       const rt = new THREE.WebGLRenderTarget(W, H, { depthBuffer: false, type: THREE.FloatType, minFilter: NN, magFilter: NN });
       draw(mkMat(c, true, true), rt, [0, 0, 0], 0); out[c.name] = b64f(read(rt, Float32Array)); rt.dispose();
     } else if (!(c.f < 1)) {
-      const rt = new THREE.WebGLRenderTarget(W, H, { depthBuffer: true, ...(mode === 'depth' ? { depthTexture: new THREE.DepthTexture(W, H) } : {}) }); // build 497: the volume writes depth (gl_FragDepth), as in the app
+      const rt = new THREE.WebGLRenderTarget(W, H, { depthBuffer: true, ...(mode === 'depth' ? { depthTexture: new THREE.DepthTexture(W, H) } : {}) }); // the volume writes depth (gl_FragDepth), as in the app
       draw(mkMat(c, false, false), rt, BG, 1);
-      if (c.arrow && mode !== 'depth') { // build 511: an optional overlay drawn after the volume into the same target (LineSegments, pure green, never writes depth), as the app draws the section arrow: c.arrow = {pts: [[x,y,z],...] segment end points (object space), depthTest}
+      if (c.arrow && mode !== 'depth') { // an optional overlay drawn after the volume into the same target (LineSegments, pure green, never writes depth), as the app draws the section arrow: c.arrow = {pts: [[x,y,z],...] segment end points (object space), depthTest}
         const g = new THREE.BufferGeometry().setFromPoints(c.arrow.pts.map(p => new THREE.Vector3(...p))), lm = new THREE.LineBasicMaterial({ color: 0x00ff00, transparent: true, depthTest: !!c.arrow.depthTest, depthWrite: false, toneMapped: false }), ls = new THREE.LineSegments(g, lm), osc = new THREE.Scene();
         ls.frustumCulled = false; ls.renderOrder = 2; osc.add(ls); renderer.setRenderTarget(rt); renderer.autoClear = false; renderer.render(osc, cam); renderer.autoClear = true; g.dispose(); lm.dispose();
       }
       out[c.name] = mode === 'depth' ? b64f(readDepth(rt)) : b64f(read(rt, Uint8Array)); rt.dispose();
     } else {
       // the low-resolution path of vr-view.js: the ray material into a small target (cleared to transparent), then the composite pass over the background
-      // build 560: c.fullAlloc = the target allocated at the full size and only its corner used (as the app does now: no reallocation when f changes; the rest holds
+      // c.fullAlloc = the target allocated at the full size and only its corner used (as the app does now: no reallocation when f changes; the rest holds
       // garbage that must never be sampled); c.fov = {k, rect: [x0, y0, x1, y1] output px, band px}: offscreen foveation (the centre rect at f, the whole view at f * k into a second target)
       const f = c.f, tw = Math.max(1, Math.ceil(W * f)), th = Math.max(1, Math.ceil(H * f)), full = !!(c.fullAlloc || c.fov);
       const mkT = (w, h) => new THREE.WebGLRenderTarget(w, h, { depthBuffer: true, depthTexture: new THREE.DepthTexture(w, h), minFilter: L, magFilter: L });
@@ -185,7 +204,7 @@ export async function renderBatch(args) {
         const R = c.fov.rect, sx = Math.floor(R[0] * f) - 1, sy = Math.floor(R[1] * f) - 1; renderCorner(mkMat(c, true, false), low, f, [sx, sy, Math.ceil(R[2] * f) + 1 - sx, Math.ceil(R[3] * f) + 1 - sy]);
         peri = mkT(Math.ceil(W * 0.75), Math.ceil(H * 0.75)); renderCorner(mkMat(c, true, false), peri, f * c.fov.k, null);
       }
-      const cu = { img: { value: low.texture }, depthImg: { value: low.depthTexture }, invSize: { value: new THREE.Vector2(f / low.width, f / low.height) }, halfExt: { value: half }, uvMax: { value: new THREE.Vector2((Math.ceil(W * f) - 0.5) / low.width, (Math.ceil(H * f) - 0.5) / low.height) }, uvMax2: { value: new THREE.Vector2(1, 1) } }; // build 561: the app's used-corner clamp
+      const cu = { img: { value: low.texture }, depthImg: { value: low.depthTexture }, invSize: { value: new THREE.Vector2(f / low.width, f / low.height) }, halfExt: { value: half }, uvMax: { value: new THREE.Vector2((Math.ceil(W * f) - 0.5) / low.width, (Math.ceil(H * f) - 0.5) / low.height) }, uvMax2: { value: new THREE.Vector2(1, 1) } }; // the app's used-corner clamp
       if (peri) Object.assign(cu, { img2: { value: peri.texture }, depthImg2: { value: peri.depthTexture }, invSize2: { value: new THREE.Vector2(f * c.fov.k / peri.width, f * c.fov.k / peri.height) }, uvMax2: { value: new THREE.Vector2((Math.ceil(W * f * c.fov.k) - 0.5) / peri.width, (Math.ceil(H * f * c.fov.k) - 0.5) / peri.height) }, fovOn: { value: 1 }, rectL: { value: new THREE.Vector4(...c.fov.rect) }, rectR: { value: new THREE.Vector4() }, splitX: { value: 1e9 }, band: { value: c.fov.band } });
       const comp = new THREE.ShaderMaterial({ glslVersion: THREE.GLSL3, vertexShader: sh.cvs, fragmentShader: sh.cfs, side: THREE.BackSide, toneMapped: false, depthWrite: true, transparent: false, blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor, uniforms: cu });
       draw(comp, rt, BG, 1); out[c.name] = mode === 'depth' ? b64f(readDepth(rt)) : b64f(read(rt, Uint8Array)); rt.dispose(); low.dispose(); peri?.dispose();
@@ -198,8 +217,11 @@ export async function renderBatch(args) {
   return { out, glError: err, cam: cam.position.toArray(), rays };
 }
 
+// the app compiles with VRL_MEDIUMP by default (vr-view.js VR_MEDIUMP); VR_PREC=highp runs every check on the 32-bit variant instead (the default here is the app's: mediump)
+export const VR_PREC = process.env.VR_PREC === 'highp' ? 'highp' : 'mediump';
+const withPrec = cases => VR_PREC === 'highp' || !Array.isArray(cases) ? cases : cases.map(c => ({ ...c, defines: [...(c.defines || []), ...((c.defines || []).includes('VRL_MEDIUMP') ? [] : ['VRL_MEDIUMP'])] }));
 export async function runBatch(pg, args) {
-  const r = await pg.evaluate(renderBatch, { segM: materialVec('standard'), ...args }); // build 620: every segment at the standard material unless a case says otherwise
+  const r = await pg.evaluate(renderBatch, { segM: materialVec('standard'), ...args, ...(args.cases ? { cases: withPrec(args.cases) } : {}) }); // every segment at the standard material unless a case says otherwise
   const dec = s => Buffer.from(s, 'base64');
   return { ...r, out: Object.fromEntries(Object.entries(r.out).map(([k, v]) => [k, dec(v)])), raysBuf: r.rays ? new Float32Array(new Uint8Array(dec(r.rays)).buffer) : null };
 }

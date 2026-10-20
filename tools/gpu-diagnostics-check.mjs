@@ -1,4 +1,4 @@
-// GPU info tab check (build 520, debug mode only). Two page loads against docs/ (CDN imports mapped to node_modules, no network):
+// GPU info tab check. Two page loads against docs/ (CDN imports mapped to node_modules, no network):
 //   1. without ?debug: the tab is hidden, the status bar is not a button and a click on it opens nothing; and the page never makes an
 //      extra WebGL context / requestAdapter call for diagnostics (counted through init scripts)
 //   2. with ?debug: the status bar opens settings > GPU info, the report has the summary line and the new sections, copy works,

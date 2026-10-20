@@ -2,7 +2,7 @@ import { chromium } from '@playwright/test';
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
 const root=path.resolve('docs'),nm=path.resolve('node_modules');const errors=[];
 const srv=http.createServer((q,r)=>{const p=path.join(root,decodeURIComponent(q.url.split('?')[0]));
- // build 437: the practice data's bundled project (docs/demo/sample1/project.vrlab) is applied on load; the checks start
+ // the practice data's bundled project (docs/demo/sample1/project.vrlab) is applied on load; the checks start
  // from the bare data unless SAMPLE_PROJECT=1
  if(p.endsWith('project.vrlab')&&!process.env.SAMPLE_PROJECT){r.writeHead(404);r.end();return}
  fs.readFile(p.endsWith('/')?p+'index.html':p,(e,b)=>{if(e){r.writeHead(404);r.end();return}r.writeHead(200,{'content-type':p.endsWith('.js')?'text/javascript':p.endsWith('.css')?'text/css':'text/html'});r.end(b)})}).listen(Number(process.env.PORT||8765));
@@ -58,7 +58,7 @@ const r=await pg.evaluate(async()=>{
  {const f=await sr.getFinalSegmentRuns('fat',vol),s2=await sr.getFinalSegmentRuns('soft',vol);out.closingBoth=rl.analysisRunsVoxelCount(rl.intersectRunArrays(f,s2,d))}
  return out;
 });
-// build 439: drag the soft card's ⋮⋮ above the fat card (pointer events, as on a touch screen): soft then takes the overlap
+// drag the soft card's ⋮⋮ above the fat card (pointer events, as on a touch screen): soft then takes the overlap
 await pg.evaluate(()=>{document.querySelector('[data-seg-closing="fat"]').value='0';document.querySelector('[data-seg-closing="fat"]').dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('[data-seg-closing="fat"]').dispatchEvent(new Event('change',{bubbles:true}))});
 await idle();
 const h=pg.locator('[data-seg-drag="soft"]'),fatCard=pg.locator('[data-segment="fat"]');await fatCard.scrollIntoViewIfNeeded();await h.scrollIntoViewIfNeeded();
@@ -68,13 +68,13 @@ for(let i=1;i<=12;i++)await pg.mouse.move(hb.x+hb.width/2,hb.y+hb.height/2+(fb.y
 await pg.mouse.up();await idle();
 r.drag=await pg.evaluate(async()=>{const v=new URL(document.querySelector('script[src*="app.js"]').src).search,sg=await import('./segments.js'+v);const S=sg.segmentState;
  return{order:[...sg.segmentExclusive.order],cards:[...document.querySelectorAll('#segment-controls [data-segment]')].filter(c=>!c.classList.contains('is-hidden')).map(c=>c.dataset.segment),soft:[S.soft.min,S.soft.max],fat:[S.fat.min,S.fat.max],fatUser:[S.fat.userMin,S.fat.userMax],softUser:[S.soft.userMin,S.soft.userMax],fatNote:document.querySelector('[data-seg-effective="fat"]').textContent}});
-// ---- build 459 part 2: what a higher segment removes or adds moves the segments below it, in every view ----
+// ---- part 2: what a higher segment removes or adds moves the segments below it, in every view ----
 const runPart2=withFilter=>pg.evaluate(async withFilter=>{
  const v=new URL(document.querySelector('script[src*="app.js"]').src).search,im=f=>import('./'+f+v);
  const [st,seg,sr,rl,sg,gv,ops,mr,ui,sf]=await Promise.all([im('state.js'),im('segment-ui.js'),im('segment-runs.js'),im('run-length.js'),im('segments.js'),im('gpu-volume-data.js'),im('analysis-ops.js'),im('mpr-render.js'),im('ui-shell.js'),im('source-filters.js')]);
  const wait=ms=>new Promise(r=>setTimeout(r,ms)),idle=async()=>{await wait(1200);for(let t=Date.now();Date.now()-t<600000;){await wait(300);if(!window.__vrlBusyModal?.().active&&!['bone','fat','soft'].some(k=>sg.segmentEditState[k].pendingBase))break}await wait(500)};
  const S=sg.segmentState,vol=st.current3DVolume||st.volume,d=vol.slices,w=vol.columns,h=vol.rows,out={};
- // part 3 (build 460): the same checks with a filter on, i.e. the run path (the in-memory CT copy cannot stand in for the filtered data)
+ // part 3: the same checks with a filter on, i.e. the run path (the in-memory CT copy cannot stand in for the filtered data)
  for(const k of ['bone','fat','soft']){await (await im('analysis-ops.js')).resetFocusedSegmentEdit?.(k)}
  if(st.analysisRegions)st.analysisRegions.length=0;
  {const ex=sg.segmentEditState;for(const k of ['bone','fat','soft']){ex[k].keepRuns=null;ex[k].excludeRuns=null;ex[k].undo=[];ex[k].redo=[];sg.segmentEditGen[k]++}}

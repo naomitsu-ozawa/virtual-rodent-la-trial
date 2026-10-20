@@ -1,8 +1,8 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
 import dicomParser from 'https://esm.sh/dicom-parser@1.8.21';
-import { multi, safePair, num, safeTriple, numberOr, frameYield } from './utils.js?v=20261018-build621';
-import { analyzeSliceSpacing, excludeDuplicateSlices, seriesNormal, slicePosition } from './slice-spacing.js?v=20261018-build621';
+import { multi, safePair, num, safeTriple, numberOr, frameYield } from './utils.js?v=20261020-build630';
+import { analyzeSliceSpacing, excludeDuplicateSlices, seriesNormal, slicePosition } from './slice-spacing.js?v=20261020-build630';
 export async function parseDicomHeader(file){
  const attempts=[Math.min(file.size,256*1024),Math.min(file.size,1024*1024)];
  let lastError=null;
@@ -57,7 +57,7 @@ export function groupSeries(slices){
  return[...m.entries()].map(([id,all])=>{
   const readIndex=new Map(all.map((x,i)=>[x,i])),g0=[...all],normal=seriesNormal(g0),synthetic=g0.some(s=>s.syntheticPos),key=s=>synthetic?(s.sortIndex??s.instance??0):(slicePosition(s,normal)??s.sortIndex??s.instance??0);
   g0.sort((a,b)=>key(a)-key(b));
-  // build 469: every gap along the slice normal is checked; duplicate slices are excluded (smaller InstanceNumber stays);
+  // every gap along the slice normal is checked; duplicate slices are excluded (smaller InstanceNumber stays);
   // the z spacing is the whole span / (N-1), or a gap-corrected fit when slices are missing
   const tagZ=g0[0].spacingBetween||g0[0].thickness||1;
   let g=g0,spacingCheck=analyzeSliceSpacing(g0,tagZ,normal);

@@ -59,7 +59,7 @@ describe('saving and loading the choice', () => {
     expect(s._m.get(THEME_STORAGE_KEY)).toBe(THEME_IDS.at(-1));
     expect(readStoredTheme(fakeStorage({ [THEME_STORAGE_KEY]: 'rainbow' }))).toBeNull();
   });
-  it('a saved id of a renamed theme (the blue ones became gray in build 450) is read as the new id and saved again under it', () => {
+  it('a saved id of a renamed theme (the blue ones became gray) is read as the new id and saved again under it', () => {
     expect(THEME_ALIASES).toEqual({ 'light-cool': 'light-gray', 'dark-navy': 'dark-gray' });
     for (const [old, now] of Object.entries(THEME_ALIASES)) {
       expect(isThemeId(old)).toBe(false); expect(isThemeId(now)).toBe(true); expect(normalizeThemeId(old)).toBe(now);
@@ -175,7 +175,7 @@ describe('contrast (WCAG AA, 4.5:1) in all six themes', () => {
   });
 });
 
-describe('the image does not change with the theme; the backgrounds around it follow it (builds 450-451)', () => {
+describe('the image does not change with the theme; the backgrounds around it follow it', () => {
   it('the 2D canvas background follows the theme; the 3D one is a dark, theme-tinted colour; the 3D card keeps dark UI tokens', () => {
     expect(themesCss).not.toMatch(/\.viewport-card|(?<!-)\.view-card(?!-3d)/); // no general card re-declaration
     expect(themesCss.match(/\.view-card-3d\{/g).length).toBe(1);
@@ -193,7 +193,7 @@ describe('the image does not change with the theme; the backgrounds around it fo
       const tk = themeTokens(t.id);
       for (const k of ['canvas-bg-3d', 'canvas-bg-2d']) expect(tk[k], t.id + ' ' + k).toMatch(/^\d{1,3} \d{1,3} \d{1,3}$/);
       const l3 = lum(rgbOf(tk['canvas-bg-3d'])), l2 = lum(rgbOf(tk['canvas-bg-2d']));
-      // dark enough for the volume and the white-ish UI to read (build 452: bright enough to see the tint, relative luminance 0.005-0.05)
+      // dark enough for the volume and the white-ish UI to read
       if (t.id !== 'dark-reading') expect(l3, t.id + ' 3D').toBeGreaterThan(0.01);
       expect(l3, t.id + ' 3D').toBeLessThan(0.05);
       if (t.mode === 'light') expect(l2, t.id + ' 2D').toBeGreaterThan(0.3); else expect(l2, t.id + ' 2D').toBeLessThan(0.02);
@@ -223,11 +223,11 @@ describe('the image does not change with the theme; the backgrounds around it fo
     const mv = read('docs/medical-volume.js');
     expect(mv).toContain("from './canvas-theme.js");
     // the shader: a background uniform, no fixed colour any more
-    expect(mv).toMatch(/textureDims:vec4<f32>,\n background:vec4<f32>,\n segMat:array<vec4<f32>,4>\n\};\n@group\(0\) @binding\(0\) var<uniform> u:Uniforms;/); // build 620: segMat appended after it
+    expect(mv).toMatch(/textureDims:vec4<f32>,\n background:vec4<f32>,\n segMat:array<vec4<f32>,4>\n\};\n@group\(0\) @binding\(0\) var<uniform> u:Uniforms;/); // segMat appended after it
     expect(mv).not.toMatch(/0\.035\s*,\s*0\.045\s*,\s*0\.05/);
     expect(mv.match(/return vec4<f32>\(u\.background\.rgb,1\.0\);/g).length).toBe(3);
     expect(mv).toContain('let bg=u.background.rgb;');
-    // the uniform buffer holds the 23rd vec4 and is filled every frame (build 620: + 4 segMat vec4s, 432 bytes); the canvas stays opaque
+    // the uniform buffer holds the 23rd vec4 and is filled every frame; the canvas stays opaque
     expect(mv).toContain('size:432,usage:GPUBufferUsage.UNIFORM');
     expect(mv).toContain('this.frameData=new Float32Array(108);');
     expect(mv).toMatch(/const bg=canvasBackground3dUnit\(\);put\(22,bg\[0\],bg\[1\],bg\[2\],1\);/);
@@ -295,7 +295,7 @@ describe('colours left as literals in style.css are the intended ones', () => {
   it('only overlay scrims, shadows, spinners and image-area colours stay literal', () => {
     const css = styleCss.replace(/\/\*[\s\S]*?\*\//g, '');
     const lits = new Set([...css.matchAll(/#[0-9a-fA-F]{6}\b|#[0-9a-fA-F]{3}\b|rgba?\([^)]*\)/g)].map(m => m[0].toLowerCase().replace(/\s/g, '')).filter(x => !/^rgba?\(var/.test(x)));
-    const allowed = ['#fff', '#ffe27a', '#111', 'rgba(255,255,255,.9)', 'rgba(255,210,61,.85)', '#0a84ff', '#3d8bfd', '#00b8d4', '#9bd7ee', 'rgba(5,8,10,.28)', 'rgba(5,8,10,.54)', 'rgba(5,8,10,.55)', 'rgba(93,141,255,.24)', 'rgba(0,229,255,.8)', 'rgba(0,229,255,.45)', 'rgba(255,255,255,.2)', 'rgba(255,255,255,.22)', 'rgba(255,255,255,.42)', 'rgba(255,255,255,.08)', 'rgba(105,184,216,.18)', 'rgba(128,128,128,.45)', '#0b6f8c', '#4dd8ff', '#04202a' /* 3D point dots: the VR point colours (build 465), the same on every theme */, '#ffd23d', 'rgba(255,210,61,.7)', 'rgba(17,23,27,.88)' /* distances (build 477): the VR selection yellow and its dark label, the same on every theme */];
+    const allowed = ['#fff', '#ffe27a', '#111', 'rgba(255,255,255,.9)', 'rgba(255,210,61,.85)', '#0a84ff', '#3d8bfd', '#00b8d4', '#9bd7ee', 'rgba(5,8,10,.28)', 'rgba(5,8,10,.54)', 'rgba(5,8,10,.55)', 'rgba(93,141,255,.24)', 'rgba(0,229,255,.8)', 'rgba(0,229,255,.45)', 'rgba(255,255,255,.2)', 'rgba(255,255,255,.22)', 'rgba(255,255,255,.42)', 'rgba(255,255,255,.08)', 'rgba(105,184,216,.18)', 'rgba(128,128,128,.45)', '#0b6f8c', '#4dd8ff', '#04202a' /* 3D point dots: the VR point colours, the same on every theme */, '#ffd23d', 'rgba(255,210,61,.7)', 'rgba(17,23,27,.88)' /* distances: the VR selection yellow and its dark label, the same on every theme */];
     const extra = [...lits].filter(x => !allowed.includes(x) && !/^rgba\(0,0,0,[\d.]+\)$/.test(x) && !/^rgba\((118,141,151|110,130,140|216,230,236),[\d.]+\)$/.test(x));
     expect(extra).toEqual([]);
   });

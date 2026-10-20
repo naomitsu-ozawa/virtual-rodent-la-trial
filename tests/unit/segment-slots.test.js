@@ -2,13 +2,13 @@ import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { installDomStub, importApp } from '../helpers/dom-stub.js';
 import { gpuSlotOrder, canEnableSegment, enabledSegmentCount, slotSignature, GPU_SEGMENT_SLOTS } from '../../docs/segment-slots.js';
 
-// build 531: five presets (bone, soft, fat, lung, contrast), at most four enabled at once; the GPU views have four slots
+// five presets (bone, soft, fat, lung, contrast), at most four enabled at once; the GPU views have four slots
 const ORDER = ['bone', 'soft', 'fat', 'lung', 'contrast'];
 const st = (...on) => Object.fromEntries(ORDER.map(k => [k, { active: on.includes(k) || on.includes('~' + k), enabled: on.includes(k) }]));
 
 describe('gpuSlotOrder (pure)', () => {
   it('has four slots', () => { expect(GPU_SEGMENT_SLOTS).toBe(4); });
-  it('keeps slot i = order[i] when contrast is not enabled, whatever else is on (identical to before build 531)', () => {
+  it('keeps slot i = order[i] when contrast is not enabled, whatever else is on (identical to before)', () => {
     expect(gpuSlotOrder(ORDER, st())).toEqual(['bone', 'soft', 'fat', 'lung']);
     expect(gpuSlotOrder(ORDER, st('bone', 'fat'))).toEqual(['bone', 'soft', 'fat', 'lung']);
     expect(gpuSlotOrder(ORDER, st('bone', 'soft', 'fat', 'lung'))).toEqual(['bone', 'soft', 'fat', 'lung']);

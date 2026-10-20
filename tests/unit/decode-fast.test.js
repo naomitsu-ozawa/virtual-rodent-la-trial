@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { decodeSourceSlice } from '../../docs/volume-io.js';
 
-// build 294: the typed-array fast path must equal the DataView path
+// the typed-array fast path must equal the DataView path
 describe('decodeSourceSlice fast path', () => {
   for (const signed of [false, true]) it(signed ? 'signed' : 'unsigned', async () => {
     const rows = 3, columns = 5, n = rows * columns, head = 132, buf = new Uint8Array(head + n * 2), dv = new DataView(buf.buffer);

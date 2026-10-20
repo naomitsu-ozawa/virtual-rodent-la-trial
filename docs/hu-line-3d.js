@@ -1,4 +1,4 @@
-// HU line in the 3D view (build 541, PC only; no GPU shader change, nothing for VR / Mac / iPad paths).
+// HU line in the 3D view.
 // Pick two points directly on the 3D surface: press = start, drag to stretch, release = end (or click, then click). The pick is the same
 // one the 3D analysis uses: the GPU volume pick in volume mode (medicalVolume.pick), the mesh ray cast (analysis-ops surfacePointerVoxel)
 // in surface mode. When the ray hits nothing, the active section (clip) plane is intersected instead; with neither, the point is ignored.
@@ -7,14 +7,14 @@
 // canvas handlers (rotate / pan / comment taps) see it; moves and releases are followed on the document. The line is an SVG overlay
 // projected like the comment / measure lines (voxelToLocal3D -> object matrix -> camera), updated after every 3D frame.
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.webgpu.js';
-import { sceneState, volume, current3DVolume, threeRenderMode, analysisEditTool, sectionViewOpen, sectionViewPlane } from './state.js?v=20261018-build621';
-import { voxelToLocal3D } from './crosshair.js?v=20261018-build621';
-import { surfacePointerVoxel } from './analysis-ops.js?v=20261018-build621';
-import { segmentState, gpuSegmentOrder } from './segments.js?v=20261018-build621';
-import { sectionLocalPoint, sectionLocalNormal } from './section-view.js?v=20261018-build621';
-import { request3DRender } from './scene3d.js?v=20261018-build621';
-import { getHuLine, setHuLine, clearHuLine, onHuLineChange, getHuLineHover, onHuLineHoverChange, localToVoxel, voxelInside, rayPlaneT } from './hu-line-model.js?v=20261018-build621';
-import { createLiveScheduler } from './hu-line-live.js?v=20261018-build621';
+import { sceneState, volume, current3DVolume, threeRenderMode, analysisEditTool, sectionViewOpen, sectionViewPlane } from './state.js?v=20261020-build630';
+import { voxelToLocal3D } from './crosshair.js?v=20261020-build630';
+import { surfacePointerVoxel } from './analysis-ops.js?v=20261020-build630';
+import { segmentState, gpuSegmentOrder } from './segments.js?v=20261020-build630';
+import { sectionLocalPoint, sectionLocalNormal } from './section-view.js?v=20261020-build630';
+import { request3DRender } from './scene3d.js?v=20261020-build630';
+import { getHuLine, setHuLine, clearHuLine, onHuLineChange, getHuLineHover, onHuLineHoverChange, localToVoxel, voxelInside, rayPlaneT } from './hu-line-model.js?v=20261020-build630';
+import { createLiveScheduler } from './hu-line-live.js?v=20261020-build630';
 const DRAG_PX = 6, CYAN = '#35e0ff', ORANGE = '#ffb13b';
 let host = null, svg = null, armed = false;
 const armedListeners = new Set();

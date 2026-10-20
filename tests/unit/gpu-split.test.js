@@ -360,7 +360,7 @@ describe('status line', () => {
     const long = 'verify [anisotropic]: pipeline anisotropic: Requested allocation size (10407936) is smaller than the image requires (11280384). - While calling [Device].CreateTexture() with a long tail ' + 'x'.repeat(200);
     const bar = { classList: { toggle() {} } }, barText = { textContent: '' };
     const doc = { getElementById: id => (id === 'gpu-status-bar' ? bar : id === 'gpu-status-text' ? barText : null) };
-    // build 517: the 160-character chip / full bar belong to the detailed status (retry, detected hybrid, debug); the plain
+    // the 160-character chip / full bar belong to the detailed status (retry, detected hybrid, debug); the plain
     // status keeps the 96 characters of builds up to 515
     const runtime = { ...rt(), device: {}, lastBackend: 'WEBGPU COMPUTE FAIL', lastError: long, limitRetries: 1 };
     const { api, deps } = buildCompute(LINUX, runtime, { document: doc });
@@ -443,7 +443,7 @@ describe('create3DRenderer: split, fallback, unchanged single-device path', () =
   });
 });
 
-// ---- build 517: supervisor findings S1 / S2 / N2 / S4 / N3 and the hybrid-mode setting ----
+// ---- supervisor findings S1 / S2 / N2 / S4 / N3 and the hybrid-mode setting ----
 describe('S2: single-GPU / Mac / iPad status equals the status of builds up to 515 (main)', () => {
   // main's updateGpuStatus text, verbatim, as the reference
   const mainStatus = rtm => {
@@ -462,7 +462,7 @@ describe('S2: single-GPU / Mac / iPad status equals the status of builds up to 5
   };
   const LIMIT_INFO = 'limits buf 4096MB/bind 4096MB (adapter 4096MB/4096MB)';
   const healthy = extra => ({ ...rt(), device: {}, lastBackend: 'WEBGPU CORE FULL VERIFIED · WG256', adapterLabel: 'apple metal-3', limitInfo: LIMIT_INFO, limitRetries: 0, ...extra });
-  it("PR #128's hook: updateGpuStatus ends with updateLinuxWebgpuNote() on every path", () => {
+  it("an earlier change's hook: updateGpuStatus ends with updateLinuxWebgpuNote() on every path", () => {
     let calls = 0;
     const { api } = buildCompute(LINUX, healthy({}), { updateLinuxWebgpuNote: () => { calls++; }, document: { getElementById: () => null } });
     api.updateGpuStatus(); api.updateGpuStatus();
@@ -620,7 +620,7 @@ describe('「ハイブリッド環境での処理」 (gpuHybridMode): Linux hybr
     expect(m.log.filter(l => l.startsWith('device nvidia')).length).toBe(0);
     expect(m.log.filter(l => l.startsWith('device intel')).length).toBe(4);
   });
-  it("'hybrid' (default): nothing happens here; the split of build 516 is as before", async () => {
+  it("'hybrid' (default): nothing happens here; the split of is as before", async () => {
     for (const v of ['hybrid', undefined]) {
       settings(v);
       const { m, got } = await primary(LINUX, HYBRID, WEBGL_INTEL);

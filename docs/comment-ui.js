@@ -1,21 +1,22 @@
-// Position comments UI (Issue #88, stage 2): a small panel in the display drawer. "Add" records the current position (the linked
+// Position comments UI (stage 2): a small panel in the display drawer. "Add" records the current position (the linked
 // crosshair, or the three slices on show) with the text; "View this place" moves the crosshair and the three sliders there. Nothing
 // here runs by itself on load, and no pointer handler is added to the image canvases (the click / swipe on them is untouched).
-import { planes } from './ui-shell.js?v=20261018-build621';
-import { volume, activeSeries, getCrosshair, currentLanguage } from './state.js?v=20261018-build621';
-import { tr } from './i18n.js?v=20261018-build621';
-import { datasetFingerprint } from './project-file.js?v=20261018-build621';
-import { COMMENT_MAX_TEXT, nextAutoKey, createComment, addComment, removeComment, restoreComment, updateCommentText, updateCommentColor, hasUnsavedComments, getComments, onCommentsChange, commentMatchesSeries, commentTarget, commentMarkers, getMarkersShown, setMarkersShown, onMarkersShownChange } from './comments.js?v=20261018-build621';
-import { POINT_PALETTE, pointColor, autoPointColor, inkOn, paletteName } from './point-colors.js?v=20261018-build621';
-import { showCrosshairAt, crosshairModeActive, setOverlayPainter, requestOverlayDraw } from './crosshair-ui.js?v=20261018-build621';
-import { getMeasurements, setLabelOffset, onMeasurementsChange, removeMeasurement, measurementsOfPoint, restoreMeasurements, measurementMm, measureLabel, seriesSpacing, spacingLevel, getMeasureStart, onMeasureStartChange, cancelMeasure, createLongPress, hasUnsavedMeasurements } from './measurements.js?v=20261018-build621';
-import { planeLabelPlacement, planeVoxelDelta, clampLabelCenter, createFocusTracker } from './measure-label.js?v=20261018-build621';
-import { planePointFromVoxel } from './crosshair.js?v=20261018-build621';
-import { openPointMenu, setPointMenuHandlers, installPointMenu, endMeasureAt, cancelMeasureUi, flashUndo } from './point-menu.js?v=20261018-build621';
+import { eventModeOn } from './event-mode.js?v=20261020-build630';
+import { planes } from './ui-shell.js?v=20261020-build630';
+import { volume, activeSeries, getCrosshair, currentLanguage } from './state.js?v=20261020-build630';
+import { tr } from './i18n.js?v=20261020-build630';
+import { datasetFingerprint } from './project-file.js?v=20261020-build630';
+import { COMMENT_MAX_TEXT, nextAutoKey, createComment, addComment, removeComment, restoreComment, updateCommentText, updateCommentColor, hasUnsavedComments, getComments, onCommentsChange, commentMatchesSeries, commentTarget, commentMarkers, getMarkersShown, setMarkersShown, onMarkersShownChange } from './comments.js?v=20261020-build630';
+import { POINT_PALETTE, pointColor, autoPointColor, inkOn, paletteName } from './point-colors.js?v=20261020-build630';
+import { showCrosshairAt, crosshairModeActive, setOverlayPainter, requestOverlayDraw } from './crosshair-ui.js?v=20261020-build630';
+import { getMeasurements, setLabelOffset, onMeasurementsChange, removeMeasurement, measurementsOfPoint, restoreMeasurements, measurementMm, measureLabel, seriesSpacing, spacingLevel, getMeasureStart, onMeasureStartChange, cancelMeasure, createLongPress, hasUnsavedMeasurements } from './measurements.js?v=20261020-build630';
+import { planeLabelPlacement, planeVoxelDelta, clampLabelCenter, createFocusTracker } from './measure-label.js?v=20261020-build630';
+import { planePointFromVoxel } from './crosshair.js?v=20261020-build630';
+import { openPointMenu, setPointMenuHandlers, installPointMenu, endMeasureAt, cancelMeasureUi, flashUndo } from './point-menu.js?v=20261020-build630';
 let pop=null,popText=null,popPos=null,popStatus=null,popTimer=0,popFrom=null;
 let root=null,listEl=null,textEl=null,addBtn=null,noteEl=null,undoEl=null,undoTimer=0,lastDeleted=null;
 let showEl=null,bubble=null,bubbleTimer=0,measTitleEl=null,measListEl=null;
-let colorOpenId=null; // build 472: the point whose colour palette is open in the list
+let colorOpenId=null; // the point whose colour palette is open in the list
 let editId=null,editDraft='',editFocus=false; // the comment being edited in the list (the draft survives a re-render of the list)
 const labelHits={axial:[],coronal:[],sagittal:[]}; // the distance labels last drawn per plane (CSS px on the overlay canvas), for the drag
 const hits={axial:[],coronal:[],sagittal:[]}; // exact markers last drawn per plane (CSS px on the overlay canvas), for the tap test
@@ -40,7 +41,7 @@ export function viewComment(id){
  const target=commentTarget(c,dimsOf());return target?showCrosshairAt(target,'comment'):null;
 }
 
-// build 477: the start point of a distance: a pulsing ring and the hint next to it (the hint pill at the bottom of the page is always shown)
+// the start point of a distance: a pulsing ring and the hint next to it (the hint pill at the bottom of the page is always shown)
 function paintStart(ctx,x,y,R,ipad){
  const ph=(performance.now()%1200)/1200,k=0.5+0.5*Math.sin(ph*Math.PI*2);
  ctx.beginPath();ctx.arc(x,y,R+4+k*6,0,Math.PI*2);ctx.lineWidth=3;ctx.strokeStyle='rgba(0,0,0,.7)';ctx.stroke();
@@ -49,7 +50,7 @@ function paintStart(ctx,x,y,R,ipad){
  ctx.fillStyle='rgba(17,23,27,.88)';ctx.beginPath();ctx.roundRect(tx,ty,w,h,6);ctx.fill();ctx.strokeStyle='#ffd23d';ctx.lineWidth=1;ctx.stroke();
  ctx.fillStyle='#fff';ctx.textAlign='left';ctx.textBaseline='middle';ctx.fillText(text,tx+6,ty+h/2+0.5);
 }
-// build 477: a distance is drawn on a plane only when BOTH of its points lie on the slice on show (a dashed line + the value at its midpoint); otherwise nothing
+// a distance is drawn on a plane only when BOTH of its points lie on the slice on show (a dashed line + the value at its midpoint); otherwise nothing
 function paintMeasures(ctx,ms,g,p){
  const at=new Map();for(const m of ms)if(m.exact)at.set(m.id,{x:g.x0+m.fx*g.w,y:g.y0+m.fy*g.h});
  const mm=getMeasurements().filter(m=>at.has(m.a)&&at.has(m.b));if(!mm.length)return;
@@ -58,7 +59,7 @@ function paintMeasures(ctx,ms,g,p){
   const A=at.get(m.a),B=at.get(m.b);
   ctx.setLineDash([6,4]);ctx.lineWidth=4;ctx.strokeStyle='rgba(0,0,0,.6)';ctx.beginPath();ctx.moveTo(A.x,A.y);ctx.lineTo(B.x,B.y);ctx.stroke();
   ctx.lineWidth=2;ctx.strokeStyle='#ffd23d';ctx.stroke();ctx.setLineDash([]);
-  // build 480: a compact label, by default beside the line (perpendicular, the upper side); where the user dragged it (labelOffset: voxel units from the midpoint) otherwise
+  // a compact label, by default beside the line (perpendicular, the upper side); where the user dragged it (labelOffset: voxel units from the midpoint) otherwise
   const text=measureLabel(measurementMm(m,cs,sp),lvl==='warn'),fs=ipad?12:10;ctx.font='700 '+fs+'px sans-serif';
   const w=ctx.measureText(text).width+8,h=fs+6,mx=(A.x+B.x)/2,my=(A.y+B.y)/2;
   let pl;
@@ -75,10 +76,10 @@ function paintMeasures(ctx,ms,g,p){
   ctx.fillStyle=lit?'#111':'#fff';ctx.textAlign='left';ctx.textBaseline='middle';ctx.fillText(text,x+4,y+h/2+0.5);
  }
 }
-// build 480: dragging a label on a 2D plane. A listener on the plane's card in the CAPTURE phase, so a press on a label never reaches the slice swipe / crosshair /
+// dragging a label on a 2D plane. A listener on the plane's card in the CAPTURE phase, so a press on a label never reaches the slice swipe / crosshair /
 // mark handlers of the canvas; everything else passes untouched. The new place is stored as labelOffset (shared with VR and 3D).
 let lastLabelDown={id:null,t:0,x:0,y:0};
-const labelFocus2d=createFocusTracker(()=>requestOverlayDraw()); // build 485: the lit label (hover / drag): the overlay is redrawn only when it changes
+const labelFocus2d=createFocusTracker(()=>requestOverlayDraw()); // the lit label (hover / drag): the overlay is redrawn only when it changes
 function installLabelDrag2d(){
  for(const p of Object.keys(labelHits)){
   const cv=planes[p].canvas,host=cv.closest('.view-card')||cv.parentElement;if(!host)continue;
@@ -122,7 +123,7 @@ function paintMarkers(ctx,p,g){
  hits[p]=[];labelHits[p]=[];if(!ctx||!getMarkersShown()||!volume)return;
  const fp=fingerprint(),dims=dimsOf();if(!fp||!dims)return;
  const ms=commentMarkers(p,getComments(),fp,+planes[p].slider.value,dims);if(!ms.length)return;
- const ipad=document.documentElement.classList.contains('vrl-ipad-ui'),R=ipad?10:8,r=R*0.7; // build 480: smaller marks (were 11 / 13 px, like the small VR markers); the tap area below stays at least 16 / 22 px
+ const ipad=document.documentElement.classList.contains('vrl-ipad-ui'),R=ipad?10:8,r=R*0.7; // smaller marks (were 11 / 13 px, like the small VR markers); the tap area below stays at least 16 / 22 px
  ms.sort((a,b)=>a.exact-b.exact); // faint ones first, exact ones on top
  paintMeasures(ctx,ms,g,p);
  for(const m of ms){
@@ -131,7 +132,7 @@ function paintMarkers(ctx,p,g){
    ctx.beginPath();ctx.arc(x,y,R,0,Math.PI*2);ctx.fillStyle=m.color;ctx.fill();ctx.lineWidth=2.5;ctx.strokeStyle='rgba(0,0,0,.75)';ctx.stroke();
    ctx.fillStyle=inkOn(m.color);ctx.font='800 '+(R*1.05)+'px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(String(m.number),x,y+0.5);
    hits[p].push({id:m.id,x,y,r:Math.max(R,ipad?22:16)});
-   if(m.id===getMeasureStart())paintStart(ctx,x,y,R,ipad); // build 477: the START of a distance (pulsing ring + hint)
+   if(m.id===getMeasureStart())paintStart(ctx,x,y,R,ipad); // the START of a distance (pulsing ring + hint)
   }else{ // a few slices away: a thin ring (dark halo under a light one), no number
    ctx.globalAlpha=.55;ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.lineWidth=4;ctx.strokeStyle='rgba(0,0,0,.6)';ctx.stroke();ctx.lineWidth=1.8;ctx.strokeStyle=m.color;ctx.stroke();ctx.globalAlpha=1;
   }
@@ -168,7 +169,7 @@ function installMarkerTap(){
    clearTimeout(d?.timer);
    const lp=createLongPress({ms:450}),hit=e.button===0||e.pointerType==='touch'?hitAt(e.clientX,e.clientY):null;lp.down(e.clientX,e.clientY,performance.now());
    d={id:e.pointerId,x:e.clientX,y:e.clientY,lp,timer:0,hit};
-   // build 477: long press on a mark (touch long press / mouse press-and-hold) opens the point menu
+   // long press on a mark (touch long press / mouse press-and-hold) opens the point menu
    if(hit&&!crosshairModeActive()&&getMarkersShown()){const mine=d;mine.timer=setTimeout(()=>{if(d===mine&&mine.lp.tick(performance.now())==='long')openPointMenu({id:mine.hit.id,x:mine.x,y:mine.y})},500)}
   });
   cv.addEventListener('pointermove',e=>{if(d&&d.id===e.pointerId)d.lp.move(e.clientX,e.clientY)});
@@ -177,7 +178,7 @@ function installMarkerTap(){
    const r=s.lp.up();if(r==='long'||r==='moved')return; // the long press opened the menu: the release is not a tap
    if(Math.hypot(e.clientX-s.x,e.clientY-s.y)>6)return;
    const best=hitAt(e.clientX,e.clientY);
-   if(getMeasureStart()){ // build 477: a distance is being measured: a point = its END, empty space = cancel (no bubble)
+   if(getMeasureStart()){ // a distance is being measured: a point = its END, empty space = cancel (no bubble)
     if(best)endMeasureAt(best.id);else cancelMeasureUi();
     return;
    }
@@ -196,7 +197,7 @@ function installMarkerTap(){
 function clearUndo(){clearTimeout(undoTimer);lastDeleted=null;if(undoEl){undoEl.hidden=true}}
 function deleteWithUndo(id){
  const index=getComments().findIndex(c=>c.id===id),c=getComments()[index];if(!c)return;
- const ms=measurementsOfPoint(id);removeComment(id);lastDeleted={c,index,ms}; // build 477: its distances are deleted with it (the cascade) and come back with the undo
+ const ms=measurementsOfPoint(id);removeComment(id);lastDeleted={c,index,ms}; // its distances are deleted with it (the cascade) and come back with the undo
  undoEl.querySelector('.comment-undo-text').textContent=tr('commentDeleted');undoEl.querySelector('.comment-undo-btn').textContent=tr('commentUndo');
  undoEl.hidden=false;noteEl.textContent='';clearTimeout(undoTimer);undoTimer=setTimeout(clearUndo,20000);
  undoEl.querySelector('.comment-undo-btn').focus(); // the delete button is gone: keep the keyboard focus inside the panel
@@ -212,7 +213,7 @@ function saveEdit(id){
  if(updateCommentText(id,editDraft)===null){noteEl.textContent=tr('commentEmptyNotSaved');return} // blank: nothing changes, stay in the editor
  noteEl.textContent='';stopEdit(id); // (a changed text re-rendered the list already; an unchanged one did not)
 }
-// build 477: the 「距離」 section under the point list: "1 – 3  12.3 mm" + delete (the value follows the points' positions; ⚠ = slice spacing issue)
+// the 「距離」 section under the point list: "1 – 3  12.3 mm" + delete (the value follows the points' positions; ⚠ = slice spacing issue)
 function renderMeasures(){
  if(!measListEl)return;
  measTitleEl.textContent=tr('measureTitle');measListEl.replaceChildren();
@@ -249,7 +250,7 @@ function render(){
   const same=commentMatchesSeries(c,fp),li=document.createElement('li');li.className='comment-item';li.dataset.commentId=c.id;
   const body=document.createElement('div');body.className='comment-body';
   const no=document.createElement('span');no.className='comment-no';no.textContent=String(list.indexOf(c)+1);no.setAttribute('aria-hidden','true');
-  const pc=pointColor(c);no.style.background=pc;no.style.borderColor=pc;no.style.color=inkOn(pc); // build 472: the number badge wears the point's colour
+  const pc=pointColor(c);no.style.background=pc;no.style.borderColor=pc;no.style.color=inkOn(pc); // the number badge wears the point's colour
   const t=document.createElement('p');t.className='comment-text';t.textContent=c.text;
   const m=document.createElement('p');m.className='comment-meta';
   m.textContent=`i ${c.position.i} · j ${c.position.j} · k ${c.position.k}`+(c.createdAt?' · '+fmtTime(c.createdAt):'')+(same?'':' · '+tr('commentOtherSeries')+' · '+tr('commentNotSaved'));
@@ -277,7 +278,7 @@ function render(){
   del.addEventListener('click',()=>deleteWithUndo(c.id));
   const ed=document.createElement('button');ed.type='button';ed.className='tool-chip comment-edit';ed.textContent=tr('commentEdit');
   ed.addEventListener('click',()=>startEdit(c.id));
-  // build 472: colour swatch (tap = a small palette: 8 colours + back to auto); the choice is saved in the project with the point
+  // colour swatch (tap = a small palette: 8 colours + back to auto); the choice is saved in the project with the point
   const sw=document.createElement('button');sw.type='button';sw.className='comment-color';sw.style.background=pc;sw.setAttribute('aria-haspopup','true');sw.setAttribute('aria-expanded',colorOpenId===c.id?'true':'false');
   const lang=currentLanguage==='ja'?'ja':'en';sw.setAttribute('aria-label',tr('commentColor')+' '+paletteName(pc,lang));sw.title=tr('commentColor');
   sw.addEventListener('click',()=>{colorOpenId=colorOpenId===c.id?null:c.id;render()});
@@ -344,7 +345,7 @@ export function installComments(){
  root.innerHTML='<summary></summary><p class="comment-hint"></p><label class="comment-show"><input type="checkbox" class="comment-show-input" checked><span></span></label><textarea class="comment-input" rows="2" maxlength="2000"></textarea><button type="button" class="tool-chip comment-add"></button><p class="comment-note" role="status"></p><div class="comment-undo" hidden role="status"><span class="comment-undo-text"></span> <button type="button" class="tool-chip comment-undo-btn"></button></div><ul class="comment-list"></ul><h4 class="measure-title"></h4><ul class="measure-list"></ul>';
  host.appendChild(root);
  showEl=root.querySelector('.comment-show-input');showEl.addEventListener('change',()=>setMarkersShown(showEl.checked));onMarkersShownChange(on=>{if(showEl.checked!==on)showEl.checked=on;closeBubble();requestOverlayDraw()});
- // build 472: the colour palette of a list row closes on a tap / click outside it and on Escape
+ // the colour palette of a list row closes on a tap / click outside it and on Escape
  document.addEventListener('pointerdown',e=>{if(colorOpenId&&!e.target?.closest?.('.comment-color-palette,.comment-color')){colorOpenId=null;render()}},true);
  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&colorOpenId){colorOpenId=null;render()}});
  setOverlayPainter(paintMarkers);installMarkerTap();installLabelDrag2d();document.addEventListener('keydown',e=>{if(e.key==='Escape')closeBubble()});

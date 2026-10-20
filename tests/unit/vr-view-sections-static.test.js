@@ -1,14 +1,19 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 
-// build 468 (stage 2): the section handling of vr-view.js (a WebXR file, not run in node) is checked on its source
+// the section handling of vr-view.js (a WebXR file, not run in node) is checked on its source
 const src = readFileSync(new URL('../../docs/vr-view.js', import.meta.url), 'utf8');
 
 describe('vr-view.js: sections are no longer grabbed (one-handed redesign, stage 2)', () => {
   it('the invisible plane board, the 20 cm proximity grab and the guide lines are gone', () => {
-    for (const w of ['rayPlane', 'nearestPlane', 'planeDist', 'heldPlanes', 'takePlane', 'fixPlane', 'fixAll', 'userData.guide', 'userData.target', 'heldPlane', 'pl.hit', 'PlaneGeometry(2*h,2*h)']) {
+    for (const w of ['rayPlane', 'nearestPlane', 'planeDist', 'heldPlanes', 'takePlane', 'fixPlane', 'fixAll', 'userData.guide', 'userData.target', 'heldPlane', 'pl.hit']) {
       expect(src.includes(w), w).toBe(false);
     }
+  });
+  it('the only plane quad is the hover fill of the frame ("glass": hidden when idle, never raycast; the laser is tested analytically, tests/unit/vr-section-glass.test.js)', () => {
+    expect(src.split('PlaneGeometry(2*h,2*h)').length - 1).toBe(1);
+    expect(src).toContain('const glass=new THREE.Mesh(new THREE.PlaneGeometry(2*h,2*h)');
+    expect(src).toContain('glass.visible=false;obj.add(glass);');
   });
   it('the 持ち方 setting is gone', () => {
     for (const w of ['secHold', 'L.hold', 'holdModes', 'helpHold']) expect(src.includes(w), w).toBe(false);
@@ -17,7 +22,7 @@ describe('vr-view.js: sections are no longer grabbed (one-handed redesign, stage
     for (const w of ['resolveTriggerMode', 'resolveTrigger(', 'recordPoint(null)', 'L.ptRec', 'L.ptNeed']) expect(src.includes(w), w).toBe(false);
   });
   it('the grip handler only moves the volume', () => {
-    const a = src.indexOf("addEventListener('squeezestart'"), b = src.indexOf("addEventListener('selectstart'");
+    const a = src.indexOf('const gripStart=c=>{'), b = src.indexOf("addEventListener('selectstart'"); // the squeeze listeners call gripStart / gripEnd (the same bodies)
     const grip = src.slice(a, b);
     expect(grip).toContain('grabbing.add(c)');
     expect(grip).not.toMatch(/plane|Plane/);
@@ -72,11 +77,11 @@ describe('vr-view.js: review fixes (F1-F9)', () => {
   it('F6: a move to the same place pushes no undo', () => { expect(src).toContain('the same place: nothing to undo'); });
   it('F7 / F8: the selected point is checked, a stale drag ends at the press', () => {
     expect(src).toContain("getComments().some(x=>x.id===pr.res.ref.id))selectPoint");
-    expect(src).toMatch(/addEventListener\('selectstart',\(\)=>\{\s*endDrag\(c\);/);
+    expect(src).toMatch(/addEventListener\('selectstart',e=>\{\s*(?:if\(isHand\(c\.userData\.source\)&&\(!e\.handPinch\|\|handIn\.grabbing\(c\)\|\|handIn\.fistLike\(c\)\)\)return;[^\n]*\n\s*)?endDrag\(c\);/); // a hand inside a fist first
   });
 });
 
-describe('vr-view.js: section drag restored, one cursor (build 470)', () => {
+describe('vr-view.js: section drag restored, one cursor', () => {
   it('the section is not clamped while dragging and snaps back into the box on release', () => {
     const a = src.indexOf('const updatePress='), b = src.indexOf('const sectionForEmpty=');
     expect(src.slice(a, b)).not.toContain('clampPlaneCenter');

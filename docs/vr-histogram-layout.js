@@ -1,5 +1,5 @@
-import { HIST_MIN, HIST_MAX, MIN_WINDOW } from './histogram.js?v=20261018-build621';
-import { LABELS, SLOTS, UNLABELED } from './vr-label-histogram.js?v=20261018-build621';
+import { HIST_MIN, HIST_MAX, MIN_WINDOW } from './histogram.js?v=20261020-build630';
+import { LABELS, SLOTS, UNLABELED } from './vr-label-histogram.js?v=20261020-build630';
 
 // canvas size and the plot rectangle inside it (px)
 export const PANEL_W = 1024, PANEL_H = 640;
@@ -24,7 +24,7 @@ export const columnsFor = (lo, hi) => Math.max(1, Math.min(Math.round(hi - lo + 
 export const barFraction = (count, ymax, log) => (ymax > 0 && count > 0 ? (log ? Math.log10(1 + count) / Math.log10(1 + ymax) : count / ymax) : 0);
 export const countLabel = n => (n >= 1e6 ? +(n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? +(n / 1e3).toFixed(n >= 1e4 ? 0 : 1) + 'k' : String(Math.round(n)));
 // the y ticks (counts) for a plot of height ymax: linear = 0 and a few round steps; log = 0 and powers of ten (at most 5)
-export function yTicks(ymax, log, out = []) { // out: a reused array (build 571), emptied first
+export function yTicks(ymax, log, out = []) { // out: a reused array, emptied first
   out.length = 0; out.push(0);
   if (!(ymax > 0)) return out;
   if (log) {
@@ -97,7 +97,7 @@ export function progressText(busyLabel, prog) {
 // the bar texture is redrawn when something it shows changed (dirty), never more often than every MIN_GAP_MS
 export const shouldRedraw = ({ dirty, now, lastDraw }) => !!dirty && now - lastDraw >= MIN_GAP_MS;
 
-// ---- build 570: the display range from VR (display only, never data): the laser grabs the LEFT or RIGHT end of the x axis and drags it ----
+// ---- the display range from VR (display only, never data): the laser grabs the LEFT or RIGHT end of the x axis and drags it ----
 // the grab zones (canvas px): around each end of the plot, from the top of the plot down to the end labels under the axis
 export const AXIS_GRAB = { inner: 70, outer: 70, top: PLOT.y, bottom: X_AXIS_Y + 24 };
 // the end labels (the window's lo / hi, under the axis ends) and the 「自動」 button (bottom right, in the status row)
@@ -105,7 +105,7 @@ export const END_LABEL_Y = X_AXIS_Y;
 export const AUTO_BTN = { x: PANEL_W - 24 - 128, y: STATUS_Y - 26, w: 128, h: 48 };
 // the redraw interval while an end is dragged (the bars follow at ~12 Hz; the drag itself costs nothing per frame)
 export const DRAG_REDRAW_MS = 80;
-// build 571: while an end is dragged only this part of the board follows, on its own small texture (half resolution: 488 x 206, ~0.4 MB per upload
+// while an end is dragged only this part of the board follows, on its own small texture (half resolution: 488 x 206, ~0.4 MB per upload
 // instead of 2.6 MB for the whole board): the plot, the count ticks on its left, the HU ticks, the x axis title and the end values under it.
 // The board under it is drawn once at the grab with this part blank, and once more after the release.
 export const PLOT_OV = { x: 48, y: PLOT.y - 16, w: PANEL_W - 48, h: X_AXIS_Y + 20 - (PLOT.y - 16) }, PLOT_OV_SCALE = 0.5;

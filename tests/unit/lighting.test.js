@@ -4,7 +4,7 @@ import * as L from '../../docs/lighting.js';
 import { volumeShader } from '../../docs/medical-volume.js';
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.webgpu.js';
 
-// build 612: one lighting model for the desktop WebGPU volume, the VR / AR volume and the 3D-view meshes (docs/lighting.js).
+// one lighting model for the desktop WebGPU volume, the VR / AR volume and the 3D-view meshes (docs/lighting.js).
 const read = f => readFileSync(new URL('../../docs/' + f, import.meta.url), 'utf8');
 const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 const norm = a => { const l = Math.hypot(...a); return a.map(c => c / l); };
@@ -110,7 +110,7 @@ describe('shadePoint (the JS twin of vrlShade)', () => {
     const nScreenUp = flip(norm([0, 1, 1])), nScreenDown = flip(norm([0, -1, 1]));
     const offNew = L.lightOffset(flip(RIGHT), flip(UP)); // the viewer's right / up in the volume frame
     expect(L.shadePoint(nScreenUp, VIEW, offNew, 0).diffuse).toBeGreaterThan(L.shadePoint(nScreenDown, VIEW, offNew, 0).diffuse);
-    const offOld = [0.35, 0.5, 0.25]; // volume coordinates, as before build 612
+    const offOld = [0.35, 0.5, 0.25]; // volume coordinates, as before
     expect(L.shadePoint(nScreenUp, VIEW, offOld, 0).diffuse).toBeLessThan(L.shadePoint(nScreenDown, VIEW, offOld, 0).diffuse);
   });
 });
@@ -129,7 +129,7 @@ describe('depth01', () => {
 
 describe('generated shader helpers', () => {
   const g = L.lightingGLSL(), w = L.lightingWGSL();
-  it('carry the shared constants and take the material (ambient, spec, shininess) as an argument (build 620)', () => {
+  it('carry the shared constants and take the material (ambient, spec, shininess) as an argument', () => {
     for (const src of [g, w]) {
       expect(src).toContain('mat.x+(1.0-mat.x)*max(dot(n,l),0.0)');
       expect(src).toContain(String(L.DEPTH_FADE));
@@ -168,7 +168,7 @@ describe('every view uses the shared lighting (static)', () => {
     const wgsl = volumeShader();
     expect(wgsl).toContain('fn vrlShade(');
     expect(wgsl).toMatch(/let shade=vrlShade\(select\(n,-inward,later\),viewDir,u\.camRightTan\.xyz\*[\d.]+\+u\.camUpAspect\.xyz\*[\d.]+,vrlDepth01\(hi,u\.camOrigin\.xyz,u\.halfStep\.xyz\),select\(0\.0,1\.0,later\),u\.segMat\[u32\(idx\)\]\.xyz\);/);
-    expect(wgsl).toContain('segMat:array<vec4<f32>,4>\n};'); // build 620: appended at the END of the struct (the pick shader's struct is a prefix of it)
+    expect(wgsl).toContain('segMat:array<vec4<f32>,4>\n};'); // appended at the END of the struct (the pick shader's struct is a prefix of it)
     expect(wgsl).toContain('let later=acc.a>0.0;');
     // n itself is not flipped; the outward normal of a later hit is -inward, so inward must be defined before the shading
     expect(wgsl).toContain('let inward=select(-n,n,hvPrev<-1e8||hvPrev<a.x);');
@@ -256,7 +256,7 @@ describe('the mesh material (WebGPU node material and WebGL fallback)', () => {
 });
 
 
-// build 620: per-segment material presets (標準 / ソリッド / 石膏 / プラスチック)
+// per-segment material presets (標準 / ソリッド / 石膏 / プラスチック)
 describe('segment material presets', () => {
   it('standard is exactly the constants every view used before (the default renders as before)', () => {
     expect(L.MATERIALS.standard).toEqual({ ambient: 0.28, spec: 0.18, shininess: 20 });
@@ -308,7 +308,7 @@ describe('segment material presets', () => {
     const back = unpackProject(packProject(project)).project;
     expect(back.segments.bone.material).toBe('plastic');
     expect(L.materialKey(back.segments.soft.material)).toBe('plaster');
-    expect(L.materialKey(back.segments.fat.material)).toBe('standard'); // saved before build 620
+    expect(L.materialKey(back.segments.fat.material)).toBe('standard'); // saved before
   });
   it('the mesh material of a segment follows its preset in place (one shared uniform per segment, WebGPU and WebGL)', async () => {
     const M = await import('../../docs/mesh-material.js');

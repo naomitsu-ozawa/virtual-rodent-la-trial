@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-// build 612: the constrained smoothing runs in a pool of Web Workers (smooth-workers.js) from the kernel's source text; a
+// the constrained smoothing runs in a pool of Web Workers (smooth-workers.js) from the kernel's source text; a
 // chunk smoothed in a worker must come out bit for bit as on the main thread (the seam copy and the mesh cache rely on it).
 
 // (in the page) a welded voxel-face mesh: a ball with a 1-voxel rod

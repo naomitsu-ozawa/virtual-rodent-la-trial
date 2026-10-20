@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { marchClassificationHit, marchClassificationHitInfo } from '../../docs/vr-pick.js';
 
-// build 402: 8³ grid in a ±1 box, one channel; index mapping as the VR shader's texCoord (y index runs down)
+// 8³ grid in a ±1 box, one channel; index mapping as the VR shader's texCoord (y index runs down)
 const N=8,he=[1,1,1],dims=[N,N,N];
 const grid=fill=>{const data=new Uint8Array(N*N*N);for(let z=0;z<N;z++)for(let y=0;y<N;y++)for(let x=0;x<N;x++)if(fill(x,y,z))data[x+N*(y+N*z)]=200;return{data,C:1,chan:[0,-1,-1,-1]}};
 const v=(x,y,z)=>({x,y,z});

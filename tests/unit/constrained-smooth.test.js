@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { constrainedSmoothPositions, constrainedSmoothSchedule } from '../../docs/constrained-smooth.js';
 import { makeMask, voxelFaces, weld, vertexNormals, volume, edgeCounts, planeStats, thickness } from '../helpers/voxel-mesh.js';
 
-// the surface smoothing for 3D printing (build 612): staircases go, 1-voxel structures stay
+// the surface smoothing for 3D printing: staircases go, 1-voxel structures stay
 const strength4 = constrainedSmoothSchedule(4);
 const mesh = (w, h, d, inside, boundary = true) => weld(voxelFaces(makeMask(w, h, d, inside), w, h, d, { boundary }).positions);
 

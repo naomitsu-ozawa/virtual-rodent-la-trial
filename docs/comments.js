@@ -1,16 +1,16 @@
-// Position comments (Issue #88, stage 2): a comment = text + a place in the DATA (voxel indices {i,j,k}, like the linked
+// Position comments (stage 2): a comment = text + a place in the DATA (voxel indices {i,j,k}, like the linked
 // crosshair in state.js: independent of zoom, pan or 3D rotation) + the series it was written on. Pure data and a small in-memory
 // store, no DOM. They are saved in the project file (project.comments, see gatherProject / applyProject in data-load.js).
 // A loaded project does NOT move any view by itself: a position is only used when the user presses "view this place".
-import { clampVoxel, sliceIndexFor, planePointFromVoxel } from './crosshair.js?v=20261018-build621';
-import { compareFingerprints } from './project-file.js?v=20261018-build621';
-import { normalizeColor, pointColor, pointKey, normalizeAutoKey, textPointNumber } from './point-colors.js?v=20261018-build621';
+import { clampVoxel, sliceIndexFor, planePointFromVoxel } from './crosshair.js?v=20261020-build630';
+import { compareFingerprints } from './project-file.js?v=20261020-build630';
+import { normalizeColor, pointColor, pointKey, normalizeAutoKey, textPointNumber } from './point-colors.js?v=20261020-build630';
 export const COMMENT_MAX_TEXT=2000;
 const isIdx=n=>Number.isFinite(+n)&&n!==null&&n!==''&&n!==true&&n!==false;
 export const commentVoxel=v=>v&&isIdx(v.i)&&isIdx(v.j)&&isIdx(v.k)?{i:Math.round(+v.i),j:Math.round(+v.j),k:Math.round(+v.k)}:null;
 
 let counter=0;
-// autoKey (build 472): the stable number the auto colour comes from, fixed when the point is recorded (see point-colors.js pointKey)
+// autoKey: the stable number the auto colour comes from, fixed when the point is recorded (see point-colors.js pointKey)
 export function createComment({text,position,series,now=Date.now(),id,autoKey}){
  const pos=commentVoxel(position);if(!pos)return null;
  return{id:id||('c'+now.toString(36)+'-'+(++counter)),text:String(text??'').slice(0,COMMENT_MAX_TEXT),createdAt:new Date(now).toISOString(),position:pos,series:series||null,...(normalizeAutoKey(autoKey)!==null?{autoKey}:{})};
@@ -24,7 +24,7 @@ export function sanitizeComments(list){
  for(const c of list){
   const pos=commentVoxel(c?.position);if(!pos||!c||typeof c!=='object')continue;
   let id=typeof c.id==='string'&&c.id?c.id:'c-'+out.length;while(seen.has(id))id+='_';seen.add(id);
-  const autoKey=normalizeAutoKey(c.autoKey),color=normalizeColor(c.color); // build 472: an optional colour chosen by the user; an invalid one is dropped (the point gets its auto colour)
+  const autoKey=normalizeAutoKey(c.autoKey),color=normalizeColor(c.color); // an optional colour chosen by the user; an invalid one is dropped (the point gets its auto colour)
   out.push({id,text:String(c.text??'').slice(0,COMMENT_MAX_TEXT),createdAt:typeof c.createdAt==='string'?c.createdAt:'',position:pos,series:c.series&&typeof c.series==='object'?c.series:null,...(autoKey!==null?{autoKey}:{}),...(color?{color}:{})});
  }
  return out;
@@ -70,7 +70,7 @@ export function updateCommentPosition(id,position){
  if(o.i!==pos.i||o.j!==pos.j||o.k!==pos.k){list=list.map((c,n)=>n===i?{...c,position:pos}:c);emit()}
  return getComments()[i];
 }
-// set / clear the colour of a point (build 472): a valid "#rrggbb" sets it, null / '' goes back to the auto colour; anything else is refused (null).
+// set / clear the colour of a point: a valid "#rrggbb" sets it, null / '' goes back to the auto colour; anything else is refused (null).
 // Text, position, createdAt and series stay. An unchanged colour is not a change.
 export function updateCommentColor(id,color){
  const none=color===null||color===undefined||color==='',col=none?null:normalizeColor(color);

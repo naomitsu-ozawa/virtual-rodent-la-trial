@@ -9,7 +9,7 @@ import { resolveLighting } from './lib/vr-gl-harness.mjs';
 import { materialVec } from '../docs/lighting.js';
 const root=path.resolve('docs'),nm=path.resolve('node_modules');
 const src=fs.readFileSync(path.join(root,'vr-view.js'),'utf8');
-const grab=name=>{const m=src.match(new RegExp('const '+name+'=`([\\s\\S]*?)`;'));if(!m)throw new Error('shader '+name+' not found');return resolveLighting(m[1])}; // build 612: the shared lighting placeholders
+const grab=name=>{const m=src.match(new RegExp('const '+name+'=`([\\s\\S]*?)`;'));if(!m)throw new Error('shader '+name+' not found');return resolveLighting(m[1])}; // the shared lighting placeholders
 const vertexShader=grab('vertexShader'),fragmentShader=grab('fragmentShader');
 const srv=http.createServer((q,r)=>{r.writeHead(200,{'content-type':'text/html'});r.end('<!doctype html><html><body></body></html>')}).listen(8766);
 const b=await chromium.launch({...(process.env.PW_CHROMIUM?{executablePath:process.env.PW_CHROMIUM}:{}),args:['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader']});
@@ -31,7 +31,7 @@ const result=await pg.evaluate(async ({vertexShader,fragmentShader,segM})=>{
  for(let z=0;z<dims[2];z++)for(let y=0;y<dims[1];y++)for(let x=0;x<dims[0];x++){const v=x*10,o=((z*dims[1]+y)*dims[0]+x)*2;data[o]=v&255;data[o+1]=v>>8}
  const vol=new THREE.Data3DTexture(data,...dims);vol.format=THREE.RGFormat;vol.type=THREE.UnsignedByteType;vol.minFilter=vol.magFilter=THREE.LinearFilter;vol.unpackAlignment=1;vol.needsUpdate=true;
  // bricks: one brick covering everything, HU 0..630
- const bricks=new THREE.Data3DTexture(new Float32Array([0,630,0,0]),1,1,1);bricks.format=THREE.RGBAFormat;bricks.type=THREE.FloatType;bricks.minFilter=bricks.magFilter=THREE.NearestFilter;bricks.needsUpdate=true; // build 526: RGBA32F (B = mask-only occupancy)
+ const bricks=new THREE.Data3DTexture(new Float32Array([0,630,0,0]),1,1,1);bricks.format=THREE.RGBAFormat;bricks.type=THREE.FloatType;bricks.minFilter=bricks.magFilter=THREE.NearestFilter;bricks.needsUpdate=true; // RGBA32F (B = mask-only occupancy)
  const dummy=new THREE.Data3DTexture(new Uint8Array(4),1,1,1);dummy.format=THREE.RGBAFormat;dummy.needsUpdate=true;
  const halfExt=[1.6,0.2,0.2];
  const u={vol:{value:vol},bricks:{value:bricks},halfExt:{value:new THREE.Vector3(...halfExt)},texDims:{value:new THREE.Vector3(...dims)},brickDims:{value:new THREE.Vector3(1,1,1)},

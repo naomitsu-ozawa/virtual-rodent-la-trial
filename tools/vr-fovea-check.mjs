@@ -1,4 +1,4 @@
-// VR offscreen-path check (build 560 guard). Renders the synthetic phantom with the REAL fragment and composite shaders of docs/vr-view.js on headless Chromium /
+// VR offscreen-path check. Renders the synthetic phantom with the REAL fragment and composite shaders of docs/vr-view.js on headless Chromium /
 // SwiftShader through the low-resolution path three ways and compares them pixel by pixel (colour and the depth the composite writes back):
 //  1) full-size target (B): the offscreen target allocated at the full size with only its corner used (the rest holds garbage) must give exactly the image of
 //     the exactly-sized target the app used before (the invSize math and the cleared margin are right; changing f needs no reallocation).

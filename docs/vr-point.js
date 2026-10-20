@@ -1,4 +1,4 @@
-// VR position points (Issue #88, stage 3): record where the VR laser meets a section as a position comment (voxel {i,j,k}).
+// VR position points (stage 3): record where the VR laser meets a section as a position comment (voxel {i,j,k}).
 // Pure geometry + the comment record, no three.js and no DOM (unit-tested in tests/unit/vr-point.test.js); vr-view.js feeds it the
 // ray and the section planes, vr-point-markers.js draws the result.
 //
@@ -9,8 +9,8 @@
 // that another clipping section has cut away. A section whose intersection is outside the volume is skipped, never clamped.
 // Voxel rule: voxel i covers the fraction [i/n, (i+1)/n) of the box along its axis, so the index is floor(fraction * n); a point
 // outside [0,1) on any axis (the far face itself included) is NOT recorded: it is never moved into the volume.
-import { createComment, addComment, getComments, removeComment, restoreComment, updateCommentPosition, updateCommentColor, commentMatchesSeries } from './comments.js?v=20261018-build621';
-import { marchClassificationHitInfo } from './vr-pick.js?v=20261018-build621';
+import { createComment, addComment, getComments, removeComment, restoreComment, updateCommentPosition, updateCommentColor, commentMatchesSeries } from './comments.js?v=20261020-build630';
+import { marchClassificationHitInfo } from './vr-pick.js?v=20261020-build630';
 const T_MIN=1e-6,EDGE_EPS=1e-4;
 
 // t of the ray o + t*q on the plane, or null (parallel, or behind the origin)
@@ -69,10 +69,10 @@ export function nextVrPointNumber(comments,fingerprint){
 export function recordVrPoint({voxel,series,language='ja',now=Date.now(),store={getComments,addComment}}){
  if(!voxel||!series)return null;
  const n=nextVrPointNumber(store.getComments(),series),text=vrPointText(n,language);
- return store.addComment(createComment({text,position:voxel,series,now,autoKey:n})); // autoKey: the number given now, which fixes the auto colour (build 472)
+ return store.addComment(createComment({text,position:voxel,series,now,autoKey:n})); // autoKey: the number given now, which fixes the auto colour
 }
 
-// ---- thumbstick gate (build 464) ----
+// ---- thumbstick gate ----
 // The trigger of a hand must not record while that hand's thumbstick is being used (it scrolls the selected section; a stray trigger
 // would add a point), nor for HOLDOFF_MS after the stick came back to the centre (the stick passes the dead zone on its way back).
 // A state machine per hand: update(x, y, now) every frame with the stick axes (xr-standard axes[2], axes[3]) and the time in ms;
@@ -132,7 +132,7 @@ export function sectionRelation(p,plane,halfExt,dims){
 }
 
 // ---- hidden behind tissue ----
-// RULE (build 464): a point is HIDDEN when, walking in half-voxel steps (vr-pick.js marchClassificationHitInfo, the same march as the laser) from the
+// RULE: a point is HIDDEN when, walking in half-voxel steps (vr-pick.js marchClassificationHitInfo, the same march as the laser) from the
 // point towards the head (the middle of both eyes), a voxel of a SHOWN segment (the classification channels `chs`, >= 128) is met on the side
 // that every clipping section keeps, before reaching the head. The point's own voxel is skipped: the march starts one half voxel diagonal
 // away from the point. Otherwise the point is EXPOSED. Nothing shown = exposed. Segment opacity is not considered (VR draws 100 % by default).
@@ -146,7 +146,7 @@ export function pointIsHidden(pLocal,headLocal,{cls,dims,halfExt,chs,planes=[],c
  return marchClassificationHitInfo(pLocal,q,halfExt,dims,cls,chs,planes,count,cut,skip,1)!==null;
 }
 
-// ---- surface mode (build 465) ----
+// ---- surface mode ----
 // The 位置 tab can switch the trigger's 4th step from the face of a section (断面, default) to the first tissue surface the laser meets (表面).
 // "Surface" = the first voxel of a SHOWN segment (classification channel >= 128) on the side every clipping section keeps, found by the same
 // march as the analysis label pointer (vr-pick.js marchClassificationHitInfo); a face cut by a clipping section is therefore a surface too.
@@ -175,7 +175,7 @@ export function surfaceRayHit(o,q,{halfExt,dims,cls,clsDims,chs,planes=[],count=
  return voxel?{t:info.t,point:{x:o.x+q.x*info.t,y:o.y+q.y*info.t,z:o.z+q.z*info.t},voxel,ch:info.ch}:null;
 }
 // ======================================================================================================================
-// One-handed redesign, stage 1 (build 468): pure functions only, not yet called by vr-view.js. See the one-hand spec.
+// One-handed redesign, stage 1: pure functions only, not yet called by vr-view.js. See the one-hand spec.
 // ======================================================================================================================
 
 // ---- quaternions {x,y,z,w} (no three.js) ----
@@ -201,7 +201,8 @@ export const qAngleDeg=q=>2*Math.atan2(Math.hypot(q.x,q.y,q.z),Math.abs(q.w))*18
 //  is open; ringHighlight: its lit item (null = none); moving: this hand is moving a point, placement = where it would land (or null);
 //  tab: a section number tag hit {t,...}; point: {t|distance,id,...}; band: {t,...}; tissue / plane: {t,...} (tissue = first shown surface,
 //  plane = the selected section's plane hit); mode 'section'|'surface'; analysis: the analysis tab is open; canDrag: a selected section exists
-//  and the other hand is not dragging it.
+//  and the other hand is not dragging it. glass (build: the empty inside of a section frame): {t,pl,...} the laser meets a visible section's plane inside its frame; it counts ONLY
+//  when nothing else answers (no board / ring / tag / point / label / band / tissue / selected plane): the laser then ends on the plane and a press takes that section (kind 'section').
 // Returns {kind,ref}; kind: 'board'|'ring-confirm'|'ring-close'|'move'|'section'|'point'|'mlabel'|'record'|'label'|'empty'|'none'.
 // A hit's distance is t (or distance, as pickPoint returns); all in world metres. Ties within 1e-6 m: point > band > target.
 export const TIE_EPS=1e-6;
@@ -217,11 +218,11 @@ export function resolveTriggerTarget(c={}){
  let target=null;
  if(c.analysis){if(c.tissue)target={kind:'label',ref:c.tissue}}
  else if(normalizePointMode(c.mode)==='surface'){if(c.tissue)target={kind:'record',ref:c.tissue,plane:false}}
- else if(c.tissue&&(!c.plane||hitT(c.tissue)<hitT(c.plane)-(Number.isFinite(c.occludeEps)?c.occludeEps:TIE_EPS)))target={kind:'tissue',ref:c.tissue}; // build 484: section mode: an object surface in front of the plane (or no plane) stops the laser; the plane is recorded on only where it is in front of the surface or the object is cut away
+ else if(c.tissue&&(!c.plane||hitT(c.tissue)<hitT(c.plane)-(Number.isFinite(c.occludeEps)?c.occludeEps:TIE_EPS)))target={kind:'tissue',ref:c.tissue}; // section mode: an object surface in front of the plane (or no plane) stops the laser; the plane is recorded on only where it is in front of the surface or the object is cut away
  else if(c.plane)target={kind:'record',ref:c.plane,plane:true};
  const cands=[];
  if(c.point&&hitT(c.point)!==null)cands.push({kind:'point',ref:c.point,t:hitT(c.point),rank:0});
- if(c.mlabel&&hitT(c.mlabel)!==null)cands.push({kind:'mlabel',ref:c.mlabel,t:hitT(c.mlabel),rank:0}); // build 480: a distance label (it can be moved)
+ if(c.mlabel&&hitT(c.mlabel)!==null)cands.push({kind:'mlabel',ref:c.mlabel,t:hitT(c.mlabel),rank:0}); // a distance label (it can be moved)
  if(c.band&&hitT(c.band)!==null)cands.push({kind:'section',ref:c.band,t:hitT(c.band),rank:1});
  if(target&&hitT(target.ref)!==null)cands.push({kind:target.kind,ref:target.ref,t:hitT(target.ref),rank:2});
  let best=null;
@@ -229,6 +230,7 @@ export function resolveTriggerTarget(c={}){
   if(!best||k.t<best.t-TIE_EPS||(Math.abs(k.t-best.t)<=TIE_EPS&&k.rank<best.rank))best=k;
  }
  if(best)return{kind:best.kind,ref:best.ref};
+ if(c.glass&&hitT(c.glass)!==null)return{kind:'section',ref:c.glass}; // the empty inside of a section frame: last, after everything that was a hit before
  return c.canDrag?{kind:'empty',ref:null}:{kind:'none',ref:null};
 }
 
@@ -251,12 +253,15 @@ export function createTriggerPress({longMs=LONG_PRESS_MS}={}){
 // DRAG_RECORD: the press began where a tap would record a point (section mode, the laser on the selected plane); there the threshold is higher
 // (2 cm / 5 deg) so hand jitter in a tap does not drag, and holding still never starts a drag (holdMs Infinity: a long press just records nothing).
 export const DRAG_RECORD={posM:0.02,angDeg:5,holdMs:Infinity};
+// a tracked hand (pinch) shakes more than a controller: its drags start only after 2 cm / 5 deg (the controller's DRAG_RECORD) and,
+// where a pinch would record a point, after 3 cm / 7 deg; a pinned label moves after 2 cm (controller 8 mm). The controller values above stay.
+export const DRAG_HAND={posM:0.02,angDeg:5,holdMs:LONG_PRESS_MS},DRAG_RECORD_HAND={posM:0.03,angDeg:7,holdMs:Infinity},HAND_LABEL_MOVE_M=0.02;
 export function dragShouldStart({dPosM=0,dAngleDeg=0,heldMs=0}={},{posM=0.01,angDeg=1.5,holdMs=LONG_PRESS_MS}={}){
  return dPosM>posM||dAngleDeg>angDeg||heldMs>=holdMs;
 }
 
-// ---- section drag (build 470), holder space ----
-// the section follows the hand rigidly in all 6 degrees of freedom (as when it was held in the hand before build 468): the rotation pivot is the hand.
+// ---- section drag, holder space ----
+// the section follows the hand rigidly in all 6 degrees of freedom (as when it was held in the hand before): the rotation pivot is the hand.
 // reach of a plane with unit normal n over the box +-halfExt: R(n) = |nx|hx+|ny|hy+|nz|hz
 export const planeReach=(n,halfExt)=>Math.abs(n.x)*halfExt[0]+Math.abs(n.y)*halfExt[1]+Math.abs(n.z)*halfExt[2];
 // the foot of the perpendicular from the origin: n*w
@@ -305,6 +310,8 @@ export function chooseSectionForRay(cands){
 
 // ---- frame band of a section (spec 4.1), pure parts ----
 // a point (y,z) on the section plane (local coordinates, square half side h) lies on the band of half width b around the edge
+// the point (y,z) lies inside the square of half-size h (frame included): the area a section's invisible 'glass' answers the laser on
+export function squareContains(y,z,h){return Math.max(Math.abs(y),Math.abs(z))<=h+1e-12}
 export function squareBandContains(y,z,h,b){return Math.abs(Math.max(Math.abs(y),Math.abs(z))-h)<=b+1e-12}
 // ray (o,q in the section's local space) with the plane X=0 -> {t,y,z} or null (parallel, or behind the origin)
 export function rayLocalPlaneX(o,q){
@@ -339,7 +346,7 @@ export const HAPTIC={
  ringHighlight:{amp:0.12,ms:10,count:1},
  ringConfirm:{amp:0.35,ms:18,count:1},
  moveDrop:{amp:0.35,ms:18,count:1},
- measureStart:{amp:0.35,ms:18,count:1}, // build 477: 距離 chosen on a point (the start is set), one pulse (after the ring's confirm pulse)
+ measureStart:{amp:0.35,ms:18,count:1}, // 距離 chosen on a point (the start is set), one pulse (after the ring's confirm pulse)
  measureEnd:{amp:0.35,ms:18,count:1}, // the end point chosen: the distance is made
 };
 // no vibration at all: a tap on nothing, a record stopped by the thumbstick gate, a failed undo, a cancelled move, release of a drag

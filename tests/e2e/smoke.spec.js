@@ -19,7 +19,7 @@ test('app boots and renders the main UI', async ({ page }) => {
   await expect(page.locator('#app')).not.toBeEmpty();
   await expect(page.locator('#sample-demo-button')).toBeVisible();
   await expect(page.locator('#demo-button')).toHaveCount(0);
-  await expect(page.locator('#gpu-status-bar')).toBeVisible(); // top chip hidden since build 274
+  await expect(page.locator('#gpu-status-bar')).toBeVisible(); // top chip hidden
   // GPU volume cache chip only appears with a WebGPU volume renderer (none in CI)
   await expect(page.locator('#volume-cache-clear')).toBeHidden();
   // 'original CT' badge exists but is hidden unless GPU volume + filters
@@ -40,7 +40,7 @@ test('version badge shows the deployed build and no reload loop occurs', async (
 
 test('language toggle switches between Japanese and English', async ({ page }) => {
   await page.goto('/');
-  await page.locator('[data-ipad-drawer-tab="prefs"]').click(); // build 587: language / theme live in the 設定 panel
+  await page.locator('[data-ipad-drawer-tab="prefs"]').click(); // language / theme live in the 設定 panel
   const toggle = page.locator('#language-toggle');
   await expect(page.locator('html')).toHaveAttribute('lang', 'ja');
   await expect(toggle).toHaveText('English');
@@ -52,7 +52,7 @@ test('language toggle switches between Japanese and English', async ({ page }) =
   await expect(page.locator('html')).toHaveAttribute('lang', 'ja');
 });
 
-// Workspace UI (iPad layout, used on every desktop since build 331);
+// Workspace UI (iPad layout, used on every desktop);
 // ?ui=classic must keep the old desktop layout.
 test('workspace UI boots with its toolbar and drawer', async ({ page }) => {
   await page.goto('/?ui=workspace');
@@ -62,7 +62,7 @@ test('workspace UI boots with its toolbar and drawer', async ({ page }) => {
   await expect(page.locator('#demo-button')).toHaveCount(0);
 });
 
-// build 331: the workspace UI is the default on every desktop OS (CI: Linux)
+// the workspace UI is the default on every desktop OS (CI: Linux)
 test('workspace UI is the default on desktops; classic can be forced', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('html')).toHaveClass(/vrl-ipad-ui/);

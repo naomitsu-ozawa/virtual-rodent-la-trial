@@ -28,6 +28,6 @@ test('self-check runs the scenarios on a fake frame loop and shows PASS / FAIL w
   expect(decodeURIComponent(out.json)).toContain('"kind": "vr-self-check"');
   expect(out.view.some(t => /^✔ 2倍 /.test(t))).toBe(true); expect(out.view.some(t => t.startsWith('－ 4倍（実施せず：最大 3.8倍まで）'))).toBe(true); expect(out.view.some(t => t.startsWith('✖ 拡大（回転中）：'))).toBe(false);
   expect(out.view.some(t => t.startsWith('✔ 拡大（静止）：'))).toBe(true); expect(out.panel).toContain('拡大（静止）'); expect(out.zmag).toBe(1);
-  expect(out.view.some(t => /^✔ 2倍 .* · 直後 72\.0fps$/.test(t))).toBe(true); expect(decodeURIComponent(out.json)).toContain('"transition"'); // build 560: right after the change (not judged) + steady
+  expect(out.view.some(t => /^✔ 2倍 .* · 直後 72\.0fps$/.test(t))).toBe(true); expect(decodeURIComponent(out.json)).toContain('"transition"'); // right after the change (not judged) + steady
   expect(out.restored).toBe('restore'); expect(out.q).toBe(0);
 });

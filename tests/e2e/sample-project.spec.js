@@ -3,7 +3,7 @@ import { zipSync, strToU8 } from 'fflate';
 import { makeCtSlice } from '../helpers/synthetic-dicom.js';
 import { syntheticDataset } from '../helpers/dicom-folder.js';
 
-// Build 368: a project shipped next to the practice data (demo/sample1/project.vrlab)
+// a project shipped next to the practice data (demo/sample1/project.vrlab)
 // is applied when the sample opens. The sample index, its slices and the project
 // are stubbed with the synthetic 16x16x12 series of tests/helpers/dicom-folder.js.
 const FORMAT = { format: 'virtual-rodent-lab-project', version: 1 };
@@ -77,7 +77,7 @@ test('the practice data still opens when there is no project.vrlab', async ({ pa
   expect(errors).toEqual([]);
 });
 
-// Build 578: the third practice dataset (mouse head, 512^3 crop) is served from the local
+// the third practice dataset (mouse head, 512^3 crop) is served from the local
 // docs/ folder; the real 512 slices are loaded through the sample dialog button.
 test('sample3 (mouse head) loads 512 slices at 512x512 from the local server', async ({ page }) => {
   test.setTimeout(300_000);
@@ -101,7 +101,7 @@ test('sample3 (mouse head) loads 512 slices at 512x512 from the local server', a
   expect(errors).toEqual([]);
 });
 
-// Build 584: the fourth practice dataset (trabecular bone, 0.05 mm) is appended after the others, with its bundled project.
+// the fourth practice dataset (trabecular bone, 0.05 mm) is appended after the others, with its bundled project.
 test('sample4 (trabecular bone) loads 512 slices at 512x512 from the local server', async ({ page }) => {
   test.setTimeout(300_000);
   const errors = [];

@@ -3,7 +3,7 @@ import * as K from '../../docs/cpu-filters.js';
 
 // CPU 3D filter kernels (fallback path). The loops were moved from app.js
 // unchanged (verified voxel-identical against the old apply* functions when
-// extracted, build 230); these tests pin their basic behaviour.
+// extracted); these tests pin their basic behaviour.
 const vol = (w, h, d, fill) => {
   const data = new Float32Array(w * h * d);
   for (let i = 0; i < data.length; i++) data[i] = typeof fill === 'function' ? fill(i) : fill;
@@ -59,7 +59,7 @@ describe('cpu-filters', () => {
     }
   });
 
-  // build 436: contrast around the centre, HU kept outside centre ± width/2
+  // contrast around the centre, HU kept outside centre ± width/2
   it('sigmoid keeps the centre and the values outside the window, strength 0 changes nothing', async () => {
     const v = vol(41, 1, 1, i => -200 + i * 10); // −200 … 200 HU
     const r = await K.cpuSigmoid(v, { strength: 0.5, center: -30, width: 200 });

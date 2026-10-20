@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { brickOccupancy, cellRange, writeBrickOccupancy, brickHasMask } from '../../docs/vr-brick-occupancy.js';
 
-// build 526 (issue #132 for VR / AR): while a mask-only segment (Closing / hole filling) was shown, the VR shader's brickClass() made every
+// while a mask-only segment (Closing / hole filling) was shown, the VR shader's brickClass() made every
 // brick "mixed" on the HU path (512^3 data, or the classification diagnostics off): no empty-space skipping. The occupancy nibble per brick
 // (B channel of the brick texture) now says which bricks can hold a voxel of such a segment's mask, judged conservatively on the edit grid.
 

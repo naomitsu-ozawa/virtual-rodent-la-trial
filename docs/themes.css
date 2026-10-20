@@ -1,9 +1,9 @@
-/* Colour themes (builds 449-450). Every colour of the interface is a token holding an RGB triplet, used as
+/* Colour themes. Every colour of the interface is a token holding an RGB triplet, used as
    rgb(var(--ui-s1)) or rgb(var(--ui-s1) / .88). The standard dark theme is the default (:root); the others override the
    tokens on <html data-theme="...">. docs/theme.js sets data-theme / data-theme-mode.
    s0-s4 surfaces (page, panel, card, button, raised), t1-t5 text (strong to muted), b1-b3 borders, *-bg / *-tx / *-bd
    tinted states, link = accent text on surfaces.
-   Two groups follow the theme (builds 450-451):
+   Two groups follow the theme:
     - the UI of the 2D view cards and everything outside the views: the ordinary tokens above;
     - the canvas backgrounds: --ui-canvas-bg-2d (the area around a 2D slice) follows the theme fully (light in the light
       themes); --ui-canvas-bg-3d is a DARK colour tinted like the theme in every theme (GPU volume view clear colour and

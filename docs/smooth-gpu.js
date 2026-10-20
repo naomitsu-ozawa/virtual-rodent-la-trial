@@ -1,14 +1,14 @@
-// The constrained surface smoothing on the GPU (build 612): the chunks of a surface are smoothed by the WGSL kernels
+// The constrained surface smoothing on the GPU: the chunks of a surface are smoothed by the WGSL kernels
 // SMOOTH_KERNELS (gpu-shaders.js) on the compute device, in the order of smoothIterationPlan (smooth-gpu-plan.js), when a
 // WebGPU device is there (Mac, iPad, PC); the worker pool (smooth-workers.js) remains the path without one and the fallback
 // when a chunk does not fit the device limits or the GPU fails. The GPU computes in f32 throughout, so its result differs
 // from the CPU kernel's by ~1e-5 voxel (not bit for bit): the method is part of the mesh cache route (smoothMethod), and a
 // failure turns the GPU path off for the session (which changes the route, so a mixed build is not stored).
 // ?smoothgpu=off keeps the smoothing on the CPU.
-import { ensureGpuFilterDevice, gpuFilterPipeline, gpuFilterRuntime, gpuDispatch1D } from './gpu-compute.js?v=20261018-build621';
-import { SMOOTH_KERNEL_KINDS, smoothKernelBindings } from './gpu-shaders.js?v=20261018-build621';
-import { buildSmoothTopology, smoothIterationPlan, smoothParamsWords, smoothGpuBytes } from './smooth-gpu-plan.js?v=20261018-build621';
-import { setSmoothGpuBackend, SMOOTH_CANCELLED } from './smooth-workers.js?v=20261018-build621';
+import { ensureGpuFilterDevice, gpuFilterPipeline, gpuFilterRuntime, gpuDispatch1D } from './gpu-compute.js?v=20261020-build630';
+import { SMOOTH_KERNEL_KINDS, smoothKernelBindings } from './gpu-shaders.js?v=20261020-build630';
+import { buildSmoothTopology, smoothIterationPlan, smoothParamsWords, smoothGpuBytes } from './smooth-gpu-plan.js?v=20261020-build630';
+import { setSmoothGpuBackend, SMOOTH_CANCELLED } from './smooth-workers.js?v=20261020-build630';
 
 // chunks: smoothed on the GPU; skipped: too large for the device limits (smoothed by the workers); lastError: why the GPU
 // path was turned off

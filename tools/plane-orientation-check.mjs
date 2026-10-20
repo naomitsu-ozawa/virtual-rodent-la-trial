@@ -1,4 +1,4 @@
-// 3D plane views face the plane as the 2D view draws it (build 434): practice data; for each plane the 3D view is turned by
+// 3D plane views face the plane as the 2D view draws it: practice data; for each plane the 3D view is turned by
 // sceneState.setAxisView, then object-local directions are taken into camera space. 2D drawing (mpr-render.js): axial
 // x = column, y = row (row 0 at the top); coronal x = column, y = d−1−slice; sagittal x = row, y = d−1−slice. So on screen:
 // axial: +column right, +row down; coronal: +column right, +slice up; sagittal: +row right, +slice up. Object-local axes
@@ -9,7 +9,7 @@ import { chromium } from '@playwright/test';
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
 const root=path.resolve('docs'),nm=path.resolve('node_modules');const errors=[];
 const srv=http.createServer((q,r)=>{const p=path.join(root,decodeURIComponent(q.url.split('?')[0]));
- // build 437: the practice data's bundled project (docs/demo/sample1/project.vrlab) is applied on load; the checks start
+ // the practice data's bundled project (docs/demo/sample1/project.vrlab) is applied on load; the checks start
  // from the bare data unless SAMPLE_PROJECT=1
  if(p.endsWith('project.vrlab')&&!process.env.SAMPLE_PROJECT){r.writeHead(404);r.end();return}
  fs.readFile(p.endsWith('/')?p+'index.html':p,(e,b)=>{if(e){r.writeHead(404);r.end();return}r.writeHead(200,{'content-type':p.endsWith('.js')?'text/javascript':p.endsWith('.css')?'text/css':'text/html'});r.end(b)})}).listen(8765);

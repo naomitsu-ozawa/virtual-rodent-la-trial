@@ -1,4 +1,4 @@
-// Linked crosshair (build 458): pure geometry, no DOM and no imports (unit-tested in tests/unit/crosshair.test.js).
+// Linked crosshair: pure geometry, no DOM and no imports (unit-tested in tests/unit/crosshair.test.js).
 // A position is a VOXEL index {i,j,k} (integers inside the data), not patient millimetres: dicom.js orders slices by Z only and
 // does not read ImageOrientationPatient, so millimetres would be wrong for a tilted series, while voxel indices stay valid
 // whatever orientation handling is added later. Millimetres are derived from volume.spacing and are for display only.

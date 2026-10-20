@@ -19,7 +19,7 @@ All four browser checks run on headless Chromium with SwiftShader (software WebG
 ## Rule for VR performance PRs
 
 - **VR perf PRs must keep the golden diff at 0** (`changed pixels 0, max channel diff 0`), or declare and justify a threshold in the PR
-  (`--max-pixels N --max-diff N`, and why the picture is allowed to change). Builds 386-393 had no regressions because every shader change was pixel-compared first; this makes it automatic.
+  (`--max-pixels N --max-diff N`, and why the picture is allowed to change).-393 had no regressions because every shader change was pixel-compared first; this makes it automatic.
 - **Perf PRs must not touch `docs/vr-pick.js`, `docs/point-cls.js` or `docs/vr-point.js` without updating the parity test**
   (`tools/vr-cls-parity.mjs`, `tests/unit/cls-parity.test.js`) and saying so in the PR. The picking (laser, 3D markers, hidden points) must classify the same voxels the shader draws.
 - An intended picture change: `npm run vr-render-golden:update`, look at every changed PNG in `tests/golden/vr-render/`, commit them with the reason in the commit message.
@@ -33,14 +33,14 @@ A 64^3 phantom (bone ball / plate / rod with 100 HU-per-voxel ramps, soft tissue
 - `combined-section`, `combined-section-bonefat`, `combined-two-planes`: variant `VRL_NO_GENERAL + VRL_OPAQUE` with a clipping plane, cut-face cap and CT slice (and a second, non-clipping slice plane);
 - `noevents-regions`: the same with `VRL_REGIONS` (analysis result colours);
 - `full-cls-translucent`, `full-hu`: the general loop (translucent soft tissue 0.35 / fat 0.5), classification path and HU path (this is where `ACC_STOP` shows).
-- `full-hu-maskonly` (build 526, issue #132): the HU path with only the bone shown and the bone decided by a mask-only edit (`editMaskOnly`; the scene's edit mask on a
+- `full-hu-maskonly`: the HU path with only the bone shown and the bone decided by a mask-only edit (`editMaskOnly`; the scene's edit mask on a
   half-size grid, as the app's 512³ data with the 256 mask: the ball "closed" to 12 voxels plus a detached cube of soft tissue). The brick texture's B channel
   carries the mask-only occupancy (`docs/vr-brick-occupancy.js`). The same run also checks the **occupancy proof** (not a golden): the scene rendered with every
   brick a candidate (the pre-526 behaviour = no skip) must have the same drawn silhouette (at most `--max-silhouette` 24 edge pixels re-phased by the skip) and the
   diag 5 probe must show at most `--max-sample-ratio` 0.6 of the samples per ray (measured 0.25).
-- `noevents-bonefat-rolled`, `combined-section-rolled` (build 612, shared lighting `docs/lighting.js`): the same scenes with the viewer rolled by 180 degrees about its view axis (`camUp` in the case, = the volume turned upside down). The light is a headlight above the viewer, so these are lit from the same side in the picture as the unrolled cases; before build 612 the light was fixed in volume coordinates and the rolled picture was lit from below. Build 612 changed every golden on purpose (one-sided diffuse, the light above the viewer, a mild depth cue): silhouettes and depths are unchanged, only the shading. A hit behind a translucent layer (a slice, a cut face or a translucent segment composited first) is shaded with the segment's OUTWARD normal and not turned to the viewer (an inner wall that faces away gets only the ambient floor): only the cases with such hits (combined-*, full-*, 4seg-combined-section) changed in that second step, the opaque first-hit cases did not.
+- `noevents-bonefat-rolled`, `combined-section-rolled`: the same scenes with the viewer rolled by 180 degrees about its view axis (`camUp` in the case, = the volume turned upside down). The light is a headlight above the viewer, so these are lit from the same side in the picture as the unrolled cases; before the light was fixed in volume coordinates and the rolled picture was lit from below. changed every golden on purpose (one-sided diffuse, the light above the viewer, a mild depth cue): silhouettes and depths are unchanged, only the shading. A hit behind a translucent layer (a slice, a cut face or a translucent segment composited first) is shaded with the segment's OUTWARD normal and not turned to the viewer (an inner wall that faces away gets only the ambient floor): only the cases with such hits (combined-*, full-*, 4seg-combined-section) changed in that second step, the opaque first-hit cases did not.
 - `-f100` = direct 100 % drawing; `-f70` = the low-resolution path of `vr-view.js` (ray material into a 70 % target, then the composite pass over the background).
-- **Content-box proof** (build 562, not a golden: compared within the run). The app discards a ray that misses the content box (`docs/vr-content-box.js`: the box of the
+- **Content-box proof**. The app discards a ray that misses the content box (`docs/vr-content-box.js`: the box of the
   bricks a shown segment can occupy, plus the CT slices above `sliceAir`) and ends the march at its exit; the proxy geometry and the ray parameter stay the full box's.
   Every golden case, plus bone-only cases with and without CT slices (where the box is much smaller), is rendered again with the box: all must be pixel-identical
   (0 px / 0 diff) to the full-box render. The run also prints the box size, the diag-5 samples summed over the image (full vs content box) and, for reference
@@ -76,4 +76,4 @@ shifting the CPU threshold 128 -> 96 or 160, or the shader's `q - 0.5` by 0.05 (
 ## Static guard (`tests/unit/swallowed-statement.test.js`)
 
 Scans every `docs/*.js` (template literals / GLSL too) for a `//` comment that swallowed code: a comment after code that ends with `;`, `;` directly followed by a call / assignment, or a word glued to `scene.` / `ctx.` / `mesh.` + call.
-Strings (URLs), `scheme://`, regex ends (`\/\/`) and `/* */` are skipped. Two live defects on main were found when it was written (kept in an explicit `KNOWN` list, with the swallowed text, so the guard is green; fix and delete the entry): `docs/comment-ui.js` (build 481: `onMeasureStartChange(...)` never registered) and `docs/data-load.js` (build 436: `sigmoidCenter.disabled=...` never runs).
+Strings (URLs), `scheme://`, regex ends (`\/\/`) and `/* */` are skipped. Two live defects on main were found when it was written (kept in an explicit `KNOWN` list, with the swallowed text, so the guard is green; fix and delete the entry): `docs/comment-ui.js` (`onMeasureStartChange(...)` never registered) and `docs/data-load.js`.

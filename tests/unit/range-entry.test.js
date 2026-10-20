@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { rangeWheelSteps, parseShownValue } from '../../docs/range-entry.js';
 
-describe('rangeWheelSteps (build 442: one notch = one step)', () => {
+describe('rangeWheelSteps', () => {
   it('a mouse notch is one step whatever its size', () => {
     const s = { acc: 0 };
     expect(rangeWheelSteps(s, 100)).toBe(1);

@@ -29,19 +29,19 @@ describe('default VR/AR layout', () => {
     const s = readFileSync('docs/vr-view.js', 'utf8');
     expect(s).toMatch(/MENU_OFFSET\.fwd/); expect(s).toMatch(/HELP_OFFSET\.fwd/); expect(s).toMatch(/VOLUME_FWD/); expect(s).toMatch(/makeMenu\(MENU_W,MENU_H,MENU_WIDTH\)/);
   });
-  it('histogram board (build 543): right of the volume like the help board, at reading distance, clear of the volume and above the help board', () => {
+  it('histogram board: right of the volume like the help board, at reading distance, clear of the volume and above the help board', () => {
     expect(boardDistance(HIST_OFFSET)).toBeGreaterThanOrEqual(0.8); expect(boardDistance(HIST_OFFSET)).toBeLessThanOrEqual(1.0);
     expect(HIST_OFFSET.left).toBeLessThan(0);
     expect(Math.atan((Math.abs(HIST_OFFSET.left) - HIST_WIDTH / 2) / HIST_OFFSET.fwd)).toBeGreaterThan(Math.atan(0.1 / VOLUME_FWD));
     const histBottom = HIST_OFFSET.down + HIST_WIDTH * PANEL_H / PANEL_W / 2, helpTop = HELP_OFFSET.down - HELP_WIDTH * HELP_H / HELP_W / 2;
     expect(histBottom).toBeLessThan(helpTop);
   });
-  it('vr-view.js wires the histogram board: menu button, its own label pass, freed on exit; view only (build 567)', () => {
+  it('vr-view.js wires the histogram board: menu button, its own label pass, freed on exit; view only', () => {
     const s = readFileSync('docs/vr-view.js', 'utf8');
     expect(s).toMatch(/createVrHistogramPanel\(THREE/); expect(s).toMatch(/createVrLabelHistogram\(/); expect(s).toMatch(/labelHist\.dispose\(\)/);
-    expect(s).not.toMatch(/acquireHistogram|releaseHistogram|getHistogramView|forceHistogramRecompute/); // the board counts the VR data itself (vr-label-histogram.js); build 568: that PC consumer API is gone
+    expect(s).not.toMatch(/acquireHistogram|releaseHistogram|getHistogramView|forceHistogramRecompute/); // the board counts the VR data itself (vr-label-histogram.js);: that PC consumer API is gone
     expect(readFileSync('docs/histogram-ui.js', 'utf8')).not.toMatch(/export (function|const) (acquireHistogram|releaseHistogram|getHistogramView|getHistogramProgress|forceHistogramRecompute)\b/);
-    expect(s).toMatch(/histSigInto\(P,material\.uniforms,histSigNow\)/); // build 568: the pass follows the shader's path (uniforms) for the data in use
+    expect(s).toMatch(/histSigInto\(P,material\.uniforms,histSigNow\)/); // the pass follows the shader's path (uniforms) for the data in use
     expect(s).toMatch(/hist\.update\(/); expect(s).toMatch(/o\.hist=histHit\(c\)/); expect(s).toMatch(/if\(bd\.hist\)\{/); expect(s).toMatch(/histAxisEnd\(true\)/); expect(s).toMatch(/if\(histAxis===c\)histAxisEnd\(false\)/); expect(s).toMatch(/if\(!on\)histAxisEnd\(false\)/); expect(s).toMatch(/const bd=histAxis===c\?histAxisBd:boardHits\(c\)/); expect(s).toMatch(/histAxisBd=\{menu:null,help:null,hist:histAxisOut,wheel:null,pwheel:null,undoBtn:null,hu:null\}/); expect(s).not.toMatch(/hist\.grab\(/); expect(s).toMatch(/bd\.help\|\|bd\.hu/);
   });
 });

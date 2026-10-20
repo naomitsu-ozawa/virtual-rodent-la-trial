@@ -1,7 +1,7 @@
-// VR brick occupancy of the mask-only segments (build 526, issue #132 for VR / AR). Pure helpers: no three.js, no DOM.
+// VR brick occupancy of the mask-only segments. Pure helpers: no three.js, no DOM.
 //
 // The VR shader's brickClass() (vr-view.js) skips an 8^3 brick when no shown segment can be inside it. A mask-only segment
-// (Closing / hole filling, build 459) is decided by its mask alone, so the brick's HU min/max say nothing about it and every brick
+// (Closing / hole filling) is decided by its mask alone, so the brick's HU min/max say nothing about it and every brick
 // used to count as "mixed" while such a segment was shown: no empty-space skipping at all. That only matters on the HU path of the
 // shader (the 512^3 data setting, or the classification / distance-field diagnostics off): the default 256^3 path skips with the
 // distance field, which is built from the classification bytes that already fold the mask in (point-cls.js).

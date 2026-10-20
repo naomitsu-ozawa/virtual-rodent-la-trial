@@ -5,7 +5,7 @@ import { MedicalVolumeRenderer } from '../../docs/medical-volume.js';
 // the volume shader reads (analysisOverlayAt): [0]=colour table start,
 // [1..rows+1]=offsets, then (x0|x1<<16, rgb|focused<<24|valid<<31) pairs per
 // texture row, then the colour table (word for region k at [table+k]).
-// Build 374 also uploads a region index texture: 4 bits per voxel, 8 voxels
+// also uploads a region index texture: 4 bits per voxel, 8 voxels
 // per u32 along x, k = region index + 1.
 globalThis.GPUBufferUsage ??= { STORAGE: 0x80, COPY_DST: 0x8 };
 globalThis.GPUTextureUsage ??= { TEXTURE_BINDING: 0x4, COPY_DST: 0x2 };
@@ -19,7 +19,7 @@ function fakeRenderer(textureDims) {
       return { size, destroy: vi.fn(), mapped: !!mappedAtCreation, getMappedRange: () => data, unmap: vi.fn() };
     },
     createTexture: (desc) => ({ desc, destroy: vi.fn() }),
-    // build 376: the region texture is filled in a staging buffer and copied with copyBufferToTexture
+    // the region texture is filled in a staging buffer and copied with copyBufferToTexture
     createCommandEncoder: () => ({
       copyBufferToTexture: (src, dst, size) => textures.push({ texture: dst.texture, words: new Uint32Array(src.buffer.getMappedRange()), layout: { bytesPerRow: src.bytesPerRow, rowsPerImage: src.rowsPerImage }, size }),
       finish: () => ({}),
@@ -72,7 +72,7 @@ describe('MedicalVolumeRenderer.setAnalysisRuns', () => {
     const { r, written } = fakeRenderer([4, 1, 1]);
     const v = { columns: 4, rows: 1, slices: 1 };
     r.setAnalysisRuns([{ runs: runs(1, { 0: [0, 1, 2] }), color: 1, segments: [2] }], v, 's1');
-    expect(written.at(-1).data[written.at(-1).data[0]]).toBe(1 << 2); // segment mask (build 375)
+    expect(written.at(-1).data[written.at(-1).data[0]]).toBe(1 << 2); // segment mask
     const n = written.length;
     r.setAnalysisRuns([{ runs: runs(1, { 0: [0, 1, 2] }), color: 1 }], v, 's1');
     expect(written.length).toBe(n);
@@ -80,7 +80,7 @@ describe('MedicalVolumeRenderer.setAnalysisRuns', () => {
     expect([...written.at(-1).data]).toEqual([0, 0]);
   });
 
-  it('keeps the region index texture when only colour or focus change (build 377)', () => {
+  it('keeps the region index texture when only colour or focus change', () => {
     const { r, written, textures } = fakeRenderer([8, 1, 1]);
     const v = { columns: 8, rows: 1, slices: 1 };
     const regions = (color, focused) => [{ runs: runs(1, { 0: [0, 1, 2] }), color, focused }];

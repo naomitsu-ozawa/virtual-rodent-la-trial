@@ -1,4 +1,4 @@
-// VR render golden check (build 484 guard). Renders a small deterministic synthetic scene (bone ball / plate / rod, soft tissue, complex
+// VR render golden check. Renders a small deterministic synthetic scene (bone ball / plate / rod, soft tissue, complex
 // high-opacity fat: thin sheets with holes and single-voxel specks) with the REAL fragment shader of docs/vr-view.js on headless Chromium /
 // SwiftShader, in the shader variants the app uses, at 100 % and through the low-resolution path (f < 1: offscreen target + composite pass),
 // and compares every image with the committed golden PNG in tests/golden/vr-render/.
@@ -24,7 +24,7 @@ const zero = [0, 0, 1, 0];
 const noSoft = [[300, 3000, 1, 1], [-200, 299, 1, 0], [-250, -50, 1, 1], [0, 0, 0, 0]]; // soft tissue off: bone and (complex) fat show
 const translucent = [[300, 3000, 1, 1], [-200, 299, 0.35, 1], [-250, -50, 0.5, 1], [0, 0, 0, 0]]; // the app's soft-tissue default 0.35; fat 0.5 so that rays pile up opacity through many sheets (ACC_STOP matters)
 const cut = [[-pl[0], -pl[1], -pl[2], 0.05], zero, zero, zero]; // the half towards the camera is removed
-const boneOnly = [[300, 3000, 1, 1], [-200, 299, 1, 0], [-250, -50, 1, 0], [0, 0, 0, 0]]; // build 526: only the (mask-only) bone is shown, so empty bricks exist to skip
+const boneOnly = [[300, 3000, 1, 1], [-200, 299, 1, 0], [-250, -50, 1, 0], [0, 0, 0, 0]]; // only the (mask-only) bone is shown, so empty bricks exist to skip
 const CASES = [
   { name: 'noevents-bonefat', defines: [...OPQ, 'VRL_NO_EVENTS'], u: { segA: noSoft } },
   { name: 'noevents-allopaque', defines: [...OPQ, 'VRL_NO_EVENTS'], u: { segA: allOpaque } },
@@ -34,13 +34,13 @@ const CASES = [
   { name: 'full-cls-translucent', defines: [], useClsRaw: true, u: { segA: translucent, distInCls: 0, useDist: 0 } },
   { name: 'full-hu', defines: [], noCls: true, u: { segA: translucent } },
   { name: 'noevents-regions', defines: [...OPQ, 'VRL_NO_EVENTS', 'VRL_REGIONS'], u: { segA: noSoft } },
-  { name: 'full-hu-maskonly', defines: [], noCls: true, maskOnly: true, u: { segA: boneOnly } }, // build 526 (issue #132): HU path with a mask-only bone (the scene's edit mask), brick occupancy in use
-  // build 612 (shared lighting, docs/lighting.js): the viewer rolled by 180 degrees about its view axis = the volume turned upside down. The light is a headlight
+  { name: 'full-hu-maskonly', defines: [], noCls: true, maskOnly: true, u: { segA: boneOnly } }, // HU path with a mask-only bone (the scene's edit mask), brick occupancy in use
+  // the viewer rolled by 180 degrees about its view axis = the volume turned upside down. The light is a headlight
   // above the VIEWER, so these two must look like the unrolled cases turned by 180 degrees (shadows on the same sides of the shapes), never lit from below
   { name: 'noevents-bonefat-rolled', defines: [...OPQ, 'VRL_NO_EVENTS'], camUp: [0, -1, 0], u: { segA: noSoft } },
   { name: 'combined-section-rolled', defines: OPQ, camUp: [0, -1, 0], u: { segA: allOpaque, cutPlanes: cut, planeCount: 1, planeCut: 1, capOn: 1, sliceOpacity: 0.7 } },
 ];
-// build 528: four enabled segments (chan 0..3) on their own phantom (a -600 HU ball in the soft tissue as the fourth segment): the VRL_CLS4 variants the app uses
+// four enabled segments (chan 0..3) on their own phantom (a -600 HU ball in the soft tissue as the fourth segment): the VRL_CLS4 variants the app uses
 // then (the fourth segment's bytes in a second R8 texture) and, for reference, the general loop with the separate field those data used to run on
 const allOpaque4 = [[300, 3000, 1, 1], [-200, 299, 1, 1], [-250, -50, 1, 1], [-800, -300, 1, 1]], noSoft4 = [[300, 3000, 1, 1], [-200, 299, 1, 0], [-250, -50, 1, 1], [-800, -300, 1, 1]];
 const CASES4 = [
@@ -48,10 +48,10 @@ const CASES4 = [
   { name: '4seg-noevents-nosoft', defines: [...OPQ, 'VRL_NO_EVENTS', 'VRL_CLS4'], u: { segA: noSoft4 } },
   { name: '4seg-combined-section', defines: [...OPQ, 'VRL_CLS4'], u: { segA: allOpaque4, cutPlanes: cut, planeCount: 1, planeCut: 1, capOn: 1, sliceOpacity: 0.7 } },
   { name: '4seg-full-general', defines: [], useClsRaw: true, useDistTex: true, u: { segA: allOpaque4 } },
-  { name: '4seg-full4', defines: ['VRL_CLS4'], u: { segA: allOpaque4 } }, // build 529: the full4 variant (screenshots, diag modes): its runtime tight branch
+  { name: '4seg-full4', defines: ['VRL_CLS4'], u: { segA: allOpaque4 } }, // the full4 variant (screenshots, diag modes): its runtime tight branch
   { name: '4seg-full4-noskip', defines: ['VRL_CLS4'], u: { segA: allOpaque4, diag: 4 } }, // and its general loop (診断 スキップなし) reading the fourth segment from cls4Tex
 ];
-// build 526: the same scene with the pre-526 bricks (every brick a candidate of the mask-only segment = no empty-space skip) and the diag 5 probe
+// the same scene with the pre-526 bricks (every brick a candidate of the mask-only segment = no empty-space skip) and the diag 5 probe
 // (R = samples / 1024): the occupancy must skip (fewer samples) without losing a mask voxel (the drawn silhouette is the same; the skip re-phases
 // the samples, so single pixels inside the silhouette may differ by dither)
 const moCase = CASES.find(c => c.name === 'full-hu-maskonly'), PROOF = [
@@ -62,9 +62,9 @@ const PROOF_MAX_SILHOUETTE = +opt('--max-silhouette', 24), PROOF_SAMPLE_RATIO = 
 const jobs = CASES.flatMap(c => [{ ...c, name: c.name + '-f100', f: 1 }, { ...c, name: c.name + '-f' + Math.round(F_LOW * 100), f: F_LOW }]);
 const jobs4 = CASES4.flatMap(c => [{ ...c, name: c.name + '-f100', f: 1 }, { ...c, name: c.name + '-f' + Math.round(F_LOW * 100), f: F_LOW }]);
 
-const jobs3 = jobs.slice(); // the three-segment jobs (and the build 526 proof) go to the first scene; jobs gets the four-segment ones appended for the comparison loop
+const jobs3 = jobs.slice(); // the three-segment jobs (and the proof) go to the first scene; jobs gets the four-segment ones appended for the comparison loop
 const sh = grabShaders(shaderFile), scene = await buildScene(N), scene4 = await buildScene(N, { four: true });
-// build 562: content-box proof (not goldens: compared within the run). The app discards a ray that misses the content box (docs/vr-content-box.js) and
+// content-box proof (not goldens: compared within the run). The app discards a ray that misses the content box (docs/vr-content-box.js) and
 // ends the march at its exit; the proxy and the ray parameter stay the full box's, so every image must be pixel-identical to the full-box render: each golden
 // case, plus cases where the box is much smaller than the data box (bone only; bone only with a CT slice, whose air threshold reaches the body).
 // The diag-5 probe (R = samples / 1024 per pixel) sums the samples over all pixels, full box vs content box (the work saved). Not failing, reported
@@ -90,9 +90,23 @@ const PROBE_NAMES = new Set(['noevents-allopaque-f100', 'combined-section-f100',
 const boxRuns = (list, sc) => [...list.filter(c => c.name.startsWith('xbox-')),
   ...list.map(c => boxCase(c, sc)), ...list.map(c => boxCase(c, sc, { boxEntry: 1 })),
   ...list.filter(c => PROBE_NAMES.has(c.name)).flatMap(c => [probeOf(c), probeOf(boxCase(c, sc))])];
+// the off-frame rebuild of the combined texture (docs/vr-combo-rebuild.js; vr-view.js uploadCombo / applyCombo), compared within the run:
+//  - patched: the texture holding a wrong alpha, then the right bytes sent in z slabs (copyTextureToTexture, as uploadCombo) = the normal image, pixel-identical;
+//  - interim: while a shown segment is added, the general loop without jumps (distInCls 0, useDist 0) reads the texture with an alpha that no longer fits:
+//    pixel-identical to the same loop on the plain classification bytes (the 距離場 diagnostic's path, golden full-cls-translucent);
+//  - hide: the jumps kept on an alpha built for more segments (a lower bound for fewer). That is the configuration of this golden set's own noevents-bonefat
+//    (alpha of 0b111, fat + bone shown) and of vr-cls-parity's fat-hidden case (checked against the CPU march there). Reported, not judged: the difference to
+//    the exact alpha of the shown segments (other jump lengths re-phase the samples,: dither on the fat sheets and specks)
+const byName = (list, n) => list.find(c => c.name === n), nsb = byName(jobs3, 'noevents-bonefat-f100'), ns4 = byName(jobs4, '4seg-noevents-f100');
+const REBUILD = [{ ...nsb, name: 'rb-patched', comboVariant: 'patched' }, { ...byName(jobs3, 'full-cls-translucent-f100'), name: 'rb-interim', useClsRaw: false, comboVariant: 'stale' }, { ...nsb, name: 'rb-hide-exact', comboVariant: 'alt' }];
+const REBUILD4 = [{ ...ns4, name: 'rb4-patched', comboVariant: 'patched' },
+  { name: 'rb4-interim', defines: ['VRL_CLS4'], f: 1, comboVariant: 'stale', u: { segA: allOpaque4, distInCls: 0, useDist: 0 } },
+  { name: 'rb4-interim-ref', defines: [], f: 1, useClsRaw: true, u: { segA: allOpaque4, distInCls: 0, useDist: 0 } }];
+const { combineClassificationDistance } = await import('../docs/distance-field.js');
+const comboAlt = combineClassificationDistance(scene.cls, scene.dist, 0b101); // bone + fat (noSoft): the exact alpha of noevents-bonefat (its golden uses the 0b111 one)
 const render = () => withPage(async (pg, info) => {
-  const r = await runBatch(pg, { sh, N, W, H, halfExt: HALF_EXT, scene: sceneArgs(scene), cases: [...jobs3, ...PROOF, ...boxRuns(BOX3, scene)], mode: 'color', filter: 'linear' });
-  const r4 = await runBatch(pg, { sh, N, W, H, halfExt: HALF_EXT, scene: sceneArgs(scene4), cases: [...jobs4, ...boxRuns(BOX4, scene4)], mode: 'color', filter: 'linear' });
+  const r = await runBatch(pg, { sh, N, W, H, halfExt: HALF_EXT, scene: { ...sceneArgs(scene), comboAlt: Buffer.from(comboAlt).toString('base64') }, cases: [...jobs3, ...PROOF, ...boxRuns(BOX3, scene), ...REBUILD], mode: 'color', filter: 'linear' });
+  const r4 = await runBatch(pg, { sh, N, W, H, halfExt: HALF_EXT, scene: sceneArgs(scene4), cases: [...jobs4, ...boxRuns(BOX4, scene4), ...REBUILD4], mode: 'color', filter: 'linear' });
   return { ...r, out: { ...r.out, ...r4.out }, glError: r.glError || r4.glError, info };
 });
 jobs.push(...jobs4);
@@ -127,7 +141,7 @@ for (const j of jobs) {
     fs.writeFileSync(path.join(outDir, j.name + '-diff.png'), encodePng(dp, W, H));
   }
 }
-// build 526: the mask-only occupancy proof (not a golden: compared within the run)
+// the mask-only occupancy proof (not a golden: compared within the run)
 {
   const px = n => first.out[n], covered = p => { const c = new Uint8Array(W * H); for (let i = 0; i < c.length; i++) { const o = i * 4; if (Math.abs(p[o] - BGpx[0]) + Math.abs(p[o + 1] - BGpx[1]) + Math.abs(p[o + 2] - BGpx[2]) > 6) c[i] = 1; } return c; };
   const a = covered(px('proof-occ')), b = covered(px('proof-mixed')); let sil = 0, drawn = 0; for (let i = 0; i < a.length; i++) { if (a[i] !== b[i]) sil++; if (b[i]) drawn++; }
@@ -137,7 +151,7 @@ for (const j of jobs) {
   console.log((bad ? 'FAIL ' : 'ok   ') + 'mask-only occupancy proof: occupied bricks ' + scene.occupied + ' / ' + scene.brickN ** 3 + ', silhouette pixels changed ' + sil + ' of ' + drawn + ' drawn (max ' + PROOF_MAX_SILHOUETTE + '), samples per ray ' + (sOcc * 1024 / 255).toFixed(1) + ' with occupancy vs ' + (sMixed * 1024 / 255).toFixed(1) + ' with every brick mixed (ratio ' + ratio.toFixed(3) + ', max ' + PROOF_SAMPLE_RATIO + '); colour diff inside the silhouette ' + d.pixels + ' px / max ' + d.maxDiff);
   if (bad) { failed = true; fs.mkdirSync(outDir, { recursive: true }); for (const n of ['proof-occ', 'proof-mixed']) fs.writeFileSync(path.join(outDir, n + '.png'), encodePng(px(n), W, H)); }
 }
-// build 562: the content-box proof
+// the content-box proof
 {
   const boxFails = [], inDiffs = []; let worstIn = { pixels: 0, maxDiff: 0 }, n = 0;
   for (const [list, sc] of [[BOX3, scene], [BOX4, scene4]]) for (const c of list) {
@@ -152,6 +166,15 @@ for (const j of jobs) {
   console.log((boxFails.length ? 'FAIL ' : 'ok   ') + 'content-box proof: ' + (n - boxFails.length) + ' / ' + n + ' images pixel-identical to the full-box render' + (boxFails.length ? ': ' + boxFails.join(', ') : ''));
   console.log('     (reference, not judged) march also starting at the content box: ' + inDiffs.length + ' / ' + n + ' images differ, worst ' + worstIn.pixels + ' px / max channel diff ' + worstIn.maxDiff + (worstIn.name ? ' (' + worstIn.name + ')' : ''));
   if (boxFails.length) failed = true;
+}
+// the combined-texture rebuild proof
+{
+  const px = n => first.out[n], same = (a, b) => { const d = diffPixels(px(a), px(b)); const ok = !d.pixels && !d.maxDiff; console.log((ok ? 'ok   ' : 'FAIL ') + 'combo rebuild: ' + a + ' vs ' + b + ': changed pixels ' + d.pixels + ', max channel diff ' + d.maxDiff); return ok; };
+  let ok = same('rb-patched', 'noevents-bonefat-f100') & same('rb4-patched', '4seg-noevents-f100') & same('rb-interim', 'full-cls-translucent-f100') & same('rb4-interim', 'rb4-interim-ref');
+  const covered = p => { const c = new Uint8Array(W * H); for (let i = 0; i < c.length; i++) { const o = i * 4; if (Math.abs(p[o] - BGpx[0]) + Math.abs(p[o + 1] - BGpx[1]) + Math.abs(p[o + 2] - BGpx[2]) > 6) c[i] = 1; } return c; };
+  const a = covered(px('noevents-bonefat-f100')), b = covered(px('rb-hide-exact')), d = diffPixels(px('noevents-bonefat-f100'), px('rb-hide-exact')); let sil = 0; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) sil++;
+  console.log('     (reference, not judged) combo rebuild: hide with the superset alpha vs the exact alpha: silhouette pixels changed ' + sil + ', changed pixels ' + d.pixels + ', max channel diff ' + d.maxDiff);
+  if (!ok) { failed = true; fs.mkdirSync(outDir, { recursive: true }); for (const n of ['rb-patched', 'rb4-patched', 'rb-interim', 'rb4-interim', 'rb4-interim-ref', 'rb-hide-exact']) fs.writeFileSync(path.join(outDir, n + '.png'), encodePng(px(n), W, H)); }
 }
 if (update) console.log('goldens updated in ' + path.relative(ROOT, goldenDir) + ': review the images and commit them, stating why the picture changed');
 else if (failed) { console.error('vr-render-golden FAILED (actual / diff images in ' + path.relative(ROOT, outDir) + '). If the change is intended, rerun with --update, review and commit the goldens.'); process.exit(1); }

@@ -1,4 +1,4 @@
-// VR depth read-back check (build 500 guard of the build 497 depth occlusion). The volume's fragment shader writes the clip depth of the first thing a ray shows (pushed back by
+// VR depth read-back check. The volume's fragment shader writes the clip depth of the first thing a ray shows (pushed back by
 // depthBias()) to gl_FragDepth; the distance labels / lines are depth tested against it. This tool renders the synthetic phantom with the REAL fragment shader on headless Chromium /
 // SwiftShader at f = 1 (volume pass straight into the depth buffer) and f < 1 (low-resolution target + the app's composite pass, which writes its nearest-sampled depth back), reads the
 // depth buffer back and compares, for hit pixels and for miss pixels, with the expected depth: the hit point of the same camera ray (the shader patched at its first hit, as in
@@ -68,7 +68,7 @@ for (const job of ['f100', 'f50']) {
 // spacing (here 5 : 1, like 0.1 / 0.1 / 0.5 mm) that centre can lie far behind the surface, and a line between two surface points would be depth tested against the written depth and drawn
 // as a ghost. For every hit pixel the centre of the voxel that contains the hit point must lie IN FRONT of (or on) the written depth. The old bias (2 * voxelMin) must fail on the anisotropic
 // case (the test has teeth) while the current one passes there and on the isotropic phantom.
-// build 502: the same holds for the point MARKERS (sphere + number chip drawn at the recorded voxel centre, depth tested + ghost) and for a point recorded on the CUT FACE of a section: the
+// the same holds for the point MARKERS (sphere + number chip drawn at the recorded voxel centre, depth tested + ghost) and for a point recorded on the CUT FACE of a section: the
 // centre of the voxel that contains the first hit (the surface, or the cut face with the capped section) must not lie behind the written depth, otherwise the marker would be ghosted.
 const cutPl = (() => { const n = [0.6, 0.3, 0.74], l = Math.hypot(...n); return [-n[0] / l, -n[1] / l, -n[2] / l, 0.05]; })(); // the half towards the camera is removed (as tools/vr-render-golden.mjs combined-section)
 const cutBase = { name: 'surface', defines: ['VRL_NO_GENERAL', 'VRL_OPAQUE'], u: { segA: allOpaque, cutPlanes: [cutPl, [0, 0, 1, 0], [0, 0, 1, 0], [0, 0, 1, 0]], planeCount: 1, planeCut: 1, capOn: 1, sliceOpacity: 0.7 } };
@@ -86,13 +86,13 @@ for (const [name, he, bs] of [['isotropic voxels', [1.3, 1.3, 1.3], base], ['ani
     const vi = Math.min(N - 1, Math.max(0, Math.floor((p[0] / (2 * he[0]) + 0.5) * N))), vj = Math.min(N - 1, Math.max(0, Math.floor((0.5 - p[1] / (2 * he[1])) * N))), vk = Math.min(N - 1, Math.max(0, Math.floor((p[2] / (2 * he[2]) + 0.5) * N)));
     const c = [((vi + 0.5) / N - 0.5) * 2 * he[0], (0.5 - (vj + 0.5) / N) * 2 * he[1], ((vk + 0.5) / N - 0.5) * 2 * he[2]];
     const dc = clipDepth(mv, proj, c), written = r.z[i], hp = [r.hit[i * 4], r.hit[i * 4 + 1], r.hit[i * 4 + 2]];
-    // the unbiased surface depth is what the old bias is added to; the old build 497 depth = the hit point pushed back by 2 * voxelMin
+    // the unbiased surface depth is what the old bias is added to; the old depth = the hit point pushed back by 2 * voxelMin
     const old = clipDepth(mv, proj, hp.map((v, k) => v + d[k] * 2 * vm));
     if (dc > written + 1e-7) { behindNew++; worstNew = Math.max(worstNew, dc - written); }
     if (dc > old + 1e-7) { behindOld++; worstOld = Math.max(worstOld, dc - old); }
   }
   const okNew = behindNew === 0 && hits > W * H * 0.03, teeth = name.startsWith('iso') || behindOld > 0;
-  console.log((okNew && teeth ? 'ok   ' : 'FAIL ') + 'no ghost, ' + name + ': hit pixels ' + hits + ', voxel centres behind the written depth: ' + behindNew + ' (build 500 bias), ' + behindOld + ' (build 497 bias 2 * voxelMin, worst ' + worstOld.toExponential(1) + ')' + (teeth ? '' : ' <- the old bias should fail here'));
+  console.log((okNew && teeth ? 'ok   ' : 'FAIL ') + 'no ghost, ' + name + ': hit pixels ' + hits + ', voxel centres behind the written depth: ' + behindNew + ', ' + behindOld + ' (bias 2 * voxelMin, worst ' + worstOld.toExponential(1) + ')' + (teeth ? '' : ' <- the old bias should fail here'));
   if (!(okNew && teeth)) failed = true;
 }
 {

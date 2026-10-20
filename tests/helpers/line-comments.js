@@ -27,10 +27,10 @@ export function lineComments(src) {
   return out;
 }
 
-// Does the comment look like it swallowed a statement? (build 474 / 481 / 436 accidents: an edit appended code after a `//` comment on the same line)
+// Does the comment look like it swallowed a statement?
 //  S1: a comment after code that ends with `;`        (`foo(); // note them scene.add(dot);`)
 //  S2: `;` directly followed by a call or an assignment (`...them);c.userData.dot=dot;`), in any comment
-//  S3: a lowercase letter glued to scene./ctx./mesh./c.userData. + a call (`themscene.add(`), in any comment (the build 474 shape)
+//  S3: a lowercase letter glued to scene./ctx./mesh./c.userData. + a call (`themscene.add(`), in any comment (the shape)
 // Prose with a trailing `;`, `a; b.c()` with a space, or a URL does not match.
 export function swallowedStatement({ code, text }) {
   const t = text.trimEnd();

@@ -1,8 +1,8 @@
-// VR depth occlusion (build 497). The volume's fragment shader (vr-view.js) writes the clip-space depth of the first thing a ray shows (a tissue surface, or the cut
+// VR depth occlusion. The volume's fragment shader (vr-view.js) writes the clip-space depth of the first thing a ray shows (a tissue surface, or the cut
 // face of a section) to gl_FragDepth; the distance lines / leaders / labels (vr-measure.js) are then drawn with a real depth test (hidden parts clipped at the surface
 // outline) plus a faint "ghost" pass (depthFunc GreaterDepth) so a hidden part stays findable. Pure helpers: no three.js, no DOM.
 
-// setting 「ラベルの隠れ方」 (VR settings): 1 = 実際に隠す (GPU depth, default), 0 = 薄くする (build 493-494: CPU probes, drawn faint)
+// setting 「ラベルの隠れ方」 (VR settings): 1 = 実際に隠す (GPU depth, default), 0 = 薄くする
 export const LABEL_HIDE_REAL = 1, LABEL_HIDE_FADE = 0, LABEL_HIDE_DEFAULT = LABEL_HIDE_REAL;
 // only an explicit 0 / '0' / false selects the fade; a missing or odd saved value falls back to the default
 export const normalizeLabelHide = v => (v === 0 || v === '0' || v === false) ? LABEL_HIDE_FADE : LABEL_HIDE_DEFAULT;
@@ -16,7 +16,7 @@ export const occludedPass = (occlusion, lit) => !!occlusion && !lit;
 // how far behind the surface the volume's written depth lies (object space, along the unit ray direction): DEPTH_BIAS_RAY * (the voxel's extent along the ray) + DEPTH_BIAS_MIN * voxelMin.
 // Points / lines are recorded at a voxel CENTRE on a surface voxel or a cut face (up to half a voxel inside along the ray, so 0.5 * dot(|dir|, voxelSize), which follows an
 // anisotropic spacing such as 0.1 / 0.1 / 0.5), plus up to 1.5 voxels of the surface march (grazing rays). For isotropic data this is 2.0 .. 2.4 voxels (never less than the
-// build 497 bias of 2). Must equal DEPTH_BIAS_RAY / DEPTH_BIAS_MIN and depthBias() in the fragment shader (tests/unit/vr-depth.test.js).
+// bias of 2). Must equal DEPTH_BIAS_RAY / DEPTH_BIAS_MIN and depthBias() in the fragment shader (tests/unit/vr-depth.test.js).
 export const DEPTH_BIAS_RAY = 0.5, DEPTH_BIAS_MIN = 1.5;
 // the same maths as the fragment shader: dir = the unit ray direction (object space), voxelSize = the object-space size of a voxel per axis [x, y, z], voxelMin = its smallest side of the classification grid
 export function depthBias(dir, voxelSize, voxelMin) {
@@ -43,7 +43,7 @@ export function perspectiveDepth(zEye, near, far) {
 }
 
 // the menu / help boards are depth tested (the volume's depth hides a board that lies inside or behind the tissue), so a hit on a board that the tissue covers must not take the
-// laser or the trigger (no invisible delete / exit button). Same idea as build 484's section plane rule: the board hit is ignored when the volume surface along the ray is nearer.
+// laser or the trigger (no invisible delete / exit button). Same idea as's section plane rule: the board hit is ignored when the volume surface along the ray is nearer.
 // hit = the raycaster hit of one board ({distance}) or null; tissueDistance = the volume surface hit distance along the same ray (world metres; null / undefined = none). true = the board is visible there.
 // (The rings are drawn without a depth test, so they are not subject to this rule.)
 export const boardVisible = (hit, tissueDistance) => !!hit && !(tissueDistance != null && tissueDistance < hit.distance);

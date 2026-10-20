@@ -1,4 +1,4 @@
-// "The HU the user sees" for the analysis panels (build 538): histogram and HU line profile read the FILTERED axial planes (the same
+// "The HU the user sees" for the analysis panels: histogram and HU line profile read the FILTERED axial planes (the same
 // planes the 2D MPR cards show) when image filters are on, or the raw source values when the user chooses so. Pure module: no app
 // state, no DOM at import time. The app-specific readers (source-filters.js, state.js) are injected, see effective-hu-source.js.
 // Units: both the raw source slices (slope / intercept applied) and the filter outputs are HU, so no conversion is needed.
@@ -21,7 +21,7 @@ export const effectiveHuSignature = (mode, stageCount, filterSignature) => (reso
 // Does a segment need its final runs (instead of being a plain [min,max] slice of the whole-volume histogram)? The slice is only valid
 // when the histogram values and the segment's own voxel test see the same data: with image filters active the segment is built from
 // filtered data (source-backed: filtered blocks; in-memory: the filtered 3D volume), so membership must come from the final runs,
-// for in-memory volumes too (build 539; before, only source-backed volumes were routed to the runs).
+// for in-memory volumes too.
 export const segmentNeedsRuns = (needsVoxelMask, stageCount) => !!needsVoxelMask || stageCount > 0;
 
 // deps: { stageCount(): number, rawSlice(z, v): Float32Array|Int16Array|Promise, filteredSlice(z, v): Float32Array|Promise }

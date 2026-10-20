@@ -1,4 +1,4 @@
-import { gpuPlatformOs } from './gpu-preference.js?v=20261018-build621';
+import { gpuPlatformOs } from './gpu-preference.js?v=20261020-build630';
 
 // 'nvidia' | 'intel' | 'amd' | 'apple' | 'software' | 'other' | '' (unknown). `parts` are the strings that name the GPU:
 // adapter.info.vendor / architecture / device / description, or the WebGL UNMASKED_VENDOR / UNMASKED_RENDERER.
@@ -52,7 +52,7 @@ export function gpuIsVolumeLabel(label) {
 // The status-line wording. Empty parts when not split, so the single-GPU line is unchanged.
 //   split          gpuFilterRuntime.split ({active, renderVendor, computeVendor})
 //   computeLabel   the backend label (gpuFilterRuntime.lastBackend)
-//   primaryVendor  build 517: vendor of the one GPU in the 'primary' hybrid mode ('' otherwise)
+//   primaryVendor: vendor of the one GPU in the 'primary' hybrid mode ('' otherwise)
 // In split mode a volume label is on the display GPU: "Volume WEBGPU RESIDENT intel (display)", not "Compute ... nvidia (split)".
 export function gpuSplitStatusParts(split, computeLabel = '', primaryVendor = '') {
   const same = { computeName: 'Compute', computeLabel };

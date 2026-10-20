@@ -100,7 +100,7 @@ describe('hybrid exclusion equals the full voxel model (in-memory path)', () => 
   });
 });
 
-// build 460: the thin-part removal runs AFTER the higher segments' voxels are taken out (as on the run path), so a thin
+// the thin-part removal runs AFTER the higher segments' voxels are taken out (as on the run path), so a thin
 // shell that only looked thick together with the bone voxels it wraps is not kept
 describe('thin-part removal comes after the higher voxels are taken out (in-memory path)', () => {
   it('a soft shell of thickness 2 around a bone core is empty once the bone is removed from it', async () => {

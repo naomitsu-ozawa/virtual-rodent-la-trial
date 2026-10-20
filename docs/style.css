@@ -404,7 +404,7 @@ h1{margin:0;font-size:clamp(23px,3vw,34px);line-height:1;letter-spacing:-.035em}
 }
 
 
-/* Build 181: iPad workspace layout. Scoped by runtime class so desktop/Mac UI is unchanged. */
+/* iPad workspace layout. Scoped by runtime class so desktop/Mac UI is unchanged. */
 html.vrl-ipad-ui,
 html.vrl-ipad-ui body,
 html.vrl-ipad-ui #app{height:100%;overflow:hidden}
@@ -548,7 +548,7 @@ html.vrl-ipad-ui footer{min-height:18px;display:flex;justify-content:space-betwe
 }
 
 
-/* Build 182: keep iPad settings visible at all times.
+/* keep iPad settings visible at all times.
    Landscape = left settings rail. Portrait = bottom settings panel. */
 html.vrl-ipad-ui.ipad-settings-persistent .workspace{
   display:grid;
@@ -665,7 +665,7 @@ html.vrl-ipad-ui.ipad-settings-persistent .ipad-edit-drawer-panel .analysis-cut-
 }
 
 
-/* Build 184: iPad overlap audit.
+/* iPad overlap audit.
    Large analysis controls live in the persistent settings column, not over the 3D viewport. */
 html.vrl-ipad-ui .ipad-analysis-settings{
   display:grid;
@@ -794,10 +794,10 @@ html.vrl-ipad-ui .selected-series-overlay{
 .gpu-status-bar{margin-top:6px;padding:4px 10px;border:1px solid rgb(var(--ui-green-bd));border-radius:7px;background:rgb(var(--ui-green-bg0));color:rgb(var(--ui-green-tx));font:11px/1.45 ui-monospace,Menlo,monospace;white-space:normal;overflow-wrap:anywhere}
 .gpu-status-bar:empty{display:none}
 .gpu-status-bar.is-warning{border-color:rgb(var(--ui-amber-bd));background:rgb(var(--ui-amber-bg0));color:rgb(var(--ui-amber-tx))}
-/* the bar above the footer replaces the top chip (build 274) */
+/* the bar above the footer replaces the top chip */
 #gpu-status{display:none!important}
 
-/* settings dialog (build 280); tabs so more pages can be added later */
+/* settings dialog; tabs so more pages can be added later */
 .settings-dialog{width:min(460px,calc(100vw - 32px));border:1px solid rgb(var(--ui-b2));border-radius:12px;background:rgb(var(--ui-s2));color:rgb(var(--ui-t2));padding:14px 16px}
 .settings-dialog::backdrop{background:rgba(0,0,0,.55)}
 .settings-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
@@ -810,7 +810,7 @@ html.vrl-ipad-ui .selected-series-overlay{
 .settings-check{justify-content:flex-start}
 .settings-check input{width:20px;height:20px}
 .settings-foot{margin-top:10px}
-/* build 287: the message line (timings, results) was 11px grey and easy to
+/* the message line (timings, results) was 11px grey and easy to
    miss; show it as a second status bar, same size as the GPU bar */
 .gpu-status-bar{font-size:12px}
 footer{display:flex!important;gap:10px;margin-top:6px!important;align-items:center!important}
@@ -818,7 +818,7 @@ footer>a{flex:none}
 html:not(.vrl-ipad-ui) footer{padding-right:250px}
 footer #footer{flex:1;min-width:0;padding:5px 10px;border:1px solid rgb(var(--ui-b2));border-radius:7px;background:rgb(var(--ui-s2));color:rgb(var(--ui-t2));font:12px/1.5 ui-monospace,Menlo,monospace;white-space:normal;overflow-wrap:anywhere}
 footer #footer:empty{display:none}
-/* build 288: filter cards overflowed the narrow side panel (title wrapped,
+/* filter cards overflowed the narrow side panel (title wrapped,
    type select and sliders cut off). Title on its own row, controls below,
    everything shrinks to the panel width. */
 .filter-control-list,.filter-control-card{min-width:0;max-width:100%;box-sizing:border-box}
@@ -831,7 +831,7 @@ footer #footer:empty{display:none}
 .filter-control-card .segment-range{min-width:0}
 .filter-control-card .segment-range input[type=range]{width:100%;min-width:0;box-sizing:border-box}
 
-/* settings > cache (build 296) */
+/* settings > cache */
 .settings-cache-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:8px 0}
 .settings-cache-list{display:grid;gap:6px;max-height:40vh;overflow:auto}
 .settings-cache-row{display:flex;justify-content:space-between;align-items:center;gap:8px;border:1px solid rgb(var(--ui-b1));border-radius:8px;padding:6px 8px}
@@ -841,7 +841,7 @@ footer #footer:empty{display:none}
 footer #footer{height:calc(1.5em * 2 + 10px);overflow-y:auto;box-sizing:border-box}
 footer #footer:empty{display:block}
 
-/* build 405: one progress modal for every long operation (progress-modal.js); the older
+/* one progress modal for every long operation (progress-modal.js); the older
    indicators (full-screen overlay, 3D-view overlay, side-panel bar) are no longer shown */
 #processing-overlay,#three-busy,#scan-progress{display:none!important}
 .job-modal{position:fixed;inset:0;z-index:20000;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(5,8,10,.55);backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px);color:rgb(var(--ui-t1));pointer-events:auto;touch-action:none}
@@ -864,17 +864,17 @@ footer #footer:empty{display:block}
 .job-help{color:rgb(var(--ui-t4));font-size:12px}
 @media (prefers-reduced-motion:reduce){.job-spinner{animation-duration:1.6s}.job-track.is-indeterminate .job-bar{animation:none;width:100%;opacity:.45}}
 
-/* build 438: the range in use when the card priority trims a segment's range */
+/* the range in use when the card priority trims a segment's range */
 .segment-effective{margin:-2px 0 6px;font-size:11px;line-height:1.35;color:var(--muted,rgb(var(--ui-t3)))}
 .segment-effective.is-hidden{display:none}
 .segment-exclusive-row select{width:100%}
-.segment-material-row select{grid-column:2/-1;width:100%;min-width:0} /* build 620: material preset of a segment */
+.segment-material-row select{grid-column:2/-1;width:100%;min-width:0} /* material preset of a segment */
 
-/* build 439: drag the segment cards (⋮⋮) to set their priority */
+/* drag the segment cards (⋮⋮) to set their priority */
 .segment-drag-handle{cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;padding:2px 6px;margin-right:4px;color:var(--muted,rgb(var(--ui-t3)));font-size:14px;line-height:1}
 .segment-drag-handle:active{cursor:grabbing}
 .segment-card.is-dragging{opacity:.75;outline:2px solid var(--accent,#3d8bfd);outline-offset:2px}
-/* build 442: the value next to a slider can be typed in (range-entry.js) */
+/* the value next to a slider can be typed in (range-entry.js) */
 label:has(input[type=range]) output{cursor:text;border-bottom:1px dotted rgb(var(--ui-t3) / .45)}
 label:has(input[type=range]) output:hover{border-bottom-color:rgba(0,229,255,.8)}
 .range-entry-field{width:7.5em;max-width:100%;justify-self:end;font:inherit;font-variant-numeric:tabular-nums;color:rgb(var(--ui-t1));background:rgb(var(--ui-s0));border:1px solid #00b8d4;border-radius:5px;padding:2px 5px;text-align:right}
@@ -882,7 +882,7 @@ label:has(input[type=range]) output:hover{border-bottom-color:rgba(0,229,255,.8)
 /* The 3D card keeps a dark background in every theme (tinted like the theme) and re-declares the standard dark UI tokens
    (themes.css), so the buttons, labels and cards on the 3D view read on it. */
 .view-card-3d{background:rgb(var(--ui-canvas-bg-3d))}
-/* builds 449-451: colour themes. Tokens (themes.css) are space-separated RGB triplets: rgb(var(--ui-s1)) / rgb(var(--ui-s1) / .88).
+/* 451: colour themes. Tokens (themes.css) are space-separated RGB triplets: rgb(var(--ui-s1)) / rgb(var(--ui-s1) / .88).
    The UI of the view cards and the canvas backgrounds follow the theme; the image itself (grey levels, window / level,
    segment colours, volume transfer function) never reads a token. */
 .theme-quick{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:800;color:rgb(var(--ui-t3))}
@@ -896,7 +896,7 @@ html.vrl-ipad-ui .theme-quick select{min-height:40px;padding:7px 8px;font-size:1
 .theme-option .theme-swatch i{flex:1}
 .theme-option small{font-size:10px;font-weight:600;color:rgb(var(--ui-t4))}
 
-/* Linked crosshair (build 458): the lines live on their own canvas above the slice canvas (the slice pixels never change), the
+/* Linked crosshair: the lines live on their own canvas above the slice canvas (the slice pixels never change), the
    readout is a small label over the card. Fixed colours with a dark halo (drawn in crosshair-ui.js): visible in every theme. */
 .mpr-crosshair-canvas{position:absolute;inset:0;width:100%;height:100%;z-index:3;pointer-events:none}
 .view-card-mpr .view-toolbar{flex-wrap:wrap}
@@ -908,7 +908,7 @@ html.vrl-ipad-ui .theme-quick select{min-height:40px;padding:7px 8px;font-size:1
 .crosshair-readout b{color:#fff;font-weight:800}
 html.vrl-ipad-ui .crosshair-toggle,html.vrl-ipad-ui .comment-toggle{min-height:38px;padding:6px 11px;font-size:12px}
 html.vrl-ipad-ui .crosshair-readout{font-size:12px}
-/* Position comments (Issue #88 stage 2): theme tokens only, touch-sized buttons */
+/* Position comments (stage 2): theme tokens only, touch-sized buttons */
 .comment-panel{margin-top:10px;border:1px solid rgb(var(--ui-b2));border-radius:8px;padding:6px 8px;background:rgb(var(--ui-s1) / 0.5)}
 .comment-panel>summary{cursor:pointer;font-size:12px;font-weight:700;color:rgb(var(--ui-t1));min-height:28px;display:flex;align-items:center}
 .comment-hint,.comment-note,.comment-meta,.comment-empty{margin:4px 0;font-size:11px;color:rgb(var(--ui-t2))}
@@ -954,7 +954,7 @@ html.vrl-ipad-ui .comment-popover .comment-input{font-size:16px}
 
 /* position comments on the 3D view (comment-3d.js): a layer of numbered dots over the viewport, never catching the pointer */
 .comment-layer-3d{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:6}
-/* build 465: the same look as the VR points (vr-point-markers.js; tests/unit/comment-3d-hidden.test.js keeps these colours equal to its constants).
+/* the same look as the VR points (vr-point-markers.js; tests/unit/comment-3d-hidden.test.js keeps these colours equal to its constants).
    The element IS the dot, so its centre is the point's position; the number is a small chip beside it. exposed = solid dot + white rim;
    hidden behind tissue (.is-behind, the VR rule) = a smaller dot in the VR "hidden" colour, no rim. */
 :root{--vr-point-fill:#0b6f8c;--vr-point-dot:#4dd8ff;--vr-point-rim:#fff}
@@ -963,7 +963,7 @@ html.vrl-ipad-ui .comment-popover .comment-input{font-size:16px}
 .comment-marker-3d.is-behind{width:6px;height:6px;background:var(--vr-point-dot);border:0}
 .comment-lines-3d{position:absolute;left:0;top:0;pointer-events:none;overflow:visible}
 .comment-lines-3d line{stroke:var(--vr-point-dot);stroke-opacity:.6;stroke-width:1.2}
-/* build 480: the dots are about 0.65 x the old size (VR's small markers); the tap area is the JS reach (16 / 24 px), not the drawn size. On the active section: x1.4 (centre unchanged) */
+/* the dots are about 0.65 x the old size (VR's small markers); the tap area is the JS reach (16 / 24 px), not the drawn size. On the active section: x1.4 (centre unchanged) */
 .comment-marker-3d.is-on-section{width:13px;height:13px}
 .comment-marker-3d.is-behind.is-on-section{width:8px;height:8px}
 .vrl-ipad-ui .comment-marker-3d.is-on-section{width:16px;height:16px}
@@ -976,7 +976,7 @@ html.vrl-ipad-ui .comment-popover .comment-input{font-size:16px}
 .vrl-ipad-ui .comment-marker-3d.is-behind .comment-marker-3d-no{font-size:9px;line-height:11px;min-width:11px}
 .comment-bubble-3d{pointer-events:none}
 
-/* build 477: point menu (long press / right-click on a point), distances (line + label in 3D, list in the panel), the start of a distance */
+/* point menu (long press / right-click on a point), distances (line + label in 3D, list in the panel), the start of a distance */
 .point-menu{position:fixed;z-index:60;display:grid;gap:6px;min-width:190px;max-width:calc(100vw - 12px);padding:8px;border:1px solid rgb(var(--ui-b2));border-radius:10px;background:rgb(var(--ui-s1));color:rgb(var(--ui-t1));box-shadow:0 6px 22px rgba(0,0,0,.4);touch-action:manipulation}
 .point-menu[hidden]{display:none}
 .point-menu-head{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700}
@@ -994,22 +994,22 @@ html.vrl-ipad-ui .point-menu-btn{min-height:44px;min-width:64px;font-size:15px}
 .measure-item .comment-no{margin-right:0}
 .measure-note{font-size:11px;color:rgb(var(--ui-amber-tx));margin-right:6px}
 .measure-item .measure-value{margin-left:8px;flex:1;font-variant-numeric:tabular-nums}
-/* build 494: `.comment-lines-3d line` (the section cue lines, cyan) is more specific than a bare class, so the measure line / leader repeat the container: the same yellow as the label and VR (VR_MEASURE_COLOR) in every state, hidden or not (the hidden part is the gradient's stop-opacity over the same colour) */
+/* `.comment-lines-3d line` (the section cue lines, cyan) is more specific than a bare class, so the measure line / leader repeat the container: the same yellow as the label and VR (VR_MEASURE_COLOR) in every state, hidden or not (the hidden part is the gradient's stop-opacity over the same colour) */
 .comment-lines-3d .measure-line-3d{stroke:#ffd23d;stroke-width:2;stroke-opacity:.95;stroke-dasharray:6 4;filter:drop-shadow(0 0 1.5px rgba(0,0,0,.9))}
 .measure-label-3d,.measure-hint-3d{position:absolute;left:0;top:0;padding:1px 6px;border-radius:999px;border:1px solid #ffd23d;background:rgba(17,23,27,.88);color:#fff;font:700 10px/13px sans-serif;white-space:nowrap;pointer-events:none;font-variant-numeric:tabular-nums;will-change:transform}
 .measure-label-3d[hidden],.measure-hint-3d[hidden]{display:none}
-/* build 480: the labels can be dragged (the view finds them itself, they take no pointer events: a point under the press wins) */
+/* the labels can be dragged (the view finds them itself, they take no pointer events: a point under the press wins) */
 .measure-label-3d{-webkit-user-select:none;user-select:none}
 .measure-label-3d.is-dragging{cursor:grabbing}
 .measure-label-3d.is-lit,.measure-label-3d.is-dragging{background:#ffe27a;color:#111;border-color:#fff;box-shadow:0 0 0 2px rgba(255,255,255,.9),0 0 10px 2px rgba(255,210,61,.85)}
 .vrl-ipad-ui .measure-label-3d,.vrl-ipad-ui .measure-hint-3d{font-size:12px;line-height:15px}
 .comment-lines-3d .measure-leader-3d{stroke:#ffd23d;stroke-width:1;stroke-opacity:.8}
-/* build 493: behind the volume's surface (the points' rule, see comment-3d.js depthCue) = faint, like an x-ray, so a label does not float in front of tissue it lies behind; a lit / dragged label stays fully visible to be used */
+/* behind the volume's surface (the points' rule, see comment-3d.js depthCue) = faint, like an x-ray, so a label does not float in front of tissue it lies behind; a lit / dragged label stays fully visible to be used */
 .measure-label-3d,.measure-leader-3d{transition:opacity .15s}
 .measure-label-3d.is-behind,.measure-leader-3d.is-behind{opacity:.3}
 .measure-label-3d.is-behind.is-lit,.measure-label-3d.is-behind.is-dragging,.measure-leader-3d.is-behind.is-lit{opacity:1}
 @media (prefers-reduced-motion:reduce){.measure-label-3d,.measure-leader-3d{transition:none}}
-/* build 523: analysis result labels on the 3D view (analysis-label.js): a chip with the result's colour, number, segments and volume, movable by a drag; a moved one has a leader line to its anchor (SVG layer) */
+/* analysis result labels on the 3D view (analysis-label.js): a chip with the result's colour, number, segments and volume, movable by a drag; a moved one has a leader line to its anchor (SVG layer) */
 .analysis-label-3d{position:absolute;left:0;top:0;display:inline-flex;align-items:center;gap:5px;padding:1px 7px 1px 5px;border-radius:999px;border:1px solid rgba(255,255,255,.42);background:rgba(17,23,27,.88);color:#fff;font:700 10px/13px sans-serif;white-space:nowrap;pointer-events:none;font-variant-numeric:tabular-nums;will-change:transform;-webkit-user-select:none;user-select:none}
 .analysis-label-3d[hidden]{display:none}
 .analysis-label-3d>i{width:8px;height:8px;border-radius:999px;flex:none;border:1px solid rgba(255,255,255,.42)}
@@ -1032,18 +1032,18 @@ html.vrl-ipad-ui .point-menu-btn{min-height:44px;min-width:64px;font-size:15px}
 @keyframes vrl-measure-pulse{0%,100%{box-shadow:0 0 0 2px #ffd23d,0 0 0 3px rgba(0,0,0,.6)}50%{box-shadow:0 0 0 7px rgba(255,210,61,.7),0 0 0 8px rgba(0,0,0,.5)}}
 @media (prefers-reduced-motion:reduce){.comment-marker-3d.is-measure-start{animation:none}}
 
-/* build 469: slice-spacing warning (non-blocking; wraps on narrow / iPad layouts) */
+/* slice-spacing warning (non-blocking; wraps on narrow / iPad layouts) */
 .spacing-warn{display:block;padding:5px 7px;border:1px solid rgb(var(--ui-amber-bd));border-radius:7px;background:rgb(var(--ui-amber-bg));color:rgb(var(--ui-amber-tx))!important;font-size:11px;line-height:1.35;overflow-wrap:anywhere;white-space:normal}
 .size-warn{display:block;padding:5px 7px;border:1px solid rgb(var(--ui-amber-bd));border-radius:7px;background:rgb(var(--ui-amber-bg));color:rgb(var(--ui-amber-tx))!important;font-size:11px;line-height:1.35;overflow-wrap:anywhere;white-space:normal}
 .spacing-warn{pointer-events:auto}.spacing-warn summary{cursor:pointer;list-style-position:inside}.spacing-info{background:rgb(var(--ui-s2));border-color:rgb(var(--ui-b2));color:rgb(var(--ui-t3))!important}.spacing-mark{color:rgb(var(--ui-amber-tx));font-weight:700}
 .sample-choices{display:grid;gap:10px;margin-top:12px}
 .sample-choice{min-height:44px;font-size:15px;touch-action:manipulation}
 .settings-row[hidden],.settings-panel .hint[hidden]{display:none}
-/* build 520: GPU info tab, debug mode only (the tab button and panel are `hidden` unless debug is on) */
+/* GPU info tab, debug mode only (the tab button and panel are `hidden` unless debug is on) */
 .settings-tab[hidden]{display:none}
 .gpu-report{width:100%;box-sizing:border-box;margin-top:6px;font:11px/1.4 ui-monospace,Menlo,monospace;resize:vertical}
 .gpu-status-bar.is-debug-link{cursor:pointer}
-/* build 534: per-segment HU histogram (histogram-ui.js) */
+/* per-segment HU histogram (histogram-ui.js) */
 .seg-hist-result{min-width:min(340px,calc(100vw - 80px));gap:6px}
 .seg-hist-bar{display:flex;align-items:center;gap:6px}.seg-hist-bar strong{flex:1;font-size:12px}
 .seg-hist-mini{min-height:24px;padding:2px 8px;border:1px solid rgb(var(--ui-b3));border-radius:6px;background:rgb(var(--ui-s3));color:rgb(var(--ui-t2));font-size:10px}
@@ -1062,7 +1062,7 @@ html.vrl-ipad-ui .point-menu-btn{min-height:44px;min-width:64px;font-size:15px}
 .lp-canvas{display:block;width:100%;pointer-events:auto;touch-action:none;color:rgb(var(--ui-t2))}.lp-plot{cursor:crosshair}
 .seg-hist-hint{font-size:10px;line-height:1.35;color:rgb(var(--ui-t4))}
 
-/* Build 540: analysis dock (analysis-dock.js). One container for the HU histogram and HU line-profile cards.
+/* analysis dock (analysis-dock.js). One container for the HU histogram and HU line-profile cards.
    3D only: floats over the 3D card (bottom-left) or is pinned under it; 2D only / split: takes its own grid track under (or beside) the slices. */
 .ipad-analysis-tools{display:none}
 html.vrl-ipad-ui .ipad-analysis-tools{display:flex;align-items:center;gap:5px;margin-left:8px}
@@ -1134,7 +1134,7 @@ html.vrl-ipad-ui .ipad-mode-split .viewer-grid[data-dock="split-full"]>.analysis
 .hu-line-3d-armed canvas{cursor:crosshair}
 @media (prefers-reduced-motion:reduce){.lp-live{animation:none}}
 
-/* crop export panel (build 573) */
+/* crop export panel */
 .crop-panel{min-width:250px;gap:7px}
 .crop-head{display:flex;justify-content:space-between;align-items:center}
 .crop-x{border:0;background:transparent;color:inherit;font-size:16px;line-height:1;cursor:pointer;padding:2px 6px}
@@ -1224,7 +1224,7 @@ html:not(.vrl-ipad-ui) #result-place-row{display:none}
  html.vrl-ipad-ui .sidebar>.sidebar-scroll,
  html.vrl-ipad-ui.ipad-settings-persistent .sidebar>.sidebar-scroll{grid-column:1;grid-row:3}
 }
-/* Build 586: resizable panes (pane-resize.js) - a thin handle on each border; drag = resize, double-click = default */
+/* resizable panes (pane-resize.js) - a thin handle on each border; drag = resize, double-click = default */
 html.vrl-ipad-ui .workspace,html.vrl-ipad-ui .viewer-grid{position:relative}
 .pane-resizer{position:absolute;z-index:20;touch-action:none;background:transparent}
 .pane-resizer[data-axis="x"]{cursor:col-resize}.pane-resizer[data-axis="y"]{cursor:row-resize}
@@ -1233,17 +1233,17 @@ html.vrl-ipad-ui .workspace,html.vrl-ipad-ui .viewer-grid{position:relative}
 .pane-resizer:hover::after,.pane-resizer.is-dragging::after{background:rgb(var(--ui-t3) / .55)}
 .pane-resizer[hidden]{display:none}
 html.pane-resizing,html.pane-resizing *{user-select:none!important}
-/* Build 586: rail icons - icon over the name (landscape), icon beside the name (portrait top row) */
+/* rail icons - icon over the name (landscape), icon beside the name (portrait top row) */
 html.vrl-ipad-ui .ws-tool-rail button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px}
 html.vrl-ipad-ui .ws-tool-rail .ws-rail-icon{width:22px;height:22px;flex:0 0 auto}
 html.vrl-ipad-ui .ws-tool-rail .ws-rail-label{display:block}
 @media (orientation:portrait){html.vrl-ipad-ui .sidebar>.ws-tool-rail button{flex-direction:row;gap:5px}html.vrl-ipad-ui .ws-tool-rail .ws-rail-icon{width:18px;height:18px}}
-/* Build 587: open / save at the top of the データ panel (workspace-ui.js) */
+/* open / save at the top of the データ panel (workspace-ui.js) */
 html.vrl-ipad-ui .ws-file-actions{display:grid;gap:10px;padding:2px 0 12px;margin-bottom:10px;border-bottom:1px solid rgb(var(--ui-b1))}
 html.vrl-ipad-ui .ws-file-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
 html.vrl-ipad-ui .ws-file-row>.ws-cap{grid-column:1 / -1}
 html.vrl-ipad-ui .ws-file-row>button{min-height:40px;padding:7px 8px;font-size:12px;white-space:normal;line-height:1.25;width:100%}
-/* Build 587: 設定 panel (theme / language / all settings) and VR / AR at the top of 表示; the top bar keeps only the title */
+/* 設定 panel (theme / language / all settings) and VR / AR at the top of 表示; the top bar keeps only the title */
 html.vrl-ipad-ui .ws-pref-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid rgb(var(--ui-b1))}
 html.vrl-ipad-ui .ws-pref-row>.ws-cap{font-size:12px;white-space:normal}
 html.vrl-ipad-ui .ws-pref-row .theme-quick,html.vrl-ipad-ui .ws-pref-row .theme-quick select,html.vrl-ipad-ui .ws-pref-row>button{width:100%;min-height:40px}
@@ -1280,6 +1280,43 @@ html.vrl-ipad-ui .ws-settings-embed .settings-cache-list,html.vrl-ipad-ui .ws-se
 .ws-note{margin-left:8px;font-size:11px;color:rgb(var(--ui-t3));transition:opacity .25s}.ws-note.is-leaving{opacity:0}
 @media (prefers-reduced-motion:reduce){html.vrl-ipad-ui .ws-sample-picker,html.vrl-ipad-ui .ws-sample-picker .sample-choice,.ws-ask{transition:none!important;animation:none!important}}
 
-/* Build 591: 3D再構築 on the 3D view itself while the scene is stale */
+/* 3D再構築 on the 3D view itself while the scene is stale */
 .three-rebuild-chip{position:absolute;right:10px;bottom:10px;z-index:7;min-height:36px;padding:6px 14px;border-radius:18px;border:1px solid rgb(var(--ui-amber-bg2));background:rgb(var(--ui-amber-bg2) / 0.95);color:rgb(var(--ui-on-amber));font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.35)}
 .three-rebuild-chip[hidden]{display:none}
+
+/* 体験会モード - level choice in the データ panel (event-mode-ui.js); present only while the setting is on */
+.event-level-panel{display:grid;gap:10px;padding:2px 0 12px;margin-bottom:10px;border-bottom:1px solid rgb(var(--ui-b1))}
+.event-level-title{font-size:15px;color:rgb(var(--ui-t1))}
+.event-level-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,200px),1fr));gap:10px}
+.event-level-card{display:grid;gap:7px;align-content:start;width:100%;min-height:96px;padding:12px 14px;border-radius:14px;border:2px solid rgb(var(--ui-b2));background:rgb(var(--ui-s2));color:rgb(var(--ui-t2));text-align:left;font:inherit;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+.event-level-card:hover{border-color:rgb(var(--ui-blue-bd2))}
+.event-level-card:focus-visible{outline:3px solid rgb(var(--ui-accent));outline-offset:2px}
+.event-level-card.is-selected{border-color:rgb(var(--ui-blue-bd));background:rgb(var(--ui-blue-bg));color:rgb(var(--ui-blue-tx))}
+.event-level-card:disabled{cursor:progress;opacity:.7}
+.event-level-card.is-selected:disabled{opacity:1}
+.event-level-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.event-level-badge{padding:2px 10px;border-radius:99px;border:1px solid rgb(var(--ui-blue-bd));background:rgb(var(--ui-blue-bg));color:rgb(var(--ui-blue-tx));font-weight:700;font-size:15px}
+.event-level-name{font-size:18px;font-weight:700}
+.event-level-mark{display:none;margin-left:auto;padding:2px 10px;border-radius:99px;border:1px solid rgb(var(--ui-blue-bd));font-size:13px;font-weight:700}
+.event-level-mark::before{content:'\2713  '}
+.event-level-card.is-selected .event-level-mark{display:inline-block}
+.event-level-mission{font-size:15px;line-height:1.5}
+.event-level-hints{display:flex;flex-wrap:wrap;gap:6px}
+.event-level-hint{padding:3px 8px;border-radius:8px;background:rgb(var(--ui-s4));color:rgb(var(--ui-t3));font-size:12px;line-height:1.4}
+.event-reset-btn{justify-self:start;min-height:44px;padding:8px 18px;border-radius:12px;border:2px solid rgb(var(--ui-b2));background:rgb(var(--ui-s2));color:rgb(var(--ui-t2));font:inherit;font-weight:700;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+.event-reset-btn:hover:not(:disabled){border-color:rgb(var(--ui-blue-bd2))}
+.event-reset-btn:focus-visible{outline:3px solid rgb(var(--ui-accent));outline-offset:2px}
+.event-reset-btn.is-armed{border-color:rgb(var(--ui-amber-bg2));background:rgb(var(--ui-amber-bg2));color:rgb(var(--ui-on-amber))}
+.event-reset-btn:disabled{cursor:default;opacity:.55}
+.event-level-after{margin:0}
+
+/* 設定 > デバッグ > テスト機能 (debug-switches-ui.js): collapsed by default, below the debug-mode switch */
+.debug-switches{margin-top:12px;border-top:1px solid rgb(var(--ui-b3));padding-top:8px}
+.debug-switches-title{cursor:pointer;min-height:44px;display:flex;align-items:center;font-weight:600}
+.debug-switches .settings-check>span{overflow-wrap:anywhere}
+.debug-switch-note{margin:0 0 6px 28px}
+.debug-switch-group{margin:10px 0 0;font-weight:600}
+.debug-switch-when{white-space:nowrap}
+.debug-switch-reload{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:8px 0}
+.debug-switch-reload[hidden]{display:none}
+.debug-switches>#dbg-reset{margin-top:8px}

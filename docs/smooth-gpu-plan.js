@@ -1,4 +1,4 @@
-// The constrained surface smoothing on the GPU (build 612), the part without a device: the mesh topology as the kernels
+// The constrained surface smoothing on the GPU, the part without a device: the mesh topology as the kernels
 // read it (SMOOTH_KERNELS, gpu-shaders.js) and the order of their dispatches. smooth-gpu.js uploads and dispatches; the
 // unit test runs the same plan with the kernel bodies on the CPU. Same algorithm as constrainedSmoothPositions
 // (constrained-smooth.js); the GPU computes in f32 throughout, the CPU in f64 between the f32 arrays, so the results

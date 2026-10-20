@@ -1,4 +1,4 @@
-// Analysis dock (build 540): one container for the HU histogram, the HU line-profile and (build 573) the crop export cards.
+// Analysis dock: one container for the HU histogram, the HU line-profile and the crop export cards.
 // The existing result DOM (#seg-hist-result, #line-profile-result) is moved into the dock (appendChild); histogram-ui.js / line-profile-ui.js
 // keep rendering into those very elements, so no analysis logic changes. Where the dock sits depends on the workspace view mode
 // (rules in analysis-dock-state.js):
@@ -7,8 +7,8 @@
 //   split   : under the 2D column (or full width under both): never over a view
 // Open state / size / placement are remembered per mode (localStorage, optional). Every part of the dock takes pointer input itself
 // and stops the pointer events, so the 3D view never rotates from a dock interaction.
-import { tr } from './i18n.js?v=20261018-build621';
-import { ANALYSIS_CARDS, DOCK_MODES, loadDockState, saveDockState, nextPlace, layoutKey, isDocked, clampSize, resizeBy, dockExtent, OVERLAY_H, DOCK_LIMITS } from './analysis-dock-state.js?v=20261018-build621';
+import { tr } from './i18n.js?v=20261020-build630';
+import { ANALYSIS_CARDS, DOCK_MODES, loadDockState, saveDockState, nextPlace, layoutKey, isDocked, clampSize, resizeBy, dockExtent, OVERLAY_H, DOCK_LIMITS } from './analysis-dock-state.js?v=20261020-build630';
 const mk = (tag, cls, attrs) => { const e = document.createElement(tag); if (cls) e.className = cls; for (const [k, v] of Object.entries(attrs || {})) e.setAttribute(k, v); return e; };
 const label = (el, key) => { el.dataset.i18n = key; el.textContent = tr(key); };
 const placeKey = (mode, place) => (mode === '3d' ? (place === 'overlay' ? 'dockPin' : 'dockUnpin') : { below: 'dockSide', side: 'dockBelow', under2d: 'dockFull', full: 'dockUnder2d' }[place] || 'dockPin');
@@ -37,7 +37,7 @@ export function installAnalysisDock() {
   dock.append(grip, head, body);
 
   // proxy buttons: the originals sit in the 3D card, which the 2D-only view hides (and the workspace CSS hides them there anyway).
-  // build 585: they live in the tool's own panel of the left column ([data-tool-buttons] from workspace-ui.js: 解析 / 切り出し);
+  // they live in the tool's own panel of the left column ([data-tool-buttons] from workspace-ui.js: 解析 / 切り出し);
   // volume / section analysis act on the 3D view, so they are proxied too and are off in the 2D-only view
   const tools3d = [{ id: 'volume', toggleId: 'volume-analysis-toggle', titleKey: 'volumeMode' }, { id: 'section', toggleId: 'section-view-toggle', titleKey: 'sliceAnalysis' }]
     .map(c => ({ ...c, toggle: document.getElementById(c.toggleId) })).filter(c => c.toggle);
@@ -50,7 +50,7 @@ export function installAnalysisDock() {
   }
   if (fallback.childElementCount) { const modes = toolbar.querySelector('.ipad-view-modes'); if (modes) modes.after(fallback); else toolbar.append(fallback); }
   const syncTools = () => { const no3d = modeNow() === '2d'; for (const c of proxied) { c.proxy.disabled = c.toggle.disabled || (no3d && tools3d.includes(c)); c.proxy.classList.toggle('is-active', c.toggle.classList.contains('is-active')); } };
-  // build 585: where the result cards are shown (settings 'resultPlace'): 'panel' = in the tool's panel of the left column (the default),
+  // where the result cards are shown (settings 'resultPlace'): 'panel' = in the tool's panel of the left column (the default),
   // 'below' = in this dock, always under the views (3D / 2D: below, split: full width)
   const resultPlace = () => (globalThis.__vrlSettings?.get?.('resultPlace') === 'below' ? 'below' : 'panel');
   const hostOf = c => document.querySelector(`[data-result-host="${groupOf(c)}"]`);

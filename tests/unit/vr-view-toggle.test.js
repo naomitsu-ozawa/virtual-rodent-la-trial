@@ -26,7 +26,7 @@ describe('ringIdsFor', () => {
     const ids = [...DEFAULT_WHEEL];
     const r = ringIdsFor(ids, false); expect(r).toEqual([...DEFAULT_WHEEL, SECTION_DELETE_ID]); expect(r).not.toBe(ids); expect(ids).toEqual(DEFAULT_WHEEL);
   });
-  it('AR with a full ring: the toggle keeps its 7th slot (as before build 521), 断面を削除 is the 8th; the saved array is not changed', () => {
+  it('AR with a full ring: the toggle keeps its 7th slot (as before), 断面を削除 is the 8th; the saved array is not changed', () => {
     const ids = [...DEFAULT_WHEEL], r = ringIdsFor(ids, true);
     expect(r).toEqual([...DEFAULT_WHEEL, VIEW_TOGGLE_ID, SECTION_DELETE_ID]); expect(ids).toEqual(DEFAULT_WHEEL);
     expect(r.indexOf(VIEW_TOGGLE_ID)).toBe(DEFAULT_WHEEL.length);

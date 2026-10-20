@@ -65,7 +65,7 @@ describe('createFocusTracker (the lit distance label)', () => {
   });
 });
 
-describe('depth cue helpers (build 493)', () => {
+describe('depth cue helpers', () => {
   it('fadeAlpha: faint only when hidden and not lit', () => {
     expect(fadeAlpha(false, false)).toBe(1); expect(fadeAlpha(true, false)).toBe(OCCLUDED_ALPHA); expect(fadeAlpha(true, true)).toBe(1); expect(fadeAlpha(false, true)).toBe(1);
     expect(OCCLUDED_ALPHA).toBeGreaterThanOrEqual(0.25); expect(OCCLUDED_ALPHA).toBeLessThanOrEqual(0.35);
@@ -91,7 +91,7 @@ describe('depth cue helpers (build 493)', () => {
   });
 });
 
-describe('gradient stop offsets (build 494)', () => {
+describe('gradient stop offsets', () => {
   it('equal depths (or orthographic): the offsets are i / n', () => {
     const o = lineStopOffsets(2, 2); for (let i = 0; i <= LINE_SAMPLES; i++) expect(o[i]).toBeCloseTo(i / LINE_SAMPLES, 12);
     const q = lineStopOffsets(1, 9, 0.01, true); for (let i = 0; i <= LINE_SAMPLES; i++) expect(q[i]).toBeCloseTo(i / LINE_SAMPLES, 12);
@@ -124,7 +124,7 @@ describe('gradient stop offsets (build 494)', () => {
   });
 });
 
-describe('unique ids (build 494)', () => {
+describe('unique ids', () => {
   it('ids from the same project-file ids that look alike once made attribute-safe do not collide', () => {
     const next = createIdMaker('mg3d-'), safe = id => 'mg3d-' + String(id).replace(/[^\w-]/g, '_');
     expect(safe('距離')).toBe(safe('測定')); // the old scheme: a collision
@@ -134,7 +134,7 @@ describe('unique ids (build 494)', () => {
   it('every maker counts on its own', () => { const a = createIdMaker('x-'), b = createIdMaker('x-'); expect([a(), a(), b()]).toEqual(['x-1', 'x-2', 'x-1']) });
 });
 
-describe('probe gate (build 494): skip the judgement while nothing changed', () => {
+describe('probe gate: skip the judgement while nothing changed', () => {
   const cls = {}, e0 = { x: 0, y: 1.6, z: 0 };
   it('the first check runs; the same inputs skip', () => {
     const g = createProbeGate(0.005);
@@ -156,7 +156,7 @@ describe('probe gate (build 494): skip the judgement while nothing changed', () 
   });
 });
 
-describe('measure line colour (build 494, static)', () => {
+describe('measure line colour', () => {
   it('the measure line / leader out-rank `.comment-lines-3d line` (cyan) so they are yellow whether hidden or not', async () => {
     const { readFileSync } = await import('node:fs');
     const css = readFileSync(new URL('../../docs/style.css', import.meta.url), 'utf8');

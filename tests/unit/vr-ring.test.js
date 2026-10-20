@@ -136,7 +136,7 @@ describe('createRingMenu (drawing)', () => {
   });
 });
 
-describe('ring laser hit (build 474)', () => {
+describe('ring laser hit', () => {
   it('inDisk covers the dark disc, not the margin; a ring in front of the hand is hit by its laser, nearer than a board behind it', async () => {
     const { createRingMenu } = await import('../../docs/vr-ring.js');
     const THREE = await import('three');
@@ -166,7 +166,7 @@ describe('ring laser hit (build 474)', () => {
   });
 });
 
-describe('ring disc for every hand (build 474)', () => {
+describe('ring disc for every hand', () => {
   it('the disc covers blank gaps between items and the hole, and slots stay null there', async () => {
     const { createRingMenu } = await import('../../docs/vr-ring.js');
     const THREE = await import('three');
@@ -183,7 +183,7 @@ describe('ring disc for every hand (build 474)', () => {
   });
 });
 
-describe('the laser stops on the whole drawn ring (build 474)', () => {
+describe('the laser stops on the whole drawn ring', () => {
   it('every point of the sectors, their gaps, the hole and the lit sector growth is inside inDisk; every slot hit is too', async () => {
     const { createRingMenu } = await import('../../docs/vr-ring.js');
     const THREE = await import('three');
@@ -206,7 +206,7 @@ describe('the laser stops on the whole drawn ring (build 474)', () => {
   });
 });
 
-describe('focus highlight is redrawn (build 476)', () => {
+describe('focus highlight is redrawn', () => {
   it('setHighlight redraws the texture only when the lit slot changes, for names and for swatches', async () => {
     const { createRingMenu } = await import('../../docs/vr-ring.js');
     const THREE = await import('three');
@@ -238,7 +238,7 @@ describe('the quick / point ring are world-fixed and focus follows the laser (st
   });
 });
 
-describe('build 496: flip-cut ring item, point mode default, ring distance (static check of vr-view.js)', () => {
+describe('flip-cut ring item, point mode default, ring distance (static check of vr-view.js)', () => {
   it('the catalog has section-flip and the default ring includes it', () => {
     expect(WHEEL_ITEMS.find(i => i.id === 'section-flip')).toMatchObject({ ja: '切り口反転', en: 'Flip cut' });
     expect(DEFAULT_WHEEL).toContain('section-flip');
@@ -251,7 +251,7 @@ describe('build 496: flip-cut ring item, point mode default, ring distance (stat
     expect(src).toContain("case'section-flip':return canFlipPlane(section.selected)");
     expect(src).toContain("case'section-flip':flipPlane(section.selected);break");
     expect(src).toContain('L.flip,false,()=>flipPlane(pl)');
-    expect(src).toContain('const flipPlane=pl=>{if(canFlipPlane(pl)){pl.side=-pl.side;pl.aFlash=performance.now()+ARROW_FLASH_MS}}'); // build 511: the flip also shows the arrow for a moment
+    expect(src).toContain('const flipPlane=pl=>{if(canFlipPlane(pl)){pl.side=-pl.side;pl.aFlash=performance.now()+ARROW_FLASH_MS}}'); // the flip also shows the arrow for a moment
   });
 });
 

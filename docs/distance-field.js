@@ -1,4 +1,4 @@
-// Distance field for VR sphere tracing (build 369). For each segment channel
+// Distance field for VR sphere tracing. For each segment channel
 // of the classification bytes (>= 128 inside), a byte per voxel: a lower
 // bound, in voxels, of the distance to the nearest voxel of the other class
 // (inside → nearest outside, outside → nearest inside), capped at 255.
@@ -12,11 +12,11 @@
 // Pure module (no DOM), unit-tested.
 const INF=0x3fffffff;
 // inside: Uint8Array (non-zero = inside), dims [w,h,d]; returns Uint8Array
-// scratch: optional {D:Int32Array(n), a, b, dil: Uint8Array(n)} reused across channels (build 371)
+// scratch: optional {D:Int32Array(n), a, b, dil: Uint8Array(n)} reused across channels
 export function chamferDistanceBytes(inside,dims,scratch=null){
  const [w,h,d]=dims,n=w*h*d,wh=w*h,D=scratch?.D||new Int32Array(n);
  // seeds: voxels with a 26-neighbour of the other class = dilate(inside) and
- // not erode(inside), with separable 3-tap max / min passes (build 370: the
+ // not erode(inside), with separable 3-tap max / min passes (the
  // direct 27-neighbour test took most of the build time at 256³)
  const a=scratch?.a||new Uint8Array(n),b=scratch?.b||new Uint8Array(n);
  const axisPass=(src,dst,op)=>{
@@ -72,12 +72,12 @@ export async function buildDistanceBytes(cls,dims,onProgress=null){
  onProgress?.(C,C);
  return{data:out,C,chan:cls.chan};
 }
-// build 384: the classification bytes and the per-segment distance bytes
+// the classification bytes and the per-segment distance bytes
 // share one RGBA texture: channels as in cls (chan), alpha = the smallest
 // distance over the enabled segments (bit s of mask), 255 when none. One
 // fetch per ray step then serves the jump test and the classification.
 // Needs a free channel: at most three segments stored (chan < 3).
-// build 528: with {four:true} four stored channels are accepted as well: channels 0..2 go to the texture as before, the
+// with {four:true} four stored channels are accepted as well: channels 0..2 go to the texture as before, the
 // alpha is the smallest distance over every shown segment (channel 3 included), and channel 3's classification bytes are
 // served by fourthChannelBytes for a second (R8) texture. Without the option the result is as before (null for four).
 export function combineClassificationDistance(cls,dist,mask,out=null,{four=false}={}){
@@ -94,7 +94,23 @@ export function combineClassificationDistance(cls,dist,mask,out=null,{four=false
  }
  return res;
 }
-// build 528: the classification bytes of channel 3 (the fourth stored segment), one byte per voxel, for the VR shader's
+// only the alpha of combineClassificationDistance, one byte per voxel, for the voxels [i0, i1) into alpha[i0..i1): the smallest
+// distance over the shown segments (bit s of mask, any stored channel), 255 when none, the same rule as above. The classification channels of
+// the combined bytes do not depend on the mask, so a rebuild for a new mask only rewrites the alpha (vr-combo-rebuild.js; byte-identical to the
+// one-shot result, unit-tested). Self-contained (no outer names): it also runs as the source of the rebuild worker.
+export function combinedAlphaRange(dist,chan,mask,alpha,i0,i1){
+ const C=dist.C,d=dist.data;let c0=-1,c1=-1,c2=-1,c3=-1,k=0;
+ for(let s=0;s<4;s++)if(chan[s]>=0&&((mask>>s)&1)){const c=chan[s];if(k===0)c0=c;else if(k===1)c1=c;else if(k===2)c2=c;else c3=c;k++}
+ for(let i=i0;i<i1;i++){
+  const b=i*C;let m=255,v=0;
+  if(c0>=0){v=d[b+c0];if(v<m)m=v}
+  if(c1>=0){v=d[b+c1];if(v<m)m=v}
+  if(c2>=0){v=d[b+c2];if(v<m)m=v}
+  if(c3>=0){v=d[b+c3];if(v<m)m=v}
+  alpha[i]=m;
+ }
+}
+// the classification bytes of channel 3 (the fourth stored segment), one byte per voxel, for the VR shader's
 // second texture (VRL_CLS4); null when no segment uses channel 3
 export function fourthChannelBytes(cls){
  const C=cls.C,chan=cls.chan;if(!chan.includes(3)||C<4)return null;

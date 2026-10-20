@@ -1,43 +1,47 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { SAMPLE_CACHE, DEFAULT_SAMPLE, sampleIndexUrl, sampleSliceUrl, sampleCacheKey } from './sample-sets.js?v=20261018-build621';
-import { mark3DStale, mark3DCurrent } from './three-state.js?v=20261018-build621';
-import { updateVolumeFilterBadge, set3DBusy, gpuVolumeRefresh } from './three-status.js?v=20261018-build621';
-import { currentLanguage, current3DVolume, volume, activeSeries, threeRenderMode, sceneState, sourceVolume, setActiveId, setActiveSeries, activeId, setSourceVolume, setVolume, setThreeRenderMode, ipadGpuTargetSide, setResidentGpuUploadSeriesId, setResidentMprReadbackDisabled, residentGpuUploadSeriesId, gpuPrewarmScheduled, gpuPrewarmIndex, setGpuPrewarmScheduled, incGpuPrewarmIndex, setFilterOrder, setCtRangeMode, setCtRangeProfile, ctRangeProfile, incSourceRenderRevision, setThreeDCancelRequested, setCurrent3DVolume, setMemoryGpuPreviewActive, incResidentMprEpoch, ctRangeMode, filterOrder, threeDDirty } from './state.js?v=20261018-build621';
-import { footer, resetFilterBtn, wc, ww, surfaceSmoothEnabled, surfaceSmoothStrength, planes, spikeHoleStrength, spikeHoleThreshold, nlmStrength, nlmSearchRadius, nlmPatchRadius, anisotropicStrength, anisotropicIterations, smoothingType, gaussianStrength, spatialPasses, sigmoidStrength, sigmoidCenter, sigmoidWidth, bilateralStrength, bilateralSpatial, bilateralIntensity, bilateralPasses, tvWeight, tvIterations, unsharpRadius, unsharpAmount, unsharpThreshold, list, selected, prog, volumeAnalysisToggle, threeLabel, state, renderModeToggle, gaussianBtn, spikeHoleBtn, nlmBtn, anisotropicBtn, sigmoidBtn, bilateralBtn, tvBtn, unsharpBtn, filterAddSelect, filterAddButton, ctRangeAuto, ctRangeFull, $, progLabel, bar, anisotropicKappa, tvEps } from './ui-shell.js?v=20261018-build621';
-import { commentsForProject, loadProjectComments, markCommentsSaved } from './comments.js?v=20261018-build621';
-import { normalizeAnalysisLabel } from './analysis-label.js?v=20261018-build621';
-import { measurementsForProject, loadProjectMeasurements, markMeasurementsSaved } from './measurements.js?v=20261018-build621';
-import { compareFingerprints, resolveProjectMatch, resolveProjectMatchAsync, legacySpacingUpgrade, datasetFingerprint, decodeRuns, packProject, PROJECT_EXTENSION, encodeRuns } from './project-file.js?v=20261018-build621';
-import { SEGMENT_PRESET_ORDER, segmentState, segmentEditState, segmentNeedsVoxelMask, segmentEditGen, segmentExclusive, applyExclusiveRanges, commitExclusiveRanges } from './segments.js?v=20261018-build621';
-import { materialKey } from './lighting.js?v=20261018-build621';
-import { FILTER_CATALOG_ORDER, addFilter, applyVolumeAfterFilterRebuild, invalidateSourceFilters, syncFilterControls, setFilterUnitControl, formatHU } from './filter-pipeline.js?v=20261018-build621';
-import { sourceRangeFromMetadata } from './dicom.js?v=20261018-build621';
-import { spacingCheckForProject, spacingWarningText, spacingWarningHtml as spacingHtml } from './slice-spacing.js?v=20261018-build621';
-import { sizeWarningHtml } from './vr-real-scale.js?v=20261018-build621';
-import { FILTER_UNITS, filterLegacyRange, resolveFilterParams } from './filter-units.js?v=20261018-build621';
-import { smoothingSync, applyDeviceSmoothing } from './settings.js?v=20261018-build621';
-import { setControlValue, applyCtRangeMode, removeSegmentPreset, addSegmentPreset, segmentControl, setControlChecked, clearAnalysisHighlight, scheduleSegment3D, updateSegmentOutputs, renderSegmentPresets, THIN_SLIDERS, configureThinSliders } from './segment-ui.js?v=20261018-build621';
-import { syncGpuVolumeEdits, gpuVolumeApplied, gpuVolumeTarget, gpuVolumePlanOptions, updateVolumeCacheControl, gpuVolumeDataSignature } from './gpu-volume-data.js?v=20261018-build621';
-import { renderAll, cancelSourceMprWarmup } from './mpr-render.js?v=20261018-build621';
-import { updateAnalysisEditorControls } from './edit-tools.js?v=20261018-build621';
-import { request3DRender } from './scene3d.js?v=20261018-build621';
-import { downloadBlob, esc, fmt, isIPadRuntime, isIPhoneRuntime, isTabletRuntime, niceCtStep, withTimeout } from './utils.js?v=20261018-build621';
-import { decode, prepareSourceMprCache } from './volume-io.js?v=20261018-build621';
-import { progress, clearMemoryFilterPreviewCache, surfaceEditsPending } from './rebuild-3d.js?v=20261018-build621';
-import { ensureMpr3DPreviewCache, syncMpr3DSliceSliders, syncMpr3DOverlayPresentation, disposeMprPlaneGroup } from './mpr3d-overlay.js?v=20261018-build621';
-import { tr } from './i18n.js?v=20261018-build621';
-import { setGpuComputeBackend, gpuFilterRuntime, gpuFilterPipeline } from './gpu-compute.js?v=20261018-build621';
+import { SAMPLE_CACHE, DEFAULT_SAMPLE, sampleIndexUrl, sampleSliceUrl, sampleCacheKey } from './sample-sets.js?v=20261020-build630';
+import { mark3DStale, mark3DCurrent } from './three-state.js?v=20261020-build630';
+import { updateVolumeFilterBadge, set3DBusy, gpuVolumeRefresh } from './three-status.js?v=20261020-build630';
+import { analysisRegions, currentLanguage, current3DVolume, volume, activeSeries, threeRenderMode, sceneState, sourceVolume, setActiveId, setActiveSeries, activeId, setSourceVolume, setVolume, setThreeRenderMode, ipadGpuTargetSide, setResidentGpuUploadSeriesId, setResidentMprReadbackDisabled, residentGpuUploadSeriesId, gpuPrewarmScheduled, gpuPrewarmIndex, setGpuPrewarmScheduled, incGpuPrewarmIndex, setFilterOrder, setCtRangeMode, setCtRangeProfile, ctRangeProfile, incSourceRenderRevision, setThreeDCancelRequested, setCurrent3DVolume, setMemoryGpuPreviewActive, incResidentMprEpoch, ctRangeMode, filterOrder, threeDDirty } from './state.js?v=20261020-build630';
+import { footer, resetFilterBtn, wc, ww, surfaceSmoothEnabled, surfaceSmoothStrength, planes, spikeHoleStrength, spikeHoleThreshold, nlmStrength, nlmSearchRadius, nlmPatchRadius, anisotropicStrength, anisotropicIterations, smoothingType, gaussianStrength, spatialPasses, sigmoidStrength, sigmoidCenter, sigmoidWidth, bilateralStrength, bilateralSpatial, bilateralIntensity, bilateralPasses, tvWeight, tvIterations, unsharpRadius, unsharpAmount, unsharpThreshold, list, selected, prog, volumeAnalysisToggle, threeLabel, state, renderModeToggle, gaussianBtn, spikeHoleBtn, nlmBtn, anisotropicBtn, sigmoidBtn, bilateralBtn, tvBtn, unsharpBtn, filterAddSelect, filterAddButton, ctRangeAuto, ctRangeFull, $, progLabel, bar, anisotropicKappa, tvEps } from './ui-shell.js?v=20261020-build630';
+import { commentsForProject, loadProjectComments, markCommentsSaved } from './comments.js?v=20261020-build630';
+import { normalizeAnalysisLabel, setRegionLabel } from './analysis-label.js?v=20261020-build630';
+import { resetUserState } from './event-fresh.js?v=20261020-build630';
+import { segmentVisibilityPlan } from './event-mode.js?v=20261020-build630';
+import { measurementsForProject, loadProjectMeasurements, markMeasurementsSaved } from './measurements.js?v=20261020-build630';
+import { compareFingerprints, resolveProjectMatch, resolveProjectMatchAsync, legacySpacingUpgrade, datasetFingerprint, decodeRuns, packProject, PROJECT_EXTENSION, encodeRuns } from './project-file.js?v=20261020-build630';
+import { SEGMENT_PRESET_ORDER, segmentState, segmentEditState, segmentNeedsVoxelMask, segmentEditGen, segmentExclusive, applyExclusiveRanges, commitExclusiveRanges, SEGMENT_PRESET_DEFAULTS } from './segments.js?v=20261020-build630';
+import { materialKey } from './lighting.js?v=20261020-build630';
+import { FILTER_CATALOG_ORDER, addFilter, applyVolumeAfterFilterRebuild, invalidateSourceFilters, syncFilterControls, setFilterUnitControl, formatHU } from './filter-pipeline.js?v=20261020-build630';
+import { sourceRangeFromMetadata } from './dicom.js?v=20261020-build630';
+import { spacingCheckForProject, spacingWarningText, spacingWarningHtml as spacingHtml } from './slice-spacing.js?v=20261020-build630';
+import { sizeWarningHtml } from './vr-real-scale.js?v=20261020-build630';
+import { FILTER_UNITS, filterLegacyRange, resolveFilterParams } from './filter-units.js?v=20261020-build630';
+import { smoothingSync, applyDeviceSmoothing } from './settings.js?v=20261020-build630';
+import { setControlValue, applyCtRangeMode, removeSegmentPreset, addSegmentPreset, segmentControl, setControlChecked, clearAnalysisHighlight, scheduleSegment3D, updateSegmentOutputs, renderSegmentPresets, THIN_SLIDERS, configureThinSliders } from './segment-ui.js?v=20261020-build630';
+import { syncGpuVolumeEdits, gpuVolumeApplied, gpuVolumeTarget, gpuVolumePlanOptions, updateVolumeCacheControl, gpuVolumeDataSignature } from './gpu-volume-data.js?v=20261020-build630';
+import { renderAll, cancelSourceMprWarmup } from './mpr-render.js?v=20261020-build630';
+import { updateAnalysisEditorControls } from './edit-tools.js?v=20261020-build630';
+import { request3DRender } from './scene3d.js?v=20261020-build630';
+import { downloadBlob, esc, fmt, isIPadRuntime, isIPhoneRuntime, isTabletRuntime, niceCtStep, withTimeout } from './utils.js?v=20261020-build630';
+import { decode, prepareSourceMprCache } from './volume-io.js?v=20261020-build630';
+import { progress, clearMemoryFilterPreviewCache, surfaceEditsPending } from './rebuild-3d.js?v=20261020-build630';
+import { ensureMpr3DPreviewCache, syncMpr3DSliceSliders, syncMpr3DOverlayPresentation, disposeMprPlaneGroup } from './mpr3d-overlay.js?v=20261020-build630';
+import { tr } from './i18n.js?v=20261020-build630';
+import { setGpuComputeBackend, gpuFilterRuntime, gpuFilterPipeline } from './gpu-compute.js?v=20261020-build630';
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.webgpu.js';
-import { GPU_IDLE_PREWARM_KINDS } from './gpu-shaders.js?v=20261018-build621';
-import { filterState, currentFilterSignature } from './source-filters.js?v=20261018-build621';
-import { dispose } from './surface-mesh.js?v=20261018-build621';
-import { residentMprJobs } from './mpr-orthogonal.js?v=20261018-build621';
-import { ensureSegmentBaseRuns } from './segment-runs.js?v=20261018-build621';
-import { APP_VERSION, APP_BUILD } from './version.js?v=20261018-build621';
-import { askInline } from './inline-ask.js?v=20261018-build621';
-import { setBusySlot, reportBusyProgress, setBusyLabel } from './progress-modal.js?v=20261018-build621';
-import { analysisRegionsForProject, restoreAnalysisRegions } from './analysis-ops.js?v=20261018-build621';
+import { GPU_IDLE_PREWARM_KINDS } from './gpu-shaders.js?v=20261020-build630';
+import { filterState, currentFilterSignature } from './source-filters.js?v=20261020-build630';
+import { dispose } from './surface-mesh.js?v=20261020-build630';
+import { residentMprJobs } from './mpr-orthogonal.js?v=20261020-build630';
+import { ensureSegmentBaseRuns } from './segment-runs.js?v=20261020-build630';
+import { APP_VERSION, APP_BUILD } from './version.js?v=20261020-build630';
+import { askInline } from './inline-ask.js?v=20261020-build630';
+import { setBusySlot, reportBusyProgress, setBusyLabel } from './progress-modal.js?v=20261020-build630';
+import { analysisRegionsForProject, restoreAnalysisRegions, clearAllSegmentEdits } from './analysis-ops.js?v=20261020-build630';
+import { resetLineProfileForDataset } from './line-profile-ui.js?v=20261020-build630';
+import { resetSegmentStyles } from './dataset-reset.js?v=20261020-build630';
 export function updateRenderModeControl(v=volume){
  updateVolumeFilterBadge();
  if(!renderModeToggle)return;
@@ -113,7 +117,7 @@ export function clear3DForSeriesChange(){
  if(sceneState?.obj){sceneState.obj.parent?.remove(sceneState.obj);dispose(sceneState.obj);sceneState.obj=null}
  disposeMprPlaneGroup();request3DRender();mark3DStale();
 }
-// build 335: practice dataset hosted on this site (docs/demo/sample1, 512 DICOM slices
+// practice dataset hosted on this site (docs/demo/sample1, 512 DICOM slices
 // listed in index.json). Same-origin, so it also opens on a Meta Quest without typing a
 // URL. The browser HTTP cache keeps it for the next visit.
 export async function loadSampleDemo(setId=DEFAULT_SAMPLE){
@@ -121,12 +125,12 @@ export async function loadSampleDemo(setId=DEFAULT_SAMPLE){
  const r=await fetch(sampleIndexUrl(setId),{credentials:'omit'});
  if(!r.ok)throw new Error('Sample index: HTTP '+r.status);
  const names=(await r.json()).files||[];if(!names.length)throw new Error('Sample index is empty');
- // build 352: slices kept in Cache Storage (like the public demo), so a
+ // slices kept in Cache Storage (like the public demo), so a
  // second open reads them from disk instead of downloading 260 MB again;
  // cache problems fall back to the network
  let cache=null;try{if('caches' in window)cache=await withTimeout(caches.open(SAMPLE_CACHE),1500,null)}catch{cache=null}
  const out=new Array(names.length);let next=0,done=0,bytes=0,cached=0;
- // build 355: the cache key does not contain the page path, so main and the
+ // the cache key does not contain the page path, so main and the
  // PR previews (same origin) share one copy; the write runs beside the read
  const puts=[];
  const lane=async()=>{while(next<names.length){const i=next++,url=new URL(sampleSliceUrl(setId,names[i]),location.href).href,key=sampleCacheKey(location.origin,setId,names[i]);
@@ -142,15 +146,15 @@ export const detectedSeries={list:[]};
 export function useWorkspaceUi(){
  const q=new URLSearchParams(location.search).get('ui');
  if(q==='classic')return false;if(q==='workspace')return true;
- // build 331: the workspace UI everywhere but the iPhone (was iPad + Mac only)
+ // the workspace UI everywhere but the iPhone (was iPad + Mac only)
  return !isIPhoneRuntime();
 }
 export function requestIPadSettingsTab(tab){
  if(!useWorkspaceUi())return;
  document.dispatchEvent(new CustomEvent('vrl-ipad-settings-tab',{detail:{tab}}));
 }
-// build 469: non-blocking slice-spacing warning shown with the selected series (wraps; fine on iPad)
-function spacingWarningHtml(s){return spacingHtml(s.spacingCheck,currentLanguage,esc)+sizeWarningHtml(s,currentLanguage,esc)} // build 489: + the >30 cm note (Issue #88 item 3)
+// non-blocking slice-spacing warning shown with the selected series (wraps; fine on iPad)
+function spacingWarningHtml(s){return spacingHtml(s.spacingCheck,currentLanguage,esc)+sizeWarningHtml(s,currentLanguage,esc)} // + the >30 cm note (item 3)
 // language switch: redraw the warning in the selected-series overlay
 export function refreshSpacingWarning(){
  for(const s of detectedSeries.list){const w=spacingWarningText(s.spacingCheck),mark=[...list.children].find(n=>n.dataset.id===s.id)?.querySelector('.spacing-mark');if(w&&mark)mark.title=currentLanguage==='ja'?w.ja:w.en}
@@ -166,8 +170,26 @@ function smallSeriesGpuVolume(s){
  if(s.sourceBacked||isTabletRuntime()||isIPhoneRuntime()||/Mac/i.test(navigator.platform||''))return false;
  const mv=sceneState?.medicalVolume;return !!mv?.support(openSourceBackedVolume(s),gpuVolumePlanOptions()).ok;
 }
+// the ONE place where the per-dataset state is reset when another dataset is opened (another practice dataset without a page reload,
+// another series card, the series a project points to). It runs at the start of selectSeries, before configure() and before the new data's
+// project is applied (applyPendingProject at the end of selectSeries), so what that project sets wins; what it does not set is not inherited.
+//   cleared here: the HU line (the shared model: 2D slices, 3D overlay, VR line + panel) with the line-profile panel and a pick in progress;
+//     the segments' manual edits, undo / redo and the 3D edit tool / target (voxel runs in the old grid); the inactive segment presets'
+//     own settings (colour, opacity, post-processing, material: dataset-reset.js)
+//   cleared elsewhere on the same switch: crosshair (state.js setSourceVolume), analysis regions + their focus / selection (clear3DForSeriesChange;
+//     a project restore still running for the old data stops: analysis-ops.js restoreAnalysisRegions), crop box, a measurement start and the
+//     3D HU line pick (their 'vrl-serieschange' listeners), segment ranges / overlap order (configureSegments), window, slices, filters (configure,
+//     app.js resetVolume on a new load), the section view (resetVolume)
+//   kept on purpose: position comments and distances (stored per dataset fingerprint, merged by projects), settings, theme, language, the
+//     histogram's display range, the analysis dock layout, the Filtered / Raw HU choice
+export function resetDatasetState(){
+ resetLineProfileForDataset();
+ clearAllSegmentEdits();
+ for(const key of resetSegmentStyles(segmentState,SEGMENT_PRESET_DEFAULTS)){const el=segmentControl('material',key);if(el)el.value=segmentState[key].material} // the other controls follow configureSegments
+}
 export async function selectSeries(s){
- setActiveId(s.id);setActiveSeries(s);clear3DForSeriesChange();const sourceBacked=s.sourceBacked||smallSeriesGpuVolume(s);
+ // per-dataset reset only for another series (the same card again re-decodes the same data and keeps its edits, as before)
+ const prevSeries=activeSeries;setActiveId(s.id);setActiveSeries(s);clear3DForSeriesChange();if(s!==prevSeries)resetDatasetState();const sourceBacked=s.sourceBacked||smallSeriesGpuVolume(s);
  requestIPadSettingsTab('display');
  for(const n of list.children)n.classList.toggle('is-selected',n.dataset.id===activeId);
  selected.innerHTML='<strong>'+esc(s.description)+'</strong><span>'+esc(s.modality)+' · '+s.slices.length+' slices · '+s.columns+'×'+s.rows+(sourceBacked?' · full resolution':'')+'</span>'+spacingWarningHtml(s)+'<span class="ready-badge">CT volume loading…</span>';
@@ -266,7 +288,7 @@ export function configure(v){
  const p=ctRangeProfile,center=p.center,initialWidth=p.width;
  wc.min=p.fullMin;wc.max=p.fullMax;wc.value=Math.max(p.fullMin,Math.min(p.fullMax,center));wc.disabled=false;
  ww.min=Math.max(niceCtStep(p.fullSpan),1e-6);ww.max=p.fullWidthMax;ww.value=Math.max(+ww.min,Math.min(p.fullWidthMax,initialWidth));ww.disabled=false;
- sigmoidCenter.min=p.fullMin;sigmoidCenter.max=p.fullMax;sigmoidCenter.value=Math.max(p.fullMin,Math.min(p.fullMax,0)); // build 436: 0 HU, between fat and soft tissue (was the window centre)
+ sigmoidCenter.min=p.fullMin;sigmoidCenter.max=p.fullMax;sigmoidCenter.value=Math.max(p.fullMin,Math.min(p.fullMax,0)); // 0 HU, between fat and soft tissue (was the window centre)
  sigmoidCenter.disabled=!filterState.sigmoid;
  const vals={axial:[v.slices,v.slices/2],coronal:[v.rows,v.rows/2],sagittal:[v.columns,v.columns/2]};for(const [plane,[max,mid]]of Object.entries(vals)){planes[plane].slider.max=max-1;planes[plane].slider.value=Math.floor(mid);planes[plane].slider.disabled=false}
  configureSegments(v);
@@ -287,14 +309,14 @@ export function configureSegments(v){
   enabled.disabled=color.disabled=min.disabled=max.disabled=opacity.disabled=!usable;opening.disabled=closing.disabled=minComponent.disabled=holeFill.disabled=!usable;for(const [attr] of THIN_SLIDERS){const el=$('[data-seg-'+attr+'="'+key+'"]');if(el)el.disabled=!usable}if(exportBtn)exportBtn.disabled=!usable;if(removeBtn)removeBtn.disabled=!usable;enabled.checked=cfg.enabled;color.value=cfg.color;
   min.min=max.min=Math.floor(v.min);min.max=max.max=Math.ceil(v.max);min.value=cfg.min;max.value=cfg.max;opacity.value=cfg.opacity;opening.value=cfg.opening;closing.value=cfg.closing;minComponent.value=cfg.minComponent;holeFill.checked=cfg.holeFill;$('[data-seg-opening-out="'+key+'"]').value=cfg.opening;$('[data-seg-closing-out="'+key+'"]').value=cfg.closing;$('[data-seg-min-component-out="'+key+'"]').value=cfg.minComponent;cfg._maskCache=null;updateSegmentOutputs(key);
  }
- // build 438: new data: no overlaps, the default card order
+ // new data: no overlaps, the default card order
  segmentExclusive.mode='priority';segmentExclusive.order=['contrast','bone','fat','soft','lung'];applyExclusiveRanges();segmentExclusive.pending.clear();
  for(const key of Object.keys(segmentState))updateSegmentOutputs(key);
  renderSegmentPresets();
 }
 export const FILTER_PARAM_INPUTS={spikeHole:{strength:spikeHoleStrength,thresholdHU:spikeHoleThreshold},nlm:{hHU:nlmStrength,searchRadius:nlmSearchRadius,patchRadius:nlmPatchRadius},anisotropic:{strength:anisotropicStrength,kappaHU:anisotropicKappa,iterations:anisotropicIterations},gaussian:{mode:smoothingType,strength:gaussianStrength,passes:spatialPasses},sigmoid:{strength:sigmoidStrength,center:sigmoidCenter,width:sigmoidWidth},bilateral:{strength:bilateralStrength,spatialSigma:bilateralSpatial,sigmaHU:bilateralIntensity,passes:bilateralPasses},tv:{weight:tvWeight,epsHU:tvEps,iterations:tvIterations},unsharp:{radius:unsharpRadius,amount:unsharpAmount,thresholdHU:unsharpThreshold}};
 export const pendingProject={value:null};
-// builds 446-447: set by applyProject when HU parameters were derived from an old project (no HU values saved); shown in the footer
+// 447: set by applyProject when HU parameters were derived from an old project (no HU values saved); shown in the footer
 export const filterLegacyNotes={value:[]};
 export function gatherProject(){
  const series=activeSeries,slices=series.slices.length;
@@ -303,7 +325,7 @@ export function gatherProject(){
   dataset:datasetFingerprint(series),
   display:{windowCenter:wc.value,windowWidth:ww.value,ctRangeMode,slices:Object.fromEntries(Object.keys(planes).map(p=>[p,+planes[p].slider.value]))},
   filters:{order:filterOrder.filter(k=>filterState[k]).map(key=>({key,params:Object.fromEntries(Object.entries(FILTER_PARAM_INPUTS[key]||{}).map(([name,el])=>[name,name in (FILTER_UNITS[key]?.params||{})?+el.value:el.value]))}))},
-  // build 438: overlap rule and card order (priority); segment min / max below are the user (slider) ranges
+  // overlap rule and card order (priority); segment min / max below are the user (slider) ranges
   segmentOptions:{exclusive:segmentExclusive.mode,order:[...segmentExclusive.order]},
   segments:Object.fromEntries(SEGMENT_PRESET_ORDER.map(key=>{const g=segmentState[key];return[key,{active:!!g.active,enabled:!!g.enabled,color:g.color,opacity:g.opacity,min:g.userMin??g.min,max:g.userMax??g.max,opening:g.opening,closing:g.closing,minComponent:g.minComponent,holeFill:!!g.holeFill,surfaceMm:g.surfaceMm,thicknessMm:g.thicknessMm,material:materialKey(g.material)}]})),
   surfaceSmoothing:{enabled:!!surfaceSmoothEnabled?.checked,strength:surfaceSmoothStrength?.value??null},
@@ -311,12 +333,12 @@ export function gatherProject(){
   // project then restores the 3D state too, not only the 2D preview.
   threeD:{filtersApplied:!!currentFilterSignature()&&(gpuVolumeDataSignature()===currentFilterSignature()||!threeDDirty)},
   edits:{},
-  // build 469: slice-spacing check (optional, informational; no project version bump)
+  // slice-spacing check (optional, informational; no project version bump)
   ...(series.spacingCheck?{spacingCheck:spacingCheckForProject(series.spacingCheck)}:{}),
-  // Issue #88 stage 2: position comments of this series (voxel indices; never applied by loading, only by "view this place")
+  // stage 2: position comments of this series (voxel indices; never applied by loading, only by "view this place")
   comments:commentsForProject(datasetFingerprint(series)),
  };
- // build 477: distances between two of those points ({id,a,b}: point ids). Only written when there are some; an older app ignores the field (no project version bump)
+ // distances between two of those points ({id,a,b}: point ids). Only written when there are some; an older app ignores the field (no project version bump)
  {const ms=measurementsForProject(new Set(project.comments.map(c=>c.id)));if(ms.length)project.measurements=ms}
  const binaries={};
  for(const key of SEGMENT_PRESET_ORDER){
@@ -324,7 +346,7 @@ export function gatherProject(){
   for(const kind of['keep','exclude']){const runs=st[kind+'Runs'];if(runs){const path='edits/'+key+'-'+kind+'.bin';binaries[path]=encodeRuns(runs,slices);entry[kind]=path}}
   if(Object.keys(entry).length)project.edits[key]=entry;
  }
- // build 408: analysis results (colour, flags, voxels as runs); volumes are recomputed on load
+ // analysis results (colour, flags, voxels as runs); volumes are recomputed on load
  const regions=analysisRegionsForProject();
  if(regions.length)project.analysis={regions:regions.map((r,i)=>{const path='analysis/region-'+(i+1)+'.bin';binaries[path]=encodeRuns(r.runsBySlice,slices);const{runsBySlice,...meta}=r;return{...meta,runs:path}})};
  return{project,binaries};
@@ -336,7 +358,7 @@ export async function applyPendingProject(){
  if(!compareFingerprints(ds,datasetFingerprint(activeSeries)).ok){
   const match=detectedSeries.list.find(s=>s!==activeSeries&&compareFingerprints(ds,datasetFingerprint(s)).ok);
   if(match){await selectSeries(match);return}
-  // build 469: a project saved with the old first-two-slices spacing may be opened with the new one after confirmation
+  // a project saved with the old first-two-slices spacing may be opened with the new one after confirmation
   const accepted=pending.legacyAccepted!=null&&pending.legacyAccepted===activeSeries.id&&!!legacySpacingUpgrade(ds,datasetFingerprint(activeSeries)),
    r=accepted?{action:'apply'}:await resolveProjectMatchAsync(ds,datasetFingerprint(activeSeries),t=>askInline(t),currentLanguage);
   if(r.action==='cancel'){footer.textContent=ja?'プロジェクトの適用をキャンセルしました（スライス間隔が保存時と異なります）':'Project not applied (the slice spacing differs from the saved one)';return}
@@ -358,12 +380,12 @@ export async function applyProject({project,files}){
   if(!SEGMENT_PRESET_ORDER.includes(key))continue;edits[key]={};
   for(const kind of['keep','exclude'])if(entry?.[kind]){const bytes=files[entry[kind]];if(!bytes)throw new Error('missing '+entry[kind]);edits[key][kind]=decodeRuns(bytes,dims)}
  }
- // build 408: analysis results (projects before 408 have none)
+ // analysis results (projects before 408 have none)
  const analysis=[];
  for(const e of project.analysis?.regions||[]){
   const keys=(e.segmentKeys||[]).filter(k=>SEGMENT_PRESET_ORDER.includes(k));if(!keys.length)continue;
   const bytes=files[e.runs];if(!bytes)throw new Error('missing '+e.runs);
-  analysis.push({key:e.key,segmentKeys:keys,color:Number(e.color),visible:e.visible!==false,selected:e.selected===true,merged:!!e.merged,groupId:e.groupId||null,label:normalizeAnalysisLabel(e.label)||undefined,runsBySlice:decodeRuns(bytes,dims)}); // build 523: the pinned label (projects before 523 have none)
+  analysis.push({key:e.key,segmentKeys:keys,color:Number(e.color),visible:e.visible!==false,selected:e.selected===true,merged:!!e.merged,groupId:e.groupId||null,label:normalizeAnalysisLabel(e.label)||undefined,runsBySlice:decodeRuns(bytes,dims)}); // the pinned label (projects before 523 have none)
  }
  // filters (replayed through the filter controls)
  resetFilterBtn.click();
@@ -381,13 +403,13 @@ export async function applyProject({project,files}){
  const display=project.display||{};
  if(display.ctRangeMode)applyCtRangeMode(display.ctRangeMode);
  setControlValue(wc,display.windowCenter);setControlValue(ww,display.windowWidth);
- // segments; build 438: projects saved before 438 have no overlap rule: they keep overlaps ('off'), so their results stay
+ // segments;: projects saved before 438 have no overlap rule: they keep overlaps ('off'), so their results stay
  const so=project.segmentOptions||{};segmentExclusive.mode=['off','priority'].includes(so.exclusive)?so.exclusive:'off';
  if(Array.isArray(so.order)&&so.order.length)segmentExclusive.order=[...so.order.filter(k=>SEGMENT_PRESET_ORDER.includes(k)),...['bone','fat','soft','lung','contrast'].filter(k=>!so.order.includes(k))];
  renderSegmentPresets();
  for(const key of SEGMENT_PRESET_ORDER){
   const g=project.segments?.[key];
-  setControlValue(segmentControl('material',key),materialKey(g?.material)); // build 620: also for inactive / missing segments; projects saved before 620 have no material: standard
+  setControlValue(segmentControl('material',key),materialKey(g?.material)); // also for inactive / missing segments; projects saved before 620 have no material: standard
   if(!g)continue;
   if(!g.active){if(segmentState[key].active)removeSegmentPreset(key);continue}
   if(!segmentState[key].active)addSegmentPreset(key);
@@ -397,7 +419,7 @@ export async function applyProject({project,files}){
   setControlValue(segmentControl('closing',key),g.closing);setControlValue(segmentControl('min-component',key),g.minComponent);
   setControlValue(segmentControl('surface-mm',key),g.surfaceMm??0);setControlValue(segmentControl('thickness-mm',key),g.thicknessMm??0);
   setControlChecked(segmentControl('hole-fill',key),g.holeFill);setControlChecked(segmentControl('enabled',key),g.enabled);
-  // build 438: the saved range exactly: the slider snaps a value to its step grid, which moves with the slider's
+  // the saved range exactly: the slider snaps a value to its step grid, which moves with the slider's
   // range, so each save → load moved a range by a step (measured on main: fat −249…82 → −245…86 → −241…90)
   if(Number.isFinite(+g.min)&&Number.isFinite(+g.max)){const s=segmentState[key];s.userMin=+g.min;s.userMax=+g.max}
  }
@@ -410,17 +432,17 @@ export async function applyProject({project,files}){
   st.keepRuns=e.keep||null;st.excludeRuns=e.exclude||null;st.cutRuns=null;st.finalRuns=null;st.undo=[];st.redo=[];st.revision++;
   segmentEditGen[key]=(segmentEditGen[key]|0)+1;
  }
- // build 459: the restored edits make their segments voxel takers: the segments below follow
+ // the restored edits make their segments voxel takers: the segments below follow
  commitExclusiveRanges();
  if(threeRenderMode==='volume'&&sceneState?.medicalVolume?.active){syncGpuVolumeEdits(sourceVolume||volume);for(const key of SEGMENT_PRESET_ORDER){const st=segmentEditState[key];if(st.keepRuns||st.excludeRuns||st.surfaceGroup)surfaceEditsPending.add(key)}}
  // position comments: just stored (no view is moved)
  let commentIdMap={};
  if(Array.isArray(project.comments))commentIdMap=loadProjectComments(project.comments,datasetFingerprint(activeSeries)); // merged, never replaced (unsaved / other-series comments stay)
- // build 477: distances (after the points: entries whose points are missing are dropped; the other fields are never touched)
+ // distances (after the points: entries whose points are missing are dropped; the other fields are never touched)
  if(Array.isArray(project.measurements))loadProjectMeasurements(project.measurements,commentIdMap);
  // slice positions
  for(const[p,idx]of Object.entries(display.slices||{}))if(planes[p]&&Number.isFinite(+idx))planes[p].slider.value=String(Math.max(0,Math.min(+planes[p].slider.max,+idx)));
- // 3D: projects without the flag (saved before build 206) count as applied
+ // 3D: projects without the flag (saved before) count as applied
  const applied=project.threeD?.filtersApplied??!!(project.filters?.order||[]).length;
  if(applied&&currentFilterSignature()&&(sourceVolume||volume)?.sourceBacked){
   gpuVolumeApplied.seriesId=(sourceVolume||volume)?.series?.id??null;gpuVolumeApplied.signature=currentFilterSignature();
@@ -429,9 +451,37 @@ export async function applyProject({project,files}){
  clearAnalysisHighlight();renderAll();scheduleSegment3D();updateAnalysisEditorControls();updateVolumeFilterBadge();
  if(analysis.length)await restoreAnalysisRegions(analysis);
 }
-// build 408: moved to utils.js (analysis-ops.js needs it without importing data-load.js)
+// 体験会モード, the VR 「最初の状態に戻す」 button: the annotations of the open practice data go back to what its project file holds, IN PLACE (no decode, no GPU upload:
+// the volume stays as it is, which is what a running XR session needs). resetUserState empties the points / distances / histogram / HU choice, then the project's
+// own points, distances (with their moved labels) and the pinned analysis labels (with their moved places) are put back, and so are the segments' visibility (enabled flags) and the
+// CT window the project file starts with (the VR menu can switch every segment and move its own window: those are VR-local and re-derived from the page's, vr-view.js resetToStart;
+// the page's own flags / window are put back here so that both sides start from the same file). Filters are not touched: nothing in VR changes them. Returns false when no data is open.
+export function restoreProjectAnnotations(parsed){
+ if(!activeSeries)return false;
+ resetUserState();
+ const project=parsed?.project;if(!project)return true; // no project file for this data: everything the visitor added is cleared, nothing to put back
+ let idMap={};
+ if(Array.isArray(project.comments))idMap=loadProjectComments(project.comments,datasetFingerprint(activeSeries));
+ if(Array.isArray(project.measurements))loadProjectMeasurements(project.measurements,idMap);
+ // the regions come back in the project's order (applyProject / restoreAnalysisRegions): each takes the next entry with its key
+ const entries=[...(project.analysis?.regions||[])];
+ for(const r of analysisRegions){
+  const i=entries.findIndex(e=>e.key===r.key&&!!e.merged===!!r.merged);if(i<0)continue;
+  const [e]=entries.splice(i,1);setRegionLabel(r,normalizeAnalysisLabel(e.label)); // no label in the file = unpinned
+ }
+ // segment visibility: off first, then on (at most 4 shown); only what differs is touched (no needless 3D work)
+ const plan=segmentVisibilityPlan(project.segments,segmentState,SEGMENT_PRESET_ORDER);
+ for(const k of plan.off)setControlChecked(segmentControl('enabled',k),false);
+ for(const k of plan.on)setControlChecked(segmentControl('enabled',k),true);
+ // the CT window of the file
+ const display=project.display||{};
+ if(Number.isFinite(+display.windowCenter)&&+wc.value!==+display.windowCenter)setControlValue(wc,display.windowCenter);
+ if(Number.isFinite(+display.windowWidth)&&+ww.value!==+display.windowWidth)setControlValue(ww,display.windowWidth);
+ return true;
+}
+// moved to utils.js (analysis-ops.js needs it without importing data-load.js)
 export { downloadBlob };
-// build 405: loading (practice data, series decode) in the progress modal; calls are paired
+// loading (practice data, series decode) in the progress modal; calls are paired
 // phase of the running load in the modal title (the side-panel texts sit behind the modal)
 export function loadPhase(ja,en){setBusyLabel('load',currentLanguage==='en'?'Loading data · '+en:'データを読み込み中 · '+ja)}
 export function busy(v){setBusySlot('load',v,{label:currentLanguage==='en'?'Loading data…':'データを読み込み中…',counted:true})}

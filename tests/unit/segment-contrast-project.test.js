@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { installDomStub, importApp } from '../helpers/dom-stub.js';
 
-// build 531: the fifth preset (contrast) in the .vrlab project: new projects carry it, old projects (four presets) open unchanged
+// the fifth preset (contrast) in the .vrlab project: new projects carry it, old projects (four presets) open unchanged
 installDomStub();
 let D, S, ST;
 beforeAll(async () => { S = await importApp('segments'); ST = await importApp('state'); D = await importApp('data-load'); });
@@ -42,7 +42,7 @@ describe('load', () => {
     expect(S.segmentExclusive.order).toEqual(['soft', 'bone', 'fat', 'lung', 'contrast']);
     expect(S.segmentState.contrast.active).toBe(false); expect(S.segmentState.contrast.enabled).toBe(false);
   });
-  it('a project from before build 438 (no segmentOptions at all) loads as exclusive off', async () => {
+  it('a project from before (no segmentOptions at all) loads as exclusive off', async () => {
     reset(); ST.setActiveSeries(dims);
     await D.applyProject({ project: { app: { build: '400' }, segments: {} }, files: {} });
     expect(S.segmentExclusive.mode).toBe('off');

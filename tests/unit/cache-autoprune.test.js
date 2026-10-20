@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { pruneOtherFilterSettings } from '../../docs/gpu-volume-cache.js';
 
-describe('cache auto-prune (build 296)', () => {
+describe('cache auto-prune', () => {
   it('drops only same dataset + resolution entries with another filter', async () => {
     const entries = [
       { key: 'cur', info: { kind: 'volume', dataset: 'A', plan: '512', filter: 'g0.6' } },

@@ -16,7 +16,7 @@ const series = { id: 's::1', columns: 8, rows: 6, spacingX: 0.05, spacingY: 0.05
 // the practice data: no SmallestImagePixelValue / LargestImagePixelValue, unsigned 16 bit, slope 1, intercept -4000
 const practiceSlices = [{ bits: 16, bitsStored: 16, signed: false, slope: 1, intercept: -4000 }];
 
-describe('bilateral intensity sigma in HU (build 445)', () => {
+describe('bilateral intensity sigma in HU', () => {
   it('(a) the filter output does not depend on v.min / v.max', async () => {
     const params = { strength: 0.8, spatialSigma: 1.2, sigmaHU: 50, passes: 2 };
     const a = await cpuBilateral3D(noisy(-1361, 3102), params);
@@ -70,7 +70,7 @@ describe('bilateral intensity sigma in HU (build 445)', () => {
   });
 });
 
-describe('compatibility value by load path (build 446)', () => {
+describe('compatibility value by load path', () => {
   const dataRange = { min: -1361, max: 3102 };
   const meta = sl => sourceRangeFromMetadata(sl);
   const old = { intensitySigma: '0.02' };
@@ -104,7 +104,7 @@ describe('compatibility value by load path (build 446)', () => {
   });
 });
 
-describe('bilateral kernels do not use the volume range (build 446)', () => {
+describe('bilateral kernels do not use the volume range', () => {
   const src = readFileSync('docs/source-filters.js', 'utf8');
   // the worker function is stringified into a Blob worker in the app; here the same source text is evaluated
   const fn = src.match(/function bilateral\(input,w,h,d,p\)\{[^\n]*\}\n/)?.[0];

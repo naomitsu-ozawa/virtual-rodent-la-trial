@@ -17,7 +17,7 @@ describe('surface build: superseded exits return null', () => {
       const b = body(name);
       const exits = [...b.matchAll(/if\(revision!==sourceRenderRevision\)\{dispose\(group\);return([^}]*)\}/g)];
       for (const m of exits) expect(m[1].trim()).toBe('null');
-      // build 612: after the smoothing stream exists, a superseded exit also cancels its queued smoothing jobs (abandon())
+      // after the smoothing stream exists, a superseded exit also cancels its queued smoothing jobs (abandon())
       const abandons = [...b.matchAll(/if\(revision!==sourceRenderRevision\)return abandon\(\);/g)];
       expect(exits.length + abandons.length).toBeGreaterThanOrEqual(3);
       if (abandons.length) expect(b).toMatch(/const abandon=\(\)=>\{smoothStream\?\.cancel\(\);dispose\(group\);return null\};/);

@@ -220,13 +220,13 @@ describe('VR display (vr-measure.js)', () => {
     const line = scene.children.find(o => o.isLine), l1 = voxelToLocal({ i: 2, j: 3, k: 1 }, halfExt, dims), l2 = voxelToLocal({ i: 12, j: 9, k: 8 }, halfExt, dims);
     const w1 = new THREE.Vector3(l1.x, l1.y, l1.z).applyMatrix4(mesh.matrixWorld), w2 = new THREE.Vector3(l2.x, l2.y, l2.z).applyMatrix4(mesh.matrixWorld);
     const pos = line.geometry.attributes.position;
-    expect(new THREE.Vector3(pos.getX(0), pos.getY(0), pos.getZ(0)).distanceTo(w1)).toBeLessThan(1e-6); const nn = pos.count - 1; expect(nn).toBe(LINE_SAMPLES); expect(new THREE.Vector3(pos.getX(nn), pos.getY(nn), pos.getZ(nn)).distanceTo(w2)).toBeLessThan(1e-6); // 9 sample vertices A -> B (build 493: a depth cue per part)
+    expect(new THREE.Vector3(pos.getX(0), pos.getY(0), pos.getZ(0)).distanceTo(w1)).toBeLessThan(1e-6); const nn = pos.count - 1; expect(nn).toBe(LINE_SAMPLES); expect(new THREE.Vector3(pos.getX(nn), pos.getY(nn), pos.getZ(nn)).distanceTo(w2)).toBeLessThan(1e-6); // 9 sample vertices A -> B
     const label = scene.children.find(o => o.isMesh && o.renderOrder === 6);
     expect(label.visible).toBe(true);
     // the label starts NEAR the line (a small offset from the midpoint, beside it), 60 % size, and a leader joins them
     const mid = w1.clone().add(w2).multiplyScalar(0.5);
     expect(label.position.distanceTo(mid)).toBeLessThan(0.06); expect(label.position.distanceTo(mid)).toBeGreaterThan(0.005);
-    expect(label.scale.x).toBeLessThan(0.075); // smaller than build 478 (0.075 m wide) at arm's length
+    expect(label.scale.x).toBeLessThan(0.075); // smaller than (0.075 m wide) at arm's length
     expect(scene.children.length).toBe(n0 + 3);
     v.update({ ...base, startId: 'p1' }); expect(scene.children.length).toBe(n0 + 5); // + ring + hint
     v.update({ ...base, startId: null }); expect(scene.children.length).toBe(n0 + 3);
@@ -269,7 +269,7 @@ describe('review fixes: series, id renames, per-series saved state', () => {
 });
 
 describe('the label: size, default placement near the line, offset (move) persistence', () => {
-  it('about 60 % of build 478 in size, growing with the head distance', () => {
+  it('about 60 % of in size, growing with the head distance', () => {
     expect(MEASURE_LABEL_W_M).toBeCloseTo(0.075 * 0.6, 6);
     expect(labelScaleFor(0.6)).toBeCloseTo(1, 9); expect(labelScaleFor(1.2)).toBeCloseTo(2, 9); expect(labelScaleFor(0.1)).toBe(0.7); expect(labelScaleFor(5)).toBe(2.2);
   });
@@ -314,7 +314,7 @@ describe('label moves do not rebuild lists; point priority and reset are wired (
   it('the views let a point under the press win over a label, reset on double tap, rebuild the list only for real changes', () => {
     const ui = readFileSync(new URL('../../docs/comment-ui.js', import.meta.url), 'utf8'), d3 = readFileSync(new URL('../../docs/comment-3d.js', import.meta.url), 'utf8'), pm = readFileSync(new URL('../../docs/point-menu.js', import.meta.url), 'utf8');
     expect(ui).toContain('hits[p].some(h=>Math.hypot(h.x-x,h.y-y)<=h.r))return;'); // 2D: a mark under the press wins
-    expect(d3).toContain('gate()&&nearestDot(x,y)==null'); // 3D: a dot under the press wins (build 523: via allowed(), for both kinds of label)
+    expect(d3).toContain('gate()&&nearestDot(x,y)==null'); // 3D: a dot under the press wins (via allowed(), for both kinds of label)
     expect(ui).toContain('setLabelOffset(L.id,null)'); expect(d3).toContain('setLabelOffset(h.id,off)'); expect(d3).toContain('setOff(null)'); // double tap / click
     expect(ui).toContain('if(!info?.labelOnly)renderMeasures()');
     expect(pm).toContain("'point-menu-labelreset'"); expect(pm).toContain('setLabelOffset(m.id,null)');
@@ -358,7 +358,7 @@ describe('VR label: default near the line, grab and drag (vr-measure.js)', () =>
   });
 });
 
-describe('VR depth cue: behind the volume surface = faint (vr-measure.js, build 493)', () => {
+describe('VR depth cue: behind the volume surface = faint (vr-measure.js)', () => {
   const ctx = new Proxy({}, { get: (t, k) => (k in t ? t[k] : () => {}), set: (t, k, v) => { t[k] = v; return true } });
   beforeEach(() => vi.stubGlobal('document', { createElement: () => ({ width: 0, height: 0, getContext: () => ctx }) }));
   afterEach(() => vi.unstubAllGlobals());

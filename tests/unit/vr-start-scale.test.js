@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { startHolderScale, realMagnification, clampScale, scaleLineText, magnificationText, NORM_LONG } from '../../docs/vr-real-scale.js';
 import { createViewToggle } from '../../docs/vr-view-toggle.js';
 
-// build 512: a VR / AR session starts at 1x (real size), AR and VR alike, and the AR passthrough <-> VR view toggle never changes the scale.
+// a VR / AR session starts at 1x (real size), AR and VR alike, and the AR passthrough <-> VR view toggle never changes the scale.
 const src = readFileSync(new URL('../../docs/vr-view.js', import.meta.url), 'utf8');
 const DEFAULT_SCALE = 0.165 / NORM_LONG; // baseScale: the old 16.5 cm fit, used only when the physical size is unknown
 const LONGEST = [2.4, 60.4, 75.8, 100, 300]; // synthetic test volume, practice mouse (sample2), practice rat (sample1), a 10 cm and a 30 cm animal
@@ -60,7 +60,7 @@ describe('the AR view toggle leaves the scale alone', () => {
   });
 });
 
-describe('detail tab scale line (build 512)', () => {
+describe('detail tab scale line', () => {
   it('shows the real-size magnification, not the raw holder scale (x0.02 at real size looked like "not 1x")', () => {
     const real = 60.4 / 1000 / NORM_LONG; // holder scale of the practice mouse at real size
     expect(real.toFixed(2)).toBe('0.02'); // what the line used to print

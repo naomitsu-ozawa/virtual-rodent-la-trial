@@ -63,8 +63,8 @@ describe('text', () => {
     expect(verdictLine([ok, ng])).toContain('✖ 総合：不合格（1 / 2'); expect(verdictLine([ok])).toContain('✔ 総合：合格（1 項目）');
   });
   it('resultText / resultJson carry every scenario', () => {
-    const res = { head: 'VR 自己診断 build 552 · 72 Hz', build: '552', when: 'now', hz: 72, results: [ok, ng] };
-    expect(resultText(res).split('\n')).toHaveLength(6); // build 562: each measured scenario adds its detail line
+    const res = { head: 'VR 自己診断 · 72 Hz', build: '552', when: 'now', hz: 72, results: [ok, ng] };
+    expect(resultText(res).split('\n')).toHaveLength(6); // each measured scenario adds its detail line
     expect(resultText(res).split('\n')[2]).toMatch(/^ {3}間隔 p50 13\.9 \/ p95 13\.9 \/ 最大 13\.9 ms · 1\.5倍超 0 コマ$/);
     const j = resultJson(res); expect(j.verdict).toBe('FAIL'); expect(j.scenarios[0]).toMatchObject({ id: 'idle', pass: true, meanFps: 72 }); expect(j.scenarios[1].reasons).toContain('over');
     expect(() => JSON.stringify(j)).not.toThrow();
@@ -76,7 +76,7 @@ const makeHolder = () => { const q = { v: 0, clone() { return { v: this.v, copy(
 // drive tick() like the XR loop: n frames or until the runner stops measuring
 async function drive(sc, { dt = D72, hitchAt = () => 0, max = 20000 } = {}) {
   let t = 1000, k = 0;
-  const flush = () => new Promise(r => setImmediate(r)); // build 560: setImmediate (not the 1 ms setTimeout): the run is ~55 s of frames now
+  const flush = () => new Promise(r => setImmediate(r)); // setImmediate (not the 1 ms setTimeout): the run is ~55 s of frames now
   for (let i = 0; i < max && sc.active; i++) { t += dt + hitchAt(k++); sc.tick(t); await flush(); }
   return t;
 }
@@ -112,7 +112,7 @@ describe('runner: built-in scenarios on a fake frame loop', () => {
     expect(by('zoom4').skipped).toContain('3.8'); expect(by('zoom2').verdict.pass).toBe(true); expect(by('zoom2').label).toBe('2倍'); expect(by('zoomMax').label).toBe('最大 3.8倍');
     expect(by('zoomClose').label).toBe('接近'); expect(by('zoomMaxRot').label).toBe('最大 3.8倍 回転'); expect(by('zoomCloseRot').label).toBe('接近 回転');
     expect(by('zoom2').stats.seconds).toBeCloseTo(2, 0); // 2 s per zoom point
-    const zl = env.log.filter(x => typeof x === 'string' && x.startsWith('z')); expect(zl).toEqual(['z+', 'z2.0', 'z-', 'z+', 'z3.8', 'z-', 'z+', 'z3.8', 'z-', 'z+', 'z3.8c', 'z-', 'z+', 'z3.8', 'z-', 'z+', 'z3.8c', 'z-']); // build 562: 最大 90°静止 after 最大
+    const zl = env.log.filter(x => typeof x === 'string' && x.startsWith('z')); expect(zl).toEqual(['z+', 'z2.0', 'z-', 'z+', 'z3.8', 'z-', 'z+', 'z3.8', 'z-', 'z+', 'z3.8c', 'z-', 'z+', 'z3.8', 'z-', 'z+', 'z3.8c', 'z-']); // 最大 90°静止 after 最大
     expect(env.zs.mag).toBe(1); expect(env.zs.close).toBe(false); expect(env.holder.quaternion.v).toBe(0);
     expect(by('idle').zoom).toEqual({ order: 1, name: '1倍', nameEn: '1x', rot: false });
     expect(zoomSummaries(sc.results).map(z => z.text)).toEqual(['✔ 拡大（静止）：接近まで OK', '✔ 拡大（回転中）：接近まで OK']);
@@ -146,7 +146,7 @@ describe('runner: built-in scenarios on a fake frame loop', () => {
     const env = baseEnv(8), sc = createVrSelfCheck({ env, log: () => {} }), p = sc.start(); const t0 = 1000; const t1 = await drive(sc); await p;
     expect((t1 - t0) / 1000).toBeLessThan(64); expect((t1 - t0) / 1000).toBeGreaterThan(48); expect(sc.results.every(r => !r.skipped)).toBe(true);
   });
-  it('build 560: zoom scenarios measure right after the change (直後, not judged) and steady from 3 s (judged), each with its info', async () => {
+  it('zoom scenarios measure right after the change (直後, not judged) and steady from 3 s (judged), each with its info', async () => {
     let n = 0; const env = baseEnv(8); env.info = () => ({ autoPct: 100, n: ++n, mag: env.zs.mag });
     const sc = createVrSelfCheck({ env, log: () => {} }), p = sc.start();
     let late = false; await drive(sc, { hitchAt: k => (late && k % 5 === 0 ? 30 : 0) }); await p;
@@ -158,7 +158,7 @@ describe('runner: built-in scenarios on a fake frame loop', () => {
     const j = resultJson({ head: 'h', hz: 72, results: sc.results }).scenarios.find(s => s.id === 'zoom4');
     expect(j.transition).toMatchObject({ meanFps: 72, overCount: 0, info: { mag: 4 } }); expect(j.info.mag).toBe(4);
   });
-  it('build 560: a hitch right after the size change shows on the line as 直後 … 遅れ but does not fail the steady verdict', async () => {
+  it('a hitch right after the size change shows on the line as 直後 … 遅れ but does not fail the steady verdict', async () => {
     const env = baseEnv(8), sc = createVrSelfCheck({ env, log: () => {} }), p = sc.start();
     let prevMag = 1, sinceChange = 1e9; await drive(sc, { hitchAt: () => { if (env.zs.mag !== prevMag) { prevMag = env.zs.mag; sinceChange = 0; } return sinceChange++ < 20 && env.zs.mag > 1 && sinceChange % 4 === 0 ? 40 : 0; } }); await p;
     const z = sc.results.find(r => r.id === 'zoom2');
@@ -221,7 +221,7 @@ describe('registerVrSelfCheck (extension API)', () => {
   });
 });
 
-describe('build 562: measurement details, ray probe, 最大 90°静止', () => {
+describe('measurement details, ray probe, 最大 90°静止', () => {
   it('computeStats gives the raw interval p50 / p95 (ms) next to the worst frame and the over-budget count; JSON and the detail line carry them', () => {
     const a = withHitches(200, 4, 30), s = computeStats(a, 72);
     expect(s.p50Ms).toBeCloseTo(D72, 6); expect(s.p95Ms).toBeCloseTo(D72, 6); expect(s.worstMs).toBe(30); expect(s.overCount).toBe(4);
@@ -229,7 +229,7 @@ describe('build 562: measurement details, ray probe, 最大 90°静止', () => {
     const r = { id: 'zoomMax', label: '最大 3.8倍', stats: s, verdict: judge(s), info: { grid: '256×256×256', boxPct: [80, 62, 90], probe: { mean: 85.2, p95: 212, max: 400, hit: 0.91, skip: 0.4, px: 1500 } } };
     expect(detailLine(r)).toBe('   間隔 p50 13.9 / p95 13.9 / 最大 30.0 ms · 1.5倍超 4 コマ · 格子 256×256×256 · 内容ボックス 80×62×90% · 反復 平均 85 / p95 212 · hit終了 91% · 跳躍 40%（1500 画素）');
     expect(detailLine({ id: 'x', label: 'x', skipped: 'a' })).toBe('');
-    const rb = { ...r, info: { ...r.info, boxMs: 1.234, boxFrames: 5 } }; // build 564: the content-box rebuild (segment scan summed over its frames)
+    const rb = { ...r, info: { ...r.info, boxMs: 1.234, boxFrames: 5 } }; // the content-box rebuild (segment scan summed over its frames)
     expect(detailLine(rb)).toContain('内容ボックス 80×62×90% · 箱の再構築 1.23 ms / 5 フレーム · 反復');
     expect(resultJson({ head: 'h', hz: 72, results: [rb] }).scenarios[0].info.boxMs).toBe(1.234);
     const j = resultJson({ head: 'h', hz: 72, results: [r] }).scenarios[0]; expect(j.p95Ms).toBeCloseTo(D72, 1); expect(j.p50Ms).toBeCloseTo(D72, 1); expect(j.overCount).toBe(4); expect(j.info.probe.p95).toBe(212);
@@ -261,9 +261,9 @@ describe('vr-view.js wiring (static)', () => {
   it('imports the module, feeds it the XR frame time, opens it from 詳細 and unwinds it on cleanup', () => {
     expect(src).toMatch(/from '\.\/vr-self-check\.js\?v=/);
     expect(src).toMatch(/renderer\.setAnimationLoop\(xrTs=>\{\s*selfCheck\.tick\(xrTs\)/);
-    expect(src).toMatch(/zoom:\(\(\)=>\{let sv=null;/); expect(src).toContain('scaleLimits(lm())'); // build 554: the zoom hook (measurement only: it sets and restores holder scale / position)
+    expect(src).toMatch(/zoom:\(\(\)=>\{let sv=null;/); expect(src).toContain('scaleLimits(lm())'); // the zoom hook (measurement only: it sets and restores holder scale / position)
     expect(src).toContain('selfCheckTexts(ja)'); expect(src).toContain('SC.button'); expect(src).toContain('ui.tab===8');
-    expect(src).toMatch(/renderer\.setAnimationLoop\(null\);(if\(probeReq\)\{[^}]*\})?selfCheck\.dispose\(\)/); // build 562: a pending probe resolves first
+    expect(src).toMatch(/renderer\.setAnimationLoop\(null\);(if\(probeReq\)\{[^}]*\})?selfCheck\.dispose\(\)/); // a pending probe resolves first
   });
 });
 

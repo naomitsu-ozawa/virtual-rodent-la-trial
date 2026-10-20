@@ -110,7 +110,7 @@ describe('dragShouldStart', () => {
   it('hold', () => { expect(dragShouldStart({ heldMs: 499 })).toBe(false); expect(dragShouldStart({ heldMs: 500 })).toBe(true); });
 });
 
-describe('dragShouldStart with the record threshold (build 470)', () => {
+describe('dragShouldStart with the record threshold', () => {
   it('2 cm / 5 deg; holding still never starts it', () => {
     expect(DRAG_RECORD).toEqual({ posM: 0.02, angDeg: 5, holdMs: Infinity });
     expect(dragShouldStart({ dPosM: 0.019 }, DRAG_RECORD)).toBe(false); expect(dragShouldStart({ dPosM: 0.021 }, DRAG_RECORD)).toBe(true);
@@ -119,7 +119,7 @@ describe('dragShouldStart with the record threshold (build 470)', () => {
   });
 });
 
-describe('section follows the hand rigidly (build 470)', () => {
+describe('section follows the hand rigidly', () => {
   const I = { x: 0, y: 0, z: 0, w: 1 };
   const axisAngle = (a, deg) => { const h = deg * Math.PI / 360, s = Math.sin(h), l = Math.hypot(...a); return { x: a[0] / l * s, y: a[1] / l * s, z: a[2] / l * s, w: Math.cos(h) }; };
   const base = { p0: { x: 0.1, y: 0.2, z: 0.3 }, q0: axisAngle([0, 1, 0], 40), c0: { x: 1, y: 0, z: 0 }, Qp0: axisAngle([1, 1, 0], 25) };

@@ -46,14 +46,14 @@ describe('realistic Quest throw: laser drag at ~0.7 m, 45 degree wrist flick + 8
     expect(r.hand.v.speed).toBeLessThan(FLING_SPEED_MPS);
     expect(r.plane.v.speed).toBeGreaterThan(3);
   });
-  it('build 521 measured the controller and used the axis volume centre -> controller: the throw was kept (the bug)', () => {
+  it('measured the controller and used the axis volume centre -> controller: the throw was kept (the bug)', () => {
     const old = flingDecision({ v: r.hand.v, from: r.last.hand, center: C, head });
     expect(old.fling).toBe(false); expect(old.reason).toBe('slow');
     // even a fast hand would have failed: the hand is between the viewer and the volume, so "centre -> hand" points back at the viewer
     const fastHand = { x: r.plane.v.x, y: r.plane.v.y, z: r.plane.v.z };
     expect(flingDecision({ v: fastHand, from: r.last.hand, center: C, head }).fling).toBe(false);
   });
-  it('build 522 measures the frame and uses centre -> frame: the throw deletes', () => {
+  it('measures the frame and uses centre -> frame: the throw deletes', () => {
     const d = flingDecision({ v: r.plane.v, from: r.last.plane, center: C, head });
     expect(d).toMatchObject({ fling: true, reason: 'fling' }); expect(d.cos).toBeGreaterThan(0.8);
   });
@@ -106,7 +106,7 @@ describe('releases that must NOT delete (same real follow math)', () => {
 });
 
 describe('vr-view.js wires the frame (not the controller) into the throw', () => {
-  const loop = src.slice(src.indexOf('build 522: the dragged FRAME'), src.indexOf('build 522: the dragged FRAME') + 700);
+  const loop = src.slice(src.indexOf('the dragged FRAME'), src.indexOf('the dragged FRAME') + 700);
   const fl = src.slice(src.indexOf('const tryFling=c=>{'), src.indexOf('const tryFling=c=>{') + 900);
   it('the frame loop samples the dragged frame\'s world position, with the frame time', () => {
     expect(loop).toContain('.obj.getWorldPosition(tmpFv)');

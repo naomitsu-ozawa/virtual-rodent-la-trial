@@ -1,16 +1,36 @@
-// build 497: occlusion by the GPU (update({occlusion:true})): the volume writes depth (vr-depth.js); the line, the leader and the label are drawn with a depth test (the part behind the tissue is clipped at its
+// occlusion by the GPU (update({occlusion:true})): the volume writes depth (vr-depth.js); the line, the leader and the label are drawn with a depth test (the part behind the tissue is clipped at its
 // outline) and again as a faint "ghost" (a child object sharing the geometry, depthFunc GreaterDepth, GHOST_ALPHA) so the hidden part stays findable. A LIT label (the laser on it / grabbed) and its
-// leader are drawn without a depth test, fully on top, so the laser target stays reachable. With occlusion off (setting 「薄くする」) nothing is depth tested and the build 493 fade is used.
-// VR display of the distances between two points (build 477): a line A-B with the value in mm on a label (billboard) at its midpoint, and, while a
+// leader are drawn without a depth test, fully on top, so the laser target stays reachable. With occlusion off (setting 「薄くする」) nothing is depth tested and the fade is used.
+// VR display of the distances between two points: a line A-B with the value in mm on a label (billboard) at its midpoint, and, while a
 // distance is being made, the START point with a pulsing ring and the hint 「終点のポイントを選んでください」 next to it.
 // vr-view.js calls createVrMeasure(THREE, scene) -> { update, probes, pickLabel, dragLabel, dispose } every frame and does everything else (the flow, haptics, undo) itself; the state is
 // measurements.js (the same for the PC / iPad). The value follows the points: it is recomputed from their voxels each frame (a point being moved included, preview).
-import { getComments, getMarkersShown, commentMatchesSeries, commentTarget } from './comments.js?v=20261018-build621';
-import { getMeasurements, setLabelOffset, distanceMm, measureLabel } from './measurements.js?v=20261018-build621';
-import { nearLabelWorld, stepDelta, offsetFromDelta, LINE_SAMPLES, probeKey, fadeAlpha, approachAlpha, OCCLUDED_ALPHA } from './measure-label.js?v=20261018-build621';
-import { voxelToLocal } from './vr-point.js?v=20261018-build621';
-import { GHOST_ALPHA, occludedPass } from './vr-depth.js?v=20261018-build621';
+import { getComments, getMarkersShown, commentMatchesSeries, commentTarget } from './comments.js?v=20261020-build630';
+import { getMeasurements, setLabelOffset, distanceMm, measureLabel } from './measurements.js?v=20261020-build630';
+import { nearLabelWorld, stepDelta, offsetFromDelta, LINE_SAMPLES, probeKey, fadeAlpha, approachAlpha, OCCLUDED_ALPHA } from './measure-label.js?v=20261020-build630';
+import { voxelToLocal } from './vr-point.js?v=20261020-build630';
+import { GHOST_ALPHA, occludedPass } from './vr-depth.js?v=20261020-build630';
 export const VR_MEASURE_COLOR=0xffd23d,MEASURE_LABEL_W_M=0.045,MEASURE_LABEL_H_M=0.0132,MEASURE_HINT_W_M=0.2,MEASURE_HINT_H_M=0.026;
+export const HINT_DIST_M=0.7,HINT_ELEV=0.5,HINT_ALPHA=0.6,HINT_FADED_ALPHA=0.28,HINT_FADE_AFTER_MS=3000,HINT_FADE_MS=1200;
+// pure: the hint's opacity after elapsedMs on screen
+export function hintAlpha(elapsedMs){const t=Math.min(1,Math.max(0,((+elapsedMs||0)-HINT_FADE_AFTER_MS)/HINT_FADE_MS));return HINT_ALPHA+(HINT_FADED_ALPHA-HINT_ALPHA)*t}
+// pure: the world place of the head-locked hint: from the head {x,y,z}, HINT_DIST_M along the gaze {x,y,z} turned HINT_ELEV towards the world's up (about the gaze's right-hand side: it stays at the top of the view
+// when the head looks up or down); null when there is no usable gaze
+export function hintPlace(head,gaze){
+ if(!head||!gaze)return null;
+ const L=Math.hypot(gaze.x,gaze.y,gaze.z);if(!(L>1e-6))return null;
+ const f={x:gaze.x/L,y:gaze.y/L,z:gaze.z/L};
+ let r={x:-f.z,y:0,z:f.x};let rl=Math.hypot(r.x,r.z);if(rl<1e-4){r={x:1,y:0,z:0};rl=1}r={x:r.x/rl,y:0,z:r.z/rl}; // right = forward x up (world up): horizontal
+ const u={x:r.y*f.z-r.z*f.y,y:r.z*f.x-r.x*f.z,z:r.x*f.y-r.y*f.x}; // up' = right x forward
+ const c=Math.cos(HINT_ELEV),sn=Math.sin(HINT_ELEV);
+ return{x:head.x+(f.x*c+u.x*sn)*HINT_DIST_M,y:head.y+(f.y*c+u.y*sn)*HINT_DIST_M,z:head.z+(f.z*c+u.z*sn)*HINT_DIST_M};
+}
+export const HINT_HAND_UP_M=0.09,HINT_HAND_SCALE=0.7;
+// pure: the world place of the hand-following hint, or null without a usable hand position {x,y,z}
+export function hintHandPlace(hand){
+ if(!hand||![hand.x,hand.y,hand.z].every(Number.isFinite))return null;
+ return{x:hand.x,y:hand.y+HINT_HAND_UP_M,z:hand.z};
+}
 // the label's size factor from the head distance (m): about 1 at arm's length (0.6 m), bigger when far, never tiny
 // the lit label (the laser on it / grabbed): like the ring menu's lit sector (vr-ring.js) it turns #ffe27a with dark text and a white rim, and grows a little
 export const LABEL_LIT_SCALE=1.15;
@@ -21,7 +41,7 @@ export const pulsePhase=nowMs=>0.5+0.5*Math.sin((+nowMs||0)/1200*Math.PI*2);
 
 export function createVrMeasure(THREE,scene,deps={getComments,getMarkersShown,getMeasurements,setLabelOffset}){
  const planeGeo=new THREE.PlaneGeometry(1,1),sphereGeo=new THREE.SphereGeometry(1,16,12);
- // build 493: the line and the leader carry a per-vertex alpha (vertexColors, RGBA, rgb = 1 so the colour stays the material's): the part of the line that lies behind the
+ // the line and the leader carry a per-vertex alpha (vertexColors, RGBA, rgb = 1 so the colour stays the material's): the part of the line that lies behind the
  // visible surface of the volume is drawn faint (measure-label.js "depth cue"; the volume writes no depth, so this is judged on the CPU by vr-view.js, see probes()).
  const LINE_OPACITY=0.95,LEADER_OPACITY=0.6,lineOpts={color:VR_MEASURE_COLOR,transparent:true,depthTest:false,depthWrite:false,toneMapped:false,vertexColors:true};
  const lineMat=new THREE.LineBasicMaterial({...lineOpts,opacity:LINE_OPACITY});
@@ -60,7 +80,7 @@ export function createVrMeasure(THREE,scene,deps={getComments,getMarkersShown,ge
  return{
   // fingerprint / dims / halfExt / mesh: as vpMarkers.update; head: the head's world position; spacing: [sx,sy,sz] mm; warn: the series has a slice-spacing warning;
   // startId: the point a distance starts at (or null); hint: its text; now: ms; preview: {id,voxel} a point being moved (voxel null = still at its place)
-  update({fingerprint,dims,halfExt,mesh,head,spacing,warn=false,startId=null,hint='',now=performance.now(),preview=null,lit=null,hidden=null,occlusion=false}){ // occlusion: true = the volume's depth hides (build 497, see the top of this file; hidden is then not used). lit: a Set of measurement ids whose label is lit (laser on it / grabbed), or null. hidden: a Set of probe keys behind the volume's surface (probes()), or null
+  update({fingerprint,dims,halfExt,mesh,head,gaze=null,handPos=null,spacing,warn=false,startId=null,hint='',now=performance.now(),preview=null,lit=null,hidden=null,occlusion=false}){ // occlusion: true = the volume's depth hides. lit: a Set of measurement ids whose label is lit (laser on it / grabbed), or null. hidden: a Set of probe keys behind the volume's surface (probes()), or null
    const all=fingerprint&&dims&&halfExt&&mesh&&deps.getMarkersShown()?deps.getComments():[],byId=new Map();
    for(const c of all){
     if(!commentMatchesSeries(c,fingerprint))continue;
@@ -69,7 +89,7 @@ export function createVrMeasure(THREE,scene,deps={getComments,getMarkersShown,ge
     byId.set(c.id,{vox,local:voxelToLocal(vox,halfExt,dims)});
    }
    const keep=new Set();
-   if(occlusion)hidden=null;lineMat.depthTest=occlusion;lineGhost.visible=occlusion; // the line material is shared: depth tested + ghost, or the plain build 493 line
+   if(occlusion)hidden=null;lineMat.depthTest=occlusion;lineGhost.visible=occlusion; // the line material is shared: depth tested + ghost, or the plain line
    if(byId.size){
     mesh.updateWorldMatrix(true,false);mesh.getWorldScale(s);const unit=s.x||1,r0=Math.max(0.003,0.045*unit),step=voxelStep(halfExt,dims);
     for(const m of deps.getMeasurements()){
@@ -96,14 +116,14 @@ export function createVrMeasure(THREE,scene,deps={getComments,getMarkersShown,ge
      it.label.mesh.position.copy(lab);it.label.mesh.scale.set(MEASURE_LABEL_W_M*k,MEASURE_LABEL_H_M*k,1);if(head)it.label.mesh.lookAt(head);it.label.mesh.visible=true;it.label.mesh.updateMatrixWorld(true);
      const lg=it.leader.geometry.attributes.position;lg.setXYZ(0,mid.x,mid.y,mid.z);lg.setXYZ(1,lab.x,lab.y,lab.z);lg.needsUpdate=true;
      it.lprobe.world.copy(lab);it.dragged=!!m.labelOffset;
-     // depth cue (build 493): the parts behind the surface fade towards OCCLUDED_ALPHA (smoothly: the judgement is ~10 Hz); the label and its leader follow the dragged label's own
+     // depth cue: the parts behind the surface fade towards OCCLUDED_ALPHA (smoothly: the judgement is ~10 Hz); the label and its leader follow the dragged label's own
      // place, or (not dragged) the line's midpoint; a LIT label (laser on it / grabbed) stays fully visible so it can still be used
      const dt=it.t?Math.min(250,now-it.t):0;it.t=now;
      const col=it.line.geometry.attributes.color;let ch=false;
      for(let i=0;i<=LINE_SAMPLES;i++){const v=approachAlpha(it.va[i],hidden&&hidden.has(it.probes[i].id)?OCCLUDED_ALPHA:1,dt);if(v!==it.va[i]){it.va[i]=v;col.setW(i,v);ch=true}}
      if(ch)col.needsUpdate=true;
      const lh=!!hidden&&hidden.has(m.labelOffset?it.lprobe.id:it.probes[LINE_SAMPLES/2].id),la=approachAlpha(it.la,fadeAlpha(lh,isLit),dt);
-     // occlusion (build 497): a lit label and its leader are drawn on top (no depth test, no ghost); the others are depth tested + ghost
+     // occlusion: a lit label and its leader are drawn on top (no depth test, no ghost); the others are depth tested + ghost
      {const top=!occludedPass(occlusion,isLit);it.label.mesh.material.depthTest=!top;it.label.ghost.material.visible=!top;it.leader.material.depthTest=!top;it.leaderGhost.material.visible=!top}
      if(la!==it.la){it.la=la;it.label.mesh.material.opacity=la;it.label.ghost.material.opacity=la*GHOST_ALPHA;const lc=it.leader.geometry.attributes.color;lc.setW(0,la);lc.setW(1,la);lc.needsUpdate=true}
     }
@@ -111,12 +131,16 @@ export function createVrMeasure(THREE,scene,deps={getComments,getMarkersShown,ge
     if(S){
      if(!start){
       const ring=new THREE.Mesh(sphereGeo,pulseMat);ring.renderOrder=2;ring.frustumCulled=false;scene.add(ring);
-      start={ring,hint:makeLabel(512,64,MEASURE_HINT_W_M,MEASURE_HINT_H_M)};
+      start={ring,hint:makeLabel(512,64,MEASURE_HINT_W_M,MEASURE_HINT_H_M),id:startId,t0:now};
      }
+     if(start.id!==startId){start.id=startId;start.t0=now} // another start point: the hint is read again (full strength, then fades)
      a.set(S.local.x,S.local.y,S.local.z);mesh.localToWorld(a);
      start.ring.position.copy(a);start.ring.scale.setScalar(r0*0.4*(2.1+0.9*pulsePhase(now)));
      drawText(start.hint,hint,'bold 30px system-ui,sans-serif');
-     start.hint.mesh.position.set(a.x,a.y+0.045+r0,a.z);if(head)start.hint.mesh.lookAt(head);start.hint.mesh.visible=true;
+     const hh=hintHandPlace(handPos),hp=hh||hintPlace(head,gaze);
+     {const hk=hh?HINT_HAND_SCALE:1;start.hint.mesh.scale.set(MEASURE_HINT_W_M*hk,MEASURE_HINT_H_M*hk,1)} // keep the plane's real width x height (a uniform setScalar made it a 0.7 m square: the 512x64 text stretched into vertical streaks)
+     if(hp)start.hint.mesh.position.set(hp.x,hp.y,hp.z);else start.hint.mesh.position.set(a.x,a.y+0.045+r0,a.z);
+     if(head)start.hint.mesh.lookAt(head);start.hint.mesh.material.opacity=hintAlpha(now-start.t0);start.hint.mesh.visible=true;
     }else dropStart();
    }else dropStart();
    for(const [id,it] of [...items])if(!keep.has(id))dropItem(id,it);

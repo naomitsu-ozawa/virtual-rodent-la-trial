@@ -1,24 +1,24 @@
-// Linked crosshair UI (build 458): the toolbar button / mode, the pointer handling on the three MPR canvases, the lines on their
+// Linked crosshair UI: the toolbar button / mode, the pointer handling on the three MPR canvases, the lines on their
 // own overlay canvases (NOT the slice canvases: those must keep their pixels, tools/theme-image-check.mjs compares them) and the
 // small HU / position readout. The position itself lives in state.js (setCrosshair / getCrosshair / clearCrosshair); the
 // geometry is in crosshair.js. Scope of this stage: crosshair, HU readout and the position API only.
-import { planes } from './ui-shell.js?v=20261018-build621';
-import { volume, sourceVolume, getCrosshair, setCrosshair, clearCrosshair, onCrosshairChange } from './state.js?v=20261018-build621';
-import { tr } from './i18n.js?v=20261018-build621';
-import { schedulePlaneRender } from './mpr-render.js?v=20261018-build621';
-import { sourceSliceCache } from './volume-io.js?v=20261018-build621';
-import { sourceFilterStages, sourceFilterSignature, sourceFilterCacheGet } from './source-filters.js?v=20261018-build621';
-import { CROSSHAIR_PLANES, clientToFraction, voxelFromPlanePoint, planePointFromVoxel, sliceIndexFor, voxelToMm, sampleHu, formatHu, formatMm } from './crosshair.js?v=20261018-build621';
+import { planes } from './ui-shell.js?v=20261020-build630';
+import { volume, sourceVolume, getCrosshair, setCrosshair, clearCrosshair, onCrosshairChange } from './state.js?v=20261020-build630';
+import { tr } from './i18n.js?v=20261020-build630';
+import { schedulePlaneRender } from './mpr-render.js?v=20261020-build630';
+import { sourceSliceCache } from './volume-io.js?v=20261020-build630';
+import { sourceFilterStages, sourceFilterSignature, sourceFilterCacheGet } from './source-filters.js?v=20261020-build630';
+import { CROSSHAIR_PLANES, clientToFraction, voxelFromPlanePoint, planePointFromVoxel, sliceIndexFor, voxelToMm, sampleHu, formatHu, formatMm } from './crosshair.js?v=20261020-build630';
 let overlayPainter=null;
 // other overlays (the comment markers) paint on the same canvases: fn(ctx,plane,{x0,y0,w,h,dpr,cssW,cssH}) with the transform set to CSS px
 export const setOverlayPainter=fn=>{overlayPainter=fn};
-// a second painter (the line profile line, build 537): drawn after the markers, under the crosshair
+// a second painter (the line profile line): drawn after the markers, under the crosshair
 let extraPainter=null;export const setExtraOverlayPainter=fn=>{extraPainter=fn};
-// a third painter (the crop box, build 573): drawn after the line, under the crosshair
+// a third painter (the crop box): drawn after the line, under the crosshair
 let cropPainter=null;export const setCropOverlayPainter=fn=>{cropPainter=fn};
 export const requestOverlayDraw=()=>scheduleDraw();
 let mode=false,drag=null,activePlane='axial',drawQueued=false,huRetries=0,huTimer=null;
-const COLOR='#ffe14d'; // drawn over a dark halo (same recipe as the cut stroke of PR #92), so it reads on light and dark themes
+const COLOR='#ffe14d'; // drawn over a dark halo (same recipe as the cut stroke of an earlier change), so it reads on light and dark themes
 const dimsOf=()=>volume?{columns:volume.columns,rows:volume.rows,slices:volume.slices}:null;
 export const crosshairModeActive=()=>mode;
 

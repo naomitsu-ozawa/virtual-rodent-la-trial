@@ -1,4 +1,4 @@
-// Practice-data check of the analysis result boundary (build 412 follow-up): opens docs/demo/sample1, adds the fat
+// Practice-data check of the analysis result boundary: opens docs/demo/sample1, adds the fat
 // segment (and FILTER=<key> from the filter menu), takes the final segment runs and their largest connected component
 // (componentsFromRuns, the analysis region), and counts segment voxels outside the component that touch it face-wise
 // (6-neighbour: must be 0) or only edge / corner-wise (26-neighbour only: separate components drawn uncoloured
@@ -8,7 +8,7 @@ import { chromium } from '@playwright/test';
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
 const root=path.resolve('docs'),nm=path.resolve('node_modules');const errors=[];
 const srv=http.createServer((q,r)=>{const p=path.join(root,decodeURIComponent(q.url.split('?')[0]));
- // build 437: the practice data's bundled project (docs/demo/sample1/project.vrlab) is applied on load; the checks start
+ // the practice data's bundled project (docs/demo/sample1/project.vrlab) is applied on load; the checks start
  // from the bare data unless SAMPLE_PROJECT=1
  if(p.endsWith('project.vrlab')&&!process.env.SAMPLE_PROJECT){r.writeHead(404);r.end();return}
  fs.readFile(p.endsWith('/')?p+'index.html':p,(e,b)=>{if(e){r.writeHead(404);r.end();return}r.writeHead(200,{'content-type':p.endsWith('.js')?'text/javascript':p.endsWith('.css')?'text/css':'text/html'});r.end(b)})}).listen(8765);

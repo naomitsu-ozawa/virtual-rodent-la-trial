@@ -5,7 +5,7 @@ import { gaussianPassKernel } from '../../docs/gpu-shaders.js';
 const pass = (a, s) => a.map((b, i) => { const l = a[Math.max(0, i - 1)], r = a[Math.min(a.length - 1, i + 1)]; return b * (1 - s) + s * (l + 2 * b + r) / 4; });
 const fused = (a, k) => { const r = (k.length - 1) / 2; return a.map((_, i) => { let acc = 0; for (let j = -r; j <= r; j++) acc += k[j + r] * a[Math.min(a.length - 1, Math.max(0, i + j))]; return acc; }); };
 
-describe('fused gaussian (build 286)', () => {
+describe('fused gaussian', () => {
   it('equals n repeated 3-tap passes away from the edges', () => {
     let s = 3; const rnd = () => (s = (s * 1103515245 + 12345) % 2147483648) / 2147483648;
     const a = Array.from({ length: 64 }, () => rnd() * 2000 - 1000);

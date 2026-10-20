@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 
-// build 558: the VR self-check 「HU線」 scenario: a synthetic drag of HU_LINE_DRAG_SECONDS, then the release's full read is timed; state restored in finally
+// the VR self-check 「HU線」 scenario: a synthetic drag of HU_LINE_DRAG_SECONDS, then the release's full read is timed; state restored in finally
 const huSrc = readFileSync(new URL('../../docs/vr-hu-line.js', import.meta.url), 'utf8');
 // the scenario lives in the pure module (vr-hu-line.js pulls in the DOM-bound app modules); use the runner instance it registered with
 const tag = readFileSync(new URL('../../docs/vr-hu-line-core.js', import.meta.url), 'utf8').match(/'\.\/vr-self-check\.js(\?v=[^']+)'/)[1];
@@ -58,7 +58,7 @@ describe('VR self-check: HU line scenario', () => {
     await HU_LINE_SELF_CHECK.run(ctx);
     expect(ctx.notes).toHaveLength(0); expect(log.at(-1)).toBe('cancel');
   });
-  it('the duration label is the new total (about 70 s with the build 560 zoom phases and 最大 90°静止) and the hint names the HU scenarios', () => {
+  it('the duration label is the new total (about 70 s with the zoom phases and 最大 90°静止) and the hint names the HU scenarios', () => {
     expect(selfCheckTexts(true).button).toBe('自己診断（約 70 秒）'); expect(selfCheckTexts(false).button).toBe('Self-check (about 70 s)');
     expect(selfCheckTexts(true).hint[0]).toContain('最大90°'); expect(selfCheckTexts(false).hint[0]).toContain('max at 90°');
     expect(selfCheckTexts(true).hint[0]).toContain('HU線'); expect(selfCheckTexts(false).hint[0]).toContain('HU line');

@@ -2,14 +2,19 @@
 // volumeShader): renders a synthetic phantom with the real WGSL through
 // SwiftShader WebGPU, saves the image, and compares two versions of the file
 // pixel by pixel. SwiftShader time is a CPU proxy (relative only).
-//   PW_CHROMIUM=/opt/pw-browsers/chromium node tools/volume-shader-check.mjs [fileA] [fileB] [outDir]   (ROLL=1: the viewer upside down = the volume turned half a circle about the view axis; build 612)
+//   PW_CHROMIUM=/opt/pw-browsers/chromium node tools/volume-shader-check.mjs [fileA] [fileB] [outDir]   (ROLL=1: the viewer upside down = the volume turned half a circle about the view axis)
 // fileA defaults to docs/medical-volume.js; fileB (optional) is compared with
 // it, e.g. a copy from git: git show HEAD:docs/medical-volume.js > /tmp/old.js
+// EDITTEX=1: the edit / applied-cut voxel bit mask texture (docs/edit-mask-texture.js) is built from the same
+// intervals; A renders through it and B is the same shader on the row search (mprWindow.z = 0): any differing pixel fails.
+// A third pass with an all-zero mask must differ from B when an edit is on (the texture path really ran). EDIT=3: bone box
+// exclusion + a keep / mask-only soft-tissue mask (x < 70; EDIT=4: 60 % of its voxels, hashed); CUT=1: the bone box is also an applied cut (cut planes).
+// PASSES=n: timed passes per image (default 6; npm run edit-mask-check uses 1)
 import { chromium } from '@playwright/test';
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
 import { lightingWGSL, lightOffsetExpr, materialVec } from '../docs/lighting.js';
 const fileA=process.argv[2]||'docs/medical-volume.js',fileB=process.argv[3]||null,outDir=process.argv[4]||'.',refine=+(process.env.REFINE??1),overlap=+(process.env.OVERLAP??1),mpr=+(process.env.MPR??0),analysis=+(process.env.ANALYSIS??0);
-// build 612: the shader text is cut from the source, so the two placeholders of the shared lighting (docs/lighting.js) are resolved here
+// the shader text is cut from the source, so the two placeholders of the shared lighting (docs/lighting.js) are resolved here
 const resolveLighting=t=>t.replace('${lightingWGSL()}',lightingWGSL()).replace("${lightOffsetExpr('u.camRightTan.xyz','u.camUpAspect.xyz')}",lightOffsetExpr('u.camRightTan.xyz','u.camUpAspect.xyz'));
 const safeWgsl=source=>source.replace(/\bmeta\b/g,'vrlMeta').replace(/\bactive\b/g,'vrlActive').replace(/\btarget\b/g,'vrlTarget');
 const shaderOf=file=>{const s=fs.readFileSync(file,'utf8'),a=s.indexOf('export function volumeShader(){'),b=s.indexOf('export function brickShader(){',a);const body=s.slice(a,b),i=body.indexOf('`')+1,j=body.lastIndexOf('`');return safeWgsl(resolveLighting(body.slice(i,j)))};
@@ -23,11 +28,12 @@ const uniformBytes=(()=>{const m=/struct Uniforms\{([\s\S]*?)\};/.exec(shaderOf(
  const members=m[1].replace(/\s+/g,'').replace(/,$/,''),re=/(\w+):(?:array<vec4<f32>,(\d+)>|vec4<f32>)(?:,|$)/y;let n=0,at=0;
  while(at<members.length){re.lastIndex=at;const x=re.exec(members);if(!x){console.error('FAIL: unexpected Uniforms member near: '+members.slice(at,at+40));process.exit(1)}n+=x[2]?+x[2]:1;at=re.lastIndex}
  return n*16})();
-const shaders={A:shaderOf(fileA),B:fileB?shaderOf(fileB):null};
-// IDCAP=1 (build 416): a third pass per file returns, for every pixel whose ray reaches the section cap, the voxel at
+const editTexOn=+(process.env.EDITTEX??0);if(editTexOn&&fileB){console.error('EDITTEX compares the texture path with the row search of one file: pass one file');process.exit(2)}
+const shaders={A:shaderOf(fileA),B:fileB?shaderOf(fileB):editTexOn?shaderOf(fileA):null};
+// IDCAP=1: a third pass per file returns, for every pixel whose ray reaches the section cap, the voxel at
 // the cap point (linear index + 1), the segment the cap shows (capSegmentIndex) and whether it takes a result colour;
 // the page compares them with the phantom's voxel truth (that voxel's HU in the segment range, inside the region)
-// IDHIT=1 (build 417): instead, every surface hit of a segment with results returns the voxel its colour is taken
+// IDHIT=1: instead, every surface hit of a segment with results returns the voxel its colour is taken
 // from (linear index + 1), the segment and whether it is coloured; compared with that voxel's truth
 const HITLINE='var overlay=0u;if(anyRegion&&!isCutPreview){overlay=analysisOverlayAt(tcv);}';
 const idHit=code=>{const old='var overlay=0u;if(anyRegion&&!isCutPreview){if(regionByTexture){overlay=regionOverlayNear(tc,dir,inward);}else{overlay=analysisOverlayAt(tcv);}}';
@@ -36,12 +42,12 @@ const idHit=code=>{const old='var overlay=0u;if(anyRegion&&!isCutPreview){if(reg
  return code.replace(line,line+'if(anyRegion&&idx==0){let st=insideVoxelTc(tc,dir,inward,u32(idx));let td=vec3<u32>(u.textureDims.xyz);let pv=min(vec3<u32>(clamp(st,vec3<f32>(0.0),vec3<f32>(0.999999))*u.textureDims.xyz),td-vec3<u32>(1u));return vec4<f32>(f32((pv.z*td.y+pv.y)*td.x+pv.x)+1.0,f32(idx),select(0.0,1.0,overlay!=0u),1.0);}')};
 const CAPLINE='let cp=u.camOrigin.xyz+dir*capT;let ctc=texCoord(cp);let capIndex=capSegmentIndex(ctc);';
 const idCap=code=>{if(!code.includes(CAPLINE))throw new Error('IDCAP: cap line not found');return code.replace(CAPLINE,CAPLINE+'{let td=vec3<u32>(u.textureDims.xyz);let pv=min(vec3<u32>(clamp(ctc,vec3<f32>(0.0),vec3<f32>(0.999999))*u.textureDims.xyz),td-vec3<u32>(1u));var rg=0u;if(analysisOverlay[0]!=0u&&capIndex>=0){rg=analysisOverlayAt(ctc);}return vec4<f32>(f32((pv.z*td.y+pv.y)*td.x+pv.x)+1.0,f32(capIndex),select(0.0,1.0,rg!=0u),1.0);}')};
-const srv=http.createServer((q,r)=>{r.writeHead(200,{'content-type':'text/html'});r.end('<!doctype html><html><body></body></html>')}).listen(8778);
+const srv=http.createServer((q,r)=>{if(q.url.startsWith('/edit-mask-texture.js')){r.writeHead(200,{'content-type':'text/javascript'});r.end(fs.readFileSync(new URL('../docs/edit-mask-texture.js',import.meta.url)));return}r.writeHead(200,{'content-type':'text/html'});r.end('<!doctype html><html><body></body></html>')}).listen(8778);
 const b=await chromium.launch({executablePath:process.env.PW_CHROMIUM,args:['--enable-unsafe-webgpu','--enable-features=Vulkan','--use-vulkan=swiftshader','--use-webgpu-adapter=swiftshader']});
 let gpuErrors=0;
 const pg=await b.newPage();pg.on('console',m=>{if(m.type()==='error'||m.type()==='warning'){if(/invalid|validation/i.test(m.text()))gpuErrors++;console.log('console.'+m.type()+':',m.text().slice(0,400))}});
 await pg.goto('http://localhost:8778/');
-const result=await pg.evaluate(async ({segM,uniformBytes,shaders,counting,refine,overlap,mpr,analysis,regionTexOn,regionR,edit,specksOn,section,sectionZ,sectionSign,roll})=>{
+const result=await pg.evaluate(async ({segM,uniformBytes,shaders,counting,refine,overlap,mpr,analysis,regionTexOn,regionR,edit,specksOn,section,sectionZ,sectionSign,roll,editTex,cutOn,passesN})=>{
  const adapter=await navigator.gpu.requestAdapter(),device=await adapter.requestDevice();
  // phantom: 128³, unsigned u16 = HU + 1024 (slope 1, intercept -1024, bias 0):
  // soft-tissue ellipsoid (40 HU) holding a bone sphere (900 HU), a 2-voxel
@@ -70,12 +76,30 @@ const result=await pg.evaluate(async ({segM,uniformBytes,shaders,counting,refine
   const ov=overlap?1:0;for(let z=Math.max(0,k*BS-ov);z<Math.min(N,(k+1)*BS+ov);z++)for(let y=Math.max(0,j*BS-ov);y<Math.min(N,(j+1)*BS+ov);y++)for(let x=Math.max(0,i*BS-ov);x<Math.min(N,(i+1)*BS+ov);x++){const v=hu(x,y,z);if(v<lo)lo=v;if(v>hi)hi=v}
   const o=((k*bx+j)*bx+i)*2;brick[o]=lo;brick[o+1]=hi}
  const storage=arr=>{const buf=device.createBuffer({size:Math.max(16,arr.byteLength),usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST});device.queue.writeBuffer(buf,0,arr);return buf};
- let editRows=storage(new Uint32Array(64)),editIntervals=null;
+ let editRows=storage(new Uint32Array(64)),editIntervals=null,editUp=null,cutUp=null;
  // EDIT=1: exclusion edit on segment 0 (bone): the box x 44..84, y 44..84, z 64..127 is removed (editAllows layout of setEditRuns: [activeMask, keepMask, 4 × (rowCount+1) offsets], intervals x0|x1<<16)
- if(edit){const rowCount=N*N,offsets=new Uint32Array(2+4*(rowCount+1)),ints=[];offsets[0]=1;offsets[1]=0;
+ // EDIT=3: EDIT=1 plus segment 1 (soft tissue) as keep + mask-only (keepMask bits 1 and 16<<1): the soft ellipsoid's voxels with x < 70,
+ // with the brick occupancy nibbles after the row index as setEditRuns appends them
+ // EDIT=4: the same with a noisy mask (each voxel kept with probability 0.6, hashed): tens of intervals per row, as a processed fat segment
+ const softMask=(x,y,z)=>{const cx=x-64,cy=y-64,cz=z-64;if(!(x<70&&cx*cx/(52*52)+cy*cy/(40*40)+cz*cz/(56*56)<1))return false;if(edit!==4)return true;let h=Math.imul((z*N+y)*N+x,2654435761)>>>0;h=Math.imul(h^(h>>>15),2246822519)>>>0;return ((h^(h>>>13))>>>0)%10<6};
+ if(edit){const rowCount=N*N,occWords=edit>=3?Math.ceil(bx*bx*bx/8):0,offsets=new Uint32Array(2+4*(rowCount+1)+occWords),ints=[];offsets[0]=edit>=3?3:1;offsets[1]=edit>=3?(2|32):0;
   const speckRows=new Map();for(const i of specks){const x=i%N,r=(i/N)|0;(speckRows.get(r)||speckRows.set(r,[]).get(r)).push(x)}
-  for(let si=0;si<4;si++){const base=2+si*(rowCount+1);for(let r=0;r<rowCount;r++){offsets[base+r]=ints.length;const z=(r/N)|0,y=r%N;if(si===0&&edit===1&&z>=64&&y>=44&&y<=84)ints.push((84<<16)|44);if(si===0&&edit===2&&speckRows.has(r))for(const x of speckRows.get(r).sort((a,b)=>a-b))ints.push((x<<16)|x)}offsets[base+rowCount]=ints.length}
-  editRows=storage(offsets);editIntervals=storage(new Uint32Array(ints.length?ints:[0]))}
+  for(let si=0;si<4;si++){const base=2+si*(rowCount+1);for(let r=0;r<rowCount;r++){offsets[base+r]=ints.length;const z=(r/N)|0,y=r%N;if(si===0&&(edit===1||edit>=3)&&z>=64&&y>=44&&y<=84)ints.push((84<<16)|44);if(si===0&&edit===2&&speckRows.has(r))for(const x of speckRows.get(r).sort((a,b)=>a-b))ints.push((x<<16)|x);
+   if(si===1&&edit>=3){let x0=-1;for(let x=0;x<=N;x++){const m=x<N&&softMask(x,y,z);if(m&&x0<0)x0=x;if(!m&&x0>=0){ints.push(((x-1)<<16)|x0);x0=-1}}}}offsets[base+rowCount]=ints.length}
+  if(edit>=3)for(let z=0;z<N;z++)for(let y=0;y<N;y++)for(let x=0;x<N;x++)if(softMask(x,y,z)){const b=((z>>3)*bx+(y>>3))*bx+(x>>3);offsets[2+4*(rowCount+1)+(b>>3)]|=2<<((b&7)*4)}
+  const intervals=new Uint32Array(ints.length?ints:[0]);editRows=storage(offsets);editIntervals=storage(intervals);editUp={offsets,intervals,activeMask:offsets[0]}}
+ // CUT=1: the EDIT=1 box is also an applied cut of segment 0 (setAppliedCutRuns layout: [activeMask, 4 × (rowCount+1) offsets])
+ let cutRows=null,cutIntervals=null;
+ if(cutOn){const rowCount=N*N,offsets=new Uint32Array(1+4*(rowCount+1)),ints=[];offsets[0]=1;
+  for(let si=0;si<4;si++){const base=1+si*(rowCount+1);for(let r=0;r<rowCount;r++){offsets[base+r]=ints.length;const z=(r/N)|0,y=r%N;if(si===0&&z>=64&&y>=44&&y<=84)ints.push((84<<16)|44)}offsets[base+rowCount]=ints.length}
+  const intervals=new Uint32Array(ints.length?ints:[0]);cutRows=storage(offsets);cutIntervals=storage(intervals);cutUp={offsets,intervals,activeMask:1}}
+ // EDITTEX: the mask texture from exactly these uploads (staging buffer, one copyBufferToTexture, as the renderer does)
+ const em=await import('/edit-mask-texture.js');let maskTex=device.createTexture({size:{width:1,height:1,depthOrArrayLayers:1},dimension:'3d',format:'r32uint',usage:GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.COPY_DST}),zeroMaskTex=maskTex,maskZ=0,maskW=0;
+ if(editTex&&(editUp||cutUp)){const planes=em.editMaskPlanes(editUp?.activeMask||0,cutUp?.activeMask||0),L=em.editMaskLayout([N,N,N],planes.count);
+  const upload=fill=>{const staging=device.createBuffer({size:L.bytes,usage:GPUBufferUsage.COPY_SRC,mappedAtCreation:true});if(fill)em.fillEditMaskWords(L,planes.table,editUp,cutUp,new Uint32Array(staging.getMappedRange()));staging.unmap();
+   const t=device.createTexture({size:{width:L.width,height:L.height,depthOrArrayLayers:L.depth},dimension:'3d',format:'r32uint',usage:GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.COPY_DST});
+   const enc=device.createCommandEncoder();enc.copyBufferToTexture({buffer:staging,bytesPerRow:L.bytesPerRow,rowsPerImage:L.height},{texture:t},{width:L.width,height:L.height,depthOrArrayLayers:L.depth});device.queue.submit([enc.finish()]);return t};
+  maskTex=upload(true);zeroMaskTex=upload(false);maskZ=em.editMaskInfoWord(L);maskW=planes.table}
  const brickBuf=storage(brick),zero=storage(new Uint32Array([0,0,0,0]));
  // analysis overlay (medical-volume.js setAnalysisRuns layout): the bone sphere as one focused cyan region
  let overlayBuf=zero,regionTex=device.createTexture({size:{width:1,height:1,depthOrArrayLayers:1},dimension:'3d',format:'r32uint',usage:GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.COPY_DST});
@@ -83,10 +107,10 @@ const result=await pg.evaluate(async ({segM,uniformBytes,shaders,counting,refine
   for(let z=0;z<N;z++)for(let y=0;y<N;y++){let x0=-1;for(let x=0;x<=N;x++){const inR=x<N&&Math.hypot(x-64,y-64,z-64)<regionR;if(inR&&x0<0)x0=x;if(!inR&&x0>=0){runs.push([z*N+y,x0,x-1]);counts[z*N+y]++;x0=-1}}}
   const header=2+rowCount,data=new Uint32Array(header+runs.length*2),cursor=new Uint32Array(rowCount);data[0]=1;let at=header;for(let r=0;r<rowCount;r++){data[1+r]=at;cursor[r]=at;at+=counts[r]*2}data[1+rowCount]=at;
   const word=(0x00c8ff|0x1000000|0x80000000)>>>0;for(const [row,x0,x1] of runs){const c=cursor[row];data[c]=((x1&65535)<<16)|(x0&65535);data[c+1]=word;cursor[row]=c+2}
-  // build 374 layout: colour table after the pairs, data[0] = its start; region index texture (4 bits per voxel)
+  // layout: colour table after the pairs, data[0] = its start; region index texture (4 bits per voxel)
   const tableStart=header+runs.length*2,data2=new Uint32Array(tableStart+16);data2.set(data);data2[0]=tableStart;data2[tableStart]=0xff;data2[tableStart+1]=word;
   overlayBuf=storage(data2);
-  // build 376 (as setAnalysisRuns): staging buffer at the 256-byte row pitch, one copyBufferToTexture (tw = 16 words here, so rows are padded)
+  // staging buffer at the 256-byte row pitch, one copyBufferToTexture (tw = 16 words here, so rows are padded)
   const tw=N/8,bytesPerRow=Math.ceil(tw*4/256)*256,rowWords=bytesPerRow/4,staging=device.createBuffer({size:bytesPerRow*N*N,usage:GPUBufferUsage.COPY_SRC,mappedAtCreation:true}),words=new Uint32Array(staging.getMappedRange());
   for(const [row,x0,x1] of runs){for(let x=x0;x<=x1;x++){const wi=row*rowWords+(x>>3),sh=(x&7)*4;words[wi]=(words[wi]&~(15<<sh))|(1<<sh)}}
   staging.unmap();
@@ -103,24 +127,26 @@ const result=await pg.evaluate(async ({segM,uniformBytes,shaders,counting,refine
  // segments: bone opaque, soft tissue 35 % (rays continue through it)
  put(8,300,3000,1,1);put(9,0.91,0.86,0.72,1);put(10,-200,299,0.35,1);put(11,0.85,0.55,0.42,1);put(12,0,0,0,0);put(13,0,0,0,0);put(14,0,0,0,0);put(15,0,0,0,0);
  put(16,64,64,64,mpr?0.6:0);put(17,mpr,0,0,refine);put(18,40,400,0,0);put(19,section?1:0,sectionZ,sectionSign,analysis&&regionTexOn?1:0);put(20,section?1:0,0.85,0,28);put(21,N,N,N,1);put(22,0.05,0.06,0.08,1);
- for(let s=0;s<4&&23+s<uni.length/4;s++)put(23+s,...segM); // build 620: segMat (the standard material in every slot), when the struct has it
- // SECTION=1 (build 410): axial section at z = SECTION_Z (app units), SECTION_SIGN picks the kept side, cap at 85 %
+ for(let s=0;s<4&&23+s<uni.length/4;s++)put(23+s,...segM); // segMat (the standard material in every slot), when the struct has it
+ // SECTION=1: axial section at z = SECTION_Z (app units), SECTION_SIGN picks the kept side, cap at 85 %
  const uniBuf=device.createBuffer({size:uni.byteLength,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});device.queue.writeBuffer(uniBuf,0,uni);
  const sampler=device.createSampler({magFilter:'linear',minFilter:'linear'});
  const targets={rgba8unorm:device.createTexture({size:{width:W,height:H},format:'rgba8unorm',usage:GPUTextureUsage.RENDER_ATTACHMENT|GPUTextureUsage.COPY_SRC}),rgba32float:device.createTexture({size:{width:W,height:H},format:'rgba32float',usage:GPUTextureUsage.RENDER_ATTACHMENT|GPUTextureUsage.COPY_SRC})};
  const readBufs={rgba8unorm:device.createBuffer({size:W*H*4,usage:GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ}),rgba32float:device.createBuffer({size:W*H*16,usage:GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ})};
  const validation=[];
- const run=async(code,label,format='rgba8unorm')=>{device.pushErrorScope('validation');try{return await run0(code,label,format)}finally{const e=await device.popErrorScope();if(e)validation.push(label+': '+e.message.slice(0,300))}};
- const run0=async(code,label,format)=>{
+ const run=async(code,label,format='rgba8unorm',mask=null)=>{device.pushErrorScope('validation');try{return await run0(code,label,format,mask)}finally{const e=await device.popErrorScope();if(e)validation.push(label+': '+e.message.slice(0,300))}};
+ const run0=async(code,label,format,mask)=>{
+  // mprWindow.z / .w = the mask texture's layout word and plane table (0: row search)
+  uni[18*4+2]=mask?maskZ:0;uni[18*4+3]=mask?maskW:0;device.queue.writeBuffer(uniBuf,0,uni);
   const target=targets[format],readBuf=readBufs[format],bpp=format==='rgba8unorm'?4:16;
   const module=device.createShaderModule({code});const info=await module.getCompilationInfo();
   const errs=info.messages.filter(m=>m.type==='error').map(m=>m.lineNum+':'+m.message);if(errs.length)return{label,errs};
   const pipeline=device.createRenderPipeline({layout:'auto',vertex:{module,entryPoint:'vs'},fragment:{module,entryPoint:'fs',targets:[{format}]},primitive:{topology:'triangle-list'}});
   const group=device.createBindGroup({layout:pipeline.getBindGroupLayout(0),entries:[
    {binding:0,resource:{buffer:uniBuf}},{binding:1,resource:tex.createView({dimension:'3d'})},{binding:2,resource:{buffer:editRows}},{binding:3,resource:{buffer:brickBuf}},{binding:4,resource:sampler},
-   {binding:5,resource:{buffer:editIntervals||zero}},{binding:6,resource:{buffer:zero}},{binding:7,resource:{buffer:zero}},{binding:8,resource:{buffer:zero}},{binding:9,resource:{buffer:zero}},{binding:10,resource:{buffer:overlayBuf}}].concat(code.includes('regionTex')?[{binding:11,resource:regionTex.createView({dimension:'3d'})}]:[])});
+   {binding:5,resource:{buffer:editIntervals||zero}},{binding:6,resource:{buffer:zero}},{binding:7,resource:{buffer:zero}},{binding:8,resource:{buffer:cutRows||zero}},{binding:9,resource:{buffer:cutIntervals||zero}},{binding:10,resource:{buffer:overlayBuf}}].concat(code.includes('regionTex')?[{binding:11,resource:regionTex.createView({dimension:'3d'})}]:[]).concat(code.includes('editMaskTex')?[{binding:12,resource:(mask==='zero'?zeroMaskTex:maskTex).createView({dimension:'3d'})}]:[])});
   const times=[];let px=null;
-  const passes=format==='rgba8unorm'?6:1;
+  const passes=format==='rgba8unorm'?passesN:1;
   for(let i=0;i<passes;i++){
    const enc=device.createCommandEncoder(),pass=enc.beginRenderPass({colorAttachments:[{view:target.createView(),loadOp:'clear',clearValue:{r:0,g:0,b:0,a:1},storeOp:'store'}]});
    pass.setPipeline(pipeline);pass.setBindGroup(0,group);pass.draw(3);pass.end();
@@ -130,9 +156,10 @@ const result=await pg.evaluate(async ({segM,uniformBytes,shaders,counting,refine
   await readBuf.mapAsync(GPUMapMode.READ);px=format==='rgba8unorm'?Array.from(new Uint8Array(readBuf.getMappedRange())):Array.from(new Float32Array(readBuf.getMappedRange()));readBuf.unmap();
   times.sort((a,b)=>a-b);return{label,ms:times[0],px};
  };
- const out={A:await run(shaders.A,'A'),Ac:await run(shaders.Ac,'Ac','rgba32float')};if(shaders.B){out.B=await run(shaders.B,'B');out.Bc=await run(shaders.Bc,'Bc','rgba32float')}
+ const out={A:await run(shaders.A,'A','rgba8unorm',editTex?'mask':null),Ac:await run(shaders.Ac,'Ac','rgba32float',editTex?'mask':null)};if(shaders.B){out.B=await run(shaders.B,'B');out.Bc=await run(shaders.Bc,'Bc','rgba32float')}
+ if(editTex&&maskZ){const z=await run(shaders.A,'Az','rgba8unorm','zero');out.zeroDiff=z.errs?-1:z.px.reduce((n,v,i)=>n+(i%4!==3&&v!==out.B.px[i]?1:0),0)}
  // IDCAP: compare the cap's segment / result with the voxel truth
- const truthSeg=(x,y,z)=>{const v=hu(x,y,z),boneOut=(edit===1&&z>=64&&y>=44&&y<=84&&x>=44&&x<=84)||(edit===2&&specks.has((z*N+y)*N+x));return v>=300&&v<=3000&&!boneOut?0:v>=-200&&v<=299?1:-1};
+ const truthSeg=(x,y,z)=>{const v=hu(x,y,z),boneOut=((edit===1||edit>=3)&&z>=64&&y>=44&&y<=84&&x>=44&&x<=84)||(edit===2&&specks.has((z*N+y)*N+x));return v>=300&&v<=3000&&!boneOut?0:(edit>=3?softMask(x,y,z):v>=-200&&v<=299)?1:-1};
  for(const k of ['Aid','Bid']){if(!shaders[k])continue;const r=await run(shaders[k],k,'rgba32float');if(r.errs){out[k]=r;continue}const px=r.px;let colored=0,cap=0,segBad=0,segExtra=0,segMissing=0,regBad=0,regExtra=0,regMissing=0;
   for(let i=0;i<px.length;i+=4){if(px[i]<0.5)continue;cap++;const id=Math.round(px[i])-1,x=id%N,y=((id/N)|0)%N,z=(id/(N*N))|0,ts=truthSeg(x,y,z),ss=Math.round(px[i+1]);
    if(ss!==ts){segBad++;if(ts<0)segExtra++;else if(ss<0)segMissing++}
@@ -140,13 +167,13 @@ const result=await pg.evaluate(async ({segM,uniformBytes,shaders,counting,refine
   out[k]={colored,cap,segBad,segExtra,segMissing,regBad,regExtra,regMissing}}
  for(const k of ['Ac','Bc']){const r=out[k];if(!r||r.errs)continue;let f=0,br=0,e=0;for(let i=0;i<r.px.length;i+=4){f+=r.px[i];br+=r.px[i+1];e+=r.px[i+2]}r.sums={fetch:f,brick:br,edit:e};r.px=null}
  return{W,H,out,validation};
-},{segM:materialVec('standard'),uniformBytes,shaders:{A:shaders.A,B:shaders.B,Ac:counting(shaders.A),Bc:shaders.B?counting(shaders.B):null,Aid:process.env.IDCAP?idCap(shaders.A):process.env.IDHIT?idHit(shaders.A):null,Bid:shaders.B?(process.env.IDCAP?idCap(shaders.B):process.env.IDHIT?idHit(shaders.B):null):null},refine,overlap,mpr,analysis,section:!!process.env.SECTION,sectionZ:+(process.env.SECTION_Z??0.3),sectionSign:+(process.env.SECTION_SIGN??-1),regionTexOn:+(process.env.REGIONTEX??1),regionR:+(process.env.REGIONR??22),edit:+(process.env.EDIT??0),specksOn:+(process.env.SPECKS??0),roll:+(process.env.ROLL??0)});
+},{segM:materialVec('standard'),uniformBytes,shaders:{A:shaders.A,B:shaders.B,Ac:counting(shaders.A),Bc:shaders.B?counting(shaders.B):null,Aid:process.env.IDCAP?idCap(shaders.A):process.env.IDHIT?idHit(shaders.A):null,Bid:shaders.B?(process.env.IDCAP?idCap(shaders.B):process.env.IDHIT?idHit(shaders.B):null):null},refine,overlap,mpr,analysis,section:!!process.env.SECTION,sectionZ:+(process.env.SECTION_Z??0.3),sectionSign:+(process.env.SECTION_SIGN??-1),regionTexOn:+(process.env.REGIONTEX??1),regionR:+(process.env.REGIONR??22),edit:+(process.env.EDIT??0),specksOn:+(process.env.SPECKS??0),roll:+(process.env.ROLL??0),editTex:editTexOn,cutOn:+(process.env.CUT??0),passesN:Math.max(1,+(process.env.PASSES??6)|0)});
 await b.close();srv.close();
 const {W,H,out,validation}=result;
-for(const k of Object.keys(out)){const r=out[k];if(r.errs){console.log(k,'COMPILE ERRORS',r.errs);process.exit(1)}
+for(const k of Object.keys(out)){const r=out[k];if(k==='zeroDiff')continue;if(r.errs){console.log(k,'COMPILE ERRORS',r.errs);process.exit(1)}
  if(k.endsWith('id')){console.log(k+(process.env.IDHIT?' (surface hits vs voxel truth): hit pixels ':' (cap vs voxel truth): cap pixels ')+r.cap+' · segment wrong '+r.segBad+' (shown where the voxel is not in it '+r.segExtra+', missing '+r.segMissing+') · result wrong '+r.regBad+' (coloured but not in the result '+r.regExtra+', missing '+r.regMissing+') · coloured '+r.colored);continue}
  if(r.sums)console.log(k+': per pixel — HU fetches '+(r.sums.fetch/(W*H)).toFixed(1)+', brick reads '+(r.sums.brick/(W*H)).toFixed(1)+', edit lookups '+(r.sums.edit/(W*H)).toFixed(1)+' (totals '+r.sums.fetch+' / '+r.sums.brick+' / '+r.sums.edit+')');
- else console.log(k+': SwiftShader pass '+r.ms.toFixed(0)+' ms (min of 6; CPU proxy, relative only)')}
+ else console.log(k+': SwiftShader pass '+r.ms.toFixed(0)+' ms (min of '+Math.max(1,+(process.env.PASSES??6)|0)+'; CPU proxy, relative only)')}
 // PNG writer (no deps): zlib via node
 import zlib from 'node:zlib';
 const png=(px,w,h)=>{const raw=Buffer.alloc((w*4+1)*h);for(let y=0;y<h;y++){raw[y*(w*4+1)]=0;for(let x=0;x<w*4;x++)raw[y*(w*4+1)+1+x]=px[y*w*4+x]}
@@ -154,7 +181,7 @@ const png=(px,w,h)=>{const raw=Buffer.alloc((w*4+1)*h);for(let y=0;y<h;y++){raw[
  const chunk=(t,d)=>{const l=Buffer.alloc(4);l.writeUInt32BE(d.length);const td=Buffer.concat([Buffer.from(t),d]);const c=Buffer.alloc(4);c.writeUInt32BE(crc(td));return Buffer.concat([l,td,c])};
  const ihdr=Buffer.alloc(13);ihdr.writeUInt32BE(w,0);ihdr.writeUInt32BE(h,4);ihdr[8]=8;ihdr[9]=6;ihdr[10]=0;ihdr[11]=0;ihdr[12]=0;
  return Buffer.concat([Buffer.from([137,80,78,71,13,10,26,10]),chunk('IHDR',ihdr),chunk('IDAT',zlib.deflateSync(raw)),chunk('IEND',Buffer.alloc(0))])};
-fs.writeFileSync(path.join(outDir,'volume-A.png'),png(out.A.px,W,H));
+fs.mkdirSync(outDir,{recursive:true});fs.writeFileSync(path.join(outDir,'volume-A.png'),png(out.A.px,W,H));
 if(out.B){fs.writeFileSync(path.join(outDir,'volume-B.png'),png(out.B.px,W,H));
  let maxd=0,n=0,sum=0;const a=out.A.px,bb=out.B.px;for(let i=0;i<a.length;i++){if(i%4===3)continue;const d=Math.abs(a[i]-bb[i]);if(d){n++;sum+=d;if(d>maxd)maxd=d}}
  console.log('A vs B: differing channels '+n+' of '+(a.length*3/4)+', max |diff| '+maxd+', mean |diff| over differing '+(n?(sum/n).toFixed(2):0));
@@ -165,4 +192,7 @@ const problems=[];
 if(validation.length)problems.push('WebGPU validation error: '+validation.join(' | '));
 if(gpuErrors)problems.push(gpuErrors+' invalid/validation message(s) on the console');
 for(const k of ['Ac','Bc']){const r=out[k];if(r&&r.sums&&!(r.sums.fetch>0))problems.push(k+': 0 HU fetches (shader did not run)')}
+if(editTexOn){const a=out.A.px,bb=out.B.px;let n=0;for(let i=0;i<a.length;i++)if(i%4!==3&&a[i]!==bb[i])n++;
+ if(n)problems.push('EDITTEX: the mask texture path differs from the row search in '+n+' channels');
+ if(+(process.env.EDIT??0)||+(process.env.CUT??0)){if(!(out.zeroDiff>0))problems.push('EDITTEX: an all-zero mask texture renders the same as the row search (the texture path did not run)');else console.log('EDITTEX: texture path = row search pixel for pixel; an all-zero mask differs in '+out.zeroDiff+' channels (texture path active)')}}
 if(problems.length){console.error('FAIL: '+problems.join('; '));process.exit(1)}

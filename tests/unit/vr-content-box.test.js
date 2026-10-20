@@ -158,7 +158,7 @@ describe('segsFromUniforms / contentKeyChanged', () => {
   });
 });
 
-describe('build 564: the rebuild never blocks a frame', () => {
+describe('the rebuild never blocks a frame', () => {
   const src = readFileSync(new URL('../../docs/vr-content-box.js', import.meta.url), 'utf8');
   const body = name => { const i = src.indexOf('export function ' + name + '('); return src.slice(i, src.indexOf('\n}\n', i)); };
   function randomGrid(seed, dims) {
@@ -225,7 +225,7 @@ describe('build 564: the rebuild never blocks a frame', () => {
   });
 });
 
-describe('render-scale cap on the content box (build 562, approved rule change)', () => {
+describe('render-scale cap on the content box', () => {
   const I = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1], model = (s, x, y, z) => [s, 0, 0, 0, 0, s, 0, 0, 0, 0, s, 0, x, y, z, 1];
   const persp = (n = 0.05, f = 100) => [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, -(f + n) / (f - n), -1, 0, 0, -2 * f * n / (f - n), 0]; // 90 deg
   const HALF = [1, 1, 1], DIMS = [256, 256, 256];
@@ -253,7 +253,7 @@ describe('vr-view.js wiring (static)', () => {
     expect(src).toMatch(/boxEntry:\{value:0\}/); // the app never starts the march at the content box
   });
   it('the box is refreshed with the per-frame uniforms (only rebuilt on a change), follows the grid, and the cap reads it', () => {
-    expect(src).toMatch(/refreshCombo\(\);refreshContentBox\(\);/); expect(src).toMatch(/cbGrid=i===1&&P\.half\?P\.half:vd;cbKey\.fill\(NaN\);cbSegOk=false/);
+    expect(src).toMatch(/comboTick\(\);refreshCombo\(\);\n(?:[^\n]*\n){1,9}?[^\n]*vis=comboShaderMask\(\)[^\n]*\n(?:[^\n]*\n){5}   refreshContentBox\(\);/); // after the shader's segA of the frame is set expect(src).toMatch(/cbGrid=i===1&&P\.half\?P\.half:vd;cbKey\.fill\(NaN\);cbSegOk=false/);
     expect(src).toMatch(/contentKeyChanged\(cbKey,segs,cbGrid\.dims\)/);
     expect(src).toMatch(/eyeMetrics\([^;]*,rsEye,rsBox\)/);
   });

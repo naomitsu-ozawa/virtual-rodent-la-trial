@@ -1,4 +1,4 @@
-// CPU / GPU parity of the VR classification path (build 484 guard). The VR laser, the 3D position-comment markers and the point-hidden test pick on the
+// CPU / GPU parity of the VR classification path. The VR laser, the 3D position-comment markers and the point-hidden test pick on the
 // CPU (docs/vr-pick.js marchClassificationHitInfo over docs/point-cls.js buildClsData bytes); the picture is drawn by the GLSL march of docs/vr-view.js.
 // This tool renders a small synthetic volume (32^3, gentle HU ramps) with the REAL fragment shader patched only at its first-hit point (the shader writes
 // hit position and segment instead of colour; everything before it, the march, the distance-field jumps, the surface search, the plane clip, is unchanged),
@@ -22,13 +22,13 @@ const TOL = {
   linear: { agree: 0.88, segment: 0.90, dtP95: 1.9, dtP99: 3.2, cheb1: 0.96, exact: 0 },
   nearest: { agree: 0.97, segment: 0.955, dtP95: 0.8, dtP99: 2.5, cheb1: 0.985, exact: 0.75 },
 };
-const scene = await buildScene(N, { complex: false }), scene4 = await buildScene(N, { complex: false, four: true }); // build 528: four enabled segments
+const scene = await buildScene(N, { complex: false }), scene4 = await buildScene(N, { complex: false, four: true }); // four enabled segments
 const sh = grabShaders(shaderFile);
 const plane = (() => { const n = [0.6, 0.3, 0.74], l = Math.hypot(...n); return { x: n[0] / l, y: n[1] / l, z: n[2] / l, w: 0.05 }; })(); // kept side: n.p - w >= 0
 const none = [0, 0, 1, 0], allOpaque = [[300, 3000, 1, 1], [-200, 299, 1, 1], [-250, -50, 1, 1], [0, 0, 0, 0]];
 const noFat = [[300, 3000, 1, 1], [-200, 299, 1, 1], [-250, -50, 1, 0], [0, 0, 0, 0]];
 const allOpaque4 = [[300, 3000, 1, 1], [-200, 299, 1, 1], [-250, -50, 1, 1], [-800, -300, 1, 1]];
-// build 528: four stored segments: the VRL_CLS4 tight loop (the fourth segment's bytes from the second texture) against the CPU march over the same
+// four stored segments: the VRL_CLS4 tight loop (the fourth segment's bytes from the second texture) against the CPU march over the same
 // four-channel bytes (the general loop those data used to take cannot be patched at its hit by this harness; its picture is in the render goldens)
 // Their own linear tolerance for the distances: the fourth segment is a 3-voxel ball with a 213 HU-per-voxel ramp in a phantom without the skin ramp (hard air / soft step),
 // so the trilinear 0.5 surface and the CPU's nearest voxel differ by up to about a voxel more than on the bone ramps (measured p95 2.2, p99 4.0, within 1: 93.4 %);
@@ -36,7 +36,7 @@ const allOpaque4 = [[300, 3000, 1, 1], [-200, 299, 1, 1], [-250, -50, 1, 1], [-8
 const TOL4 = { linear: { dtP95: 2.6, dtP99: 4.6, cheb1: 0.92 } };
 const CASES4 = [
   { name: '4seg-tight-cls4', tol: TOL4, defines: ['VRL_NO_GENERAL', 'VRL_NO_EVENTS', 'VRL_OPAQUE', 'VRL_CLS4'], u: { segA: allOpaque4 }, shown: [0, 1, 2, 3], planes: [], cut: 0 },
-  { name: '4seg-full4', tol: TOL4, defines: ['VRL_CLS4'], u: { segA: allOpaque4 }, shown: [0, 1, 2, 3], planes: [], cut: 0 }, // build 529: the full4 variant (its runtime tight branch, as screenshots take it)
+  { name: '4seg-full4', tol: TOL4, defines: ['VRL_CLS4'], u: { segA: allOpaque4 }, shown: [0, 1, 2, 3], planes: [], cut: 0 }, // the full4 variant (its runtime tight branch, as screenshots take it)
   { name: '4seg-tight-plane', tol: TOL4, defines: ['VRL_NO_GENERAL', 'VRL_OPAQUE', 'VRL_CLS4'], u: { segA: allOpaque4, cutPlanes: [[plane.x, plane.y, plane.z, plane.w], none, none, none], planeCount: 1, planeCut: 1, capOn: 0, sliceOpacity: 0 }, shown: [0, 1, 2, 3], planes: [plane], cut: 1 },
 ];
 const CASES = [

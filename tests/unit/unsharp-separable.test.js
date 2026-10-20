@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-// The GPU unsharp mask (build 271) replaces the (2r+1)³ cube loop by x and y
+// The GPU unsharp mask replaces the (2r+1)³ cube loop by x and y
 // 1D box means and a z mean fused with the sharpening. The clipped box is a
 // product of 1D intervals, so the result is the same (up to float rounding).
 function cube(src, w, h, d, r) {

@@ -45,7 +45,7 @@ describe('VR position markers', () => {
   });
 });
 
-describe('pick radius (build 468)', () => {
+describe('pick radius', () => {
   it('about 4.7 mm at the default size: a ray 3 mm off hits, 6 mm off does not; the least is PICK_MIN_M', () => {
     addComment(createComment({ text: 'a', position: { i: 5, j: 4, k: 3 }, series: fp }));
     const scene = new THREE.Scene(), mesh = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 2)), holder = new THREE.Group();
@@ -60,7 +60,7 @@ describe('pick radius (build 468)', () => {
   });
 });
 
-describe('preview of a point being moved (build 468)', () => {
+describe('preview of a point being moved', () => {
   it('drawn at the preview voxel; faint at its old place when the voxel is null', () => {
     addComment(createComment({ text: 'a', position: { i: 1, j: 1, k: 1 }, series: fp, id: 'p1' }));
     const scene = new THREE.Scene(), mesh = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 2));
@@ -79,7 +79,7 @@ describe('preview of a point being moved (build 468)', () => {
 });
 
 import * as markers from '../../docs/vr-point-markers.js';
-describe('one cursor for both modes (build 470)', () => {
+describe('one cursor for both modes', () => {
   it('the square section cursor is gone', () => {
     expect(markers.createSectionCursor).toBeUndefined(); expect(markers.sectionCursorSize).toBeUndefined();
   });
