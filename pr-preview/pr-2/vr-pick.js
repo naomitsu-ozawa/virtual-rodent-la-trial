@@ -38,3 +38,14 @@ export function marchClassificationHitInfo(o,q,halfExt,dims,cls,chs,planes=[],pl
  }
  return null;
 }
+// is the point p (object space, as the march's o + q t) inside a shown segment? The same classification bytes and voxel indexing as the march above (nearest
+// voxel, a channel >= 128): the tissue test of the Surface mode applied to one place. False outside the box, for no channel / no data, and for a non-finite point.
+// Used for recording a VR point on a section: only where the section shows tissue, never on air / empty.
+export function classifiedAt(p,halfExt,dims,cls,chs){
+ if(!p||!chs||!chs.length||!cls||!cls.data||!halfExt||!dims)return false;
+ const [w,h,d]=dims,fx=p.x/(2*halfExt[0])+0.5,fy=0.5-p.y/(2*halfExt[1]),fz=p.z/(2*halfExt[2])+0.5;
+ if(!(fx>=0&&fx<=1&&fy>=0&&fy<=1&&fz>=0&&fz<=1))return false; // also false for NaN
+ const x=Math.min(w-1,Math.floor(fx*w)),y=Math.min(h-1,Math.floor(fy*h)),z=Math.min(d-1,Math.floor(fz*d)),k=(x+w*(y+h*z))*cls.C;
+ for(const ch of chs)if(cls.data[k+ch]>=128)return true;
+ return false;
+}
