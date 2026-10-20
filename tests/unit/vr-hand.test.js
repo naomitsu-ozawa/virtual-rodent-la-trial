@@ -5,7 +5,7 @@ import {
   fingerCurl, grabScore, createGrabHysteresis, GRAB, GRAB_JOINT_NAMES, GRAB_FINGERS, palmPoint, PALM_FROM_WRIST, WRIST_SCROLL, wristScrollGain, wristScrollSign,
   handAlive, fistForming, FIST_GUARD, wristScrollKeep, PINCH, PINCH_FUSION, createPinchFusion, DRAG_CARRY, createDragCarry, blendPose, parsePinchTune, parseDragTune,
   PALM_FILTER, RAY_DELAY, rayDelayMs, slewDelay, boxDist, centeredBoxDist, squareOutlineDist, pickNearGrab, NEAR_KINDS, parseFilterTune, parseGrabTune,
-  AIM_RAY, AIM_FILTER, AIM_HOLD, aimRayPose, thumbSideOf, createAimHold, turnToward, parseRayTune,
+  AIM_RAY, AIM_RAY_META, AIM_AXES, AIM_ORIGINS, AIM_FILTER, AIM_HOLD, aimRayPose, fingerAimPose, indexBend, thumbSideOf, createAimHold, turnToward, parseRayTune,
 } from '../../docs/vr-hand.js';
 import { pinchScale } from '../../docs/vr-real-scale.js';
 import { DRAG_RECORD, DRAG_HAND, DRAG_RECORD_HAND, HAND_LABEL_MOVE_M, dragShouldStart, sectionFollowStart, sectionFollowStep } from '../../docs/vr-point.js';
@@ -656,14 +656,38 @@ describe('fist guard vs. real pinch postures', () => {
 const rotQ = (q, v) => { const [x, y, z, w] = q, tx = 2 * (y * v[2] - z * v[1]), ty = 2 * (z * v[0] - x * v[2]), tz = 2 * (x * v[1] - y * v[0]); return [v[0] + w * tx + y * tz - z * ty, v[1] + w * ty + z * tx - x * tz, v[2] + w * tz + x * ty - y * tx]; };
 const angDeg = (a, b) => Math.acos(Math.max(-1, Math.min(1, a[0] * b[0] + a[1] * b[1] + a[2] * b[2]))) * 180 / Math.PI;
 describe('aimRayPose: from the index knuckle along the index metacarpal, tilted to the palm and the thumb', () => {
-  it('defaults: 8 deg toward the palm, 4 deg toward the thumb, the joint ray on', () => { expect(AIM_RAY).toEqual({ pitchDeg: 8, yawDeg: 4, joint: 1 }); });
+  it('defaults: along the index finger from its second knuckle, no tilt, the joint ray on; axis "metacarpal" tilts 8 / 4 deg', () => {
+    expect(AIM_RAY).toEqual({ axis: 'finger', origin: 'pip', tipMix: 0, pitchDeg: 0, yawDeg: 0, joint: 1 }); expect(AIM_RAY_META).toEqual({ pitchDeg: 8, yawDeg: 4 });
+    expect(AIM_AXES).toEqual(['finger', 'metacarpal']); expect(AIM_ORIGINS).toEqual(['knuckle', 'pip', 'tip']);
+  });
+  it('no tilt (the defaults): the joint pose itself at the origin; out may be the input', () => {
+    const o = new Float64Array(7), q = qAxis([1, 2, 3], 37);
+    aimRayPose([9, 9, 9, ...q], [1, 2, 3], -1, {}, o); expect([...o]).toEqual([1, 2, 3, ...q]);
+    const j = new Float64Array([9, 9, 9, ...q]); aimRayPose(j, [1, 2, 3], 1, { pitchDeg: 8, yawDeg: 4 }, j);
+    const k = aimRayPose([9, 9, 9, ...q], [1, 2, 3], 1, { pitchDeg: 8, yawDeg: 4 }, new Float64Array(7)); expect([...j]).toEqual([...k]);
+  });
+  it('fingerAimPose: tipMix 0 = the proximal joint pose at the origin; tipMix 1 = the knuckle -> tip line (the roll kept); between: the blend; no tip: the bone', () => {
+    const o = new Float64Array(7), q = qAxis([1, 0, 0], -40); // the phalanx bent 40 deg toward the palm: -Z -> (0, -sin40, -cos40)
+    fingerAimPose([0, 0, 0, ...q], [1, 2, 3], [0, -1, -1], 0, o); expect([...o]).toEqual([1, 2, 3, ...q]);
+    fingerAimPose([0, 0, 0, ...q], [1, 2, 3], null, 1, o); expect([...o]).toEqual([1, 2, 3, ...q]);
+    fingerAimPose([0, 0, 0, ...q], [0, 0, 0], [0, -5, -5], 1, o);
+    expect(angDeg(rotQ([...o.slice(3)], [0, 0, -1]), [0, -Math.SQRT1_2, -Math.SQRT1_2])).toBeLessThan(1e-6); // along the tip line (45 deg)
+    expect(angDeg(rotQ([...o.slice(3)], [1, 0, 0]), [1, 0, 0])).toBeLessThan(1e-6); // the roll: X stays across
+    fingerAimPose([0, 0, 0, ...q], [0, 0, 0], [0, -5, -5], 0.5, o);
+    const d = rotQ([...o.slice(3)], [0, 0, -1]); expect(angDeg(d, [0, -Math.sin(40 * Math.PI / 180), -Math.cos(40 * Math.PI / 180)])).toBeCloseTo(2.5, 6); // halfway between 40 and 45
+    expect(Math.hypot(...o.slice(3))).toBeCloseTo(1, 12);
+  });
+  it('indexBend: the angle between the metacarpal and the proximal phalanx bone axes', () => {
+    expect(indexBend([0, 0, 0, 1], qAxis([1, 0, 0], -40)) * 180 / Math.PI).toBeCloseTo(40, 9);
+    expect(indexBend(qAxis([0, 1, 0], 30), qAxis([0, 1, 0], 30))).toBeCloseTo(0, 9);
+  });
   it('an unturned joint: the origin is the knuckle, the direction is -Z tilted toward -Y (the palm) and toward the thumb side (+X or -X)', () => {
     const o = new Float64Array(7);
-    aimRayPose([0.5, 0.6, 0.7, 0, 0, 0, 1], [1, 2, 3], 1, {}, o);
+    aimRayPose([0.5, 0.6, 0.7, 0, 0, 0, 1], [1, 2, 3], 1, AIM_RAY_META, o);
     expect([...o.slice(0, 3)]).toEqual([1, 2, 3]);
     const d = rotQ([...o.slice(3)], [0, 0, -1]);
     expect(d[0]).toBeCloseTo(Math.sin(4 * Math.PI / 180) * Math.cos(8 * Math.PI / 180), 6); expect(d[1]).toBeCloseTo(-Math.sin(8 * Math.PI / 180), 6); expect(d[2]).toBeLessThan(-0.98);
-    aimRayPose([0, 0, 0, 0, 0, 0, 1], [0, 0, 0], -1, {}, o);
+    aimRayPose([0, 0, 0, 0, 0, 0, 1], [0, 0, 0], -1, AIM_RAY_META, o);
     const e = rotQ([...o.slice(3)], [0, 0, -1]);
     expect(e[0]).toBeCloseTo(-d[0], 9); expect(e[1]).toBeCloseTo(d[1], 9); // the thumb on the other side: the yaw mirrors, the pitch does not
     expect(Math.hypot(...o.slice(3))).toBeCloseTo(1, 12);
@@ -681,14 +705,25 @@ describe('aimRayPose: from the index knuckle along the index metacarpal, tilted 
     expect(thumbSideOf([0, 0, 0, 1], [0, 0, 0], [0.03, -0.01, -0.02])).toBe(1); expect(thumbSideOf([0, 0, 0, 1], [0, 0, 0], [-0.03, 0, -0.02])).toBe(-1);
     expect(thumbSideOf(qAxis([0, 1, 0], 180), [0, 0, 0], [0.03, 0, -0.02])).toBe(-1); expect(thumbSideOf([0, 0, 0, 1], [1, 1, 1], [1, 1, 1])).toBe(0);
   });
-  it('parseRayTune (localStorage vrl-hand-ray): the listed keys within their ranges, nothing else', () => {
-    expect(parseRayTune('{"joint":0,"pitch":12,"yaw":-3,"minCutoff":3,"beta":0.3,"dCutoff":8,"holdDeg":5,"holdSpeed":0.2,"holdMs":100,"rampMs":200,"x":1}')).toEqual({ joint: 0, pitch: 12, yaw: -3, minCutoff: 3, beta: 0.3, dCutoff: 8, holdDeg: 5, holdSpeed: 0.2, holdMs: 100, rampMs: 200 });
-    expect(parseRayTune('{"pitch":90,"joint":2}')).toEqual({}); expect(parseRayTune(null)).toEqual({}); expect(parseRayTune('nope')).toEqual({});
+  it('parseRayTune (localStorage vrl-hand-ray): the listed keys within their ranges, axis / origin from their lists, nothing else', () => {
+    expect(parseRayTune('{"joint":0,"axis":"metacarpal","origin":"tip","tipMix":0.5,"pitch":12,"yaw":-3,"minCutoff":3,"beta":0.3,"dCutoff":8,"holdDeg":5,"holdSpeed":0.2,"holdCurl":90,"holdMs":100,"rampMs":200,"x":1}')).toEqual({ joint: 0, axis: 'metacarpal', origin: 'tip', tipMix: 0.5, pitch: 12, yaw: -3, minCutoff: 3, beta: 0.3, dCutoff: 8, holdDeg: 5, holdSpeed: 0.2, holdCurl: 90, holdMs: 100, rampMs: 200 });
+    expect(parseRayTune('{"pitch":90,"joint":2,"axis":"wrist","origin":1,"tipMix":2}')).toEqual({}); expect(parseRayTune(null)).toEqual({}); expect(parseRayTune('nope')).toEqual({});
   });
 });
 
 describe('the aim hold (createAimHold / turnToward): the direction is held only while a pinch is closing', () => {
-  it('defaults: closing faster than 12 cm/s below 6 cm; 10 deg/s for 60 ms after, ramped free over 120 ms', () => { expect(AIM_HOLD).toEqual({ closeM: 0.06, speed: 0.12, degPerS: 10, tailMs: 60, rampMs: 120, freeDegPerS: 720 }); });
+  it('defaults: closing faster than 12 cm/s (or the index curling faster than 60 deg/s) below 6 cm; 10 deg/s for 60 ms after, ramped free over 120 ms', () => { expect(AIM_HOLD).toEqual({ closeM: 0.06, speed: 0.12, curlDegPerS: 60, degPerS: 10, tailMs: 60, rampMs: 120, freeDegPerS: 720 }); });
+  it('the index curling faster than 60 deg/s below 6 cm holds (a slow gap alone would not); above 6 cm, straightening, or an unknown bend: not', () => {
+    const h = createAimHold(); let t = 0; const R = Math.PI / 180, perFrame = 10 * R * FRAME / 1000;
+    for (let i = 0; i < 10; i++) expect(h.update(0.05, t += FRAME, 20 * R)).toBe(Infinity);
+    for (let i = 1; i <= 5; i++) expect(h.update(0.05 - 0.0005 * i, t += FRAME, (20 + 4 * i) * R)).toBeCloseTo(perFrame, 12); // 290 deg/s of curl, the gap closing 3.6 cm/s
+    for (let i = 0; i < 20; i++) h.update(0.047, t += FRAME, 40 * R); expect(h.update(0.047, t += FRAME, 40 * R)).toBe(Infinity);
+    for (let i = 1; i <= 5; i++) expect(h.update(0.05, t += FRAME, (40 - 4 * i) * R)).toBe(Infinity); // straightening
+    for (let i = 1; i <= 5; i++) expect(h.update(0.08, t += FRAME, (20 + 4 * i) * R)).toBe(Infinity); // the gap is wide open: a finger wiggle, not a pinch
+    for (let i = 1; i <= 5; i++) expect(h.update(0.08, t += FRAME, NaN)).toBe(Infinity);
+    expect(h.update(0.08, t += FRAME, 80 * R)).toBe(Infinity); // after NaN the first bend has no rate
+    for (let i = 1; i <= 5; i++) expect(h.update(0.08 - 0.0001 * i, t += FRAME, (80 + 0.5 * i) * R)).toBe(Infinity); // 36 deg/s: under the trigger
+  });
   it('a relaxed gap held still, a slow drift, an opening hand, an unknown distance: free (Infinity)', () => {
     const h = createAimHold(); let t = 0;
     for (let i = 0; i < 30; i++) expect(h.update(0.04, t += FRAME)).toBe(Infinity);

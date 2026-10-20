@@ -9,12 +9,13 @@ let createHandInput;
 beforeAll(async () => {
   const inert = new Proxy(function () {}, { get: (t, k) => (k === 'then' ? undefined : inert), apply: () => inert, set: () => true });
   vi.stubGlobal('document', { createElement: () => ({ width: 0, height: 0, getContext: () => inert }) });
-  vi.stubGlobal('localStorage', { getItem: () => null, setItem() {}, removeItem() {} });
+  vi.stubGlobal('localStorage', { getItem: k => LS[k] ?? null, setItem() {}, removeItem() {} });
   ({ createHandInput } = await import(/* @vite-ignore */ '../../docs/vr-hand-view.js' + q));
 });
 afterAll(() => vi.unstubAllGlobals());
 
 const FRAME = 1000 / 72;
+const LS = {}; // what the stand-in localStorage answers (the tunables are read once, when the rig is made)
 const BONES = { index: [0.068, 0.039, 0.022, 0.018], middle: [0.065, 0.044, 0.026, 0.019], ring: [0.058, 0.041, 0.025, 0.019], pinky: [0.054, 0.032, 0.018, 0.017] };
 const BASE_X = { index: 0.02, middle: 0, ring: -0.02, pinky: -0.038 };
 const PREFIX = { index: 'index-finger', middle: 'middle-finger', ring: 'ring-finger', pinky: 'pinky-finger' };
@@ -30,7 +31,7 @@ function handPose(joints, { pos = new THREE.Vector3(0.15, 1.1, -0.35), rot = new
   for (const f of Object.keys(BONES)) {
     const bend = f === 'index' ? index : others; let ang = 0; const p = new THREE.Vector3(BASE_X[f], 0, 0);
     set(PREFIX[f] + SUFFIX[0], p);
-    for (let i = 0; i < 4; i++) { if (i) ang += bend[i - 1] * deg; p.add(new THREE.Vector3(0, -Math.sin(ang), -Math.cos(ang)).multiplyScalar(BONES[f][i])); set(PREFIX[f] + SUFFIX[i + 1], p); }
+    for (let i = 0; i < 4; i++) { if (i) ang += bend[i - 1] * deg; p.add(new THREE.Vector3(0, -Math.sin(ang), -Math.cos(ang)).multiplyScalar(BONES[f][i])); set(PREFIX[f] + SUFFIX[i + 1], p, rot.clone().multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), i < 3 ? -(ang + bend[i] * deg) : -ang))); } // each joint's -Z along its own bone
     if (f === 'index') indexTip = p.clone();
   }
   set('thumb-tip', indexTip.clone().add(new THREE.Vector3(thumbGap, 0, 0)));
@@ -38,15 +39,22 @@ function handPose(joints, { pos = new THREE.Vector3(0.15, 1.1, -0.35), rot = new
   if (joints.noIndex) for (const n of ['index-finger-metacarpal', 'index-finger-phalanx-proximal']) joints[n].visible = false; // the joint ray's sources lost (the wrist stays: the palm anchor) -> the system ray
 }
 const JOINTS = ['wrist', 'thumb-tip', 'thumb-metacarpal', ...Object.values(PREFIX).flatMap(f => SUFFIX.map(s => f + s))];
-// where the joint aim ray should be for a hand at pos / rot: from the index knuckle, along the metacarpal (-Z) tilted 8 deg to the palm (-Y) and 4 deg to the thumb (+X here)
-const aimOf = ({ pos = new THREE.Vector3(0.15, 1.1, -0.35), rot = new THREE.Quaternion() } = {}) => {
+// where the aim ray should be for a hand at pos / rot with the index bent `index` deg at its knuckle: from the second knuckle, along the proximal phalanx
+const aimOf = ({ pos = new THREE.Vector3(0.15, 1.1, -0.35), rot = new THREE.Quaternion(), index = [40, 50, 20] } = {}) => {
+  const a = index[0] * deg, bone = new THREE.Vector3(0, -Math.sin(a), -Math.cos(a));
+  const origin = new THREE.Vector3(BASE_X.index, 0, -BONES.index[0]).add(bone.clone().multiplyScalar(BONES.index[1])).applyQuaternion(rot).add(pos);
+  return { origin, dir: bone.applyQuaternion(rot) };
+};
+// 's ray (vrl-hand-ray axis "metacarpal"): from the first knuckle, along the metacarpal (-Z) tilted 8 deg to the palm (-Y) and 4 deg to the thumb (+X here)
+const aimMetaOf = ({ pos = new THREE.Vector3(0.15, 1.1, -0.35), rot = new THREE.Quaternion() } = {}) => {
   const origin = new THREE.Vector3(BASE_X.index, 0, -BONES.index[0]).applyQuaternion(rot).add(pos);
   const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(new THREE.Quaternion().setFromEuler(new THREE.Euler(-8 * deg, -4 * deg, 0, 'YXZ'))).applyQuaternion(rot);
   return { origin, dir };
 };
 const dirOf = h => new THREE.Vector3(0, 0, -1).applyQuaternion(h.getWorldQuaternion(new THREE.Quaternion()));
 
-function rig() {
+function rig(ray = null) {
+  if (ray) LS['vrl-hand-ray'] = ray; else delete LS['vrl-hand-ray'];
   const scene = new THREE.Scene(), hands = [0, 1].map(() => ({ joints: Object.fromEntries(JOINTS.map(n => [n, new THREE.Group()])) }));
   const controllers = [0, 1].map(() => { const g = new THREE.Group(); g.matrixAutoUpdate = false; scene.add(g); return g; });
   const events = [], released = [];
@@ -131,7 +139,7 @@ describe('vr-hand-view.js: the carried pinch drag', () => {
     for (let i = 0; i < 40; i++) r.frame({ thumbGap: 0.06 }); // the hand is still: the filtered joint ray converges on it
     r.frame({ thumbGap: 0.01 }); r.frame({ thumbGap: 0.01 });
     const p0 = r.events[0][2], sys = new THREE.Vector3().setFromMatrixPosition(r.sysRay);
-    expect(p0.distanceTo(aimOf().origin)).toBeLessThan(1e-3); expect(p0.distanceTo(sys)).toBeGreaterThan(0.05);
+    expect(p0.distanceTo(aimOf().origin)).toBeLessThan(1e-3); expect(p0.distanceTo(sys)).toBeGreaterThan(0.02);
     expect(r.hi.dragTh(h, h.userData.press)).not.toBeNull(); // the drag may start at once (no 60 ms wait)
     const q0 = h.getWorldQuaternion(new THREE.Quaternion());
     // the hand moves 3 cm up and the wrist turns 30 deg (a fan stroke) while the system ray stays where it was
@@ -180,19 +188,40 @@ describe('vr-hand-view.js: the carried pinch drag', () => {
 
 // the hand's own aim ray (the joints), the system's ray only as the fallback
 describe('vr-hand-view.js: the joint aim ray', () => {
-  it('aims from the index knuckle along the index metacarpal (8 deg to the palm, 4 deg to the thumb) and turns 1:1 with the hand; the system ray is not used', () => {
+  it('aims from the second knuckle of the index along its proximal phalanx (no pitch / yaw bias), turns 1:1 with the hand and follows the index bending at its knuckle; the system ray is not used', () => {
     const r = rig(), h = r.controllers[0];
     for (let i = 0; i < 60; i++) r.frame({ thumbGap: 0.05 });
     let e = aimOf();
     expect(h.getWorldPosition(new THREE.Vector3()).distanceTo(e.origin)).toBeLessThan(1e-3);
     expect(dirOf(h).angleTo(e.dir) / deg).toBeLessThan(0.05);
     expect(dirOf(h).angleTo(new THREE.Vector3(0, 0, -1).applyQuaternion(new THREE.Quaternion().setFromRotationMatrix(r.sysRay))) / deg).toBeGreaterThan(5);
+    expect(dirOf(h).angleTo(aimMetaOf().dir) / deg).toBeGreaterThan(30); // not the back of the hand: the index is bent 40 deg at the knuckle
     // the hand turns 25 deg about X and 15 deg about Y and moves: the ray goes with it (unlike the system ray, which is left where it was)
     const rot = new THREE.Quaternion().setFromEuler(new THREE.Euler(25 * deg, 15 * deg, 0)), pos = new THREE.Vector3(0.1, 1.2, -0.4);
     for (let i = 0; i < 60; i++) r.frame({ thumbGap: 0.05, rot, pos });
     e = aimOf({ rot, pos });
     expect(h.getWorldPosition(new THREE.Vector3()).distanceTo(e.origin)).toBeLessThan(1e-3);
     expect(dirOf(h).angleTo(e.dir) / deg).toBeLessThan(0.05);
+    // the index straightens to 10 deg (slowly: no hold): the ray follows the finger, the middle / ring / little fingers do not matter
+    for (let i = 0; i < 60; i++) r.frame({ thumbGap: 0.05, rot, pos, index: [Math.max(10, 40 - i), 50, 20], others: [60, 70, 40] });
+    e = aimOf({ rot, pos, index: [10, 50, 20] });
+    expect(h.getWorldPosition(new THREE.Vector3()).distanceTo(e.origin)).toBeLessThan(1e-3);
+    expect(dirOf(h).angleTo(e.dir) / deg).toBeLessThan(0.05);
+  });
+  it('vrl-hand-ray: axis "metacarpal" gives\'s ray (first knuckle, the metacarpal tilted 8 / 4 deg); origin "knuckle" / "tip"; tipMix 1 aims along the knuckle -> tip line', () => {
+    const r = rig('{"axis":"metacarpal"}'), h = r.controllers[0];
+    for (let i = 0; i < 60; i++) r.frame({ thumbGap: 0.05 });
+    expect(h.getWorldPosition(new THREE.Vector3()).distanceTo(aimMetaOf().origin)).toBeLessThan(1e-3); expect(dirOf(h).angleTo(aimMetaOf().dir) / deg).toBeLessThan(0.05);
+    const k = rig('{"origin":"knuckle"}'), hk = k.controllers[0];
+    for (let i = 0; i < 60; i++) k.frame({ thumbGap: 0.05 });
+    expect(hk.getWorldPosition(new THREE.Vector3()).distanceTo(aimMetaOf().origin)).toBeLessThan(1e-3); expect(dirOf(hk).angleTo(aimOf().dir) / deg).toBeLessThan(0.05);
+    const t = rig('{"origin":"tip","tipMix":1}'), ht = t.controllers[0];
+    for (let i = 0; i < 60; i++) t.frame({ thumbGap: 0.05 });
+    const tipP = ht.getWorldPosition(new THREE.Vector3());
+    const knuckle = aimMetaOf().origin, tipJ = new THREE.Vector3(); // the fingertip of the stand-in: the knuckle plus the three phalanges at 40 / 90 / 110 deg
+    let ang = 0; tipJ.copy(knuckle); for (let i = 1; i < 4; i++) { ang += [40, 50, 20][i - 1] * deg; tipJ.add(new THREE.Vector3(0, -Math.sin(ang), -Math.cos(ang)).multiplyScalar(BONES.index[i])); }
+    expect(tipP.distanceTo(tipJ)).toBeLessThan(1e-3);
+    expect(dirOf(ht).angleTo(tipJ.clone().sub(knuckle).normalize()) / deg).toBeLessThan(0.05);
   });
   it('the fallback: with the index joints missing the group shows the system ray; the joints back: the aim ray again (each switch is one step, no slew)', () => {
     const r = rig(), h = r.controllers[0], sysP = new THREE.Vector3().setFromMatrixPosition(r.sysRay);
@@ -229,5 +258,20 @@ describe('vr-hand-view.js: the joint aim ray', () => {
     expect(r.events.map(e => e[0])).toEqual(['start', 'end']);
     for (let k = 0; k < 30; k++) r.frame({ thumbGap: 0.05, rot: at(i++) }); // 400 ms on: the hold has ramped out, the ray tracks the turning hand again
     expect(aimOf({ rot: at(i - 1) }).dir.angleTo(dirOf(h)) / deg).toBeLessThan(0.5);
+  });
+  it('the index curling into a slow pinch (the gap closing under 12 cm/s) holds the ray too: it swings under 2 deg while the finger bends 30 deg; the carry keeps it through the pinch', () => {
+    const r = rig(), h = r.controllers[0];
+    for (let i = 0; i < 60; i++) r.frame({ thumbGap: 0.035, index: [20, 40, 20] });
+    const d0 = dirOf(h);
+    // 8 frames (110 ms): the knuckle bends 20 -> 50 deg (270 deg/s) while the gap closes 3.5 -> 1 cm (~10 cm/s, under the gap trigger)
+    for (let i = 1; i <= 8; i++) r.frame({ thumbGap: 0.035 - 0.025 * i / 8, index: [20 + 30 * i / 8, 40, 20] });
+    expect(r.events.map(e => e[0])).toEqual(['start']);
+    expect(d0.angleTo(dirOf(h)) / deg).toBeLessThan(2); // held (the finger axis alone would have swung 30 deg)
+    for (let i = 0; i < 20; i++) r.frame({ thumbGap: 0.01, index: [50, 40, 20] }); // the pinch held: the carried ray stays where the press was
+    expect(d0.angleTo(dirOf(h)) / deg).toBeLessThan(2);
+    for (let i = 0; i < 2; i++) r.frame({ thumbGap: 0.05, index: [20, 40, 20] });
+    expect(r.events.map(e => e[0])).toEqual(['start', 'end']);
+    for (let i = 0; i < 30; i++) r.frame({ thumbGap: 0.05, index: [20, 40, 20] }); // opened again: back on the finger within the blend + ramp
+    expect(dirOf(h).angleTo(aimOf({ index: [20, 40, 20] }).dir) / deg).toBeLessThan(0.3);
   });
 });

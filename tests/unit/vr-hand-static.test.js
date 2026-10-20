@@ -175,6 +175,9 @@ describe('the joint aim ray is built only in a hand\'s tick (controllers untouch
     expect(bodyAfter(hv, 'const aimRay=(hs,c)=>{')).toContain("joint(hs,'index-finger-phalanx-proximal')"); // the origin: the index knuckle
     expect(bodyAfter(hv, 'const aimRay=(hs,c)=>{')).toContain("joint(hs,'index-finger-metacarpal')||joint(hs,'wrist')");
     expect(hv).toContain("parseRayTune(lsGet('vrl-hand-ray'))");
+    expect(bodyAfter(hv, 'const aimRay=(hs,c)=>{')).toContain('fingerAimPose(k,ak,td,tipMix,hs.jr);'); // the index finger's own axis
+    expect(bodyAfter(hv, 'const aimRay=(hs,c)=>{')).toContain("if(!aimFinger){ak[0]=k[0];ak[1]=k[1];ak[2]=k[2];return aimRayPose(j,ak,hs.side,aimOff,hs.jr)}"); // axis 'metacarpal' =
+    expect(code(hv).match(/fingerAimPose\(/g)).toHaveLength(1);
     expect(src.includes('aimRay')).toBe(false); expect(src.includes('vrl-hand-ray')).toBe(false); // nothing of it in vr-view.js
   });
 });
