@@ -173,108 +173,6 @@ export function blendPose(a,b,k,out){
  return out;
 }
 
-// ---- the hand's own aim ray ----
-// The system's target ray of a hand is a stabilised shoulder -> hand pointer: it turns only ~1/4 as much as the wrist, is smoothed by the runtime (a
-// lag we cannot measure here) and jumps when the pinch is recognised (the reason for the 60 ms delayed ray). While the joints are tracked the
-// group gets instead a ray built from them, like a controller's.: along the INDEX FINGER (axis 'finger', fingerAimPose): the direction is
-// the index's proximal phalanx (-Z of the index-finger-phalanx-proximal joint: the segment behind the second knuckle, the steadiest part of a finger
-// that curls a little), optionally mixed with the knuckle -> fingertip line (tipMix: 0 = the phalanx alone, 1 = the line to the tip, which swings
-// with every curl), from the second knuckle (origin 'pip'; 'knuckle' = the first, 'tip' = the fingertip).'s axis 'metacarpal' (the back
-// of the hand: the index metacarpal's bone axis from the first knuckle, tilted 8 deg to the palm and 4 deg to the thumb) stays for A/B
-// (vrl-hand-ray axis). It is filtered with AIM_FILTER (lighter than ONE_EURO: the joints are the runtime's freshest, display-time predicted
-// poses) and never delayed; the index curling into the pinch is handled by the aim hold below. The system's ray stays the fallback (joints missing / joint 0).
-export const AIM_RAY={axis:'finger',origin:'pip',tipMix:0,pitchDeg:0,yawDeg:0,joint:1};
-export const AIM_RAY_META={pitchDeg:8,yawDeg:4}; // the offsets of axis 'metacarpal' unless tuned
-export const AIM_AXES=['finger','metacarpal'],AIM_ORIGINS=['knuckle','pip','tip'];
-export const AIM_FILTER={minCutoff:2,beta:0.15,dCutoff:5};
-// jp: the joint pose [px,py,pz,qx,qy,qz,qw] whose -Z is the bone (index-finger-metacarpal), kp: the knuckle position [x,y,z] (the ray origin),
-// thumbSide: +1 / -1 = the thumb lies along +X / -X of that joint frame (thumbSideOf below). out: the target-ray pose (7 numbers). No allocation.
-// out may be jp itself (the orientation is read before it is written).
-const aQ=new Float64Array(4),aR=new Float64Array(4),aT=new Float64Array(4),aJ=new Float64Array(4);
-export function aimRayPose(jp,kp,thumbSide,{pitchDeg=AIM_RAY.pitchDeg,yawDeg=AIM_RAY.yawDeg}={},out){
- aJ[0]=jp[3];aJ[1]=jp[4];aJ[2]=jp[5];aJ[3]=jp[6];
- if(!pitchDeg&&!yawDeg){out[3]=aJ[0];out[4]=aJ[1];out[5]=aJ[2];out[6]=aJ[3];out[0]=kp[0];out[1]=kp[1];out[2]=kp[2];return out}
- const a=-pitchDeg*Math.PI/180,b=-(thumbSide<0?-1:1)*yawDeg*Math.PI/180; // Rx(a): -Z toward -Y (the palm) for a < 0; Ry(b): -Z toward -X for b > 0
- aQ[0]=Math.sin(a/2);aQ[1]=0;aQ[2]=0;aQ[3]=Math.cos(a/2);aR[0]=0;aR[1]=Math.sin(b/2);aR[2]=0;aR[3]=Math.cos(b/2);
- qMulA(aR,0,aQ,0,aT,0);qMulA(aJ,0,aT,0,out,3); // joint * yaw * pitch
- const l=Math.hypot(out[3],out[4],out[5],out[6])||1;for(let i=3;i<7;i++)out[i]/=l;
- out[0]=kp[0];out[1]=kp[1];out[2]=kp[2];return out;
-}
-// the index finger's pointing pose. jp: the index-finger-phalanx-proximal joint pose (its -Z = the proximal phalanx), op: the ray origin
-// [x,y,z], tipDir: the knuckle -> fingertip vector in the reference space (any length; null = none), mix: the share of tipDir in the direction
-// (0: the phalanx alone). The roll stays the joint's; the direction is turned by the shortest arc. out (7 numbers; may be jp). No allocation.
-const fL=[0,0,0],fC=new Float64Array(4),fD=[0,0,0],fArc=new Float64Array(4);
-export function fingerAimPose(jp,op,tipDir,mix,out){
- aJ[0]=jp[3];aJ[1]=jp[4];aJ[2]=jp[5];aJ[3]=jp[6];
- out[0]=op[0];out[1]=op[1];out[2]=op[2];
- const m=Math.max(0,Math.min(1,mix||0)),tl=tipDir?Math.hypot(tipDir[0],tipDir[1],tipDir[2]):0;
- if(!(m>0)||!(tl>1e-6)){out[3]=aJ[0];out[4]=aJ[1];out[5]=aJ[2];out[6]=aJ[3];return out}
- fC[0]=-aJ[0];fC[1]=-aJ[1];fC[2]=-aJ[2];fC[3]=aJ[3];fD[0]=tipDir[0]/tl;fD[1]=tipDir[1]/tl;fD[2]=tipDir[2]/tl;
- rotV(fC,fD,fL); // the tip line in the joint's own frame
- const x=m*fL[0],y=m*fL[1],z=-(1-m)+m*fL[2],n=Math.hypot(x,y,z); // blended with the bone (0,0,-1)
- if(!(n>1e-9)){out[3]=aJ[0];out[4]=aJ[1];out[5]=aJ[2];out[6]=aJ[3];return out}
- // the shortest arc from (0,0,-1) to (x,y,z)/n: axis = (0,0,-1) x d = (dy, -dx, 0), w = 1 + (-dz)
- const dx=x/n,dy=y/n,dz=z/n,w=1-dz;
- if(w<1e-9){fArc[0]=0;fArc[1]=1;fArc[2]=0;fArc[3]=0}else{fArc[0]=dy;fArc[1]=-dx;fArc[2]=0;fArc[3]=w;const al=Math.hypot(fArc[0],fArc[1],fArc[3]);fArc[0]/=al;fArc[1]/=al;fArc[3]/=al}
- qMulA(aJ,0,fArc,0,out,3);
- const l=Math.hypot(out[3],out[4],out[5],out[6])||1;for(let i=3;i<7;i++)out[i]/=l;
- return out;
-}
-// the bend of the index at its first knuckle: the angle (rad) between the metacarpal's bone axis (-Z of mq) and the proximal phalanx's (-Z of pq)
-const bA=[0,0,0],bB=[0,0,0],nZ=[0,0,-1];
-export function indexBend(mq,pq){rotV(mq,nZ,bA);rotV(pq,nZ,bB);return Math.acos(Math.max(-1,Math.min(1,bA[0]*bB[0]+bA[1]*bB[1]+bA[2]*bB[2])))}
-const sX=[0,0,0],X1=[1,0,0];
-// which side (along the X axis of the frame q) the thumb lies: sign of (thumb - index) . X; 0 when they coincide (keep the last known side)
-export function thumbSideOf(q,indexP,thumbP){
- rotV(q,X1,sX);const d=(thumbP[0]-indexP[0])*sX[0]+(thumbP[1]-indexP[1])*sX[1]+(thumbP[2]-indexP[2])*sX[2];
- return d>1e-6?1:d<-1e-6?-1:0;
-}
-// the aim hold: the fingers closing into a pinch wobble the hand a little just before the press is recognised (and the joints' estimate shifts
-// with the hand shape), so the target would move as one pinches. While the thumb-index distance closes faster than `speed` (m/s) below `closeM`
-// (a pinch forming: a relaxed hand holding its gap, or opening, is never held) and for tailMs after, the ray's direction may turn at most
-// degPerS; then the limit ramps back to free over rampMs (what was held up slides on, no jump). The press (createPinchFusion, 2 frames
-// below 1.8 cm) falls inside the hold, so its target is the one aimed at before the fingers moved — without the delay of the old delayed ray.
-// the index curling toward the thumb swings that ray far more than the hand wobbles, and a slow pinch
-// (the gap closing under `speed`) would not be caught by the gap alone, so the bend of the index at its first knuckle (indexBend) is the
-// second trigger: curling faster than curlDegPerS below closeM holds too. update(d, now, bend) -> the most the direction may turn this frame
-// (rad); Infinity = free. bend (rad, optional): NaN / undefined = no curl trigger.
-export const AIM_HOLD={closeM:0.06,speed:0.12,curlDegPerS:60,degPerS:10,tailMs:60,rampMs:120,freeDegPerS:720};
-export function createAimHold({closeM=AIM_HOLD.closeM,speed=AIM_HOLD.speed,curlDegPerS=AIM_HOLD.curlDegPerS,degPerS=AIM_HOLD.degPerS,tailMs=AIM_HOLD.tailMs,rampMs=AIM_HOLD.rampMs,freeDegPerS=AIM_HOLD.freeDegPerS}={}){
- let lastD=NaN,lastDT=null,lastB=NaN,lastBT=null,prevT=null,until=-Infinity;
- const R=Math.PI/180;
- return{
-  update(d,now,bend){
-   const dt=prevT===null?0:Math.max(0,now-prevT);prevT=now;
-   const near=Number.isFinite(d)&&d<closeM;
-   if(Number.isFinite(d)){
-    if(lastDT!==null&&now>lastDT){const v=(lastD-d)/((now-lastDT)/1000);if(near&&v>speed)until=now+tailMs}
-    lastD=d;lastDT=now;
-   }else lastDT=null; // the rate needs two tracked samples in a row
-   if(Number.isFinite(bend)){
-    if(lastBT!==null&&now>lastBT){const w=(bend-lastB)/((now-lastBT)/1000)/R;if(near&&w>curlDegPerS)until=now+tailMs}
-    lastB=bend;lastBT=now;
-   }else lastBT=null;
-   if(now<until)return degPerS*R*dt/1000;
-   if(!(rampMs>0))return Infinity;
-   const k=(now-until)/rampMs;if(k>=1)return Infinity;
-   return (degPerS+(freeDegPerS-degPerS)*k)*R*dt/1000;
-  },
-  reset(){lastD=NaN;lastDT=null;lastB=NaN;lastBT=null;prevT=null;until=-Infinity},
-  get held(){return prevT!==null&&prevT<until},
- };
-}
-const tI=new Float64Array(4),tDq=new Float64Array(4),tP=new Float64Array(4);
-// o[oi..] = the unit quaternion a[ai..] turned toward b[bi..] by at most maxRad (b itself when it is within maxRad); returns the angle a -> b (rad)
-export function turnToward(a,ai,b,bi,maxRad,o,oi){
- tI[0]=-a[ai];tI[1]=-a[ai+1];tI[2]=-a[ai+2];tI[3]=a[ai+3];qMulA(tI,0,b,bi,tDq,0);
- if(tDq[3]<0)for(let i=0;i<4;i++)tDq[i]=-tDq[i];
- const ang=2*Math.atan2(Math.hypot(tDq[0],tDq[1],tDq[2]),tDq[3]);
- if(!(ang>maxRad)){for(let i=0;i<4;i++)o[oi+i]=b[bi+i];return ang}
- qPow(tDq,maxRad/ang,tP);qMulA(a,ai,tP,0,o,oi);
- const l=Math.hypot(o[oi],o[oi+1],o[oi+2],o[oi+3])||1;for(let i=0;i<4;i++)o[oi+i]/=l;
- return ang;
-}
-
 // ---- delayed ray ----
 // Closing / opening the fingers moves the system's pinch ray just before the pinch is recognised (and just after it ends). The hand's ray is
 // therefore taken in the past: the target under the ray at selectstart / selectend is where the ray was before the fingers moved.
@@ -498,14 +396,6 @@ export const parseGrabTune=t=>pick(jsonOf(t),{on:[0,1.5],off:[0,1.5],holdMs:[0,2
 export const parsePinchTune=t=>pick(jsonOf(t),{on:[0.003,0.08],off:[0.003,0.12],onFrames:[1,10],offFrames:[1,10],own:[0,1],os:[0,1],osGapMs:[0,1000],guardIndex:[0,1.5],guardOthers:[0,1.5]});
 // vrl-hand-drag = '{"carry":1,"gain":1,"rot":1,"blendMs":120}' (carry 0: a pinch drags with the system's (delayed) ray, as before)
 export const parseDragTune=t=>pick(jsonOf(t),{carry:[0,1],gain:[0,5],rot:[0,1],blendMs:[0,1000]});
-// vrl-hand-ray = '{"joint":1,"axis":"finger","origin":"pip","tipMix":0,"pitch":0,"yaw":0,"minCutoff":2,"beta":0.15,"dCutoff":5,"holdDeg":10,"holdSpeed":0.12,"holdCurl":60,"holdMs":60,"rampMs":120}'
-// (joint 0: the system's target ray as before; axis "metacarpal":'s ray (pitch / yaw default 8 / 4 then); origin "knuckle" | "pip" | "tip";
-// holdDeg 720: no aim hold; holdCurl 2000: no curl trigger; pitch / yaw in degrees, toward the palm / the thumb)
-export const parseRayTune=t=>{
- const v=jsonOf(t),o=pick(v,{joint:[0,1],tipMix:[0,1],pitch:[-45,45],yaw:[-45,45],minCutoff:[0.05,60],beta:[0,5],dCutoff:[0.1,60],holdDeg:[0,720],holdSpeed:[0,5],holdCurl:[0,2000],holdMs:[0,1000],rampMs:[0,2000]});
- if(v&&typeof v==='object'){if(AIM_AXES.includes(v.axis))o.axis=v.axis;if(AIM_ORIGINS.includes(v.origin))o.origin=v.origin}
- return o;
-};
 
 // ---- texts (hands only; the controller texts stay in vr-view.js) ----
 export function handTexts(ja){
