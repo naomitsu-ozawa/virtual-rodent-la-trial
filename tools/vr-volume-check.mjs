@@ -13,8 +13,7 @@ const grab=(src,name)=>{const m=src.match(new RegExp('const '+name+'=`([\\s\\S]*
 // REGION=1: a synthetic analysis result — colour index 1 on the half x < N/2 of the volume (cyan), with VRL_REGIONS
 // REGION=fat: the result only on the fat voxels of that half (a fat result, regionSeg = fat); REGZERO=1: no
 // result voxels (same shader); SEGS=nofat: fat hidden. Fat hidden, REGION=fat vs REGZERO=1 must render the same image.
-// VRL_MEDIUMP is the app's default; VR_PREC=highp checks the 32-bit variant
-const DEFS=[...(process.env.DEFINES||'').split(',').filter(Boolean),...(process.env.VR_PREC==='highp'||(process.env.DEFINES||'').includes('VRL_MEDIUMP')?[]:['VRL_MEDIUMP']),...(process.env.REGION?['VRL_REGIONS']:[])].map(d=>'#define '+d+'\n').join('');
+const DEFS=[...(process.env.DEFINES||'').split(',').filter(Boolean),...(process.env.REGION?['VRL_REGIONS']:[])].map(d=>'#define '+d+'\n').join('');
 const load=f=>{const s=fs.readFileSync(f,'utf8');return{vs:grab(s,'vertexShader'),fs:DEFS+grab(s,'fragmentShader')}};
 const counting=code=>code
  .replace('out highp vec4 outColor;','out highp vec4 outColor;')

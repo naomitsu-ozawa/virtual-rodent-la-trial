@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { labelSegmentsShown, surfaceAnchor, rectEdgePoint, vrVoxelStep, pcVoxelStep, normalizeAnalysisLabel, hasOffset, leaderVisible, withOffset, labelLocal, offsetForLocal, voxelFromLocalVr, voxelFromLocal3d, clampVoxel, setRegionLabel, setRegionLabelOffset, onAnalysisLabelsChange, labelForProject, sameLabel, ANALYSIS_LABEL_MAX } from '../../docs/analysis-label.js';
+import { surfaceAnchor, rectEdgePoint, vrVoxelStep, pcVoxelStep, normalizeAnalysisLabel, hasOffset, leaderVisible, withOffset, labelLocal, offsetForLocal, voxelFromLocalVr, voxelFromLocal3d, clampVoxel, setRegionLabel, setRegionLabelOffset, onAnalysisLabelsChange, labelForProject, sameLabel, ANALYSIS_LABEL_MAX } from '../../docs/analysis-label.js';
 import { voxelToLocal } from '../../docs/vr-point.js';
 import { voxelToLocal3D } from '../../docs/crosshair.js';
 import { packProject, unpackProject } from '../../docs/project-file.js';
@@ -199,37 +199,5 @@ describe('wiring (static): VR pins and the PC chips use the shared region.label'
     expect(d3).toContain('function drawAnalysisLabels('); expect(d3).toContain('analysisProbes(als,dims)'); expect(d3).toContain('if(moved&&aOk)');
     expect(d3).toContain('setRegionLabelOffset(regionOf(h.id),off)'); expect(d3).toContain('onAnalysisLabelsChange(again)');
     expect(d3).toContain("const analysisGate=()=>analysisEditTool==='select';"); // movable in the analysis mode too, not while an edit tool owns the pointer
-  });
-});
-
-describe('a result label follows its segments (VR)', () => {
-  it('no segments = always shown; any shown segment shows it; all hidden hides it; showing again restores (pure function of visibility)', () => {
-    const shown = new Set(['fat']);
-    const f = k => shown.has(k);
-    expect(labelSegmentsShown(undefined, f)).toBe(true);
-    expect(labelSegmentsShown([], f)).toBe(true);
-    expect(labelSegmentsShown(['fat'], f)).toBe(true);
-    expect(labelSegmentsShown(['bone', 'fat'], f)).toBe(true);
-    shown.delete('fat');
-    expect(labelSegmentsShown(['fat'], f)).toBe(false);
-    expect(labelSegmentsShown(['bone', 'fat'], f)).toBe(false);
-    shown.add('fat');
-    expect(labelSegmentsShown(['fat'], f)).toBe(true);
-  });
-  it('hiding never touches the label itself (position kept), and vr-view hides without hit-testing', () => {
-    const reg = { id: 3, segmentKeys: ['fat'], label: { anchor: { i: 1, j: 2, k: 3 }, offset: { i: 4, j: 5, k: 6 } } };
-    const before = JSON.stringify(reg.label);
-    labelSegmentsShown(reg.segmentKeys, () => false);
-    expect(JSON.stringify(reg.label)).toBe(before);
-    const vv = readFileSync(new URL('../../docs/vr-view.js', import.meta.url), 'utf8');
-    expect(vv).toContain("const vrSegShown=key=>segAvail(segmentState[key])&&segMode[key]!==2;");
-    expect(vv).toContain('lb.hid=!labelSegmentsShown(reg.segmentKeys,vrSegShown);');
-    expect(vv).toMatch(/const placeLabel=lb=>\{\n  if\(lb\.hid\)\{lb\.m\.visible=false;lb\.line\.visible=false;return\}/);
-    expect(vv).toMatch(/for\(const lb of pins\.values\(\)\)\{\s*if\(!lb\.m\.visible\)continue;/); // pickPin skips hidden cards
-  });
-  it('the PC 3D view already hides labels of unticked segments (analysisRegionShown)', () => {
-    const c3 = readFileSync(new URL('../../docs/comment-3d.js', import.meta.url), 'utf8');
-    expect(c3).toContain('r.label&&shownRegion(r)');
-    expect(c3).toContain('analysisRegionShown(r)&&');
   });
 });

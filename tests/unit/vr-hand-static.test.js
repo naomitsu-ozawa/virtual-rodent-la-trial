@@ -164,24 +164,6 @@ describe('the own pinch and the carried pinch drag are hands only (controllers u
   });
 });
 
-describe('the joint aim ray is built only in a hand\'s tick (controllers untouched); the system ray stays the fallback', () => {
-  const code = t => t.split('\n').map(l => l.replace(/\/\/.*$/, '')).join('\n');
-  it('aimRay() is called once, inside tick (reached only from frame()\'s hand branch), behind the joint switch; the fallback path is the one', () => {
-    const tk = bodyAfter(hv, 'const tick=(c,hs,now)=>{');
-    expect(code(hv).match(/aimRay\(hs,c\)/g)).toHaveLength(1); expect(tk).toContain('const jr=aimOn?aimRay(hs,c):null;');
-    expect(tk).toContain('hs.hist.push(now,r);'); expect(tk.indexOf('hs.hist.push(now,r);')).toBeLessThan(tk.indexOf('const jr=')); // the record is kept whatever ray is shown
-    expect(tk).toContain("if(hs.src!=='sys'){hs.filter.reset();hs.src='sys'}"); expect(tk).toContain('const t=hs.hist.at(now-hs.delay,hs.del);hs.filter.filter(hs.del,t,hs.out);');
-    expect(tk).toContain('hs.aim.filter(jr,now,hs.out);'); expect(tk).toContain('turnToward(hs.lastQ,0,hs.out,3,lim,hs.out,3);');
-    expect(bodyAfter(hv, 'const aimRay=(hs,c)=>{')).toContain("joint(hs,'index-finger-phalanx-proximal')"); // the origin: the index knuckle
-    expect(bodyAfter(hv, 'const aimRay=(hs,c)=>{')).toContain("joint(hs,'index-finger-metacarpal')||joint(hs,'wrist')");
-    expect(hv).toContain("parseRayTune(lsGet('vrl-hand-ray'))");
-    expect(bodyAfter(hv, 'const aimRay=(hs,c)=>{')).toContain('fingerAimPose(k,ak,td,tipMix,hs.jr);'); // the index finger's own axis
-    expect(bodyAfter(hv, 'const aimRay=(hs,c)=>{')).toContain("if(!aimFinger){ak[0]=k[0];ak[1]=k[1];ak[2]=k[2];return aimRayPose(j,ak,hs.side,aimOff,hs.jr)}"); // axis 'metacarpal' =
-    expect(code(hv).match(/fingerAimPose\(/g)).toHaveLength(1);
-    expect(src.includes('aimRay')).toBe(false); expect(src.includes('vrl-hand-ray')).toBe(false); // nothing of it in vr-view.js
-  });
-});
-
 describe('direct grab: hands only, the controller path is untouched', () => {
   it("the fist asks near() first; with a target the board / section / volume itself is taken, else the laser path (gripStart) runs as before", () => {
     const g = bodyAfter(hv, 'const grabStep=(c,hs,now)=>{');

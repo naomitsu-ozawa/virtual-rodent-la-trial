@@ -2,9 +2,9 @@
 // the levels). A level card asks app.js for its practice dataset ('vrl-event-sample' -> the practice-data chooser's own startSample,
 // so the bundled project.vrlab applies as usual); then the visitor presses 「VRで見る」/「ARで見る」. With the switch off (default)
 // nothing is added to the page.
-import { settings } from './app-settings.js?v=20261020-build629';
-import { tr } from './i18n.js?v=20261020-build629';
-import { EVENT_LEVELS, EVENT_HINT_KEYS, levelForSample, chooseEventLevel, chosenEventLevel, resetPress, resetArmed, RESET_ARM_MS } from './event-mode.js?v=20261020-build629';
+import { settings } from './app-settings.js?v=20261019-build626';
+import { tr } from './i18n.js?v=20261019-build626';
+import { EVENT_LEVELS, EVENT_HINT_KEYS, levelForSample, chooseEventLevel, chosenEventLevel, resetPress, resetArmed, RESET_ARM_MS } from './event-mode.js?v=20261019-build626';
 export function initEventModeUi(){
  const box=document.getElementById('set-event-mode');
  if(box){box.checked=settings.get('eventMode')===true;box.onchange=()=>settings.set('eventMode',box.checked)}

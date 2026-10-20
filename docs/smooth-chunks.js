@@ -5,9 +5,9 @@
 // first plane the positions the previous chunk gave them, so the assembled surface is watertight.
 // Free of DOM-bound imports so the unit tests can use it directly.
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.webgpu.js';
-import { constrainedSmoothPositions, constrainedSmoothSchedule } from './constrained-smooth.js?v=20261020-build629';
-import { snapToLattice, prepareSmoothChunk, vertexNormals } from './smooth-prepare.js?v=20261020-build629';
-import { smoothChunkInPool, smoothInFlightLimit, smoothInFlightFloats } from './smooth-workers.js?v=20261020-build629';
+import { constrainedSmoothPositions, constrainedSmoothSchedule } from './constrained-smooth.js?v=20261019-build626';
+import { snapToLattice, prepareSmoothChunk, vertexNormals } from './smooth-prepare.js?v=20261019-build626';
+import { smoothChunkInPool, smoothInFlightLimit, smoothInFlightFloats } from './smooth-workers.js?v=20261019-build626';
 export { snapToLattice };
 
 // slices of the neighbouring chunks smoothed with a chunk: the constrained smoothing reaches farther the stronger it is.

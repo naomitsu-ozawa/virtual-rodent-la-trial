@@ -320,14 +320,6 @@ describe('anticipate: predictive drop on a fast zoom', () => {
     zoom(aq, t => Math.pow(3, t / 500), 1500);
     expect(aq.level).toBe(1); expect(aq.f).toBe(0.5);
   });
-  it('the level already at or below the cap: the drop is floored at the MID rung relative to the cap (0.7 x cap), not at 0.7', () => {
-    const aq = createAutoQuality({ f: 0.5 }); aq.setCeiling(0.5);
-    aq.anticipate(1, 0); expect(aq.anticipate(1.3, 100)).toBe(true);
-    expect(aq.f).toBeLessThan(0.5); expect(aq.f).toBeGreaterThanOrEqual(0.35 - 1e-9);
-    zoom(aq, t => 1.3 * Math.pow(3, t / 500), 1500, 200);
-    expect(aq.f).toBeCloseTo(0.35, 9); expect(aq.level).toBeCloseTo(AUTO_MID, 9);
-    const c = createAutoQuality(); c.anticipate(1, 0); c.anticipate(5, 100); expect(c.f).toBeCloseTo(AUTO_MID, 9); // without a cap: 0.7 as before
-  });
   it('measured headroom: no drop while the predicted volume time stays within the budget; the growth since the last measurement accumulates', () => {
     const aq = createAutoQuality();
     aq.update({ volMs: 0, mainMs: 3, interval: BUDGET, budget: BUDGET }); // 3 ms of 13.9
@@ -420,63 +412,5 @@ describe('anticipate: predictive drop on a fast zoom', () => {
     const src = readFileSync(new URL('../../docs/vr-view.js', import.meta.url), 'utf8');
     expect(src).toMatch(/if\(!bench\.active&&!anBench\.active\)aq\.anticipate\(holder\.scale\.x,nowA\);/);
     expect(src.indexOf('aq.anticipate(')).toBeGreaterThan(src.indexOf('if(auto){\n   autoFrames++'));
-  });
-});
-
-// at maximum zoom the data-resolution cap (0.4 .. 0.6 for 256^3 data) lies below the floor (0.5) and the MID rung (0.7), so every resolution
-// rung was dead (scale in use = min(level, cap) = cap) and only the step 1 -> 2 could act: the ladder stopped at 50 .. 60 fps. The MID rung and the floor are
-// now relative to the cap (100 % = full data detail), so the rungs act below it. Without a cap nothing changes.
-describe('rungs below the data-resolution cap', () => {
-  // closed loop: the volume pass costs `unit` ms at scale 1, step 1; it scales with eff^2 and 1/step; rest = 2 ms
-  const loop = (unit, cap, { min = 0.5, n = 80, baseStep = 0 } = {}) => {
-    const aq = createAutoQuality({ min, baseStep }), tr = [];
-    for (let i = 0; i < n; i++) {
-      aq.setCeiling(cap); const eff = aq.f, v = unit * eff * eff * STEP_LEVELS[0] / STEP_LEVELS[aq.stepIdx], low = eff < 1;
-      const total = v + 2;
-      aq.update({ volMs: low ? v : 0, mainMs: low ? 2 : v + 2, interval: Math.max(BUDGET, total), budget: BUDGET, ctx: 'x', cover: 4e6 });
-      tr.push({ eff: aq.f, s: aq.stepIdx, total, lvl: aq.level });
-    }
-    return { aq, tr };
-  };
-  const gpu = (unit, aq) => unit * aq.f * aq.f / STEP_LEVELS[aq.stepIdx] + 2;
-  it('cap 0.45, a load that step 2 at the cap cannot carry: the scale goes below the cap and the frame fits the budget', () => {
-    const unit = 170; // at the cap: 34 ms (step 1), 17 + 2 ms at step 2 (> 13.9 budget)
-    const { aq } = loop(unit, 0.45);
-    expect(aq.f).toBeLessThan(0.45 - 0.01);
-    expect(aq.stepIdx).toBe(STEP_LEVELS.length - 1);
-    expect(gpu(unit, aq)).toBeLessThanOrEqual(BUDGET * 0.95);
-    expect(aq.f).toBeGreaterThanOrEqual(0.5 * 0.45 - 1e-9); // never below floor x cap
-  });
-  it('a light load keeps the scale at the cap (no detail given up) and the step at 1', () => {
-    const { aq } = loop(40, 0.45); // 8 + 2 ms at the cap
-    expect(aq.f).toBeCloseTo(0.45, 6); expect(aq.stepIdx).toBe(0);
-  });
-  it('a moderate overload costs a moderate drop: the resolution rung (about 0.7 of the cap) comes before the step', () => {
-    const { aq, tr } = loop(100, 0.45); // 20 ms at the cap, step 1
-    expect(aq.stepIdx).toBe(0);
-    expect(aq.f).toBeLessThan(0.45); expect(aq.f).toBeGreaterThanOrEqual(0.7 * 0.45 - 1e-9);
-    expect(new Set(tr.slice(-20).map(t => t.eff.toFixed(3) + '/' + t.s)).size).toBe(1); // settled
-  });
-  it('the bottom rung is floor x cap, and the user floor sets it (35 %: lower)', () => {
-    const a = loop(3000, 0.45, { min: 0.5 }).aq, b = loop(3000, 0.45, { min: 0.35 }).aq;
-    expect(a.f).toBeCloseTo(0.5 * 0.45, 6); expect(b.f).toBeCloseTo(0.35 * 0.45, 6);
-  });
-  it('the load goes away: the scale comes back to the cap and the step to 1', () => {
-    const { aq } = loop(170, 0.45);
-    for (let i = 0; i < 80; i++) aq.update({ volMs: 3, mainMs: 2, interval: BUDGET, budget: BUDGET, ctx: 'x', cover: 4e6 });
-    expect(aq.f).toBeCloseTo(0.45, 6); expect(aq.stepIdx).toBe(0);
-  });
-  it('the cap lifts (zoomed out): the floor rises with it, the scale in use is never below floor x the new cap', () => {
-    const { aq } = loop(170, 0.45); aq.setCeiling(1);
-    expect(aq.f).toBeGreaterThanOrEqual(0.5 - 1e-9);
-  });
-  it('the level readout is relative to the cap (never "32 %" under a Min 50 % floor); without a cap it is the scale itself', () => {
-    const { aq } = loop(3000, 0.45); expect(aq.level).toBeCloseTo(0.5, 6); expect(aq.f).toBeCloseTo(0.225, 6);
-    const { aq: b } = loop(3000, 1); expect(b.level).toBeCloseTo(b.f, 9);
-    const c = createAutoQuality(); c.setCeiling(0.4); expect(c.level).toBe(1);
-  });
-  it('no cap (ceil = 1): the old behaviour, the floor is the user floor', () => {
-    const { aq } = loop(3000, 1, { min: 0.5 }); expect(aq.f).toBeCloseTo(0.5, 6);
-    const { aq: c } = loop(3000, 1, { min: 0.25 }); expect(c.f).toBeCloseTo(0.25, 6);
   });
 });

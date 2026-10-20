@@ -217,11 +217,8 @@ export async function renderBatch(args) {
   return { out, glError: err, cam: cam.position.toArray(), rays };
 }
 
-// the app compiles with VRL_MEDIUMP by default (vr-view.js VR_MEDIUMP); VR_PREC=highp runs every check on the 32-bit variant instead (the default here is the app's: mediump)
-export const VR_PREC = process.env.VR_PREC === 'highp' ? 'highp' : 'mediump';
-const withPrec = cases => VR_PREC === 'highp' || !Array.isArray(cases) ? cases : cases.map(c => ({ ...c, defines: [...(c.defines || []), ...((c.defines || []).includes('VRL_MEDIUMP') ? [] : ['VRL_MEDIUMP'])] }));
 export async function runBatch(pg, args) {
-  const r = await pg.evaluate(renderBatch, { segM: materialVec('standard'), ...args, ...(args.cases ? { cases: withPrec(args.cases) } : {}) }); // every segment at the standard material unless a case says otherwise
+  const r = await pg.evaluate(renderBatch, { segM: materialVec('standard'), ...args }); // every segment at the standard material unless a case says otherwise
   const dec = s => Buffer.from(s, 'base64');
   return { ...r, out: Object.fromEntries(Object.entries(r.out).map(([k, v]) => [k, dec(v)])), raysBuf: r.rays ? new Float32Array(new Uint8Array(dec(r.rays)).buffer) : null };
 }

@@ -2,12 +2,12 @@
 // Reads the ORIGINAL stored values from the source files (crop-source.js), cuts / resamples them (crop-resample.js), writes one DICOM file
 // per slice (crop-dicom.js) into a sink: a folder chosen with showDirectoryPicker (File System Access API) or a .zip (fflate, stored).
 import { Zip, ZipPassThrough } from 'https://esm.sh/fflate@0.8.2';
-import { parseDicomHeader } from './dicom.js?v=20261020-build629';
-import { seriesGeometry, rotationBlockReason, syntheticGeometryReason, effectiveBox, boxAligned, exportGeometry, sourceBounds } from './crop-geometry.js?v=20261020-build629';
-import { makeStoredReader, fillStoredValue, storedBitsOf, CropExportError } from './crop-source.js?v=20261020-build629';
-import { createSampler, resampleSlice, copyAlignedSlice } from './crop-resample.js?v=20261020-build629';
-import { extractTemplate, createSliceWriter, generateUid, seriesDescriptionFor, derivationDescriptionFor, namingFor } from './crop-dicom.js?v=20261020-build629';
-import { frameYield } from './utils.js?v=20261020-build629';
+import { parseDicomHeader } from './dicom.js?v=20261019-build626';
+import { seriesGeometry, rotationBlockReason, syntheticGeometryReason, effectiveBox, boxAligned, exportGeometry, sourceBounds } from './crop-geometry.js?v=20261019-build626';
+import { makeStoredReader, fillStoredValue, storedBitsOf, CropExportError } from './crop-source.js?v=20261019-build626';
+import { createSampler, resampleSlice, copyAlignedSlice } from './crop-resample.js?v=20261019-build626';
+import { extractTemplate, createSliceWriter, generateUid, seriesDescriptionFor, derivationDescriptionFor, namingFor } from './crop-dicom.js?v=20261019-build626';
+import { frameYield } from './utils.js?v=20261019-build626';
 
 export { CropExportError };
 const MiB = 2 ** 20, GiB = 2 ** 30;
