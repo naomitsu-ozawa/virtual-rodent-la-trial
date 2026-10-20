@@ -106,6 +106,17 @@ describe('laser against a point', () => {
     expect(pickPoint({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: -1 }, items).id).toBe('near');
     expect(pickPoint({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 1 }, items)).toBe(null);
   });
+  it('pickPoint with a cone tolerance (a hand\'s laser): a point the ray touches always wins; else the one passed closest within the tolerance; none beyond it; 0 = exact', () => {
+    const o = { x: 0, y: 0, z: 0 }, d = { x: 0, y: 0, z: -1 }, tol = 3 * Math.PI / 180;
+    const near = { id: 'near', center: { x: 0.04, y: 0, z: -1 }, radius: 0.01 }, far = { id: 'far', center: { x: 0.2, y: 0, z: -1 }, radius: 0.01 }, hit = { id: 'hit', center: { x: 0, y: 0, z: -3 }, radius: 0.01 };
+    expect(pickPoint(o, d, [near], 0)).toBe(null); // 4 cm off at 1 m: a miss without tolerance
+    const p = pickPoint(o, d, [far, near], tol); expect(p.id).toBe('near'); expect(p.distance).toBeCloseTo(0.99, 6); // 3 cm of surface off at 1 m = 1.7 deg
+    expect(pickPoint(o, d, [far], tol)).toBe(null);
+    expect(pickPoint(o, d, [near, hit], tol).id).toBe('hit'); // a real hit beats a nearer snap
+    expect(pickPoint(o, { x: 0, y: 0, z: 1 }, [near], tol)).toBe(null); // behind the hand
+    expect(pickPoint(o, d, [{ id: 'wide', center: { x: 0.12, y: 0, z: -2 }, radius: 0.01 }], tol)).toBe(null); // the cone grows with the distance: 11 cm of surface at 2 m = 3.1 deg
+    expect(pickPoint(o, d, [{ id: 'wide', center: { x: 0.11, y: 0, z: -2 }, radius: 0.01 }], tol).id).toBe('wide');
+  });
 });
 
 describe('distance from the active section (within half a voxel = on the section) and the perpendicular', () => {

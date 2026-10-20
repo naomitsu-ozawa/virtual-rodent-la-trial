@@ -1,4 +1,4 @@
-import { clampRangeValue } from './utils.js?v=20261020-build630';
+import { clampRangeValue } from './utils.js?v=20261020-build631';
 
 export const WHEEL_NOTCH_PX=50,WHEEL_SMOOTH_PX=42;
 // state {acc}: returns the signed number of steps for one wheel event (deltaMode 0 px, 1 line, 2 page)

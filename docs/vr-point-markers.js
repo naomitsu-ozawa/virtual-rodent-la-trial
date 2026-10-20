@@ -13,10 +13,10 @@
 // (GPU occlusion, update({occlusion:true}), vr-depth.js): the sphere, its rim, the chip (number) and the perpendicular are drawn with a real depth test (clipped at the tissue outline) plus a faint
 // ghost child (depthFunc GreaterDepth, GHOST_ALPHA), and the CPU "hidden" look (small dot) is not used. A hovered / selected / moved point (and its chip) stays fully on top, so it can be operated.
 // With occlusion off (「薄くする」, or no usable GPU depth) nothing changes: no depth test, the CPU hidden look.
-import { getComments, getMarkersShown, commentMatchesSeries, commentTarget } from './comments.js?v=20261020-build630';
-import { voxelToLocal, sectionRelation, pickPoint } from './vr-point.js?v=20261020-build630';
-import { pointColor, colorToInt, darkFill, inkOn } from './point-colors.js?v=20261020-build630';
-import { GHOST_ALPHA, occludedPass } from './vr-depth.js?v=20261020-build630';
+import { getComments, getMarkersShown, commentMatchesSeries, commentTarget } from './comments.js?v=20261020-build631';
+import { voxelToLocal, sectionRelation, pickPoint } from './vr-point.js?v=20261020-build631';
+import { pointColor, colorToInt, darkFill, inkOn } from './point-colors.js?v=20261020-build631';
+import { GHOST_ALPHA, occludedPass } from './vr-depth.js?v=20261020-build631';
 export const VR_MARKER_COLOR=0x4dd8ff,VR_MARKER_FILL=0x0b6f8c,VR_RIM_COLOR=0xffffff,VR_HALO_HOVER=0xffffff,VR_HALO_SELECTED=0xffd23d;
 export const PICK_MIN_M=0.004,MARKER_SCALE=0.4; // MARKER_SCALE: the drawn radius as a factor of the base radius, the same in every state
 const RADIUS_UNITS=0.045,MIN_RADIUS_M=0.003; // radius in volume units (the longest side is 3.3) and the least radius in metres
@@ -116,7 +116,7 @@ export function createVrPointMarkers(THREE,scene,deps={getComments,getMarkersSho
    for(const [id,it] of [...items])if(!keep.has(id))drop(id,it);
   },
   // the nearest point a world-space ray (unit direction) touches: {id,distance} or null (as of the last update)
-  pick(o,d){return pickPoint(o,d,[...items].map(([id,it])=>({id,center:it.sphere.position,radius:it.radius})))},
+  pick(o,d,tolRad=0){return pickPoint(o,d,[...items].map(([id,it])=>({id,center:it.sphere.position,radius:it.radius})),tolRad)}, // tolRad: a hand's laser (vr-point.js HAND_PICK_TOL), 0 for a controller
   // world centres of the points shown: [{id,world:Vector3}] (for the hidden test)
   centres(){return[...items].map(([id,it])=>({id,world:it.sphere.position}))},
   dispose(){for(const [id,it] of [...items])drop(id,it);geo.dispose();for(const m of Object.values(mats))m.dispose();for(const m of byColor.values())for(const x of Object.values(m))x.dispose();chipGeo.dispose()},

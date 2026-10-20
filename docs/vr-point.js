@@ -9,8 +9,8 @@
 // that another clipping section has cut away. A section whose intersection is outside the volume is skipped, never clamped.
 // Voxel rule: voxel i covers the fraction [i/n, (i+1)/n) of the box along its axis, so the index is floor(fraction * n); a point
 // outside [0,1) on any axis (the far face itself included) is NOT recorded: it is never moved into the volume.
-import { createComment, addComment, getComments, removeComment, restoreComment, updateCommentPosition, updateCommentColor, commentMatchesSeries } from './comments.js?v=20261020-build630';
-import { marchClassificationHitInfo } from './vr-pick.js?v=20261020-build630';
+import { createComment, addComment, getComments, removeComment, restoreComment, updateCommentPosition, updateCommentColor, commentMatchesSeries } from './comments.js?v=20261020-build631';
+import { marchClassificationHitInfo } from './vr-pick.js?v=20261020-build631';
 const T_MIN=1e-6,EDGE_EPS=1e-4;
 
 // t of the ray o + t*q on the plane, or null (parallel, or behind the origin)
@@ -111,10 +111,21 @@ export function raySphereT(o,d,c,r){
  const s=Math.sqrt(disc),t=-b-s>T_MIN?-b-s:(-b+s>T_MIN?-b+s:null);
  return t;
 }
-// the nearest point a ray touches: items [{id,center,radius}] -> {id,distance} or null
-export function pickPoint(o,d,items){
+// the nearest point a ray touches: items [{id,center,radius}] -> {id,distance} or null.
+// tolRad: when the ray touches no point, the point it passes closest to within tolRad of its surface (a cone, so
+// the tolerance grows with the distance: a few degrees) is snapped to; a point the ray really touches always wins. The distance of a snapped point is that to its surface along the ray.
+export const HAND_PICK_TOL=3*Math.PI/180;
+export function pickPoint(o,d,items,tolRad=0){
  let best=null;
  for(const it of items){const t=raySphereT(o,d,it.center,it.radius);if(t!==null&&(!best||t<best.distance))best={id:it.id,distance:t}}
+ if(best||!(tolRad>0))return best;
+ const k=Math.tan(Math.min(tolRad,1.4));let bm=Infinity;
+ for(const it of items){
+  const vx=it.center.x-o.x,vy=it.center.y-o.y,vz=it.center.z-o.z,al=vx*d.x+vy*d.y+vz*d.z;
+  if(!(al>T_MIN))continue;
+  const px=vx-al*d.x,py=vy-al*d.y,pz=vz-al*d.z,miss=(Math.sqrt(px*px+py*py+pz*pz)-it.radius)/al; // the angular miss of the surface (tan)
+  if(miss<=k&&miss<bm){bm=miss;best={id:it.id,distance:Math.max(T_MIN*2,al-it.radius)}}
+ }
  return best;
 }
 

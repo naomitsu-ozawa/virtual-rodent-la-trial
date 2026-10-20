@@ -17,16 +17,21 @@ export const ONE_EURO={minCutoff:1.2,beta:0.05,dCutoff:5};
 // the palm anchor (what a fist holds): a held object is compared with the real hand by the eye, so it is filtered much less than the ray
 export const PALM_FILTER={minCutoff:5,beta:0.15,dCutoff:8};
 export const euroAlpha=(cutoffHz,dtS)=>{const r=2*Math.PI*cutoffHz*dtS;return r/(r+1)};
-export function createOneEuro(n,{minCutoff=ONE_EURO.minCutoff,beta=ONE_EURO.beta,dCutoff=ONE_EURO.dCutoff,speedScale=1}={}){
+export function createOneEuro(n,{minCutoff=ONE_EURO.minCutoff,beta=ONE_EURO.beta,dCutoff=ONE_EURO.dCutoff,speedScale=1,perAxis=false}={}){
  const x=new Float64Array(n),dx=new Float64Array(n);let t=null;
+ // perAxis: each channel has its own speed (and so its own cutoff), the One Euro filter as published for a scalar signal; otherwise all n channels share the
+ // cutoff of their combined speed (a position / a quaternion moves as one: a diagonal move opens every axis alike)
  return{
   // v: n numbers (array-like) at time now (ms) -> the filtered values written into out (default: v itself), returned. No allocation.
+  // A non-finite v[i] (a lost joint) is not fed to the filter (one NaN would stay in its state for good): the previous output, out untouched when there is none yet.
   filter(v,now,out=v){
+   for(let i=0;i<n;i++)if(!(v[i]-v[i]===0)||!(now-now===0)){if(t!==null)for(let j=0;j<n;j++)out[j]=x[j];return out}
    if(t===null){for(let i=0;i<n;i++){x[i]=v[i];dx[i]=0;out[i]=v[i]}t=now;return out}
    const dt=(now-t)/1000;
    if(!(dt>0)){for(let i=0;i<n;i++)out[i]=x[i];return out} // same (or older) time stamp: the previous output
    t=now;const ad=euroAlpha(dCutoff,dt);let s=0;
    for(let i=0;i<n;i++){dx[i]+=ad*((v[i]-x[i])/dt-dx[i]);s+=dx[i]*dx[i]}
+   if(perAxis){for(let i=0;i<n;i++){x[i]+=euroAlpha(minCutoff+beta*Math.abs(dx[i])*speedScale,dt)*(v[i]-x[i]);out[i]=x[i]}return out}
    const a=euroAlpha(minCutoff+beta*Math.sqrt(s)*speedScale,dt);
    for(let i=0;i<n;i++){x[i]+=a*(v[i]-x[i]);out[i]=x[i]}
    return out;
@@ -173,106 +178,154 @@ export function blendPose(a,b,k,out){
  return out;
 }
 
-// ---- the hand's own aim ray ----
-// The system's target ray of a hand is a stabilised shoulder -> hand pointer: it turns only ~1/4 as much as the wrist, is smoothed by the runtime (a
-// lag we cannot measure here) and jumps when the pinch is recognised (the reason for the 60 ms delayed ray). While the joints are tracked the
-// group gets instead a ray built from them, like a controller's.: along the INDEX FINGER (axis 'finger', fingerAimPose): the direction is
-// the index's proximal phalanx (-Z of the index-finger-phalanx-proximal joint: the segment behind the second knuckle, the steadiest part of a finger
-// that curls a little), optionally mixed with the knuckle -> fingertip line (tipMix: 0 = the phalanx alone, 1 = the line to the tip, which swings
-// with every curl), from the second knuckle (origin 'pip'; 'knuckle' = the first, 'tip' = the fingertip).'s axis 'metacarpal' (the back
-// of the hand: the index metacarpal's bone axis from the first knuckle, tilted 8 deg to the palm and 4 deg to the thumb) stays for A/B
-// (vrl-hand-ray axis). It is filtered with AIM_FILTER (lighter than ONE_EURO: the joints are the runtime's freshest, display-time predicted
-// poses) and never delayed; the index curling into the pinch is handled by the aim hold below. The system's ray stays the fallback (joints missing / joint 0).
-export const AIM_RAY={axis:'finger',origin:'pip',tipMix:0,pitchDeg:0,yawDeg:0,joint:1};
-export const AIM_RAY_META={pitchDeg:8,yawDeg:4}; // the offsets of axis 'metacarpal' unless tuned
-export const AIM_AXES=['finger','metacarpal'],AIM_ORIGINS=['knuckle','pip','tip'];
-export const AIM_FILTER={minCutoff:2,beta:0.15,dCutoff:5};
-// jp: the joint pose [px,py,pz,qx,qy,qz,qw] whose -Z is the bone (index-finger-metacarpal), kp: the knuckle position [x,y,z] (the ray origin),
-// thumbSide: +1 / -1 = the thumb lies along +X / -X of that joint frame (thumbSideOf below). out: the target-ray pose (7 numbers). No allocation.
-// out may be jp itself (the orientation is read before it is written).
-const aQ=new Float64Array(4),aR=new Float64Array(4),aT=new Float64Array(4),aJ=new Float64Array(4);
-export function aimRayPose(jp,kp,thumbSide,{pitchDeg=AIM_RAY.pitchDeg,yawDeg=AIM_RAY.yawDeg}={},out){
- aJ[0]=jp[3];aJ[1]=jp[4];aJ[2]=jp[5];aJ[3]=jp[6];
- if(!pitchDeg&&!yawDeg){out[3]=aJ[0];out[4]=aJ[1];out[5]=aJ[2];out[6]=aJ[3];out[0]=kp[0];out[1]=kp[1];out[2]=kp[2];return out}
- const a=-pitchDeg*Math.PI/180,b=-(thumbSide<0?-1:1)*yawDeg*Math.PI/180; // Rx(a): -Z toward -Y (the palm) for a < 0; Ry(b): -Z toward -X for b > 0
- aQ[0]=Math.sin(a/2);aQ[1]=0;aQ[2]=0;aQ[3]=Math.cos(a/2);aR[0]=0;aR[1]=Math.sin(b/2);aR[2]=0;aR[3]=Math.cos(b/2);
- qMulA(aR,0,aQ,0,aT,0);qMulA(aJ,0,aT,0,out,3); // joint * yaw * pitch
- const l=Math.hypot(out[3],out[4],out[5],out[6])||1;for(let i=3;i<7;i++)out[i]/=l;
- out[0]=kp[0];out[1]=kp[1];out[2]=kp[2];return out;
+// ---- the hand's laser: a shoulder -> hand ray (Ultraleap far-field interaction; Meta "Ray casting best practices") ----
+// The ray is the line from a body-anchored SHOULDER estimate through a stable point of the hand (the index knuckle), so it is steered by the arm like a laser
+// pointer, and the fingers (the pinch, a curl) never swing it. Earlier builds aimed along the hand's own bones (628: the metacarpal "back of the hand", 629: the
+// index finger): both felt wrong / inconsistent, because a bone axis turns with every small wrist and finger movement.
+//  - shoulder = the head (the viewer pose) moved down by neckDown and sideways by shoulderSide toward the hand's side, using only the head's YAW
+//    (headForward below): nodding or tilting the head does not swing the ray
+//  - aim point = the index knuckle (index-finger-phalanx-proximal) plus aimForward along the index metacarpal (fixed with the hand: unlike the
+//    phalanges it does not move when the finger curls or the thumb comes in); never a fingertip
+//  - direction = normalize(aim - shoulder); the group's origin is the aim point (the same line as from the shoulder, so the laser starts at the hand and nothing
+//    between the shoulder and the hand is hit)
+//  - both points go through One Euro filters, one per axis (createOneEuro perAxis): still = smooth, fast = nearly no lag (HAND_RAY_FILTER)
+//  - pinch lock (createPinchLock): the fingers closing into a pinch must not carry the target away, so the direction is held for lockMs while the gap closes
+//  - dropout: the joints missing for a moment (or NaN) -> the last good ray is held for holdMs; only a longer loss goes back to the system's ray, blended
+// All of it is allocation-free per frame and NaN-safe (a missing joint, a zero-length vector, a bad head pose: the frame is a dropout, never a NaN ray).
+export const HAND_RAY={neckDown:0.18,shoulderSide:0.17,aimForward:0.02,minLen:0.05,holdMs:200,blendMs:150,resumeMs:100};
+// beta is for speed in cm/s (speedScale 100): a hand at 30 cm/s opens the cutoff to ~31 Hz. Measured in tests/unit/vr-hand.test.js: ~1.4 ms lag at 1 m/s, ~9 ms at 10 cm/s.
+export const HAND_RAY_FILTER={minCutoff:1,beta:1,dCutoff:1,speedScale:100};
+export const PINCH_LOCK={closeM:0.06,speed:0.12,holdDegPerS:10,lockMs:120,maxMs:300,rampMs:120,freeDegPerS:720,coolMs:600};
+const fin=v=>v===v&&v-v===0; // finite (no allocation, no call into Number)
+// the head's forward direction on the floor plane from its orientation q=[x,y,z,w]: out=[fx,fz] (unit). Only the yaw: the gaze flattened (nodding and tilting the
+// head leave it alone). When the head looks steeply down / up (the gaze is almost vertical and its flattening unstable) the head's up axis, which then points
+// forward / back, takes over, blended in between |gaze.y| 0.8 and 0.97 (looking at the desk never flips it; there a tilt does turn it, as it is a turn about the gaze).
+// false for a non-finite / degenerate q (out untouched).
+const hG=[0,0,0],hU=[0,0,0],hN=[0,0,0,1],nZ=[0,0,-1],uY=[0,1,0];
+export function headForward(q,out){
+ if(!q||!fin(q[0])||!fin(q[1])||!fin(q[2])||!fin(q[3]))return false;
+ const l=Math.hypot(q[0],q[1],q[2],q[3]);if(!(l>1e-6))return false;
+ hN[0]=q[0]/l;hN[1]=q[1]/l;hN[2]=q[2]/l;hN[3]=q[3]/l;
+ rotV(hN,nZ,hG);rotV(hN,uY,hU);
+ const gm=Math.hypot(hG[0],hG[2]),um=Math.hypot(hU[0],hU[2]),sg=hG[1]<0?1:-1; // looking down: the up axis leans forward
+ const w=gm>1e-6?Math.max(0,Math.min(1,(Math.abs(hG[1])-0.8)/0.17)):1;
+ let x=0,z=0;
+ if(gm>1e-6&&w<1){x+=(1-w)*hG[0]/gm;z+=(1-w)*hG[2]/gm}
+ if(um>1e-6&&w>0){x+=w*sg*hU[0]/um;z+=w*sg*hU[2]/um}
+ const m=Math.hypot(x,z);
+ if(!(m>1e-6))return false;
+ out[0]=x/m;out[1]=z/m;return true;
 }
-// the index finger's pointing pose. jp: the index-finger-phalanx-proximal joint pose (its -Z = the proximal phalanx), op: the ray origin
-// [x,y,z], tipDir: the knuckle -> fingertip vector in the reference space (any length; null = none), mix: the share of tipDir in the direction
-// (0: the phalanx alone). The roll stays the joint's; the direction is turned by the shortest arc. out (7 numbers; may be jp). No allocation.
-const fL=[0,0,0],fC=new Float64Array(4),fD=[0,0,0],fArc=new Float64Array(4);
-export function fingerAimPose(jp,op,tipDir,mix,out){
- aJ[0]=jp[3];aJ[1]=jp[4];aJ[2]=jp[5];aJ[3]=jp[6];
- out[0]=op[0];out[1]=op[1];out[2]=op[2];
- const m=Math.max(0,Math.min(1,mix||0)),tl=tipDir?Math.hypot(tipDir[0],tipDir[1],tipDir[2]):0;
- if(!(m>0)||!(tl>1e-6)){out[3]=aJ[0];out[4]=aJ[1];out[5]=aJ[2];out[6]=aJ[3];return out}
- fC[0]=-aJ[0];fC[1]=-aJ[1];fC[2]=-aJ[2];fC[3]=aJ[3];fD[0]=tipDir[0]/tl;fD[1]=tipDir[1]/tl;fD[2]=tipDir[2]/tl;
- rotV(fC,fD,fL); // the tip line in the joint's own frame
- const x=m*fL[0],y=m*fL[1],z=-(1-m)+m*fL[2],n=Math.hypot(x,y,z); // blended with the bone (0,0,-1)
- if(!(n>1e-9)){out[3]=aJ[0];out[4]=aJ[1];out[5]=aJ[2];out[6]=aJ[3];return out}
- // the shortest arc from (0,0,-1) to (x,y,z)/n: axis = (0,0,-1) x d = (dy, -dx, 0), w = 1 + (-dz)
- const dx=x/n,dy=y/n,dz=z/n,w=1-dz;
- if(w<1e-9){fArc[0]=0;fArc[1]=1;fArc[2]=0;fArc[3]=0}else{fArc[0]=dy;fArc[1]=-dx;fArc[2]=0;fArc[3]=w;const al=Math.hypot(fArc[0],fArc[1],fArc[3]);fArc[0]/=al;fArc[1]/=al;fArc[3]/=al}
- qMulA(aJ,0,fArc,0,out,3);
- const l=Math.hypot(out[3],out[4],out[5],out[6])||1;for(let i=3;i<7;i++)out[i]/=l;
+// the shoulder: head [x,y,z], fwd [fx,fz] (headForward), side +1 = the right hand, -1 = the left. out [x,y,z].
+export function shoulderPoint(head,fwd,side,out,{neckDown=HAND_RAY.neckDown,shoulderSide=HAND_RAY.shoulderSide}={}){
+ const s=side<0?-1:1,rx=-fwd[1],rz=fwd[0]; // right = forward x up
+ out[0]=head[0]+s*shoulderSide*rx;out[1]=head[1]-neckDown;out[2]=head[2]+s*shoulderSide*rz;return out;
+}
+// the aim point: the index knuckle kp [x,y,z] + forward along the metacarpal's -Z (mq [x,y,z,w]; null: the knuckle itself). out [x,y,z].
+const aD=[0,0,0];
+export function aimPoint(kp,mq,out,forward=HAND_RAY.aimForward){
+ if(mq&&fin(mq[0])&&fin(mq[1])&&fin(mq[2])&&fin(mq[3])){rotV(mq,nZ,aD);for(let i=0;i<3;i++)out[i]=kp[i]+forward*aD[i]}
+ else for(let i=0;i<3;i++)out[i]=kp[i];
  return out;
 }
-// the bend of the index at its first knuckle: the angle (rad) between the metacarpal's bone axis (-Z of mq) and the proximal phalanx's (-Z of pq)
-const bA=[0,0,0],bB=[0,0,0],nZ=[0,0,-1];
-export function indexBend(mq,pq){rotV(mq,nZ,bA);rotV(pq,nZ,bB);return Math.acos(Math.max(-1,Math.min(1,bA[0]*bB[0]+bA[1]*bB[1]+bA[2]*bB[2])))}
-const sX=[0,0,0],X1=[1,0,0];
-// which side (along the X axis of the frame q) the thumb lies: sign of (thumb - index) . X; 0 when they coincide (keep the last known side)
-export function thumbSideOf(q,indexP,thumbP){
- rotV(q,X1,sX);const d=(thumbP[0]-indexP[0])*sX[0]+(thumbP[1]-indexP[1])*sX[1]+(thumbP[2]-indexP[2])*sX[2];
- return d>1e-6?1:d<-1e-6?-1:0;
+// d = normalize(b - a) into out; false (out untouched) when a or b is not finite or the two are closer than minLen
+export function rayDirection(a,b,out,minLen=HAND_RAY.minLen){
+ const x=b[0]-a[0],y=b[1]-a[1],z=b[2]-a[2],l=Math.hypot(x,y,z);
+ if(!fin(l)||!(l>=minLen))return false;
+ out[0]=x/l;out[1]=y/l;out[2]=z/l;return true;
 }
-// the aim hold: the fingers closing into a pinch wobble the hand a little just before the press is recognised (and the joints' estimate shifts
-// with the hand shape), so the target would move as one pinches. While the thumb-index distance closes faster than `speed` (m/s) below `closeM`
-// (a pinch forming: a relaxed hand holding its gap, or opening, is never held) and for tailMs after, the ray's direction may turn at most
-// degPerS; then the limit ramps back to free over rampMs (what was held up slides on, no jump). The press (createPinchFusion, 2 frames
-// below 1.8 cm) falls inside the hold, so its target is the one aimed at before the fingers moved — without the delay of the old delayed ray.
-// the index curling toward the thumb swings that ray far more than the hand wobbles, and a slow pinch
-// (the gap closing under `speed`) would not be caught by the gap alone, so the bend of the index at its first knuckle (indexBend) is the
-// second trigger: curling faster than curlDegPerS below closeM holds too. update(d, now, bend) -> the most the direction may turn this frame
-// (rad); Infinity = free. bend (rad, optional): NaN / undefined = no curl trigger.
-export const AIM_HOLD={closeM:0.06,speed:0.12,curlDegPerS:60,degPerS:10,tailMs:60,rampMs:120,freeDegPerS:720};
-export function createAimHold({closeM=AIM_HOLD.closeM,speed=AIM_HOLD.speed,curlDegPerS=AIM_HOLD.curlDegPerS,degPerS=AIM_HOLD.degPerS,tailMs=AIM_HOLD.tailMs,rampMs=AIM_HOLD.rampMs,freeDegPerS=AIM_HOLD.freeDegPerS}={}){
- let lastD=NaN,lastDT=null,lastB=NaN,lastBT=null,prevT=null,until=-Infinity;
+// the orientation of a ray looking along d (unit): yaw about the world up, then pitch; no roll (-Z of the pose = d). yaw (rad) is the last yaw: kept when d is
+// (almost) vertical, where it is undefined. Returns the yaw used; o[oi..oi+3] = x,y,z,w.
+export function dirQuat(d,yaw,o,oi=0){
+ const h=Math.hypot(d[0],d[2]);if(h>0.14)yaw=Math.atan2(-d[0],-d[2]);
+ const p=Math.asin(Math.max(-1,Math.min(1,d[1]))),cy=Math.cos(yaw/2),sy=Math.sin(yaw/2),cx=Math.cos(p/2),sx=Math.sin(p/2);
+ o[oi]=cy*sx;o[oi+1]=cx*sy;o[oi+2]=-sy*sx;o[oi+3]=cy*cx;return yaw;
+}
+// the unit direction a turned toward b by at most maxRad (b itself when within); returns the angle a -> b (rad). out may be a or b.
+export function turnDir(a,b,maxRad,out){
+ const c=Math.max(-1,Math.min(1,a[0]*b[0]+a[1]*b[1]+a[2]*b[2])),ang=Math.acos(c);
+ if(!(ang>maxRad)){out[0]=b[0];out[1]=b[1];out[2]=b[2];return ang}
+ // rotate a toward b in their plane: out = a cos(m) + u sin(m), u = unit part of b perpendicular to a
+ let ux=b[0]-c*a[0],uy=b[1]-c*a[1],uz=b[2]-c*a[2];const ul=Math.hypot(ux,uy,uz);
+ if(!(ul>1e-9)){out[0]=a[0];out[1]=a[1];out[2]=a[2];return ang} // opposite directions: no unique way, stay
+ ux/=ul;uy/=ul;uz/=ul;const m=Math.max(0,maxRad),cm=Math.cos(m),sm=Math.sin(m);
+ const ox=a[0]*cm+ux*sm,oy=a[1]*cm+uy*sm,oz=a[2]*cm+uz*sm,ol=Math.hypot(ox,oy,oz)||1;
+ out[0]=ox/ol;out[1]=oy/ol;out[2]=oz/ol;return ang;
+}
+// the pinch lock: the fingers closing into a pinch wobble the hand a little just before the press is recognised, so the target would move as one pinches.
+// While the thumb-index gap closes faster than `speed` (m/s) below `closeM` (a pinch forming: a relaxed hand holding its gap, or opening, is never locked),
+// and for lockMs after, the direction may turn at most holdDegPerS (10: practically frozen); then the limit ramps back to free over rampMs (what was held
+// slides on, no jump). The lock window is capped at maxMs and then blocked for coolMs (fingers fidgeting never pin the ray). The press (createPinchFusion: 2 frames below 1.8 cm)
+// falls inside the lock, so its target is the one aimed at before the fingers moved. update(gap, now) -> the most the direction may turn this frame (rad);
+// Infinity = free. A missing gap (NaN) keeps the lock as it is and starts none.
+export function createPinchLock({closeM=PINCH_LOCK.closeM,speed=PINCH_LOCK.speed,holdDegPerS=PINCH_LOCK.holdDegPerS,lockMs=PINCH_LOCK.lockMs,maxMs=PINCH_LOCK.maxMs,rampMs=PINCH_LOCK.rampMs,freeDegPerS=PINCH_LOCK.freeDegPerS,coolMs=PINCH_LOCK.coolMs}={}){
+ let lastD=NaN,lastT=null,prevT=null,until=-Infinity,start=-Infinity,cool=-Infinity;
  const R=Math.PI/180;
  return{
-  update(d,now,bend){
+  update(d,now){
    const dt=prevT===null?0:Math.max(0,now-prevT);prevT=now;
-   const near=Number.isFinite(d)&&d<closeM;
-   if(Number.isFinite(d)){
-    if(lastDT!==null&&now>lastDT){const v=(lastD-d)/((now-lastDT)/1000);if(near&&v>speed)until=now+tailMs}
-    lastD=d;lastDT=now;
-   }else lastDT=null; // the rate needs two tracked samples in a row
-   if(Number.isFinite(bend)){
-    if(lastBT!==null&&now>lastBT){const w=(bend-lastB)/((now-lastBT)/1000)/R;if(near&&w>curlDegPerS)until=now+tailMs}
-    lastB=bend;lastBT=now;
-   }else lastBT=null;
-   if(now<until)return degPerS*R*dt/1000;
+   if(fin(d)){
+    if(lastT!==null&&now>lastT&&d<closeM&&(lastD-d)/((now-lastT)/1000)>speed){
+     if(now>=until&&now>=cool)start=now; // a new lock window
+     if(now-start<maxMs)until=now+lockMs;
+     else cool=until+coolMs; // the window is spent (fingers fidgeting): no new one for coolMs
+    }
+    lastD=d;lastT=now;
+   }else lastT=null; // the rate needs two tracked samples in a row
+   if(now<until)return holdDegPerS*R*dt/1000;
    if(!(rampMs>0))return Infinity;
    const k=(now-until)/rampMs;if(k>=1)return Infinity;
-   return (degPerS+(freeDegPerS-degPerS)*k)*R*dt/1000;
+   return (holdDegPerS+(freeDegPerS-holdDegPerS)*k)*R*dt/1000;
   },
-  reset(){lastD=NaN;lastDT=null;lastB=NaN;lastBT=null;prevT=null;until=-Infinity},
-  get held(){return prevT!==null&&prevT<until},
+  reset(){lastD=NaN;lastT=null;prevT=null;until=-Infinity;start=-Infinity;cool=-Infinity},
+  get locked(){return prevT!==null&&prevT<until},
  };
 }
-const tI=new Float64Array(4),tDq=new Float64Array(4),tP=new Float64Array(4);
-// o[oi..] = the unit quaternion a[ai..] turned toward b[bi..] by at most maxRad (b itself when it is within maxRad); returns the angle a -> b (rad)
-export function turnToward(a,ai,b,bi,maxRad,o,oi){
- tI[0]=-a[ai];tI[1]=-a[ai+1];tI[2]=-a[ai+2];tI[3]=a[ai+3];qMulA(tI,0,b,bi,tDq,0);
- if(tDq[3]<0)for(let i=0;i<4;i++)tDq[i]=-tDq[i];
- const ang=2*Math.atan2(Math.hypot(tDq[0],tDq[1],tDq[2]),tDq[3]);
- if(!(ang>maxRad)){for(let i=0;i<4;i++)o[oi+i]=b[bi+i];return ang}
- qPow(tDq,maxRad/ang,tP);qMulA(a,ai,tP,0,o,oi);
- const l=Math.hypot(o[oi],o[oi+1],o[oi+2],o[oi+3])||1;for(let i=0;i<4;i++)o[oi+i]/=l;
- return ang;
+// The whole ray of one hand. update(inp, sys, now, out) -> 'joint' (live), 'hold' (the joints dropped out: the last good ray, up to holdMs) or 'sys'
+// (no good ray for longer than holdMs: the system's pose sys, 7 numbers [p,q]; also while nothing was ever good). out = the pose [px,py,pz,qx,qy,qz,qw].
+// Changing between the joint ray and the system's, or coming back from a hold, is blended (blendMs / resumeMs), never a jump.
+// inp (reused by the caller): head [x,y,z], headQ [x,y,z,w], knuckle [x,y,z] | null, metaQ [x,y,z,w] | null (the index metacarpal's orientation; the wrist's),
+// side +1 right / -1 left / 0 unknown (decided from which side of the head the hand is), gap (thumb tip - index tip, m; NaN unknown).
+export function createHandRay({filter=HAND_RAY_FILTER,ray=HAND_RAY,lock}={}){
+ const sF=createOneEuro(3,{...filter,perAxis:true}),aF=createOneEuro(3,{...filter,perAxis:true}),pl=createPinchLock(lock);
+ const fw=[0,1],sRaw=[0,0,0],aRaw=[0,0,0],S=[0,0,0],A=[0,0,0],dLive=[0,0,0],dir=[0,0,0],cand=new Float64Array(7),good=new Float64Array(7),prev=new Float64Array(7),from=new Float64Array(7),tgt=new Float64Array(7);
+ let hasFw=false,hasDir=false,hasGood=false,goodAt=-Infinity,yaw=0,side=0,kind=null,blendAt=-Infinity,blendMs=0,hasOut=false,inp0=null;
+ const restart=()=>{sF.reset();aF.reset();pl.reset();hasDir=false}; // the filters start again from the next joint sample
+ const live=now=>{ // this frame's joint ray into cand: false = a dropout
+  const h=inp0.head,k=inp0.knuckle;
+  if(!h||!k||!fin(h[0])||!fin(h[1])||!fin(h[2])||!fin(k[0])||!fin(k[1])||!fin(k[2]))return false;
+  if(headForward(inp0.headQ,fw))hasFw=true;else if(!hasFw)return false; // a bad head pose keeps the last yaw
+  if(inp0.side)side=inp0.side<0?-1:1;
+  else if(!side)side=(k[0]-h[0])*-fw[1]+(k[2]-h[2])*fw[0]<0?-1:1; // unknown handedness: the side the hand is on
+  shoulderPoint(h,fw,side,sRaw,ray);aimPoint(k,inp0.metaQ,aRaw,ray.aimForward);
+  sF.filter(sRaw,now,S);aF.filter(aRaw,now,A);
+  if(!rayDirection(S,A,dLive,ray.minLen))return false;
+  const lim=pl.update(inp0.gap,now);
+  if(hasDir&&lim<Infinity)turnDir(dir,dLive,lim,dir);else{dir[0]=dLive[0];dir[1]=dLive[1];dir[2]=dLive[2]}
+  yaw=dirQuat(dir,yaw,cand,3);cand[0]=A[0];cand[1]=A[1];cand[2]=A[2];hasDir=true;
+  return true;
+ };
+ const api={
+  update(inp,sys,now,out){
+   inp0=inp;
+   let k;
+   if(live(now)){k='joint';good.set(cand);hasGood=true;goodAt=now;tgt.set(cand)}
+   else if(hasGood&&now-goodAt<=ray.holdMs){k='hold';tgt.set(good)}
+   else{k='sys';tgt.set(sys)}
+   if(k==='sys'&&kind!=='sys')restart(); // a long loss: the joint filters do not carry stale state across it
+   if(hasOut&&(k==='sys')!==(kind==='sys')){from.set(prev);blendAt=now;blendMs=ray.blendMs}
+   else if(hasOut&&k==='joint'&&kind==='hold'){from.set(prev);blendAt=now;blendMs=ray.resumeMs}
+   kind=k;
+   const t=blendMs>0?(now-blendAt)/blendMs:1;
+   if(t<1)blendPose(from,tgt,t,out);else for(let i=0;i<7;i++)out[i]=tgt[i];
+   for(let i=0;i<7;i++)if(!fin(out[i])){out.set(hasOut?prev:tgt);break} // never a NaN pose
+   prev.set(out);hasOut=true;return k;
+  },
+  reset(){restart();hasGood=false;goodAt=-Infinity;kind=null;hasOut=false;blendMs=0},
+  get kind(){return kind},
+  get locked(){return pl.locked},
+ };
+ return api;
 }
 
 // ---- delayed ray ----
@@ -371,10 +424,20 @@ export function createWristMenuGate(opts={}){
   get shown(){return shown},
  };
 }
-// the wrist menu's buttons, left to right: A/X short (the quick ring), A/X long (the menu), B/Y short (sections shown / hidden), B/Y long
+// the wrist menu's buttons, in slot order: A/X short (the quick ring), A/X long (the menu), B/Y short (sections shown / hidden), B/Y long
 // (add a section), 取り消し (the ring's undo), then 断面 － / ＋ (the selected section along its normal = the thumbstick up / down: hold to repeat)
 export const WRIST_ITEMS=['ring','menu','section','add','undo','secDown','secUp'];
-export const wristSlotFromU=u=>Number.isFinite(u)?Math.max(0,Math.min(WRIST_ITEMS.length-1,Math.floor(u*WRIST_ITEMS.length))):null;
+// a compact grid panel instead of the 28 cm strip (labelled buttons -> a grid; the 7 items fit 3 columns x 3 rows). WRIST_GRID.cells[slot] = [col,row]
+// (row 0 on top): the three view buttons on the first row, add / undo on the second, the 断面 － / ＋ pair together on the last; two cells stay empty.
+// size: a cell is 5 x 3.5 cm (the same 5000 px / m of text as before), the panel 15 x 10.5 cm: readable at arm's length, and it does not cover the hand.
+export const WRIST_GRID={cols:3,rows:3,cellW:0.05,cellH:0.035,cells:[[0,0],[1,0],[2,0],[0,1],[1,1],[0,2],[1,2]]};
+// the slot under the texture coordinates (u to the right, v up: three's plane uv) or null (outside / an empty cell / not a number)
+export function wristSlotFromUv(u,v){
+ if(!Number.isFinite(u)||!Number.isFinite(v))return null;
+ const g=WRIST_GRID,c=Math.max(0,Math.min(g.cols-1,Math.floor(u*g.cols))),r=Math.max(0,Math.min(g.rows-1,Math.floor((1-v)*g.rows)));
+ for(let i=0;i<g.cells.length;i++)if(g.cells[i][0]===c&&g.cells[i][1]===r)return i;
+ return null;
+}
 // 断面 －/＋ held on the wrist menu: the thumbstick's deflection (1 = full) after heldMs. A tap nudges (0.4), holding speeds up to full in 1 s.
 // ＋ = the thumbstick pushed up (the plane moves along +X, its normal), － = pulled back; the sign is returned by wristScrollSign.
 export const WRIST_SCROLL={start:0.4,rampMs:1000};
@@ -498,14 +561,6 @@ export const parseGrabTune=t=>pick(jsonOf(t),{on:[0,1.5],off:[0,1.5],holdMs:[0,2
 export const parsePinchTune=t=>pick(jsonOf(t),{on:[0.003,0.08],off:[0.003,0.12],onFrames:[1,10],offFrames:[1,10],own:[0,1],os:[0,1],osGapMs:[0,1000],guardIndex:[0,1.5],guardOthers:[0,1.5]});
 // vrl-hand-drag = '{"carry":1,"gain":1,"rot":1,"blendMs":120}' (carry 0: a pinch drags with the system's (delayed) ray, as before)
 export const parseDragTune=t=>pick(jsonOf(t),{carry:[0,1],gain:[0,5],rot:[0,1],blendMs:[0,1000]});
-// vrl-hand-ray = '{"joint":1,"axis":"finger","origin":"pip","tipMix":0,"pitch":0,"yaw":0,"minCutoff":2,"beta":0.15,"dCutoff":5,"holdDeg":10,"holdSpeed":0.12,"holdCurl":60,"holdMs":60,"rampMs":120}'
-// (joint 0: the system's target ray as before; axis "metacarpal":'s ray (pitch / yaw default 8 / 4 then); origin "knuckle" | "pip" | "tip";
-// holdDeg 720: no aim hold; holdCurl 2000: no curl trigger; pitch / yaw in degrees, toward the palm / the thumb)
-export const parseRayTune=t=>{
- const v=jsonOf(t),o=pick(v,{joint:[0,1],tipMix:[0,1],pitch:[-45,45],yaw:[-45,45],minCutoff:[0.05,60],beta:[0,5],dCutoff:[0.1,60],holdDeg:[0,720],holdSpeed:[0,5],holdCurl:[0,2000],holdMs:[0,1000],rampMs:[0,2000]});
- if(v&&typeof v==='object'){if(AIM_AXES.includes(v.axis))o.axis=v.axis;if(AIM_ORIGINS.includes(v.origin))o.origin=v.origin}
- return o;
-};
 
 // ---- texts (hands only; the controller texts stay in vr-view.js) ----
 export function handTexts(ja){
