@@ -5,11 +5,11 @@
 // distance is being made, the START point with a pulsing ring and the hint 「終点のポイントを選んでください」 next to it.
 // vr-view.js calls createVrMeasure(THREE, scene) -> { update, probes, pickLabel, dragLabel, dispose } every frame and does everything else (the flow, haptics, undo) itself; the state is
 // measurements.js (the same for the PC / iPad). The value follows the points: it is recomputed from their voxels each frame (a point being moved included, preview).
-import { getComments, getMarkersShown, commentMatchesSeries, commentTarget } from './comments.js?v=20261020-build627';
-import { getMeasurements, setLabelOffset, distanceMm, measureLabel } from './measurements.js?v=20261020-build627';
-import { nearLabelWorld, stepDelta, offsetFromDelta, LINE_SAMPLES, probeKey, fadeAlpha, approachAlpha, OCCLUDED_ALPHA } from './measure-label.js?v=20261020-build627';
-import { voxelToLocal } from './vr-point.js?v=20261020-build627';
-import { GHOST_ALPHA, occludedPass } from './vr-depth.js?v=20261020-build627';
+import { getComments, getMarkersShown, commentMatchesSeries, commentTarget } from './comments.js?v=20261020-build628';
+import { getMeasurements, setLabelOffset, distanceMm, measureLabel } from './measurements.js?v=20261020-build628';
+import { nearLabelWorld, stepDelta, offsetFromDelta, LINE_SAMPLES, probeKey, fadeAlpha, approachAlpha, OCCLUDED_ALPHA } from './measure-label.js?v=20261020-build628';
+import { voxelToLocal } from './vr-point.js?v=20261020-build628';
+import { GHOST_ALPHA, occludedPass } from './vr-depth.js?v=20261020-build628';
 export const VR_MEASURE_COLOR=0xffd23d,MEASURE_LABEL_W_M=0.045,MEASURE_LABEL_H_M=0.0132,MEASURE_HINT_W_M=0.2,MEASURE_HINT_H_M=0.026;
 export const HINT_DIST_M=0.7,HINT_ELEV=0.5,HINT_ALPHA=0.6,HINT_FADED_ALPHA=0.28,HINT_FADE_AFTER_MS=3000,HINT_FADE_MS=1200;
 // pure: the hint's opacity after elapsedMs on screen
@@ -138,7 +138,7 @@ export function createVrMeasure(THREE,scene,deps={getComments,getMarkersShown,ge
      start.ring.position.copy(a);start.ring.scale.setScalar(r0*0.4*(2.1+0.9*pulsePhase(now)));
      drawText(start.hint,hint,'bold 30px system-ui,sans-serif');
      const hh=hintHandPlace(handPos),hp=hh||hintPlace(head,gaze);
-     start.hint.mesh.scale.setScalar(hh?HINT_HAND_SCALE:1);
+     {const hk=hh?HINT_HAND_SCALE:1;start.hint.mesh.scale.set(MEASURE_HINT_W_M*hk,MEASURE_HINT_H_M*hk,1)} // keep the plane's real width x height (a uniform setScalar made it a 0.7 m square: the 512x64 text stretched into vertical streaks)
      if(hp)start.hint.mesh.position.set(hp.x,hp.y,hp.z);else start.hint.mesh.position.set(a.x,a.y+0.045+r0,a.z);
      if(head)start.hint.mesh.lookAt(head);start.hint.mesh.material.opacity=hintAlpha(now-start.t0);start.hint.mesh.visible=true;
     }else dropStart();

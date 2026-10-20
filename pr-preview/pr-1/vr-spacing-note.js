@@ -1,6 +1,6 @@
 // slice-spacing warning for the VR / AR volume displays (pure, DOM- and three-free so it can be unit-tested).
 // Only a warn-level check counts; the info-level "unverified" note stays on the 2D pages (same split as analysis-results.js).
-import { spacingWarningText } from './slice-spacing.js?v=20261020-build627';
+import { spacingWarningText } from './slice-spacing.js?v=20261020-build628';
 
 export const VR_SPACING_MARK = '⚠';
 
