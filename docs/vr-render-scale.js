@@ -8,7 +8,11 @@
 // Pure math on plain arrays (no THREE, no allocation per call): tests/unit/vr-render-scale.test.js.
 
 export const PPV_CENTER = 1.3;
-export const PPV_FAR = 1.0;        // ... and at the farthest corner of the box: never fewer than one pixel per voxel
+export const PPV_FAR = 1.0;
+export const PPV_CENTER_MIN = 1.0;
+export const PPV_FAR_MIN = 0.8;
+export const RELIEF_FROM = 2.0;
+export const RELIEF_TO = 4.0;
 export const CAP_MIN = 0.1;        // the cap never goes below this (the volume would need > 13 px per voxel at the centre)
 export const CAP_QUANT = 1 / 32;   // the cap moves in steps of 1/32 (rounded up: detail first)
 export const CAP_HYST = 2 / 32;    // ... and only drops once the new value is this far below (head bob does not make it flicker)
@@ -60,10 +64,17 @@ export function eyeMetrics(m, half, dims, view, proj, vw, vh, out = {}, box = nu
   return out;
 }
 
-// the raw cap (0..1] from the pixels per voxel of one eye: the smallest scale that keeps PPV_CENTER at the centre and PPV_FAR at the far corner
+// the zoom relief of an eye, 0 (none) .. 1 (full) from its pixels per voxel at the centre
+export const reliefOf = ppvCenter => Math.min(1, Math.max(0, (ppvCenter - RELIEF_FROM) / (RELIEF_TO - RELIEF_FROM)));
+// the pixels per voxel to keep at the centre / the far corner for an eye whose ppv at the centre is ppvCenter
+export const targetCenter = ppvCenter => PPV_CENTER - (PPV_CENTER - PPV_CENTER_MIN) * reliefOf(ppvCenter);
+export const targetFar = ppvCenter => PPV_FAR - (PPV_FAR - PPV_FAR_MIN) * reliefOf(ppvCenter);
+
+// the raw cap (0..1] from the pixels per voxel of one eye: the smallest scale that keeps the centre target at the centre and the far target at the far corner
+// (PPV_CENTER / PPV_FAR, relaxed towards PPV_CENTER_MIN / PPV_FAR_MIN at the largest magnifications: zoom relief)
 export function capFromPpv(ppvCenter, ppvFar) {
   if (!(ppvCenter > 0) || !(ppvFar > 0)) return 1;
-  const need = Math.max(PPV_CENTER / ppvCenter, PPV_FAR / ppvFar);
+  const need = Math.max(targetCenter(ppvCenter) / ppvCenter, targetFar(ppvCenter) / ppvFar);
   return Math.min(1, Math.max(CAP_MIN, need));
 }
 

@@ -3,8 +3,8 @@
 // same data with the same settings again skips building it. Same database, same LRU budget and the same "clear cache"
 // buttons as the volume and segment-runs entries; browser storage can be evicted, so this is only a cache.
 // DOM-free: the caller passes the opened cache (gpu-volume-data.js volumeCache()), so the unit tests use a fake IndexedDB.
-import { packMeshes, packedMeshBytes, unpackMeshes } from './mesh-pack.js?v=20261020-build632';
-import { MESH_FORMAT } from './mesh-cache-key.js?v=20261020-build632';
+import { packMeshes, packedMeshBytes, unpackMeshes } from './mesh-pack.js?v=20261020-build633';
+import { MESH_FORMAT } from './mesh-cache-key.js?v=20261020-build633';
 export const MESH_KIND='segment-mesh';
 // share of the whole cache budget the meshes may hold, so a burst of large meshes cannot push the (slow to rebuild) GPU
 // volume entries out; and the largest single entry (iPad: storage and memory are tight, the blob is built in memory once)

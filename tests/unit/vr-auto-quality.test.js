@@ -169,10 +169,38 @@ describe('failed level is remembered', () => {
   });
   it('the memory lapses after about 60 s (120 samples)', () => {
     const aq = createAutoQuality();
-    drive(aq, 60); const f0 = aq.f;
+    for (let i = 0; i < 4; i++) aq.update({ volMs: 0, mainMs: 0, interval: budget * 1.6, budget, ctx: 'a' }); // heavy: one step down, that level locked
+    const f0 = aq.f; expect(f0).toBeLessThan(1);
     const light = []; for (let i = 0; i < 160; i++) { aq.update({ volMs: 0, mainMs: 0, interval: budget, budget, ctx: 'a' }); light.push(aq.f); }
-    expect(light[20]).toBeCloseTo(f0, 6);           // still held at 10 s
+    expect(light[100]).toBeCloseTo(f0, 6);          // still held at 50 s
     expect(aq.f).toBeGreaterThan(f0);               // released afterwards
+  });
+  // a probe that fails is a stutter of its own: it is taken back on its first over window, and the failed level is kept out twice as long each time
+  it('a rise that is over on its first window is taken back at once (no second slow window)', () => {
+    const aq = createAutoQuality();
+    for (let i = 0; i < 4; i++) aq.update({ volMs: 0, mainMs: 0, interval: budget * 1.6, budget, ctx: 'a' });
+    let rose = false, back = -1, i = 0;
+    for (; i < 400 && !rose; i++) { const f = aq.f; aq.update({ volMs: 0, mainMs: 0, interval: budget, budget, ctx: 'a' }); rose = aq.f > f + 1e-9; }
+    expect(rose).toBe(true);
+    const up = aq.f; aq.update({ volMs: 0, mainMs: 0, interval: budget * 1.4, budget, ctx: 'a' }); // the probe is slow: one window
+    expect(aq.f).toBeLessThan(up - 1e-9);
+  });
+  it('each failed probe doubles the time the failed level stays out (60 s, 120 s, 240 s ...), a changed context starts again', () => {
+    const budgetMs = budget, aq = createAutoQuality();
+    const slowOnce = () => aq.update({ volMs: 0, mainMs: 0, interval: budgetMs * 1.4, budget: budgetMs, ctx: 'a' }), ok = () => aq.update({ volMs: 0, mainMs: 0, interval: budgetMs, budget: budgetMs, ctx: 'a' });
+    for (let i = 0; i < 4; i++) slowOnce();
+    const times = [];
+    for (let k = 0; k < 4; k++) {
+      let n = 0, rose = false;
+      while (n < 2000 && !rose) { const f = aq.f; ok(); n++; rose = aq.f > f + 1e-9; }
+      times.push(n); expect(rose).toBe(true);
+      slowOnce(); // the probe fails
+    }
+    // the first retry waits out the 60 s lock (120 samples); every failed probe doubles the wait
+    expect(times[1]).toBeGreaterThanOrEqual(2 * 120 - 10); expect(times[2]).toBeGreaterThanOrEqual(2 * times[1] - 10); expect(times[3]).toBeGreaterThanOrEqual(2 * times[2] - 10);
+    // another view (ctx): the lock is lifted at once, the level climbs again within a few windows (not after the 8 minutes the failures piled up)
+    let n = 0, rose = false; while (n < 2000 && !rose) { const f = aq.f; aq.update({ volMs: 0, mainMs: 0, interval: budgetMs, budget: budgetMs, ctx: 'b' }); n++; rose = aq.f > f + 1e-9; }
+    expect(rose).toBe(true); expect(n).toBeLessThanOrEqual(40);
   });
 });
 
