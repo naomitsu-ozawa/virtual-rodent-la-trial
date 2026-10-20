@@ -23,6 +23,7 @@
     "vr-depth-check": "node tools/vr-depth-check.mjs",
     "vr-guards": "node tools/vr-gpu-prepare-check.mjs && node tools/vr-render-golden.mjs && node tools/vr-cls-parity.mjs && node tools/vr-depth-check.mjs && node tools/vr-fovea-check.mjs",
     "vr-fovea-check": "node tools/vr-fovea-check.mjs",
+    "vr-start-flicker-check": "node tools/vr-start-flicker-check.mjs",
     "edit-mask-check": "EDITTEX=1 EDIT=3 CUT=1 PASSES=1 node tools/volume-shader-check.mjs docs/medical-volume.js '' test-results/edit-mask && EDITTEX=1 EDIT=2 SPECKS=2 MPR=1 SECTION=1 PASSES=1 node tools/volume-shader-check.mjs docs/medical-volume.js '' test-results/edit-mask",
     "progress-modal-check": "node tools/progress-modal-check.mjs",
     "analysis-project-check": "node tools/analysis-project-check.mjs",
