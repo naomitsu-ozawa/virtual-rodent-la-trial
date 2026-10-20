@@ -7,8 +7,8 @@
 //   split   : under the 2D column (or full width under both): never over a view
 // Open state / size / placement are remembered per mode (localStorage, optional). Every part of the dock takes pointer input itself
 // and stops the pointer events, so the 3D view never rotates from a dock interaction.
-import { tr } from './i18n.js?v=20261020-build627';
-import { ANALYSIS_CARDS, DOCK_MODES, loadDockState, saveDockState, nextPlace, layoutKey, isDocked, clampSize, resizeBy, dockExtent, OVERLAY_H, DOCK_LIMITS } from './analysis-dock-state.js?v=20261020-build627';
+import { tr } from './i18n.js?v=20261020-build628';
+import { ANALYSIS_CARDS, DOCK_MODES, loadDockState, saveDockState, nextPlace, layoutKey, isDocked, clampSize, resizeBy, dockExtent, OVERLAY_H, DOCK_LIMITS } from './analysis-dock-state.js?v=20261020-build628';
 const mk = (tag, cls, attrs) => { const e = document.createElement(tag); if (cls) e.className = cls; for (const [k, v] of Object.entries(attrs || {})) e.setAttribute(k, v); return e; };
 const label = (el, key) => { el.dataset.i18n = key; el.textContent = tr(key); };
 const placeKey = (mode, place) => (mode === '3d' ? (place === 'overlay' ? 'dockPin' : 'dockUnpin') : { below: 'dockSide', side: 'dockBelow', under2d: 'dockFull', full: 'dockUnder2d' }[place] || 'dockPin');
