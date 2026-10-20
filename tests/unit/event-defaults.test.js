@@ -144,7 +144,7 @@ describe('thumbstick click: short press vs hold (FRAME_HIDE_MS)', () => {
     expect(src).toContain('const vis=section.on&&!fHide?planes.filter(p=>!draggedBy(p,c)):[];');
     expect(src).toContain('canDrag:anyOk&&!fHide&&(surfaceActive()||labelMode()||!vh)');
     expect(src).toContain('if(section.on&&vrHalfExt&&!framesHidden()){');
-    expect(src).toContain('const framesHidden=()=>controllers.some(x=>x.userData.hideFrames&&!!x.userData.source?.gamepad)'.replace('const ', '')); // a disconnected controller never leaves the frames hidden
+    expect(src).toContain('const framesHidden=()=>controllers.some(x=>x.userData.hideFrames&&(!!x.userData.source?.gamepad||isHand(x.userData.source)))'.replace('const ', '')); // a disconnected controller / hand never leaves the frames hidden
     expect(src).not.toMatch(/fHide[^;\n]*(cutPlanes|planeCount|planeCut)/); // the cut uniforms do not look at it
   });
 });
