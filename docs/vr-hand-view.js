@@ -1,7 +1,9 @@
 // hand tracking (Quest 3), phase 1 / 2: the three.js side. vr-view.js passes THREE, the renderer and a few callbacks; everything here acts
 // on a controller group only while its input source is a hand (isHand(c.userData.source), state c.userData.hs) — controllers are never touched.
-//  - the hand's target ray: the pose rayDelayMs() ago (0 for an open hand, up to 60 ms while thumb and index are close: the pinch's own ray jump is left out), One Euro filtered, written back into the group's
-//    matrix every frame and again before each select event (three refreshes it from the frame right before dispatching them)
+//  - the hand's target ray:: the hand's own aim ray from the joints (aimRayPose: from the index knuckle along the index metacarpal, AIM_FILTER, the aim hold
+//    while a pinch is closing), written back into the group's matrix every frame and again before each select event (three refreshes it from the frame right before
+//    dispatching them). The system's target ray (the pose rayDelayMs() ago, 0 for an open hand, up to 60 ms while thumb and index are close, One Euro filtered) is
+//    the fallback while the joints are missing (or with vrl-hand-ray joint 0)
 //  - tracking loss: > LOSS_CANCEL_MS without a pose drops the hand's press / drag (the disconnect release); the first frame back is skipped
 //  - the wrist menu (the back of the left wrist turned to the eyes) and the fingertip markers (index tip, thumb tip; white while pinched)
 //  - pulse(): a hand has no haptics; the end dot and the fingertips swell for a moment instead
@@ -12,8 +14,8 @@
 //    While a pinch is held the group carries the press's ray with the palm anchor (createDragCarry: 1:1, the wrist's turn included, no 60 ms delay)
 //    instead of the system's ray; after the release it blends back to the system's ray in blendMs.
 // Per frame: no allocation (reused vectors / typed arrays; the wrist menu's canvas is redrawn only when its state key changes).
-import { isHand, handAlive, fistForming, FIST_GUARD, createGrabHysteresis, grabScore, fingerCurl, GRAB_JOINT_NAMES, GRAB, palmPoint, createPoseFilter, createPoseHistory, createPinchFusion, createDragCarry, blendPose, DRAG_CARRY, parsePinchTune, parseDragTune, createTrackingLoss, createWristMenuGate, wristMenuMetrics, createOneEuro, RAY_DELAY, rayDelayMs, slewDelay, PALM_FILTER, ONE_EURO, parseFilterTune, parseGrabTune, WRIST_ITEMS, wristSlotFromU, handTexts } from './vr-hand.js?v=20261019-build626';
-import { DRAG_HAND, DRAG_RECORD_HAND, HAND_LABEL_MOVE_M } from './vr-point.js?v=20261019-build626';
+import { isHand, handAlive, fistForming, FIST_GUARD, createGrabHysteresis, grabScore, fingerCurl, GRAB_JOINT_NAMES, GRAB, palmPoint, createPoseFilter, createPoseHistory, createPinchFusion, createDragCarry, blendPose, DRAG_CARRY, parsePinchTune, parseDragTune, createTrackingLoss, createWristMenuGate, wristMenuMetrics, createOneEuro, RAY_DELAY, rayDelayMs, slewDelay, PALM_FILTER, ONE_EURO, parseFilterTune, parseGrabTune, WRIST_ITEMS, wristSlotFromU, handTexts, AIM_RAY, AIM_FILTER, AIM_HOLD, aimRayPose, thumbSideOf, createAimHold, turnToward, parseRayTune } from './vr-hand.js?v=20261020-build628';
+import { DRAG_HAND, DRAG_RECORD_HAND, HAND_LABEL_MOVE_M } from './vr-point.js?v=20261020-build628';
 export { HAND_LABEL_MOVE_M };
 
 const TIP_R=0.0045,WRIST_W=0.28,WRIST_H=0.04,WRIST_LIFT=0.055,CW=1400,CH=200,GRAB_TIP=0xffa000,REACH_TIP=0x39ff6a; // 7 buttons of 4 cm; the fingertips: orange = holding, green = something is within reach of a fist
@@ -23,6 +25,7 @@ export function createHandInput(THREE,{renderer,scene,controllers,ja,getHead,col
  const texts=handTexts(ja);
  const one=new THREE.Vector3(1,1,1),tP=new THREE.Vector3(),tQ=new THREE.Quaternion(),tS=new THREE.Vector3(),tM=new THREE.Matrix4(),tC=new THREE.Color(),pj=Array.from({length:5},()=>null),curls=[0,0,0,0],pw=[0,0,0],pk=[0,0,0],pp=[0,0,0],pose7=new Float64Array(7),tW=new THREE.Vector3(),tWq=new THREE.Quaternion(),tD=new THREE.Vector3();
  const qI=new THREE.Quaternion(),zero=new THREE.Vector3(0,0,0),wp=[0,0,0],wq=[0,0,0,1],met={facing:0,across:0,dist:0},w3=new Float64Array(3);
+ const jp7=new Float64Array(7),jq=[0,0,0,1],ip=[0,0,0],tp=[0,0,0],ak=[0,0,0]; // the aim ray's temporaries
  // fingertip markers: 2 per slot (index tip, thumb tip), at most 4 instances; hidden when no hand is there
  const tips=new THREE.InstancedMesh(new THREE.SphereGeometry(TIP_R,10,6),new THREE.MeshBasicMaterial({color:0xffffff,toneMapped:false}),4);
  tips.frustumCulled=false;tips.visible=false;tips.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -56,9 +59,13 @@ export function createHandInput(THREE,{renderer,scene,controllers,ja,getHead,col
  // the pinch (vrl-hand-pinch) and the pinch drag (vrl-hand-drag), read once per session as the others
  const pt=parsePinchTune(lsGet('vrl-hand-pinch')),guardTune={index:pt.guardIndex??FIST_GUARD.index,others:pt.guardOthers??FIST_GUARD.others};
  const dk=parseDragTune(lsGet('vrl-hand-drag')),carryOn=(dk.carry??DRAG_CARRY.carry)>0,carryTune={gain:dk.gain??DRAG_CARRY.gain,rot:dk.rot??DRAG_CARRY.rot},blendMs=dk.blendMs??DRAG_CARRY.blendMs;
+ // the hand's own aim ray (vrl-hand-ray = '{"joint":1,"pitch":8,"yaw":4,"minCutoff":2,"beta":0.15,"dCutoff":5,"holdDeg":10,"holdSpeed":0.12,"holdMs":60,"rampMs":120}', read once per session)
+ const rt=parseRayTune(lsGet('vrl-hand-ray')),aimOn=(rt.joint??AIM_RAY.joint)>0,aimOff={pitchDeg:rt.pitch??AIM_RAY.pitchDeg,yawDeg:rt.yaw??AIM_RAY.yawDeg};
+ const aimTune={minCutoff:rt.minCutoff??AIM_FILTER.minCutoff,beta:rt.beta??AIM_FILTER.beta,dCutoff:rt.dCutoff??AIM_FILTER.dCutoff},holdTune={degPerS:rt.holdDeg??AIM_HOLD.degPerS,speed:rt.holdSpeed??AIM_HOLD.speed,tailMs:rt.holdMs??AIM_HOLD.tailMs,rampMs:rt.rampMs??AIM_HOLD.rampMs};
  const newState=hand=>({hand,filter:createPoseFilter(tune),hist:createPoseHistory(),loss:createTrackingLoss(),pinch:createPinchFusion(pt),raw:new Float64Array(7),del:new Float64Array(7),out:new Float64Array(7),has:false,flashAt:0,flashMs:0,flashAmp:0,rebased:null,
   grab:createGrabHysteresis(grabTune),aFilter:createPoseFilter(palmTune),anchor:null,anchorOk:false,pd:NaN,delay:0,lastNow:0,near:null,
-  palm7:new Float64Array(7),palmAt:-1,carry:createDragCarry(),cout:new Float64Array(7),bout:new Float64Array(7),shown:null,carryLost:false,blendAt:-Infinity});
+  palm7:new Float64Array(7),palmAt:-1,carry:createDragCarry(),cout:new Float64Array(7),bout:new Float64Array(7),shown:null,carryLost:false,blendAt:-Infinity,
+  aim:createPoseFilter(aimTune),hold:createAimHold(holdTune),jr:new Float64Array(7),lastQ:new Float64Array(4),src:null,side:0}); // the joint aim ray (src: 'joint' | 'sys', the ray the group shows)
  // the group gets the hand's pose o = [px,py,pz,qx,qy,qz,qw] (target-ray space: -z along the ray); children (the laser) follow
  const apply=(c,o)=>{tP.set(o[0],o[1],o[2]);tQ.set(o[3],o[4],o[5],o[6]);c.position.copy(tP);c.quaternion.copy(tQ);c.matrix.compose(tP,tQ,one);c.matrixWorldNeedsUpdate=true;c.updateMatrixWorld(true)};
  // the pose on the group: the carried press ray while a pinch is held (and the blend back after it), else the system's filtered / delayed ray
@@ -68,17 +75,39 @@ export function createHandInput(THREE,{renderer,scene,controllers,ja,getHead,col
   const holding=hs.grab.active||hs.pinch.pressed,wristOk=holding&&!!joint(hs,'wrist'); // a fist / pinch holding something: the wrist joint decides (a palm turned to the face or a fast swing can lose the target ray)
   const st=hs.loss.update(handAlive(c.visible,wristOk,holding),now);
   if(st==='cancel'){release(c);hs.rebased=null;hs.grab.release();dropPinch(hs)} // release() also lets go of what the fist held; the fist must open before it grabs again
-  if(st!=='ok'){if(st==='recover'){hs.filter.reset();hs.hist.reset();hs.aFilter.reset();hs.delay=0}if(hs.has)apply(c,shownPose(hs));return false}
+  if(st!=='ok'){if(st==='recover'){hs.filter.reset();hs.hist.reset();hs.aFilter.reset();hs.aim.reset();hs.hold.reset();hs.delay=0}if(hs.has)apply(c,shownPose(hs));return false}
   const it=joint(hs,'index-finger-tip'),th=joint(hs,'thumb-tip');hs.pd=it&&th?it.position.distanceTo(th.position):NaN; // also while the ray is lost (the pinch goes on)
   if(!c.visible){if(hs.has)apply(c,shownPose(hs));return true} // alive by the wrist only: the stale raw ray is not fed to the filter
   c.matrix.decompose(tP,tQ,tS);const r=hs.raw;r[0]=tP.x;r[1]=tP.y;r[2]=tP.z;r[3]=tQ.x;r[4]=tQ.y;r[5]=tQ.z;r[6]=tQ.w; // three wrote the raw ray pose this frame
   // the ray is delayed only while the thumb and index are close (a pinch forming / ending); an open hand has the live ray
   hs.delay=slewDelay(hs.delay,rayDelayMs(hs.pd,delayTune),now-hs.lastNow);hs.lastNow=now;
-  hs.hist.push(now,r);const t=hs.hist.at(now-hs.delay,hs.del);hs.filter.filter(hs.del,t,hs.out);hs.has=true;apply(c,shownPose(hs));
+  hs.hist.push(now,r); // every frame, whatever ray is shown: the fallback finds a record when it takes over
+  const jr=aimOn?aimRay(hs,c):null; // the hand's own aim ray from the joints, no delay; the system's ray only while the joints are missing
+  if(jr){
+   if(hs.src!=='joint'){hs.aim.reset();hs.hold.reset();hs.src='joint'} // a switch of the ray model: the filter starts from the new ray (one step, not a slew from a stale pose)
+   hs.aim.filter(jr,now,hs.out);
+   const lim=hs.hold.update(hs.pd,now);if(hs.has&&lim<Infinity)turnToward(hs.lastQ,0,hs.out,3,lim,hs.out,3); // the pinch is closing: the direction is held
+  }else{
+   if(hs.src!=='sys'){hs.filter.reset();hs.src='sys'}
+   const t=hs.hist.at(now-hs.delay,hs.del);hs.filter.filter(hs.del,t,hs.out);
+  }
+  for(let i=0;i<4;i++)hs.lastQ[i]=hs.out[3+i];
+  hs.has=true;apply(c,shownPose(hs));
   // the drag reference of a press is taken again once the delayed ray has passed the pinch itself (until then the hand's press does not drag).
-  // not for a carried press (its reference is right at the press: the carried ray has no pinch jump and no delay)
-  const pr=c.userData.press;if(pr&&hs.rebased!==pr&&!hs.carry.active&&now-pr.t0>=delayTune.maxMs){const hp=handInHolder(c);pr.p0=hp.p;pr.q0=hp.q;hs.rebased=pr}
+  // not for a carried press (its reference is right at the press: the carried ray has no pinch jump and no delay).: the joint ray has no delay either
+  const pr=c.userData.press;if(pr&&hs.rebased!==pr&&!hs.carry.active&&now-pr.t0>=(hs.src==='joint'?0:delayTune.maxMs)){const hp=handInHolder(c);pr.p0=hp.p;pr.q0=hp.q;hs.rebased=pr}
   return true;
+ };
+ // the hand's own aim ray (aimRayPose) from this frame's joints, or null when they are missing: the index metacarpal's bone axis (the wrist's as
+ // fallback) from the index knuckle; which side the thumb lies on (the yaw toward it) is read from the thumb's base joint, else from the handedness
+ const aimRay=(hs,c)=>{
+  const kn=joint(hs,'index-finger-phalanx-proximal'),mc=joint(hs,'index-finger-metacarpal')||joint(hs,'wrist');if(!kn||!mc)return null;
+  mc.matrix.decompose(tW,tWq,tS);const j=jp7;j[0]=tW.x;j[1]=tW.y;j[2]=tW.z;j[3]=tWq.x;j[4]=tWq.y;j[5]=tWq.z;j[6]=tWq.w;
+  const tb=joint(hs,'thumb-metacarpal')||joint(hs,'thumb-phalanx-proximal');
+  if(tb){jq[0]=j[3];jq[1]=j[4];jq[2]=j[5];jq[3]=j[6];ip[0]=j[0];ip[1]=j[1];ip[2]=j[2];tp[0]=tb.position.x;tp[1]=tb.position.y;tp[2]=tb.position.z;const s=thumbSideOf(jq,ip,tp);if(s)hs.side=s}
+  if(!hs.side)hs.side=c.userData.source?.handedness==='left'?1:-1; // WebXR joint axes: +X runs across the hand toward the little finger of a right hand
+  ak[0]=kn.position.x;ak[1]=kn.position.y;ak[2]=kn.position.z;
+  return aimRayPose(j,ak,hs.side,aimOff,hs.jr);
  };
  // the carried press ray, every frame while a pinch is held and during the blend back to the system's ray after the release
  const carryStep=(c,hs,now)=>{

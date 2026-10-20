@@ -6,7 +6,7 @@
 //   offset : where the user left the label, as the vector from the anchor in VOXEL units (the same convention as a distance label's labelOffset in measurements.js), so it does not
 //            depend on the model's move / rotation / scale and is the same in VR and on the PC. No offset = the view's default placement (beside the anchor, facing the viewer).
 // A leader line joins a moved label to its anchor (leaderVisible).
-import { stepDelta, offsetFromDelta } from './measure-label.js?v=20261019-build626';
+import { stepDelta, offsetFromDelta } from './measure-label.js?v=20261020-build628';
 
 export const ANALYSIS_LABEL_MAX=1e4; // |component| limit (voxels): anything beyond is a corrupt file, dropped
 const num=(x)=>typeof x==='number'&&Number.isFinite(x)&&Math.abs(x)<=ANALYSIS_LABEL_MAX;
@@ -79,6 +79,10 @@ export function setRegionLabelOffset(region,offset){
 }
 // the label of a region for the project file (a clean copy) / for a snapshot, or undefined
 export const labelForProject=region=>normalizeAnalysisLabel(region?.label)||undefined;
+
+// a result's label follows its segments' visibility (VR; the PC 3D view gets it through analysisRegionShown): shown while the result has no segment, or at least one of its segments
+// is shown (`isShown(key)`); hidden while all of them are hidden. Nothing about the label changes (its anchor / moved place stay), so showing the segment again brings it back where it was.
+export const labelSegmentsShown=(segmentKeys,isShown)=>!segmentKeys?.length||segmentKeys.some(k=>isShown(k));
 
 // ---- the views' per-voxel steps ----
 // VR: object-space change per voxel along i / j / k (vr-point.js voxelToLocal); PC 3D: crosshair.js voxelToLocal3D (the longest side is 3.3 units)

@@ -57,12 +57,31 @@ describe('vr-view.js: segment visibility changes rebuild the combined texture of
   it('the slices go up through three.js (texSubImage3D from a texture the renderer never saw)', () => {
     expect(rc).toContain('renderer.copyTextureToTexture(t.comboSrc,t.combo,comboBox,comboAt)');
   });
-  it('until the rebuild is complete, the jumps are on only when rb.jumpsSafe; otherwise the general loop without jumps from the same texture', () => {
-    expect(rc).toContain('if(t.rb?t.rb.jumpsSafe(shown):t.comboMask===shown){useCombo(t);material.uniforms.useDist.value=1;return}');
-    expect(rc).toContain('material.uniforms.clsTex.value=t.combo;material.uniforms.clsChan.value.set(...P.cls.chan);material.uniforms.distInCls.value=0;material.uniforms.useDist.value=0;');
+  // the interim without jumps (variant 'full', about 20x a frame, its offscreen program compiled on
+  // its first frame) is gone: the jumps stay on and the shader's shown set is held within the texture's safe mask until the upload is complete
+  it('the jumps stay on through a rebuild: no switch to the general loop (distInCls / useDist never cleared for it)', () => {
+    expect(rc).toContain('const applyCombo=t=>{useCombo(t);material.uniforms.useDist.value=1};');
+    expect(rc).not.toContain('distInCls.value=0;material.uniforms.useDist.value=0');
+    expect(rc).toContain('comboShaderMask=()=>{const t=comboT;return t?(t.rb?t.rb.safeMask:t.comboMask):15};');
+  });
+  it('the shader sees the shown segments within that mask, set after the rebuild step of the frame (a segment just shown appears once uploaded)', () => {
+    const at = loop.indexOf('comboTick();refreshCombo();'), seg = loop.indexOf('u.segA.value[i].set(seg?.min||0,seg?.max||0,1,(held>>i&1)||(vis>>i&1)&&segAvail(seg)&&segMode[key]!==2?1:0);');
+    expect(at).toBeGreaterThan(0); expect(seg).toBeGreaterThan(at);
+    expect(loop).toContain('const slotKeys=gpuSegmentOrder(),vis=comboShaderMask(),sh=shownMask(),held=sh&&!(sh&vis)?vis:0;'); // a swap keeps the old set (never a blank volume)
+    expect(loop.indexOf('refreshContentBox();', seg)).toBeGreaterThan(seg); // the content box reads segA after it is set
+    expect(loop.match(/comboTick\(\)/g)).toHaveLength(1);
+  });
+  it('the prepared combined texture is built for the modes the session starts with (event mode: initialVrModes before shownMask)', () => {
+    const prep = src.slice(src.indexOf('export async function prepareVrGpu('), src.indexOf('export async function prepareVrGpu(') + 4000);
+    const a = prep.indexOf('initialVrModes();'), b = prep.indexOf('const mask=shownMask();');
+    expect(a).toBeGreaterThan(0); expect(b).toBeGreaterThan(a);
+  });
+  it('the offscreen ray variants are compiled before the session with a render target bound (its colour space is in the program key)', () => {
+    expect(src).toContain('renderer.setRenderTarget(rt);try{await renderer.compileAsync(sr,cam)}finally{renderer.setRenderTarget(prevT);rt.dispose()}');
+    expect(src).toContain('for(const m of mats.slice(keys.length,2*keys.length))');
   });
   it('the rebuild advances once per frame, before the render; the session end stops it; the benchmark waits for it', () => {
-    expect(loop).toContain('comboTick();refreshCombo();refreshContentBox();');
+    expect(loop).toContain('comboTick();refreshCombo();');
     expect(src).toContain('comboTs.forEach(t=>{t.rb.dispose();t.rb=null});');
     expect(src).toContain('if(now-bench.at>=800&&!comboT?.rb?.busy){bench.measureAt=now;');
   });

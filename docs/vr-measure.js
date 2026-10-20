@@ -5,11 +5,11 @@
 // distance is being made, the START point with a pulsing ring and the hint 「終点のポイントを選んでください」 next to it.
 // vr-view.js calls createVrMeasure(THREE, scene) -> { update, probes, pickLabel, dragLabel, dispose } every frame and does everything else (the flow, haptics, undo) itself; the state is
 // measurements.js (the same for the PC / iPad). The value follows the points: it is recomputed from their voxels each frame (a point being moved included, preview).
-import { getComments, getMarkersShown, commentMatchesSeries, commentTarget } from './comments.js?v=20261019-build626';
-import { getMeasurements, setLabelOffset, distanceMm, measureLabel } from './measurements.js?v=20261019-build626';
-import { nearLabelWorld, stepDelta, offsetFromDelta, LINE_SAMPLES, probeKey, fadeAlpha, approachAlpha, OCCLUDED_ALPHA } from './measure-label.js?v=20261019-build626';
-import { voxelToLocal } from './vr-point.js?v=20261019-build626';
-import { GHOST_ALPHA, occludedPass } from './vr-depth.js?v=20261019-build626';
+import { getComments, getMarkersShown, commentMatchesSeries, commentTarget } from './comments.js?v=20261020-build628';
+import { getMeasurements, setLabelOffset, distanceMm, measureLabel } from './measurements.js?v=20261020-build628';
+import { nearLabelWorld, stepDelta, offsetFromDelta, LINE_SAMPLES, probeKey, fadeAlpha, approachAlpha, OCCLUDED_ALPHA } from './measure-label.js?v=20261020-build628';
+import { voxelToLocal } from './vr-point.js?v=20261020-build628';
+import { GHOST_ALPHA, occludedPass } from './vr-depth.js?v=20261020-build628';
 export const VR_MEASURE_COLOR=0xffd23d,MEASURE_LABEL_W_M=0.045,MEASURE_LABEL_H_M=0.0132,MEASURE_HINT_W_M=0.2,MEASURE_HINT_H_M=0.026;
 export const HINT_DIST_M=0.7,HINT_ELEV=0.5,HINT_ALPHA=0.6,HINT_FADED_ALPHA=0.28,HINT_FADE_AFTER_MS=3000,HINT_FADE_MS=1200;
 // pure: the hint's opacity after elapsedMs on screen
@@ -24,6 +24,12 @@ export function hintPlace(head,gaze){
  const u={x:r.y*f.z-r.z*f.y,y:r.z*f.x-r.x*f.z,z:r.x*f.y-r.y*f.x}; // up' = right x forward
  const c=Math.cos(HINT_ELEV),sn=Math.sin(HINT_ELEV);
  return{x:head.x+(f.x*c+u.x*sn)*HINT_DIST_M,y:head.y+(f.y*c+u.y*sn)*HINT_DIST_M,z:head.z+(f.z*c+u.z*sn)*HINT_DIST_M};
+}
+export const HINT_HAND_UP_M=0.09,HINT_HAND_SCALE=0.7;
+// pure: the world place of the hand-following hint, or null without a usable hand position {x,y,z}
+export function hintHandPlace(hand){
+ if(!hand||![hand.x,hand.y,hand.z].every(Number.isFinite))return null;
+ return{x:hand.x,y:hand.y+HINT_HAND_UP_M,z:hand.z};
 }
 // the label's size factor from the head distance (m): about 1 at arm's length (0.6 m), bigger when far, never tiny
 // the lit label (the laser on it / grabbed): like the ring menu's lit sector (vr-ring.js) it turns #ffe27a with dark text and a white rim, and grows a little
@@ -74,7 +80,7 @@ export function createVrMeasure(THREE,scene,deps={getComments,getMarkersShown,ge
  return{
   // fingerprint / dims / halfExt / mesh: as vpMarkers.update; head: the head's world position; spacing: [sx,sy,sz] mm; warn: the series has a slice-spacing warning;
   // startId: the point a distance starts at (or null); hint: its text; now: ms; preview: {id,voxel} a point being moved (voxel null = still at its place)
-  update({fingerprint,dims,halfExt,mesh,head,gaze=null,spacing,warn=false,startId=null,hint='',now=performance.now(),preview=null,lit=null,hidden=null,occlusion=false}){ // occlusion: true = the volume's depth hides. lit: a Set of measurement ids whose label is lit (laser on it / grabbed), or null. hidden: a Set of probe keys behind the volume's surface (probes()), or null
+  update({fingerprint,dims,halfExt,mesh,head,gaze=null,handPos=null,spacing,warn=false,startId=null,hint='',now=performance.now(),preview=null,lit=null,hidden=null,occlusion=false}){ // occlusion: true = the volume's depth hides. lit: a Set of measurement ids whose label is lit (laser on it / grabbed), or null. hidden: a Set of probe keys behind the volume's surface (probes()), or null
    const all=fingerprint&&dims&&halfExt&&mesh&&deps.getMarkersShown()?deps.getComments():[],byId=new Map();
    for(const c of all){
     if(!commentMatchesSeries(c,fingerprint))continue;
@@ -131,7 +137,8 @@ export function createVrMeasure(THREE,scene,deps={getComments,getMarkersShown,ge
      a.set(S.local.x,S.local.y,S.local.z);mesh.localToWorld(a);
      start.ring.position.copy(a);start.ring.scale.setScalar(r0*0.4*(2.1+0.9*pulsePhase(now)));
      drawText(start.hint,hint,'bold 30px system-ui,sans-serif');
-     const hp=hintPlace(head,gaze);
+     const hh=hintHandPlace(handPos),hp=hh||hintPlace(head,gaze);
+     {const hk=hh?HINT_HAND_SCALE:1;start.hint.mesh.scale.set(MEASURE_HINT_W_M*hk,MEASURE_HINT_H_M*hk,1)} // keep the plane's real width x height (a uniform setScalar made it a 0.7 m square: the 512x64 text stretched into vertical streaks)
      if(hp)start.hint.mesh.position.set(hp.x,hp.y,hp.z);else start.hint.mesh.position.set(a.x,a.y+0.045+r0,a.z);
      if(head)start.hint.mesh.lookAt(head);start.hint.mesh.material.opacity=hintAlpha(now-start.t0);start.hint.mesh.visible=true;
     }else dropStart();

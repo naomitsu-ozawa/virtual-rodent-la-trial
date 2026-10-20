@@ -9,27 +9,33 @@
 // bound of the distance to the shown surfaces (all the jump needs) whenever the shown mask is a subset of that mask.
 // safeMask = the AND of every mask whose alpha may be in the bytes or on the GPU; jumpsSafe(shown) = shown ⊆ safeMask. Hiding a segment
 // keeps the jumps; showing one draws without them (general loop, classification only) until the upload is complete.
+// vr-view.js no longer draws the interim without jumps (it cost ~20x a frame); the shader's shown set
+// is held inside safeMask instead, so a shown segment appears when its upload is complete. Every per-frame step here stays within budgetMs:
+// the distance slabs (1 MB each, several per frame while time is left), the alpha written into the bytes in chunks (an upload once its z slab
+// is complete, at most one per frame); the worker's alpha buffer goes back to it for the next build (no 16 MB allocation per change).
 // Pure (no DOM / GL; the worker is injected), unit-tested.
-import { combinedAlphaRange } from './distance-field.js?v=20261019-build626';
+import { combinedAlphaRange } from './distance-field.js?v=20261020-build628';
 
-export const UPLOAD_BYTES = 2 << 20, SLAB_BYTES = 4 << 20, CHUNK = 1 << 16, WORKER_CHUNK = 1 << 20, BUDGET_MS = 2, WORKER_FRAMES = 600;
+export const UPLOAD_BYTES = 2 << 20, SLAB_BYTES = 1 << 20, CHUNK = 1 << 16, WORKER_CHUNK = 1 << 20, BUDGET_MS = 2, WORKER_FRAMES = 600;
 
 // the worker: keeps a copy of the distance bytes (init + slabs; a known cost: n x C bytes, up to 64 MB at 256³ with four segments, resident until the
 // session ends, so that a later change needs no copy), answers build {id, mask, chan, chunk} with the alpha (transferred); a newer
 // build or a cancel stops the one running at its next chunk. Self-contained apart from combinedAlphaRange (both go to the worker as source).
 export function comboWorkerMain(scope) {
-  let dist = null, C = 1, latest = 0;
+  let dist = null, C = 1, latest = 0, spare = null;
   scope.onmessage = async e => {
     const m = e.data;
     if (m.t === 'init') { dist = new Uint8Array(m.bytes); C = m.C; latest = 0; }
     else if (m.t === 'slab') dist.set(new Uint8Array(m.buf), m.at);
     else if (m.t === 'cancel') latest = 0;
+    else if (m.t === 'spare') spare = new Uint8Array(m.buf); // the alpha of the last build, back from the main side once uploaded
     else if (m.t === 'build') {
       // an exception in this async handler would not reach Worker.onerror: it is reported (the main side then goes on by itself)
       try {
-        const id = latest = m.id, n = dist.length / C, alpha = new Uint8Array(n), src = { data: dist, C };
+        const id = latest = m.id, n = dist.length / C, alpha = spare && spare.length === n ? spare : new Uint8Array(n), src = { data: dist, C }; // every voxel is written below
+        spare = null;
         for (let i = 0; i < n; i += m.chunk) {
-          if (i > 0) { await new Promise(r => setTimeout(r, 0)); if (latest !== id) return; }
+          if (i > 0) { await new Promise(r => setTimeout(r, 0)); if (latest !== id) { spare = alpha; return; } }
           combinedAlphaRange(src, m.chan, m.mask, alpha, i, Math.min(n, i + m.chunk));
         }
         if (latest === id) scope.postMessage({ t: 'alpha', id, buf: alpha.buffer }, [alpha.buffer]);
@@ -52,6 +58,9 @@ const blobWorker = () => {
 export function createComboRebuild({ dist, chan, dims, data, mask, upload, makeWorker = blobWorker, now = () => performance.now(), budgetMs = BUDGET_MS, uploadBytes = UPLOAD_BYTES, slabBytes = SLAB_BYTES, workerFrames = WORKER_FRAMES }) {
   const plane = dims[0] * dims[1], depth = dims[2], n = plane * depth, C = dist.C, chanA = Array.from(chan);
   let content = mask, safe = mask < 0 ? 0 : mask, job = null, seq = 0, wk = null, broken = false, sent = 0, spare = null;
+  const newJob = (mask, target) => ({ id: ++seq, mask, target, alpha: null, buf: null, i: 0, z: 0, w: 0, posted: false });
+  // the alpha buffer of a job that is over: the worker's goes back to it (transferred), the main thread's is kept
+  const recycle = j => { if (j.buf) spare = j.buf; else if (j.alpha && wk && !broken) { try { wk.postMessage({ t: 'spare', buf: j.alpha.buffer }, [j.alpha.buffer]); } catch { /* dropped */ } } };
   const fail = () => { broken = true; try { wk?.terminate(); } catch { /* gone */ } wk = null; if (job && !job.alpha) { job.posted = false; job.i = 0; } }; // the job goes on on the main thread
   const ensure = () => {
     if (wk || broken) return wk;
@@ -77,17 +86,20 @@ export function createComboRebuild({ dist, chan, dims, data, mask, upload, makeW
     get safeMask() { return safe; },
     jumpsSafe: m => (m & ~safe) === 0,
     request(m) {
-      if (job && job.mask === m) return;
-      if (job) { if (job.posted && wk) wk.postMessage({ t: 'cancel' }); if (job.buf) spare = job.buf; job = null; } // slices already uploaded stay (safe has their mask)
+      if (job && job.target === m) return;
+      if (job) { if (job.posted && wk) wk.postMessage({ t: 'cancel' }); recycle(job); job = null; } // slices already written / uploaded stay (safe has their mask)
       if (m === content) return; // nothing written yet for the cancelled one: the bytes still hold m
-      job = { id: ++seq, mask: m, alpha: null, buf: null, i: 0, z: 0, posted: false };
+      // a set disjoint from safe (a swap, bone only -> soft only) has nothing drawable with the jumps meanwhile: first the union (its alpha
+      // is a lower bound for both, safe keeps the old set through that upload), then m itself
+      const mid = m !== 0 && safe !== 0 && (m & safe) === 0 ? (m | safe) : m;
+      job = newJob(mid, m);
     },
     tick() {
       if (!job) return false;
       if (!job.alpha) {
         const w = ensure();
         if (w) {
-          if (!job.posted) { if (sendSlab()) { w.postMessage({ t: 'build', id: job.id, mask: job.mask, chan: chanA, chunk: WORKER_CHUNK }); job.posted = true; job.waited = 0; } }
+          if (!job.posted) { const t0 = now(); let done = false, last = 0; do { const a = now(); done = sendSlab(); last = now() - a; } while (!done && now() - t0 + last < budgetMs); if (done) { w.postMessage({ t: 'build', id: job.id, mask: job.mask, chan: chanA, chunk: WORKER_CHUNK }); job.posted = true; job.waited = 0; } }
           else if (++job.waited > workerFrames) fail();
           return false;
         }
@@ -97,12 +109,15 @@ export function createComboRebuild({ dist, chan, dims, data, mask, upload, makeW
         if (job.i >= n) job.alpha = job.buf;
         return false; // the upload starts on the next frame
       }
-      const k = Math.max(1, Math.floor(uploadBytes / (plane * 4))), z0 = job.z, z1 = Math.min(depth, z0 + k), a = job.alpha;
+      // the alpha of slab [z0, z1) written in chunks while time is left (job.w = next voxel), uploaded once complete: at most one upload per frame
+      const k = Math.max(1, Math.floor(uploadBytes / (plane * 4))), z0 = job.z, z1 = Math.min(depth, z0 + k), a = job.alpha, e = z1 * plane, t0 = now(), wrote = job.w < e;
       safe &= job.mask; content = -1;
-      for (let i = z0 * plane, e = z1 * plane; i < e; i++) data[i * 4 + 3] = a[i];
+      do { const ce = Math.min(e, job.w + CHUNK); for (let i = job.w; i < ce; i++) data[i * 4 + 3] = a[i]; job.w = ce; } while (job.w < e && now() - t0 < budgetMs);
+      if (job.w < e || (wrote && now() - t0 >= budgetMs)) return false; // the budget is spent: the upload goes on the next frame
       upload(z0, z1); job.z = z1;
       if (z1 < depth) return false;
-      content = safe = job.mask; if (job.buf) spare = job.buf; job = null;
+      content = safe = job.mask; recycle(job); const next = job.target; job = null;
+      if (next !== content) job = newJob(next, next); // the second step of a swap
       return true;
     },
     dispose() { job = null; spare = null; broken = true; try { wk?.terminate(); } catch { /* gone */ } wk = null; },

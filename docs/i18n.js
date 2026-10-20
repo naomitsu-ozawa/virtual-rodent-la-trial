@@ -1,6 +1,6 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { currentLanguage, setCurrentLanguage } from './state.js?v=20261019-build626';
+import { currentLanguage, setCurrentLanguage } from './state.js?v=20261020-build628';
 export const I18N={
  ja:{
   subtitle:'マウス・実験動物画像のためのブラウザDICOM CTビューワー',
@@ -34,7 +34,7 @@ export const I18N={
   setEventMode:'体験会モード',setEventModeNote:'オンにすると「データ」パネルにレベル選択（Lv0〜Lv3）を表示します。レベルを押すとその練習データを読み込み、VR／ARではそのミッションを「操作方法」に表示します。',evTitle:'体験会：レベルを選ぶ',evSelected:'選択中',evLoading:'読み込み中…',evAfter:'読み込みが終わったら「VRで見る」または「ARで見る」を押してください（「表示」パネルの上）。',evMissionCap:'ミッション',
   // 設定 > デバッグ > テスト機能 (debug-flags.js / debug-switches-ui.js)
   dbgTitle:'テスト機能（上級者向け）',dbgGroupLight:'軽さのテスト',dbgApplyReload:'再読み込みで反映',
-  dbgVrPrec:'VR描画を16ビット精度で試す',dbgVrPrecNote:'Quest向けの試験。軽くなる一方、見た目が荒れることがあります。',
+  dbgVrPrec:'VR描画を32ビット精度に戻す（画質確認用）',dbgVrPrecNote:'ふだんは16ビット精度で軽く描きます。見た目の違いを確かめたいときだけオンにします。',
   dbgReloadNote:'再読み込みで反映される設定を変えました。',dbgReload:'再読み込み',dbgReset:'テスト設定を元に戻す',
   evLv0Name:'骨梁',evLv0Mission:'骨の中のスポンジ構造を断面で観察しよう',evLv1Name:'マウス頭部',evLv1Mission:'断面で頭の中を観察しよう → 軟部組織を表示して、肺の構造を確かめよう',evLv2Name:'マウス腹部',evLv2Mission:'断面でおなかの中を観察しよう → 軟部組織を隠して脂肪を表示しよう → メニューで「解析モード」に切り替えよう → 脂肪にレーザーを向けるとラベルが出る（トリガーで固定）',evLv3Name:'ラット腹部',evLv3Mission:'断面で腹腔を観察しよう → 腎臓を探して、長さを測ろう',
   evHintSection:'断面：B/Y',evHintMove:'動かす：スティック上下',evHintToggle:'表示切り替え：A/X 長押しでメニュー',evHintMark:'印：トリガー',evHintDistance:'距離：印を長押し→距離',
@@ -72,7 +72,7 @@ export const I18N={
   setEventMode:'Event mode',setEventModeNote:'Shows a level choice (Lv0-Lv3) in the Data panel. A level loads its practice data; in VR / AR its mission is shown on the Controls board.',evTitle:'Event: choose a level',evSelected:'Selected',evLoading:'Loading…',evAfter:'When loading has finished, press "View in VR" or "View in AR" (top of the Display panel).',evMissionCap:'Mission',
   // Settings > Debug > test features (debug-flags.js / debug-switches-ui.js)
   dbgTitle:'Test features (advanced)',dbgGroupLight:'Lightness test',dbgApplyReload:'applies after a reload',
-  dbgVrPrec:'Try 16-bit VR rendering',dbgVrPrecNote:'A Quest trial. Lighter, but the picture may look rougher.',
+  dbgVrPrec:'Go back to 32-bit VR rendering (image check)',dbgVrPrecNote:'VR normally draws in lighter 16-bit precision. Turn this on only to compare the picture.',
   dbgReloadNote:'You changed a setting that applies after a reload.',dbgReload:'Reload',dbgReset:'Reset test settings',
   evLv0Name:'Trabecular bone',evLv0Mission:'Look at the sponge-like structure inside the bone in a section',evLv1Name:'Mouse head',evLv1Mission:'Look inside the head with a section → show the soft tissue and check the structure of the lungs',evLv2Name:'Mouse abdomen',evLv2Mission:'Look inside the belly with a section → hide the soft tissue and show the fat → in the menu, switch to "Analysis mode" → point the laser at the fat: its label appears (trigger pins it)',evLv3Name:'Rat abdomen',evLv3Mission:'Look at the abdominal cavity with a section → find a kidney and measure its length',
   evHintSection:'Section: B/Y',evHintMove:'Move: stick up / down',evHintToggle:'Show / hide: hold A/X for the menu',evHintMark:'Mark: trigger',evHintDistance:'Distance: hold a mark → Distance',
