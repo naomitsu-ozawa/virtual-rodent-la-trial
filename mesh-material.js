@@ -1,12 +1,12 @@
-// The material of every surface mesh of the 3D view (build 612): the SAME lighting formula as the two volume shaders (lighting.js), evaluated in the material
+// The material of every surface mesh of the 3D view: the SAME lighting formula as the two volume shaders (lighting.js), evaluated in the material
 // with the light fixed in view space and no scene lights. WebGPU: a MeshStandardNodeMaterial with lights off whose colourNode is the lit colour
 // (meshColorNode, linear working space; the emissive highlight of edited / selected regions is still added by the material); WebGL fallback: a core
 // MeshStandardMaterial whose fragment shader is patched (patchStandardFragment). Segment colour / opacity / transparency / flatShading / side / clipping
 // planes / emissive are the material's own properties as before.
-// build 620: each segment's material preset (lighting.js MATERIALS) is a uniform shared by every mesh of that segment (one per segment key), so
+// each segment's material preset (lighting.js MATERIALS) is a uniform shared by every mesh of that segment (one per segment key), so
 // changing the preset (setSegmentMeshMaterial) updates the meshes in place, no rebuild; meshes without a segment key use the standard material.
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.webgpu.js';
-import { meshColorNode, patchStandardFragment, boxRadius, materialVec } from './lighting.js?v=20261018-build621';
+import { meshColorNode, patchStandardFragment, boxRadius, materialVec } from './lighting.js?v=20261020-build630';
 
 const TSL = THREE.TSL; // the TSL namespace of the webgpu build (three/tsl itself imports a bare specifier the app has no import map for)
 let backend = 'WEBGPU';

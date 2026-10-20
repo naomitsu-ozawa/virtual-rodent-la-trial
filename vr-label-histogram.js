@@ -1,5 +1,5 @@
-import { HIST_MIN, HIST_BINS } from './histogram.js?v=20261018-build621';
-import { accToHist, createAcc, textureU16 } from './histogram-texture.js?v=20261018-build621';
+import { HIST_MIN, HIST_BINS } from './histogram.js?v=20261020-build630';
+import { accToHist, createAcc, textureU16 } from './histogram-texture.js?v=20261020-build630';
 
 export const SLOTS = 4, REGION_COLORS = 14, LABELS = 1 + SLOTS + REGION_COLORS, UNLABELED = 0;
 export const UNLABELED_COLOR = '#8c969c';
@@ -241,7 +241,7 @@ export function passPlan(input) {
 }
 
 // bin counts [LABELS x HIST_BINS] -> one HU histogram per label (null when the label has no voxel) and the total, each weighted by w (volume
-// voxels per grid voxel). Each bin count is a whole number, weighted once (as build 565's countsToAcc), so the result does not depend on the order
+// voxels per grid voxel). Each bin count is a whole number, weighted once (as's countsToAcc), so the result does not depend on the order
 // the voxels were counted in.
 // (one label per call of binLabel: the pass spreads them over frames)
 function binLabel(counts, L, w, acc, totalAcc) {
@@ -322,7 +322,7 @@ export function createVrLabelHistogram({ yieldFn = () => new Promise(r => setTim
       const plan = timed(() => passPlan(input), 'planMs'), h = await count(j, plan, w);
       if (!h || j.cancelled) return false;
       const next = { key: input.key, shownMask: input.shownMask, hists: h.hists, total: h.total, dims: d, reduced: d[0] !== v[0] || d[1] !== v[1] || d[2] !== v[2] };
-      // build 569: the same pass again (self-check, histForce) giving the same result: nothing on the board changes, so no redraw / upload
+      // the same pass again (self-check, histForce) giving the same result: nothing on the board changes, so no redraw / upload
       if (sameResult(result, next) && !hadError) quiet = true; else result = next;
       stats.ms = now() - t0;
       return true;

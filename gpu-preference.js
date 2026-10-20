@@ -1,4 +1,4 @@
-// GPU preference ("使う GPU", build 515): which GPU the WebGPU adapter request asks for. Pure, no imports, so it can be
+// GPU preference ("使う GPU"): which GPU the WebGPU adapter request asks for. Pure, no imports, so it can be
 // loaded by unit tests without a DOM. The choice is offered (and honoured) only on Linux / Windows desktops, where a
 // machine can have two GPUs (integrated + NVIDIA / AMD). Mac, iPad, phones and anything else always stay on 'auto',
 // which is exactly the request the app made before this setting existed.
@@ -45,9 +45,9 @@ export function gpuPreferenceInfoText(requested, adapter) {
   return 'GPU pref ' + requested.effective + ' → ' + got + (adapter && requested.optionIndex >= 0 ? ' (request #' + (requested.optionIndex + 1) + ')' : '');
 }
 
-// The setting 「ハイブリッド環境での処理」 (build 517): what the app does on a Linux machine with an Intel display GPU and an
+// The setting 「ハイブリッド環境での処理」: what the app does on a Linux machine with an Intel display GPU and an
 // NVIDIA GPU (the hybrid case of gpu-split.js). 'hybrid' (default) = render on the display GPU, compute on NVIDIA (the split of
-// build 516); 'primary' = everything on the primary (display, low-power) GPU, one shared device as on a one-GPU machine.
+// ); 'primary' = everything on the primary (display, low-power) GPU, one shared device as on a one-GPU machine.
 // The row is shown on Linux only and the stored value is ignored everywhere else (Mac, iPad, Windows, Android: 'hybrid', i.e.
 // nothing changes); it only has an effect where the hybrid case is detected (a single-GPU machine ignores it).
 export function gpuHybridModeSupported(nav = globalThis.navigator) {

@@ -1,21 +1,21 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { indexedGeometryFromTrianglePositions, makeSource3DCoordinates, makeVolume3DCoordinates, Float32FaceBuilder, appendAnalysisRunBoundaryFaces } from './mesh-geometry.js?v=20261018-build621';
+import { indexedGeometryFromTrianglePositions, makeSource3DCoordinates, makeVolume3DCoordinates, Float32FaceBuilder, appendAnalysisRunBoundaryFaces } from './mesh-geometry.js?v=20261020-build630';
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.webgpu.js';
-import { createSurfaceMaterial } from './mesh-material.js?v=20261018-build621';
-import { list, surfaceSmoothStrength } from './ui-shell.js?v=20261018-build621';
-import { segmentState, segmentEditState } from './segments.js?v=20261018-build621';
-import { surfaceSmoothingActive } from './settings.js?v=20261018-build621';
-import { frameYield } from './utils.js?v=20261018-build621';
-import { constrainedSmoothPositions, constrainedSmoothSchedule } from './constrained-smooth.js?v=20261018-build621';
-import { smoothChunkHalo, createSeamLinker, OrderedChunkSmoother } from './smooth-chunks.js?v=20261018-build621';
-import { smoothMethod } from './smooth-workers.js?v=20261018-build621';
+import { createSurfaceMaterial } from './mesh-material.js?v=20261020-build630';
+import { list, surfaceSmoothStrength } from './ui-shell.js?v=20261020-build630';
+import { segmentState, segmentEditState } from './segments.js?v=20261020-build630';
+import { surfaceSmoothingActive } from './settings.js?v=20261020-build630';
+import { frameYield } from './utils.js?v=20261020-build630';
+import { constrainedSmoothPositions, constrainedSmoothSchedule } from './constrained-smooth.js?v=20261020-build630';
+import { smoothChunkHalo, createSeamLinker, OrderedChunkSmoother } from './smooth-chunks.js?v=20261020-build630';
+import { smoothMethod } from './smooth-workers.js?v=20261020-build630';
 // ignoreCut: runs that are not the segment itself (an analysis region), so the
 // segment's raw cut faces do not apply
-// slices of the neighbouring chunks smoothed with a chunk: smoothChunkHalo (build 603 / 612; smooth-chunks.js)
+// slices of the neighbouring chunks smoothed with a chunk: smoothChunkHalo
 // chunk size of the run surface in floats; tests set override to make small volumes take the chunked path (as a 512³ one)
 export const runSurfaceChunkFloats={override:0};
-// build 612: twice as large on a desktop while smoothing (each chunk is smoothed with halo slices on both sides)
+// twice as large on a desktop while smoothing (each chunk is smoothed with halo slices on both sides)
 export function runSurfaceChunkLimit(smooth=surfaceSmoothingActive()){return runSurfaceChunkFloats.override||((navigator.maxTouchPoints||0)>0?4:smooth?16:8)*1024*1024}
 // material of a segment surface (the mesh cache rebuilds materials from the CURRENT segment settings, never from storage)
 export function surfaceMaterialParams(seg,key,smooth=surfaceSmoothingActive()){
@@ -30,7 +30,7 @@ export function runSurfaceRoute(v){
 }
 export async function buildEditableRunsGroup(v,runs,key,shouldContinue=null,forceRaw=false,ignoreCut=false){
  const seg=segmentState[key],st=segmentEditState[key],smooth=!forceRaw&&surfaceSmoothingActive(),hasRawCut=!ignoreCut&&!!(st?.rawCutSurface&&st?.cutRuns);
- // build 612: no one-piece isosurface any more (a blurred field and marching tetrahedra, then Taubin): every run surface is
+ // no one-piece isosurface any more (a blurred field and marching tetrahedra, then Taubin): every run surface is
  // the voxel faces, smoothed by the constrained smoothing (constrained-smooth.js) chunk by chunk
  const coords=v.sourceBacked?makeSource3DCoordinates(v.series):makeVolume3DCoordinates(v),group=new THREE.Group(),builder=new Float32FaceBuilder(),limit=runSurfaceChunkLimit(smooth),pinnedKeys=hasRawCut?new Set():null;
  const params=surfaceMaterialParams(seg,key,smooth);
@@ -72,7 +72,7 @@ export function geometryFromSourcePositions(positions,applySmoothing=true,pinned
  }
  return geometry;
 }
-// build 612: the constrained smoothing of a welded voxel-face geometry (constrained-smooth.js) replaces Taubin: every vertex
+// the constrained smoothing of a welded voxel-face geometry (constrained-smooth.js) replaces Taubin: every vertex
 // stays within half a voxel of its lattice point, so the steps of a staircase relax but no 1-voxel structure is lost.
 // pinned: Set of vertex indices that keep their place (the raw cut faces)
 export function constrainedSmoothGeometry(geometry,strength,pinned=null,box=null){

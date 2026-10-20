@@ -1,17 +1,17 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { gpuStagesSupported, runGpuSourceFilters, gpuFilterRuntime, setGpuComputeBackend, addGpuStepTime } from './gpu-compute.js?v=20261018-build621';
-import { sourceVolume, filterOrder } from './state.js?v=20261018-build621';
-import { ww, spikeHoleStrength, spikeHoleThreshold, nlmStrength, nlmSearchRadius, nlmPatchRadius, anisotropicStrength, anisotropicKappa, anisotropicIterations, smoothingType, gaussianStrength, spatialPasses, sigmoidStrength, sigmoidCenter, sigmoidWidth, bilateralStrength, bilateralSpatial, bilateralIntensity, bilateralPasses, tvWeight, tvEps, tvIterations, unsharpRadius, unsharpAmount, unsharpThreshold } from './ui-shell.js?v=20261018-build621';
-import { frameYield, isIPhoneRuntime, isTabletRuntime, isDesktopRuntime } from './utils.js?v=20261018-build621';
-import { isNativeDicomTransferSyntax } from './dicom.js?v=20261018-build621';
-import { decodeSourceSlice, sourceSliceCache } from './volume-io.js?v=20261018-build621';
-import { cacheKey } from './gpu-volume-cache.js?v=20261018-build621';
-import { sourceFilterSignature as signatureOf, withSpacingWeights } from './filter-units.js?v=20261018-build621';
+import { gpuStagesSupported, runGpuSourceFilters, gpuFilterRuntime, setGpuComputeBackend, addGpuStepTime } from './gpu-compute.js?v=20261020-build630';
+import { sourceVolume, filterOrder } from './state.js?v=20261020-build630';
+import { ww, spikeHoleStrength, spikeHoleThreshold, nlmStrength, nlmSearchRadius, nlmPatchRadius, anisotropicStrength, anisotropicKappa, anisotropicIterations, smoothingType, gaussianStrength, spatialPasses, sigmoidStrength, sigmoidCenter, sigmoidWidth, bilateralStrength, bilateralSpatial, bilateralIntensity, bilateralPasses, tvWeight, tvEps, tvIterations, unsharpRadius, unsharpAmount, unsharpThreshold } from './ui-shell.js?v=20261020-build630';
+import { frameYield, isIPhoneRuntime, isTabletRuntime, isDesktopRuntime } from './utils.js?v=20261020-build630';
+import { isNativeDicomTransferSyntax } from './dicom.js?v=20261020-build630';
+import { decodeSourceSlice, sourceSliceCache } from './volume-io.js?v=20261020-build630';
+import { cacheKey } from './gpu-volume-cache.js?v=20261020-build630';
+import { sourceFilterSignature as signatureOf, withSpacingWeights } from './filter-units.js?v=20261020-build630';
 export const memoryFilterPreviewCache={map:new Map(),bytes:0};
 export const filterState={spikeHole:false,nlm:false,anisotropic:false,gaussian:false,sigmoid:false,bilateral:false,tv:false,unsharp:false};
 export function sourceSliceCacheLimit(){return isIPhoneRuntime()?64*1024*1024:isTabletRuntime()?192*1024*1024:256*1024*1024}
-// parallel read-ahead (build 294): one decode per slice even if requested twice
+// parallel read-ahead: one decode per slice even if requested twice
 const sliceInflight=new Map();
 export async function getCachedSourceSlice(meta){
  const hit=sourceSliceCache.map.get(meta);
@@ -40,7 +40,7 @@ export function sourceFilterWorkerMain(){
  function boxW(input,w,h,d,radius,sp){const out=new Float32Array(input.length),R=Math.max(1,Math.round(radius)),ax=[Math.sqrt(sp[0]),Math.sqrt(sp[1]),Math.sqrt(sp[2])].map(q=>{const A=(R+0.5)*q;return{A,K:Math.min(R,Math.max(0,Math.ceil(A-0.5-1e-9)))}}),tab=ax.map(({A,K})=>{const t=[];for(let k=-K;k<=K;k++)t.push(Math.min(1,Math.max(0,A-Math.abs(k)+0.5)));return t}),kx=ax[0].K,ky=ax[1].K,kz=ax[2].K,tx=tab[0],ty=tab[1],tz=tab[2];for(let z=0;z<d;z++)for(let y=0;y<h;y++)for(let x=0;x<w;x++){let sum=0,count=0;for(let dz=-kz;dz<=kz;dz++){const zz=z+dz;if(zz<0||zz>=d)continue;for(let dy=-ky;dy<=ky;dy++){const yy=y+dy;if(yy<0||yy>=h)continue;for(let dx=-kx;dx<=kx;dx++){const xx=x+dx;if(xx<0||xx>=w)continue;const wt=tz[dz+kz]*ty[dy+ky]*tx[dx+kx];sum+=wt*input[zz*h*w+yy*w+xx];count+=wt}}}out[z*h*w+y*w+x]=sum/Math.max(1e-12,count)}return out}
  function box(input,w,h,d,radius,sp){if(sp)return boxW(input,w,h,d,radius,sp);const out=new Float32Array(input.length),r=Math.max(1,Math.round(radius));for(let z=0;z<d;z++)for(let y=0;y<h;y++)for(let x=0;x<w;x++){let sum=0,count=0;for(let dz=-r;dz<=r;dz++){const zz=z+dz;if(zz<0||zz>=d)continue;for(let dy=-r;dy<=r;dy++){const yy=y+dy;if(yy<0||yy>=h)continue;for(let dx=-r;dx<=r;dx++){const xx=x+dx;if(xx<0||xx>=w)continue;sum+=input[zz*h*w+yy*w+xx];count++}}}out[z*h*w+y*w+x]=sum/Math.max(1,count)}return out}
  function unsharp(input,w,h,d,p){const blur=box(input,w,h,d,p.radius,p.sp),out=new Float32Array(input.length),th=+p.thresholdHU;for(let i=0;i<input.length;i++){const detail=input[i]-blur[i];out[i]=Math.abs(detail)>=th?input[i]+p.amount*detail:input[i]}return out}
- // build 436: S-curve around the centre within ±width/2 (HU kept: centre fixed, values outside unchanged, strength 0 = none); same formula as cpuSigmoid and the WGSL kernel
+ // S-curve around the centre within ±width/2 (HU kept: centre fixed, values outside unchanged, strength 0 = none); same formula as cpuSigmoid and the WGSL kernel
  function sigmoid(input,p){const out=new Float32Array(input.length),c=+p.center,hw=Math.max(1,(+p.width||300)/2),g=Math.max(0,+p.strength||0)*6,k=g>1e-4?1/Math.tanh(g):0;for(let i=0;i<input.length;i++){const x=input[i],t=(x-c)/hw;out[i]=k&&t>-1&&t<1?c+hw*Math.tanh(g*t)*k:x}return out}
  function stage(input,w,h,d,s){const p=s.params;if(s.key==='spikeHole')return spike(input,w,h,d,p);if(s.key==='nlm')return nlm(input,w,h,d,p);if(s.key==='anisotropic')return anisotropic(input,w,h,d,p);if(s.key==='gaussian')return p.mode==='median'?median(input,w,h,d,p):gaussian(input,w,h,d,p);if(s.key==='sigmoid')return sigmoid(input,p);if(s.key==='bilateral')return bilateral(input,w,h,d,p);if(s.key==='tv')return tv(input,w,h,d,p);if(s.key==='unsharp')return unsharp(input,w,h,d,p);return input}
  function extract(data,w,h,t){const out=new Float32Array(t.width*t.height*t.depth);let q=0;for(let z=0;z<t.depth;z++)for(let y=0;y<t.height;y++){const src=((t.z+z)*h+(t.y+y))*w+t.x;out.set(data.subarray(src,src+t.width),q);q+=t.width}return out}
@@ -145,10 +145,9 @@ export async function readSourceSubregion(meta,x0,y0,width,height,preferFullSlic
 }
 export async function readSourceRegion(series,box,revision,preferFullSliceCache=false){
  const out=new Float32Array(box.width*box.height*box.depth),plane=box.width*box.height;
- // build 294 (measured build 293: read 26.6 s = file 8.7 + decode 6.9 + yield 7.0):
- // - up to 4 slices are read ahead in parallel so file reads overlap (build 310: 8 measured slower than 4 on the Mac; ?ahead=N to try)
+ // - up to 4 slices are read ahead in parallel so file reads overlap
  // - whole-width boxes copy straight from the cached slice (one memcpy)
- // - yield to the UI by time (every ~60 ms since build 309), not every 2 slices
+ // - yield to the UI by time (every ~60 ms), not every 2 slices
  const fullWidth=preferFullSliceCache&&box.x===0&&box.width===series.columns,AHEAD=globalThis.__vrlReadAhead||4,pending=new Map();
  const fetch=z=>{if(z>=box.depth||pending.has(z))return;const meta=series.slices[box.z+z];pending.set(z,fullWidth?getCachedSourceSlice(meta):readSourceSubregion(meta,box.x,box.y,box.width,box.height,preferFullSliceCache))};
  let lastYield=performance.now();
@@ -225,7 +224,7 @@ export async function getFilteredSourcePlaneValues(p,idx,series,keyPrefix='mpr',
  }
  if(revision!==sourceFilterRuntime.revision||stale())throw new Error('__SUPERSEDED__');sourceFilterCacheSet(cacheKey,out);return out;
 }
-// Budget for one filtered GPU-volume block (build 289): whole slices, as deep
+// Budget for one filtered GPU-volume block: whole slices, as deep
 // as fits. The old 8-slice blocks in 384x128 tiles re-read and re-filtered
 // each halo (gaussian x4: 16 slices read per 8 kept, 24 tiles per block).
 export function volumeBlockBudget(){
@@ -243,7 +242,7 @@ export async function getFilteredSourceAxialBlock(zStart,coreDepth,series,keyPre
  for(let y=0;y<h;y+=ty)for(let x=0;x<w;x+=tx){
   if(revision!==sourceFilterRuntime.revision)throw new Error('__SUPERSEDED__');
   const tw=Math.min(tx,w-x),th=Math.min(ty,h-y),whole=pack&&tw===w&&th===h,tile=await processSourceRegion(series,{x,y,z:zStart,width:tw,height:th,depth:outDepth},stages,keyPrefix+':'+zStart,revision,true,whole?pack:null);
-  // build 311: GPU returned texture-ready slices (no float block)
+  // GPU returned texture-ready slices (no float block)
   if(whole&&tile?.packed){if(revision!==sourceFilterRuntime.revision)throw new Error('__SUPERSEDED__');return{...tile,coreDepth:Math.min(coreDepth,d-zStart)}}
   const tc=performance.now();
   if(tw===w)out.set(tile.subarray(0,tw*th*outDepth),0);else for(let zz=0;zz<outDepth;zz++)for(let yy=0;yy<th;yy++){

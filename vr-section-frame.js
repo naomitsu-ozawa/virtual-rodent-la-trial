@@ -1,10 +1,10 @@
-// VR/AR section planes: the plane limit and the frame's depth state (build 509). Pure helpers: no three.js, no DOM.
+// VR/AR section planes: the plane limit and the frame's depth state. Pure helpers: no three.js, no DOM.
 //
-// Limit (build 509: 4 -> 10). The same number is in the volume shader (#define SECTION_PLANES in vr-view.js: the cutPlanes[] uniform array, the per-ray cross / slice
+// Limit. The same number is in the volume shader (#define SECTION_PLANES in vr-view.js: the cutPlanes[] uniform array, the per-ray cross / slice
 // arrays and their loops); tests/unit/vr-section-frame.test.js compares the two. Only the planes in use are tested: the shader's per-ray loops skip every index >= planeCount
 // (vr-view.js writes planeCount = the number of shown planes, never the limit).
 export const MAX_SECTION_PLANES = 10;
-// frame colours, one per plane index (the first four are the build 400 palette: soft gold, sky, rose, mint; the hands use vivid orange / indigo outside this set)
+// frame colours, one per plane index (the first four are the palette: soft gold, sky, rose, mint; the hands use vivid orange / indigo outside this set)
 export const PLANE_COLORS = [0xf2d27a, 0x8ec5ff, 0xf5a3c7, 0x9be3b0, 0xc4a8ff, 0xffb980, 0x7fdcd2, 0xd6e885, 0xff9f94, 0xd2d9e0];
 // the colour of the next plane: the first palette colour no plane uses (a palette of 10 for at most 10 planes: always one free)
 export const nextPlaneColor = usedColors => { const used = new Set(usedColors); return PLANE_COLORS.find(c => !used.has(c)) ?? PLANE_COLORS[0]; };

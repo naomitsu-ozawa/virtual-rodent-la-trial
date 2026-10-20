@@ -1,10 +1,10 @@
-// HU line in VR, pure part (build 545): no DOM, no three.js, no app state (unit-tested in tests/unit/vr-hu-line-core.test.js).
+// HU line in VR, pure part: no DOM, no three.js, no app state (unit-tested in tests/unit/vr-hu-line-core.test.js).
 // The controller ray hit -> a voxel position of the shared model (hu-line-model.js), the update rate of the live panel, the panel's layout,
 // the plot geometry and the texts. The stateful part (three.js objects, the gesture, the sampling calls) is vr-hu-line.js.
-// build 558: also the VR self-check's HU線 scenario (below; the self-check runner has no DOM and no three.js either).
-import { registerVrSelfCheck } from './vr-self-check.js?v=20261018-build621';
+// also the VR self-check's HU線 scenario (below; the self-check runner has no DOM and no three.js either).
+import { registerVrSelfCheck } from './vr-self-check.js?v=20261020-build630';
 
-// VR self-check scenario (build 558, vr-self-check.js): the frame rate while a line is stretched, then the time of the full read after the release.
+// VR self-check scenario: the frame rate while a line is stretched, then the time of the full read after the release.
 // env.huLine (vr-view.js) = { beginDrag() -> '' | reason, moveTo(u), release(), reading(), cancel() }: a synthetic laser (no controller) drags a line
 // across the middle of the data for HU_LINE_DRAG_SECONDS (the live preview runs as in a real drag), releases it, and the full read is timed
 // (polled every 50 ms, at most HU_LINE_READ_TIMEOUT_MS). cancel() in finally puts back the line, the panel and the armed state as they were.
@@ -77,7 +77,7 @@ export const sameGrid = (a, b) => !!a && !!b && a.columns === b.columns && a.row
 // live preview: nothing is decoded, filtered or waited for. HU = (u16 - bias) * slope + intercept. The grid may be reduced against the volume
 // (VR texture <= 512 per side): then a sample is a trilinear read of the reduced grid = APPROXIMATE (shown as such); same grid: exact up to the
 // packing's rounding to one raw unit. The release always does the exact full read (effective-hu), so the final values equal the PC's.
-// build 566: the line is a straight line through the volume in 3D, not tied to any slice; an oblique line crosses many axial slices, and the 2D
+// the line is a straight line through the volume in 3D, not tied to any slice; an oblique line crosses many axial slices, and the 2D
 // caches (hu-line-live.js) hold only a few of them (NaN = a gap in the graph for every slice not cached). So the live values ALWAYS come from this
 // copy when it exists, also when its kind (filtered / raw) is not the one the mode asks for: then they are approximate (labelled 「VR表示データから
 // 概算」) and, when the filters are on but not applied to the 3D view, the panel says they are the unfiltered values.
@@ -120,7 +120,7 @@ export function panelLayout(w = PANEL_W, h = PANEL_H) {
   const py = head + gap + 6, plot = { x: pad + axisL, y: py, w: w - 2 * pad - axisL, h: h - pad - statH - gap - (axisB + 4) - py };
   const sw = (w - 2 * pad - 2 * gap) / 3, sy = h - pad - statH;
   return {
-    // build 566: two lines in the head: t1 = the title (HU線 · mode) and the length, t2 = the state (ライブ… / 計算中… / 読み取り失敗…), 20 px, above the plot
+    // two lines in the head: t1 = the title (HU線 · mode) and the length, t2 = the state (ライブ… / 計算中… / 読み取り失敗…), 20 px, above the plot
     pad, head: { x: pad, y: 0, w: w - 2 * pad, h: head, t1: 20, t2: 45 }, plot,
     axisX: { x: plot.x, y: plot.y + plot.h + 4, w: plot.w, h: axisB },
     stats: [0, 1, 2].map(i => ({ x: pad + i * (sw + gap), y: sy, w: sw, h: statH }))
@@ -208,7 +208,7 @@ export function glyphsInto(str, xPx, yPx, sizePx, align, atlas, pos, uv, at, zOf
   return at;
 }
 // Texts (ja / en). modeKey: 'filtered' | 'raw' (the mode really read). busy: the full read is running (a live preview is shown meanwhile).
-// build 566: head = 「HU線 · mode」 (first line), status = the state (second line); title = both (the background key and the tests). A failed full
+// head = 「HU線 · mode」 (first line), status = the state (second line); title = both (the background key and the tests). A failed full
 // read wins over the live state (the live values stay plotted, the title says the read failed). unfiltered: the live values are the raw data
 // although the mode asks for filtered ones (filters on but not applied to the 3D view).
 export function panelTexts(lang, { stats, lengthMm, modeKey, live, approx, busy, empty, failed, unfiltered }) {

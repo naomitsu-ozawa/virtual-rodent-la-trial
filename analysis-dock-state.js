@@ -1,4 +1,4 @@
-// Placement / size / persistence rules of the analysis dock (build 540). Pure: no DOM, no storage of its own (the storage is passed in),
+// Placement / size / persistence rules of the analysis dock. Pure: no DOM, no storage of its own (the storage is passed in),
 // so the unit tests and a later VR panel can use the same rules. The result models themselves stay where they are
 // (histogram.js, line-profile.js); the dock only decides where their cards are shown.
 //
@@ -22,7 +22,7 @@ const W_DEF = 380;
 export const ANALYSIS_CARDS = [
   { id: 'hist', boxId: 'seg-hist-result', toggleId: 'seg-hist-toggle', titleKey: 'segHist' },
   { id: 'line', boxId: 'line-profile-result', toggleId: 'line-profile-toggle', titleKey: 'lineProfile' },
-  { id: 'crop', boxId: 'crop-export-panel', toggleId: 'crop-export-toggle', titleKey: 'cropTitle' } // build 573 (absent from the DOM when CROP_EXPORT_UI_ENABLED is false)
+  { id: 'crop', boxId: 'crop-export-panel', toggleId: 'crop-export-toggle', titleKey: 'cropTitle' } // (absent from the DOM when CROP_EXPORT_UI_ENABLED is false)
 ];
 
 const num = (x, lo, hi, def) => (x !== null && x !== '' && Number.isFinite(+x) ? Math.min(hi, Math.max(lo, Math.round(+x))) : def);

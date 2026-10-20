@@ -1,8 +1,8 @@
-import { rebinHist, niceStep, huToX, windowFor, HIST_MIN, HIST_MAX } from './histogram.js?v=20261018-build621';
-import { PLOT_OV, PLOT_OV_SCALE, AXIS_GRAB, AUTO_BTN, END_LABEL_Y, DRAG_REDRAW_MS, axisTarget, localToPxX, localToPxY, dragWindow, PANEL_W, PANEL_H, PLOT, LEGEND, STATUS_Y, TITLE_Y, X_TICK_Y, X_AXIS_Y, Y_AXIS_X, PROG_PX, PROG_W_M, boardHeightM, pxToLocalX, pxToLocalY, columnsFor, barFraction, countLabel, yTicks, STACK_ORDER, stackColumn, legendItems, legendLayout, titleText, yAxisText, progressText, shouldRedraw } from './vr-histogram-layout.js?v=20261018-build621';
-import { registerVrSelfCheck } from './vr-self-check.js?v=20261018-build621';
+import { rebinHist, niceStep, huToX, windowFor, HIST_MIN, HIST_MAX } from './histogram.js?v=20261020-build630';
+import { PLOT_OV, PLOT_OV_SCALE, AXIS_GRAB, AUTO_BTN, END_LABEL_Y, DRAG_REDRAW_MS, axisTarget, localToPxX, localToPxY, dragWindow, PANEL_W, PANEL_H, PLOT, LEGEND, STATUS_Y, TITLE_Y, X_TICK_Y, X_AXIS_Y, Y_AXIS_X, PROG_PX, PROG_W_M, boardHeightM, pxToLocalX, pxToLocalY, columnsFor, barFraction, countLabel, yTicks, STACK_ORDER, stackColumn, legendItems, legendLayout, titleText, yAxisText, progressText, shouldRedraw } from './vr-histogram-layout.js?v=20261020-build630';
+import { registerVrSelfCheck } from './vr-self-check.js?v=20261020-build630';
 
-// VR self-check scenario (build 557, vr-self-check.js): the frame rate while the histogram pass runs. env.histogram (vr-view.js) =
+// VR self-check scenario: the frame rate while the histogram pass runs. env.histogram (vr-view.js) =
 // { isOpen(), open(), close(), forceCompute(), busy() }. The board is opened and the pass is started again each time it finishes, so it runs during
 // the whole measurement; the note says how many passes finished and the longest one. Restored in finally (closed again when it was closed).
 export const HISTOGRAM_SELF_CHECK = {
@@ -56,7 +56,7 @@ export function createVrHistogramPanel(THREE, opts) {
   };
   const rd = { dirty: false, now: 0, lastDraw: 0 }; // the argument of shouldRedraw, reused every frame
   let open = false, dirty = false, lastDraw = -1e9, drawCount = 0, shownWin = null;
-  // build 570: the highlight quads of the grab zones (x axis ends) and the 「自動」 button: opacity only, never a redraw
+  // the highlight quads of the grab zones (x axis ends) and the 「自動」 button: opacity only, never a redraw
   const pxW = px => px / PANEL_W * widthM, pxH = py => py / PANEL_H * boardHeightM(widthM);
   const quad = (x0, y0, w0, h0) => { // clipped to the board, so the right end's zone (it reaches past PANEL_W) never hangs off the edge
     const x = Math.max(0, x0), y = Math.max(0, y0), w = Math.min(PANEL_W, x0 + w0) - x, h = Math.min(PANEL_H, y0 + h0) - y;
@@ -69,7 +69,7 @@ export function createVrHistogramPanel(THREE, opts) {
   const dragWin = [0, 0];
   const showLit = () => { for (const k in lit) { const a = drag ? (drag.end === k ? 0.3 : 0) : hoverT === k ? 0.16 : 0; lit[k].material.opacity = a; lit[k].visible = a > 0; } };
 
-  // ---- build 571: the drag overlay (PLOT_OV, half resolution): only it follows a dragged end; the board under it is blank there while dragging ----
+  // ---- the drag overlay (PLOT_OV, half resolution): only it follows a dragged end; the board under it is blank there while dragging ----
   const oc = document.createElement('canvas'); oc.width = Math.round(PLOT_OV.w * PLOT_OV_SCALE); oc.height = Math.round(PLOT_OV.h * PLOT_OV_SCALE);
   const octx = oc.getContext('2d'), otex = new THREE.CanvasTexture(oc); otex.colorSpace = THREE.SRGBColorSpace;
   const ov = new THREE.Mesh(new THREE.PlaneGeometry(pxW(PLOT_OV.w), pxH(PLOT_OV.h)), new THREE.MeshBasicMaterial({ map: otex, transparent: true, toneMapped: false, depthWrite: false }));
@@ -115,7 +115,7 @@ export function createVrHistogramPanel(THREE, opts) {
       let y = PLOT.y + PLOT.h;
       for (let i = 0; i < part.length; i++) { const h = part[i]; if (!h) continue; c.fillStyle = colors[i]; c.fillRect(PLOT.x + k * bw, y - h, Math.max(1.5, bw - 0.4), h); y -= h; }
     }
-    // build 570: the window's ends under the axis ends (the grab targets)
+    // the window's ends under the axis ends (the grab targets)
     c.font = 'bold 22px system-ui,sans-serif'; c.fillStyle = '#ffd27a';
     c.textAlign = 'left'; c.fillText('◀ ' + lo, PLOT.x - 40, END_LABEL_Y); c.textAlign = 'right'; c.fillText(hi + ' ▶', PLOT.x + PLOT.w + 20, END_LABEL_Y);
     c.textAlign = 'left';
@@ -149,7 +149,7 @@ export function createVrHistogramPanel(THREE, opts) {
       ctx.fillStyle = it.color; ctx.fillRect(it.x, it.y - LEGEND.swatch / 2, LEGEND.swatch, LEGEND.swatch);
       ctx.fillStyle = '#fff'; ctx.fillText(it.name, it.x + LEGEND.swatch + 10, it.y + 1);
     }
-    // build 570: the 「自動」 button
+    // the 「自動」 button
     const auto = !drag && view.range?.mode === 'auto';
     ctx.fillStyle = auto ? 'rgba(127,211,255,.85)' : 'rgba(255,255,255,.12)'; ctx.beginPath(); ctx.roundRect(AUTO_BTN.x, AUTO_BTN.y, AUTO_BTN.w, AUTO_BTN.h, 12); ctx.fill();
     ctx.fillStyle = auto ? '#0e141b' : '#fff'; ctx.textAlign = 'center'; ctx.font = 'bold 24px system-ui,sans-serif'; ctx.fillText(L.auto || '自動', AUTO_BTN.x + AUTO_BTN.w / 2, AUTO_BTN.y + AUTO_BTN.h / 2 + 1);
@@ -161,7 +161,7 @@ export function createVrHistogramPanel(THREE, opts) {
   return {
     group, board, canvas,
     get drawCount() { return drawCount; }, // whole-board redraws (1024 x 640)
-    get overlayDrawCount() { return ovCount; }, // build 571: drag overlay redraws (PLOT_OV at half resolution)
+    get overlayDrawCount() { return ovCount; }, // drag overlay redraws (PLOT_OV at half resolution)
     overlay: ov, overlayCanvas: oc,
     get isOpen() { return open; },
     get window() { return shownWin; }, // the HU window [lo, hi] last drawn (null before data)
@@ -172,7 +172,7 @@ export function createVrHistogramPanel(THREE, opts) {
     },
     // new data / display range / scale / language: the next update() redraws (at most one per MIN_GAP_MS)
     invalidate() { dirty = true; },
-    // build 570: the laser on the board (board-local metres): 'lo' / 'hi' (an end of the x axis), 'auto' or null; only once data is shown
+    // the laser on the board (board-local metres): 'lo' / 'hi' (an end of the x axis), 'auto' or null; only once data is shown
     axisTargetAt(x, y) { return open && shownWin ? axisTarget(localToPxX(x, widthM), localToPxY(y, widthM)) : null; },
     setAxisHover(t) { if (t !== hoverT) { hoverT = t; showLit(); } },
     // grab an end at board x (metres); false when nothing is shown

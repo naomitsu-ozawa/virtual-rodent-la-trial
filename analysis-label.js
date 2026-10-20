@@ -1,4 +1,4 @@
-// Analysis result labels (build 523): the label of an analysis result (colour, number, segments, volume) pinned at a point of the volume, in VR and on the PC / iPad 3D view,
+// Analysis result labels: the label of an analysis result (colour, number, segments, volume) pinned at a point of the volume, in VR and on the PC / iPad 3D view,
 // and MOVABLE in both. Pure functions (no DOM, no three.js); the label lives on the analysis region itself (region.label), so it is saved in the project with the
 // region, follows the region's removal for free and is the same object for every view.
 //   label = { anchor:{i,j,k}, offset?:{i,j,k} }
@@ -6,7 +6,7 @@
 //   offset : where the user left the label, as the vector from the anchor in VOXEL units (the same convention as a distance label's labelOffset in measurements.js), so it does not
 //            depend on the model's move / rotation / scale and is the same in VR and on the PC. No offset = the view's default placement (beside the anchor, facing the viewer).
 // A leader line joins a moved label to its anchor (leaderVisible).
-import { stepDelta, offsetFromDelta } from './measure-label.js?v=20261018-build621';
+import { stepDelta, offsetFromDelta } from './measure-label.js?v=20261020-build630';
 
 export const ANALYSIS_LABEL_MAX=1e4; // |component| limit (voxels): anything beyond is a corrupt file, dropped
 const num=(x)=>typeof x==='number'&&Number.isFinite(x)&&Math.abs(x)<=ANALYSIS_LABEL_MAX;
@@ -80,6 +80,10 @@ export function setRegionLabelOffset(region,offset){
 // the label of a region for the project file (a clean copy) / for a snapshot, or undefined
 export const labelForProject=region=>normalizeAnalysisLabel(region?.label)||undefined;
 
+// a result's label follows its segments' visibility (VR; the PC 3D view gets it through analysisRegionShown): shown while the result has no segment, or at least one of its segments
+// is shown (`isShown(key)`); hidden while all of them are hidden. Nothing about the label changes (its anchor / moved place stay), so showing the segment again brings it back where it was.
+export const labelSegmentsShown=(segmentKeys,isShown)=>!segmentKeys?.length||segmentKeys.some(k=>isShown(k));
+
 // ---- the views' per-voxel steps ----
 // VR: object-space change per voxel along i / j / k (vr-point.js voxelToLocal); PC 3D: crosshair.js voxelToLocal3D (the longest side is 3.3 units)
 export const vrVoxelStep=(halfExt,dims)=>[2*halfExt[0]/dims.columns,-2*halfExt[1]/dims.rows,2*halfExt[2]/dims.slices];
@@ -96,7 +100,7 @@ export function rectEdgePoint(dx,dy,hw,hh){
  return{x:dx*s,y:dy*s};
 }
 
-// ---- the anchor of a label pinned on the PC (build 524) ----
+// ---- the anchor of a label pinned on the PC ----
 // A result's inside voxel would put its card INSIDE the tissue in VR (a ghost behind bone), so the PC pins on the result's SURFACE as the current camera sees it: march from the eye
 // (voxel units, {i,j,k}) towards a voxel inside the result and take the first sample that lies in it (contains(i,j,k) on rounded voxel indices). Deterministic, at most maxSteps tests
 // (a long ray is cut to its last maxSteps samples, the part nearest the target). Returns the entry point {i,j,k} (floats), or null when the ray never meets the result.

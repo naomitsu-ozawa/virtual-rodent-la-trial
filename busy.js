@@ -1,11 +1,11 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { processingOverlay, processingOverlayLabel, resetFilterBtn, gaussianBtn, spikeHoleBtn, nlmBtn, anisotropicBtn, sigmoidBtn, smoothingType, gaussianStrength, spatialPasses, spikeHoleStrength, spikeHoleThreshold, nlmStrength, nlmSearchRadius, nlmPatchRadius, anisotropicStrength, anisotropicIterations, sigmoidStrength, sigmoidCenter, sigmoidWidth, bilateralStrength, bilateralSpatial, bilateralIntensity, bilateralPasses, tvWeight, tvIterations, unsharpRadius, unsharpAmount, unsharpThreshold, prog, bar, progLabel, anisotropicKappa } from './ui-shell.js?v=20261018-build621';
-import { sourceVolume } from './state.js?v=20261018-build621';
-import { filterState } from './source-filters.js?v=20261018-build621';
-import { setBusySlot } from './progress-modal.js?v=20261018-build621';
+import { processingOverlay, processingOverlayLabel, resetFilterBtn, gaussianBtn, spikeHoleBtn, nlmBtn, anisotropicBtn, sigmoidBtn, smoothingType, gaussianStrength, spatialPasses, spikeHoleStrength, spikeHoleThreshold, nlmStrength, nlmSearchRadius, nlmPatchRadius, anisotropicStrength, anisotropicIterations, sigmoidStrength, sigmoidCenter, sigmoidWidth, bilateralStrength, bilateralSpatial, bilateralIntensity, bilateralPasses, tvWeight, tvIterations, unsharpRadius, unsharpAmount, unsharpThreshold, prog, bar, progLabel, anisotropicKappa } from './ui-shell.js?v=20261020-build630';
+import { sourceVolume } from './state.js?v=20261020-build630';
+import { filterState } from './source-filters.js?v=20261020-build630';
+import { setBusySlot } from './progress-modal.js?v=20261020-build630';
 export function setProcessingBusy(busyState,label='Processing',lockControls=true){
- // build 405: shown in the central progress modal (calls are paired: counted slot)
+ // shown in the central progress modal (calls are paired: counted slot)
  setBusySlot('processing',busyState,{label,counted:true});
  if(processingOverlay){
   processingOverlay.classList.toggle('is-hidden',!busyState||!lockControls);

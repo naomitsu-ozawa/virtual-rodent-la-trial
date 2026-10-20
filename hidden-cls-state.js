@@ -1,4 +1,4 @@
-// State handling of the classification bytes behind the 3D position-comment markers' hidden judgement (build 465). Pure (no three.js, no DOM,
+// State handling of the classification bytes behind the 3D position-comment markers' hidden judgement. Pure (no three.js, no DOM,
 // the clock and timers are injectable) so it is unit-tested; vr-view.js hiddenClsFor plugs in the real keys and builders.
 //  - one build at a time; a key change during a build makes that build stale (dropped when it comes back), the next one starts after the debounce
 //  - debounce: a build starts only when the key has been the same for debounceMs (a slider drag does not start a build per step)

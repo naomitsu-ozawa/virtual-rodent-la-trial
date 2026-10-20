@@ -1,4 +1,4 @@
-// VR laser hit on the volume (build 402). The ray, in the volume's object
+// VR laser hit on the volume. The ray, in the volume's object
 // space (box ±halfExt, the shader's texCoord: x and z up the index, y down),
 // is marched in half-voxel steps over the classification bytes (nearest
 // voxel) to the first voxel where one of the given channels is >= 128 (the
@@ -9,7 +9,7 @@
 export function marchClassificationHit(o,q,halfExt,dims,cls,chs,planes=[],planeCount=0,planeCut=0){
  const h=marchClassificationHitInfo(o,q,halfExt,dims,cls,chs,planes,planeCount,planeCut);return h?h.t:-1;
 }
-// build 423: the same march, returning the hit voxel and the channel that matched (null when nothing is hit)
+// the same march, returning the hit voxel and the channel that matched (null when nothing is hit)
 // tMin / tMax (optional, default 0 / Infinity): only the part of the ray between them is marched (VR points: from just outside a point's own
 // voxel to the head, see vr-point.js pointIsHidden)
 export function marchClassificationHitInfo(o,q,halfExt,dims,cls,chs,planes=[],planeCount=0,planeCut=0,tMin=0,tMax=Infinity){

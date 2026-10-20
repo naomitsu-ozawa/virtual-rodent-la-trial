@@ -1,14 +1,14 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { set3DBusy } from './three-status.js?v=20261018-build621';
-import { useWorkspaceUi, updateRenderModeControl, clearResidentMprJobs, prepareResidentGpuVolume, activateMedicalVolume, setThreeVolumeOverlay } from './data-load.js?v=20261018-build621';
-import { appVersionBadge, planes, ipadGpuQualityControl, ipadGpuQuality, footer } from './ui-shell.js?v=20261018-build621';
-import { sceneState, volume, currentLanguage, ipadGpuTargetSide, setIpadGpuTargetSide, sourceVolume, threeRenderMode, setResidentMprReadbackDisabled, setThreeRenderMode } from './state.js?v=20261018-build621';
-import { updateMprCanvasPhysicalAspect, schedulePlaneRender } from './mpr-render.js?v=20261018-build621';
-import { request3DRender } from './scene3d.js?v=20261018-build621';
-import { applyLanguage } from './i18n.js?v=20261018-build621';
-import { isIPhoneRuntime, isTabletRuntime, fmt } from './utils.js?v=20261018-build621';
-import { settings } from './app-settings.js?v=20261018-build621';
+import { set3DBusy } from './three-status.js?v=20261020-build630';
+import { useWorkspaceUi, updateRenderModeControl, clearResidentMprJobs, prepareResidentGpuVolume, activateMedicalVolume, setThreeVolumeOverlay } from './data-load.js?v=20261020-build630';
+import { appVersionBadge, planes, ipadGpuQualityControl, ipadGpuQuality, footer } from './ui-shell.js?v=20261020-build630';
+import { sceneState, volume, currentLanguage, ipadGpuTargetSide, setIpadGpuTargetSide, sourceVolume, threeRenderMode, setResidentMprReadbackDisabled, setThreeRenderMode } from './state.js?v=20261020-build630';
+import { updateMprCanvasPhysicalAspect, schedulePlaneRender } from './mpr-render.js?v=20261020-build630';
+import { request3DRender } from './scene3d.js?v=20261020-build630';
+import { applyLanguage } from './i18n.js?v=20261020-build630';
+import { isIPhoneRuntime, isTabletRuntime, fmt } from './utils.js?v=20261020-build630';
+import { settings } from './app-settings.js?v=20261020-build630';
 export function initIPadWorkspaceUi(){
  if(!useWorkspaceUi())return;
  const shell=document.querySelector('.app-shell'),workspace=document.querySelector('.workspace'),sidebar=document.querySelector('.sidebar'),sidebarScroll=document.querySelector('.sidebar-scroll'),viewer=document.querySelector('#viewer-grid'),topbar=document.querySelector('.topbar');
@@ -24,7 +24,7 @@ export function initIPadWorkspaceUi(){
  const sep=()=>{const d=document.createElement('span');d.className='ws-sep';d.setAttribute('aria-hidden','true');return d};
  toolbar.prepend(cap('wsScreen','画面'));
  const mprTabs=toolbar.querySelector('.ipad-mpr-tabs');
- // build 604: the 2D plane group only means something with 2D views on screen (2D / 分割) - hidden in 3D (.ws-2d-only)
+ // the 2D plane group only means something with 2D views on screen (2D / 分割) - hidden in 3D (.ws-2d-only)
  if(mprTabs){const s2=sep();s2.classList.add('ws-2d-only');mprTabs.classList.add('ws-2d-only');mprTabs.before(s2);mprTabs.prepend(cap('ws2dPlane','2D断面'))}
  const overlay3d=document.querySelector('.three-overlay-controls'),gpuToggle=document.querySelector('#render-mode-toggle');
  if(overlay3d){
@@ -45,7 +45,7 @@ export function initIPadWorkspaceUi(){
  const moveInto=(target,selectors)=>{for(const q of selectors)for(const el of [...document.querySelectorAll(q)])target.append(el)};
  if(dataPanel){
   dataPanel.dataset.ipadDrawerSection='data';
-  // build 587: open / save at the top of the データ panel (the same buttons, moved: ids, handlers and i18n are unchanged)
+  // open / save at the top of the データ panel (the same buttons, moved: ids, handlers and i18n are unchanged)
   const q=id=>document.getElementById(id),open=[q('sample-demo-button')].filter(Boolean);
   if(open.length){
    const box=document.createElement('div');box.className='ws-file-actions';
@@ -142,7 +142,7 @@ export function initIPadWorkspaceUi(){
   setTimeout(run,120);
  };
  const setDrawerTab=tab=>{
-  if(tab==='prefs')document.dispatchEvent(new Event('vrl-settings-sync')); // build 589: the embedded settings show the stored values
+  if(tab==='prefs')document.dispatchEvent(new Event('vrl-settings-sync')); // the embedded settings show the stored values
   drawerTab=tab;
   drawerTabs.querySelectorAll('[data-ipad-drawer-tab]').forEach(b=>b.classList.toggle('is-active',b.dataset.ipadDrawerTab===tab));
   const active=drawerTabs.querySelector('[data-ipad-drawer-tab="'+tab+'"] .ws-rail-label');if(headTitle&&active){headTitle.dataset.i18n=active.dataset.i18n;headTitle.textContent=active.textContent}
@@ -156,7 +156,7 @@ export function initIPadWorkspaceUi(){
  };
  document.addEventListener('vrl-ipad-settings-tab',onSettingsTabRequest);
 
- // build 420: the 2D tab takes part in the shared plane selection (app.js selectPlane)
+ // the 2D tab takes part in the shared plane selection (app.js selectPlane)
  const setMprPlane=(plane,fromSync=false)=>{
   mprPlane=['axial','coronal','sagittal'].includes(plane)?plane:'axial';
   if(!fromSync)document.dispatchEvent(new CustomEvent('vrl-plane-chosen',{detail:{plane:mprPlane,source:'workspace'}}));

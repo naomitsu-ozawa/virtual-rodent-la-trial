@@ -1,4 +1,4 @@
-// Memory ledger (build 303, diagnostics): GPU textures/buffers created on the
+// Memory ledger: GPU textures/buffers created on the
 // shared WebGPU device, by label, plus the app's own caches. Safari gives a
 // page no memory API, so this is what the app itself holds (browser internals
 // and garbage not yet collected are not included).

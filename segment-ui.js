@@ -1,17 +1,17 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { mark3DStale } from './three-state.js?v=20261018-build621';
-import { $, footer, threeLabel, ctRangeAuto, ctRangeFull, wc, ww, sigmoidCenter, wcVal, wwVal, sigmoidCenterValue, segmentControls, segmentAddSelect, segmentAddButton } from './ui-shell.js?v=20261018-build621';
-import { sceneState, setAnalysisRegions, setAnalysisFocusedRegionId, setNextAnalysisRegionId, setNextAnalysisColorIndex, volume, segmentRenderTimer, incSourceRenderRevision, threeRenderMode, ctRangeMode, ctRangeProfile, setCtRangeMode, sourceVolume } from './state.js?v=20261018-build621';
-import { dispose } from './surface-mesh.js?v=20261018-build621';
-import { request3DRender } from './scene3d.js?v=20261018-build621';
-import { renderAnalysisResults } from './analysis-results.js?v=20261018-build621';
-import { segmentEditState, segmentEditGen, SEGMENT_PRESET_ORDER, segmentState, segmentExclusive, commitExclusiveRanges, gpuSegmentSignature } from './segments.js?v=20261018-build621';
-import { canEnableSegment } from './segment-slots.js?v=20261018-build621';
-import { tr } from './i18n.js?v=20261018-build621';
-import { niceCtStep, formatCtValue } from './utils.js?v=20261018-build621';
-import { syncGpuVolumeEdits } from './gpu-volume-data.js?v=20261018-build621';
-import { renderAll } from './mpr-render.js?v=20261018-build621';
+import { mark3DStale } from './three-state.js?v=20261020-build630';
+import { $, footer, threeLabel, ctRangeAuto, ctRangeFull, wc, ww, sigmoidCenter, wcVal, wwVal, sigmoidCenterValue, segmentControls, segmentAddSelect, segmentAddButton } from './ui-shell.js?v=20261020-build630';
+import { sceneState, setAnalysisRegions, setAnalysisFocusedRegionId, setNextAnalysisRegionId, setNextAnalysisColorIndex, volume, segmentRenderTimer, incSourceRenderRevision, threeRenderMode, ctRangeMode, ctRangeProfile, setCtRangeMode, sourceVolume } from './state.js?v=20261020-build630';
+import { dispose } from './surface-mesh.js?v=20261020-build630';
+import { request3DRender } from './scene3d.js?v=20261020-build630';
+import { renderAnalysisResults } from './analysis-results.js?v=20261020-build630';
+import { segmentEditState, segmentEditGen, SEGMENT_PRESET_ORDER, segmentState, segmentExclusive, commitExclusiveRanges, gpuSegmentSignature } from './segments.js?v=20261020-build630';
+import { canEnableSegment } from './segment-slots.js?v=20261020-build630';
+import { tr } from './i18n.js?v=20261020-build630';
+import { niceCtStep, formatCtValue } from './utils.js?v=20261020-build630';
+import { syncGpuVolumeEdits } from './gpu-volume-data.js?v=20261020-build630';
+import { renderAll } from './mpr-render.js?v=20261020-build630';
 export function installSegmentReorder(onCommit){
  let drag=null;
  const cards=()=>[...segmentControls.querySelectorAll('[data-segment]')];
@@ -36,7 +36,7 @@ export function installSegmentReorder(onCommit){
   window.addEventListener('pointerup',end);window.addEventListener('pointercancel',end);
  }
 }
-// build 531: at most 4 segments are enabled (shown) at once (the GPU views have 4 slots, segment-slots.js). True = refused (a message is shown,
+// at most 4 segments are enabled (shown) at once (the GPU views have 4 slots, segment-slots.js). True = refused (a message is shown,
 // nothing changes: the user turns one off first; nothing is switched off automatically)
 export function refuseSegmentEnable(key){
  if(canEnableSegment(SEGMENT_PRESET_ORDER,segmentState,key))return false;
@@ -50,7 +50,7 @@ export function setSegmentEnabled(key,on){
 }
 export function renderSegmentPresets(){
  const active=new Set(SEGMENT_PRESET_ORDER.filter(key=>segmentState[key].active));
- // build 438: the cards stand in the priority order (top = first), see segment-exclusive.js
+ // the cards stand in the priority order (top = first), see segment-exclusive.js
  for(const key of segmentExclusive.order){const card=segmentControls.querySelector('[data-segment="'+key+'"]');if(card)card.parentElement.append(card)}
  const modeSel=document.getElementById('segment-exclusive-mode');if(modeSel)modeSel.value=segmentExclusive.mode;
  for(const key of SEGMENT_PRESET_ORDER){
@@ -67,14 +67,14 @@ export function renderSegmentPresets(){
 export function addSegmentPreset(key){
  if(!volume||!SEGMENT_PRESET_ORDER.includes(key)||segmentState[key].active)return;
  const seg=segmentState[key];seg.active=true;
- // build 531: a fifth enabled segment is refused: the card is added, its checkbox stays off (turn another one off, then tick it)
+ // a fifth enabled segment is refused: the card is added, its checkbox stays off (turn another one off, then tick it)
  const allowed=!refuseSegmentEnable(key);setSegmentEnabled(key,allowed);
  const enabled=$('[data-seg-enabled="'+key+'"]'),color=$('[data-seg-color="'+key+'"]'),min=$('[data-seg-min="'+key+'"]'),max=$('[data-seg-max="'+key+'"]'),opacity=$('[data-seg-opacity="'+key+'"]'),exportBtn=$('[data-seg-export="'+key+'"]'),removeBtn=$('[data-seg-remove="'+key+'"]'),opening=$('[data-seg-opening="'+key+'"]'),closing=$('[data-seg-closing="'+key+'"]'),minComponent=$('[data-seg-min-component="'+key+'"]'),holeFill=$('[data-seg-hole-fill="'+key+'"]');
  enabled.checked=allowed;enabled.disabled=false;color.disabled=false;min.disabled=false;max.disabled=false;opacity.disabled=false;
  opening.disabled=false;closing.disabled=false;minComponent.disabled=false;holeFill.disabled=false;
  for(const [attr] of THIN_SLIDERS){const el=$('[data-seg-'+attr+'="'+key+'"]');if(el)el.disabled=false}
  if(exportBtn)exportBtn.disabled=true;if(removeBtn)removeBtn.disabled=false;
- // build 438: a new card takes part in the priority: the segments below it may lose part of their range
+ // a new card takes part in the priority: the segments below it may lose part of their range
  renderSegmentPresets();commitExclusiveRanges();renderAll();scheduleSegment3D();
 }
 export function removeSegmentPreset(key){
@@ -87,7 +87,7 @@ export function removeSegmentPreset(key){
 export function ctSliderUnit(p){
  return Number.isInteger(p.fullMin)&&Number.isInteger(p.fullMax)?1:niceCtStep(p.fullSpan)/10;
 }
-// build 442: a typed CT value may widen its slider up to the data's full range (range-entry.js)
+// a typed CT value may widen its slider up to the data's full range (range-entry.js)
 export function ctSliderFullBounds(el){
  const p=ctRangeProfile;if(!p||!el)return null;
  if(el===ww)return[Math.max(niceCtStep(p.fullSpan),1e-6),p.fullWidthMax];
@@ -96,7 +96,7 @@ export function ctSliderFullBounds(el){
 }
 export function setCtSliderRange(el,min,max,step){
  if(!el)return;
- // build 442: the ends on the step grid (multiples of the step), so the slider stops on whole values whatever the
+ // the ends on the step grid (multiples of the step), so the slider stops on whole values whatever the
  // window (an auto window can start at a fraction); before, the grid started at the window's own minimum
  const value=+el.value,lo=Math.floor(Math.min(min,value)/step)*step,hi=Math.ceil(Math.max(max,value)/step)*step;
  el.min=String(+lo.toFixed(8));el.max=String(+Math.max(lo+step,hi).toFixed(8));el.step=String(step);
@@ -143,10 +143,10 @@ export function updateSegmentOutputs(key){
  const s=segmentState[key],st=+minEl?.step||1;
  $('[data-seg-min-out="'+key+'"]').value=formatCtValue(s.userMin??s.min,st);
  $('[data-seg-max-out="'+key+'"]').value=formatCtValue(s.userMax??s.max,+maxEl?.step||1);
- // build 438: the range in use when the card priority trims the user range
+ // the range in use when the card priority trims the user range
  const note=$('[data-seg-effective="'+key+'"]');
  if(note){const e=s.exclusive,trimmed=s.active&&e&&(e.empty||e.min!==(s.userMin??s.min)||e.max!==(s.userMax??s.max)),srcs=s.active&&e&&!e.empty?(e.sources||[]):[];note.classList.toggle('is-hidden',!trimmed&&!srcs.length);
-  // build 459: the segments above that hold voxels (post-processing / edits) are subtracted voxel by voxel, not by range
+  // the segments above that hold voxels (post-processing / edits) are subtracted voxel by voxel, not by range
   const names=srcs.map(k=>tr(k)||k).join(', '),from=srcs.length?tr('segExcludesUpper')+' ('+names+')':'';
   if(trimmed||srcs.length){const f=v=>formatCtValue(v,st);note.textContent=(trimmed?(e.empty?tr('segEffectiveEmpty'):tr('segEffective')+' '+f(e.min)+' 〜 '+f(e.max)+(e.dropped?.length?' · '+tr('segEffectiveDropped')+' '+e.dropped.map(([a,b])=>f(a)+'〜'+f(b)).join(', '):'')):'')+(trimmed&&from?' · ':'')+from}}
  $('[data-seg-opacity-out="'+key+'"]').value=segmentState[key].opacity.toFixed(2);

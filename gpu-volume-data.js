@@ -1,24 +1,24 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { beginSharedMpr3DPreview } from './mpr3d-overlay.js?v=20261018-build621';
-import { gpuStepTimes, gpuFilterRuntime, gpuCounts } from './gpu-compute.js?v=20261018-build621';
-import { gpuVolumeRefresh, updateVolumeFilterBadge, set3DBusy } from './three-status.js?v=20261018-build621';
-import { sourceVolume, volume, sceneState, currentLanguage, threeRenderMode, ipadGpuTargetSide } from './state.js?v=20261018-build621';
-import { SEGMENT_PRESET_ORDER, gpuSegmentOrder, segmentEditState, segmentState, segmentHasProcessedMask, segmentAddsVoxels } from './segments.js?v=20261018-build621';
-import { request3DRender } from './scene3d.js?v=20261018-build621';
-import { footer, volumeCacheClearBtn } from './ui-shell.js?v=20261018-build621';
-import { subtractRunArrays, intersectRunArrays } from './run-length.js?v=20261018-build621';
-import { tr } from './i18n.js?v=20261018-build621';
-import { fmt, isTabletRuntime, isIPhoneRuntime } from './utils.js?v=20261018-build621';
-import { openVolumeCache, cacheKey, textureCacheHandle, pruneOtherFilterSettings } from './gpu-volume-cache.js?v=20261018-build621';
-import { datasetFingerprint } from './project-file.js?v=20261018-build621';
-import { getFilteredSourceAxialBlock, currentFilterSignature, volumeBlockDepth, volumeBlockBudget } from './source-filters.js?v=20261018-build621';
+import { beginSharedMpr3DPreview } from './mpr3d-overlay.js?v=20261020-build630';
+import { gpuStepTimes, gpuFilterRuntime, gpuCounts } from './gpu-compute.js?v=20261020-build630';
+import { gpuVolumeRefresh, updateVolumeFilterBadge, set3DBusy } from './three-status.js?v=20261020-build630';
+import { sourceVolume, volume, sceneState, currentLanguage, threeRenderMode, ipadGpuTargetSide } from './state.js?v=20261020-build630';
+import { SEGMENT_PRESET_ORDER, gpuSegmentOrder, segmentEditState, segmentState, segmentHasProcessedMask, segmentAddsVoxels } from './segments.js?v=20261020-build630';
+import { request3DRender } from './scene3d.js?v=20261020-build630';
+import { footer, volumeCacheClearBtn } from './ui-shell.js?v=20261020-build630';
+import { subtractRunArrays, intersectRunArrays } from './run-length.js?v=20261020-build630';
+import { tr } from './i18n.js?v=20261020-build630';
+import { fmt, isTabletRuntime, isIPhoneRuntime } from './utils.js?v=20261020-build630';
+import { openVolumeCache, cacheKey, textureCacheHandle, pruneOtherFilterSettings } from './gpu-volume-cache.js?v=20261020-build630';
+import { datasetFingerprint } from './project-file.js?v=20261020-build630';
+import { getFilteredSourceAxialBlock, currentFilterSignature, volumeBlockDepth, volumeBlockBudget } from './source-filters.js?v=20261020-build630';
 export const gpuVolumeApplied={seriesId:null,signature:''};
 export function gpuVolumeDataSignature(){
  const id=(sourceVolume||volume)?.series?.id??null,applied=gpuVolumeApplied.seriesId===id?gpuVolumeApplied.signature:'';
  return applied&&applied===currentFilterSignature()?applied:'';
 }
-// build 305: the next block is started while the current one is used, so its
+// the next block is started while the current one is used, so its
 // file reads overlap this block's GPU filtering and upload (one block ahead:
 // ~2 blocks of memory, within the swap-safe block budget)
 export function filteredSourceSliceProvider(series,blockDepth=null,onBlock=null){
@@ -36,7 +36,7 @@ export function filteredSourceSliceProvider(series,blockDepth=null,onBlock=null)
   const n=series.rows*series.columns,off=(z-start)*n;return block.data.subarray(off,off+n);
  };
 }
-// build 311: reduced GPU volume upload straight from GPU-packed blocks.
+// reduced GPU volume upload straight from GPU-packed blocks.
 // plan: {tw,th,xs,ys,zMap,rowStride,slope,intercept,bias}; returns tz -> packed
 // texture slice (or null to fall back to the float path). preview (optional)
 // gets full-res float planes for the z it needs.
@@ -109,32 +109,33 @@ export async function refreshGpuVolumeData(){
  const wanted=gpuVolumeDataSignature();
  if((mv.dataSignature||'')===wanted||gpuVolumeRefresh.running===wanted){updateVolumeFilterBadge();return}
  const token=++gpuVolumeRefresh.token,target={...gpuVolumeTarget(),isCancelled:()=>token!==gpuVolumeRefresh.token};
- // build 308: the 3D C/S preview is filled from these filtered blocks
+ // the 3D C/S preview is filled from these filtered blocks
  const preview=target.sliceData&&target.series?beginSharedMpr3DPreview():null;
  if(preview)target.sliceData=filteredSourceSliceProvider(target.series,null,(z,src)=>preview.feed(z,src));
- // build 311: reduced plans upload GPU-packed slices (falls back to sliceData)
+ // reduced plans upload GPU-packed slices (falls back to sliceData)
  if(target.sliceData&&target.series)target.packedSliceProvider=plan=>filteredPackedSliceProvider(target.series,plan,preview);
  gpuVolumeRefresh.running=wanted;updateVolumeFilterBadge();
- // debug (build 285): total time and per-filter GPU times of the 3D rebuild
+ // debug: total time and per-filter GPU times of the 3D rebuild
  const t0=performance.now();gpuStepTimes.clear();gpuCounts.clear();const errBefore=gpuFilterRuntime.lastError||'';footer.textContent=currentLanguage==='ja'?'3D再構築中…':'Rebuilding 3D…';
  try{await mv.ensure(target,gpuVolumePlanOptions());preview?.finish(true);syncGpuVolumeEdits(target);request3DRender();if(mv.lastCacheHit)footer.textContent=tr('volumeCacheLoaded');void updateVolumeCacheControl()
-  // build 306: always replace the start message (it stayed as '3D再構築中…' when debug was off)
+  // always replace the start message (it stayed as '3D再構築中…' when debug was off)
   if(!mv.lastCacheHit)footer.textContent=(currentLanguage==='ja'?'3D再構築 完了 ':'3D rebuild done ')+((performance.now()-t0)/1000).toFixed(1)+'s';
   if(globalThis.__vrlSettings?.debugOn?.()&&!mv.lastCacheHit){const steps=[...gpuStepTimes].map(([n,ms])=>n+' '+(ms/1000).toFixed(1)+'s').join(', ');footer.textContent=(currentLanguage==='ja'?'3D再構築 ':'3D rebuild ')+((performance.now()-t0)/1000).toFixed(1)+'s'+(steps?' · ['+steps+']':'')+(gpuCounts.size?' · '+[...gpuCounts].map(([n,c])=>n+' '+c).join(', '):'')}
-  // build 291: a GPU filter failure falls back to the CPU worker silently; say so
+  // a GPU filter failure falls back to the CPU worker silently; say so
   const errNow=gpuFilterRuntime.lastError||'';if(errNow&&errNow!==errBefore)footer.textContent+=(currentLanguage==='ja'?' · GPUフィルター失敗→CPU: ':' · GPU filter failed -> CPU: ')+errNow}
  catch(e){preview?.finish(false);if(String(e.message||e)==='__SUPERSEDED__')footer.textContent=currentLanguage==='ja'?'3D再構築: 新しい設定でやり直し中':'3D rebuild: restarted with newer settings';if(String(e.message||e)!=='__SUPERSEDED__'){console.warn('GPU volume filter refresh failed.',e);
   footer.textContent=(currentLanguage==='ja'?'3D再構築エラー（表示は途中まで更新）: ':'3D rebuild error (volume partly updated): ')+String(e?.message||e)+(gpuFilterRuntime.lastError?' · GPU: '+gpuFilterRuntime.lastError:'')}}
  finally{if(token===gpuVolumeRefresh.token){gpuVolumeRefresh.running=null;set3DBusy(false)}updateVolumeFilterBadge()}
 }
-export function gpuVolumeEditDescriptors(v=sourceVolume||volume){
+// avail (optional): which segments count as shown (default: active and enabled); VR in event mode also takes the ones the page keeps hidden (vr-view.js segAvail)
+export function gpuVolumeEditDescriptors(v=sourceVolume||volume,avail=seg=>!!(seg?.active&&seg.enabled)){
  const out={};if(!v)return out;
  for(const key of SEGMENT_PRESET_ORDER){
   const st=segmentEditState[key],seg=segmentState[key];if(!st)continue;
-  // post-processed segments (Opening, thin-region suppression, ...) and segments below a voxel taker (build 459): the
+  // post-processed segments (Opening, thin-region suppression, ...) and segments below a voxel taker: the
   // volume shader only thresholds, so show the final voxels as a keep mask. maskOnly (Closing / hole filling can add
   // voxels outside the HU range): the shader decides by the mask alone, as the 2D views do.
-  if(seg?.active&&seg.enabled&&segmentHasProcessedMask(key)&&st.baseRuns?.length===v.slices){
+  if(avail(seg)&&segmentHasProcessedMask(key)&&st.baseRuns?.length===v.slices){
    let runs=st.keepRuns?intersectRunArrays(st.baseRuns,st.keepRuns,v.slices):st.baseRuns;
    if(st.excludeRuns)runs=subtractRunArrays(runs,st.excludeRuns,v.slices);
    out[key]={mode:'keep',runs,cutRuns:st.cutRuns,maskOnly:segmentAddsVoxels(seg)};continue;
@@ -151,7 +152,7 @@ function noteSegment3D(key,text,error){
  el.textContent=el.textContent.replace(/ · (3D反映済み|shown in 3D|3D反映エラー: .*|3D error: .*)$/,'')+' · '+text;if(error)el.classList.add('is-error');
 }
 export function syncGpuVolumeEdits(v=sourceVolume||volume){
- // build 414: the 2D views draw the edited segment from finalRuns, which the volume-view edits reset and nothing
+ // the 2D views draw the edited segment from finalRuns, which the volume-view edits reset and nothing
  // rebuilt (2D kept showing deleted voxels): app.js rebuilds them and repaints 2D on this event
  if(v&&typeof document!=='undefined')document.dispatchEvent(new CustomEvent('vrl-gpu-edits-synced'));
  const mv=sceneState?.medicalVolume;if(!mv||!v)return;

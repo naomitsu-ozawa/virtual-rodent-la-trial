@@ -1,4 +1,4 @@
-// VR content box (build 562). Pure helpers: no three.js, no DOM. Unit-tested in tests/unit/vr-content-box.test.js.
+// VR content box. Pure helpers: no three.js, no DOM. Unit-tested in tests/unit/vr-content-box.test.js.
 //
 // The VR volume used to be drawn with the full data box as its proxy (BoxGeometry 2x2x2 scaled by halfExt): every pixel the box covers ran
 // the fragment shader, also where the rays cross nothing but air (a body is much thinner than its bounding grid, and zoomed in the air
@@ -13,7 +13,7 @@
 // range test (the classification byte >= 128 of a corner implies the corner's HU is in range, the mask only removes). p lies within one voxel
 // of those corners: each candidate brick b contributes the voxel range [8b - 2, 8b + 9] (voxel-centre units) plus its normalised cell
 // [b / cells, (b + 1) / cells] (the mapping the occupancy and the shader's brick lookup use), clamped to the data box.
-// Build 564: the rebuild never blocks a frame. The segment part is a resumable scan (segScanStart / segScanStep, a time budget per frame;
+// the rebuild never blocks a frame. The segment part is a resumable scan (segScanStart / segScanStep, a time budget per frame;
 // until it is done the last box stays only when it provably still covers everything (segsSubset), else the full box is drawn), the slice part
 // comes from per-axis slab maxima of the slice grid (sliceIndex once per grid, sliceRange per sliceAir: O(slabs)).
 // The shader keeps the full box for the ray parameter (entry, sample positions, texture coordinates): the content box only limits the
@@ -22,7 +22,7 @@
 export const BRICK = 8;
 
 // candidate test of one brick (the shader's brickClass(tc) > 0): segs = [{min, max, on, maskOnly, maskAny}] x 4, mm = [min, max, occupancy nibble].
-// maskAny (build 564): the data holds the segment as mask-only but the shader's editMaskOnly bit is off (詳細 editDiag 2): the classification
+// maskAny: the data holds the segment as mask-only but the shader's editMaskOnly bit is off (詳細 editDiag 2): the classification
 // bytes may still carry the mask, so the brick counts by its HU range or its occupancy bit (conservative)
 export function brickShown(segs, mn, mx, occ) {
   for (let s = 0; s < segs.length; s++) {
@@ -59,7 +59,7 @@ export function growByBricks(bricks, brickDims, dims, test, lo, hi, from = 0, to
   return count;
 }
 
-// slice part (build 564): per-axis slab maxima of the slice grid's brick max (a brick is drawn by the slices when max > sliceAir, so along
+// slice part: per-axis slab maxima of the slice grid's brick max (a brick is drawn by the slices when max > sliceAir, so along
 // each axis the drawn bricks span exactly from the first to the last slab whose maximum is above the air level). Built once per grid (one
 // pass, no sort; cached by the brick array); null when the grid has no bricks
 const sliceCache = new WeakMap();
@@ -134,7 +134,7 @@ export function contentBox({ halfExt, grid, segs, slices = false, sliceGrid = nu
   return out;
 }
 
-// resumable segment scan (build 564): segScanStart copies the segments and resets; segScanStep scans up to budgetMs (checked every chunk
+// resumable segment scan: segScanStart copies the segments and resets; segScanStep scans up to budgetMs (checked every chunk
 // bricks) and returns true when done. scan.lo / scan.hi / scan.count hold the result, scan.ms the total scan time, scan.frames the steps
 export function createSegScan() {
   return { grid: null, segs: [{}, {}, {}, {}], test: null, q: 0, n: 0, lo: new Float64Array(3), hi: new Float64Array(3), count: 0, done: true, ms: 0, frames: 0 };

@@ -1,4 +1,4 @@
-// Global app settings (build 280): stored per device in localStorage and
+// Global app settings: stored per device in localStorage and
 // shown in the settings dialog. Pure module, no imports, so any module
 // (including medical-volume.js, which the unit tests load alone) can read it
 // through globalThis.__vrlSettings.
@@ -15,12 +15,14 @@ export const SETTINGS_DEFAULTS={
  debug:false,          // same as ?debug
  cacheAutoPrune:true,  // keep only the current filter setting per dataset + 3D resolution
  cacheLimit:'auto',    // GPU volume cache limit: auto / 0.5 / 1 / 2 / 4 (GB)
- resultPlace:'panel',   // build 585: workspace UI: analysis results in the left panel with the tool ('panel') or under the views ('below')
- mpr2dAlpha:'0.65',    // build 430: strength of the segment / result colours in the 2D views (× segment opacity)
- gpuHybridMode:'hybrid', // build 517: Linux hybrid (display Intel / NVIDIA) only: 'hybrid' (display Intel, compute NVIDIA; the build 516 split) / 'primary' (everything on the display GPU); ignored off Linux, applies after a reload
+ resultPlace:'panel',   // workspace UI: analysis results in the left panel with the tool ('panel') or under the views ('below')
+ mpr2dAlpha:'0.65',    // strength of the segment / result colours in the 2D views (× segment opacity)
+ gpuHybridMode:'hybrid', // Linux hybrid (display Intel / NVIDIA) only: 'hybrid' (display Intel, compute NVIDIA; the split) / 'primary' (everything on the display GPU); ignored off Linux, applies after a reload
  surfaceSmooth:true,  // device default of the 表面平滑化 checkbox: applied at start and to data / projects without a saved value (the project file stays the primary store)
  surfaceSmoothStrength:'0.60', // device default of its strength slider (0-6), same rule
- gpuPreference:'auto'  // build 515: GPU for WebGPU: 'auto' (as before) / 'high-performance' / 'low-power'; honoured only on Linux / Windows (gpu-preference.js), applies after a reload
+ vrHighp:false,        // 設定 > デバッグ (debug-flags.js):: true = VR drawing in 32 bit, the same as ?vrprec=highp (read at page load; default 16 bit)
+ eventMode:false,     // 体験会モード (設定 > 外観): level choice in the データ panel + the level's mission on the VR help board (event-mode-ui.js)
+ gpuPreference:'auto'  // GPU for WebGPU: 'auto' (as before) / 'high-performance' / 'low-power'; honoured only on Linux / Windows (gpu-preference.js), applies after a reload
 };
 // pixel budgets (MP) per interaction tier / at rest; 'max' = no budget
 export const DRAG_BUDGETS={low:[0.12e6,0.09e6,0.06e6],standard:[0.25e6,0.18e6,0.12e6],high:[0.45e6,0.32e6,0.22e6],max:[Infinity,Infinity,Infinity]};
@@ -45,5 +47,5 @@ export function debugEnabled(){
  if(values.debug)return true;
  return typeof location!=='undefined'&&/[?&]debug(\b|=|&|$)/.test(location.search);
 }
-// build 309: ?ahead=N sets how many slices are read in parallel (default 4)
+// ?ahead=N sets how many slices are read in parallel (default 4)
 try{const n=+new URLSearchParams(globalThis.location?.search||'').get('ahead');if(n>=1&&n<=32)globalThis.__vrlReadAhead=Math.round(n)}catch{}

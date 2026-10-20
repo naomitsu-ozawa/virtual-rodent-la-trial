@@ -1,22 +1,22 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { mark3DStale, mark3DCurrent, set3DState } from './three-state.js?v=20261018-build621';
-import { updateVolumeFilterBadge, set3DBusy } from './three-status.js?v=20261018-build621';
-import { currentLanguage, volume, threeDApplying, threeRenderMode, sceneState, sourceVolume, setThreeDCancelRequested, threeDCancelRequested, filterRebuildRevision, setCurrent3DVolume, deferAutomatic3D, setDeferAutomatic3D, setMemoryGpuPreviewActive, setVolume, filterOrder, analysisRegions, analysisFilterSignature } from './state.js?v=20261018-build621';
-import { setGpuComputeBackend } from './gpu-compute.js?v=20261018-build621';
-import { gpuVolumeApplied, refreshGpuVolumeData, syncGpuVolumeEdits } from './gpu-volume-data.js?v=20261018-build621';
-import { SEGMENT_PRESET_ORDER, segmentState, segmentNeedsVoxelMask } from './segments.js?v=20261018-build621';
-import { ensureSegmentBaseRuns } from './segment-runs.js?v=20261018-build621';
-import { renderAll } from './mpr-render.js?v=20261018-build621';
-import { sourceFilterStages, filterState, memoryFilterPreviewCache, sourceFilterHalo, fitSourceTile, processMemoryRegion, currentFilterSignature } from './source-filters.js?v=20261018-build621';
-import { footer, threeLabel, smoothingType, spikeHoleStrength, spikeHoleThreshold, nlmStrength, nlmSearchRadius, nlmPatchRadius, anisotropicStrength, anisotropicIterations, gaussianStrength, spatialPasses, sigmoidStrength, sigmoidCenter, sigmoidWidth, bilateralStrength, bilateralSpatial, bilateralIntensity, bilateralPasses, tvWeight, tvIterations, unsharpRadius, unsharpAmount, unsharpThreshold, bar, progLabel, anisotropicKappa, tvEps } from './ui-shell.js?v=20261018-build621';
-import { tr } from './i18n.js?v=20261018-build621';
-import { render3D, gpuMeshBlockDepth } from './surface-build.js?v=20261018-build621';
-import { resetAnalysisRegistryAfterRebuild, keepAnalysisRegionsAfterRebuild } from './analysis-results.js?v=20261018-build621';
-import { setProcessingBusy } from './busy.js?v=20261018-build621';
-import { reportBusyProgress } from './progress-modal.js?v=20261018-build621';
-import { cpuSpikeHole, cpuNlm3D, cpuAnisotropicDiffusion, cpuGaussian3D, cpuMedian3D, cpuSigmoid, cpuBilateral3D, cpuTvDenoising3D, cpuUnsharpMask3D } from './cpu-filters.js?v=20261018-build621';
-import { isDesktopRuntime, frameYield } from './utils.js?v=20261018-build621';
+import { mark3DStale, mark3DCurrent, set3DState } from './three-state.js?v=20261020-build630';
+import { updateVolumeFilterBadge, set3DBusy } from './three-status.js?v=20261020-build630';
+import { currentLanguage, volume, threeDApplying, threeRenderMode, sceneState, sourceVolume, setThreeDCancelRequested, threeDCancelRequested, filterRebuildRevision, setCurrent3DVolume, deferAutomatic3D, setDeferAutomatic3D, setMemoryGpuPreviewActive, setVolume, filterOrder, analysisRegions, analysisFilterSignature } from './state.js?v=20261020-build630';
+import { setGpuComputeBackend } from './gpu-compute.js?v=20261020-build630';
+import { gpuVolumeApplied, refreshGpuVolumeData, syncGpuVolumeEdits } from './gpu-volume-data.js?v=20261020-build630';
+import { SEGMENT_PRESET_ORDER, segmentState, segmentNeedsVoxelMask } from './segments.js?v=20261020-build630';
+import { ensureSegmentBaseRuns } from './segment-runs.js?v=20261020-build630';
+import { renderAll } from './mpr-render.js?v=20261020-build630';
+import { sourceFilterStages, filterState, memoryFilterPreviewCache, sourceFilterHalo, fitSourceTile, processMemoryRegion, currentFilterSignature } from './source-filters.js?v=20261020-build630';
+import { footer, threeLabel, smoothingType, spikeHoleStrength, spikeHoleThreshold, nlmStrength, nlmSearchRadius, nlmPatchRadius, anisotropicStrength, anisotropicIterations, gaussianStrength, spatialPasses, sigmoidStrength, sigmoidCenter, sigmoidWidth, bilateralStrength, bilateralSpatial, bilateralIntensity, bilateralPasses, tvWeight, tvIterations, unsharpRadius, unsharpAmount, unsharpThreshold, bar, progLabel, anisotropicKappa, tvEps } from './ui-shell.js?v=20261020-build630';
+import { tr } from './i18n.js?v=20261020-build630';
+import { render3D, gpuMeshBlockDepth } from './surface-build.js?v=20261020-build630';
+import { resetAnalysisRegistryAfterRebuild, keepAnalysisRegionsAfterRebuild } from './analysis-results.js?v=20261020-build630';
+import { setProcessingBusy } from './busy.js?v=20261020-build630';
+import { reportBusyProgress } from './progress-modal.js?v=20261020-build630';
+import { cpuSpikeHole, cpuNlm3D, cpuAnisotropicDiffusion, cpuGaussian3D, cpuMedian3D, cpuSigmoid, cpuBilateral3D, cpuTvDenoising3D, cpuUnsharpMask3D } from './cpu-filters.js?v=20261020-build630';
+import { isDesktopRuntime, frameYield } from './utils.js?v=20261020-build630';
 export function mark3DUpdating(){set3DState('updating')}
 export async function buildCpuFilteredVolumeFor3D(){
  const previousDefer=deferAutomatic3D;setDeferAutomatic3D(true);setMemoryGpuPreviewActive(false);clearMemoryFilterPreviewCache();setVolume(sourceVolume);
@@ -80,7 +80,7 @@ export async function rebuildCurrent3D(){
   if(analysisRegions.length&&(analysisFilterSignature==null||analysisFilterSignature===appliedSignature))keepAnalysisRegionsAfterRebuild();else resetAnalysisRegistryAfterRebuild();
   setCurrent3DVolume(buildVolume);surfaceRebuildPending.value=false;
   gpuVolumeApplied.seriesId=(sourceVolume||volume)?.series?.id??null;gpuVolumeApplied.signature=appliedSignature;
-  // build 593: the masks too (as the source-backed branch above)
+  // the masks too (as the source-backed branch above)
   if(threeRenderMode==='volume')void refreshGpuVolumeData().then(()=>resyncSegmentMasksToVolume()).catch(e=>console.warn('GPU volume mask resync failed.',e));
  }catch(e){
   if(String(e.message||e)!=='__SUPERSEDED__')console.error(e);
@@ -138,5 +138,5 @@ export async function applyCpuFilter(key,baseVolume=volume){
  finally{setProcessingBusy(false)}
 }
 export function clearMemoryFilterPreviewCache(){memoryFilterPreviewCache.map.clear();memoryFilterPreviewCache.bytes=0}
-// build 405: also the bar of the job shown in the progress modal
+// also the bar of the job shown in the progress modal
 export function progress(a,b){bar.style.width=(b?Math.round(a/b*100):0)+'%';progLabel.textContent=a+' / '+b;reportBusyProgress(null,a,b,a+' / '+b)}

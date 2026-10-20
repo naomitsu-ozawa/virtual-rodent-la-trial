@@ -15,7 +15,7 @@ export function datasetFingerprint(series){
   seriesId:series?.id??null,studyUid:f.studyUid??null,seriesUid:f.seriesUid??null,
   description:series?.description??'',modality:series?.modality??'',
   columns:series?.columns??0,rows:series?.rows??0,slices:series?.slices?.length??0,
-  // build 469: legacy first-two-slices spacing (recognises projects saved before the new rule) and excluded duplicates
+  // legacy first-two-slices spacing (recognises projects saved before the new rule) and excluded duplicates
   legacySpacingZ:series?.spacingCheck?.legacyZ??null,duplicatesExcluded:series?.spacingCheck?.duplicatesExcluded||0,
   spacing:[series?.spacingX,series?.spacingY,series?.spacingZ].map(n=>Number.isFinite(+n)?+(+n).toPrecision(8):null),
  };
@@ -33,7 +33,7 @@ export function compareFingerprints(saved,current,opts){
  if(opts?.legacyZ&&issues.length===1&&issues[0]==='spacing'&&legacySpacingUpgrade(saved,current))return{ok:true,issues:[],legacyZ:true};
  return{ok:issues.length===0,issues};
 }
-// Project saved before build 469 whose z spacing was the first-two-slices difference: only the z spacing differs,
+// Project saved before whose z spacing was the first-two-slices difference: only the z spacing differs,
 // slice count / size / x,y spacing are unchanged and the saved z equals the legacy value of the current series.
 // Returns {savedZ,newZ} (the user is asked) or null (reject).
 export function legacySpacingUpgrade(saved,current){
@@ -74,7 +74,7 @@ export function resolveProjectMatch(saved,current,confirmFn,lang='ja'){
  return{action:'reject',reason:projectMismatchReason(saved,current),issues:c.issues};
 }
 
-// build 588: the same with an asking function that may answer later (an in-place question instead of window.confirm)
+// the same with an asking function that may answer later (an in-place question instead of window.confirm)
 export async function resolveProjectMatchAsync(saved,current,askFn,lang='ja'){
  const up=compareFingerprints(saved,current).ok?null:legacySpacingUpgrade(saved,current);
  if(!up)return resolveProjectMatch(saved,current,()=>false,lang);

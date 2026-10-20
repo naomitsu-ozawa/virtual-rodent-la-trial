@@ -1,4 +1,4 @@
-// Colours of the position points (build 472), shared by the VR markers / ring, the 3D overlay, the 2D marks and the comment list.
+// Colours of the position points, shared by the VR markers / ring, the 3D overlay, the 2D marks and the comment list.
 // No imports (comments.js uses it to check a saved colour). A point's colour is its own `color` ("#rrggbb", set by the user) or, when
 // it has none, the AUTO colour: the palette entry for its stable key. The key is the N of the text 「VR ポイント N」 (the number given when
 // it was recorded; never the list position, so deleting a point does not recolour the others) or, for any other text, a hash of the id.
@@ -33,7 +33,7 @@ const hash=s=>{let h=0x811c9dc5;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h
 export const normalizeAutoKey=v=>Number.isSafeInteger(v)&&v>=0?v:null;
 // the number a point of the OLD kind would be given from its text 「VR ポイント N」 (null for other texts)
 export const textPointNumber=text=>{const m=NAME_RE.exec(String(text??'').trim());return m?Math.max(1,+m[1]):null};
-// the stable key of a point (build 472): its stored `autoKey` (set when it was recorded: the N of 「VR ポイント N」 in VR, the next free number
+// the stable key of a point: its stored `autoKey` (set when it was recorded: the N of 「VR ポイント N」 in VR, the next free number
 // for a point added on the PC / iPad), so editing the text never changes the colour. A legacy point without one derives it once from its
 // text (「VR ポイント N」 -> N) or the hash of its id; comments.js stores that derived key before the text is edited.
 export function pointKey(c){
@@ -45,7 +45,7 @@ export const autoPointColor=c=>POINT_PALETTE[(((pointKey(c)-1)%POINT_PALETTE.len
 export const pointColor=c=>normalizeColor(c?.color)||autoPointColor(c);
 export const colorToInt=hex=>parseInt((normalizeColor(hex)||'#000000').slice(1),16);
 // the body of the solid VR sphere (the colour itself is the hidden dot and the chip): the same hue at 80 % brightness, so blue / violet / brown stay
-// visible on the dark background at the small size (build 472)
+// visible on the dark background at the small size
 export function darkFill(hex){
  const n=colorToInt(hex);
  return(Math.round((n>>16&255)*0.8)<<16)|(Math.round((n>>8&255)*0.8)<<8)|Math.round((n&255)*0.8);

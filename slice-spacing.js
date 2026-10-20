@@ -58,7 +58,7 @@ export function slicePosition(meta,normal){
 }
 const median=a=>{const s=[...a].sort((x,y)=>x-y),m=s.length>>1;return s.length%2?s[m]:(s[m-1]+s[m])/2};
 
-// the spacing the app used before build 469 (first two slices by Z, else the tag value); kept to recognise old projects
+// the spacing the app used before (first two slices by Z, else the tag value); kept to recognise old projects
 function legacyZOf(slices,tagZ){
  const a=slices[0],b=slices[1];
  return a?.pos&&b?.pos?(Math.abs(b.pos[2]-a.pos[2])||tagZ):tagZ;

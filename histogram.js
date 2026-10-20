@@ -1,4 +1,4 @@
-// Per-segment HU histogram (build 534). Pure functions only (no DOM, no app state), so the unit tests use them directly.
+// Per-segment HU histogram. Pure functions only (no DOM, no app state), so the unit tests use them directly.
 // Fixed 1-HU bins from HIST_MIN (-1024) to HIST_MAX (3071): 4096 bins; values outside are clamped into the two end bins
 // (bin 0 = "<= -1024", the last bin = ">= 3071"). A histogram is a Uint32Array(HIST_BINS); the results of a whole volume stay tiny.
 export const HIST_MIN = -1024;
@@ -64,7 +64,7 @@ export function histCount(hist) {
 }
 // counts for display: the HU window [lo, hi] (inclusive, whole HU) cut into `columns` columns of equal width.
 // Returns Float64Array(columns); a column holds the sum of the bins it covers.
-// out (optional, build 571: the VR board's drag redraw allocates nothing): a reused array at least `columns` long; its first `columns` entries are
+// out (optional,: the VR board's drag redraw allocates nothing): a reused array at least `columns` long; its first `columns` entries are
 // cleared and written, the rest is left alone
 export function rebinHist(hist, lo, hi, columns, out) {
   const n = Math.max(1, columns | 0);

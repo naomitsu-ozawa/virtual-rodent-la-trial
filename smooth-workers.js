@@ -1,4 +1,4 @@
-// Web Workers for the constrained surface smoothing (build 612). The kernel (constrained-smooth.js) takes ~16 us per vertex
+// Web Workers for the constrained surface smoothing. The kernel (constrained-smooth.js) takes ~16 us per vertex
 // at strength 4, so a full-resolution surface of a few million vertices is a minute on one thread; the chunks of a
 // surface are smoothed side by side in a small pool of workers while the main thread keeps extracting faces. The workers
 // run the very same function from its source text, so a chunk comes out bit for bit as on the main thread (where it runs
@@ -6,8 +6,8 @@
 // chunks go to the GPU first (smooth-gpu.js registers itself here with setSmoothGpuBackend); the pool is then only the
 // fallback for the kernel; the workers still prepare the chunks for it (snap, weld) and are started for that.
 // A chunk's preparation and normals (smooth-prepare.js) run in the worker with its kernel: the main thread only cuts the core.
-import { constrainedSmoothPositions } from './constrained-smooth.js?v=20261018-build621';
-import { snapToLattice, weldTrianglePositions, vertexNormals, prepareSmoothChunk } from './smooth-prepare.js?v=20261018-build621';
+import { constrainedSmoothPositions } from './constrained-smooth.js?v=20261020-build630';
+import { snapToLattice, weldTrianglePositions, vertexNormals, prepareSmoothChunk } from './smooth-prepare.js?v=20261020-build630';
 
 // one job, in a worker or on the main thread: either a chunk's faces (prepared here: snap, weld, pinned flags) or welded
 // positions; then the kernel (iterations > 0) and the vertex normals (normals). null: no triangle. (exported: tests)

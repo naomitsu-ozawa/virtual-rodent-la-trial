@@ -1,9 +1,9 @@
-// Line profile (build 537): pure sampling code, no DOM and no app state (unit-tested in tests/unit/line-profile.test.js).
+// Line profile: pure sampling code, no DOM and no app state (unit-tested in tests/unit/line-profile.test.js).
 // A line is two voxel positions a, b ({i,j,k}: voxel CENTRES, index space). It is cut into N samples spaced at most the smallest voxel
 // spacing apart (the last sample is exactly b), and every sample reads the raw HU by trilinear interpolation. The reading goes slice by
 // slice (z ascending, at most two slices held at once), so a source-backed study is never copied: the caller supplies getSlice(z) ->
 // Float32Array | Int16Array (or a promise of one).
-import { createHist, binValues, histStats } from './histogram.js?v=20261018-build621';
+import { createHist, binValues, histStats } from './histogram.js?v=20261020-build630';
 
 export const PROFILE_MAX_SAMPLES = 4096;
 const spacingOf = sp => [0, 1, 2].map(n => { const x = +(sp?.[n]); return Number.isFinite(x) && x > 0 ? x : 1; });
