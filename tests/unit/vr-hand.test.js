@@ -1,11 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import {
-  isHand, createOneEuro, euroAlpha, ONE_EURO, createPoseFilter, createPinchHysteresis, PINCH_ON_M, PINCH_OFF_M, createPoseHistory, RAY_DELAY_MS,
-  createTrackingLoss, LOSS_CANCEL_MS, wristMenuMetrics, createWristMenuGate, WRIST_MENU, WRIST_ITEMS, wristSlotFromU, handTexts,
+  isHand, createOneEuro, euroAlpha, ONE_EURO, createPoseFilter, createPinchHysteresis, PINCH_ON_M, PINCH_OFF_M, RAY_HOLD_MS,
+  createTrackingLoss, LOSS_CANCEL_MS, wristMenuMetrics, createWristMenuGate, WRIST_MENU, WRIST_ITEMS, WRIST_GRID, wristSlotFromUv, handTexts, EMPTY_PINCH, palmFacesHead,
   fingerCurl, grabScore, createGrabHysteresis, GRAB, GRAB_JOINT_NAMES, GRAB_FINGERS, palmPoint, PALM_FROM_WRIST, WRIST_SCROLL, wristScrollGain, wristScrollSign,
   handAlive, fistForming, FIST_GUARD, wristScrollKeep, PINCH, PINCH_FUSION, createPinchFusion, DRAG_CARRY, createDragCarry, blendPose, parsePinchTune, parseDragTune,
-  PALM_FILTER, RAY_DELAY, rayDelayMs, slewDelay, boxDist, centeredBoxDist, squareOutlineDist, pickNearGrab, NEAR_KINDS, parseFilterTune, parseGrabTune,
-  AIM_RAY, AIM_RAY_META, AIM_AXES, AIM_ORIGINS, AIM_FILTER, AIM_HOLD, aimRayPose, fingerAimPose, indexBend, thumbSideOf, createAimHold, turnToward, parseRayTune,
+  PALM_FILTER, boxDist, centeredBoxDist, squareOutlineDist, pickNearGrab, NEAR_KINDS, parseFilterTune, parseGrabTune,
 } from '../../docs/vr-hand.js';
 import { pinchScale } from '../../docs/vr-real-scale.js';
 import { DRAG_RECORD, DRAG_HAND, DRAG_RECORD_HAND, HAND_LABEL_MOVE_M, dragShouldStart, sectionFollowStart, sectionFollowStep } from '../../docs/vr-point.js';
@@ -157,33 +156,6 @@ describe('createPinchFusion: own pinch + system select = one press', () => {
   });
 });
 
-describe('delayed ray (pose history)', () => {
-  const pose = x => [x, 0, 0, 0, 0, 0, 1];
-  it('returns the newest pose at or before now - 60 ms', () => {
-    expect(RAY_DELAY_MS).toBeGreaterThanOrEqual(50); expect(RAY_DELAY_MS).toBeLessThanOrEqual(80);
-    const h = createPoseHistory(), out = new Float64Array(7);
-    for (let i = 0; i <= 20; i++) h.push(i * FRAME, pose(i));
-    const now = 20 * FRAME, t = h.at(now - RAY_DELAY_MS, out);
-    expect(t).toBeLessThanOrEqual(now - RAY_DELAY_MS); expect(t).toBeGreaterThan(now - RAY_DELAY_MS - FRAME);
-    expect(out[0]).toBe(Math.round(t / FRAME)); // the pose recorded at that time (16 at 72 Hz: 4 frames back)
-  });
-  it('the pinch jump is left out: a ray that turns in the last 40 ms before selectstart still gives the pose before it', () => {
-    const h = createPoseHistory(), out = new Float64Array(7);
-    for (let i = 0; i <= 30; i++) h.push(i * FRAME, pose(i < 27 ? 0 : 0.05)); // the last 3 frames (~40 ms) jumped 5 cm
-    h.at(30 * FRAME - RAY_DELAY_MS, out); expect(out[0]).toBe(0);
-  });
-  it('a record shorter than the delay gives its oldest pose; empty gives null; the ring wraps', () => {
-    const h = createPoseHistory(4), out = new Float64Array(7);
-    expect(h.at(100, out)).toBe(null);
-    h.push(100, pose(1)); h.push(110, pose(2));
-    expect(h.at(50, out)).toBe(100); expect(out[0]).toBe(1);
-    for (let i = 3; i <= 9; i++) h.push(100 + (i - 1) * 10, pose(i)); // 7 more into a ring of 4: 6..9 remain (t 150..180)
-    expect(h.length).toBe(4); expect(h.at(0, out)).toBe(150); expect(out[0]).toBe(6);
-    expect(h.at(175, out)).toBe(170); expect(out[0]).toBe(8);
-    h.reset(); expect(h.at(1000, out)).toBe(null);
-  });
-});
-
 describe('tracking loss timer', () => {
   it('cancels once after 200 ms without a pose, and drops the first frame back', () => {
     expect(LOSS_CANCEL_MS).toBe(200);
@@ -237,10 +209,24 @@ describe('wrist menu decision (synthetic joint poses)', () => {
     expect(g.update(wristMenuMetrics(wp, watch, head), r.t + 10, true)).toBe(false); // the left hand pinches / tracking lost
     expect(g.update(null, r.t + 20)).toBe(false);
   });
-  it('seven buttons: ring, menu, sections, add, undo, section -, section +; u -> slot', () => {
+  it('seven buttons in slot order (ring, menu, sections, add, undo, section -, section +), laid out as a 3 x 3 grid; uv -> slot', () => {
     expect(WRIST_ITEMS).toEqual(['ring', 'menu', 'section', 'add', 'undo', 'secDown', 'secUp']);
-    expect(wristSlotFromU(0)).toBe(0); expect(wristSlotFromU(0.14)).toBe(0); expect(wristSlotFromU(0.15)).toBe(1); expect(wristSlotFromU(0.99)).toBe(6); expect(wristSlotFromU(1)).toBe(6);
-    expect(wristSlotFromU(5 / 7 + 0.01)).toBe(5); expect(wristSlotFromU(NaN)).toBe(null);
+    expect(WRIST_GRID.cells).toHaveLength(WRIST_ITEMS.length); expect(WRIST_GRID.cols).toBe(3); expect(WRIST_GRID.rows).toBe(3);
+    const key = c => c.join(','); expect(new Set(WRIST_GRID.cells.map(key)).size).toBe(WRIST_ITEMS.length); // one cell each
+    for (const [c, r] of WRIST_GRID.cells) { expect(c).toBeGreaterThanOrEqual(0); expect(c).toBeLessThan(3); expect(r).toBeGreaterThanOrEqual(0); expect(r).toBeLessThan(3); }
+    // the cell centre -> its slot (v is up: row 0 is the top)
+    WRIST_GRID.cells.forEach(([c, r], i) => expect(wristSlotFromUv((c + 0.5) / 3, 1 - (r + 0.5) / 3), WRIST_ITEMS[i]).toBe(i));
+    expect(wristSlotFromUv(0.01, 0.99)).toBe(0); expect(wristSlotFromUv(0.5, 0.99)).toBe(1); expect(wristSlotFromUv(0.99, 0.99)).toBe(2); // top row
+    expect(wristSlotFromUv(0.01, 0.5)).toBe(3); expect(wristSlotFromUv(0.5, 0.5)).toBe(4); // middle row: add, undo
+    expect(wristSlotFromUv(0.01, 0.01)).toBe(5); expect(wristSlotFromUv(0.4, 0.01)).toBe(6); // bottom row: the 断面 - / + pair side by side
+    expect(wristSlotFromUv(0.9, 0.5)).toBe(null); expect(wristSlotFromUv(0.9, 0.1)).toBe(null); // the empty cells hit nothing
+    expect(wristSlotFromUv(1, 1)).toBe(2); expect(wristSlotFromUv(0, 0)).toBe(5); // the edges stay in their cell
+    expect(wristSlotFromUv(NaN, 0.5)).toBe(null); expect(wristSlotFromUv(0.5, undefined)).toBe(null);
+  });
+  it('the panel is compact: 15 x 10.5 cm (the strip was 28 x 4), buttons 5 x 3.5 cm', () => {
+    expect(WRIST_GRID.cellW).toBe(0.05); expect(WRIST_GRID.cellH).toBe(0.035);
+    const w = WRIST_GRID.cols * WRIST_GRID.cellW, h = WRIST_GRID.rows * WRIST_GRID.cellH; expect(w).toBeCloseTo(0.15, 9); expect(h).toBeCloseTo(0.105, 9); expect(w).toBeLessThan(0.28);
+    expect(WRIST_GRID.cellH).toBeGreaterThanOrEqual(0.03); // readable at arm's length (the strip's buttons were 4 cm)
   });
   it('断面 -/+ held: a tap nudges (0.4), holding ramps to the full stick in 1 s; + = stick up (-), - = stick down (+)', () => {
     expect(wristScrollGain(0)).toBeCloseTo(WRIST_SCROLL.start); expect(wristScrollGain(WRIST_SCROLL.rampMs / 2)).toBeCloseTo((1 + WRIST_SCROLL.start) / 2);
@@ -264,6 +250,9 @@ describe('hand texts and thresholds', () => {
     expect(j.helpMenuSimple).toContain('グー'); expect(e.helpMenuSimple).toContain('fist'); // 体験会モードのかんたんメニュー（ボタンのみ）
     expect(j.helpSec.join()).toContain('断面＋／－'); expect(j.helpMenu).toContain('グー'); expect(e.helpBasic.join()).toContain('Fist'); expect(e.helpBasic.join()).toContain('Two fists');
     expect(e.helpSec.join()).toContain('Section + / -'); expect(e.helpMenu).toContain('fist');
+    // the empty-space pinch actions and the double pinch are in both help texts (basic and with sections), in both languages
+    for (const l of [j.helpBasic.join(), j.helpSec.join()]) { expect(l).toContain('右手ピンチ'); expect(l).toContain('左手'); expect(l).toContain('2回ピンチ'); }
+    for (const l of [e.helpBasic.join(), e.helpSec.join()]) { expect(l).toContain('Right pinch'); expect(l).toContain('Left pinch'); expect(l).toMatch(/2 quick pinches|two quick pinches/i); }
     for (const x of [j, e]) expect(x.helpBasic.concat(x.helpSec, x.helpMenu).join()).not.toMatch(/コントローラーで|with the controllers/); // nothing is left to the controllers any more
     expect(j.wrist(true).map(x => x[0])).toEqual(['よく使う', 'メニュー', '断面', '断面を', '取り消し', '断面', '断面']);
     expect(j.wrist(true).slice(5).map(x => x[1])).toEqual(['－', '＋']);
@@ -442,22 +431,6 @@ describe('filter lag', () => {
   });
 });
 
-describe('ray delay only while the fingers are close (rayDelayMs / slewDelay)', () => {
-  it('0 for an open hand, the full delay with thumb and index within 3 cm, linear between; unknown distance: the full delay; delayMs 0: none', () => {
-    expect(RAY_DELAY).toEqual({ maxMs: 60, farM: 0.06, nearM: 0.03 });
-    expect(rayDelayMs(0.12)).toBe(0); expect(rayDelayMs(0.06)).toBe(0); expect(rayDelayMs(0.03)).toBe(60); expect(rayDelayMs(0.01)).toBe(60);
-    expect(rayDelayMs(0.045)).toBeCloseTo(30, 9); expect(rayDelayMs(NaN)).toBe(60); expect(rayDelayMs(0.01, { maxMs: 0 })).toBe(0);
-    expect(rayDelayMs(0.2, { nearM: 10 })).toBe(60); // delayNear 10 = the old fixed delay
-  });
-  it('the pinch itself (< 1.5 cm) always has the full delay, so selectstart still sees the ray from before the fingers moved', () => {
-    expect(rayDelayMs(0.015)).toBe(RAY_DELAY.maxMs); expect(rayDelayMs(0.025)).toBe(RAY_DELAY.maxMs);
-  });
-  it('slewDelay: rises at once, falls at half real time (no jump of the ray when the fingers open)', () => {
-    expect(slewDelay(0, 60, 14)).toBe(60); expect(slewDelay(60, 0, 14)).toBeCloseTo(53, 9); expect(slewDelay(2, 0, 14)).toBe(0); expect(slewDelay(60, 60, 14)).toBe(60); expect(slewDelay(30, 0, -5)).toBe(30);
-    let d = 60; for (let i = 0; i < 9; i++) d = slewDelay(d, 0, 14); expect(d).toBe(0); // 120 ms to get back to the live ray
-  });
-});
-
 describe('direct grab: distances and the choice', () => {
   it('boxDist: 0 inside, the distance outside (face, edge, corner); a flat board is its rectangle', () => {
     const mn = { x: -1, y: -1, z: -1 }, mx = { x: 1, y: 1, z: 1 };
@@ -513,9 +486,9 @@ describe('tunables from localStorage (parse only what is valid)', () => {
     expect(DRAG_CARRY).toEqual({ carry: 1, gain: 1, rot: 1, blendMs: 120 });
   });
   it('vrl-hand-filter', () => {
-    expect(parseFilterTune(null)).toEqual({}); expect(parseFilterTune('not json')).toEqual({}); expect(parseFilterTune('[1]')).toEqual({}); expect(parseFilterTune('{"beta":"x","dCutoff":null}')).toEqual({});
-    expect(parseFilterTune('{"minCutoff":2,"beta":0.1,"dCutoff":8,"aMinCutoff":6,"aBeta":0.2,"aDCutoff":9,"delayMs":0,"delayFar":0.08,"delayNear":0.02}')).toEqual({ minCutoff: 2, beta: 0.1, dCutoff: 8, aMinCutoff: 6, aBeta: 0.2, aDCutoff: 9, delayMs: 0, delayFar: 0.08, delayNear: 0.02 });
-    expect(parseFilterTune('{"minCutoff":0,"beta":-1,"delayMs":1e9}')).toEqual({}); // out of range: ignored (minCutoff 0 would freeze the ray)
+    expect(parseFilterTune(null)).toEqual({}); expect(parseFilterTune('not json')).toEqual({}); expect(parseFilterTune('[1]')).toEqual({}); expect(parseFilterTune('{"aBeta":"x","aDCutoff":null}')).toEqual({});
+    expect(parseFilterTune('{"minCutoff":2,"beta":0.1,"aMinCutoff":6,"aBeta":0.2,"aDCutoff":9,"delayMs":0}')).toEqual({ aMinCutoff: 6, aBeta: 0.2, aDCutoff: 9 }); // the ray's own keys are gone: the ray is the system's
+    expect(parseFilterTune('{"aMinCutoff":0,"aBeta":-1}')).toEqual({}); // out of range: ignored
   });
   it('vrl-hand-grab (the old keys keep working; near is new)', () => {
     expect(parseGrabTune('{"on":0.5,"off":0.65,"holdMs":30,"near":0.08}')).toEqual({ on: 0.5, off: 0.65, holdMs: 30, near: 0.08 });
@@ -579,59 +552,6 @@ describe('createDragCarry: the press ray carried by the palm anchor', () => {
   });
 });
 
-// ---- what the hand path adds, measured on synthetic motion (72 Hz) ----
-// the old pinch drag: the system ray 60 ms in the past (thumb and index are close for the whole pinch) through the ray One Euro; the new one: the palm
-// anchor (PALM_FILTER) carrying the press ray. Quest's own hand tracking / pointer latency is not in these numbers (it is the same for both).
-const oldPinchRayLagMs = v => {
-  const h = createPoseHistory(), f = createPoseFilter(ONE_EURO), del = new Float64Array(7), o = new Float64Array(7); let x = 0, delay = 0, last = 0;
-  for (let i = 0; i < 400; i++) { const t = i * FRAME; x = v * t / 1000; delay = slewDelay(delay, rayDelayMs(0.01), t - last); last = t; h.push(t, [x, 0, 0, 0, 0, 0, 1]); const ts = h.at(t - delay, del); f.filter(del, ts, o); }
-  return (x - o[0]) / v * 1000;
-};
-const carriedLagMs = v => {
-  const f = createPoseFilter(PALM_FILTER), a = new Float64Array(7), c = createDragCarry(), o = new Float64Array(7); let x = 0;
-  for (let i = 0; i < 400; i++) { const t = i * FRAME; x = v * t / 1000; f.filter([x, 0, 0, 0, 0, 0, 1], t, a); if (i === 0) c.start(pose([0, 0, -0.1], [0, 0, 0, 1]), a); c.step(a, o); }
-  return (x - o[0]) / v * 1000;
-};
-describe('latency of a pinch drag', () => {
-  it('before: ~84 ms at 10 cm/s (the 60 ms delay = 5 frames = 69 ms at 72 Hz for the whole pinch + 14 ms ray filter); after: ~6 ms (palm filter only)', () => {
-    const before = [0.05, 0.1, 0.3].map(oldPinchRayLagMs), after = [0.05, 0.1, 0.3].map(carriedLagMs);
-    expect(before[1]).toBeGreaterThan(80); expect(before[1]).toBeLessThan(88); // 69 + 14 (5 cm/s: ~91, 30 cm/s: ~76)
-    expect(before[0]).toBeGreaterThan(86); expect(before[2]).toBeGreaterThan(72);
-    expect(after[0]).toBeLessThan(10); expect(after[1]).toBeLessThan(7); expect(after[2]).toBeLessThan(3);
-  });
-  it('the drag no longer waits for the delayed ray to pass the pinch (60 ms) before it can start: the carried press has its reference at the press', () => {
-    expect(RAY_DELAY.maxMs).toBe(60); // the old wait (vr-hand-view.js tick: now - pr.t0 >= delayTune.maxMs), skipped while the press is carried
-  });
-});
-
-// a fan stroke: the wrist flexes +-30 deg at 1.5 Hz with the forearm still. The system's pinch ray is aimed from the shoulder through the pinch point
-// (a model of Quest's hand pointer, without its own smoothing): it hardly turns. The carried ray turns with the wrist.
-describe('fan stroke', () => {
-  const W = [0, 0, -0.45], amp = 30, hz = 1.5, n = 300;
-  const wristQ = t => qAxis([1, 0, 0], amp * Math.sin(2 * Math.PI * hz * t / 1000));
-  const pitch = q => { const d = qRotV(q, [0, 0, -1]); return Math.atan2(d[1], -d[2]) * 180 / Math.PI; };
-  // amplitude (deg) and lag (ms, from the input's zero crossings) of a pitch series sampled at FRAME
-  const ampLag = (series, from = 120) => {
-    let a = 0; const lags = [];
-    for (let i = from; i < series.length; i++) { a = Math.max(a, Math.abs(series[i])); if (series[i - 1] < 0 && series[i] >= 0) { const t = (i - 1 + (-series[i - 1]) / (series[i] - series[i - 1])) * FRAME; const per = 1000 / hz; lags.push(((t % per) + per) % per); } }
-    return { amp: a, lag: lags.reduce((s, v) => s + v, 0) / lags.length };
-  };
-  it('the system ray turns ~7 deg (23 %) and ~120 ms late; the carried ray turns the full 30 deg, < 1 ms late', () => {
-    const h = createPoseHistory(), fr = createPoseFilter(ONE_EURO), fa = createPoseFilter(PALM_FILTER), c = createDragCarry();
-    const del = new Float64Array(7), ro = new Float64Array(7), a = new Float64Array(7), co = new Float64Array(7), sys = [], car = [];
-    let delay = 0, last = 0;
-    for (let i = 0; i < n; i++) {
-      const t = i * FRAME, q = wristQ(t), pin = qRotV(q, [0, -0.02, -0.09]).map((v, k) => v + W[k]), palm = qRotV(q, [0, 0, -0.045]).map((v, k) => v + W[k]);
-      const ph = Math.atan2(pin[1], -pin[2]) / 2, rq = [Math.sin(ph), 0, 0, Math.cos(ph)]; // shoulder (origin) -> pinch point
-      delay = slewDelay(delay, rayDelayMs(0.01), t - last); last = t; h.push(t, [...pin, ...rq]); const ts = h.at(t - delay, del); fr.filter(del, ts, ro); sys.push(pitch([...ro.slice(3)]));
-      fa.filter([...palm, ...q], t, a); if (i === 0) c.start(pose(pin, [0, 0, 0, 1]), a); c.step(a, co); car.push(pitch([...co.slice(3)]));
-    }
-    const s = ampLag(sys), k = ampLag(car);
-    expect(s.amp).toBeLessThan(8); expect(s.amp / amp).toBeLessThan(0.25); expect(s.lag).toBeGreaterThan(100);
-    expect(k.amp).toBeGreaterThan(29); expect(k.lag).toBeLessThan(3);
-  });
-});
-
 // the fist guard against pinch postures (planar fingers, adult bone lengths): a pinch with the other fingers tucked is no fist
 describe('fist guard vs. real pinch postures', () => {
   const bones = { index: [0.068, 0.039, 0.022, 0.018], middle: [0.065, 0.044, 0.026, 0.019], ring: [0.058, 0.041, 0.025, 0.019], pinky: [0.054, 0.032, 0.018, 0.017] };
@@ -652,135 +572,39 @@ describe('fist guard vs. real pinch postures', () => {
   });
 });
 
-// ---- the hand's own aim ray ----
-const rotQ = (q, v) => { const [x, y, z, w] = q, tx = 2 * (y * v[2] - z * v[1]), ty = 2 * (z * v[0] - x * v[2]), tz = 2 * (x * v[1] - y * v[0]); return [v[0] + w * tx + y * tz - z * ty, v[1] + w * ty + z * tx - x * tz, v[2] + w * tz + x * ty - y * tx]; };
-const angDeg = (a, b) => Math.acos(Math.max(-1, Math.min(1, a[0] * b[0] + a[1] * b[1] + a[2] * b[2]))) * 180 / Math.PI;
-describe('aimRayPose: from the index knuckle along the index metacarpal, tilted to the palm and the thumb', () => {
-  it('defaults: along the index finger from its second knuckle, no tilt, the joint ray on; axis "metacarpal" tilts 8 / 4 deg', () => {
-    expect(AIM_RAY).toEqual({ axis: 'finger', origin: 'pip', tipMix: 0, pitchDeg: 0, yawDeg: 0, joint: 1 }); expect(AIM_RAY_META).toEqual({ pitchDeg: 8, yawDeg: 4 });
-    expect(AIM_AXES).toEqual(['finger', 'metacarpal']); expect(AIM_ORIGINS).toEqual(['knuckle', 'pip', 'tip']);
+// ---- the hand's ray is the system's own, as it is ----
+describe('the system ray, held through a short dropout', () => {
+  it('RAY_HOLD_MS is 200 ms (the same as the tracking-loss cancel: a press is dropped only after the ray has been missing longer)', () => {
+    expect(RAY_HOLD_MS).toBe(200); expect(RAY_HOLD_MS).toBeLessThanOrEqual(LOSS_CANCEL_MS);
   });
-  it('no tilt (the defaults): the joint pose itself at the origin; out may be the input', () => {
-    const o = new Float64Array(7), q = qAxis([1, 2, 3], 37);
-    aimRayPose([9, 9, 9, ...q], [1, 2, 3], -1, {}, o); expect([...o]).toEqual([1, 2, 3, ...q]);
-    const j = new Float64Array([9, 9, 9, ...q]); aimRayPose(j, [1, 2, 3], 1, { pitchDeg: 8, yawDeg: 4 }, j);
-    const k = aimRayPose([9, 9, 9, ...q], [1, 2, 3], 1, { pitchDeg: 8, yawDeg: 4 }, new Float64Array(7)); expect([...j]).toEqual([...k]);
-  });
-  it('fingerAimPose: tipMix 0 = the proximal joint pose at the origin; tipMix 1 = the knuckle -> tip line (the roll kept); between: the blend; no tip: the bone', () => {
-    const o = new Float64Array(7), q = qAxis([1, 0, 0], -40); // the phalanx bent 40 deg toward the palm: -Z -> (0, -sin40, -cos40)
-    fingerAimPose([0, 0, 0, ...q], [1, 2, 3], [0, -1, -1], 0, o); expect([...o]).toEqual([1, 2, 3, ...q]);
-    fingerAimPose([0, 0, 0, ...q], [1, 2, 3], null, 1, o); expect([...o]).toEqual([1, 2, 3, ...q]);
-    fingerAimPose([0, 0, 0, ...q], [0, 0, 0], [0, -5, -5], 1, o);
-    expect(angDeg(rotQ([...o.slice(3)], [0, 0, -1]), [0, -Math.SQRT1_2, -Math.SQRT1_2])).toBeLessThan(1e-6); // along the tip line (45 deg)
-    expect(angDeg(rotQ([...o.slice(3)], [1, 0, 0]), [1, 0, 0])).toBeLessThan(1e-6); // the roll: X stays across
-    fingerAimPose([0, 0, 0, ...q], [0, 0, 0], [0, -5, -5], 0.5, o);
-    const d = rotQ([...o.slice(3)], [0, 0, -1]); expect(angDeg(d, [0, -Math.sin(40 * Math.PI / 180), -Math.cos(40 * Math.PI / 180)])).toBeCloseTo(2.5, 6); // halfway between 40 and 45
-    expect(Math.hypot(...o.slice(3))).toBeCloseTo(1, 12);
-  });
-  it('indexBend: the angle between the metacarpal and the proximal phalanx bone axes', () => {
-    expect(indexBend([0, 0, 0, 1], qAxis([1, 0, 0], -40)) * 180 / Math.PI).toBeCloseTo(40, 9);
-    expect(indexBend(qAxis([0, 1, 0], 30), qAxis([0, 1, 0], 30))).toBeCloseTo(0, 9);
-  });
-  it('an unturned joint: the origin is the knuckle, the direction is -Z tilted toward -Y (the palm) and toward the thumb side (+X or -X)', () => {
-    const o = new Float64Array(7);
-    aimRayPose([0.5, 0.6, 0.7, 0, 0, 0, 1], [1, 2, 3], 1, AIM_RAY_META, o);
-    expect([...o.slice(0, 3)]).toEqual([1, 2, 3]);
-    const d = rotQ([...o.slice(3)], [0, 0, -1]);
-    expect(d[0]).toBeCloseTo(Math.sin(4 * Math.PI / 180) * Math.cos(8 * Math.PI / 180), 6); expect(d[1]).toBeCloseTo(-Math.sin(8 * Math.PI / 180), 6); expect(d[2]).toBeLessThan(-0.98);
-    aimRayPose([0, 0, 0, 0, 0, 0, 1], [0, 0, 0], -1, AIM_RAY_META, o);
-    const e = rotQ([...o.slice(3)], [0, 0, -1]);
-    expect(e[0]).toBeCloseTo(-d[0], 9); expect(e[1]).toBeCloseTo(d[1], 9); // the thumb on the other side: the yaw mirrors, the pitch does not
-    expect(Math.hypot(...o.slice(3))).toBeCloseTo(1, 12);
-  });
-  it('no offsets: exactly the joint axis; the joint turned: the ray turns with it 1:1 (the whole 90 deg, not the ~23% of the system ray)', () => {
-    const o = new Float64Array(7), q = qAxis([0, 1, 0], 90);
-    aimRayPose([0, 0, 0, ...q], [0, 0, 0], 1, { pitchDeg: 0, yawDeg: 0 }, o);
-    expect(angDeg(rotQ([...o.slice(3)], [0, 0, -1]), rotQ(q, [0, 0, -1]))).toBeLessThan(1e-6);
-    expect(angDeg(rotQ(q, [0, 0, -1]), [0, 0, -1])).toBeCloseTo(90, 6);
-    aimRayPose([0, 0, 0, ...q], [0, 0, 0], 1, {}, o);
-    const d = rotQ([...o.slice(3)], [0, 0, -1]), e = rotQ(q, rotQ([...aimRayPose([0, 0, 0, 0, 0, 0, 1], [0, 0, 0], 1, {}, new Float64Array(7)).slice(3)], [0, 0, -1]));
-    expect(angDeg(d, e)).toBeLessThan(1e-4); // the offsets are in the joint's own frame
-  });
-  it('thumbSideOf: the sign of the thumb base along the frame X axis; the frame turned 180 deg about Y flips it; coincident: 0 (keep the last side)', () => {
-    expect(thumbSideOf([0, 0, 0, 1], [0, 0, 0], [0.03, -0.01, -0.02])).toBe(1); expect(thumbSideOf([0, 0, 0, 1], [0, 0, 0], [-0.03, 0, -0.02])).toBe(-1);
-    expect(thumbSideOf(qAxis([0, 1, 0], 180), [0, 0, 0], [0.03, 0, -0.02])).toBe(-1); expect(thumbSideOf([0, 0, 0, 1], [1, 1, 1], [1, 1, 1])).toBe(0);
-  });
-  it('parseRayTune (localStorage vrl-hand-ray): the listed keys within their ranges, axis / origin from their lists, nothing else', () => {
-    expect(parseRayTune('{"joint":0,"axis":"metacarpal","origin":"tip","tipMix":0.5,"pitch":12,"yaw":-3,"minCutoff":3,"beta":0.3,"dCutoff":8,"holdDeg":5,"holdSpeed":0.2,"holdCurl":90,"holdMs":100,"rampMs":200,"x":1}')).toEqual({ joint: 0, axis: 'metacarpal', origin: 'tip', tipMix: 0.5, pitch: 12, yaw: -3, minCutoff: 3, beta: 0.3, dCutoff: 8, holdDeg: 5, holdSpeed: 0.2, holdCurl: 90, holdMs: 100, rampMs: 200 });
-    expect(parseRayTune('{"pitch":90,"joint":2,"axis":"wrist","origin":1,"tipMix":2}')).toEqual({}); expect(parseRayTune(null)).toEqual({}); expect(parseRayTune('nope')).toEqual({});
+  it('the One Euro filter (the palm anchor, the wrist menu) never takes a non-finite sample into its state: the previous output comes back, out untouched when there is none', () => {
+    const f = createOneEuro(3, { speedScale: 100 }), o = new Float64Array(3);
+    f.filter([1, 2, 3], 0, o); f.filter([1, 2, 3], FRAME, o);
+    f.filter([NaN, 2, 3], 2 * FRAME, o); expect([...o]).toEqual([1, 2, 3]);
+    f.filter([1, Infinity, 3], 3 * FRAME, o); expect([...o]).toEqual([1, 2, 3]);
+    f.filter([1, 2, 3], NaN, o); expect([...o]).toEqual([1, 2, 3]);
+    f.filter([1.5, 2, 3], 4 * FRAME, o); expect(o.every(Number.isFinite)).toBe(true); expect(o[0]).toBeGreaterThan(1);
+    const g = createOneEuro(3), p = new Float64Array([7, 7, 7]); g.filter([NaN, 0, 0], 0, p); expect([...p]).toEqual([7, 7, 7]);
   });
 });
 
-describe('the aim hold (createAimHold / turnToward): the direction is held only while a pinch is closing', () => {
-  it('defaults: closing faster than 12 cm/s (or the index curling faster than 60 deg/s) below 6 cm; 10 deg/s for 60 ms after, ramped free over 120 ms', () => { expect(AIM_HOLD).toEqual({ closeM: 0.06, speed: 0.12, curlDegPerS: 60, degPerS: 10, tailMs: 60, rampMs: 120, freeDegPerS: 720 }); });
-  it('the index curling faster than 60 deg/s below 6 cm holds (a slow gap alone would not); above 6 cm, straightening, or an unknown bend: not', () => {
-    const h = createAimHold(); let t = 0; const R = Math.PI / 180, perFrame = 10 * R * FRAME / 1000;
-    for (let i = 0; i < 10; i++) expect(h.update(0.05, t += FRAME, 20 * R)).toBe(Infinity);
-    for (let i = 1; i <= 5; i++) expect(h.update(0.05 - 0.0005 * i, t += FRAME, (20 + 4 * i) * R)).toBeCloseTo(perFrame, 12); // 290 deg/s of curl, the gap closing 3.6 cm/s
-    for (let i = 0; i < 20; i++) h.update(0.047, t += FRAME, 40 * R); expect(h.update(0.047, t += FRAME, 40 * R)).toBe(Infinity);
-    for (let i = 1; i <= 5; i++) expect(h.update(0.05, t += FRAME, (40 - 4 * i) * R)).toBe(Infinity); // straightening
-    for (let i = 1; i <= 5; i++) expect(h.update(0.08, t += FRAME, (20 + 4 * i) * R)).toBe(Infinity); // the gap is wide open: a finger wiggle, not a pinch
-    for (let i = 1; i <= 5; i++) expect(h.update(0.08, t += FRAME, NaN)).toBe(Infinity);
-    expect(h.update(0.08, t += FRAME, 80 * R)).toBe(Infinity); // after NaN the first bend has no rate
-    for (let i = 1; i <= 5; i++) expect(h.update(0.08 - 0.0001 * i, t += FRAME, (80 + 0.5 * i) * R)).toBe(Infinity); // 36 deg/s: under the trigger
+// ---- empty-space pinch actions ----
+describe('empty-space pinch: the palm test and the thresholds', () => {
+  it('thresholds: dropped after 5 cm of hand travel; a palm within 60 deg of the face is the system gesture; a double pinch within 300 ms', () => {
+    expect(EMPTY_PINCH).toEqual({ moveM: 0.05, palmFacingCos: 0.5, doubleMs: 300 });
   });
-  it('a relaxed gap held still, a slow drift, an opening hand, an unknown distance: free (Infinity)', () => {
-    const h = createAimHold(); let t = 0;
-    for (let i = 0; i < 30; i++) expect(h.update(0.04, t += FRAME)).toBe(Infinity);
-    for (let i = 0; i < 30; i++) expect(h.update(0.04 - 0.001 * i, t += FRAME)).toBe(Infinity); // 7 cm/s: a drift, not a pinch
-    for (let i = 0; i < 10; i++) expect(h.update(0.01 + 0.005 * i, t += FRAME)).toBe(Infinity); // opening fast
-    for (let i = 0; i < 10; i++) expect(h.update(NaN, t += FRAME)).toBe(Infinity);
-    expect(h.update(0.02, t += FRAME)).toBe(Infinity); // after NaN the first finite sample has no rate
-    expect(h.held).toBe(false);
+  const wp = [0, 1.2, -0.3], head = [0, 1.6, 0];
+  it('palmFacesHead: the palm (-Y of the wrist) turned to the head is true; the back of the hand to the head, the palm down / away, are false', () => {
+    const toHead = norm(head.map((v, i) => v - wp[i]));
+    // a wrist whose palm normal (-Y) points at the head: +Y = away from the head; fingers across the view
+    const palmUp = wristQ(toHead.map(v => -v), cross(toHead, [0, 1, 0]));
+    expect(palmFacesHead(wp, palmUp, head)).toBe(true); expect(palmFacesHead(wp, palmUp, { x: 0, y: 1.6, z: 0 })).toBe(true);
+    const backToHead = wristQ(toHead, cross(toHead, [0, 1, 0])); expect(palmFacesHead(wp, backToHead, head)).toBe(false); // the watch pose: the wrist menu, not the system gesture
+    expect(palmFacesHead(wp, wristQ([0, 1, 0], [0, 0, -1]), head)).toBe(false); // palm down, aiming forward
+    expect(palmFacesHead(wp, wristQ([0, -1, 0], [0, 0, -1]), head)).toBe(true); // palm up toward a head above
+    expect(palmFacesHead(wp, wristQ([0, 0, 1], [0, 0, -1]), head)).toBe(false); // palm away from the face (normal along -Z... toward -Z, head is behind)
   });
-  it('a pinch closing (6 -> 1 cm in 70 ms): held at 10 deg/s per frame from the first closing frame, 60 ms after the last, then the limit ramps up to free within 120 ms', () => {
-    const h = createAimHold(); let t = 0; h.update(0.06, t);
-    const perFrame = 10 * Math.PI / 180 * FRAME / 1000;
-    for (const d of [0.05, 0.04, 0.03, 0.02, 0.01]) expect(h.update(d, t += FRAME)).toBeCloseTo(perFrame, 12);
-    expect(h.held).toBe(true);
-    const lims = []; for (let i = 0; i < 20; i++) lims.push(h.update(0.01, t += FRAME));
-    const held = lims.filter(l => Math.abs(l - perFrame) < 1e-12).length, free = lims.indexOf(Infinity);
-    expect(held).toBeGreaterThanOrEqual(4); expect(held).toBeLessThanOrEqual(5); // ~60 ms of tail
-    expect(free).toBeGreaterThan(held); expect(free).toBeLessThanOrEqual(held + 9); // the ramp: 120 ms
-    for (let i = held; i < free; i++) expect(lims[i]).toBeGreaterThan(lims[i - 1]); // monotone: no snap
-    for (let i = free; i < lims.length; i++) expect(lims[i]).toBe(Infinity);
-    expect(h.held).toBe(false);
-    h.reset(); expect(h.update(0.01, t += FRAME)).toBe(Infinity);
-  });
-  it('turnToward: within the limit the target itself; beyond it exactly maxRad toward it; returns the angle', () => {
-    const a = [0, 0, 0, 1], b = qAxis([0, 1, 0], 30), o = new Float64Array(4);
-    expect(turnToward(a, 0, b, 0, 1, o, 0) * 180 / Math.PI).toBeCloseTo(30, 9); expect([...o]).toEqual(b);
-    turnToward(a, 0, b, 0, 10 * Math.PI / 180, o, 0);
-    expect(angDeg(rotQ([...o], [0, 0, -1]), [0, 0, -1])).toBeCloseTo(10, 9); expect(angDeg(rotQ([...o], [0, 0, -1]), rotQ(b, [0, 0, -1]))).toBeCloseTo(20, 9);
-    const nb = b.map(v => -v); turnToward(a, 0, nb, 0, 10 * Math.PI / 180, o, 0); // -q is the same turn: the short way
-    expect(angDeg(rotQ([...o], [0, 0, -1]), [0, 0, -1])).toBeCloseTo(10, 9);
-    expect(turnToward(b, 0, b, 0, 0, o, 0)).toBeCloseTo(0, 9); expect(Math.hypot(...o)).toBeCloseTo(1, 12);
-  });
-});
-
-// the lag of the filtered direction behind a hand turning at w deg/s (ms), and the angle it is behind by (deg); the run is kept under a half turn
-const rotLagMs = (opts, w) => { const f = createPoseFilter(opts), o = new Float64Array(7); let a = 0; const n = Math.min(600, Math.floor(170 / w * 72)); for (let i = 0; i < n; i++) { a = w * Math.PI / 180 * i * FRAME / 1000; f.filter([0, 0, 0, 0, Math.sin(a / 2), 0, Math.cos(a / 2)], i * FRAME, o); } return (a - 2 * Math.atan2(o[4], o[6])) / (w * Math.PI / 180) * 1000; };
-// rms of the filtered direction (deg) for a hand at rest whose tracked orientation carries white noise of s deg rms and a 0.15 deg 8 Hz tremor
-const rotJitterDeg = (opts, s) => { const f = createPoseFilter(opts), o = new Float64Array(7); let seed = 7, s2 = 0, n = 0; const g = () => { let u = 0; for (let k = 0; k < 12; k++) u += (seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296; return u - 6; };
-  for (let i = 0; i < 1440; i++) { const a = (s * g() + 0.15 * Math.sin(2 * Math.PI * 8 * i * FRAME / 1000)) * Math.PI / 180; f.filter([0, 0, 0, 0, Math.sin(a / 2), 0, Math.cos(a / 2)], i * FRAME, o); if (i > 144) { const ao = 2 * Math.atan2(o[4], o[6]); s2 += ao * ao; n++; } } return Math.sqrt(s2 / n) * 180 / Math.PI; };
-describe('aim path latency: what the hand code adds on top of the runtime, before / after, 72 Hz', () => {
-  it('the delayed ray is gone from the aim path: a relaxed hand (4.5 cm gap) had 30 ms, a closing one 60 ms (+ up to 120 ms of slew after opening); the joint ray has 0', () => {
-    expect(rayDelayMs(0.045)).toBeCloseTo(30, 9); expect(rayDelayMs(0.02)).toBe(60); expect(rayDelayMs(0.07)).toBe(0);
-    let d = 60, ms = 0; while (d > 0) { d = slewDelay(d, 0, FRAME); ms += FRAME; } expect(ms).toBeGreaterThan(110); // the tail after the fingers open
-    // the aim hold replaces it: free unless the fingers close faster than 12 cm/s (a relaxed hand, aiming, is never held)
-    const h = createAimHold(); let t = 0; for (let i = 0; i < 50; i++) expect(h.update(0.045 + 0.0007 * Math.sin(i), t += FRAME)).toBe(Infinity); // the gap wavers by ~5 cm/s at most
-  });
-  it('the filter: the direction trails under 20 / 12 / 8 / 4 ms at 2 / 5 / 10 / 30 deg/s (was 36 / 23 / 15 / 7), under 0.1 deg at 10 deg/s; the origin under 10 ms at 10 cm/s', () => {
-    const before = [2, 5, 10, 30].map(w => rotLagMs(ONE_EURO, w)), after = [2, 5, 10, 30].map(w => rotLagMs(AIM_FILTER, w));
-    expect(before.map(Math.round)).toEqual([36, 23, 15, 7]);
-    expect(after[0]).toBeLessThan(20); expect(after[1]).toBeLessThan(12); expect(after[2]).toBeLessThan(8); expect(after[3]).toBeLessThan(4);
-    for (let i = 0; i < 4; i++) expect(after[i]).toBeLessThan(before[i] * 0.6);
-    expect(rotLagMs(AIM_FILTER, 10) * 10 / 1000).toBeLessThan(0.1);
-    expect(steadyLagMs(AIM_FILTER, 0.1)).toBeLessThan(10); expect(steadyLagMs(AIM_FILTER, 0.02)).toBeLessThan(steadyLagMs(ONE_EURO, 0.02));
-  });
-  it('jitter at rest stays bounded: under 0.25 deg rms for 0.3 deg of tracking noise (+ tremor), at most 1.5x the old ray filter; 0.15 deg noise -> under 0.13', () => {
-    expect(rotJitterDeg(AIM_FILTER, 0.3)).toBeLessThan(0.25); expect(rotJitterDeg(AIM_FILTER, 0.3)).toBeLessThan(rotJitterDeg(ONE_EURO, 0.3) * 1.5);
-    expect(rotJitterDeg(AIM_FILTER, 0.15)).toBeLessThan(0.13);
-    expect(rotJitterDeg(AIM_FILTER, 0.3)).toBeLessThan(rotJitterDeg({ minCutoff: 1e4, beta: 0, dCutoff: 1e4 }, 0.3) * 0.8); // and it does smooth
+  it('bad inputs are never "facing" (no NaN decision)', () => {
+    expect(palmFacesHead(null, [0, 0, 0, 1], head)).toBe(false); expect(palmFacesHead(wp, null, head)).toBe(false); expect(palmFacesHead(wp, [NaN, 0, 0, 1], head)).toBe(false); expect(palmFacesHead(wp, [0, 0, 0, 1], wp)).toBe(false);
   });
 });

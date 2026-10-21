@@ -22,14 +22,14 @@
 //   in result.phases[phase] = {stats, info}: shown on the line and in the JSON, not judged. A throw = "✖ …（エラー）". Cancelling (the button, or leaving VR)
 //   makes the pending measure() throw so that your finally blocks run.
 // The runner is created once per VR session (createVrSelfCheck, vr-view.js); registrations are module level, so a feature registers at import time.
-import { DEFAULT_HZ, createFrameRing, computeStats, judge, formatLine, verdictLine, criteriaText, resultText, resultJson, overall, zoomSummaries, PASS_MARK, FAIL_MARK } from './vr-self-check-core.js?v=20261020-build630';
+import { DEFAULT_HZ, createFrameRing, computeStats, judge, formatLine, verdictLine, criteriaText, resultText, resultJson, overall, zoomSummaries, PASS_MARK, FAIL_MARK } from './vr-self-check-core.js?v=20261021-build639';
 
 export { PASS_MARK, FAIL_MARK };
 export const SCENARIO_SECONDS = 5, SETTLE_MS = 800;
 export const ZOOM_SECONDS = 2; // the zoom scenarios are shorter (6 of them)
 // each zoom scenario measures twice: 直後 (transition) = the first TRANSITION_SECONDS right after the size change (no settle: hitches of the change
 // and the time the quality needs to adapt show here), then 安定 (steady) = ZOOM_SECONDS from STEADY_AT_MS after the change (judged). Total about 55 s
-// (about 70 s with 最大 90°静止 of and the histogram and HU line scenarios of #148).
+// (about 70 s with 最大 90°静止 of and the histogram and HU line scenarios of an earlier change).
 export const TRANSITION_SECONDS = 1, STEADY_AT_MS = 3000;
 const CANCEL = Symbol('vr-self-check-cancel');
 
@@ -122,7 +122,7 @@ export const lastVrSelfCheckResult = () => lastResult;
 
 // ja texts of the VR page (kept here so that vr-view.js has no new language strings)
 export function selfCheckTexts(ja = true) {
-  // about 70 s in all: 4 x 5.8 s (基準 / 回転 / 断面 / 再描画) + 7 x about 5 s (拡大: 直後 + 安定,; 最大 90°静止) + 5.8 s (ヒストグラム, #147) + 3.8 s and the full read (HU線)
+  // about 70 s in all: 4 x 5.8 s (基準 / 回転 / 断面 / 再描画) + 7 x about 5 s (拡大: 直後 + 安定,; 最大 90°静止) + 5.8 s (ヒストグラム) + 3.8 s and the full read (HU線)
   return ja ? { button: '自己診断（約 70 秒）', title: 'VR 自己診断', run: '自己診断を始める', stop: '中止', hint: ['ボタンを押すとボリュームが正面に出て、自動で回転・断面・再描画と、拡大（2倍・4倍・最大・最大90°・接近）、HU分布の集計、HU線を試します。', '測定中はコントローラに触れず、ヘッドセットを動かさないでください。'], running: '測定中 ', done: '終わりました。この画面の数字を伝えるか、VR 終了後に出る「コピー」で貼り付けてください', cancelled: '中止しました（元の状態に戻しました）', none: 'まだ実行していません', copy: 'コピー', close: '閉じる', save: '保存（JSON）', summary: 'VR 自己診断' }
     : { button: 'Self-check (about 70 s)', title: 'VR self-check', run: 'Start self-check', stop: 'Stop', hint: ['Brings the volume in front and tries rotation, a section sweep, re-rendering, magnified views (2x, 4x, max, max at 90°, close-up), the HU histogram and the HU line automatically.', 'Do not touch the controllers or move around while it runs.'], running: 'Running ', done: 'Done. Read the numbers here, or use Copy after leaving VR', cancelled: 'Cancelled (state restored)', none: 'Not run yet', copy: 'Copy', close: 'Close', save: 'Save (JSON)', summary: 'VR self-check' };
 }

@@ -83,7 +83,7 @@ describe('vr-view.js: hand tracking is optional and every hand branch is guarded
   it('selectstart ignores a pinch the system sees inside a fist (first thing); selectend stops the wrist 断面 +/-', () => {
     const b = bodyAfter(src, "c.addEventListener('selectstart',e=>{");
     expect(b.trimStart().startsWith('if(isHand(c.userData.source)&&(!e.handPinch||handIn.grabbing(c)||handIn.fistLike(c)))return;')).toBe(true);
-    expect(src).toContain("c.addEventListener('selectend',e=>{if(isHand(c.userData.source)&&!e.handPinch)return;c.userData.wristScroll=null});");
+    expect(src).toContain("c.addEventListener('selectend',e=>{if(isHand(c.userData.source)&&!e.handPinch)return;c.userData.wristScroll=null;if(isHand(c.userData.source)){empStop(c,false);c.userData.dpr?.update(false,performance.now())}});"); // + the empty-space pinch / double pinch end, hands only
     expect(bodyAfter(hv, 'grabbing(c){')).toContain('isHand(c.userData.source)');
   });
   it('wrist 断面 -/+: only from a hand, only with a selected section, added to the stick scroll (the same SCROLL_SPEED / clamp path)', () => {
@@ -108,7 +108,7 @@ describe('vr-view.js: hand tracking is optional and every hand branch is guarded
   });
   it('every other handIn / wrist use in vr-view.js is behind isHand() or comes from a hand-only call', () => {
     const own = ['import ', 'const handIn=createHandInput(', "session.addEventListener('end',()=>handIn.dispose()", "for(const t of ['selectstart','selectend'])"];
-    const handOnlyApi = ['handIn.frame(', 'handIn.wristHit(', 'handIn.hover(', 'handIn.wristId(', 'handIn.anyHand()', 'handIn.drop(c)', 'handIn.connect(', 'handIn.flash(', 'handIn.dragTh(', 'handIn.holder(', 'handIn.grabbing(', 'handIn.reach(', 'handIn.wristShown'];
+    const handOnlyApi = ['handIn.frame(', 'handIn.wristHit(', 'handIn.hover(', 'handIn.wristId(', 'handIn.anyHand()', 'handIn.drop(c)', 'handIn.connect(', 'handIn.flash(', 'handIn.dragTh(', 'handIn.holder(', 'handIn.grabbing(', 'handIn.reach(', 'handIn.wristShown', 'handIn.rayOn('];
     for (const l of src.split('\n').filter(x => /handIn\.|bd\.wrist|o\.wrist|HAND_LABEL_MOVE_M/.test(x))) {
       if (own.some(w => l.includes(w))) continue;
       const ok = l.includes('isHand(') || l.includes('c.userData.hs') || handOnlyApi.some(w => l.includes(w)) || /bd\.wrist|o\.wrist/.test(l);
@@ -116,9 +116,11 @@ describe('vr-view.js: hand tracking is optional and every hand branch is guarded
     }
     // the hand-only API checks the input source itself
     expect(bodyAfter(hv, 'connect(c,i){')).toMatch(/^if\(!isHand\(c\.userData\.source\)\)return;/);
+    expect(bodyAfter(hv, 'rayOn(c){')).toMatch(/^const hs=c\.userData\.hs;return!isHand\(c\.userData\.source\)\|\|!hs\|\|/); // a controller's ray is always on
     expect(bodyAfter(hv, 'flash(c,amp,ms){')).toContain('if(!isHand(c.userData.source)||!hs)return;');
     expect(bodyAfter(hv, 'wristHit(c,raycaster,setRay){').trimStart()).toMatch(/^if\(!isHand\(c\.userData\.source\)\|\|!wrist\.visible\|\|c===leftC\)return null;/);
     expect(bodyAfter(hv, 'frame(now){')).toContain('if(!isHand(s)){ctrl=true;continue}');
+    expect(bodyAfter(hv, 'wristHit(c,raycaster,setRay){')).toContain('wristSlotFromUv(x.uv.x,x.uv.y)'); // the grid's hit test (rows and columns)
     // the wrist menu only via o.wrist (a hand's ray), and it is the only producer of bd.wrist
     expect(src).toContain('o.wrist=handIn.wristHit(c,raycaster,setRay);');
     expect(src.match(/o\.wrist=/g)).toHaveLength(2); // the assignment above and the nearest-board fix-up (o.wrist=null)
@@ -164,21 +166,21 @@ describe('the own pinch and the carried pinch drag are hands only (controllers u
   });
 });
 
-describe('the joint aim ray is built only in a hand\'s tick (controllers untouched); the system ray stays the fallback', () => {
+describe('the hand\'s ray is the system\'s own (no custom ray, no filter, no delay, no tunable mode); a hand-only dropout hold', () => {
   const code = t => t.split('\n').map(l => l.replace(/\/\/.*$/, '')).join('\n');
-  it('aimRay() is called once, inside tick (reached only from frame()\'s hand branch), behind the joint switch; the fallback path is the one', () => {
+  it('tick takes the raw ray three wrote as it is; the hold only keeps the last pose for RAY_HOLD_MS; nothing of the old rays is left', () => {
     const tk = bodyAfter(hv, 'const tick=(c,hs,now)=>{');
-    expect(code(hv).match(/aimRay\(hs,c\)/g)).toHaveLength(1); expect(tk).toContain('const jr=aimOn?aimRay(hs,c):null;');
-    expect(tk).toContain('hs.hist.push(now,r);'); expect(tk.indexOf('hs.hist.push(now,r);')).toBeLessThan(tk.indexOf('const jr=')); // the record is kept whatever ray is shown
-    expect(tk).toContain("if(hs.src!=='sys'){hs.filter.reset();hs.src='sys'}"); expect(tk).toContain('const t=hs.hist.at(now-hs.delay,hs.del);hs.filter.filter(hs.del,t,hs.out);');
-    expect(tk).toContain('hs.aim.filter(jr,now,hs.out);'); expect(tk).toContain('turnToward(hs.lastQ,0,hs.out,3,lim,hs.out,3);');
-    expect(bodyAfter(hv, 'const aimRay=(hs,c)=>{')).toContain("joint(hs,'index-finger-phalanx-proximal')"); // the origin: the index knuckle
-    expect(bodyAfter(hv, 'const aimRay=(hs,c)=>{')).toContain("joint(hs,'index-finger-metacarpal')||joint(hs,'wrist')");
-    expect(hv).toContain("parseRayTune(lsGet('vrl-hand-ray'))");
-    expect(bodyAfter(hv, 'const aimRay=(hs,c)=>{')).toContain('fingerAimPose(k,ak,td,tipMix,hs.jr);'); // the index finger's own axis
-    expect(bodyAfter(hv, 'const aimRay=(hs,c)=>{')).toContain("if(!aimFinger){ak[0]=k[0];ak[1]=k[1];ak[2]=k[2];return aimRayPose(j,ak,hs.side,aimOff,hs.jr)}"); // axis 'metacarpal' =
-    expect(code(hv).match(/fingerAimPose\(/g)).toHaveLength(1);
-    expect(src.includes('aimRay')).toBe(false); expect(src.includes('vrl-hand-ray')).toBe(false); // nothing of it in vr-view.js
+    expect(tk).toContain('c.matrix.decompose(tP,tQ,tS);const r=hs.out;'); // the pose shown = the raw one
+    expect(tk).toContain('inHold=!real&&hs.has&&now-hs.rayAt<=RAY_HOLD_MS'); expect(tk).toContain('if(inHold)c.visible=true;');
+    for (const w of ['filter.filter', 'hs.hist', 'slewDelay', 'rayDelayMs', 'hs.ray.', 'createHandRay', 'rayInput', 'getHeadQuat', 'aimRay', 'vrl-hand-ray', 'parseRayTune', 'PINCH_LOCK', 'lockUntil']) { expect(code(hv).includes(w), w).toBe(false); expect(code(src).includes(w), w).toBe(false); }
+    expect(hv).toContain("parseFilterTune(lsGet('vrl-hand-filter'))"); // the palm anchor's tunable stays
+  });
+  it('a press never starts while the ray is only held (guardNow)', () => {
+    expect(hv).toContain('const guardNow=(c,hs)=>hs.held||hs.grab.active||(');
+  });
+  it('the point pick of a hand gets the cone tolerance; a controller\'s stays exact', () => {
+    expect(src).toContain('vpMarkers.pick(raycaster.ray.origin,raycaster.ray.direction,isHand(c.userData.source)?HAND_PICK_TOL:0)');
+    expect(src.match(/vpMarkers\.pick\(/g)).toHaveLength(1);
   });
 });
 
@@ -347,5 +349,70 @@ describe('help board: event-mode mission + hand wording together', () => {
   it('the かんたん menu (tab 10, buttons only) gets the no-slider hand line, and the board redraws when it opens', () => {
     expect(draw).toContain('ui.tab===10?hx.helpMenuSimple:hx.helpMenu');
     expect(src).toContain('[section.on,ui.open,ui.open&&ui.tab===10].join()');
+  });
+});
+
+describe('a point is recorded on a section only on tissue (hands and controllers alike); the HU line is untouched', () => {
+  const code = t => t.split('\n').map(l => l.replace(/\/\/.*$/, '')).join('\n');
+  it('recordPoint asks sectionTissue for a section (plane) hit, once, before anything is recorded; a surface hit (no .plane) is not asked', () => {
+    const rp = bodyAfter(src, 'const recordPoint=(c,hit)=>{');
+    expect(rp).toContain('if(hit.plane!==undefined&&!sectionTissue(hit))return null;');
+    expect(rp.indexOf('sectionTissue(hit)')).toBeLessThan(rp.indexOf('recordVrPoint('));
+    expect(code(src).match(/sectionTissue\(/g)).toHaveLength(1); // the one call (recordPoint's)
+    const st = bodyAfter(src, 'const sectionTissue=hit=>{');
+    expect(st).toContain('classifiedAt(hit.point,vp.halfExt,vp.dims,vp.cls,chs)'); expect(st).toContain('vp.cls.chan[i]>=0'); // the shown channels, as volumeHitRay
+    expect(src.match(/recordPoint\(c,/g).length).toBe(2); // both callers (the controller's and the hand's deferred release) go through it
+  });
+  it('the HU line path does not know the tissue rule: its pick / start and its module never mention it', () => {
+    expect(code(hv).includes('sectionTissue')).toBe(false);
+    const hu = readFileSync(new URL('../../docs/vr-hu-line.js', import.meta.url), 'utf8') + readFileSync(new URL('../../docs/vr-hu-line-core.js', import.meta.url), 'utf8');
+    for (const w of ['sectionTissue', 'classifiedAt', 'recordPoint']) expect(hu.includes(w), w).toBe(false);
+    const press = src.slice(src.indexOf("addEventListener('selectstart'"), src.indexOf("addEventListener('selectend'"));
+    expect(press.indexOf('huLine.start(c)')).toBeGreaterThan(-1); expect(press.slice(press.indexOf('huLine.isArmed()'), press.indexOf('huLine.start(c)')).includes('sectionTissue')).toBe(false); // the line starts before any record logic
+    expect(bodyAfter(src, 'const sectionTissue=hit=>{')).not.toContain('huLine');
+    const pick = src.slice(src.indexOf('pick:(c,out)=>{'), src.indexOf('\n', src.indexOf('pick:(c,out)=>{'))); expect(pick.includes('sectionTissue')).toBe(false); expect(pick.includes('secHit')).toBe(true); // still the section point of the loop (air included)
+  });
+  it('the help text no longer says air is included (both languages)', () => {
+    expect(src.includes('air included')).toBe(false); expect(src.includes('空気の所も可')).toBe(false);
+    expect(src).toContain('records where it shows tissue (not on air)'); expect(src).toContain('選んだ断面の組織の所に当てて記録（空気の所は記録しません）');
+  });
+});
+
+describe('empty-space pinch actions and the double pinch (hands only; the controller buttons keep their code)', () => {
+  const code = t => t.split('\n').map(l => l.replace(/\/\/.*$/, '')).join('\n');
+  it('empStart: only a pinch that hits nothing (empty / none), never with the palm to the face, a grab / drag, the wrist menu or a distance in the making; right = B/Y, left = the frame hold', () => {
+    const b = bodyAfter(src, 'const empStart=(c,res,now)=>{');
+    for (const w of ['isEmptyKind(res.kind)', 'getMeasureStart()', 'handIn.palmToFace(c)', 'handIn.wristShown', 'handIn.grabbing(c)', 'c.userData.drag', 'c.userData.lblDrag']) expect(b, w).toContain(w);
+    expect(b).toContain("if(e.right){c.userData.vB=true;c.userData.vCancel=false}");
+    expect(src).toContain("isEmptyKind=k=>k==='empty'||k==='none'");
+  });
+  it('the hold / cancel rules: 5 cm, a target under the laser, a drag, a grab or the wrist menu drop it; the left hand hides the frames after FRAME_HIDE_MS and nothing else (no slice toggle from it)', () => {
+    const f = bodyAfter(src, 'const empFrame=(c,now)=>{');
+    expect(f).toContain('empQ.length()>EMPTY_PINCH.moveM'); expect(f).toContain('!isEmptyKind(rk)'); expect(f).toContain('c.userData.drag'); expect(f).toContain('handIn.grabbing(c)'); expect(f).toContain('handIn.wristShown');
+    expect(f).toContain('now-e.t0>=FRAME_HIDE_MS'); expect(f).toContain('c.userData.hideFrames=true');
+    for (const n of ['const empStart=(c,res,now)=>{', 'const empFrame=(c,now)=>{', 'const empStop=(c,cancel)=>{']) expect(bodyAfter(src, n).includes('toggleSliceClear'), n).toBe(false);
+    expect(bodyAfter(src, 'const empStop=(c,cancel)=>{')).toContain('if(cancel)c.userData.vCancel=true'); // a dropped press fires no short action on release
+  });
+  it('the right hand\'s virtual press goes through the controller\'s B/Y code (same long-press threshold, the same functions); a cancelled one does not toggle', () => {
+    expect(src).toContain('const b=!!bt?.[5]?.pressed||!!c.userData.vB,nowB=performance.now();');
+    expect(src).toContain('if(!c.userData.bLong&&!c.userData.vCancel)setSection(!section.on)}');
+    expect(src).toContain('if(!b)c.userData.vCancel=false;c.userData.bDown=b;');
+    expect(src).toContain('c.userData.bLong=true;ring.visible=false;if(planes.length>=MAX_PLANES)'); // the long press itself is the controller's code (addPlane) untouched
+  });
+  it('the double pinch: two pinches on a section within 300 ms toggle ui.sliceClear (toggleSliceClear, the stick click\'s function) and consume the second press; a hand\'s short pinch record on a section waits for the window', () => {
+    expect(src).toContain("createDoublePress({windowMs:EMPTY_PINCH.doubleMs})).update(true,now)){pr.consumed=true;pr.dragPl=null;pr.dragRec=false;c.userData.dpPend=null;toggleSliceClear(c)}");
+    expect(src).toContain("const onSectionRes=r=>r.kind==='section'||(r.kind==='record'&&!!r.ref?.plane);");
+    expect(src).toContain("if(isHand(c.userData.source)&&onSectionRes(pr.res))c.userData.dpPend={at:Math.max(performance.now(),pr.t0+EMPTY_PINCH.doubleMs),hit:pr.hit0};else recordPoint(c,pr.hit0)"); // controllers record at once
+    expect(src).toContain('if(dp&&nowF>=dp.at){c.userData.dpPend=null;recordPoint(c,dp.hit)}');
+    // the drag of a frame is not deferred: the press (and its dragPl) is made before the hand hook, which only consumes the second press of a double
+    const press = bodyAfter(src, "c.addEventListener('selectstart',e=>{");
+    expect(press.indexOf('pr.tp.press(now);c.userData.press=pr;')).toBeLessThan(press.indexOf('onSectionRes(res)'));
+  });
+  it('a hand\'s stick-click short press does not exist: the controller\'s tcPress still calls toggleSliceClear on a short click only; hands never reach it (no gamepad)', () => {
+    expect(src).toContain("if(ev==='short')toggleSliceClear(c);"); expect(code(src).match(/toggleSliceClear\(c\)/g)).toHaveLength(2); // the controller's stick click and the hand's double pinch
+  });
+  it('palmToFace is hand-only (false for a controller / no wrist) and the loss release clears every virtual state', () => {
+    expect(bodyAfter(hv, 'palmToFace(c){')).toContain('if(!isHand(c.userData.source)||!hs)return false;');
+    expect(src).toContain('c.userData.empOn=false;c.userData.vB=false;c.userData.vCancel=false;c.userData.hideFrames=false;c.userData.dpPend=null;');
   });
 });

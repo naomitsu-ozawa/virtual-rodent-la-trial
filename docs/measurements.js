@@ -2,9 +2,9 @@
 // The distance is NOT stored: it is computed from the two voxel positions and the volume's voxel spacing (the adopted spacing, series.spacingX/Y/Z),
 // so moving a point changes the value by itself. Pure data + a small in-memory store, no DOM / three.js (the VR and PC / iPad views share it).
 // Saved in the project as `measurements` (an unknown field for older apps: they ignore it, so the project version is not bumped).
-import { getComments, onCommentsChange, commentVoxel, commentMatchesSeries } from './comments.js?v=20261020-build630';
-import { compareFingerprints } from './project-file.js?v=20261020-build630';
-import { spacingWarningText } from './slice-spacing.js?v=20261020-build630';
+import { getComments, onCommentsChange, commentVoxel, commentMatchesSeries } from './comments.js?v=20261021-build639';
+import { compareFingerprints } from './project-file.js?v=20261021-build639';
+import { spacingWarningText } from './slice-spacing.js?v=20261021-build639';
 export const MEASURE_MAX=500;
 
 // ---- distance ----

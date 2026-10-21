@@ -2,11 +2,12 @@
 // Pure module (no imports, no DOM, no URL access): the caller that already reads its URL parameter passes it in as `urlOn`, so the
 // URL parameter still wins (URL on OR setting on). The switch only changes drawing precision; it selects, opens or loads no data.
 const SETTINGS_KEY='vrl.settings.v1';
-// when: 'reload' = read at page load (reload button). store: 'settings' (vrl.settings.v1 JSON)
+// when: 'reload' = read at page load (reload button); 'vr' = read when a VR session starts (no reload needed). store: 'settings' (vrl.settings.v1 JSON)
 export const DEBUG_SWITCHES=[
  {id:'vrHighp',group:'light',store:'settings',when:'reload',label:'dbgVrPrec',note:'dbgVrPrecNote'},
+ {id:'vrNoSkip',group:'light',store:'settings',when:'vr',label:'dbgVrNoSkip',note:'dbgVrNoSkipNote'}, // ON = the VR creep skip is off (it is on by default; the picture is identical, only the work differs)
 ];
-export const DEBUG_SETTING_DEFAULTS={vrHighp:false};
+export const DEBUG_SETTING_DEFAULTS={vrHighp:false,vrNoSkip:false};
 const ls=()=>{try{return globalThis.localStorage||null}catch{return null}};
 const objOf=t=>{try{const o=JSON.parse(t);return o&&typeof o==='object'&&!Array.isArray(o)?o:null}catch{return null}};
 // the stored value of a switch (without the URL), as a boolean

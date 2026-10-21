@@ -191,7 +191,7 @@ describe('vr-view.js wiring of the HU line (source guard; the file is a WebXR mo
   it('is updated in the frame loop, disposed on exit, and has its own tab id that collides neither with the quick-ring editor (7) nor the self-check page (8)', () => {
     expect(src).toContain('huLine.update(js0)'); expect(src).toContain('huLine.dispose()');
     expect(src).toContain('setHuLineDeferred(true)'); expect(src).toContain('setHuLineDeferred(false)');
-    expect(src).toContain('TAB_IDS=[0,1,2,3,4,5,6,9]'); expect(src).toContain('ui.tab===9'); expect(src).toContain('ui.tab===8'); expect(src).toContain('ui.tab===7'); // 8 is the self-check page (#151)
+    expect(src).toContain('TAB_IDS=[0,1,2,3,4,5,6,9]'); expect(src).toContain('ui.tab===9'); expect(src).toContain('ui.tab===8'); expect(src).toContain('ui.tab===7'); // 8 is the self-check page
   });
   it('the pick reuses the controller loop\'s hit (no second march) and runs after that loop', () => {
     const iUpd = src.indexOf('huLine.update(js0)'), iLoop = src.indexOf('for(const c of controllers){\n   // this hand');
@@ -229,7 +229,7 @@ describe('vr-view.js wiring of the HU line (source guard; the file is a WebXR mo
     expect(press.slice(hb, press.indexOf('return}', hb) + 7)).toMatch(/hist\.startAxisDrag\(t,histLocal\.x\)[\s\S]*return\}$/);
     expect(press).not.toMatch(/hist\.grab\(|setHistogramLine|commitHistogramLine/);
     expect(src).toContain('board=h||hh||bd.hist||bd.undoBtn||bd.hu||');
-    // the histogram board (#147) is grabbed first, then the HU line panel, both before the volume
+    // the histogram board is grabbed first, then the HU line panel, both before the volume
     expect(sq.indexOf('c.userData.histHit')).toBeGreaterThan(0); expect(sq.indexOf('c.userData.histHit')).toBeLessThan(sq.indexOf('boardHits(c).hu'));
     expect(src).toContain("ray.renderOrder=dot.renderOrder=bd.hu?11:top?8:0"); // the laser end is drawn over the panel
   });
@@ -242,7 +242,7 @@ describe('vr-view.js wiring of the HU line (source guard; the file is a WebXR mo
     expect(-HU_PANEL_OFFSET.down - h / 2).toBeGreaterThan(-HELP_OFFSET.down + 0.15); // above the help board
     expect(20 * PANEL_WORLD_W / PANEL_W).toBeGreaterThanOrEqual(0.0115); // smallest text >= 1.15 cm (help board: 30 px x 0.32 m / 820 px)
   });
-  it('at the initial places the HU line panel and the HU histogram board (#147) do not overlap as seen from the head, and neither covers the volume', async () => {
+  it('at the initial places the HU line panel and the HU histogram board do not overlap as seen from the head, and neither covers the volume', async () => {
     const { HU_PANEL_OFFSET, HIST_OFFSET, HIST_WIDTH, VOLUME_FWD, VOLUME_DOWN } = await import('../../docs/vr-layout.js');
     const { PANEL_WORLD_W } = await import('../../docs/vr-hu-line-core.js');
     const { boardHeightM } = await import('../../docs/vr-histogram-layout.js');

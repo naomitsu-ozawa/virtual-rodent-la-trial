@@ -136,3 +136,36 @@ describe('foveation pays off only when enough of the volume lies outside the cen
     expect((e.x1 - e.x0) * (e.y1 - e.y0)).toBeCloseTo(e.cover, 6); expect(e.x0).toBeGreaterThan(0); expect(e.x1).toBeLessThan(vw);
   });
 });
+
+// `inside` (a box corner within NEAR_DEPTH of the eye: cover = the whole viewport) has a hysteresis: it leaves at NEAR_DEPTH x NEAR_EXIT
+describe('eyeMetrics: inside hysteresis at the near boundary', () => {
+  // an axis-aligned box whose near face lies `n` m in front of the eye
+  const at = (n, out) => eyeMetrics(model(0.1, 0.05, 0, -(n + 0.1)), HALF, DIMS, I(), P90, 1000, 1000, out);
+  it('enters at NEAR_DEPTH, stays inside up to NEAR_DEPTH x NEAR_EXIT, then leaves', () => {
+    const out = {};
+    expect(at(0.021, out).inside).toBe(false);
+    expect(at(0.019, out).inside).toBe(true);
+    expect(at(0.025, out).inside).toBe(true);   // was: false (flip-flop with a 3 mm head jitter)
+    expect(at(0.029, out).inside).toBe(true);
+    expect(at(0.031, out).inside).toBe(false);
+    expect(at(0.025, out).inside).toBe(false);  // and the entry is the plain NEAR_DEPTH again
+    expect(at(0.019, out).inside).toBe(true);
+  });
+  it('jitter around the boundary never flips the state; the old behaviour (a fresh out every call) flips on every crossing', () => {
+    const out = {}; let flips = 0, last = null, oldFlips = 0, oldLast = null;
+    for (let i = 0; i < 400; i++) {
+      const n = 0.02 + 0.003 * Math.sin(i * 0.9) + 0.0015 * Math.sin(i * 2.3);
+      const a = at(n, out).inside, b = at(n, {}).inside;
+      if (last !== null && a !== last) flips++; last = a;
+      if (oldLast !== null && b !== oldLast) oldFlips++; oldLast = b;
+    }
+    expect(flips).toBeLessThanOrEqual(1); expect(oldFlips).toBeGreaterThan(50);
+  });
+  it('away from the box nothing changes: a used out gives the same numbers as a fresh one', () => {
+    const out = {}; at(0.019, out); at(0.031, out);
+    for (const n of [0.031, 0.05, 0.1, 0.3, 0.65]) {
+      const a = { ...at(n, out) }, b = { ...at(n, {}) };
+      expect(a).toEqual(b);
+    }
+  });
+});

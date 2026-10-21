@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { marchClassificationHit, marchClassificationHitInfo } from '../../docs/vr-pick.js';
+import { marchClassificationHit, marchClassificationHitInfo, classifiedAt } from '../../docs/vr-pick.js';
 
 // 8³ grid in a ±1 box, one channel; index mapping as the VR shader's texCoord (y index runs down)
 const N=8,he=[1,1,1],dims=[N,N,N];
@@ -48,5 +48,31 @@ describe('marchClassificationHit', () => {
   const h=marchClassificationHitInfo(v(-3,0.625,0.125),v(1,0,0),he,dims,cls,[0,1]);
   expect(h&&[h.x,h.y,h.z,h.ch]).toEqual([3,1,4,1]);
   expect(marchClassificationHitInfo(v(-3,0.625,0.125),v(1,0,0),he,dims,cls,[0])).toBe(null);
+ });
+});
+
+// recording on a section only where it shows tissue (the Surface mode's tissue test at one place)
+describe('classifiedAt: is a place inside a shown segment', () => {
+ it('true inside a filled region, false in air / outside the box; the same voxel indexing as the march (y index runs down)', () => {
+  const cls=grid((x,y,z)=>x>=4&&y<=1); // x in (0, 1], y in (0.5, 1] (the top), any z
+  expect(classifiedAt(v(0.5,0.8,0),he,dims,cls,[0])).toBe(true);
+  expect(classifiedAt(v(-0.5,0.8,0),he,dims,cls,[0])).toBe(false); // air at x < 0
+  expect(classifiedAt(v(0.5,0.2,0),he,dims,cls,[0])).toBe(false); // air below the top layer
+  expect(classifiedAt(v(0.5,-0.8,0),he,dims,cls,[0])).toBe(false);
+  expect(classifiedAt(v(1.5,0.8,0),he,dims,cls,[0])).toBe(false); expect(classifiedAt(v(0.5,0.8,-1.2),he,dims,cls,[0])).toBe(false); // outside the box
+  expect(classifiedAt(v(1,1,1),he,dims,cls,[0])).toBe(true); // the box edge belongs to its last voxel (clamped, as in the march)
+  // it agrees with the march: a ray whose first hit is that voxel has the hit voxel's centre classified
+  const hit=marchClassificationHitInfo(v(0.5,0.9,2),v(0,0,-1),he,dims,cls,[0]); expect(hit).not.toBeNull();
+  expect(classifiedAt(v(0.5,0.9,2-hit.t),he,dims,cls,[0])).toBe(true);
+ });
+ it('no shown channel, no data, a non-finite point: false (nothing is recorded)', () => {
+  const cls=grid(()=>true);
+  expect(classifiedAt(v(0,0,0),he,dims,cls,[])).toBe(false); expect(classifiedAt(v(0,0,0),he,dims,null,[0])).toBe(false);
+  expect(classifiedAt(v(NaN,0,0),he,dims,cls,[0])).toBe(false); expect(classifiedAt(null,he,dims,cls,[0])).toBe(false); expect(classifiedAt(v(0,0,0),he,dims,cls,[0])).toBe(true);
+ });
+ it('several channels: any shown one counts; a hidden channel does not', () => {
+  const data=new Uint8Array(N*N*N*2);data[(3+N*(3+N*3))*2+1]=255; // only channel 1, at voxel x 3, y 3, z 3
+  const cls={data,C:2,chan:[0,1,-1,-1]},q=v(-0.125,0.125,-0.125); // x index floor((-0.125/2+0.5)*8)=3, y index floor((0.5-0.125/2)*8)=3, z index 3
+  expect(classifiedAt(q,he,dims,cls,[1])).toBe(true); expect(classifiedAt(q,he,dims,cls,[0])).toBe(false); expect(classifiedAt(q,he,dims,cls,[0,1])).toBe(true);
  });
 });

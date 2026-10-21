@@ -21,7 +21,9 @@ export function createOneEuro(n,{minCutoff=ONE_EURO.minCutoff,beta=ONE_EURO.beta
  const x=new Float64Array(n),dx=new Float64Array(n);let t=null;
  return{
   // v: n numbers (array-like) at time now (ms) -> the filtered values written into out (default: v itself), returned. No allocation.
+  // A non-finite v[i] (a lost joint) is not fed to the filter (one NaN would stay in its state for good): the previous output, out untouched when there is none yet.
   filter(v,now,out=v){
+   for(let i=0;i<n;i++)if(!(v[i]-v[i]===0)||!(now-now===0)){if(t!==null)for(let j=0;j<n;j++)out[j]=x[j];return out}
    if(t===null){for(let i=0;i<n;i++){x[i]=v[i];dx[i]=0;out[i]=v[i]}t=now;return out}
    const dt=(now-t)/1000;
    if(!(dt>0)){for(let i=0;i<n;i++)out[i]=x[i];return out} // same (or older) time stamp: the previous output
@@ -173,141 +175,164 @@ export function blendPose(a,b,k,out){
  return out;
 }
 
-// ---- the hand's own aim ray ----
-// The system's target ray of a hand is a stabilised shoulder -> hand pointer: it turns only ~1/4 as much as the wrist, is smoothed by the runtime (a
-// lag we cannot measure here) and jumps when the pinch is recognised (the reason for the 60 ms delayed ray). While the joints are tracked the
-// group gets instead a ray built from them, like a controller's.: along the INDEX FINGER (axis 'finger', fingerAimPose): the direction is
-// the index's proximal phalanx (-Z of the index-finger-phalanx-proximal joint: the segment behind the second knuckle, the steadiest part of a finger
-// that curls a little), optionally mixed with the knuckle -> fingertip line (tipMix: 0 = the phalanx alone, 1 = the line to the tip, which swings
-// with every curl), from the second knuckle (origin 'pip'; 'knuckle' = the first, 'tip' = the fingertip).'s axis 'metacarpal' (the back
-// of the hand: the index metacarpal's bone axis from the first knuckle, tilted 8 deg to the palm and 4 deg to the thumb) stays for A/B
-// (vrl-hand-ray axis). It is filtered with AIM_FILTER (lighter than ONE_EURO: the joints are the runtime's freshest, display-time predicted
-// poses) and never delayed; the index curling into the pinch is handled by the aim hold below. The system's ray stays the fallback (joints missing / joint 0).
-export const AIM_RAY={axis:'finger',origin:'pip',tipMix:0,pitchDeg:0,yawDeg:0,joint:1};
-export const AIM_RAY_META={pitchDeg:8,yawDeg:4}; // the offsets of axis 'metacarpal' unless tuned
-export const AIM_AXES=['finger','metacarpal'],AIM_ORIGINS=['knuckle','pip','tip'];
-export const AIM_FILTER={minCutoff:2,beta:0.15,dCutoff:5};
-// jp: the joint pose [px,py,pz,qx,qy,qz,qw] whose -Z is the bone (index-finger-metacarpal), kp: the knuckle position [x,y,z] (the ray origin),
-// thumbSide: +1 / -1 = the thumb lies along +X / -X of that joint frame (thumbSideOf below). out: the target-ray pose (7 numbers). No allocation.
-// out may be jp itself (the orientation is read before it is written).
-const aQ=new Float64Array(4),aR=new Float64Array(4),aT=new Float64Array(4),aJ=new Float64Array(4);
-export function aimRayPose(jp,kp,thumbSide,{pitchDeg=AIM_RAY.pitchDeg,yawDeg=AIM_RAY.yawDeg}={},out){
- aJ[0]=jp[3];aJ[1]=jp[4];aJ[2]=jp[5];aJ[3]=jp[6];
- if(!pitchDeg&&!yawDeg){out[3]=aJ[0];out[4]=aJ[1];out[5]=aJ[2];out[6]=aJ[3];out[0]=kp[0];out[1]=kp[1];out[2]=kp[2];return out}
- const a=-pitchDeg*Math.PI/180,b=-(thumbSide<0?-1:1)*yawDeg*Math.PI/180; // Rx(a): -Z toward -Y (the palm) for a < 0; Ry(b): -Z toward -X for b > 0
- aQ[0]=Math.sin(a/2);aQ[1]=0;aQ[2]=0;aQ[3]=Math.cos(a/2);aR[0]=0;aR[1]=Math.sin(b/2);aR[2]=0;aR[3]=Math.cos(b/2);
- qMulA(aR,0,aQ,0,aT,0);qMulA(aJ,0,aT,0,out,3); // joint * yaw * pitch
- const l=Math.hypot(out[3],out[4],out[5],out[6])||1;for(let i=3;i<7;i++)out[i]/=l;
- out[0]=kp[0];out[1]=kp[1];out[2]=kp[2];return out;
-}
-// the index finger's pointing pose. jp: the index-finger-phalanx-proximal joint pose (its -Z = the proximal phalanx), op: the ray origin
-// [x,y,z], tipDir: the knuckle -> fingertip vector in the reference space (any length; null = none), mix: the share of tipDir in the direction
-// (0: the phalanx alone). The roll stays the joint's; the direction is turned by the shortest arc. out (7 numbers; may be jp). No allocation.
-const fL=[0,0,0],fC=new Float64Array(4),fD=[0,0,0],fArc=new Float64Array(4);
-export function fingerAimPose(jp,op,tipDir,mix,out){
- aJ[0]=jp[3];aJ[1]=jp[4];aJ[2]=jp[5];aJ[3]=jp[6];
- out[0]=op[0];out[1]=op[1];out[2]=op[2];
- const m=Math.max(0,Math.min(1,mix||0)),tl=tipDir?Math.hypot(tipDir[0],tipDir[1],tipDir[2]):0;
- if(!(m>0)||!(tl>1e-6)){out[3]=aJ[0];out[4]=aJ[1];out[5]=aJ[2];out[6]=aJ[3];return out}
- fC[0]=-aJ[0];fC[1]=-aJ[1];fC[2]=-aJ[2];fC[3]=aJ[3];fD[0]=tipDir[0]/tl;fD[1]=tipDir[1]/tl;fD[2]=tipDir[2]/tl;
- rotV(fC,fD,fL); // the tip line in the joint's own frame
- const x=m*fL[0],y=m*fL[1],z=-(1-m)+m*fL[2],n=Math.hypot(x,y,z); // blended with the bone (0,0,-1)
- if(!(n>1e-9)){out[3]=aJ[0];out[4]=aJ[1];out[5]=aJ[2];out[6]=aJ[3];return out}
- // the shortest arc from (0,0,-1) to (x,y,z)/n: axis = (0,0,-1) x d = (dy, -dx, 0), w = 1 + (-dz)
- const dx=x/n,dy=y/n,dz=z/n,w=1-dz;
- if(w<1e-9){fArc[0]=0;fArc[1]=1;fArc[2]=0;fArc[3]=0}else{fArc[0]=dy;fArc[1]=-dx;fArc[2]=0;fArc[3]=w;const al=Math.hypot(fArc[0],fArc[1],fArc[3]);fArc[0]/=al;fArc[1]/=al;fArc[3]/=al}
- qMulA(aJ,0,fArc,0,out,3);
- const l=Math.hypot(out[3],out[4],out[5],out[6])||1;for(let i=3;i<7;i++)out[i]/=l;
- return out;
-}
-// the bend of the index at its first knuckle: the angle (rad) between the metacarpal's bone axis (-Z of mq) and the proximal phalanx's (-Z of pq)
-const bA=[0,0,0],bB=[0,0,0],nZ=[0,0,-1];
-export function indexBend(mq,pq){rotV(mq,nZ,bA);rotV(pq,nZ,bB);return Math.acos(Math.max(-1,Math.min(1,bA[0]*bB[0]+bA[1]*bB[1]+bA[2]*bB[2])))}
-const sX=[0,0,0],X1=[1,0,0];
-// which side (along the X axis of the frame q) the thumb lies: sign of (thumb - index) . X; 0 when they coincide (keep the last known side)
-export function thumbSideOf(q,indexP,thumbP){
- rotV(q,X1,sX);const d=(thumbP[0]-indexP[0])*sX[0]+(thumbP[1]-indexP[1])*sX[1]+(thumbP[2]-indexP[2])*sX[2];
- return d>1e-6?1:d<-1e-6?-1:0;
-}
-// the aim hold: the fingers closing into a pinch wobble the hand a little just before the press is recognised (and the joints' estimate shifts
-// with the hand shape), so the target would move as one pinches. While the thumb-index distance closes faster than `speed` (m/s) below `closeM`
-// (a pinch forming: a relaxed hand holding its gap, or opening, is never held) and for tailMs after, the ray's direction may turn at most
-// degPerS; then the limit ramps back to free over rampMs (what was held up slides on, no jump). The press (createPinchFusion, 2 frames
-// below 1.8 cm) falls inside the hold, so its target is the one aimed at before the fingers moved — without the delay of the old delayed ray.
-// the index curling toward the thumb swings that ray far more than the hand wobbles, and a slow pinch
-// (the gap closing under `speed`) would not be caught by the gap alone, so the bend of the index at its first knuckle (indexBend) is the
-// second trigger: curling faster than curlDegPerS below closeM holds too. update(d, now, bend) -> the most the direction may turn this frame
-// (rad); Infinity = free. bend (rad, optional): NaN / undefined = no curl trigger.
-export const AIM_HOLD={closeM:0.06,speed:0.12,curlDegPerS:60,degPerS:10,tailMs:60,rampMs:120,freeDegPerS:720};
-export function createAimHold({closeM=AIM_HOLD.closeM,speed=AIM_HOLD.speed,curlDegPerS=AIM_HOLD.curlDegPerS,degPerS=AIM_HOLD.degPerS,tailMs=AIM_HOLD.tailMs,rampMs=AIM_HOLD.rampMs,freeDegPerS=AIM_HOLD.freeDegPerS}={}){
- let lastD=NaN,lastDT=null,lastB=NaN,lastBT=null,prevT=null,until=-Infinity;
- const R=Math.PI/180;
- return{
-  update(d,now,bend){
-   const dt=prevT===null?0:Math.max(0,now-prevT);prevT=now;
-   const near=Number.isFinite(d)&&d<closeM;
-   if(Number.isFinite(d)){
-    if(lastDT!==null&&now>lastDT){const v=(lastD-d)/((now-lastDT)/1000);if(near&&v>speed)until=now+tailMs}
-    lastD=d;lastDT=now;
-   }else lastDT=null; // the rate needs two tracked samples in a row
-   if(Number.isFinite(bend)){
-    if(lastBT!==null&&now>lastBT){const w=(bend-lastB)/((now-lastBT)/1000)/R;if(near&&w>curlDegPerS)until=now+tailMs}
-    lastB=bend;lastBT=now;
-   }else lastBT=null;
-   if(now<until)return degPerS*R*dt/1000;
-   if(!(rampMs>0))return Infinity;
-   const k=(now-until)/rampMs;if(k>=1)return Infinity;
-   return (degPerS+(freeDegPerS-degPerS)*k)*R*dt/1000;
-  },
-  reset(){lastD=NaN;lastDT=null;lastB=NaN;lastBT=null;prevT=null;until=-Infinity},
-  get held(){return prevT!==null&&prevT<until},
+// ---- the hand's laser: two modes (the device setting handRay;,: ホーム方式 removed) ----
+// 'standard' (標準, default): the system's target ray, frame.getPose(targetRaySpace, referenceSpace) exactly as three.js wrote it into the controller group (no filter, no
+// offset, no hold, no pinch carry: vr-hand-view.js leaves the group alone). 'point' (指差し): createPointRay below (along the index finger, out of its tip), shown only while the
+// hand points (createPointGate). Older modes ('home' ホーム方式 of-638, 'between' 指先 / 'wrist' 手のひら of-636) are gone: a stored old value reads as
+// 'standard' (app-settings.js maps it on load). The mode is read every frame (設定 > 描画 on the page, 表示 tab of the VR menu); controllers never read it.
+export const HAND_RAY_MODES=['standard','point'];
+export const HAND_RAY_DEFAULT='standard';
+export const normalizeHandRay=v=>HAND_RAY_MODES.includes(v)?v:HAND_RAY_DEFAULT;
+export const RAY_HOLD_MS=200; // the system ray missing for a moment: the last pose is held (vr-hand-view.js; not in 標準)
+const fin=v=>v-v===0;
+const arcQ=(a,b,o)=>{ // the shortest turn a -> b (unit vectors) as a quaternion into o[0..3]; false when they are (nearly) opposite
+ const w=1+a[0]*b[0]+a[1]*b[1]+a[2]*b[2];if(!(w>1e-3))return false;
+ const x=a[1]*b[2]-a[2]*b[1],y=a[2]*b[0]-a[0]*b[2],z=a[0]*b[1]-a[1]*b[0],l=Math.hypot(x,y,z,w);
+ o[0]=x/l;o[1]=y/l;o[2]=z/l;o[3]=w/l;return true;
+};
+
+// ---- 指差し (setting id 'point'): the straight continuation of the pointing index finger, out of its tip ----
+//  - origin = the index-finger-tip joint; direction = the index-finger-phalanx-proximal joint (the knuckle) -> the index-finger-tip joint, extended: the laser leaves the
+//    fingertip in line with the finger. Nothing else is mixed into the direction (no wrist / arm /
+//    system-ray blend): a light One Euro on the origin and on that direction only. The gate (createPointGate) shows it only with the index extended.
+//  - pinch (the hold of's 指先 ray, unchanged): the closing of the thumb onto the index is noticed when the thumb tip - index tip gap shrinks faster than vClose
+//    (over ~3 frames) inside preFar, or is below preOn (off again above preOff), or a press is held (= near). The ray (origin AND direction) is then held in the WRIST's
+//    frame at its value from freezeMs before (where the hand pointed just before the closing): it moves and turns with the wrist, not with the curling finger (the index
+//    bending toward the thumb would swing the knuckle -> tip line). Eased in over
+//    inMs; kept relHoldMs after the fingers open, then eased out over outMs; a re-pinch within reArmMs keeps the same hold (the double pinch hits the same spot).
+//  - a lost / non-finite joint: the last ray is kept for loseMs, then the system's ray is left on the pose (no cross-fade: the laser is hidden then, createPointGate).
+//  - near: exposed for createPointGate (the laser stays on through a pinch). No allocation per update.
+export const POINT_JOINTS=['index-finger-phalanx-proximal','index-finger-tip'];
+export const POINT_RAY={freezeMs:100,preOn:0.03,preOff:0.04,preFar:0.07,vClose:0.15,closeHoldMs:120,reArmMs:400,relHoldMs:150,inMs:30,outMs:150,loseMs:200,minChord:0.03,
+ pos:{minCutoff:3,beta:0.15,dCutoff:8},dir:{minCutoff:2,beta:0.4,dCutoff:10}};
+export function createPointRay(opt={}){
+ const o={...POINT_RAY,...opt},posF=createOneEuro(3,{...o.pos,speedScale:1000}),dirF=createOneEuro(3,{...o.dir,speedScale:57.3});
+ const N=32,hT=new Float64Array(N),hD=new Float64Array(N*3),hO=new Float64Array(N*3);let hn=0,hi=0; // the last N (time, direction and origin in the wrist's frame)
+ const sys=new Float64Array(7),jq=new Float64Array(7),ds=new Float64Array(3),dl=new Float64Array(3),org=new Float64Array(3),lD=new Float64Array(3),lO=new Float64Array(3),
+  fzD=new Float64Array(3),fzO=new Float64Array(3),fw=new Float64Array(3),fo=new Float64Array(3),dd=new Float64Array(3),oo=new Float64Array(3),po=new Float64Array(3),dout=new Float64Array(3),
+  qc=new Float64Array(4),cq=new Float64Array(4),wqn=new Float64Array(4),tv=new Float64Array(3),nz=[0,0,-1];
+ const gT=new Float64Array(4),gD=new Float64Array(4);let gn=0,gi=0,closingAt=-Infinity,pdNear=false; // the last 4 (time, gap): the closing speed
+ let near=false,wasNear=false,fzSet=false,hasFz=false,relAt=-Infinity,wf=0,tPrev=null,validAt=-Infinity,hasJq=false,wOk=false;
+ // the live ray (org, dl) and the same in the wrist's frame (lO, lD; wOk: the wrist pose is usable); false: a joint is missing / the chord too short
+ const compute=(j,w)=>{
+  for(let i=0;i<6;i++)if(!fin(j[i]))return false;
+  for(let i=0;i<3;i++)dd[i]=j[3+i]-j[i];
+  const l=Math.hypot(dd[0],dd[1],dd[2]);if(!(l>=o.minChord))return false;
+  for(let i=0;i<3;i++){dl[i]=dd[i]/l;org[i]=j[3+i]}
+  wOk=true;for(let i=0;i<7;i++)if(!fin(w[i]))wOk=false;
+  const wl=wOk?Math.hypot(w[3],w[4],w[5],w[6]):0;if(!(wl>0.5))wOk=false;
+  if(wOk){
+   for(let i=0;i<4;i++)wqn[i]=w[3+i]/wl;
+   cq[0]=-wqn[0];cq[1]=-wqn[1];cq[2]=-wqn[2];cq[3]=wqn[3];rotV(cq,dl,lD);
+   tv[0]=org[0]-w[0];tv[1]=org[1]-w[1];tv[2]=org[2]-w[2];rotV(cq,tv,lO);
+  }
+  return true;
  };
-}
-const tI=new Float64Array(4),tDq=new Float64Array(4),tP=new Float64Array(4);
-// o[oi..] = the unit quaternion a[ai..] turned toward b[bi..] by at most maxRad (b itself when it is within maxRad); returns the angle a -> b (rad)
-export function turnToward(a,ai,b,bi,maxRad,o,oi){
- tI[0]=-a[ai];tI[1]=-a[ai+1];tI[2]=-a[ai+2];tI[3]=a[ai+3];qMulA(tI,0,b,bi,tDq,0);
- if(tDq[3]<0)for(let i=0;i<4;i++)tDq[i]=-tDq[i];
- const ang=2*Math.atan2(Math.hypot(tDq[0],tDq[1],tDq[2]),tDq[3]);
- if(!(ang>maxRad)){for(let i=0;i<4;i++)o[oi+i]=b[bi+i];return ang}
- qPow(tDq,maxRad/ang,tP);qMulA(a,ai,tP,0,o,oi);
- const l=Math.hypot(o[oi],o[oi+1],o[oi+2],o[oi+3])||1;for(let i=0;i<4;i++)o[oi+i]/=l;
- return ang;
+ const clear=()=>{posF.reset();dirF.reset();hn=0;hi=0;gn=0;gi=0;closingAt=-Infinity;pdNear=false;fzSet=false;hasFz=false;near=false;wasNear=false;wf=0;hasJq=false};
+ return{
+  // pose: the system's ray [px,py,pz,qx,qy,qz,qw], OVERWRITTEN with the pointing ray (left alone when it or now is not finite, or no ray for loseMs); j: 6 numbers = the
+  // positions of POINT_JOINTS (knuckle, tip; NaN for a joint that is not tracked); w: the wrist joint's pose [px,py,pz,qx,qy,qz,qw] (NaN: unknown, then no pinch hold); pd: the thumb
+  // tip - index tip distance (m; NaN keeps the state); pressed: a pinch press is held; now: ms
+  update(pose,j,w,pd,pressed,now){
+   for(let i=0;i<7;i++)if(!fin(pose[i]))return pose;
+   if(!fin(now))return pose;
+   for(let i=0;i<7;i++)sys[i]=pose[i];
+   const dt=tPrev===null||now<tPrev?0:Math.min(0.25,(now-tPrev)/1000);tPrev=now;
+   cq[0]=sys[3];cq[1]=sys[4];cq[2]=sys[5];cq[3]=sys[6];rotV(cq,nz,ds); // the system ray's direction (only for the roll of the output)
+   if(fin(pd)){
+    pdNear=pdNear?pd<o.preOff:pd<o.preOn;
+    if(gn>0&&now>gT[(gi+3)%4]){
+     const k=gn<4?0:gi,dtw=(now-gT[k])/1000; // the oldest of the last 4 samples: ~3 frames back
+     if(dtw>0.015&&pd<o.preFar&&(pd-gD[k])/dtw<-o.vClose)closingAt=now;
+    }
+    if(gn===0||now>gT[(gi+3)%4]){gT[gi]=now;gD[gi]=pd;gi=(gi+1)%4;if(gn<4)gn++}
+   }
+   near=!!pressed||pdNear||now-closingAt<o.closeHoldMs;
+   if(near&&!wasNear)fzSet=false;
+   if(!near&&wasNear)relAt=now;
+   wasNear=near;
+   let ok=compute(j,w);
+   if(ok&&wOk&&near&&!fzSet){ // the closing was noticed: the ray (wrist's frame) of freezeMs ago, or the one kept by a quick re-pinch
+    if(!(hasFz&&now-relAt<o.reArmMs)){
+     let bi=-1,bt=-Infinity;
+     for(let i=0;i<hn;i++){const t=hT[i];if(t<=now-o.freezeMs&&t>bt){bt=t;bi=i}}
+     if(bi<0){bt=Infinity;for(let i=0;i<hn;i++){const t=hT[i];if(t<bt){bt=t;bi=i}}} // nothing that old (a pinch right after the start): the oldest one kept
+     const k=bi>=0&&now-bt<400?bi:-1;
+     if(k>=0)for(let i=0;i<3;i++){fzD[i]=hD[3*k+i];fzO[i]=hO[3*k+i]}else for(let i=0;i<3;i++){fzD[i]=lD[i];fzO[i]=lO[i]}
+     hasFz=true;
+    }
+    fzSet=true;
+   }
+   const tw=fzSet&&wOk&&(near||now-relAt<o.relHoldMs)?1:0; // kept relHoldMs after the fingers open (a double pinch stays on the same spot), then eased out
+   wf=tw>wf?Math.min(1,wf+dt*1000/o.inMs):tw<wf?Math.max(0,wf-dt*1000/o.outMs):wf;
+   if(ok&&wOk&&!near&&wf===0){hT[hi]=now;for(let i=0;i<3;i++){hD[3*hi+i]=lD[i];hO[3*hi+i]=lO[i]}hi=(hi+1)%N;if(hn<N)hn++}
+   if(ok){
+    let x=dl[0],y=dl[1],z=dl[2];oo[0]=org[0];oo[1]=org[1];oo[2]=org[2];
+    if(wf>0&&hasFz&&wOk){
+     rotV(wqn,fzD,fw);rotV(wqn,fzO,fo);
+     x=dl[0]*(1-wf)+fw[0]*wf;y=dl[1]*(1-wf)+fw[1]*wf;z=dl[2]*(1-wf)+fw[2]*wf;
+     const l=Math.hypot(x,y,z);if(l>1e-6){x/=l;y/=l;z/=l}else{x=dl[0];y=dl[1];z=dl[2]}
+     for(let i=0;i<3;i++)oo[i]=org[i]*(1-wf)+(w[i]+fo[i])*wf;
+    }
+    if(now-validAt>o.loseMs){posF.reset();dirF.reset()}
+    dd[0]=x;dd[1]=y;dd[2]=z;
+    posF.filter(oo,now,po);dirF.filter(dd,now,dout);
+    const l=Math.hypot(dout[0],dout[1],dout[2]);
+    if(l>1e-6){dout[0]/=l;dout[1]/=l;dout[2]/=l}else ok=false;
+    if(ok&&arcQ(ds,dout,qc)){
+     qMulA(qc,0,sys,3,jq,3);jq[0]=po[0];jq[1]=po[1];jq[2]=po[2];
+     const ql=Math.hypot(jq[3],jq[4],jq[5],jq[6])||1;for(let i=3;i<7;i++)jq[i]/=ql;
+     hasJq=true;validAt=now;
+    }else ok=false;
+   }
+   if(!ok&&now-validAt>o.loseMs){posF.reset();dirF.reset();hn=0;hi=0;fzSet=false;hasFz=false;hasJq=false}
+   if(hasJq)for(let i=0;i<7;i++)pose[i]=jq[i]; // the pointing ray exactly (a missing joint: the last one, for loseMs)
+   return pose;
+  },
+  reset(){clear();tPrev=null;validAt=-Infinity;relAt=-Infinity},
+  get frozen(){return wf>0},
+  get near(){return near},
+  get valid(){return hasJq},
+ };
 }
 
-// ---- delayed ray ----
-// Closing / opening the fingers moves the system's pinch ray just before the pinch is recognised (and just after it ends). The hand's ray is
-// therefore taken in the past: the target under the ray at selectstart / selectend is where the ray was before the fingers moved.
-// the delay is needed only while the thumb and the index are close (a pinch is forming / ending); an open hand pointing around has
-// none. rayDelayMs(d): 0 at index-thumb distance d >= RAY_DELAY.farM, RAY_DELAY.maxMs at d <= nearM, linear between (an unknown distance: the full delay).
-export const RAY_DELAY_MS=60;
-export const RAY_DELAY={maxMs:RAY_DELAY_MS,farM:0.06,nearM:0.03};
-export function rayDelayMs(d,{maxMs=RAY_DELAY.maxMs,farM=RAY_DELAY.farM,nearM=RAY_DELAY.nearM}={}){
- if(!(maxMs>0))return 0;
- if(!Number.isFinite(d))return maxMs;
- if(d<=nearM)return maxMs;
- if(d>=farM||!(farM>nearM))return 0;
- return maxMs*(farM-d)/(farM-nearM);
-}
-// the delay may rise at once (a pinch is forming) but falls at most `fall` ms per ms (the sampled time catches up smoothly: no jump of the ray when the fingers open)
-export const slewDelay=(cur,target,dtMs,fall=0.5)=>target>=cur?target:Math.max(target,cur-fall*Math.max(0,dtMs));
-// A ring of the last `size` poses; at(t) = the newest pose at or before t (the oldest one when the record is shorter than the delay).
-export function createPoseHistory(size=24){
- const T=new Float64Array(size),P=new Float64Array(size*7);let head=0,count=0;
+// ---- 指差し: the laser is on only while the hand points (index extended, middle / ring / little curled) ----
+// curls = fingerCurl of index, middle, ring, little (GRAB_FINGERS order; ~0.95 extended, a tucked finger ~0.57, a fist < 0.55). ON when index >= indexOn AND each of the other
+// three <= othersOn AND the thumb tip - index tip gap pd > pdMin, for onFrames frames in a row. OFF when index <= indexOff OR one of the others >= othersOff (or a curl is
+// unknown), for offFrames frames in a row. Latch: while near (a pinch is closing / held: createPointRay's near) and for relHoldMs after it, the OFF test is not run, so the
+// laser stays on through the whole pinch (the index curls toward the thumb). The thumb is free. update() -> on (boolean).
+export const POINT_GATE={indexOn:0.85,indexOff:0.75,othersOn:0.62,othersOff:0.72,pdMin:0.03,onFrames:3,offFrames:8,relHoldMs:250};
+export function createPointGate(opt={}){
+ const o={...POINT_GATE,...opt};let on=false,n=0,nearAt=-Infinity;
  return{
-  push(t,pose){const k=head*7;T[head]=t;for(let i=0;i<7;i++)P[k+i]=pose[i];head=(head+1)%size;if(count<size)count++},
-  // writes the pose into out and returns its time, or null when nothing was recorded
-  at(t,out){
-   if(!count)return null;
-   let k=(head-count+size)%size; // the oldest
-   for(let j=1;j<=count;j++){const m=(head-j+size)%size;if(T[m]<=t){k=m;break}}
-   for(let i=0;i<7;i++)out[i]=P[k*7+i];
-   return T[k];
+  update(curls,pd,near,now){
+   if(near)nearAt=now;
+   if(on){
+    if(near||now-nearAt<o.relHoldMs){n=0;return on}
+    let off=!(curls[0]>o.indexOff);
+    for(let i=1;i<4;i++)if(!(curls[i]<o.othersOff))off=true;
+    if(!off){n=0;return on}
+    if(++n>=o.offFrames){on=false;n=0}
+    return on;
+   }
+   let want=curls[0]>=o.indexOn&&pd>o.pdMin;
+   for(let i=1;i<4;i++)if(!(curls[i]<=o.othersOn))want=false;
+   if(!want){n=0;return on}
+   if(++n>=o.onFrames){on=true;n=0}
+   return on;
   },
-  reset(){head=0;count=0},
-  get length(){return count},
+  reset(){on=false;n=0;nearAt=-Infinity},
+  get on(){return on},
  };
 }
+
+// ---- pinch feedback on the laser's end dot ----
+// The dot (vr-view.js: 4 mm) is scaled by 1 - (1 - minScale) * pinchStrength: full size with the fingers open (gap >= open), minScale (half) when the thumb meets the
+// index (gap <= PINCH.on) or a press is held, continuous in between. Nothing else of the laser changes (colour, line, opacity).
+export const PINCH_DOT={open:0.06,minScale:0.5};
+// the pinch strength 0..1 from the thumb tip - index tip gap (NaN: 0); a press held: 1
+export const pinchStrength=(pd,pressed,open=PINCH_DOT.open,on=PINCH.on)=>pressed?1:fin(pd)?Math.max(0,Math.min(1,(open-pd)/(open-on))):0;
+export const pinchDotScale=(pd,pressed,o=PINCH_DOT)=>1-(1-o.minScale)*pinchStrength(pd,pressed,o.open);
 
 // ---- tracking loss ----
 // update(hasPose, now) -> 'ok' | 'lost' | 'cancel' | 'recover'. 'cancel': once, on the first frame the pose has been missing for more than
@@ -371,10 +396,20 @@ export function createWristMenuGate(opts={}){
   get shown(){return shown},
  };
 }
-// the wrist menu's buttons, left to right: A/X short (the quick ring), A/X long (the menu), B/Y short (sections shown / hidden), B/Y long
+// the wrist menu's buttons, in slot order: A/X short (the quick ring), A/X long (the menu), B/Y short (sections shown / hidden), B/Y long
 // (add a section), 取り消し (the ring's undo), then 断面 － / ＋ (the selected section along its normal = the thumbstick up / down: hold to repeat)
 export const WRIST_ITEMS=['ring','menu','section','add','undo','secDown','secUp'];
-export const wristSlotFromU=u=>Number.isFinite(u)?Math.max(0,Math.min(WRIST_ITEMS.length-1,Math.floor(u*WRIST_ITEMS.length))):null;
+// a compact grid panel instead of the 28 cm strip (labelled buttons -> a grid; the 7 items fit 3 columns x 3 rows). WRIST_GRID.cells[slot] = [col,row]
+// (row 0 on top): the three view buttons on the first row, add / undo on the second, the 断面 － / ＋ pair together on the last; two cells stay empty.
+// size: a cell is 5 x 3.5 cm (the same 5000 px / m of text as before), the panel 15 x 10.5 cm: readable at arm's length, and it does not cover the hand.
+export const WRIST_GRID={cols:3,rows:3,cellW:0.05,cellH:0.035,cells:[[0,0],[1,0],[2,0],[0,1],[1,1],[0,2],[1,2]]};
+// the slot under the texture coordinates (u to the right, v up: three's plane uv) or null (outside / an empty cell / not a number)
+export function wristSlotFromUv(u,v){
+ if(!Number.isFinite(u)||!Number.isFinite(v))return null;
+ const g=WRIST_GRID,c=Math.max(0,Math.min(g.cols-1,Math.floor(u*g.cols))),r=Math.max(0,Math.min(g.rows-1,Math.floor((1-v)*g.rows)));
+ for(let i=0;i<g.cells.length;i++)if(g.cells[i][0]===c&&g.cells[i][1]===r)return i;
+ return null;
+}
 // 断面 －/＋ held on the wrist menu: the thumbstick's deflection (1 = full) after heldMs. A tap nudges (0.4), holding speeds up to full in 1 s.
 // ＋ = the thumbstick pushed up (the plane moves along +X, its normal), － = pulled back; the sign is returned by wristScrollSign.
 export const WRIST_SCROLL={start:0.4,rampMs:1000};
@@ -382,6 +417,22 @@ export const wristScrollGain=heldMs=>{const f=Math.max(0,Math.min(1,(heldMs||0)/
 // 断面 －/＋ keeps scrolling only while the ray stays on the SAME button, the hand is not a fist, and nothing the scroll needs went away
 export const wristScrollKeep=(heldId,hitId,fist)=>!!heldId&&hitId===heldId&&!fist;
 export const wristScrollSign=id=>id==='secUp'?-1:id==='secDown'?1:0; // the `scroll` sum of vr-view.js: thumbstick down = +, up = -
+
+// ---- empty-space pinch actions ----
+// A pinch whose laser hits nothing interactive does what a controller button does: the RIGHT hand = B/Y (short: sections shown / hidden, long: add one), the LEFT hand
+// held = the thumbstick click's hold (the section frames hidden while held). It is dropped when the hand moves more than moveM (a missed aim, not a press) or the
+// laser reaches a target. A palm turned to the face is the system menu / home gesture: never. Two quick pinches (doubleMs) on a section = the slice transparent / back.
+export const EMPTY_PINCH={moveM:0.05,palmFacingCos:0.5,doubleMs:300};
+// the palm faces the head: the palm normal (-Y of the wrist joint, WebXR) within acos(minCos) of wrist -> head. wp [x,y,z], wq [x,y,z,w], head [x,y,z] | {x,y,z}.
+// A missing / non-finite input: false (the pinch is then judged by the other conditions).
+const pfD=[0,0,0],pfN=[0,-1,0];
+export function palmFacesHead(wp,wq,head,minCos=EMPTY_PINCH.palmFacingCos){
+ if(!wp||!wq||!head)return false;
+ const hx=(head.x??head[0])-wp[0],hy=(head.y??head[1])-wp[1],hz=(head.z??head[2])-wp[2],d=Math.hypot(hx,hy,hz);
+ if(!(d>1e-6)||!(wq[0]-wq[0]===0)||!(wq[1]-wq[1]===0)||!(wq[2]-wq[2]===0)||!(wq[3]-wq[3]===0))return false;
+ rotV(wq,pfN,pfD);
+ return (pfD[0]*hx+pfD[1]*hy+pfD[2]*hz)/d>=minCos;
+}
 
 // ---- grab (a fist) = the grip ----
 // A grip is a closed hand: all four fingers (index, middle, ring, pinky) curled into the palm. Pointing (index out) and pinching (thumb to index,
@@ -488,9 +539,8 @@ export function pickNearGrab(cands,near=GRAB.near){
 const numOr=(v,min,max)=>{if(v===null||v===undefined||v==='')return undefined;const n=+v;return Number.isFinite(n)&&n>=min&&n<=max?n:undefined};
 const pick=(v,spec)=>{const o={};if(!v||typeof v!=='object')return o;for(const k in spec){const n=numOr(v[k],spec[k][0],spec[k][1]);if(n!==undefined)o[k]=n}return o};
 const jsonOf=t=>{try{return typeof t==='string'?JSON.parse(t):t}catch{return null}};
-// vrl-hand-filter = '{"minCutoff":1.2,"beta":0.05,"dCutoff":5,"aMinCutoff":5,"aBeta":0.15,"aDCutoff":8,"delayMs":60,"delayFar":0.06,"delayNear":0.03}'
-// (delayMs 0: no delay at all; delayNear 10: the old fixed delay whatever the fingers do)
-export const parseFilterTune=t=>pick(jsonOf(t),{minCutoff:[0.05,60],beta:[0,5],dCutoff:[0.1,60],aMinCutoff:[0.05,60],aBeta:[0,5],aDCutoff:[0.1,60],delayMs:[0,200],delayFar:[0,1],delayNear:[0,10]});
+// vrl-hand-filter = '{"aMinCutoff":5,"aBeta":0.15,"aDCutoff":8}' (the palm anchor only: the ray is the system's, unfiltered)
+export const parseFilterTune=t=>pick(jsonOf(t),{aMinCutoff:[0.05,60],aBeta:[0,5],aDCutoff:[0.1,60]});
 // vrl-hand-grab = '{"on":0.55,"off":0.7,"holdMs":60,"near":0.05}'
 export const parseGrabTune=t=>pick(jsonOf(t),{on:[0,1.5],off:[0,1.5],holdMs:[0,2000],near:[0,0.3]});
 // vrl-hand-pinch = '{"on":0.018,"off":0.03,"onFrames":2,"offFrames":2,"own":1,"os":1,"osGapMs":100,"guardIndex":0.6,"guardOthers":0.5}'
@@ -498,26 +548,22 @@ export const parseGrabTune=t=>pick(jsonOf(t),{on:[0,1.5],off:[0,1.5],holdMs:[0,2
 export const parsePinchTune=t=>pick(jsonOf(t),{on:[0.003,0.08],off:[0.003,0.12],onFrames:[1,10],offFrames:[1,10],own:[0,1],os:[0,1],osGapMs:[0,1000],guardIndex:[0,1.5],guardOthers:[0,1.5]});
 // vrl-hand-drag = '{"carry":1,"gain":1,"rot":1,"blendMs":120}' (carry 0: a pinch drags with the system's (delayed) ray, as before)
 export const parseDragTune=t=>pick(jsonOf(t),{carry:[0,1],gain:[0,5],rot:[0,1],blendMs:[0,1000]});
-// vrl-hand-ray = '{"joint":1,"axis":"finger","origin":"pip","tipMix":0,"pitch":0,"yaw":0,"minCutoff":2,"beta":0.15,"dCutoff":5,"holdDeg":10,"holdSpeed":0.12,"holdCurl":60,"holdMs":60,"rampMs":120}'
-// (joint 0: the system's target ray as before; axis "metacarpal":'s ray (pitch / yaw default 8 / 4 then); origin "knuckle" | "pip" | "tip";
-// holdDeg 720: no aim hold; holdCurl 2000: no curl trigger; pitch / yaw in degrees, toward the palm / the thumb)
-export const parseRayTune=t=>{
- const v=jsonOf(t),o=pick(v,{joint:[0,1],tipMix:[0,1],pitch:[-45,45],yaw:[-45,45],minCutoff:[0.05,60],beta:[0,5],dCutoff:[0.1,60],holdDeg:[0,720],holdSpeed:[0,5],holdCurl:[0,2000],holdMs:[0,1000],rampMs:[0,2000]});
- if(v&&typeof v==='object'){if(AIM_AXES.includes(v.axis))o.axis=v.axis;if(AIM_ORIGINS.includes(v.origin))o.origin=v.origin}
- return o;
-};
+// vrl-hand-point = '{"indexOn":0.85,"indexOff":0.75,"othersOn":0.62,"othersOff":0.72,"pdMin":0.03,"onFrames":3,"offFrames":8,"relHoldMs":250,"freezeMs":100}' (指差し: the gate,
+// POINT_GATE; and the pinch hold of the ray, POINT_RAY freezeMs / preOn / preOff / relHoldMs / reArmMs)
+export const parsePointTune=t=>pick(jsonOf(t),{indexOn:[0,1.5],indexOff:[0,1.5],othersOn:[0,1.5],othersOff:[0,1.5],pdMin:[0,0.2],onFrames:[1,60],offFrames:[1,120],relHoldMs:[0,3000],
+ freezeMs:[0,400],preOn:[0.003,0.1],preOff:[0.003,0.12],rayRelHoldMs:[0,2000],reArmMs:[0,2000]});
 
 // ---- texts (hands only; the controller texts stay in vr-view.js) ----
 export function handTexts(ja){
  return ja?{
-  helpBasic:['ピンチ（短く）：点を記録／点を選択（点で長くつまむ：移動・削除・色・距離）','グー：ボリューム・板・メニューに手を重ねて握る＝掴む（遠くはレーザーで狙う）','両手でグー：2つの拳の間隔で拡大・縮小','左手首の甲を顔に向ける：手首メニュー（A/X・B/Y・断面＋／－の代わり）','手首メニュー：右手のレーザーで指してピンチ','手首メニューの「メニュー」：メニューの開閉'],
-  helpSec:['枠の細い線・番号札：ピンチで選択／つまんだまま動かして移動・回転','ピンチ（短く）：断面や組織に点を記録／点に当てて選択、点で長くつまむ：リング','手首メニューの「断面＋／－」：選んだ断面を法線方向へ送る（押し続ける）','グー：枠・ボリュームに手を重ねて握る＝掴んで移動・回転／両手でグー：拡大・縮小','左手首の甲を顔に向ける：手首メニュー（断面の表示／非表示・追加）','手首メニューの「メニュー」：メニューの開閉'],
+  helpBasic:['ピンチ（短く）：点を記録／選択（点で長く：移動・削除・色・距離）','グー：ボリューム・板・メニューを掴む／両手でグー：拡大縮小','何もない所で右手ピンチ：断面の表示／非表示（長押し：追加）','何もない所で左手ピンチ長押し：断面の枠を隠す','断面の上で2回ピンチ：断面を透明／元に戻す','左手首の甲を顔へ：手首メニュー（「メニュー」で開閉）'],
+  helpSec:['枠の細い線・番号札：ピンチで選択／つまんだまま動かして移動・回転','ピンチ（短く）：断面や組織に点を記録／点に当てて選択、点で長く：リング','手首メニューの「断面＋／－」：選んだ断面を法線方向へ送る（押し続ける）','何もない所で右手ピンチ：表示／非表示（長押し：追加）','何もない所で左手長押し：枠を隠す／断面の上で2回ピンチ：透明／戻す','グー：枠・ボリュームを掴む／両手グー：拡大縮小'],
   helpMenu:'ピンチ：メニューのボタン・スライダー／グー：メニュー板に手を重ねて移動',
   helpMenuSimple:'ピンチ：メニューのボタン・スライダー／グー：メニュー板に手を重ねて移動',
   wrist:on=>[['よく使う','（リング）'],['メニュー','開く／閉じる'],['断面',on?'非表示にする':'表示する'],['断面を','追加'],['取り消し',''],['断面','－'],['断面','＋']],
  }:{
-  helpBasic:['Pinch (short): record / select a point (hold on a point: move, delete, colour, distance)','Fist on / near the volume, a board or the menu: grab it (far away: aim the laser, fist)','Two fists: the distance between them scales the volume','Back of the left wrist to your eyes: wrist menu (replaces A/X, B/Y, section + / -)','Wrist menu: point with the right hand and pinch','Wrist menu “Menu”: open / close the menu'],
-  helpSec:['Thin frame line / number tag: pinch selects, pinch and move to slide / rotate','Pinch (short): record a point on a section or tissue; on a point selects it; hold on a point: ring','Wrist menu “Section + / -”: slides the selected section along its normal (hold)','Fist on a section frame or the volume: grab, move / turn; two fists: scale','Back of the left wrist to your eyes: wrist menu (show / hide / add sections)','Wrist menu “Menu”: open / close the menu'],
+  helpBasic:['Pinch (short): record / select a point (hold on a point: move, delete, colour, distance)','Fist on / near the volume, a board or the menu: grab it. Two fists: scale','Right pinch in empty space: sections show / hide (hold: add a section)','Left pinch held in empty space: hide the section frames','Two quick pinches on a section: slice transparent / back','Back of the left wrist to your eyes: wrist menu (“Menu” opens / closes the menu)'],
+  helpSec:['Thin frame line / number tag: pinch selects, pinch and move to slide / rotate','Pinch (short): record a point on a section or tissue; on a point selects it; hold on a point: ring','Wrist menu “Section + / -”: slides the selected section along its normal (hold)','Right pinch in empty space: show / hide sections (hold: add)','Left pinch held in empty space: hide frames; 2 quick pinches on a section: slice clear / back','Fist on a section frame or the volume: grab, move / turn; two fists: scale'],
   helpMenu:'Pinch: menu buttons and sliders; fist on the menu board: move it',
   helpMenuSimple:'Pinch: menu buttons and sliders; fist on the menu board: move it',
   wrist:on=>[['Quick','ring'],['Menu','open / close'],['Sections',on?'hide':'show'],['Add','section'],['Undo',''],['Section','-'],['Section','+']],
