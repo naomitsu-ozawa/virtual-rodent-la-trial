@@ -4,7 +4,7 @@ import { TUTORIAL_MISSIONS } from '../../docs/tutorial-data.js';
 
 const memProgress = (init) => { let p = init || { v: 1, done: {}, skipAll: false, last: null }; const log = { saves: 0, clears: 0 };
   return { load: () => ({ ...p, done: { ...p.done } }), save: q => { p = JSON.parse(JSON.stringify(q)); log.saves++; }, clear: () => { p = { v: 1, done: {}, skipAll: false, last: null }; log.clears++; }, get: () => p, log }; };
-const mk = (o = {}) => { const progress = o.progress || memProgress(); return { progress, e: createTutorialEngine({ progress, hasAnalysis: true, ...o }) }; };
+const mk = (o = {}) => { const progress = o.progress || memProgress(); return { progress, e: createTutorialEngine({ progress, ...o }) }; };
 const sig = (e, kind, count) => e.onSignal({ kind, count });
 function finish(e, id) { e.start(id); for (const s of e.currentStep() ? TUTORIAL_MISSIONS.find(m => m.id === id).steps : []) for (let i = 0; i < s.done.count; i++) sig(e, s.done.signal); }
 
@@ -13,7 +13,8 @@ describe('tutorial engine: sequencing', () => {
     const { e } = mk();
     expect(e.getState()).toMatchObject({ mission: null, step: 0, done: {} });
     expect(e.pageInfo()).toBeNull();
-    expect(e.listMissions().map(m => m.status)).toEqual(['available', 'locked', 'locked', 'locked', 'locked', 'locked', 'locked', 'locked']);
+    expect(e.listMissions().map(m => m.status)).toEqual(['available', 'locked', 'locked', 'locked', 'locked', 'locked', 'locked']);
+    expect(e.listMissions().map(m => m.stepNo)).toEqual([1, 2, 3, 4, 5, 6, 7]); // ステップN: fixed by the order
     expect(e.start('m2')).toBe(false);
     expect(e.start('nope')).toBe(false);
   });
@@ -73,23 +74,32 @@ describe('tutorial engine: unlock rules', () => {
     for (const id of ['m1', 'm2', 'm3']) { expect(e.isUnlocked(id)).toBe(true); finish(e, id); }
     expect(e.listMissions().slice(0, 5).map(m => m.status)).toEqual(['done', 'done', 'done', 'available', 'locked']);
   });
-  it('M7 is unavailable without AR and does not block M8', () => {
+  it('M7 (AR) is unavailable without AR, keeps its number (ステップ7) and blocks nothing; with AR it is the last step to do', () => {
     const { e } = mk({ arAvailable: false });
     for (const id of ['m1', 'm2', 'm3', 'm4', 'm5', 'm6']) finish(e, id);
-    expect(e.listMissions()[6]).toMatchObject({ status: 'unavailable', reason: 'tutNoAr' });
+    expect(e.listMissions()[6]).toMatchObject({ status: 'unavailable', reason: 'tutNoAr', stepNo: 7 });
     expect(e.start('m7')).toBe(false);
-    expect(e.isUnlocked('m8')).toBe(true);
-    e.setEnv({ arAvailable: true });
-    expect(e.listMissions()[6].status).toBe('available');
-    expect(e.isUnlocked('m8')).toBe(false); // M7 exists now and is not done
-  });
-  it('M8 needs analysis labels; being optional it never blocks and is not nextMissionId over a real one', () => {
-    const { e } = mk({ hasAnalysis: false });
-    expect(e.listMissions()[7]).toMatchObject({ status: 'unavailable', reason: 'tutNoAnalysis', optional: true });
-    for (const id of ['m1', 'm2', 'm3', 'm4', 'm5', 'm6', 'm7']) finish(e, id);
     expect(e.nextMissionId()).toBeNull();
-    e.setEnv({ hasAnalysis: true });
-    expect(e.nextMissionId()).toBe('m8');
+    e.setEnv({ arAvailable: true });
+    expect(e.listMissions()[6]).toMatchObject({ status: 'available', stepNo: 7 });
+    expect(e.nextMissionId()).toBe('m7');
+  });
+  it('there is no analysis step any more (no m8, no analysis flag, no hasAnalysis env)', () => {
+    const { e } = mk();
+    expect(e.listMissions()).toHaveLength(7);
+    expect(TUTORIAL_MISSIONS.some(m => m.requiresAnalysis)).toBe(false);
+    expect(e.listMissions().every(m => m.reason !== 'tutNoAnalysis')).toBe(true);
+    e.setEnv({ hasAnalysis: false }); // an unknown key is ignored
+    expect(e.listMissions().map(m => m.status)).toEqual(['available', 'locked', 'locked', 'locked', 'locked', 'locked', 'locked']);
+  });
+  it('an optional mission (generic flag, no mission uses it now) never blocks and is not nextMissionId over a real one', () => {
+    const st = id => [{ id: id + 's', text: 't', audio: id + 's', audioText: 'abcd', done: { signal: 'move', count: 1 } }];
+    const missions = [{ id: 'a', sample: 'sample4', title: 't', steps: st('a') }, { id: 'o', sample: 'sample4', title: 't', optional: true, steps: st('o') }, { id: 'b', sample: 'sample4', title: 't', steps: st('b') }];
+    const e = createTutorialEngine({ missions, progress: memProgress() });
+    e.start('a'); sig(e, 'move');
+    expect(e.isUnlocked('b')).toBe(true); expect(e.nextMissionId()).toBe('b');
+    e.start('b'); sig(e, 'move');
+    expect(e.nextMissionId()).toBe('o');
   });
   it('setEnv closes a running mission that became unavailable', () => {
     const { e } = mk({ progress: memProgress({ v: 1, done: {}, skipAll: true, last: null }) });
@@ -117,7 +127,7 @@ describe('tutorial engine: skip and reset', () => {
     const { e, progress } = mk();
     e.skipAll();
     expect(e.listMissions().every(m => m.status === 'done' || m.status === 'unavailable')).toBe(true);
-    expect(Object.keys(e.getState().done)).toHaveLength(8);
+    expect(Object.keys(e.getState().done)).toHaveLength(7);
     expect(progress.get().skipAll).toBe(true);
     expect(e.start('m5')).toBe(true);
     expect(e.nextMissionId()).toBeNull();
@@ -223,14 +233,16 @@ describe('tutorial engine: spoken feedback', () => {
     e.start('m1'); e.next(); e.next(); l.length = 0; e.next();
     expect(l).toEqual([['missionClear', 'mclear']]);
   });
-  it('the last required mission gives allClear (optional M8 does not count, and M8 itself is a missionClear)', () => {
-    const { e } = mk({ hasAnalysis: false, progress: memProgress({ v: 1, done: { m1: true, m2: true, m3: true, m4: true, m5: true }, skipAll: false, last: null }) }); const l = watch(e);
+  it('the last mission that exists on this device gives allClear (M7 AR exists: after it; no AR: m6 is the last)', () => {
+    const done5 = { v: 1, done: { m1: true, m2: true, m3: true, m4: true, m5: true }, skipAll: false, last: null };
+    const { e } = mk({ progress: memProgress(done5) }); const l = watch(e);
     e.start('m6'); sig(e, 'point-record', 2); sig(e, 'measure-done');
     expect(l.at(-1)).toEqual(['missionClear', 'mclear']); // m7 (AR) still to do
     finish(e, 'm7');
     expect(l.at(-1)).toEqual(['allClear', 'allclear']);
-    e.setEnv({ hasAnalysis: true }); l.length = 0; finish(e, 'm8');
-    expect(l.filter(x => x[0]).at(-1)).toEqual(['missionClear', 'mclear']);
+    const noAr = mk({ arAvailable: false, progress: memProgress(done5) }); const l2 = watch(noAr.e);
+    noAr.e.start('m6'); sig(noAr.e, 'point-record', 2); sig(noAr.e, 'measure-done');
+    expect(l2.at(-1)).toEqual(['allClear', 'allclear']);
   });
   it('skips, reset and setEnv give no feedback; feedbackSeq counts the earned ones', () => {
     const { e } = mk(); const l = watch(e); const seqs = []; e.subscribe(s => seqs.push(s.feedbackSeq));

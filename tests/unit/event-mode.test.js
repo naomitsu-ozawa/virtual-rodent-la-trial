@@ -387,13 +387,15 @@ describe('static wiring', () => {
     expect(read('ui-shell.js')).toContain('<input id="set-event-mode" type="checkbox">');
     expect(read('app.js')).toMatch(/addEventListener\('vrl-event-sample',e=>\{[^\n]*e\.detail\.done=startSample\(id\)/);
   });
-  it('the VR help board keeps its size and layout without a mission', () => {
+  it('the help board has its normal page height (+ the tab strip) and the mission is its own board, only made when there is a mission', () => {
     const src = read('vr-view.js');
-    expect(src).toContain('const help=makeMenu(820,560+evH,HELP_WIDTH)');
+    expect(src).toContain('const help=makeMenu(820,560+TAB_H,HELP_WIDTH)');
     expect(src).toContain('evH=evLines.length?');
     expect(src).toContain(':[],evH=');
-    expect(src).toMatch(/y:60\+evH,text:L\.helpT/);
-    expect(src).toMatch(/y:140\+evH\+i\*HELP_LINE_PITCH/);
+    expect(src).toContain('const ev=evH?makeMenu(820,evH+10,EV_WIDTH):null;');
+    expect(src).toMatch(/y:60,text:L\.helpT/);
+    expect(src).toMatch(/y:140\+i\*HELP_LINE_PITCH/);
+    expect(src).not.toMatch(/\+evH\+i/);
   });
   it('VR / AR start with the menu board closed, or open on the かんたん menu in event mode; A/X long press and the ring still open it', () => {
     const src = read('vr-view.js');

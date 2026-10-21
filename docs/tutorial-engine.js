@@ -11,19 +11,19 @@
 //   snapshot.feedbackItem = the TUT_FEEDBACK entry {id,text,audio,audioText}, feedbackSeq counts earned feedbacks (changes on each).
 //   getState()        {mission (id | null), step, done:{}, count, finished, skipAll}   (step is 0-based; mission null = idle)
 //   pageInfo()        {n, N, hasPrev, hasNext, isLast, finished} for "n/N" (null when idle)
-//   currentStep(), listMissions(), isUnlocked(id), nextMissionId(), setEnv({arAvailable, hasAnalysis})
+//   currentStep(), listMissions(), isUnlocked(id), nextMissionId(), setEnv({arAvailable})
 // Unlock: M(n) is open once every earlier mission that exists on this device is done (or skipped); skipAll opens everything. A mission that does not exist
-// here (requiresAr without AR, requiresAnalysis without analysis labels) is neither startable nor in the way of the next one.
-import { TUTORIAL_MISSIONS, TUT_FEEDBACK } from './tutorial-data.js?v=20261021-build640';
-import { loadProgress, saveProgress, clearProgress } from './tutorial-progress.js?v=20261021-build640';
-export function createTutorialEngine({missions=TUTORIAL_MISSIONS,progress={load:loadProgress,save:saveProgress,clear:clearProgress},arAvailable=true,hasAnalysis=false}={}){
- const env={arAvailable,hasAnalysis};
+// here (requiresAr without AR) is neither startable nor in the way of the next one. listMissions() rows carry stepNo = index + 1 (the ステップN of the lists; fixed, also while the step is unavailable).
+import { TUTORIAL_MISSIONS, TUT_FEEDBACK } from './tutorial-data.js?v=20261021-build641';
+import { loadProgress, saveProgress, clearProgress } from './tutorial-progress.js?v=20261021-build641';
+export function createTutorialEngine({missions=TUTORIAL_MISSIONS,progress={load:loadProgress,save:saveProgress,clear:clearProgress},arAvailable=true}={}){
+ const env={arAvailable};
  let prog=progress.load();
  let mission=null,step=0,count=0,finished=false;
  let fb=null,fbItem=null,fbSeq=0,stepClears=0; // spoken feedback of the last transition (set by signal clears / finishing, delivered with the next snapshot only)
  const subs=new Set();
  const byId=id=>missions.find(m=>m.id===id)||null;
- const available=m=>!!m&&!(m.requiresAr&&!env.arAvailable)&&!(m.requiresAnalysis&&!env.hasAnalysis);
+ const available=m=>!!m&&!(m.requiresAr&&!env.arAvailable);
  const isDone=id=>prog.skipAll||prog.done[id]===true;
  function isUnlocked(id){
   const i=missions.findIndex(m=>m.id===id);if(i<0||!available(missions[i]))return false;
@@ -66,16 +66,16 @@ export function createTutorialEngine({missions=TUTORIAL_MISSIONS,progress={load:
  }
  function skipAll(){prog.skipAll=true;for(const m of missions)prog.done[m.id]=true;persist();if(mission){finished=true;count=0;step=mission.steps.length-1}emit();return true}
  function reset(){try{progress.clear()}catch{}prog={v:1,done:{},skipAll:false,last:null};mission=null;step=0;count=0;finished=false;emit();return true}
- function setEnv(e={}){if('arAvailable'in e)env.arAvailable=!!e.arAvailable;if('hasAnalysis'in e)env.hasAnalysis=!!e.hasAnalysis;if(mission&&!available(mission)){mission=null;step=0;count=0;finished=false}emit()}
+ function setEnv(e={}){if('arAvailable'in e)env.arAvailable=!!e.arAvailable;if(mission&&!available(mission)){mission=null;step=0;count=0;finished=false}emit()}
  function nextMissionId(){ // the first startable mission that is not done yet (null when there is none)
   for(const m of missions)if(isUnlocked(m.id)&&!isDone(m.id)&&!m.optional)return m.id;
   for(const m of missions)if(isUnlocked(m.id)&&!isDone(m.id))return m.id;
   return null;
  }
  function listMissions(){
-  return missions.map((m,i)=>({id:m.id,title:m.title,index:i,steps:m.steps.length,optional:!!m.optional,done:isDone(m.id),current:mission?.id===m.id,
+  return missions.map((m,i)=>({id:m.id,title:m.title,index:i,stepNo:i+1,steps:m.steps.length,optional:!!m.optional,done:isDone(m.id),current:mission?.id===m.id,
    status:!available(m)?'unavailable':isDone(m.id)?'done':isUnlocked(m.id)?'available':'locked',
-   reason:m.requiresAr&&!env.arAvailable?'tutNoAr':m.requiresAnalysis&&!env.hasAnalysis?'tutNoAnalysis':null}));
+   reason:m.requiresAr&&!env.arAvailable?'tutNoAr':null}));
  }
  const currentStep=()=>mission?mission.steps[step]:null;
  function pageInfo(){

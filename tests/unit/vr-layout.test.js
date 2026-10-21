@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { VOLUME_FWD, MENU_OFFSET, HELP_OFFSET, HIST_OFFSET, HIST_WIDTH, MENU_WIDTH, HELP_WIDTH, boardDistance, placeFromHead, volumeFromHead } from '../../docs/vr-layout.js';
+import { VOLUME_FWD, MENU_OFFSET, HELP_OFFSET, HIST_OFFSET, HIST_WIDTH, MENU_WIDTH, HELP_WIDTH, EV_OFFSET, EV_WIDTH, HU_PANEL_OFFSET, boardDistance, placeFromHead, volumeFromHead } from '../../docs/vr-layout.js';
 
 import { PANEL_W, PANEL_H } from '../../docs/vr-histogram-layout.js';
-const HELP_W = 820, HELP_H = 560; // the help board canvas (makeMenu(820,560,...) in vr-view.js)
+const HELP_W = 820, HELP_H = 560 + 72; // the help board canvas (makeMenu(820,560+TAB_H,...) in vr-view.js;: the 手順一覧 | 詳細 tab strip is 72 px)
 const head = { x: 1, y: 1.6, z: 2 }, fwd = { x: 0, z: -1 }, left = { x: -1, z: 0 };
 describe('default VR/AR layout', () => {
   it('volume 0.6-0.7 m ahead, a little below the eyes', () => {
@@ -42,6 +42,27 @@ describe('default VR/AR layout', () => {
     expect(s).not.toMatch(/acquireHistogram|releaseHistogram|getHistogramView|forceHistogramRecompute/); // the board counts the VR data itself (vr-label-histogram.js);: that PC consumer API is gone
     expect(readFileSync('docs/histogram-ui.js', 'utf8')).not.toMatch(/export (function|const) (acquireHistogram|releaseHistogram|getHistogramView|getHistogramProgress|forceHistogramRecompute)\b/);
     expect(s).toMatch(/histSigInto\(P,material\.uniforms,histSigNow\)/); // the pass follows the shader's path (uniforms) for the data in use
-    expect(s).toMatch(/hist\.update\(/); expect(s).toMatch(/o\.hist=histHit\(c\)/); expect(s).toMatch(/if\(bd\.hist\)\{/); expect(s).toMatch(/histAxisEnd\(true\)/); expect(s).toMatch(/if\(histAxis===c\)histAxisEnd\(false\)/); expect(s).toMatch(/if\(!on\)histAxisEnd\(false\)/); expect(s).toMatch(/(const |,)bd=(rOff\?noHits:)?histAxis===c\?histAxisBd:boardHits\(c\)/); expect(s).toMatch(/histAxisBd=\{menu:null,help:null,hist:histAxisOut,wheel:null,pwheel:null,undoBtn:null,hu:null\}/); expect(s).not.toMatch(/hist\.grab\(/); expect(s).toMatch(/bd\.help\|\|bd\.hu/);
+    expect(s).toMatch(/hist\.update\(/); expect(s).toMatch(/o\.hist=histHit\(c\)/); expect(s).toMatch(/if\(bd\.hist\)\{/); expect(s).toMatch(/histAxisEnd\(true\)/); expect(s).toMatch(/if\(histAxis===c\)histAxisEnd\(false\)/); expect(s).toMatch(/if\(!on\)histAxisEnd\(false\)/); expect(s).toMatch(/(const |,)bd=(rOff\?noHits:)?histAxis===c\?histAxisBd:boardHits\(c\)/); expect(s).toMatch(/histAxisBd=\{menu:null,help:null,hist:histAxisOut,wheel:null,pwheel:null,undoBtn:null,hu:null,ev:null\}/); expect(s).not.toMatch(/hist\.grab\(/); expect(s).toMatch(/bd\.hu\|\|bd\.ev/);
+  });
+});
+
+describe('mission board', () => {
+  const MENU_H = 1180, MENU_W = 1024, evH = 64 + 5 * 32 + 10; // the tallest mission (5 lines) on its own board
+  const h = EV_WIDTH * evH / 820, wH = HELP_WIDTH * (560 + 72) / 820;
+  it('upper left at reading distance, same width as the help board (the text keeps its size), clear of the volume, the menu, the help board and the HU panel', () => {
+    expect(EV_WIDTH).toBe(HELP_WIDTH);
+    expect(boardDistance(EV_OFFSET)).toBeGreaterThanOrEqual(0.8); expect(boardDistance(EV_OFFSET)).toBeLessThanOrEqual(1.0);
+    expect(EV_OFFSET.left).toBeGreaterThan(0); expect(EV_OFFSET.down).toBeLessThan(0); // left of and above the eyes
+    expect(EV_OFFSET.down + h / 2).toBeLessThan(MENU_OFFSET.down - MENU_WIDTH * MENU_H / MENU_W / 2); // above the menu's top edge (no overlap)
+    expect(EV_OFFSET.down + h / 2).toBeLessThan(-0.1); // far above the volume (which is below the eyes)
+    expect(EV_OFFSET.left - EV_WIDTH / 2).toBeGreaterThan(0.15 + 0.1); // clear of the HU panel (centre, 0.15 m either side)
+    expect(EV_OFFSET.left).toBeGreaterThan(0); expect(HELP_OFFSET.left).toBeLessThan(0); // the help board is on the other side
+    expect(HELP_OFFSET.down - wH / 2).toBeGreaterThan(-0.2); expect(HU_PANEL_OFFSET.left).toBe(0);
+  });
+  it('vr-view.js places it once at EV_OFFSET (like the HU panel: no follow) and 正面に戻す re-places it', () => {
+    const v = readFileSync('docs/vr-view.js', 'utf8');
+    expect(v).toContain("evTarget.copy(head).addScaledVector(headFwd,EV_OFFSET.fwd).addScaledVector(headLeft,EV_OFFSET.left);evTarget.y-=EV_OFFSET.down;");
+    expect(v).toContain('if(ev.mesh.visible&&!evPlaced&&poseAt)placeEvNow()');
+    expect(v).not.toMatch(/lazyFollow\(ev\.mesh/);
   });
 });

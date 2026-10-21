@@ -89,16 +89,6 @@
   "sec": 2.07,
   "textHash": "0912d4f8208d"
  },
- "F1/m8s1": {
-  "voice": "F1",
-  "sec": 3.2,
-  "textHash": "4dac2d541b40"
- },
- "F1/m8s2": {
-  "voice": "F1",
-  "sec": 2.83,
-  "textHash": "38eaa5ed73c2"
- },
  "F1/ok1": {
   "voice": "F1",
   "sec": 1.3,
@@ -116,8 +106,8 @@
  },
  "F1/mclear": {
   "voice": "F1",
-  "sec": 1.68,
-  "textHash": "a8daf52d8416"
+  "sec": 1.65,
+  "textHash": "524d37f276b0"
  },
  "F1/allclear": {
   "voice": "F1",

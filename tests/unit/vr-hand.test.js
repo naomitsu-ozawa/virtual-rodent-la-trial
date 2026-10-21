@@ -467,8 +467,8 @@ describe('direct grab: distances and the choice', () => {
     expect(pickNearGrab([vol, C('section', 0.2)])).toBe(vol); // a far section frame: the volume
     expect(pickNearGrab([C('section', 0.04), C('section', 0.02)])).not.toBe(null);
   });
-  it('NEAR_KINDS lists the priority order of the boards (the same as the laser grab) and ends with the section and the volume', () => {
-    expect(NEAR_KINDS).toEqual(['menu', 'help', 'hist', 'hu', 'section', 'volume']);
+  it('NEAR_KINDS lists the priority order of the boards (the same as the laser grab), the section and the volume;: the mission board ev is appended last so the other indexes stay', () => {
+    expect(NEAR_KINDS).toEqual(['menu', 'help', 'hist', 'hu', 'section', 'volume', 'ev']);
   });
   it('two fists on the volume: both hands pick the volume (the scale then follows their distance, as before)', () => {
     const a = pickNearGrab([C('volume', 0)]), b = pickNearGrab([C('volume', 0.03)]);

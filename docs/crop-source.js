@@ -12,7 +12,7 @@
 // - rotated: the interpolation needs ONE scale, so all slices are converted to the finest |slope| of the series; a value that does not fit
 //   the stored range after the conversion aborts the export (never clamped).
 import dicomParser from 'https://esm.sh/dicom-parser@1.8.21';
-import { isNativeDicomTransferSyntax } from './dicom.js?v=20261021-build640';
+import { isNativeDicomTransferSyntax } from './dicom.js?v=20261021-build641';
 
 export class CropExportError extends Error { constructor(code, message) { super(message); this.code = code; } }
 
