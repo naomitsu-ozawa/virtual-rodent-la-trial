@@ -1,0 +1,127 @@
+{
+ "F1/m1s2": {
+  "voice": "F1",
+  "sec": 3.42,
+  "textHash": "1043a2866fdc"
+ },
+ "F1/m1s3": {
+  "voice": "F1",
+  "sec": 2.48,
+  "textHash": "b8553dcc9919"
+ },
+ "F1/m1s4": {
+  "voice": "F1",
+  "sec": 2.87,
+  "textHash": "f984aeab1873"
+ },
+ "F1/m2s1": {
+  "voice": "F1",
+  "sec": 1.83,
+  "textHash": "c638f7a1f263"
+ },
+ "F1/m2s2": {
+  "voice": "F1",
+  "sec": 3.11,
+  "textHash": "6553654d939b"
+ },
+ "F1/m2s3": {
+  "voice": "F1",
+  "sec": 1.68,
+  "textHash": "4c4cbf5ab631"
+ },
+ "F1/m3s1": {
+  "voice": "F1",
+  "sec": 1.99,
+  "textHash": "4b44a67dffde"
+ },
+ "F1/m3s2": {
+  "voice": "F1",
+  "sec": 2.69,
+  "textHash": "3ba78c4d2aa7"
+ },
+ "F1/m3s3": {
+  "voice": "F1",
+  "sec": 3.11,
+  "textHash": "069e3b34f128"
+ },
+ "F1/m4s1": {
+  "voice": "F1",
+  "sec": 2.65,
+  "textHash": "836cc921bbc1"
+ },
+ "F1/m4s2": {
+  "voice": "F1",
+  "sec": 2.01,
+  "textHash": "3f06e1fdcd00"
+ },
+ "F1/m5s1": {
+  "voice": "F1",
+  "sec": 2.55,
+  "textHash": "5245cd5dec86"
+ },
+ "F1/m5s2": {
+  "voice": "F1",
+  "sec": 2.29,
+  "textHash": "8522c540d46a"
+ },
+ "F1/m6s1": {
+  "voice": "F1",
+  "sec": 2.62,
+  "textHash": "d0a6247a43be"
+ },
+ "F1/m6s2": {
+  "voice": "F1",
+  "sec": 3,
+  "textHash": "21b42971b16b"
+ },
+ "F1/m7s1": {
+  "voice": "F1",
+  "sec": 3.2,
+  "textHash": "79e3fd361cfe"
+ },
+ "F1/m7s2": {
+  "voice": "F1",
+  "sec": 2.35,
+  "textHash": "96d5e2d5b290"
+ },
+ "F1/m7s3": {
+  "voice": "F1",
+  "sec": 2.07,
+  "textHash": "0912d4f8208d"
+ },
+ "F1/m8s1": {
+  "voice": "F1",
+  "sec": 3.2,
+  "textHash": "4dac2d541b40"
+ },
+ "F1/m8s2": {
+  "voice": "F1",
+  "sec": 2.83,
+  "textHash": "38eaa5ed73c2"
+ },
+ "F1/ok1": {
+  "voice": "F1",
+  "sec": 1.3,
+  "textHash": "33f2393574ac"
+ },
+ "F1/ok2": {
+  "voice": "F1",
+  "sec": 1.25,
+  "textHash": "2ace1e0d28ea"
+ },
+ "F1/ok3": {
+  "voice": "F1",
+  "sec": 1.44,
+  "textHash": "50824059e858"
+ },
+ "F1/mclear": {
+  "voice": "F1",
+  "sec": 1.68,
+  "textHash": "a8daf52d8416"
+ },
+ "F1/allclear": {
+  "voice": "F1",
+  "sec": 2.96,
+  "textHash": "4ae6b7b9b3d0"
+ }
+}
