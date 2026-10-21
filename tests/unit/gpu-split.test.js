@@ -462,7 +462,7 @@ describe('S2: single-GPU / Mac / iPad status equals the status of builds up to 5
   };
   const LIMIT_INFO = 'limits buf 4096MB/bind 4096MB (adapter 4096MB/4096MB)';
   const healthy = extra => ({ ...rt(), device: {}, lastBackend: 'WEBGPU CORE FULL VERIFIED · WG256', adapterLabel: 'apple metal-3', limitInfo: LIMIT_INFO, limitRetries: 0, ...extra });
-  it("an earlier change's hook: updateGpuStatus ends with updateLinuxWebgpuNote() on every path", () => {
+  it("the earlier hook: updateGpuStatus ends with updateLinuxWebgpuNote() on every path", () => {
     let calls = 0;
     const { api } = buildCompute(LINUX, healthy({}), { updateLinuxWebgpuNote: () => { calls++; }, document: { getElementById: () => null } });
     api.updateGpuStatus(); api.updateGpuStatus();

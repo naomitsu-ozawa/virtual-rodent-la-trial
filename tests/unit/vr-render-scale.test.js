@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { eyeMetrics, capFromPpv, nextCap, foveaRect, outsideFovea, foveaWorth, qualityText, PPV_CENTER, PPV_FAR, PPV_CENTER_MIN, PPV_FAR_MIN, RELIEF_FROM, RELIEF_TO, reliefOf, targetCenter, targetFar, CAP_MIN, CAP_QUANT, CAP_HYST, FOVEA_HALF, FOVEA_K } from '../../docs/vr-render-scale.js';
+import { eyeMetrics, capFromPpv, nextCap, foveaRect, outsideFovea, foveaWorth, qualityText, PPV_CENTER, PPV_FAR, CAP_MIN, CAP_QUANT, CAP_HYST, FOVEA_HALF, FOVEA_K } from '../../docs/vr-render-scale.js';
 
 // column-major 4x4 like THREE.Matrix4.elements
 const I = () => [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
@@ -66,41 +66,14 @@ describe('eyeMetrics: projected box, pixels per voxel', () => {
     const cm = capFromPpv(max.ppvCenter, max.ppvFar); expect(cm).toBeGreaterThan(0.75); expect(cm).toBeLessThan(1); // 30 cm at 65 cm: about 1.5 px per voxel: little to save without losing detail
     const c = capFromPpv(close.ppvCenter, close.ppvFar);
     expect(c).toBeLessThan(0.5); expect(c).toBeGreaterThan(CAP_MIN);
-    // the close-up (about 4.3 px per voxel at the centre) keeps the relaxed targets, never fewer than the minimum ones
-    expect(close.ppvCenter * c).toBeGreaterThanOrEqual(targetCenter(close.ppvCenter) - 1e-9); expect(close.ppvFar * c).toBeGreaterThanOrEqual(targetFar(close.ppvCenter) - 1e-9);
-    expect(close.ppvCenter * c).toBeGreaterThanOrEqual(PPV_CENTER_MIN - 1e-9); expect(close.ppvCenter * c).toBeLessThan(PPV_CENTER);
-  });
-});
-
-describe('zoom relief', () => {
-  it('none up to RELIEF_FROM px per voxel, full from RELIEF_TO, linear between, never raising the targets', () => {
-    expect(reliefOf(0.5)).toBe(0); expect(reliefOf(RELIEF_FROM)).toBe(0); expect(reliefOf(RELIEF_TO)).toBe(1); expect(reliefOf(50)).toBe(1); expect(reliefOf(Infinity)).toBe(1);
-    expect(reliefOf((RELIEF_FROM + RELIEF_TO) / 2)).toBeCloseTo(0.5, 12);
-    expect(targetCenter(1)).toBe(PPV_CENTER); expect(targetFar(1)).toBe(PPV_FAR); expect(targetCenter(9)).toBe(PPV_CENTER_MIN); expect(targetFar(9)).toBe(PPV_FAR_MIN);
-    for (let p = 0.5; p < 9; p += 0.25) { expect(targetCenter(p)).toBeLessThanOrEqual(targetCenter(p - 0.25 > 0 ? p - 0.25 : p) + 1e-12); expect(targetCenter(p)).toBeGreaterThanOrEqual(PPV_CENTER_MIN); expect(targetFar(p)).toBeGreaterThanOrEqual(PPV_FAR_MIN); }
-  });
-  it('the cap falls monotonically with the magnification (no step, no rise when zooming in) and the rendered pixels per voxel never exceed the old rule', () => {
-    let prev = 1;
-    for (let p = 0.5; p <= 12; p += 0.05) {
-      const c = capFromPpv(p, p * 0.7); // far corner at 1.43 x the centre depth
-      expect(c).toBeLessThanOrEqual(prev + 1e-12); prev = c;
-      const old = Math.min(1, Math.max(CAP_MIN, Math.max(PPV_CENTER / p, PPV_FAR / (p * 0.7))));
-      expect(c).toBeLessThanOrEqual(old + 1e-12);
-      if (p <= RELIEF_FROM) expect(c).toBeCloseTo(old, 12); // unchanged below the relief
-      if (c < 1) expect(c * p).toBeGreaterThanOrEqual(PPV_CENTER_MIN - 1e-9); // never below one pixel per voxel at the centre once the cap acts
-    }
-  });
-  it('saves up to 1 - (PPV_CENTER_MIN / PPV_CENTER)^2 of the pixels at the largest magnifications', () => {
-    const c = capFromPpv(8, 8), old = PPV_CENTER / 8;
-    expect(c).toBeCloseTo(PPV_CENTER_MIN / 8, 12); expect(1 - (c / old) ** 2).toBeCloseTo(1 - (PPV_CENTER_MIN / PPV_CENTER) ** 2, 9);
+    expect(close.ppvCenter * c).toBeGreaterThanOrEqual(PPV_CENTER - 1e-9); expect(close.ppvFar * c).toBeGreaterThanOrEqual(PPV_FAR - 1e-9);
   });
 });
 
 describe('capFromPpv / nextCap', () => {
   it('keeps PPV_CENTER at the centre and PPV_FAR at the far corner, within [CAP_MIN, 1]', () => {
     expect(capFromPpv(1.3, 1.0)).toBe(1); expect(capFromPpv(0.5, 0.4)).toBe(1);
-    expect(capFromPpv(1.9, 1.5)).toBeCloseTo(Math.max(PPV_CENTER / 1.9, PPV_FAR / 1.5), 12); // below RELIEF_FROM: the original rule, unchanged
-    expect(capFromPpv(4, 2)).toBeCloseTo(Math.max(PPV_CENTER_MIN / 4, PPV_FAR_MIN / 2), 12); // at RELIEF_TO and above: the relaxed targets
+    expect(capFromPpv(4, 2)).toBeCloseTo(Math.max(PPV_CENTER / 4, PPV_FAR / 2), 12);
     expect(capFromPpv(100, 100)).toBe(CAP_MIN);
     expect(capFromPpv(Infinity, Infinity)).toBe(CAP_MIN); expect(capFromPpv(0, 0)).toBe(1); expect(capFromPpv(NaN, 1)).toBe(1);
   });

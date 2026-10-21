@@ -50,15 +50,9 @@ VRヘッドセットのブラウザでこのサイトを開くと、CT画像を�
 - 練習データは1つあたり数百MBのメモリを使います。メモリに余裕のある端末で開いてください。
 - Linux版Chromeでは、起動オプション `--enable-features=ForceEnableWebGpuInterop` が必要な場合があります（Wayland環境のみ）。
 
-## 自分のPCで動かす
+## 公開
 
-Node.jsがあれば、ビルドなしで動きます。
-
-```bash
-node scripts/serve-docs.mjs      # http://localhost:4173/ で docs/ を配信
-```
-
-GitHub Pagesで公開する場合は、`docs/` をそのまま配信してください（`.github/workflows/pages.yml` は `gh-pages` ブランチへ配信します）。
+`docs/` はビルドなしの静的ファイルです。公開サイトは GitHub Pages で配信しています（`.github/workflows/pages.yml` が `docs/` を `gh-pages` ブランチへ反映します）。このリポジトリにはHTTPサーバーのコードは含まれません。
 
 ## テスト（開発者向け）
 
@@ -66,8 +60,6 @@ GitHub Pagesで公開する場合は、`docs/` をそのまま配信してくだ
 npm ci
 npm run lint
 npm test                 # 構文・ビルド番号の整合・循環チェック + ユニットテスト (Vitest)
-npx playwright install chromium
-npm run test:e2e         # ブラウザテスト (Playwright)
 ```
 
 ## ライセンス
@@ -122,9 +114,9 @@ The VR / AR buttons appear only in browsers that support VR / AR (not on a PC or
 - Each practice dataset needs several hundred MB of memory.
 - Chrome on Linux may need `--enable-features=ForceEnableWebGpuInterop` (Wayland only).
 
-### Run locally
+### Publishing
 
-`node scripts/serve-docs.mjs` serves `docs/` at http://localhost:4173/ (no build step).
+`docs/` is plain static files (no build step). The public site is served by GitHub Pages (`.github/workflows/pages.yml` copies `docs/` to the `gh-pages` branch). This repository contains no HTTP server code.
 
 ### License
 

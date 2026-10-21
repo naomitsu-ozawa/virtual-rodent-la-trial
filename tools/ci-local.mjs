@@ -2,7 +2,7 @@
 // the first failure. The step list is read from ci.yml itself, so this stays in
 // sync with CI. Skipped: `npm ci` and `npx playwright install` (setup only).
 //   node tools/ci-local.mjs            all jobs
-//   node tools/ci-local.mjs unit       one job (unit | vr-guards | e2e)
+//   node tools/ci-local.mjs unit       one job (unit)
 import { readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 
