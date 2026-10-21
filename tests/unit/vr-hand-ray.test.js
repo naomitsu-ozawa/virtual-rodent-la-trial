@@ -2,7 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import * as THREE from 'three';
 import {
-  createBisectorRay, createArmRay, BISECTOR, BISECTOR_JOINTS, ARM_RAY, HAND_RAY_MODES, HAND_RAY_DEFAULT, normalizeHandRay, headForward, shoulderPoint, RAY_HOLD_MS,
+  createBisectorRay, createArmRay, createPalmRay, PALM_RAY, BISECTOR, BISECTOR_JOINTS, ARM_RAY, HAND_RAY_MODES, HAND_RAY_DEFAULT, normalizeHandRay, headForward, shoulderPoint, RAY_HOLD_MS,
 } from '../../docs/vr-hand.js';
 import { createHandInput } from '../../docs/vr-hand-view.js';
 
@@ -75,15 +75,27 @@ describe('the setting: three modes, 指の間 by default, anything else reads as
 });
 
 describe('指の間: the bisector of the thumb and index axes, from the gap', () => {
-  it('the direction is the normalised sum of the two unit axes; the origin sits in the gap, 8 mm toward the web', () => {
+  it('the direction follows the INDEX FINGERTIP (metacarpal -> tip, plus 15% of the thumb axis); the origin rides the index tip (30% toward the thumb tip)', () => {
     const s = inputs(30), ray = createBisectorRay(); let last;
     for (let t = 0; t <= 400; t += FRAME) { last = SYS(); ray.update(last, s.j, s.wq, s.pd, false, t); }
     const j = handJoints(30), v = (a, b) => unit(add(j[b], j[a], -1));
-    const want = unit(add(v('index-finger-metacarpal', 'index-finger-phalanx-intermediate'), v('thumb-metacarpal', 'thumb-phalanx-distal')));
+    const want = unit(add(v('index-finger-metacarpal', 'index-finger-tip'), v('thumb-metacarpal', 'thumb-phalanx-distal'), BISECTOR.thumbW));
     expect(angleBetween(dirOfPose(last), want)).toBeLessThan(0.2);
-    const tm = [0, 1, 2].map(i => 0.5 * (j['index-finger-tip'][i] + j['thumb-tip'][i]) + [0.1, 1.2, -0.3][i]);
-    const d = Math.hypot(last[0] - tm[0], last[1] - tm[1], last[2] - tm[2]);
-    expect(d).toBeGreaterThan(0.006); expect(d).toBeLessThan(0.0085); // pulled 8 mm (the gap's midpoint is the pinch point)
+    const org = [0, 1, 2].map(i => j['index-finger-tip'][i] + 0.3 * (j['thumb-tip'][i] - j['index-finger-tip'][i]) + [0.1, 1.2, -0.3][i]);
+    expect(Math.hypot(last[0] - org[0], last[1] - org[1], last[2] - org[2])).toBeLessThan(0.002);
+  });
+  it('pointing the fingertip moves the ray (the wrist still): the index swung 20 deg to the side turns the ray ~17+ deg, 10 deg up turns it too', () => {
+    const settle = tipOff => {
+      const s = inputs(30), ray = createBisectorRay(); let last;
+      const j = Float64Array.from(s.j); for (let i = 0; i < 3; i++) j[12 + i] += tipOff[i]; // the index tip moved (the other joints stay)
+      for (let t = 0; t <= 600; t += FRAME) { last = SYS(); ray.update(last, j, s.wq, s.pd, false, t); }
+      return { d: dirOfPose(last), p: [last[0], last[1], last[2]] };
+    };
+    const base = settle([0, 0, 0]);
+    const side = settle([-0.04, 0, 0.01]), up = settle([0, 0.04, 0.01]);
+    expect(angleBetween(base.d, side.d)).toBeGreaterThan(12); expect(angleBetween(base.d, up.d)).toBeGreaterThan(12);
+    expect(side.d.every(Number.isFinite) && up.d.every(Number.isFinite)).toBe(true);
+    expect(Math.hypot(...[0, 1, 2].map(i => side.p[i] - base.p[i]))).toBeGreaterThan(0.02); // the origin follows the tip too
   });
   it('the ray is far from the system ray when the hand is turned (it follows the hand, not the shoulder): a hand turned 25 deg turns the ray 25 deg, the system ray staying put', () => {
     const settle = q => { const ray = createBisectorRay(), s = inputs(30, q); let last; for (let t = 0; t <= 500; t += FRAME) { last = SYS(); ray.update(last, s.j, s.wq, s.pd, false, t); } return dirOfPose(last); };
@@ -121,7 +133,7 @@ describe('指の間: the bisector of the thumb and index axes, from the gap', ()
     expect(rms).toBeLessThan(0.35); // degrees
   });
 
-  it('pinch onset does not swing the ray: closing the thumb (the bisector turns ~17 deg) leaves the ray where it was aimed', () => {
+  it('pinch onset does not swing the ray: closing the thumb (the live ray turns ~4.5 deg: the index tip does the pointing) leaves the ray where it was aimed', () => {
     const closing = (opts, press = true) => {
       const ray = createBisectorRay(opts), seq = [];
       for (let t = 0; t <= 1100; t += FRAME) { const s = inputs(t < 500 ? 35 : Math.max(0, 35 * (1 - (t - 500) / 150))), pose = SYS(); ray.update(pose, s.j, s.wq, press ? s.pd : NaN, press && s.pd < 0.018, t); seq.push({ t, pose: Float64Array.from(pose), pd: s.pd }); }
@@ -130,9 +142,9 @@ describe('指の間: the bisector of the thumb and index axes, from the gap', ()
     };
     const withFreeze = closing(), noFreeze = closing({}, false); // the gap / press not reported: never frozen (control)
     const settled = withFreeze.filter(x => x.t > 760), settledFree = noFreeze.filter(x => x.t > 760);
-    expect(Math.max(...settledFree.map(x => x.dev))).toBeGreaterThan(12); // without the freeze the live bisector swings away (control)
+    expect(Math.max(...settledFree.map(x => x.dev))).toBeGreaterThan(3); // without the freeze the live ray still swings away a little (the thumb's 15% share; control)
     expect(Math.max(...settled.map(x => x.dev))).toBeLessThan(1.5); // frozen (in the wrist's frame) from freezeMs before the closing was noticed
-    expect(Math.max(...withFreeze.map(x => x.dev))).toBeLessThan(8); // and never swings far on the way
+    expect(Math.max(...withFreeze.filter(x => x.t > 200).map(x => x.dev))).toBeLessThan(8); // and never swings far on the way
     expect(withFreeze.find(x => x.pd < 0.018)).toBeTruthy(); // the hand did pinch (the press fired inside the freeze)
   });
   it('the frozen direction turns with the WRIST (not with the fingers): after the onset, a wrist turn of 20 deg turns the ray 20 deg', () => {
@@ -156,9 +168,8 @@ describe('指の間: the bisector of the thumb and index axes, from the gap', ()
   it('degenerate: the thumb and index axes opposite (the sum ~ 0), a chord too short, the bisector > 90 deg from the system ray: the system ray, reached by a cross-fade', () => {
     const base = inputs(30);
     const settle = (mut, sys) => { const ray = createBisectorRay(); let last; for (let t = 0; t <= 400; t += FRAME) { last = (sys || SYS)(); const s = t < 150 ? base : mut(); ray.update(last, s.j, s.wq, s.pd, false, t); } return last; };
-    const opp = () => { const j = Float64Array.from(base.j), c = BISECTOR_JOINTS.indexOf('thumb-phalanx-distal'), m = BISECTOR_JOINTS.indexOf('thumb-metacarpal'), i1 = BISECTOR_JOINTS.indexOf('index-finger-phalanx-intermediate'), i0 = BISECTOR_JOINTS.indexOf('index-finger-metacarpal');
-      for (let k = 0; k < 3; k++) j[3 * c + k] = j[3 * m + k] - (j[3 * i1 + k] - j[3 * i0 + k]); return { ...base, j }; }; // the thumb axis = minus the index axis
-    const short = () => { const j = Float64Array.from(base.j), a = BISECTOR_JOINTS.indexOf('index-finger-phalanx-intermediate'), b = BISECTOR_JOINTS.indexOf('index-finger-metacarpal'); for (let k = 0; k < 3; k++) j[3 * a + k] = j[3 * b + k] + 0.002; return { ...base, j }; };
+    const opp = () => { const j = Float64Array.from(base.j), c = BISECTOR_JOINTS.indexOf('thumb-phalanx-distal'), m = BISECTOR_JOINTS.indexOf('thumb-metacarpal'); for (let k = 0; k < 3; k++) j[3 * c + k] = j[3 * m + k] + 0.002; return { ...base, j }; }; // a thumb chord too short
+    const short = () => { const j = Float64Array.from(base.j), a = BISECTOR_JOINTS.indexOf('index-finger-tip'), b = BISECTOR_JOINTS.indexOf('index-finger-metacarpal'); for (let k = 0; k < 3; k++) j[3 * a + k] = j[3 * b + k] + 0.002; return { ...base, j }; }; // an index chord too short
     for (const mut of [opp, short]) { const last = settle(mut); expect(Math.abs(last[0] - 0.1) + Math.abs(last[1] - 1.2) + Math.abs(last[2] + 0.2)).toBeLessThan(1e-6); expect(angleBetween(dirOfPose(last), [0, 0, -1])).toBeLessThan(1e-4); }
     const last = settle(() => base, () => new Float64Array([0.1, 1.2, -0.2, 0, 1, 0, 0])); // the system ray points +Z (180 deg turned): more than 90 deg from the bisector
     expect(angleBetween(dirOfPose(last), [0, 0, 1])).toBeLessThan(1e-4);
@@ -277,6 +288,42 @@ describe('手首から: from the wrist along the arm (shoulder -> wrist)', () =>
 });
 
 // ---- the view: createHandInput run with stand-in joints (real three.js objects, no WebXR) ----
+describe('手首から: from the wrist along the palm forward axis (wrist -> knuckles)', () => {
+  const W = [0.2, 1.2, -0.3], K = add(W, [0.02, 0.03, -0.09]);
+  const settle = (wp, kp, ms = 600) => { const ray = createPalmRay(); let p; for (let t = 0; t <= ms; t += FRAME) { p = SYS(); ray.update(p, wp, kp, t); } return { p, ray }; };
+  it('direction = normalize(knuckle - wrist), origin = the wrist pushed originFwd along it; finite and rolled like the system ray', () => {
+    const { p } = settle(W, K), f = unit([0.02, 0.03, -0.09]);
+    expect(angleBetween(dirOfPose(p), f)).toBeLessThan(0.1);
+    expect(Math.hypot(p[0] - (W[0] + PALM_RAY.originFwd * f[0]), p[1] - (W[1] + PALM_RAY.originFwd * f[1]), p[2] - (W[2] + PALM_RAY.originFwd * f[2]))).toBeLessThan(1e-3);
+    expect([...p].every(Number.isFinite)).toBe(true);
+  });
+  it('rotating the wrist moves the ray one to one (palm turned 30 deg about the vertical -> ray turned 30 deg)', () => {
+    const q = rotQ([0, 1, 0], 30), v = new THREE.Vector3(0.02, 0.03, -0.09).applyQuaternion(q), a = settle(W, K).p, b = settle(W, add(W, [v.x, v.y, v.z])).p;
+    expect(angleBetween(dirOfPose(a), dirOfPose(b))).toBeCloseTo(angleBetween([0.02, 0.03, -0.09], [v.x, v.y, v.z]), 0);
+  });
+  it('NaN / missing / too short input: the system ray, never a NaN; a bad system pose or time is left alone', () => {
+    for (const [wp, kp] of [[[NaN, 1, 1], K], [W, [NaN, NaN, NaN]], [W, add(W, [0.001, 0, 0])]]) {
+      const { p } = settle(wp, kp, 300); expect([...p].every(Number.isFinite)).toBe(true); expect(angleBetween(dirOfPose(p), [0, 0, -1])).toBeLessThan(1e-6);
+    }
+    const ray = createPalmRay(), bad = SYS(); bad[1] = NaN; ray.update(bad, W, K, 0); expect(Number.isNaN(bad[1])).toBe(true);
+    const ok = SYS(); ray.update(ok, W, K, NaN); expect(Array.from(ok)).toEqual(Array.from(SYS()));
+  });
+  it('fades in from the system ray (no jump) and fades out when the joints are lost; a long loss restarts clean', () => {
+    const ray = createPalmRay(); let p = SYS(); ray.update(p, W, K, 0); p = SYS(); ray.update(p, W, K, FRAME);
+    expect(angleBetween(dirOfPose(p), [0, 0, -1])).toBeLessThan(5);
+    for (let t = 2 * FRAME; t < 400; t += FRAME) { p = SYS(); ray.update(p, W, K, t); }
+    expect(ray.weight).toBe(1);
+    for (let t = 400; t < 500; t += FRAME) { p = SYS(); ray.update(p, [NaN, 0, 0], K, t); }
+    expect(ray.weight).toBeLessThan(1); expect([...p].every(Number.isFinite)).toBe(true);
+    for (let t = 500; t < 1200; t += FRAME) { p = SYS(); ray.update(p, [NaN, 0, 0], K, t); }
+    expect(angleBetween(dirOfPose(p), [0, 0, -1])).toBeLessThan(1e-6);
+  });
+  it('wrist mode is visible in the view source: the laser is at least 8 cm long and opaque for a hand in wrist mode', () => {
+    const src = readFileSync(new URL('../../docs/vr-view.js', import.meta.url), 'utf8');
+    expect(src).toMatch(/wristRay\?Math\.max\(dist,0\.08\)/); expect(src).toMatch(/opacity=wristRay\?0\.8:0\.35/);
+  });
+});
+
 describe('the view: each mode on the group, the standard ray untouched, controllers unaffected', () => {
   function setup(mode) {
     const stubs = { canvas: { width: 0, height: 0, getContext: () => ({ clearRect() {}, beginPath() {}, roundRect() {}, fill() {}, fillText() {}, measureText: () => ({ width: 10 }) }) } };
@@ -284,7 +331,7 @@ describe('the view: each mode on the group, the standard ray untouched, controll
     const joints = {}, mk = (name, p) => { const o = new THREE.Object3D(); o.visible = true; o.position.set(...p); o.updateMatrix(); joints[name] = o; };
     const j = handJoints(30), off = [0.1, 1.2, -0.3];
     for (const n of BISECTOR_JOINTS) mk(n, add(j[n], off));
-    mk('wrist', off);
+    mk('wrist', off); mk('middle-finger-phalanx-proximal', add(off, [0.02, 0.03, -0.09]));
     const c = new THREE.Group(); c.visible = true; c.userData.source = { hand: {}, handedness: 'right' };
     const scene = new THREE.Scene(), cur = { mode };
     const renderer = { xr: { getHand: () => ({ joints }) } };
@@ -306,24 +353,29 @@ describe('the view: each mode on the group, the standard ray untouched, controll
   it('between (the default and a bad value): from the gap, along the bisector', () => {
     for (const m of ['between', 'garbage']) {
       const s = setup(m); settle(s);
-      const j = handJoints(30), v = (a, b) => unit(add(j[b], j[a], -1)), want = unit(add(v('index-finger-metacarpal', 'index-finger-phalanx-intermediate'), v('thumb-metacarpal', 'thumb-phalanx-distal')));
+      const j = handJoints(30), v = (a, b) => unit(add(j[b], j[a], -1)), want = unit(add(v('index-finger-metacarpal', 'index-finger-tip'), v('thumb-metacarpal', 'thumb-phalanx-distal'), BISECTOR.thumbW));
       expect(angleBetween(dirOf(s.c), want)).toBeLessThan(0.3);
-      const tm = [0, 1, 2].map(i => 0.5 * (j['index-finger-tip'][i] + j['thumb-tip'][i]) + [0.1, 1.2, -0.3][i]);
+      const tm = [0, 1, 2].map(i => j['index-finger-tip'][i] + 0.3 * (j['thumb-tip'][i] - j['index-finger-tip'][i]) + [0.1, 1.2, -0.3][i]);
       expect(Math.hypot(s.c.position.x - tm[0], s.c.position.y - tm[1], s.c.position.z - tm[2])).toBeLessThan(0.01);
     }
   });
-  it('wrist: from the wrist joint, along shoulder -> wrist', () => {
+  it('wrist: visible and finite, from the wrist (pushed 4 cm out along the ray), along the palm forward axis (wrist -> middle knuckle); turning the hand turns the ray', () => {
     const s = setup('wrist'); settle(s);
-    const w = [0.1, 1.2, -0.3];
-    expect(Math.hypot(s.c.position.x - w[0], s.c.position.y - w[1], s.c.position.z - w[2])).toBeLessThan(1e-6);
-    expect(angleBetween(dirOf(s.c), unit([w[0] - 0.17, w[1] - 1.42, w[2]]))).toBeLessThan(0.1);
+    const w = [0.1, 1.2, -0.3], fwd = unit([0.02, 0.03, -0.09]);
+    expect(s.c.visible).toBe(true);
+    expect([...s.c.position.toArray(), ...s.c.quaternion.toArray()].every(Number.isFinite)).toBe(true);
+    expect(angleBetween(dirOf(s.c), fwd)).toBeLessThan(0.1);
+    expect(Math.hypot(s.c.position.x - (w[0] + 0.04 * fwd[0]), s.c.position.y - (w[1] + 0.04 * fwd[1]), s.c.position.z - (w[2] + 0.04 * fwd[2]))).toBeLessThan(1e-3);
+    const k = s.joints['middle-finger-phalanx-proximal']; k.position.set(w[0] + 0.09, w[1], w[2] - 0.02); k.updateMatrix(); // the wrist turned: the knuckles point to the side
+    for (let t = 700; t <= 1300; t += FRAME) s.frame(t);
+    expect(angleBetween(dirOf(s.c), unit([0.09, 0, -0.02]))).toBeLessThan(0.2);
   });
   it('the setting is read every frame: changing the mode takes effect at once and fades in from the system ray; no NaN anywhere', () => {
     const s = setup('standard'); settle(s, 300);
     s.cur.mode = 'wrist'; s.frame(310);
     const first = dirOf(s.c); expect(first.every(Number.isFinite)).toBe(true); expect(angleBetween(first, [0, 0, -1])).toBeLessThan(5);
     for (let t = 320; t <= 800; t += FRAME) s.frame(t);
-    expect(angleBetween(dirOf(s.c), [0, 0, -1])).toBeGreaterThan(5); // the arm line differs from the system's here
+    expect(angleBetween(dirOf(s.c), [0, 0, -1])).toBeGreaterThan(5); // the palm axis differs from the system's here
     s.cur.mode = 'between'; settle(s, 600); expect([...s.c.position.toArray(), ...s.c.quaternion.toArray()].every(Number.isFinite)).toBe(true);
     s.cur.mode = 'standard'; for (let t = 1500; t < 1600; t += FRAME) s.frame(t); expect(s.c.position.toArray()).toEqual([0.1, 1.2, -0.2]);
   });

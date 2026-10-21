@@ -15,8 +15,8 @@
 //    While a pinch is held the group carries the press's ray with the palm anchor (createDragCarry: 1:1, the wrist's turn included)
 //    instead of the system's ray; after the release it blends back to the system's ray in blendMs.
 // Per frame: no allocation (reused vectors / typed arrays; the wrist menu's canvas is redrawn only when its state key changes).
-import { isHand, handAlive, fistForming, FIST_GUARD, createGrabHysteresis, grabScore, fingerCurl, GRAB_JOINT_NAMES, GRAB, palmPoint, createPoseFilter, createPinchFusion, createDragCarry, blendPose, DRAG_CARRY, parsePinchTune, parseDragTune, createTrackingLoss, createWristMenuGate, wristMenuMetrics, createOneEuro, PALM_FILTER, parseFilterTune, parseGrabTune, WRIST_ITEMS, WRIST_GRID, wristSlotFromUv, handTexts, RAY_HOLD_MS, palmFacesHead, createBisectorRay, createArmRay, BISECTOR_JOINTS, normalizeHandRay } from './vr-hand.js?v=20261021-build634';
-import { DRAG_HAND, DRAG_RECORD_HAND, HAND_LABEL_MOVE_M } from './vr-point.js?v=20261021-build634';
+import { isHand, handAlive, fistForming, FIST_GUARD, createGrabHysteresis, grabScore, fingerCurl, GRAB_JOINT_NAMES, GRAB, palmPoint, createPoseFilter, createPinchFusion, createDragCarry, blendPose, DRAG_CARRY, parsePinchTune, parseDragTune, createTrackingLoss, createWristMenuGate, wristMenuMetrics, createOneEuro, PALM_FILTER, parseFilterTune, parseGrabTune, WRIST_ITEMS, WRIST_GRID, wristSlotFromUv, handTexts, RAY_HOLD_MS, palmFacesHead, createBisectorRay, createPalmRay, BISECTOR_JOINTS, normalizeHandRay } from './vr-hand.js?v=20261021-build635';
+import { DRAG_HAND, DRAG_RECORD_HAND, HAND_LABEL_MOVE_M } from './vr-point.js?v=20261021-build635';
 export { HAND_LABEL_MOVE_M };
 
 const TIP_R=0.0045,WRIST_W=WRIST_GRID.cols*WRIST_GRID.cellW,WRIST_H=WRIST_GRID.rows*WRIST_GRID.cellH,WRIST_LIFT=0.085,CW=WRIST_W*5000,CH=WRIST_H*5000,GRAB_TIP=0xffa000,REACH_TIP=0x39ff6a; // the wrist menu: a 3 x 3 grid of 5 x 3.5 cm buttons (WRIST_GRID), 5000 px per metre; the fingertips: orange = holding, green = something is within reach of a fist
@@ -63,11 +63,11 @@ export function createHandInput(THREE,{renderer,scene,controllers,ja,getHead,get
   grab:createGrabHysteresis(grabTune),aFilter:createPoseFilter(palmTune),anchor:null,anchorOk:false,pd:NaN,near:null,
   palm7:new Float64Array(7),palmAt:-1,carry:createDragCarry(),cout:new Float64Array(7),bout:new Float64Array(7),shown:null,carryLost:false,blendAt:-Infinity,
   rayAt:-Infinity,held:false,
-  br:createBisectorRay(),ar:createArmRay(),bj:new Float64Array(24),bq:new Float64Array(4),aw:new Float64Array(3),ah:new Float64Array(3),ahq:new Float64Array(4),mode:null}); // rayAt: when the system's ray was last there; held: it is missing and the last one is held (RAY_HOLD_MS)
+  br:createBisectorRay(),ar:createPalmRay(),bj:new Float64Array(24),bq:new Float64Array(4),aw:new Float64Array(3),ak:new Float64Array(3),mode:null}); // rayAt: when the system's ray was last there; held: it is missing and the last one is held (RAY_HOLD_MS)
  // the group gets the hand's pose o = [px,py,pz,qx,qy,qz,qw] (target-ray space: -z along the ray); children (the laser) follow
  const apply=(c,o)=>{tP.set(o[0],o[1],o[2]);tQ.set(o[3],o[4],o[5],o[6]);c.position.copy(tP);c.quaternion.copy(tQ);c.matrix.compose(tP,tQ,one);c.matrixWorldNeedsUpdate=true;c.updateMatrixWorld(true)};
 
- // the hand's laser by mode (the device setting handRay): 'between' = the thumb / index bisector from the gap, 'wrist' = shoulder -> wrist along the arm,
+ // the hand's laser by mode (the device setting handRay): 'between' = the thumb / index bisector from the gap, 'wrist' = from the wrist along the palm's forward axis,
  // 'standard' = the system's ray as three wrote it (r untouched). r = hs.out (the system's pose now): overwritten in place by the first two; their fallback is the system's ray
  const handRay=(c,hs,r,now)=>{
   const mode=normalizeHandRay(rayMode?.());
@@ -77,11 +77,10 @@ export function createHandInput(THREE,{renderer,scene,controllers,ja,getHead,get
    const w=joint(hs,'wrist');if(w){w.matrix.decompose(tW,tWq,tS);hs.bq[0]=tWq.x;hs.bq[1]=tWq.y;hs.bq[2]=tWq.z;hs.bq[3]=tWq.w}else hs.bq[3]=NaN;
    hs.br.update(r,hs.bj,hs.bq,hs.pd,hs.pinch.pressed,now);
   }else if(mode==='wrist'){
-   const w=joint(hs,'wrist'),h=getHead(),hq=getHeadQ?getHeadQ():null,hd=c.userData.source?.handedness;
+   const w=joint(hs,'wrist'),k=joint(hs,'middle-finger-phalanx-proximal'); // the palm's forward axis (wrist -> knuckles)
    hs.aw[0]=w?w.position.x:NaN;hs.aw[1]=w?w.position.y:NaN;hs.aw[2]=w?w.position.z:NaN;
-   hs.ah[0]=h?h.x:NaN;hs.ah[1]=h?h.y:NaN;hs.ah[2]=h?h.z:NaN;
-   if(hq){hs.ahq[0]=hq.x;hs.ahq[1]=hq.y;hs.ahq[2]=hq.z;hs.ahq[3]=hq.w}else hs.ahq[3]=NaN;
-   hs.ar.update(r,hs.aw,hs.ah,hs.ahq,hd==='left'?-1:hd==='right'?1:0,hs.pd,hs.pinch.pressed,now);
+   hs.ak[0]=k?k.position.x:NaN;hs.ak[1]=k?k.position.y:NaN;hs.ak[2]=k?k.position.z:NaN;
+   hs.ar.update(r,hs.aw,hs.ak,now);
   }
  };
  // the pose on the group: the carried press ray while a pinch is held (and the blend back after it), else the system's ray

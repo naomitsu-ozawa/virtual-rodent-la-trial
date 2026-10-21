@@ -191,7 +191,7 @@ export function blendPose(a,b,k,out){
 //    reached through a fadeMs cross-fade. No allocation per update.
 export const RAY_HOLD_MS=200; // the system ray missing for a moment: the last pose is held (vr-hand-view.js)
 export const BISECTOR_JOINTS=['index-finger-metacarpal','index-finger-phalanx-intermediate','thumb-metacarpal','thumb-phalanx-distal','index-finger-tip','thumb-tip','index-finger-phalanx-proximal','thumb-phalanx-proximal'];
-export const BISECTOR={freezeMs:120,preOn:0.05,preOff:0.07,reArmMs:400,inMs:50,outMs:150,fadeMs:100,loseMs:200,minSum:0.3,minChord:0.01,minDot:0,pull:0.008,
+export const BISECTOR={freezeMs:120,preOn:0.05,preOff:0.07,reArmMs:400,inMs:50,outMs:150,fadeMs:100,loseMs:200,minSum:0.3,minChord:0.01,minDot:0,thumbW:0.15,originK:0.3,
  pos:{minCutoff:1.5,beta:0.08,dCutoff:8},dir:{minCutoff:2,beta:0.3,dCutoff:10}};
 const fin=v=>v-v===0;
 const arcQ=(a,b,o)=>{ // the shortest turn a -> b (unit vectors) as a quaternion into o[0..3]; false when they are (nearly) opposite
@@ -211,16 +211,14 @@ export function createBisectorRay(opt={}){
   for(let i=0;i<24;i++)if(!fin(j[i]))return false;
   for(let i=0;i<4;i++)if(!fin(wq[i]))return false;
   const wl=Math.hypot(wq[0],wq[1],wq[2],wq[3]);if(!(wl>0.5))return false;
-  for(let i=0;i<3;i++){ia[i]=j[3+i]-j[i];ta[i]=j[9+i]-j[6+i]}
+  for(let i=0;i<3;i++){ia[i]=j[12+i]-j[i];ta[i]=j[9+i]-j[6+i]} // the index axis = metacarpal -> TIP (follows where the fingertip points)
   const li=Math.hypot(ia[0],ia[1],ia[2]),lt=Math.hypot(ta[0],ta[1],ta[2]);if(!(li>=o.minChord)||!(lt>=o.minChord))return false;
-  for(let i=0;i<3;i++)dd[i]=ia[i]/li+ta[i]/lt;
+  for(let i=0;i<3;i++)dd[i]=ia[i]/li+o.thumbW*ta[i]/lt;
   const ls=Math.hypot(dd[0],dd[1],dd[2]);if(!(ls>=o.minSum))return false;
   for(let i=0;i<3;i++)dl[i]=dd[i]/ls;
   if(dl[0]*ds[0]+dl[1]*ds[1]+dl[2]*ds[2]<o.minDot)return false;
   let v0=0,v1=0,v2=0;
-  for(let i=0;i<3;i++)org[i]=0.5*(j[12+i]+j[15+i]);
-  v0=0.5*(j[18]+j[21])-org[0];v1=0.5*(j[19]+j[22])-org[1];v2=0.5*(j[20]+j[23])-org[2];
-  const lv=Math.hypot(v0,v1,v2);if(lv>1e-6){const p=Math.min(o.pull,0.5*lv)/lv;org[0]+=v0*p;org[1]+=v1*p;org[2]+=v2*p}
+  for(let i=0;i<3;i++)org[i]=j[12+i]+o.originK*(j[15+i]-j[12+i]); // the origin rides the index tip (30% of the way to the thumb tip)
   cq[0]=-wq[0]/wl;cq[1]=-wq[1]/wl;cq[2]=-wq[2]/wl;cq[3]=wq[3]/wl;rotV(cq,dl,loc);
   return true;
  };
@@ -287,7 +285,7 @@ export function createBisectorRay(opt={}){
 }
 
 // ---- the hand's laser: the three modes ----
-// 'between' (指の間, default): createBisectorRay above. 'wrist' (手首から): createArmRay below, like a web from the wrist along the arm. 'standard' (標準): the system's
+// 'between' (指の間, default): createBisectorRay above. 'wrist' (手首から): createPalmRay below. 'standard' (標準): the system's
 // target ray as it is. The mode is the device setting handRay (app-settings.js: 設定 > 描画 on the page, 表示 tab of the VR menu); controllers never read it.
 export const HAND_RAY_MODES=['between','wrist','standard'];
 export const HAND_RAY_DEFAULT='between';
@@ -371,6 +369,51 @@ export function createArmRay(opt={}){
   },
   reset(){clear();tPrev=null;validAt=-Infinity},
   get frozen(){return wf>0},
+  get weight(){return wj},
+ };
+}
+
+// , 手首から: origin = the wrist (pushed originFwd along the ray so it starts outside the wrist menu / the hand and shows), direction = the palm's forward axis
+// (wrist -> middle-finger-phalanx-proximal, the knuckle line: turning the wrist turns the ray). One Euro on origin and direction; the system's ray is the fallback for a
+// missing / non-finite / too short input, with a fadeMs cross-fade. pose: the system's ray (overwritten); wp, kp: wrist / knuckle [x,y,z]. No allocation per update.
+export const PALM_RAY={minLen:0.03,minDot:0,originFwd:0.04,fadeMs:100,loseMs:200,pos:{minCutoff:1.5,beta:0.08,dCutoff:8},dir:{minCutoff:2,beta:0.3,dCutoff:10}};
+export function createPalmRay(opt={}){
+ const o={...PALM_RAY,...opt},posF=createOneEuro(3,{...o.pos,speedScale:1000}),dirF=createOneEuro(3,{...o.dir,speedScale:57.3});
+ const sys=new Float64Array(7),jq=new Float64Array(7),ds=new Float64Array(3),dl=new Float64Array(3),dd=new Float64Array(3),po=new Float64Array(3),dout=new Float64Array(3),org=new Float64Array(3),qc=new Float64Array(4),cq=new Float64Array(4),nz=[0,0,-1];
+ let wj=0,tPrev=null,validAt=-Infinity,hasJq=false;
+ return{
+  update(pose,wp,kp,now){
+   for(let i=0;i<7;i++)if(!fin(pose[i]))return pose;
+   if(!fin(now))return pose;
+   for(let i=0;i<7;i++)sys[i]=pose[i];
+   const dt=tPrev===null||now<tPrev?0:Math.min(0.25,(now-tPrev)/1000);tPrev=now;
+   cq[0]=sys[3];cq[1]=sys[4];cq[2]=sys[5];cq[3]=sys[6];rotV(cq,nz,ds);
+   let ok=fin(wp[0])&&fin(wp[1])&&fin(wp[2])&&fin(kp[0])&&fin(kp[1])&&fin(kp[2]);
+   if(ok){
+    dd[0]=kp[0]-wp[0];dd[1]=kp[1]-wp[1];dd[2]=kp[2]-wp[2];
+    const l=Math.hypot(dd[0],dd[1],dd[2]);
+    if(l>=o.minLen){dl[0]=dd[0]/l;dl[1]=dd[1]/l;dl[2]=dd[2]/l;ok=dl[0]*ds[0]+dl[1]*ds[1]+dl[2]*ds[2]>=o.minDot}else ok=false;
+   }
+   if(ok){
+    if(now-validAt>o.loseMs){posF.reset();dirF.reset()}
+    dirF.filter(dl,now,dout);
+    const l=Math.hypot(dout[0],dout[1],dout[2]);
+    if(l>1e-6){dout[0]/=l;dout[1]/=l;dout[2]/=l}else ok=false;
+    if(ok&&arcQ(ds,dout,qc)){
+     org[0]=wp[0]+o.originFwd*dout[0];org[1]=wp[1]+o.originFwd*dout[1];org[2]=wp[2]+o.originFwd*dout[2];
+     posF.filter(org,now,po);
+     qMulA(qc,0,sys,3,jq,3);jq[0]=po[0];jq[1]=po[1];jq[2]=po[2];
+     const ql=Math.hypot(jq[3],jq[4],jq[5],jq[6])||1;for(let i=3;i<7;i++)jq[i]/=ql;
+     hasJq=true;validAt=now;
+    }else ok=false;
+   }
+   if(!ok&&now-validAt>o.loseMs){posF.reset();dirF.reset();hasJq=false}
+   const tj=ok&&hasJq?1:0;
+   wj=tj>wj?Math.min(1,wj+dt*1000/o.fadeMs):tj<wj?Math.max(0,wj-dt*1000/o.fadeMs):wj;
+   if(wj>0&&hasJq)blendPose(sys,jq,wj,pose);
+   return pose;
+  },
+  reset(){posF.reset();dirF.reset();wj=0;hasJq=false;tPrev=null;validAt=-Infinity},
   get weight(){return wj},
  };
 }
