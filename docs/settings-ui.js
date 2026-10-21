@@ -1,16 +1,16 @@
 // Settings dialog. Tabs: 描画 (rendering) and デバッグ (debug);
 // add a tab button + panel in ui-shell.js to extend it.
-import { settings } from './app-settings.js?v=20261021-build639';
-import { request3DRender } from './scene3d.js?v=20261021-build639';
-import { updateGpuStatus } from './gpu-compute.js?v=20261021-build639';
-import { volumeCache, updateVolumeCacheControl, volumeCacheBudget } from './gpu-volume-data.js?v=20261021-build639';
-import { tr } from './i18n.js?v=20261021-build639';
-import { askInline, armConfirm, noteInline } from './inline-ask.js?v=20261021-build639';
-import { fmt } from './utils.js?v=20261021-build639';
-import { gpuPreferenceSupported, gpuEffectivePreference, gpuHybridModeSupported, gpuEffectiveHybridMode } from './gpu-preference.js?v=20261021-build639';
-import { initDebugSwitches } from './debug-switches-ui.js?v=20261021-build639';
-import { initGpuDiagnosticsUi } from './gpu-diagnostics-ui.js?v=20261021-build639';
-import { collectGpuDiagnostics } from './gpu-diagnostics-collect.js?v=20261021-build639';
+import { settings } from './app-settings.js?v=20261021-build640';
+import { request3DRender } from './scene3d.js?v=20261021-build640';
+import { updateGpuStatus } from './gpu-compute.js?v=20261021-build640';
+import { volumeCache, updateVolumeCacheControl, volumeCacheBudget } from './gpu-volume-data.js?v=20261021-build640';
+import { tr } from './i18n.js?v=20261021-build640';
+import { askInline, armConfirm, noteInline } from './inline-ask.js?v=20261021-build640';
+import { fmt } from './utils.js?v=20261021-build640';
+import { gpuPreferenceSupported, gpuEffectivePreference, gpuHybridModeSupported, gpuEffectiveHybridMode } from './gpu-preference.js?v=20261021-build640';
+import { initDebugSwitches } from './debug-switches-ui.js?v=20261021-build640';
+import { initGpuDiagnosticsUi } from './gpu-diagnostics-ui.js?v=20261021-build640';
+import { collectGpuDiagnostics } from './gpu-diagnostics-collect.js?v=20261021-build640';
 export function initSettingsDialog(){
  const dlg=document.getElementById('settings-dialog'),open=document.getElementById('settings-open');if(!dlg||!open)return;
  // in the workspace UI the dialog's content lives in the 設定 panel (workspace-ui.js sets data-embedded): the same

@@ -1,18 +1,18 @@
 // Position comments UI (stage 2): a small panel in the display drawer. "Add" records the current position (the linked
 // crosshair, or the three slices on show) with the text; "View this place" moves the crosshair and the three sliders there. Nothing
 // here runs by itself on load, and no pointer handler is added to the image canvases (the click / swipe on them is untouched).
-import { eventModeOn } from './event-mode.js?v=20261021-build639';
-import { planes } from './ui-shell.js?v=20261021-build639';
-import { volume, activeSeries, getCrosshair, currentLanguage } from './state.js?v=20261021-build639';
-import { tr } from './i18n.js?v=20261021-build639';
-import { datasetFingerprint } from './project-file.js?v=20261021-build639';
-import { COMMENT_MAX_TEXT, nextAutoKey, createComment, addComment, removeComment, restoreComment, updateCommentText, updateCommentColor, hasUnsavedComments, getComments, onCommentsChange, commentMatchesSeries, commentTarget, commentMarkers, getMarkersShown, setMarkersShown, onMarkersShownChange } from './comments.js?v=20261021-build639';
-import { POINT_PALETTE, pointColor, autoPointColor, inkOn, paletteName } from './point-colors.js?v=20261021-build639';
-import { showCrosshairAt, crosshairModeActive, setOverlayPainter, requestOverlayDraw } from './crosshair-ui.js?v=20261021-build639';
-import { getMeasurements, setLabelOffset, onMeasurementsChange, removeMeasurement, measurementsOfPoint, restoreMeasurements, measurementMm, measureLabel, seriesSpacing, spacingLevel, getMeasureStart, onMeasureStartChange, cancelMeasure, createLongPress, hasUnsavedMeasurements } from './measurements.js?v=20261021-build639';
-import { planeLabelPlacement, planeVoxelDelta, clampLabelCenter, createFocusTracker } from './measure-label.js?v=20261021-build639';
-import { planePointFromVoxel } from './crosshair.js?v=20261021-build639';
-import { openPointMenu, setPointMenuHandlers, installPointMenu, endMeasureAt, cancelMeasureUi, flashUndo } from './point-menu.js?v=20261021-build639';
+import { eventModeOn } from './event-mode.js?v=20261021-build640';
+import { planes } from './ui-shell.js?v=20261021-build640';
+import { volume, activeSeries, getCrosshair, currentLanguage } from './state.js?v=20261021-build640';
+import { tr } from './i18n.js?v=20261021-build640';
+import { datasetFingerprint } from './project-file.js?v=20261021-build640';
+import { COMMENT_MAX_TEXT, nextAutoKey, createComment, addComment, removeComment, restoreComment, updateCommentText, updateCommentColor, hasUnsavedComments, getComments, onCommentsChange, commentMatchesSeries, commentTarget, commentMarkers, getMarkersShown, setMarkersShown, onMarkersShownChange } from './comments.js?v=20261021-build640';
+import { POINT_PALETTE, pointColor, autoPointColor, inkOn, paletteName } from './point-colors.js?v=20261021-build640';
+import { showCrosshairAt, crosshairModeActive, setOverlayPainter, requestOverlayDraw } from './crosshair-ui.js?v=20261021-build640';
+import { getMeasurements, setLabelOffset, onMeasurementsChange, removeMeasurement, measurementsOfPoint, restoreMeasurements, measurementMm, measureLabel, seriesSpacing, spacingLevel, getMeasureStart, onMeasureStartChange, cancelMeasure, createLongPress, hasUnsavedMeasurements } from './measurements.js?v=20261021-build640';
+import { planeLabelPlacement, planeVoxelDelta, clampLabelCenter, createFocusTracker } from './measure-label.js?v=20261021-build640';
+import { planePointFromVoxel } from './crosshair.js?v=20261021-build640';
+import { openPointMenu, setPointMenuHandlers, installPointMenu, endMeasureAt, cancelMeasureUi, flashUndo } from './point-menu.js?v=20261021-build640';
 let pop=null,popText=null,popPos=null,popStatus=null,popTimer=0,popFrom=null;
 let root=null,listEl=null,textEl=null,addBtn=null,noteEl=null,undoEl=null,undoTimer=0,lastDeleted=null;
 let showEl=null,bubble=null,bubbleTimer=0,measTitleEl=null,measListEl=null;

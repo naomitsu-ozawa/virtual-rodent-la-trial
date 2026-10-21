@@ -3,7 +3,7 @@
 // panels use a COARSE sample (at most LIVE_MAX_SAMPLES points) read only from data that is ALREADY in memory (a cached / filtered
 // plane, a resident array): never a decode, never a filter run, never a wait. Points whose data is not cached are NaN (a gap in the
 // preview; profileStats skips them). On release the normal full read replaces the preview.
-import { bilinear, lineSamples } from './line-profile.js?v=20261021-build639';
+import { bilinear, lineSamples } from './line-profile.js?v=20261021-build640';
 
 export const LIVE_MAX_SAMPLES = 192; // coarse cap (the full read uses up to 4096)
 export const LIVE_INTERVAL_MS = 75;  // about 13 Hz

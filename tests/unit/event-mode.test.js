@@ -400,7 +400,7 @@ describe('static wiring', () => {
     expect(src).toContain("const evMenu=eventModeOn();let evLabels=TRIGGER_AT_START==='label';");
     expect(src).toContain('const menu=makeMenu(MENU_W,MENU_H,MENU_WIDTH);menu.mesh.visible=evMenu;scene.add(menu.mesh);');
     expect(src).toContain('const ui={sliceClear:false,tab:evMenu?10:0,open:evMenu,');
-    expect(src).toContain('const setMenuOpen=open=>{ui.open=open;menu.mesh.visible=open;if(open){placeMenuNow();ui.probeOnOpen=true}menu.refresh()};');
+    expect(src).toContain('const setMenuOpen=open=>{if(open)emit(\'menu-open\');else emit(\'menu-close\');ui.open=open;menu.mesh.visible=open;if(open){placeMenuNow();ui.probeOnOpen=true}menu.refresh()};');
     expect(src).toContain("if(!ui.open){setMenuOpen(true);pulseTwice(c)}");
     expect(src).toContain("case'menu':setMenuOpen(!ui.open);break;");
     expect(src).toContain('const menuHit=c=>{if(!ui.open)return null;');
@@ -414,7 +414,7 @@ describe('static wiring', () => {
     expect(block).toContain('trigger:{show:triggerModeRow(hasRes),label:evLabelOn()}');
     expect(block).not.toMatch(/activeEventLevel|level:|lv\b/); // nothing level-dependent
     // the actions behind the layout's widget ids: 断面 (B/Y's setSection), the trigger switch, 元に戻す (the ring's undo), すべての設定 -> the full menu, 終了 = the full menu's session.end()
-    expect(src).toContain("const acts={section:v=>setSection(v),'trigger:point':()=>{evLabels=false},'trigger:label':()=>{evLabels=true},undo:()=>{undoLast()},home:goHome,reset:pressReset,all:()=>{ui.tab=0},exit:()=>session.end()};");
+    expect(src).toContain("const acts={section:v=>setSection(v),'trigger:point':()=>{evLabels=false},'trigger:label':()=>{evLabels=true;emit('trigger-label')},undo:()=>{undoLast()},home:goHome,reset:pressReset,all:()=>{ui.tab=0},exit:()=>session.end()};");
     expect(src).toContain("exit:tr(mode==='ar'?'evExitAr':'evExitVr')");
     expect(src).toContain("btn(MENU_W-X-260,yb,260,L.exit,true,()=>session.end(),{color:'#b33'})"); // the full menu's own exit, unchanged
     // who decides what the trigger does: label mode only when the switch says so AND the data has results (or the 解析 tab is open, as before)

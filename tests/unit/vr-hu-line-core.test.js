@@ -209,8 +209,8 @@ describe('vr-view.js wiring of the HU line (source guard; the file is a WebXR mo
     expect(m).toContain('function hidePanel() { panel.visible = panelOn = false; }'); // hiding keeps its place in the scene
     expect(src).toContain('scene.add(huLine.panel)');
     expect(src).not.toMatch(/lazyFollow\(huLine\.panel/);
-    expect(src).toContain("case'home':bringVolumeFront();placeMenuNow();placeHelpNow();if(hist.isOpen)placeHistNow();placeHuNow();break;"); // quick ring 正面に戻す
-    expect(src).toContain('()=>{bringVolumeFront();placeMenuNow();placeHelpNow();if(hist.isOpen)placeHistNow();placeHuNow()}'); // 表示 tab button
+    expect(src).toContain("case'home':emit('home');bringVolumeFront();placeMenuNow();placeHelpNow();if(hist.isOpen)placeHistNow();placeHuNow();break;"); // quick ring 正面に戻す
+    expect(src).toContain('()=>{bringVolumeFront();placeMenuNow();placeHelpNow();if(hist.isOpen)placeHistNow();placeHuNow();emit(\'home\')}'); // 表示 tab button
     expect(src).toContain('onPanelShow:()=>{if(!huPlaced&&poseAt)placeHuNow()}');
     // grip on the panel moves it (before the volume grab); release leaves it in the scene facing the head
     const sq = src.slice(src.indexOf('const gripStart=c=>{'), src.indexOf("addEventListener('selectstart'")); // gripStart / gripEnd hold the squeeze handlers' bodies
