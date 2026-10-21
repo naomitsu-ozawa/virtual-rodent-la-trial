@@ -1,6 +1,6 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Self-contained: depends only on the imports below (no module state).
-import { ANISO_LAMBDA_MIN, ANISO_LAMBDA_MAX } from './filter-units.js?v=20261021-build637';
+import { ANISO_LAMBDA_MIN, ANISO_LAMBDA_MAX } from './filter-units.js?v=20261021-build638';
 export const AIRDIST_X_MAX_N=64;
 export function gpuFilterShader(kind,workgroupSize){
  const header=`
