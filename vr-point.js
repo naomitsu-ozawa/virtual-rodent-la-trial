@@ -9,8 +9,8 @@
 // that another clipping section has cut away. A section whose intersection is outside the volume is skipped, never clamped.
 // Voxel rule: voxel i covers the fraction [i/n, (i+1)/n) of the box along its axis, so the index is floor(fraction * n); a point
 // outside [0,1) on any axis (the far face itself included) is NOT recorded: it is never moved into the volume.
-import { createComment, addComment, getComments, removeComment, restoreComment, updateCommentPosition, updateCommentColor, commentMatchesSeries } from './comments.js?v=20261020-build630';
-import { marchClassificationHitInfo } from './vr-pick.js?v=20261020-build630';
+import { createComment, addComment, getComments, removeComment, restoreComment, updateCommentPosition, updateCommentColor, commentMatchesSeries } from './comments.js?v=20261021-build639';
+import { marchClassificationHitInfo } from './vr-pick.js?v=20261021-build639';
 const T_MIN=1e-6,EDGE_EPS=1e-4;
 
 // t of the ray o + t*q on the plane, or null (parallel, or behind the origin)
@@ -111,10 +111,21 @@ export function raySphereT(o,d,c,r){
  const s=Math.sqrt(disc),t=-b-s>T_MIN?-b-s:(-b+s>T_MIN?-b+s:null);
  return t;
 }
-// the nearest point a ray touches: items [{id,center,radius}] -> {id,distance} or null
-export function pickPoint(o,d,items){
+// the nearest point a ray touches: items [{id,center,radius}] -> {id,distance} or null.
+// tolRad: when the ray touches no point, the point it passes closest to within tolRad of its surface (a cone, so
+// the tolerance grows with the distance: a few degrees) is snapped to; a point the ray really touches always wins. The distance of a snapped point is that to its surface along the ray.
+export const HAND_PICK_TOL=3*Math.PI/180;
+export function pickPoint(o,d,items,tolRad=0){
  let best=null;
  for(const it of items){const t=raySphereT(o,d,it.center,it.radius);if(t!==null&&(!best||t<best.distance))best={id:it.id,distance:t}}
+ if(best||!(tolRad>0))return best;
+ const k=Math.tan(Math.min(tolRad,1.4));let bm=Infinity;
+ for(const it of items){
+  const vx=it.center.x-o.x,vy=it.center.y-o.y,vz=it.center.z-o.z,al=vx*d.x+vy*d.y+vz*d.z;
+  if(!(al>T_MIN))continue;
+  const px=vx-al*d.x,py=vy-al*d.y,pz=vz-al*d.z,miss=(Math.sqrt(px*px+py*py+pz*pz)-it.radius)/al; // the angular miss of the surface (tan)
+  if(miss<=k&&miss<bm){bm=miss;best={id:it.id,distance:Math.max(T_MIN*2,al-it.radius)}}
+ }
  return best;
 }
 
@@ -296,6 +307,12 @@ export function sectionFollowStart({p0,q0,c0,Qp0}){
 export function sectionFollowStep({rel,Qrel,p,q}){
  const qn=qNorm(q),r=qRot(qn,rel),Qp=qNorm(qMul(qn,Qrel));
  return{c:{x:p.x+r.x,y:p.y+r.y,z:p.z+r.z},Qp,n:qRot(Qp,{x:1,y:0,z:0})};
+}
+// a HAND's pinch drag of a section turns it with the WRIST: the wrist joint's turn since the grab (qw0 -> qw, both in holder space; the roll about the forearm
+// included) applied to the section's orientation at the grab Qp0 -> the section's orientation now (the position still follows the ray: sectionFollowStep's c). The system's
+// hand ray is aimed from the shoulder and does not roll with the wrist, so its own orientation (sectionFollowStep's Qp) hardly turned the section. Controllers do not use this.
+export function sectionWristTurn({qw0,qw,Qp0}){
+ return qNorm(qMul(qMul(qNorm(qw),qInv(qNorm(qw0))),qNorm(Qp0)));
 }
 // which section an empty-space grab moves: cands [{id,t,dist}] one per visible section; t = distance along the ray to where the ray passes
 // through the section's square (null if it does not), dist = distance from the ray to the section's centre. The nearest pass-through wins;

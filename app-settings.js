@@ -21,7 +21,9 @@ export const SETTINGS_DEFAULTS={
  surfaceSmooth:true,  // device default of the 表面平滑化 checkbox: applied at start and to data / projects without a saved value (the project file stays the primary store)
  surfaceSmoothStrength:'0.60', // device default of its strength slider (0-6), same rule
  vrHighp:false,        // 設定 > デバッグ (debug-flags.js):: true = VR drawing in 32 bit, the same as ?vrprec=highp (read at page load; default 16 bit)
+ vrNoSkip:false,       // 設定 > デバッグ (debug-flags.js):: true = the VR creep skip is off, (read when a VR session starts; default off = skip on)
  eventMode:false,     // 体験会モード (設定 > 外観): level choice in the データ panel + the level's mission on the VR help board (event-mode-ui.js)
+ handRay:'standard',    // the hand's laser in VR (hand tracking only): 'standard' (標準: the system's ray as it is) / 'point' (指差し: only while pointing, along the index finger); 設定 > 描画 and the VR menu's 表示 tab
  gpuPreference:'auto'  // GPU for WebGPU: 'auto' (as before) / 'high-performance' / 'low-power'; honoured only on Linux / Windows (gpu-preference.js), applies after a reload
 };
 // pixel budgets (MP) per interaction tier / at rest; 'max' = no budget
@@ -30,6 +32,8 @@ export const REST_BUDGETS={low:0.5e6,standard:1.0e6,high:1.8e6,max:Infinity};
 export const STEP_SCALES={coarse:1.4,standard:1,fine:0.7};
 let values={...SETTINGS_DEFAULTS};
 try{const raw=globalThis.localStorage?.getItem(KEY);if(raw)values={...values,...JSON.parse(raw)}}catch{}
+// the hand laser's modes are 'standard' / 'point' (vr-hand.js HAND_RAY_MODES); a value stored by-638 ('home' ホーム方式) or 634-636 ('between' 指先, 'wrist' 手のひら) or anything else reads as 'standard'
+if(!['standard','point'].includes(values.handRay))values.handRay='standard';
 const api={
  get:k=>values[k],
  all:()=>({...values}),

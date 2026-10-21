@@ -1247,9 +1247,6 @@ html.vrl-ipad-ui .ws-file-row>button{min-height:40px;padding:7px 8px;font-size:1
 html.vrl-ipad-ui .ws-pref-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid rgb(var(--ui-b1))}
 html.vrl-ipad-ui .ws-pref-row>.ws-cap{font-size:12px;white-space:normal}
 html.vrl-ipad-ui .ws-pref-row .theme-quick,html.vrl-ipad-ui .ws-pref-row .theme-quick select,html.vrl-ipad-ui .ws-pref-row>button{width:100%;min-height:40px}
-html.vrl-ipad-ui .ws-xr-row{margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid rgb(var(--ui-b1))}
-html.vrl-ipad-ui .ws-xr-row:not(:has(button:not([hidden]))){display:none}
-html.vrl-ipad-ui .ws-xr-row>button{min-height:40px}
 @media (orientation:landscape){html.vrl-ipad-ui .sidebar>.ws-tool-rail>[data-ipad-drawer-tab="prefs"]{margin-top:auto}}
 html.vrl-ipad-ui .topbar{min-height:0}
 html.vrl-ipad-ui .ws-sample-picker{display:grid;grid-template-rows:0fr;visibility:hidden;transition:grid-template-rows .22s ease,visibility 0s linear .22s}
