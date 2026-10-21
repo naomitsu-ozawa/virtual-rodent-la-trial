@@ -3,8 +3,8 @@
 // in as plain data; this module only formats them (and keeps a small in-memory error log).
 // The tab is shown, and anything that probes the GPU runs, only in debug mode (settings > デバッグ, or ?debug).
 
-import { gpuPlatformOs } from './gpu-preference.js?v=20261020-build633';
-import { gpuVendorKey, gpuAdapterVendorKey } from './gpu-split.js?v=20261020-build633';
+import { gpuPlatformOs } from './gpu-preference.js?v=20261021-build634';
+import { gpuVendorKey, gpuAdapterVendorKey } from './gpu-split.js?v=20261021-build634';
 // ---- visibility ----------------------------------------------------------------------------------------------------
 // The one rule: the GPU info tab (and the status-bar click that opens it) exists only while debug mode is on, on every
 // platform (Mac, iPad, Windows, Linux, Android alike). `nav` is accepted so a test can state "any platform" explicitly.
