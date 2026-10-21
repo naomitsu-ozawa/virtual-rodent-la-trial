@@ -1,14 +1,14 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { set3DBusy } from './three-status.js?v=20261021-build636';
-import { useWorkspaceUi, updateRenderModeControl, clearResidentMprJobs, prepareResidentGpuVolume, activateMedicalVolume, setThreeVolumeOverlay } from './data-load.js?v=20261021-build636';
-import { appVersionBadge, planes, ipadGpuQualityControl, ipadGpuQuality, footer } from './ui-shell.js?v=20261021-build636';
-import { sceneState, volume, currentLanguage, ipadGpuTargetSide, setIpadGpuTargetSide, sourceVolume, threeRenderMode, setResidentMprReadbackDisabled, setThreeRenderMode } from './state.js?v=20261021-build636';
-import { updateMprCanvasPhysicalAspect, schedulePlaneRender } from './mpr-render.js?v=20261021-build636';
-import { request3DRender } from './scene3d.js?v=20261021-build636';
-import { applyLanguage } from './i18n.js?v=20261021-build636';
-import { isIPhoneRuntime, isTabletRuntime, fmt } from './utils.js?v=20261021-build636';
-import { settings } from './app-settings.js?v=20261021-build636';
+import { set3DBusy } from './three-status.js?v=20261021-build637';
+import { useWorkspaceUi, updateRenderModeControl, clearResidentMprJobs, prepareResidentGpuVolume, activateMedicalVolume, setThreeVolumeOverlay } from './data-load.js?v=20261021-build637';
+import { appVersionBadge, planes, ipadGpuQualityControl, ipadGpuQuality, footer } from './ui-shell.js?v=20261021-build637';
+import { sceneState, volume, currentLanguage, ipadGpuTargetSide, setIpadGpuTargetSide, sourceVolume, threeRenderMode, setResidentMprReadbackDisabled, setThreeRenderMode } from './state.js?v=20261021-build637';
+import { updateMprCanvasPhysicalAspect, schedulePlaneRender } from './mpr-render.js?v=20261021-build637';
+import { request3DRender } from './scene3d.js?v=20261021-build637';
+import { applyLanguage } from './i18n.js?v=20261021-build637';
+import { isIPhoneRuntime, isTabletRuntime, fmt } from './utils.js?v=20261021-build637';
+import { settings } from './app-settings.js?v=20261021-build637';
 export function initIPadWorkspaceUi(){
  if(!useWorkspaceUi())return;
  const shell=document.querySelector('.app-shell'),workspace=document.querySelector('.workspace'),sidebar=document.querySelector('.sidebar'),sidebarScroll=document.querySelector('.sidebar-scroll'),viewer=document.querySelector('#viewer-grid'),topbar=document.querySelector('.topbar');
@@ -97,8 +97,8 @@ export function initIPadWorkspaceUi(){
  }
 
  const byId=id=>document.getElementById(id);
- const xrBtns=[byId('vr-view-button'),byId('ar-view-button')].filter(Boolean);
- if(displayPanel&&xrBtns.length){const r=document.createElement('div');r.className='ws-file-row ws-xr-row';r.append(cap('wsXr','VR / AR'),...xrBtns);displayPanel.prepend(r)}
+ // VR / AR buttons stay in the top bar (#vr-view-button / #ar-view-button in .topbar-actions): reachable whichever tool panel is open. Their `hidden`
+ // (shown only where WebXR reports the session type as supported, app.js xrShow) is not touched here. Until this build they were moved into the 表示 panel.
  const prefsPanel=section('prefs');
  const prefRow=(key,text,el)=>{if(!el)return;const r=document.createElement('div');r.className='ws-pref-row';r.append(cap(key,text),el);prefsPanel.append(r)};
  prefRow('wsTheme','外観',document.querySelector('.theme-quick'));
@@ -134,6 +134,7 @@ export function initIPadWorkspaceUi(){
   const token=++layoutRefreshToken;
   const run=()=>{
    if(token!==layoutRefreshToken)return;
+   sigNow=viewerSig(); // what the views were laid out for (refreshLayoutIfMoved compares against it)
    try{sceneState?.resize?.()}catch{}
    try{if(volume)for(const p of Object.keys(planes))updateMprCanvasPhysicalAspect(p)}catch{}
    try{request3DRender()}catch{}
@@ -141,6 +142,9 @@ export function initIPadWorkspaceUi(){
   requestAnimationFrame(()=>{run();requestAnimationFrame(run)});
   setTimeout(run,120);
  };
+ const viewerSig=()=>{const r=viewer.getBoundingClientRect();return[r.left,r.top,r.width,r.height].map(Math.round).join()};
+ let sigNow=null;
+ const refreshLayoutIfMoved=()=>requestAnimationFrame(()=>{if(viewerSig()!==sigNow)refreshLayout()});
  const setDrawerTab=tab=>{
   if(tab==='prefs')document.dispatchEvent(new Event('vrl-settings-sync')); // the embedded settings show the stored values
   drawerTab=tab;
@@ -148,7 +152,9 @@ export function initIPadWorkspaceUi(){
   const active=drawerTabs.querySelector('[data-ipad-drawer-tab="'+tab+'"] .ws-rail-label');if(headTitle&&active){headTitle.dataset.i18n=active.dataset.i18n;headTitle.textContent=active.textContent}
   sidebarScroll.querySelectorAll('[data-ipad-drawer-section]').forEach(p=>p.classList.toggle('is-ipad-drawer-hidden',p.dataset.ipadDrawerSection!==tab));
   if(tab==='edit'&&editDetails)editDetails.open=true;
-  refreshLayout();
+  // Switching the tool panel only changes the sidebar's content: the views keep their place and size, so nothing is resized or re-rendered
+  // (it used to run the 3D resize + a re-render 3 times per switch - a clear of the canvas and up to 3 volume renders on the click). Only when the viewer area moved.
+  refreshLayoutIfMoved();
  };
  const onSettingsTabRequest=e=>{
   const tab=e?.detail?.tab;

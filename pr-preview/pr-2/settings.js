@@ -1,7 +1,7 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { surfaceSmoothEnabled, surfaceSmoothStrength, surfaceSmoothValue } from './ui-shell.js?v=20261021-build636';
-import { settings } from './app-settings.js?v=20261021-build636';
+import { surfaceSmoothEnabled, surfaceSmoothStrength, surfaceSmoothValue } from './ui-shell.js?v=20261021-build637';
+import { settings } from './app-settings.js?v=20261021-build637';
 export function surfaceSmoothingActive(){
  return !!surfaceSmoothEnabled?.checked&&Number(surfaceSmoothStrength?.value)>0;
 }
