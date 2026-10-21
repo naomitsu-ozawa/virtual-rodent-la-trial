@@ -175,37 +175,43 @@ export function blendPose(a,b,k,out){
  return out;
 }
 
-// ---- the hand's laser, 指先 (setting id 'between', kept so stored settings stay valid) ----
-// drew this ray from the thumb / index GAP along a thumb-blended axis that started at the index METACARPAL joint (the carpal end of the bone,
-// beside the thumb's base), held its direction whenever the two tips were within 5 cm (most of the time with a relaxed hand) and faded to the system ray when
-// it was > 90 deg from it: on the device it read as coming from the base of the thumb and not following the finger.: the index finger itself.
-//  - origin = the index-finger-tip joint; direction = index-finger-phalanx-proximal (the knuckle) -> index-finger-tip: the finger's own line, ~8 cm long, so a
-//    1 mm joint noise is < 1 deg (a distal -> tip vector is 2 cm and would jitter several degrees). No thumb in it, no comparison with the system ray.
-//  - pinch: closing the thumb onto the index curls the finger and pulls its tip toward the thumb. The closing is noticed when the thumb tip - index tip gap
-//    shrinks faster than vClose (over ~3 frames) inside preFar, or is below preOn (off again above preOff), or a press is held; the ray (origin AND direction)
-//    is then held in the WRIST's frame at its value from freezeMs before (where the finger pointed just before the closing): it moves and turns with the hand,
-//    not with the curling finger. Eased in over inMs; kept relHoldMs after the fingers open, then eased out over outMs; a re-pinch within reArmMs keeps the same hold (the double pinch
-//    hits the same spot). A hand resting with the thumb a few cm away is not held.
-//  - light One Euro on the origin and the direction (a few ms of lag at normal speeds; the tests measure it).
-//  - a lost / non-finite joint: the system's ray, reached through a fadeMs cross-fade (the system ray also gives the roll of the pose). No allocation per update.
+// ---- the hand's laser: three modes (the device setting handRay) ----
+// 'standard' (標準, default): the system's target ray, frame.getPose(targetRaySpace, referenceSpace) exactly as three.js wrote it into the controller group (no filter, no
+// offset, no hold, no pinch carry: vr-hand-view.js leaves the group alone). 'home' (ホーム方式): createHomeRay below, a reconstruction of the Meta Quest Home hand pointer
+// (from an estimated shoulder through the pinch point, with Meta's beam / cursor look). 'point' (指差し): createPointRay below (wrist -> index fingertip), shown only while the
+// hand points (createPointGate). The modes of-636 ('between' 指先, 'wrist' 手のひら) are gone: a stored old value reads as 'standard' (app-settings.js maps it on load).
+// The mode is read every frame (設定 > 描画 on the page, 表示 tab of the VR menu); controllers never read it.
+export const HAND_RAY_MODES=['standard','home','point'];
+export const HAND_RAY_DEFAULT='standard';
+export const normalizeHandRay=v=>HAND_RAY_MODES.includes(v)?v:HAND_RAY_DEFAULT;
 export const RAY_HOLD_MS=200; // the system ray missing for a moment: the last pose is held (vr-hand-view.js; not in 標準)
-export const FINGER_JOINTS=['index-finger-phalanx-proximal','index-finger-tip'];
-export const FINGER_RAY={freezeMs:100,preOn:0.03,preOff:0.04,preFar:0.07,vClose:0.15,closeHoldMs:120,reArmMs:400,relHoldMs:150,inMs:30,outMs:150,fadeMs:100,loseMs:200,minChord:0.02,
- pos:{minCutoff:3,beta:0.15,dCutoff:8},dir:{minCutoff:3,beta:0.5,dCutoff:10}};
 const fin=v=>v-v===0;
 const arcQ=(a,b,o)=>{ // the shortest turn a -> b (unit vectors) as a quaternion into o[0..3]; false when they are (nearly) opposite
  const w=1+a[0]*b[0]+a[1]*b[1]+a[2]*b[2];if(!(w>1e-3))return false;
  const x=a[1]*b[2]-a[2]*b[1],y=a[2]*b[0]-a[0]*b[2],z=a[0]*b[1]-a[1]*b[0],l=Math.hypot(x,y,z,w);
  o[0]=x/l;o[1]=y/l;o[2]=z/l;o[3]=w/l;return true;
 };
-export function createFingerRay(opt={}){
- const o={...FINGER_RAY,...opt},posF=createOneEuro(3,{...o.pos,speedScale:1000}),dirF=createOneEuro(3,{...o.dir,speedScale:57.3});
+
+// ---- 指差し (setting id 'point'): from the index fingertip along the line wrist -> index fingertip ----
+//  - origin = the index-finger-tip joint; direction = the wrist joint -> the index-finger-tip joint, extended (the user's choice: 「普通手首から指先だと思う」). Nothing else is
+//    mixed into the direction (no arm / shoulder / system-ray blend): a light One Euro on the origin and on that direction only.
+//  - pinch (the hold of's 指先 ray, unchanged): the closing of the thumb onto the index is noticed when the thumb tip - index tip gap shrinks faster than vClose
+//    (over ~3 frames) inside preFar, or is below preOn (off again above preOff), or a press is held (= near). The ray (origin AND direction) is then held in the WRIST's
+//    frame at its value from freezeMs before (where the hand pointed just before the closing): it moves and turns with the wrist, not with the curling finger. Eased in over
+//    inMs; kept relHoldMs after the fingers open, then eased out over outMs; a re-pinch within reArmMs keeps the same hold (the double pinch hits the same spot).
+//  - a lost / non-finite joint: the last ray is kept for loseMs, then the system's ray is left on the pose (no cross-fade: the laser is hidden then, createPointGate).
+//  - near: exposed for createPointGate (the laser stays on through a pinch). No allocation per update.
+export const POINT_JOINTS=['wrist','index-finger-tip'];
+export const POINT_RAY={freezeMs:100,preOn:0.03,preOff:0.04,preFar:0.07,vClose:0.15,closeHoldMs:120,reArmMs:400,relHoldMs:150,inMs:30,outMs:150,loseMs:200,minChord:0.06,
+ pos:{minCutoff:3,beta:0.15,dCutoff:8},dir:{minCutoff:2,beta:0.4,dCutoff:10}};
+export function createPointRay(opt={}){
+ const o={...POINT_RAY,...opt},posF=createOneEuro(3,{...o.pos,speedScale:1000}),dirF=createOneEuro(3,{...o.dir,speedScale:57.3});
  const N=32,hT=new Float64Array(N),hD=new Float64Array(N*3),hO=new Float64Array(N*3);let hn=0,hi=0; // the last N (time, direction and origin in the wrist's frame)
  const sys=new Float64Array(7),jq=new Float64Array(7),ds=new Float64Array(3),dl=new Float64Array(3),org=new Float64Array(3),lD=new Float64Array(3),lO=new Float64Array(3),
   fzD=new Float64Array(3),fzO=new Float64Array(3),fw=new Float64Array(3),fo=new Float64Array(3),dd=new Float64Array(3),oo=new Float64Array(3),po=new Float64Array(3),dout=new Float64Array(3),
   qc=new Float64Array(4),cq=new Float64Array(4),wqn=new Float64Array(4),tv=new Float64Array(3),nz=[0,0,-1];
  const gT=new Float64Array(4),gD=new Float64Array(4);let gn=0,gi=0,closingAt=-Infinity,pdNear=false; // the last 4 (time, gap): the closing speed
- let near=false,wasNear=false,fzSet=false,hasFz=false,relAt=-Infinity,wf=0,wj=0,tPrev=null,validAt=-Infinity,hasJq=false,wOk=false;
+ let near=false,wasNear=false,fzSet=false,hasFz=false,relAt=-Infinity,wf=0,tPrev=null,validAt=-Infinity,hasJq=false,wOk=false;
  // the live ray (org, dl) and the same in the wrist's frame (lO, lD; wOk: the wrist pose is usable); false: a joint is missing / the chord too short
  const compute=(j,w)=>{
   for(let i=0;i<6;i++)if(!fin(j[i]))return false;
@@ -221,11 +227,11 @@ export function createFingerRay(opt={}){
   }
   return true;
  };
- const clear=()=>{posF.reset();dirF.reset();hn=0;hi=0;gn=0;gi=0;closingAt=-Infinity;pdNear=false;fzSet=false;hasFz=false;near=false;wasNear=false;wf=0;wj=0;hasJq=false};
+ const clear=()=>{posF.reset();dirF.reset();hn=0;hi=0;gn=0;gi=0;closingAt=-Infinity;pdNear=false;fzSet=false;hasFz=false;near=false;wasNear=false;wf=0;hasJq=false};
  return{
-  // pose: the system's ray [px,py,pz,qx,qy,qz,qw], OVERWRITTEN with the finger's ray (left alone when it or now is not finite); j: 6 numbers = the positions of
-  // FINGER_JOINTS (NaN for a joint that is not tracked); w: the wrist joint's pose [px,py,pz,qx,qy,qz,qw] (NaN: unknown, then no pinch hold); pd: the thumb tip -
-  // index tip distance (m; NaN keeps the state); pressed: a pinch press is held; now: ms
+  // pose: the system's ray [px,py,pz,qx,qy,qz,qw], OVERWRITTEN with the pointing ray (left alone when it or now is not finite, or no ray for loseMs); j: 6 numbers = the
+  // positions of POINT_JOINTS (NaN for a joint that is not tracked); w: the wrist joint's pose [px,py,pz,qx,qy,qz,qw] (NaN: unknown, then no pinch hold); pd: the thumb
+  // tip - index tip distance (m; NaN keeps the state); pressed: a pinch press is held; now: ms
   update(pose,j,w,pd,pressed,now){
    for(let i=0;i<7;i++)if(!fin(pose[i]))return pose;
    if(!fin(now))return pose;
@@ -279,28 +285,59 @@ export function createFingerRay(opt={}){
     }else ok=false;
    }
    if(!ok&&now-validAt>o.loseMs){posF.reset();dirF.reset();hn=0;hi=0;fzSet=false;hasFz=false;hasJq=false}
-   const tj=ok&&hasJq?1:0;
-   wj=tj>wj?Math.min(1,wj+dt*1000/o.fadeMs):tj<wj?Math.max(0,wj-dt*1000/o.fadeMs):wj;
-   if(wj>0&&hasJq)blendPose(sys,jq,wj,pose);
+   if(hasJq)for(let i=0;i<7;i++)pose[i]=jq[i]; // the pointing ray exactly (a missing joint: the last one, for loseMs)
    return pose;
   },
   reset(){clear();tPrev=null;validAt=-Infinity;relAt=-Infinity},
   get frozen(){return wf>0},
-  get weight(){return wj},
+  get near(){return near},
+  get valid(){return hasJq},
  };
 }
 
-// ---- the hand's laser: the three modes ----
-// 'between' (指先, default): createFingerRay above (the index finger's own line from its tip). 'wrist' (手のひら): createPalmRay below (from the palm along the
-// arm / hand axis). 'standard' (標準): the system's target ray, frame.getPose(targetRaySpace, referenceSpace) exactly as three.js wrote it into the controller group
-// (no filter, no offset, no hold, no pinch carry: vr-hand-view.js leaves the group alone). The ids are those of so a stored setting keeps its meaning
-// (指の間 -> 指先, 手首から -> 手のひら). The mode is the device setting handRay (app-settings.js: 設定 > 描画 on the page, 表示 tab of the VR menu); controllers never
-// read it. createArmRay (shoulder -> wrist) is no longer used by any mode.
-export const HAND_RAY_MODES=['between','wrist','standard'];
-export const HAND_RAY_DEFAULT='between';
-export const normalizeHandRay=v=>HAND_RAY_MODES.includes(v)?v:HAND_RAY_DEFAULT;
-export const ARM_RAY={neckDown:0.18,shoulderSide:0.17,minLen:0.15,minDot:0,freezeMs:120,outMs:100,fadeMs:100,loseMs:200,preOn:0.05,preOff:0.07,
- pos:{minCutoff:1.5,beta:0.08,dCutoff:8},dir:{minCutoff:2,beta:0.3,dCutoff:10}};
+// ---- 指差し: the laser is on only while the hand points (index extended, middle / ring / little curled) ----
+// curls = fingerCurl of index, middle, ring, little (GRAB_FINGERS order; ~0.95 extended, a tucked finger ~0.57, a fist < 0.55). ON when index >= indexOn AND each of the other
+// three <= othersOn AND the thumb tip - index tip gap pd > pdMin, for onFrames frames in a row. OFF when index <= indexOff OR one of the others >= othersOff (or a curl is
+// unknown), for offFrames frames in a row. Latch: while near (a pinch is closing / held: createPointRay's near) and for relHoldMs after it, the OFF test is not run, so the
+// laser stays on through the whole pinch (the index curls toward the thumb). The thumb is free. update() -> on (boolean).
+export const POINT_GATE={indexOn:0.85,indexOff:0.75,othersOn:0.62,othersOff:0.72,pdMin:0.03,onFrames:3,offFrames:8,relHoldMs:250};
+export function createPointGate(opt={}){
+ const o={...POINT_GATE,...opt};let on=false,n=0,nearAt=-Infinity;
+ return{
+  update(curls,pd,near,now){
+   if(near)nearAt=now;
+   if(on){
+    if(near||now-nearAt<o.relHoldMs){n=0;return on}
+    let off=!(curls[0]>o.indexOff);
+    for(let i=1;i<4;i++)if(!(curls[i]<o.othersOff))off=true;
+    if(!off){n=0;return on}
+    if(++n>=o.offFrames){on=false;n=0}
+    return on;
+   }
+   let want=curls[0]>=o.indexOn&&pd>o.pdMin;
+   for(let i=1;i<4;i++)if(!(curls[i]<=o.othersOn))want=false;
+   if(!want){n=0;return on}
+   if(++n>=o.onFrames){on=true;n=0}
+   return on;
+  },
+  reset(){on=false;n=0;nearAt=-Infinity},
+  get on(){return on},
+ };
+}
+
+// ---- ホーム方式 (setting id 'home'): the Meta Quest Home hand pointer, rebuilt from Meta's published parts ----
+// Sources (2026-10): developers.meta.com/horizon/design/raycasting_specs (beam / cursor numbers), design/raycasting_bp (「a secondary body position, like a shoulder or hip
+// point of origin, to stabilize the ray」), documentation/web/webxr-hands (Quest Browser's targetRaySpace for hands is an emulated ray matching Home's: that is 標準),
+// and the Meta XR Interaction SDK 207.0.1 (com.meta.xr.sdk.interaction): ShoulderEstimatePosition (the shoulder = head + yaw-only rotation * (0.13, -0.25, -0.13) * hand
+// scale, x mirrored for the left hand; Unity +z = forward, so -0.13 is BEHIND the head), RayInteractorPinchVisual (the pinch point = the midpoint of the thumb's and the
+// index's distal joints, HandThumb3 / HandIndex3), HandFilterParameterBlock (One Euro on joint data: minCutoff 0.5 Hz, beta 5 per m/s, dCutoff 1 Hz), HandRayInteractor.prefab
+// (beam / cursor values: HOME_VIS). Meta does not publish the Home ray's own algorithm; the shoulder -> pinch point line is the stated design (an estimate, see the report).
+//  - origin = the pinch point (filtered) + originFwd along the ray; direction = the estimated shoulder -> the pinch point. A turn of the wrist moves the pinch point a few cm
+//    at ~0.5 m from the shoulder: the ray turns a few degrees, not with the hand.
+//  - no pinch hold and no pinch carry: the ray stays the live shoulder -> hand line through the pinch (as Home's).
+//  - a missing / non-finite input (joints, head): the system's ray, through a fadeMs cross-fade (it also gives the roll). No allocation per update.
+export const HOME_RAY={shoulderSide:0.13,neckDown:0.25,shoulderBack:0.13,handScale:1,originFwd:0.02,minLen:0.1,fadeMs:100,loseMs:200,pos:{minCutoff:0.5,beta:5,dCutoff:1}};
+export const HOME_PINCH_JOINTS=['thumb-phalanx-distal','index-finger-phalanx-distal'];
 // the head's forward direction on the floor plane from its orientation q=[x,y,z,w]: out=[fx,fz] (unit). Only the yaw: the gaze flattened (nodding and tilting the
 // head leave it alone). When the head looks steeply down / up (the gaze is almost vertical and its flattening unstable) the head's up axis, which then points
 // forward / back, takes over, blended in between |gaze.y| 0.8 and 0.97 (looking at the desk never flips it; there a tilt does turn it, as it is a turn about the gaze).
@@ -320,121 +357,71 @@ export function headForward(q,out){
  if(!(m>1e-6))return false;
  out[0]=x/m;out[1]=z/m;return true;
 }
-// the shoulder: head [x,y,z], fwd [fx,fz] (headForward), side +1 = the right hand, -1 = the left. out [x,y,z].
-export function shoulderPoint(head,fwd,side,out,{neckDown=ARM_RAY.neckDown,shoulderSide=ARM_RAY.shoulderSide}={}){
- const s=side<0?-1:1,rx=-fwd[1],rz=fwd[0]; // right = forward x up
- out[0]=head[0]+s*shoulderSide*rx;out[1]=head[1]-neckDown;out[2]=head[2]+s*shoulderSide*rz;return out;
+// the shoulder (ISDK ShoulderEstimatePosition): head [x,y,z], fwd [fx,fz] (headForward), side +1 = the right hand, -1 = the left. out [x,y,z].
+export function shoulderPoint(head,fwd,side,out,{shoulderSide=HOME_RAY.shoulderSide,neckDown=HOME_RAY.neckDown,shoulderBack=HOME_RAY.shoulderBack,handScale=HOME_RAY.handScale}={}){
+ const s=side<0?-1:1,rx=-fwd[1],rz=fwd[0],k=handScale; // right = forward x up
+ out[0]=head[0]+k*(s*shoulderSide*rx-shoulderBack*fwd[0]);out[1]=head[1]-k*neckDown;out[2]=head[2]+k*(s*shoulderSide*rz-shoulderBack*fwd[1]);return out;
 }
-// 手首から: origin = the wrist joint, direction = shoulder -> wrist (the ARM: bending the hand at the wrist does not move it). The shoulder is estimated from the head
-// (yaw only: nodding / tilting the head leaves it alone), neckDown below it and shoulderSide toward the hand's side. One Euro on the origin and the direction; at a pinch onset
-// (the gap closing below preOn, or a press) the direction is held for freezeMs, then eased back to the live arm line over outMs. The system's ray is the fallback for a
-// missing / non-finite input (head, wrist) and gives the pose's roll; a cross-fade of fadeMs. No allocation per update.
-// pose: the system's ray [p,q] (overwritten); wp: wrist [x,y,z]; head [x,y,z]; hq: head orientation [x,y,z,w]; side: +1 right / -1 left / 0 unknown (taken from which side of the head the wrist is)
-export function createArmRay(opt={}){
- const o={...ARM_RAY,...opt},posF=createOneEuro(3,{...o.pos,speedScale:1000}),dirF=createOneEuro(3,{...o.dir,speedScale:57.3});
- const sys=new Float64Array(7),jq=new Float64Array(7),ds=new Float64Array(3),dl=new Float64Array(3),dd=new Float64Array(3),po=new Float64Array(3),dout=new Float64Array(3),qc=new Float64Array(4),cq=new Float64Array(4),
-  fw=[0,1],sh=[0,0,0],fz=new Float64Array(3),last=new Float64Array(3),nz=[0,0,-1];
- let near=false,wasNear=false,freezeUntil=-Infinity,wf=0,wj=0,tPrev=null,validAt=-Infinity,hasJq=false,hasLast=false;
- const clear=()=>{posF.reset();dirF.reset();near=false;wasNear=false;freezeUntil=-Infinity;wf=0;wj=0;hasJq=false;hasLast=false};
- return{
-  update(pose,wp,head,hq,side,pd,pressed,now){
-   for(let i=0;i<7;i++)if(!fin(pose[i]))return pose;
-   if(!fin(now))return pose;
-   for(let i=0;i<7;i++)sys[i]=pose[i];
-   const dt=tPrev===null||now<tPrev?0:Math.min(0.25,(now-tPrev)/1000);tPrev=now;
-   cq[0]=sys[3];cq[1]=sys[4];cq[2]=sys[5];cq[3]=sys[6];rotV(cq,nz,ds);
-   if(fin(pd))near=near?pd<o.preOff:pd<o.preOn;
-   if(pressed)near=true;
-   if(near&&!wasNear&&hasLast){fz[0]=last[0];fz[1]=last[1];fz[2]=last[2];freezeUntil=now+o.freezeMs}
-   wasNear=near;
-   let ok=fin(wp[0])&&fin(wp[1])&&fin(wp[2])&&fin(head[0])&&fin(head[1])&&fin(head[2])&&headForward(hq,fw);
-   if(ok){
-    const sd=side?(side<0?-1:1):((wp[0]-head[0])*-fw[1]+(wp[2]-head[2])*fw[0]<0?-1:1);
-    shoulderPoint(head,fw,sd,sh,o);
-    dd[0]=wp[0]-sh[0];dd[1]=wp[1]-sh[1];dd[2]=wp[2]-sh[2];
-    const l=Math.hypot(dd[0],dd[1],dd[2]);
-    if(l>=o.minLen){dl[0]=dd[0]/l;dl[1]=dd[1]/l;dl[2]=dd[2]/l;ok=dl[0]*ds[0]+dl[1]*ds[1]+dl[2]*ds[2]>=o.minDot}else ok=false;
-   }
-   wf=now<freezeUntil?1:Math.max(0,wf-dt*1000/o.outMs);
-   if(ok){
-    let x=dl[0],y=dl[1],z=dl[2];
-    if(wf>0&&hasLast){x=dl[0]*(1-wf)+fz[0]*wf;y=dl[1]*(1-wf)+fz[1]*wf;z=dl[2]*(1-wf)+fz[2]*wf;const l=Math.hypot(x,y,z);if(l>1e-6){x/=l;y/=l;z/=l}else{x=dl[0];y=dl[1];z=dl[2]}}
-    if(now-validAt>o.loseMs){posF.reset();dirF.reset()}
-    dd[0]=x;dd[1]=y;dd[2]=z;
-    posF.filter(wp,now,po);dirF.filter(dd,now,dout);
-    const l=Math.hypot(dout[0],dout[1],dout[2]);
-    if(l>1e-6){dout[0]/=l;dout[1]/=l;dout[2]/=l}else ok=false;
-    if(ok&&arcQ(ds,dout,qc)){
-     qMulA(qc,0,sys,3,jq,3);jq[0]=po[0];jq[1]=po[1];jq[2]=po[2];
-     const ql=Math.hypot(jq[3],jq[4],jq[5],jq[6])||1;for(let i=3;i<7;i++)jq[i]/=ql;
-     last[0]=dout[0];last[1]=dout[1];last[2]=dout[2];hasLast=true;hasJq=true;validAt=now;
-    }else ok=false;
-   }
-   if(!ok&&now-validAt>o.loseMs){posF.reset();dirF.reset();hasJq=false;hasLast=false}
-   const tj=ok&&hasJq?1:0;
-   wj=tj>wj?Math.min(1,wj+dt*1000/o.fadeMs):tj<wj?Math.max(0,wj-dt*1000/o.fadeMs):wj;
-   if(wj>0&&hasJq)blendPose(sys,jq,wj,pose);
-   return pose;
-  },
-  reset(){clear();tPrev=null;validAt=-Infinity},
-  get frozen(){return wf>0},
-  get weight(){return wj},
- };
-}
-
-// 手のひら (setting id 'wrist', kept so stored settings stay valid): origin = the centre of the palm, on its palm side; direction = the line of the arm.
-//  - direction: WebXR hand input has no elbow or forearm joint. The hand's long axis, wrist -> middle-finger-phalanx-proximal (the middle knuckle, ~9 cm: stable),
-//    is the forearm's line whenever the wrist is straight (how one aims an arm) and is measured directly from the tracked joints. A forearm guessed from the
-//    head (shoulder from the head's yaw -> wrist: createArmRay) turned with the head and, with the elbow bent as in normal pointing, was ~45 deg
-//    off the real forearm, so it is not used.
-//  - origin: palmPoint (PALM_FROM_WRIST of the way from the wrist to the middle knuckle: the palm's centre) moved palmSide (1.5 cm) toward the palm along the wrist
-//    joint's -Y (WebXR: -Y points into the palm), so the laser comes out of the palm, not out of the wrist or the base of the thumb. Without a usable wrist
-//    orientation the offset is left out.
-//  - light One Euro on origin and direction; a missing / non-finite / too short input: the system's ray with a fadeMs cross-fade (the system ray gives the roll).
-// pose: the system's ray (overwritten); w: the wrist joint's pose [px,py,pz,qx,qy,qz,qw]; kp: the middle knuckle [x,y,z]. No allocation per update.
-export const PALM_RAY={minLen:0.03,palmSide:0.015,fadeMs:100,loseMs:200,pos:{minCutoff:2,beta:0.1,dCutoff:8},dir:{minCutoff:2.5,beta:0.4,dCutoff:10}};
-const dY=[0,-1,0];
-export function createPalmRay(opt={}){
- const o={...PALM_RAY,...opt},posF=createOneEuro(3,{...o.pos,speedScale:1000}),dirF=createOneEuro(3,{...o.dir,speedScale:57.3});
- const sys=new Float64Array(7),jq=new Float64Array(7),ds=new Float64Array(3),dl=new Float64Array(3),dd=new Float64Array(3),po=new Float64Array(3),dout=new Float64Array(3),org=new Float64Array(3),
-  qc=new Float64Array(4),cq=new Float64Array(4),wq=new Float64Array(4),pn=new Float64Array(3),nz=[0,0,-1];
+// pose: the system's ray [p,q] (overwritten); pp: the pinch point [x,y,z] (the midpoint of HOME_PINCH_JOINTS); head [x,y,z]; hq: head orientation [x,y,z,w];
+// side: +1 right / -1 left / 0 unknown (taken from which side of the head the pinch point is); now: ms
+export function createHomeRay(opt={}){
+ const o={...HOME_RAY,...opt,pos:{...HOME_RAY.pos,...opt.pos}},posF=createOneEuro(3,{...o.pos,speedScale:1});
+ const sys=new Float64Array(7),jq=new Float64Array(7),ds=new Float64Array(3),dl=new Float64Array(3),po=new Float64Array(3),qc=new Float64Array(4),cq=new Float64Array(4),
+  fw=[0,1],sh=[0,0,0],nz=[0,0,-1],sh0=new Float64Array(3);
  let wj=0,tPrev=null,validAt=-Infinity,hasJq=false;
  return{
-  update(pose,w,kp,now){
+  update(pose,pp,head,hq,side,now){
    for(let i=0;i<7;i++)if(!fin(pose[i]))return pose;
    if(!fin(now))return pose;
    for(let i=0;i<7;i++)sys[i]=pose[i];
    const dt=tPrev===null||now<tPrev?0:Math.min(0.25,(now-tPrev)/1000);tPrev=now;
    cq[0]=sys[3];cq[1]=sys[4];cq[2]=sys[5];cq[3]=sys[6];rotV(cq,nz,ds);
-   let ok=fin(w[0])&&fin(w[1])&&fin(w[2])&&fin(kp[0])&&fin(kp[1])&&fin(kp[2]);
+   let ok=fin(pp[0])&&fin(pp[1])&&fin(pp[2])&&fin(head[0])&&fin(head[1])&&fin(head[2])&&headForward(hq,fw);
    if(ok){
-    dd[0]=kp[0]-w[0];dd[1]=kp[1]-w[1];dd[2]=kp[2]-w[2];
-    const l=Math.hypot(dd[0],dd[1],dd[2]);
-    if(l>=o.minLen){dl[0]=dd[0]/l;dl[1]=dd[1]/l;dl[2]=dd[2]/l}else ok=false;
+    if(now-validAt>o.loseMs)posF.reset();
+    sh0[0]=pp[0];sh0[1]=pp[1];sh0[2]=pp[2];posF.filter(sh0,now,po);
+    const sd=side?(side<0?-1:1):((po[0]-head[0])*-fw[1]+(po[2]-head[2])*fw[0]<0?-1:1);
+    shoulderPoint(head,fw,sd,sh,o);
+    dl[0]=po[0]-sh[0];dl[1]=po[1]-sh[1];dl[2]=po[2]-sh[2];
+    const l=Math.hypot(dl[0],dl[1],dl[2]);
+    if(l>=o.minLen){dl[0]/=l;dl[1]/=l;dl[2]/=l}else ok=false;
    }
-   if(ok){
-    for(let i=0;i<3;i++)org[i]=w[i]+PALM_FROM_WRIST*(kp[i]-w[i]);
-    const wl=fin(w[3])&&fin(w[4])&&fin(w[5])&&fin(w[6])?Math.hypot(w[3],w[4],w[5],w[6]):0;
-    if(wl>0.5){for(let i=0;i<4;i++)wq[i]=w[3+i]/wl;rotV(wq,dY,pn);for(let i=0;i<3;i++)org[i]+=o.palmSide*pn[i]}
-    if(now-validAt>o.loseMs){posF.reset();dirF.reset()}
-    dirF.filter(dl,now,dout);posF.filter(org,now,po);
-    const l=Math.hypot(dout[0],dout[1],dout[2]);
-    if(l>1e-6){dout[0]/=l;dout[1]/=l;dout[2]/=l}else ok=false;
-    if(ok&&arcQ(ds,dout,qc)){
-     qMulA(qc,0,sys,3,jq,3);jq[0]=po[0];jq[1]=po[1];jq[2]=po[2];
-     const ql=Math.hypot(jq[3],jq[4],jq[5],jq[6])||1;for(let i=3;i<7;i++)jq[i]/=ql;
-     hasJq=true;validAt=now;
-    }else ok=false;
-   }
-   if(!ok&&now-validAt>o.loseMs){posF.reset();dirF.reset();hasJq=false}
+   if(ok&&arcQ(ds,dl,qc)){
+    qMulA(qc,0,sys,3,jq,3);for(let i=0;i<3;i++)jq[i]=po[i]+o.originFwd*dl[i];
+    const ql=Math.hypot(jq[3],jq[4],jq[5],jq[6])||1;for(let i=3;i<7;i++)jq[i]/=ql;
+    hasJq=true;validAt=now;
+   }else ok=false;
+   if(!ok&&now-validAt>o.loseMs){posF.reset();hasJq=false}
    const tj=ok&&hasJq?1:0;
    wj=tj>wj?Math.min(1,wj+dt*1000/o.fadeMs):tj<wj?Math.max(0,wj-dt*1000/o.fadeMs):wj;
    if(wj>0&&hasJq)blendPose(sys,jq,wj,pose);
    return pose;
   },
-  reset(){posF.reset();dirF.reset();wj=0;hasJq=false;tPrev=null;validAt=-Infinity},
+  reset(){posF.reset();wj=0;hasJq=false;tPrev=null;validAt=-Infinity},
   get weight(){return wj},
  };
+}
+// the look of the ホーム方式 laser (vr-hand-view.js draws it; 標準 and 指差し keep the app's line and dot). From raycasting_specs and HandRayInteractor.prefab (ISDK 207):
+//  beam: starts beamStart (0.10 m) from the origin, at most beamMax (0.25 m) long, ends beamEnd (0.05 m) before the hit; width beamWidth (raycasting_specs: 0.5 mm in the Home
+//  environment, 1 mm overlay; the prefab's RayVisual is 1.2 mm); alpha along it 1 - feather * (u - 0.5)^2 (OculusRayVisual.shader, _Feather 4: clear at both ends); faded
+//  below lenFade (0.10 m) of length; white while hovering, #001E78 while selecting; hidden (fadeMs 0.25 s) when it hits nothing (「Pointing away from all surfaces: the
+//  beam fades」, noHitAlpha), while a fist holds something (「Direct grab is active: the laser hides」) and when the hand is lost.
+//  cursor (OculusRayCursor.shader on a quad of cursorScale * distance to the head = a constant angular size): a disc of radius hoverSize (0.48) -> selectSize (0.40) of the quad,
+//  linear in the pinch strength (raycasting_specs), white at hoverAlpha (0.70) -> selectAlpha (0.95), with an outline (outline 0.05 of the quad, rgb 48,61,83 at 0.95);
+//  normalOffset (5 mm) off the surface toward the eye; removed with a cursorFadeMs (0.5 s) fade when nothing is hit.
+//  pinchOpen: the thumb - index gap of pinch strength 0 (strength 1 at PINCH.on or a press held; an estimate: the OS pinch strength is not exposed to WebXR).
+export const HOME_VIS={beamStart:0.1,beamMax:0.25,beamEnd:0.05,beamWidth:0.0005,feather:4,lenFade:0.1,fadeMs:250,noHitAlpha:1,hoverColor:0xffffff,selectColor:0x001e78,
+ cursorScale:0.017,hoverSize:0.48,selectSize:0.4,outline:0.05,hoverAlpha:0.698,selectAlpha:0.949,outlineColor:0x303d53,outlineAlpha:0.949,normalOffset:0.005,cursorFadeMs:500,pinchOpen:0.06};
+// the pinch strength 0..1 from the thumb tip - index tip gap (NaN: 0); a press held: 1
+export const pinchStrength=(pd,pressed,open=HOME_VIS.pinchOpen,on=PINCH.on)=>pressed?1:fin(pd)?Math.max(0,Math.min(1,(open-pd)/(open-on))):0;
+// the beam's alpha at u (0 = its start, 1 = its end)
+export const beamAlpha=(u,feather=HOME_VIS.feather)=>Math.max(0,Math.min(1,1-feather*(u-0.5)*(u-0.5)));
+// the visible beam for a hit at dist (m; null / NaN: no hit): {start, len, k} (k: the length fade, 0..1), written into out
+export function homeBeam(dist,v=HOME_VIS,out={start:0,len:0,k:0}){
+ out.start=v.beamStart;
+ out.len=dist!=null&&fin(dist)?Math.min(v.beamMax,Math.max(0,dist-v.beamEnd-v.beamStart)):v.beamMax;
+ out.k=v.lenFade>0?Math.max(0,Math.min(1,out.len/v.lenFade)):1;
+ return out;
 }
 
 // ---- tracking loss ----
@@ -651,6 +638,15 @@ export const parseGrabTune=t=>pick(jsonOf(t),{on:[0,1.5],off:[0,1.5],holdMs:[0,2
 export const parsePinchTune=t=>pick(jsonOf(t),{on:[0.003,0.08],off:[0.003,0.12],onFrames:[1,10],offFrames:[1,10],own:[0,1],os:[0,1],osGapMs:[0,1000],guardIndex:[0,1.5],guardOthers:[0,1.5]});
 // vrl-hand-drag = '{"carry":1,"gain":1,"rot":1,"blendMs":120}' (carry 0: a pinch drags with the system's (delayed) ray, as before)
 export const parseDragTune=t=>pick(jsonOf(t),{carry:[0,1],gain:[0,5],rot:[0,1],blendMs:[0,1000]});
+// vrl-hand-point = '{"indexOn":0.85,"indexOff":0.75,"othersOn":0.62,"othersOff":0.72,"pdMin":0.03,"onFrames":3,"offFrames":8,"relHoldMs":250,"freezeMs":100}' (指差し: the gate,
+// POINT_GATE; and the pinch hold of the ray, POINT_RAY freezeMs / preOn / preOff / relHoldMs / reArmMs)
+export const parsePointTune=t=>pick(jsonOf(t),{indexOn:[0,1.5],indexOff:[0,1.5],othersOn:[0,1.5],othersOff:[0,1.5],pdMin:[0,0.2],onFrames:[1,60],offFrames:[1,120],relHoldMs:[0,3000],
+ freezeMs:[0,400],preOn:[0.003,0.1],preOff:[0.003,0.12],rayRelHoldMs:[0,2000],reArmMs:[0,2000]});
+// vrl-hand-home = '{"shoulderSide":0.13,"neckDown":0.25,"shoulderBack":0.13,"handScale":1,"originFwd":0.02,"minCutoff":0.5,"beta":5,"dCutoff":1,"beamWidth":0.0005,...}'
+// (ホーム方式: HOME_RAY and HOME_VIS; any of their numbers)
+export const parseHomeTune=t=>pick(jsonOf(t),{shoulderSide:[-0.5,0.5],neckDown:[-0.5,1],shoulderBack:[-0.5,0.5],handScale:[0.3,3],originFwd:[-0.2,0.3],minCutoff:[0.01,60],beta:[0,100],dCutoff:[0.01,60],
+ beamStart:[0,1],beamMax:[0,10],beamEnd:[0,1],beamWidth:[0.0001,0.02],feather:[0,40],lenFade:[0,1],fadeMs:[0,3000],noHitAlpha:[0,1],cursorScale:[0,0.2],hoverSize:[0,0.5],selectSize:[0,0.5],
+ outline:[0,0.5],hoverAlpha:[0,1],selectAlpha:[0,1],outlineAlpha:[0,1],normalOffset:[0,0.05],cursorFadeMs:[0,3000],pinchOpen:[0.02,0.2]});
 
 // ---- texts (hands only; the controller texts stay in vr-view.js) ----
 export function handTexts(ja){

@@ -2,13 +2,14 @@ import { describe, it, expect, vi, beforeAll, afterAll, afterEach } from 'vitest
 import { readFileSync } from 'node:fs';
 import * as THREE from 'three';
 import { WebXRController } from 'three';
-import { PALM_FROM_WRIST, PALM_RAY } from '../../docs/vr-hand.js';
+import { HOME_RAY } from '../../docs/vr-hand.js';
 
 // the hand laser end to end, from a synthetic XRFrame to the laser that is drawn and the ray that is hit-tested. three.js' own WebXRController
 // writes the poses (frame.getPose(inputSource.targetRaySpace, referenceSpace) into the controller group, frame.getJointPose into the hand's joints) exactly as
 // in a session; vr-hand-view.js then runs as vr-view.js runs it; the laser is the Line vr-view.js hangs on the group, read after scene.updateMatrixWorld() (what
 // the renderer does), and the hit test is vr-view.js's own setRay (taken from its source). For each mode the drawn laser's world origin / direction must be the
-// mode's (指先: index tip along the finger; 手のひら: the palm along the hand axis; 標準: the system's target ray, bit for bit) and the hit test must be the same ray.
+// mode's (指差し: the index tip along wrist -> index tip, only while pointing; ホーム方式: the pinch point along estimated shoulder -> pinch point; 標準: the system's target
+// ray, bit for bit) and the hit test must be the same ray.
 const viewSrc = readFileSync(new URL('../../docs/vr-view.js', import.meta.url), 'utf8');
 const hvQ = viewSrc.match(/\.\/vr-hand-view\.js(\?v=[^']+)/)[1];
 let createHandInput;
@@ -31,11 +32,19 @@ const P = { wrist: [0, 0, 0], 'thumb-metacarpal': [-0.025, -0.012, -0.025], 'thu
 const FX = { index: -0.022, middle: 0, ring: 0.02, pinky: 0.038 };
 for (const f of Object.keys(FX)) ['metacarpal', 'phalanx-proximal', 'phalanx-intermediate', 'phalanx-distal', 'tip'].forEach((n, i) => { P[`${f}-finger-${n}`] = [FX[f], [0, -0.004, -0.012, -0.022, -0.03][i], [-0.02, -0.09, -0.135, -0.16, -0.178][i]]; });
 const NAMES = Object.keys(P);
-const W = n => new THREE.Vector3(...P[n]).add(OFF);
+// the same hand pointing: the index as it is (straight), middle / ring / pinky curled into the palm (each joint bent 50 / 35 / 15 % of 180 deg toward -Y)
+const PT = { ...P };
+for (const f of ['middle', 'ring', 'pinky']) {
+  let q = [FX[f], 0, -0.02], a = 0; PT[`${f}-finger-metacarpal`] = q;
+  ['phalanx-proximal', 'phalanx-intermediate', 'phalanx-distal', 'tip'].forEach((n, i) => { a += 180 * [0, 0.5, 0.35, 0.15][i] * Math.PI / 180; const b = [0.065, 0.045, 0.025, 0.02][i]; q = [q[0], q[1] - Math.sin(a) * b, q[2] - Math.cos(a) * b]; PT[`${f}-finger-${n}`] = q; });
+}
+let pose = P;
+const W = n => new THREE.Vector3(...pose[n]).add(OFF);
 // the system's ray of a Quest hand: from the web between thumb and index, aimed from the shoulder through the hand (not along the fingers)
 const AIM_P = W('thumb-metacarpal').lerp(W('index-finger-phalanx-proximal'), 0.5), AIM_Q = new THREE.Quaternion().setFromEuler(new THREE.Euler(-0.25, 0.18, 0.05, 'YXZ'));
 
-function session(mode) {
+function session(mode, { pointing = false } = {}) {
+  pose = pointing ? PT : P;
   const hand = new Map(NAMES.map(n => [n, { jointName: n }])), src = { hand, handedness: 'right', targetRaySpace: { ray: true }, gripSpace: { grip: true }, profiles: [] };
   let aimP = AIM_P.clone(), aimQ = AIM_Q.clone(), gap = null;
   const mat = (p, q) => ({ matrix: new THREE.Matrix4().compose(p, q, new THREE.Vector3(1, 1, 1)).toArray() });
@@ -86,24 +95,35 @@ describe('the hand laser from a synthetic XRFrame: what is drawn and what is hit
     const press = s.events.find(e => e.own && e.type === 'selectstart');
     expect([press.o.x, press.o.y, press.o.z].every(Number.isFinite)).toBe(true);
   });
-  it('指先: the laser starts at the index fingertip and runs along the index finger (knuckle -> tip), not from the thumb web where the system ray starts', () => {
-    const s = session('between'); for (let i = 0; i < 60; i++) s.tick();
-    const want = { o: W('index-finger-tip'), d: W('index-finger-tip').sub(W('index-finger-phalanx-proximal')).normalize() };
-    sameRay(s.drawn(), want, 1e-3, 0.3); sameRay(s.hit(), s.drawn(), 1e-12, 1e-9);
-    expect(s.drawn().o.distanceTo(s.aim().o)).toBeGreaterThan(0.06); // ~9 cm ahead of the system ray's origin (the base of the thumb)
-    expect(deg(s.drawn().d, s.aim().d)).toBeGreaterThan(8);
+  it('指差し: while pointing, the laser starts at the index fingertip and runs along wrist -> index fingertip (nothing else mixed in); the hit test is the same ray', () => {
+    const s = session('point', { pointing: true }); for (let i = 0; i < 60; i++) s.tick();
+    expect(s.hi.rayOn(s.c)).toBe(true);
+    const want = { o: W('index-finger-tip'), d: W('index-finger-tip').sub(W('wrist')).normalize() };
+    sameRay(s.drawn(), want, 1e-6, 1e-4); sameRay(s.hit(), s.drawn(), 1e-12, 1e-9);
+    expect(s.drawn().o.distanceTo(s.aim().o)).toBeGreaterThan(0.06); // not the system ray's origin (the base of the thumb)
+    expect(deg(s.drawn().d, s.aim().d)).toBeGreaterThan(5); // ~5.8 deg off the system's aim on this hand
+    // a pinch while pointing: a press (vr-view.js's select handlers run), the laser stays on through it
+    s.setGap(0.008); for (let i = 0; i < 10; i++) { s.tick(); expect(s.hi.rayOn(s.c)).toBe(true); }
+    s.setGap(null); for (let i = 0; i < 10; i++) s.tick();
+    expect(s.events.filter(e => e.own).map(e => e.type)).toEqual(['selectstart', 'selectend']);
   });
-  it('手のひら: the laser starts at the palm centre (palm side) and runs along wrist -> middle knuckle', () => {
-    const s = session('wrist'); for (let i = 0; i < 60; i++) s.tick();
-    const wr = W('wrist'), kn = W('middle-finger-phalanx-proximal');
-    const want = { o: wr.clone().lerp(kn, PALM_FROM_WRIST).add(new THREE.Vector3(0, -PALM_RAY.palmSide, 0)), d: kn.clone().sub(wr).normalize() };
-    sameRay(s.drawn(), want, 1e-3, 0.3); sameRay(s.hit(), s.drawn(), 1e-12, 1e-9);
-    expect(s.drawn().o.distanceTo(s.aim().o)).toBeGreaterThan(0.02);
+  it('指差し: the relaxed (not pointing) hand has no laser and its pinch presses nothing; 標準 on the same hand is on', () => {
+    const s = session('point'); for (let i = 0; i < 60; i++) { s.tick(); expect(s.hi.rayOn(s.c)).toBe(false); }
+    s.setGap(0.008); for (let i = 0; i < 10; i++) s.tick(); s.setGap(null); for (let i = 0; i < 10; i++) s.tick();
+    expect(s.events.filter(e => e.own)).toEqual([]);
+    const t = session('standard'); for (let i = 0; i < 10; i++) { t.tick(); expect(t.hi.rayOn(t.c)).toBe(true); }
   });
-  it('the three modes give three different laser origins on the same hand, and the setting is read live (no restart)', () => {
-    const s = session('standard'), at = {};
-    for (const m of ['standard', 'between', 'wrist', 'standard']) { s.cur.mode = m; for (let i = 0; i < 60; i++) s.tick(); at[m] = s.drawn().o; sameRay(s.hit(), s.drawn(), 1e-12, 1e-9); }
-    expect(at.standard.distanceTo(AIM_P)).toBeLessThan(1e-9);
-    expect(at.between.distanceTo(at.standard)).toBeGreaterThan(0.05); expect(at.wrist.distanceTo(at.standard)).toBeGreaterThan(0.02); expect(at.between.distanceTo(at.wrist)).toBeGreaterThan(0.05);
+  it('ホーム方式: the laser starts 2 cm past the pinch point (thumb / index distal joints) and runs along estimated shoulder (0.13, 1.35, 0.13) -> pinch point', () => {
+    const s = session('home'); for (let i = 0; i < 60; i++) s.tick();
+    expect(s.hi.rayOn(s.c)).toBe(true);
+    const pp = W('thumb-phalanx-distal').lerp(W('index-finger-phalanx-distal'), 0.5), d = pp.clone().sub(new THREE.Vector3(0.13, 1.35, 0.13)).normalize();
+    sameRay(s.drawn(), { o: pp.clone().addScaledVector(d, HOME_RAY.originFwd), d }, 1e-6, 1e-4); sameRay(s.hit(), s.drawn(), 1e-12, 1e-9);
+  });
+  it('the three modes give three different lasers on the same hand, and the setting is read live (no restart)', () => {
+    const s = session('standard', { pointing: true }), at = {};
+    for (const m of ['standard', 'home', 'point', 'standard']) { s.cur.mode = m; for (let i = 0; i < 60; i++) s.tick(); at[m] = s.drawn(); sameRay(s.hit(), s.drawn(), 1e-12, 1e-9); }
+    expect(at.standard.o.distanceTo(AIM_P)).toBeLessThan(1e-9);
+    expect(at.point.o.distanceTo(at.standard.o)).toBeGreaterThan(0.05); expect(at.home.o.distanceTo(at.standard.o)).toBeGreaterThan(0.02); expect(at.point.o.distanceTo(at.home.o)).toBeGreaterThan(0.02);
+    expect(deg(at.point.d, at.home.d)).toBeGreaterThan(5);
   });
 });
