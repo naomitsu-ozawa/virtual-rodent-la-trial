@@ -22,7 +22,7 @@ export const SETTINGS_DEFAULTS={
  surfaceSmoothStrength:'0.60', // device default of its strength slider (0-6), same rule
  vrHighp:false,        // 設定 > デバッグ (debug-flags.js):: true = VR drawing in 32 bit, the same as ?vrprec=highp (read at page load; default 16 bit)
  eventMode:false,     // 体験会モード (設定 > 外観): level choice in the データ panel + the level's mission on the VR help board (event-mode-ui.js)
- handRay:'between',     // the hand's laser in VR (hand tracking only): 'between' (指の間: from the gap of thumb and index, along their bisector) / 'wrist' (手首から: along the arm) / 'standard' (標準: the system's ray); 設定 > 描画 and the VR menu's 表示 tab
+ handRay:'between',     // the hand's laser in VR (hand tracking only): 'between' (指先: from the index fingertip along the finger) / 'wrist' (手のひら: from the palm along the arm) / 'standard' (標準: the system's ray as it is); ids kept; 設定 > 描画 and the VR menu's 表示 tab
  gpuPreference:'auto'  // GPU for WebGPU: 'auto' (as before) / 'high-performance' / 'low-power'; honoured only on Linux / Windows (gpu-preference.js), applies after a reload
 };
 // pixel budgets (MP) per interaction tier / at rest; 'max' = no budget

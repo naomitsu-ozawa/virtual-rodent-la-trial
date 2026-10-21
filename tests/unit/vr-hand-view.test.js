@@ -40,13 +40,14 @@ function handPose(joints, { pos = new THREE.Vector3(0.15, 1.1, -0.35), rot = new
 const JOINTS = ['wrist', 'thumb-tip', 'thumb-metacarpal', ...Object.values(PREFIX).flatMap(f => SUFFIX.map(s => f + s))];
 const dirOf = h => new THREE.Vector3(0, 0, -1).applyQuaternion(h.getWorldQuaternion(new THREE.Quaternion()));
 
-function rig() {
+// mode: the hand laser setting
+function rig(mode = 'standard') {
   const headPos = new THREE.Vector3(0, 1.6, 0);
   const scene = new THREE.Scene(), hands = [0, 1].map(() => ({ joints: Object.fromEntries(JOINTS.map(n => [n, new THREE.Group()])) }));
   const controllers = [0, 1].map(() => { const g = new THREE.Group(); g.matrixAutoUpdate = false; scene.add(g); return g; });
   const events = [], released = [];
   const hi = createHandInput(THREE, {
-    renderer: { xr: { getHand: i => hands[i] } }, scene, controllers, ja: true, getHead: () => headPos, colorOf: () => 0xffffff,
+    renderer: { xr: { getHand: i => hands[i] } }, scene, controllers, ja: true, getHead: () => headPos, rayMode: () => mode, colorOf: () => 0xffffff,
     release: c => { released.push(c); c.userData.press = null; }, handInHolder: c => { const p = new THREE.Vector3(), qq = new THREE.Quaternion(); c.getWorldPosition(p); c.getWorldQuaternion(qq); return { p, q: qq }; },
     sectionOn: () => false, avail: () => true, grab: () => true, ungrab: () => {}, busy: () => false, near: null,
   });
@@ -67,7 +68,7 @@ function rig() {
     const c = controllers[1]; c.matrix.copy(ctrlPose); c.matrix.decompose(c.position, c.quaternion, c.scale); c.visible = true; c.updateMatrixWorld(true); };
   const frame = opts => { handPose(hands[0].joints, opts); writeRaw(opts?.visible ?? true); t += FRAME; vi.spyOn(performance, 'now').mockReturnValue(t); hi.frame(t); };
   const osEvent = type => { writeRaw(); controllers[0].dispatchEvent({ type, data: controllers[0].userData.source }); };
-  return { hi, controllers, events, released, frame, osEvent, sysRay, ctrlPose, headPos };
+  return { hi, controllers, events, released, frame, osEvent, sysRay, ctrlPose, headPos, tipOf: () => hands[0].joints['index-finger-tip'].position.clone() };
 }
 
 describe('vr-hand-view.js: the own pinch and the system select give one press', () => {
@@ -111,7 +112,7 @@ describe('vr-hand-view.js: no press without the system ray', () => {
     for (let i = 0; i < 4; i++) r.frame({ thumbGap: 0.06, visible: false });
     for (let i = 0; i < 6; i++) r.frame({ thumbGap: 0.01, visible: false });
     expect(r.events).toEqual([]);
-    const k = rig();
+    const k = rig('between'); // (標準 would hide the laser meanwhile, as the system does)
     for (let i = 0; i < 4; i++) k.frame({ thumbGap: 0.06 });
     for (let i = 0; i < 3; i++) k.frame({ thumbGap: 0.01 });
     for (let i = 0; i < 30; i++) k.frame({ thumbGap: 0.01, visible: false }); // 400 ms without the system ray: no cancel, no end
@@ -121,14 +122,15 @@ describe('vr-hand-view.js: no press without the system ray', () => {
   });
 });
 
-describe('vr-hand-view.js: the carried pinch drag', () => {
+describe('vr-hand-view.js: the carried pinch drag (指先 / 手のひら; 標準 has none)', () => {
   const at = h => h.getWorldPosition(new THREE.Vector3());
-  it('at the press the group keeps the system ray it had (no jump); then it follows the hand 1:1 and turns with the wrist, whatever the system ray does', () => {
-    const r = rig(), h = r.controllers[0], sys = new THREE.Vector3().setFromMatrixPosition(r.sysRay);
+  it('at the press the group keeps the ray it had (no jump); then it follows the hand 1:1 and turns with the wrist, whatever the system ray does', () => {
+    const r = rig('between'), h = r.controllers[0];
     for (let i = 0; i < 40; i++) r.frame({ thumbGap: 0.06 });
+    const before = at(h);
     r.frame({ thumbGap: 0.01 }); r.frame({ thumbGap: 0.01 });
     const p0 = r.events[0][2];
-    expect(p0.distanceTo(sys)).toBeLessThan(1e-6); // the press is at the system's own ray
+    expect(p0.distanceTo(before)).toBeLessThan(1e-3); // the press is where the laser was
     expect(r.hi.dragTh(h, h.userData.press)).not.toBeNull(); // the drag may start at once (no wait)
     const q0 = h.getWorldQuaternion(new THREE.Quaternion());
     // the hand moves 3 cm up and the wrist turns 30 deg (a fan stroke) while the system ray stays where it was
@@ -139,16 +141,25 @@ describe('vr-hand-view.js: the carried pinch drag', () => {
     const wrist0 = new THREE.Vector3(0.15, 1.1, -0.35), wrist1 = new THREE.Vector3(0.15, 1.13, -0.35);
     expect(at(h).distanceTo(p0.clone().sub(wrist0).applyQuaternion(turn).add(wrist1))).toBeLessThan(2e-3);
   });
-  it('after the release the group goes back to the system ray within blendMs (120 ms)', () => {
-    const r = rig(), h = r.controllers[0], pos = new THREE.Vector3(0.25, 1.1, -0.35), sys = new THREE.Vector3().setFromMatrixPosition(r.sysRay);
+  it('after the release the group goes back to the live (fingertip) ray', () => {
+    const r = rig('between'), h = r.controllers[0], pos = new THREE.Vector3(0.25, 1.1, -0.35), sys = new THREE.Vector3().setFromMatrixPosition(r.sysRay);
     for (let i = 0; i < 40; i++) r.frame({ thumbGap: 0.06 });
     for (let i = 0; i < 3; i++) r.frame({ thumbGap: 0.01 });
     for (let i = 0; i < 20; i++) r.frame({ thumbGap: 0.01, pos });
-    expect(at(h).distanceTo(sys)).toBeGreaterThan(0.09); // carried 10 cm away from the system ray
+    expect(at(h).distanceTo(sys)).toBeGreaterThan(0.09); // carried with the hand, away from the system ray
     for (let i = 0; i < 2; i++) r.frame({ thumbGap: 0.06, pos });
     expect(r.events.map(e => e[0])).toEqual(['start', 'end']);
-    for (let i = 0; i < 20; i++) r.frame({ thumbGap: 0.08, pos });
-    expect(at(h).distanceTo(sys)).toBeLessThan(2e-3);
+    for (let i = 0; i < 40; i++) r.frame({ thumbGap: 0.08, pos });
+    expect(at(h).distanceTo(r.tipOf())).toBeLessThan(2e-3);
+  });
+  it('標準: no carry: through a press with the hand moving and the wrist turning, the group stays exactly on the system ray of each frame', () => {
+    const r = rig('standard'), h = r.controllers[0], sys = () => new THREE.Vector3().setFromMatrixPosition(r.sysRay);
+    for (let i = 0; i < 20; i++) r.frame({ thumbGap: 0.06 });
+    const turn = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), 30 * deg);
+    for (let i = 0; i < 30; i++) { r.frame({ thumbGap: 0.01, pos: new THREE.Vector3(0.15, 1.1 + 0.002 * i, -0.35), rot: i > 10 ? turn : new THREE.Quaternion() }); expect(h.matrix.equals(r.sysRay)).toBe(true); }
+    expect(r.events.map(e => e[0])).toEqual(['start']); expect(r.events[0][2].distanceTo(sys())).toBeLessThan(1e-9);
+    for (let i = 0; i < 10; i++) { r.frame({ thumbGap: 0.06 }); expect(h.matrix.equals(r.sysRay)).toBe(true); }
+    expect(r.events.map(e => e[0])).toEqual(['start', 'end']);
   });
   it('the controller in the other slot: its pose is exactly what three wrote, no hand state, no events', () => {
     const r = rig(), c = r.controllers[1];
@@ -164,10 +175,10 @@ describe('vr-hand-view.js: the carried pinch drag', () => {
 });
 
 // the hand's ray is the system's own target ray, as it is
-describe('vr-hand-view.js: the system ray as it is, held through a short dropout', () => {
+describe('vr-hand-view.js: 標準 = the system ray as it is; the joint modes hold through a short dropout', () => {
   const at = h => h.getWorldPosition(new THREE.Vector3()), sysAt = (r, x, yaw) => r.sysRay.compose(new THREE.Vector3(x, 1.05, -0.45), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw), new THREE.Vector3(1, 1, 1));
-  it('the group is exactly the ray three wrote, every frame, with no filter or delay: a moving ray, an open hand, fingers closing, a pinch', () => {
-    const r = rig(), h = r.controllers[0];
+  it('標準: the group is exactly the ray three wrote, every frame, with no filter or delay: a moving ray, an open hand, fingers closing, a pinch', () => {
+    const r = rig('standard'), h = r.controllers[0];
     const gaps = [0.06, 0.05, 0.035, 0.025, 0.02, 0.025, 0.04, 0.06]; // fingers closing and opening, never into a press (that is the carried ray, below)
     for (let i = 0; i < 60; i++) {
       sysAt(r, 0.15 + 0.004 * i, -0.2 + 0.01 * Math.sin(i / 5)); r.frame({ thumbGap: gaps[i % gaps.length] });
@@ -175,26 +186,33 @@ describe('vr-hand-view.js: the system ray as it is, held through a short dropout
     }
     const t0 = sysAt(r, 0.5, 0.3); r.frame({ thumbGap: 0.06 }); expect(at(h).distanceTo(new THREE.Vector3().setFromMatrixPosition(t0))).toBeLessThan(1e-9); // one frame later: already there
   });
-  it('the system dropping the ray for under 200 ms: the laser stays on the last pose, shown, with no pinch starting; longer: the group is hidden as before; back: the live ray at once', () => {
-    const r = rig(), h = r.controllers[0]; for (let i = 0; i < 20; i++) r.frame({ thumbGap: 0.06 });
+  it('指先: the system dropping the ray for under 200 ms: the laser stays on the last pose, shown, with no pinch starting; longer: the group is hidden as before; back: shown again', () => {
+    const r = rig('between'), h = r.controllers[0]; for (let i = 0; i < 20; i++) r.frame({ thumbGap: 0.06 });
     const last = at(h), lastQ = h.getWorldQuaternion(new THREE.Quaternion());
     sysAt(r, 0.4, 0.5); // the system's ray has moved on, but it is not delivered while it is missing
     for (let i = 0; i < 12; i++) { r.frame({ thumbGap: 0.01, visible: false }); expect(h.visible).toBe(true); expect(at(h).distanceTo(last)).toBeLessThan(1e-6); expect(h.getWorldQuaternion(new THREE.Quaternion()).angleTo(lastQ)).toBeLessThan(1e-6); }
     expect(r.events).toEqual([]); // 167 ms of closed fingers while the ray is held: no press (a pinch needs the real ray)
     for (let i = 0; i < 6; i++) r.frame({ thumbGap: 0.06, visible: false });
     expect(h.visible).toBe(false); // 250 ms: the hold is over
-    r.frame({ thumbGap: 0.06 }); r.frame({ thumbGap: 0.06 }); expect(h.visible).toBe(true); expect(at(h).x).toBeCloseTo(0.4, 6); // (the first frame back after a loss is skipped: the filters start again)
+    r.frame({ thumbGap: 0.06 }); r.frame({ thumbGap: 0.06 }); expect(h.visible).toBe(true); // (the first frame back after a loss is skipped: the filters start again)
+    for (let i = 0; i < 30; i++) r.frame({ thumbGap: 0.06 }); expect(at(h).distanceTo(r.tipOf())).toBeLessThan(1e-3);
   });
-  it('a flickering ray (missing every 3rd frame for 1.5 s) never hides or jumps: the group is always on the last good ray', () => {
-    const r = rig(), h = r.controllers[0]; for (let i = 0; i < 20; i++) r.frame({ thumbGap: 0.06 });
+  it('標準: the system dropping the ray hides the laser at once, as the system does (no hold shown), no pinch starts; back: the system ray at once', () => {
+    const r = rig('standard'), h = r.controllers[0]; for (let i = 0; i < 20; i++) r.frame({ thumbGap: 0.06 });
+    for (let i = 0; i < 12; i++) { r.frame({ thumbGap: 0.01, visible: false }); expect(h.visible).toBe(false); }
+    expect(r.events).toEqual([]);
+    sysAt(r, 0.4, 0.5); r.frame({ thumbGap: 0.06 }); expect(h.visible).toBe(true); expect(h.matrix.equals(r.sysRay)).toBe(true);
+  });
+  it('指先: a flickering ray (missing every 3rd frame for 1.5 s) never hides or jumps: the group is always on the last good ray', () => {
+    const r = rig('between'), h = r.controllers[0]; for (let i = 0; i < 20; i++) r.frame({ thumbGap: 0.06 });
     let last = at(h);
     for (let i = 0; i < 108; i++) {
       const miss = i % 3 === 2; if (!miss) sysAt(r, 0.15 + 0.001 * i, -0.2); r.frame({ thumbGap: 0.06, visible: !miss });
       expect(h.visible).toBe(true); if (miss) expect(at(h).distanceTo(last)).toBeLessThan(1e-6); last = at(h);
     }
   });
-  it('a press that is held goes on through a ray dropout (the wrist keeps it alive) and its carried ray keeps being shown', () => {
-    const r = rig(), h = r.controllers[0]; for (let i = 0; i < 20; i++) r.frame({ thumbGap: 0.06 });
+  it('指先: a press that is held goes on through a ray dropout (the wrist keeps it alive) and its carried ray keeps being shown', () => {
+    const r = rig('between'), h = r.controllers[0]; for (let i = 0; i < 20; i++) r.frame({ thumbGap: 0.06 });
     r.frame({ thumbGap: 0.01 }); r.frame({ thumbGap: 0.01 }); expect(r.events.map(e => e[0])).toEqual(['start']);
     for (let i = 0; i < 12; i++) r.frame({ thumbGap: 0.01, visible: false }); expect(r.events.map(e => e[0])).toEqual(['start']); expect(h.visible).toBe(true);
     for (let i = 0; i < 2; i++) r.frame({ thumbGap: 0.06, visible: false }); expect(r.events.map(e => e[0])).toEqual(['start', 'end']);
