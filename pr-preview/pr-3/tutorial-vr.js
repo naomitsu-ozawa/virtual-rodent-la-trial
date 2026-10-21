@@ -1,11 +1,14 @@
 // チュートリアル on the VR help board (carousel: one page at a time). The board itself (vr-view.js makeMenu: grip move, ray hit) is the existing help board;
 // this module owns what is on it while the tutorial is on: createTutorialVr() wires the engine (tutorial-engine.js) to the 'vrl-tut-signal' events, the voice
 // (tutorial-audio.js) and the board's widgets. Pure apart from the injected engine / audio / document: unit-tested in tests/unit/tutorial-vr.test.js.
-// On / off: settings key tutorialMode (default false; only the settings switch sets it, no URL parameter). Off = nothing is created, the help board is as before.
-import { getTutorialEngine, resetTutorialAll } from './tutorial-ui.js?v=20261021-build640';
-import { createTutorialAudio, createStepReplay, speechFor, isFeedbackId } from './tutorial-audio.js?v=20261021-build640';
-import { resetPress, resetArmed, wrapWords } from './event-mode.js?v=20261021-build640';
-import { I18N, tr } from './i18n.js?v=20261021-build640';
+// On / off: settings key tutorialMode (default false; only the settings switch sets it, no URL parameter). Off = no engine is wired, no voice, no progress: the board shows the help (手順一覧) and
+// a 詳細 tab that opens a READ-ONLY preview of the steps (createTutorialPreview: its own cursor, nothing advances, nothing is saved, nothing is spoken).
+// the board has one tab strip under the page (panelTabs): 手順一覧 | 詳細. The unit is called ステップN (stepNoLabel); the pages inside a step are n/N only.
+import { getTutorialEngine, resetTutorialAll } from './tutorial-ui.js?v=20261021-build641';
+import { createTutorialAudio, createStepReplay, speechFor, isFeedbackId } from './tutorial-audio.js?v=20261021-build641';
+import { resetPress, resetArmed, wrapWords } from './event-mode.js?v=20261021-build641';
+import { I18N, tr } from './i18n.js?v=20261021-build641';
+import { TUTORIAL_MISSIONS } from './tutorial-data.js?v=20261021-build641';
 
 export const FLASH_MS = 1100;
 export function tutorialModeOn(api = globalThis.__vrlSettings) {
@@ -24,17 +27,26 @@ export function stepTexts(key, lang, dict = I18N) {
   return { text: ja, sub: lang === 'ja' ? '' : (dict.en?.[key] ?? '') };
 }
 const BTN = (id, label, o = {}) => ({ id, label, ...o });
+// 'ステップ3' / 'Step 3': the word of the language (tutStepWord) + the fixed number (M1..M7 = 1..7)
+export const stepNoLabel = (n, t = tr) => { const w = t('tutStepWord'); return /[A-Za-z]$/.test(w) ? `${w} ${n}` : `${w}${n}`; };
+// the tab strip under the board (the board is TAB_H taller than the 560 px page): 「手順一覧」 (= the existing help: the list of controls) | 「詳細」 (= the step slides). which = what is shown now
+// ('list' | 'detail'); that tab is lit, the other one switches (act(which)). The tutorial switch on starts on 詳細, off starts on 手順一覧 (and 詳細 is then a read-only preview).
+export const TAB_H = 72;
+export function panelTabs(which, { W = 820, H = 560, act = () => {}, t = tr } = {}) {
+  const M = 36, gap = 16, w = (W - 2 * M - gap) / 2, y = H + 8, h = TAB_H - 16;
+  return [['list', t('tutPanelList')], ['detail', t('tutPanelDetail')]].map(([id, label], i) => ({ x: M + i * (w + gap), y, w, h, label, size: 28, on: which === id, action: () => act(id) }));
+}
 // The page model of the board from an engine snapshot. kind: 'list' | 'step' | 'missionDone' | 'allDone'. buttons: [{id,label,disabled?,on?,warn?,size?}] in display order.
 export function buildPage({ engine, view = 'auto', input = 'ctrl', lang = 'ja', resetArmed: armed = false, t = tr, dict = I18N }) {
   const snap = engine.getState(), list = engine.listMissions(), pi = engine.pageInfo();
   const resetBtn = BTN('reset', armed ? t('tutResetAgain') : t('tutReset'), { warn: armed, size: 24 });
   const skipAllBtn = BTN('skipAll', t('tutSkipAll'), { size: 24 });
-  const titleOf = id => { const m = list.find(x => x.id === id); return m ? t(m.title) : ''; };
+  const nameOf = m => `${stepNoLabel(m.stepNo, t)} ${t(m.title)}`, titleOf = id => { const m = list.find(x => x.id === id); return m ? nameOf(m) : ''; };
   if (view === 'list' || !snap.mission) {
-    return { kind: 'list', title: t('tutTitle'), counter: '', missions: list.map(m => ({ id: m.id, label: t(m.title), status: m.status, done: m.done, current: m.current })),
+    return { kind: 'list', title: t('tutTitle'), counter: '', missions: list.map(m => ({ id: m.id, label: nameOf(m), status: m.status, done: m.done, current: m.current })),
       buttons: [skipAllBtn, resetBtn] };
   }
-  const mission = list.find(m => m.id === snap.mission), title = t(mission.title);
+  const mission = list.find(m => m.id === snap.mission), title = nameOf(mission);
   if (snap.finished) {
     const next = engine.nextMissionId();
     if (!next && engine.listMissions().every(m => m.status === 'unavailable' || m.done || m.optional)) {
@@ -83,8 +95,8 @@ export function layoutPage(page, { W = 820, H = 560, measure = () => 0, act = ()
 // the live controller. env: {engine?, audio?, getInput() -> 'ctrl'|'hand', lang, doc (EventTarget), now()}
 // ONE place that gets the engine: tutorial-ui.js getTutorialEngine (the page's single engine, kept on globalThis.__vrlTutorialEngine; it also wires the signals once)
 export function getEngine(opts = {}) { return getTutorialEngine(opts); }
-export function createTutorialVr({ engine, audio, getInput = () => 'ctrl', lang = 'ja', doc = globalThis.document, now = () => performance.now(), onChange = () => {}, arAvailable = false, hasAnalysis = false, moveTracker = null, resetUserState = null } = {}) {
-  const eng = engine || getEngine({ arAvailable, hasAnalysis });
+export function createTutorialVr({ engine, audio, getInput = () => 'ctrl', lang = 'ja', doc = globalThis.document, now = () => performance.now(), onChange = () => {}, arAvailable = false, moveTracker = null, resetUserState = null } = {}) {
+  const eng = engine || getEngine({ arAvailable });
   const voice = audio || createTutorialAudio({ getVoice: () => { try { return globalThis.__vrlSettings?.get?.('tutorialVoice') || 'F1'; } catch { return 'F1'; } } });
   let view = 'auto', rev = 1, armedUntil = 0, flashUntil = 0, flash = null, spoken = '';
   const replay = createStepReplay(() => { const s = eng.currentStep(); if (s && !eng.getState().finished) voice.play([s.audio]); });
@@ -136,4 +148,29 @@ export function createTutorialVr({ engine, audio, getInput = () => 'ctrl', lang 
     drawKey: () => `${rev}|${getInput()}|${armedUntil ? 1 : 0}|${flashUntil ? 1 : 0}`,
     dispose() { unsub(); if (ownWire) { doc?.removeEventListener?.('vrl-tut-signal', onSignal); try { globalThis.__vrlTutSignalWired = false; } catch { /* */ } } if (typeof voice.settle === 'function') voice.settle(isFeedbackId); else voice.stop(); replay.stop(); }, // the ✓ feedback that the closing signal (session-end) just earned is not cut off
   };
+}
+
+// the READ-ONLY preview of the steps (the board's チュートリアル view while the tutorial switch is OFF). No engine, no signals, no voice, no storage: only a cursor
+// (list / one page of one step) that 前へ / 次へ / 一覧 move. Pages are built from tutorial-data.js, the same texts as the real tutorial (hint.ctrl / hint.hand by the input in use).
+export function createTutorialPreview({ missions = TUTORIAL_MISSIONS, getInput = () => 'ctrl', lang = 'ja', onChange = () => {} } = {}) {
+  let mi = -1, si = 0, rev = 1;
+  const bump = () => { rev++; onChange(); };
+  function page(t = tr, dict = I18N) {
+    if (mi < 0) return { kind: 'list', title: t('tutTitle'), counter: '', missions: missions.map((m, i) => ({ id: m.id, label: `${stepNoLabel(i + 1, t)} ${t(m.title)}`, status: 'available', done: false, current: false })), buttons: [] };
+    const m = missions[mi], N = m.steps.length, tx = stepTexts(stepTextKey(m.steps[si], getInput()), lang, dict);
+    const marks = []; for (let i = 0; i < N; i++) marks.push(i < si ? t('tutDone') : i === si ? '●' : '○');
+    return { kind: 'step', title: `${stepNoLabel(mi + 1, t)} ${t(m.title)}`, counter: `${si + 1}/${N}`, marks: marks.join(' '), text: tx.text, sub: tx.sub,
+      buttons: [BTN('prev', t('tutPrev'), { disabled: si === 0 }), BTN('next', si === N - 1 ? t('tutFinish') : t('tutNext'), { on: true }), BTN('list', t('tutTitle'), { size: 24 })] };
+  }
+  function act(id) {
+    if (id.startsWith('start:')) { const i = missions.findIndex(m => m.id === id.slice(6)); if (i < 0) return false; mi = i; si = 0; bump(); return true; }
+    if (mi < 0) return false;
+    switch (id) {
+      case 'prev': if (si > 0) { si--; bump(); return true; } return false;
+      case 'next': if (si < missions[mi].steps.length - 1) si++; else mi = -1; bump(); return true; // the last page's 完了 goes back to the list
+      case 'list': mi = -1; si = 0; bump(); return true;
+    }
+    return false;
+  }
+  return { act, page, get rev() { return rev; }, widgets: (opts = {}) => layoutPage(page(), { ...opts, act }), drawKey: () => `${rev}|${getInput()}` };
 }

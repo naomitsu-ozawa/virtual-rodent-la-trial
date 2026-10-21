@@ -520,10 +520,10 @@ export function squareOutlineDist(p,h){
  const dy=Math.max(ay-h,0),dz=Math.max(az-h,0);
  return Math.sqrt(ax*ax+dy*dy+dz*dz);
 }
-// What a fist takes when several things are within `near`: the boards (menu, help, histogram, HU panel: the nearest, the listed order on a tie), else a
+// What a fist takes when several things are within `near`: the boards (menu, help, histogram, HU panel, mission board: the nearest, the listed order on a tie), else a
 // section (its frame / number tag; the nearest), else the volume (inside its box or within near). Sections rank above the volume on purpose: a palm inside the
 // box is at distance 0 from the volume and a section 2 cm away would never win otherwise. Each candidate is {kind,d,ref}; d = Infinity / NaN: not a candidate.
-export const NEAR_KINDS=['menu','help','hist','hu','section','volume'];
+export const NEAR_KINDS=['menu','help','hist','hu','section','volume','ev']; // 'ev' (the mission board) is last: appended so the indexes of the others stay; a board (group 0), lowest priority on a tie
 const nearGroup=k=>k==='volume'?2:k==='section'?1:0;
 export function pickNearGrab(cands,near=GRAB.near){
  let best=null,bg=9,bd=Infinity,bi=9;
