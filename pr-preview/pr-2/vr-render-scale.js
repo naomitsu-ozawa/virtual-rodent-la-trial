@@ -13,6 +13,7 @@ export const CAP_MIN = 0.1;        // the cap never goes below this (the volume 
 export const CAP_QUANT = 1 / 32;   // the cap moves in steps of 1/32 (rounded up: detail first)
 export const CAP_HYST = 2 / 32;    // ... and only drops once the new value is this far below (head bob does not make it flicker)
 export const NEAR_DEPTH = 0.02;    // m: depths below this count as "at the eye" (the box reaches past the near plane)
+export const NEAR_EXIT = 1.5;      // `inside` (cover = the whole viewport) leaves only when every corner is deeper than NEAR_DEPTH x this: head jitter at the 2 cm boundary no longer flips cover (and the ladder's jump rule) every frame
 export const FOVEA_HALF = 0.28;    // offscreen foveation: the sharp rect is +-28 % of the eye viewport around the optical axis (about +-30 deg on Quest 3)
 export const FOVEA_BAND = 0.05;    // ... blended into the periphery over the last 5 % of the viewport inside the rect
 export const FOVEA_K = [1, 0.75, 0.5]; // periphery scale relative to the centre, per the 周辺の簡略化 setting (なし / 中 / 強)
@@ -31,13 +32,14 @@ export function eyeMetrics(m, half, dims, view, proj, vw, vh, out = {}, box = nu
   const c0 = Math.hypot(m[0], m[1], m[2]), c1 = Math.hypot(m[4], m[5], m[6]), c2 = Math.hypot(m[8], m[9], m[10]);
   const voxel = Math.min(2 * half[0] / Math.max(1, dims[0]) * c0, 2 * half[1] / Math.max(1, dims[1]) * c1, 2 * half[2] / Math.max(1, dims[2]) * c2);
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity, far = -Infinity, inside = false;
+  const nearD = out.inside === true ? NEAR_DEPTH * NEAR_EXIT : NEAR_DEPTH; // hysteresis on the previous state of this out (one out per eye)
   const bh = box ? box.h : half, bcx = box ? box.c[0] : 0, bcy = box ? box.c[1] : 0, bcz = box ? box.c[2] : 0;
   for (let i = 0; i < 8; i++) {
     const ox = bcx + SX[i] * bh[0], oy = bcy + SY[i] * bh[1], oz = bcz + SZ[i] * bh[2];
     const wx = m[0] * ox + m[4] * oy + m[8] * oz + m[12], wy = m[1] * ox + m[5] * oy + m[9] * oz + m[13], wz = m[2] * ox + m[6] * oy + m[10] * oz + m[14];
     const x = view[0] * wx + view[4] * wy + view[8] * wz + view[12], y = view[1] * wx + view[5] * wy + view[9] * wz + view[13], z = view[2] * wx + view[6] * wy + view[10] * wz + view[14];
     const d = -z; if (d > far) far = d;
-    if (d < NEAR_DEPTH) { inside = true; continue; }
+    if (d < nearD) { inside = true; continue; }
     const cx = proj[0] * x + proj[4] * y + proj[8] * z + proj[12], cy = proj[1] * x + proj[5] * y + proj[9] * z + proj[13], w = proj[3] * x + proj[7] * y + proj[11] * z + proj[15];
     const px = (cx / w + 1) * 0.5 * vw, py = (cy / w + 1) * 0.5 * vh;
     if (px < minX) minX = px; if (px > maxX) maxX = px; if (py < minY) minY = py; if (py > maxY) maxY = py;
