@@ -8,12 +8,15 @@ const mem = (init = {}) => { const m = new Map(Object.entries(init)); return { g
 
 const src = f => readFileSync(new URL('../../docs/' + f, import.meta.url), 'utf8');
 
-describe('debug switch: VR 16-bit is the default; the one switch goes back to 32 bit', () => {
-  it('is the only switch, off by default, and exists in the settings defaults', () => {
-    expect(DEBUG_SWITCHES.map(d => d.id)).toEqual(['vrHighp']);
+describe('debug switch: VR 16-bit is the default; one switch goes back to 32 bit, one turns the creep skip off', () => {
+  it('has the two switches, off by default, and they exist in the settings defaults', () => {
+    expect(DEBUG_SWITCHES.map(d => d.id)).toEqual(['vrHighp', 'vrNoSkip']);
+    expect(debugFlag('vrNoSkip', mem())).toBe(false);
+    expect(SETTINGS_DEFAULTS.vrNoSkip).toBe(false);
+    expect(DEBUG_SWITCHES.find(d => d.id === 'vrNoSkip').when).toBe('vr'); // read when a VR session starts, no reload
     expect(debugFlag('vrHighp', mem())).toBe(false);
     expect(SETTINGS_DEFAULTS.vrHighp).toBe(false);
-    expect(DEBUG_SETTING_DEFAULTS).toEqual({ vrHighp: false });
+    expect(DEBUG_SETTING_DEFAULTS).toEqual({ vrHighp: false, vrNoSkip: false });
   });
   it('reads the settings JSON; broken JSON and unknown ids are off', () => {
     expect(debugFlag('vrHighp', mem({ 'vrl.settings.v1': JSON.stringify({ vrHighp: true }) }))).toBe(true);
@@ -35,10 +38,16 @@ describe('debug switch: VR 16-bit is the default; the one switch goes back to 32
     expect(vv).toMatch(/vrprec=\(mediump\|highp\)/);
     expect(vv).toContain("const VR_MEDIUMP=vrPrecParam==='mediump'||(vrPrecParam!=='highp'&&!effectiveFlag('vrHighp',false));");
   });
+  it('vr-view: the skip is on unless the switch; the 詳細 menu flips it live', () => {
+    const vv = src('vr-view.js');
+    expect(vv).not.toContain('vrNoSkipUrl');
+    expect(vv).toContain("settings.skipDiag=effectiveFlag('vrNoSkip',false)?0:1;");
+    expect(vv).toMatch(/choice\(y0\+830,[^\n]*settings\.skipDiag\|0/);
+  });
   it('reset goes back through setSetting', () => {
     const calls = {};
     resetDebugFlags((k, v) => { calls[k] = v; });
-    expect(calls).toEqual({ vrHighp: false });
+    expect(calls).toEqual({ vrHighp: false, vrNoSkip: false });
   });
 });
 
@@ -51,7 +60,7 @@ describe('call sites and texts', () => {
   });
   it('labels exist in both languages, and no text carries a link or a URL parameter', () => {
     const bad = /https?:|ui=|build=/i;
-    const keys = ['dbgTitle', 'dbgGroupLight', 'dbgVrPrec', 'dbgVrPrecNote', 'dbgReloadNote', 'dbgReload', 'dbgReset', 'dbgApplyReload'];
+    const keys = ['dbgTitle', 'dbgGroupLight', 'dbgVrPrec', 'dbgVrPrecNote', 'dbgVrNoSkip', 'dbgVrNoSkipNote', 'dbgApplyVr', 'dbgReloadNote', 'dbgReload', 'dbgReset', 'dbgApplyReload'];
     for (const k of keys) for (const lang of ['ja', 'en']) { expect(I18N[lang][k], `${lang}.${k}`).toBeTruthy(); expect(I18N[lang][k]).not.toMatch(bad); }
   });
 });

@@ -1,6 +1,6 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { currentLanguage, setCurrentLanguage } from './state.js?v=20261021-build637';
+import { currentLanguage, setCurrentLanguage } from './state.js?v=20261021-build638';
 export const I18N={
  ja:{
   subtitle:'マウス・実験動物画像のためのブラウザDICOM CTビューワー',
@@ -36,6 +36,7 @@ export const I18N={
   dbgTitle:'テスト機能（上級者向け）',dbgGroupLight:'軽さのテスト',dbgApplyReload:'再読み込みで反映',
   dbgVrPrec:'VR描画を32ビット精度に戻す（画質確認用）',dbgVrPrecNote:'ふだんは16ビット精度で軽く描きます。見た目の違いを確かめたいときだけオンにします。',
   dbgReloadNote:'再読み込みで反映される設定を変えました。',dbgReload:'再読み込み',dbgReset:'テスト設定を元に戻す',
+  dbgVrNoSkip:'VRの空き領域スキップを切る（速さの比較用）',dbgVrNoSkipNote:'ふだんは、表面のすぐ外側の空き領域を読み飛ばして軽く描きます（絵は同じです）。オンにすると読み飛ばしを止めます。VR の詳細メニューでも切り替えられます。',dbgApplyVr:'VRに入り直すと反映',
   evLv0Name:'骨梁',evLv0Mission:'骨の中のスポンジ構造を断面で観察しよう',evLv1Name:'マウス頭部',evLv1Mission:'断面で頭の中を観察しよう → 軟部組織を表示して、肺の構造を確かめよう',evLv2Name:'マウス腹部',evLv2Mission:'断面でおなかの中を観察しよう → 軟部組織を隠して脂肪を表示しよう → メニューで「解析モード」に切り替えよう → 脂肪にレーザーを向けるとラベルが出る（トリガーで固定）',evLv3Name:'ラット腹部',evLv3Mission:'断面で腹腔を観察しよう → 腎臓を探して、長さを測ろう',
   evHintSection:'断面：B/Y',evHintMove:'動かす：スティック上下',evHintToggle:'表示切り替え：A/X 長押しでメニュー',evHintMark:'印：トリガー',evHintDistance:'距離：印を長押し→距離',
   evSimple:'かんたん',evShow:'表示',evHide:'非表示',evMode:'モード',evModePoint:'ポイントモード',evModeAnalysis:'解析モード',evModeHintPoint:'トリガーを短く押すと印（ポイント）を記録',evModeHintAnalysis:'レーザーで解析結果の名前を表示、トリガーで固定',evAllSettings:'すべての設定',evExitVr:'VRを終了',evExitAr:'ARを終了',evReset:'最初の状態に戻す',evResetAgain:'もう一度押すとリセット',evResetDone:'最初の状態に戻しました',
@@ -74,6 +75,7 @@ export const I18N={
   dbgTitle:'Test features (advanced)',dbgGroupLight:'Lightness test',dbgApplyReload:'applies after a reload',
   dbgVrPrec:'Go back to 32-bit VR rendering (image check)',dbgVrPrecNote:'VR normally draws in lighter 16-bit precision. Turn this on only to compare the picture.',
   dbgReloadNote:'You changed a setting that applies after a reload.',dbgReload:'Reload',dbgReset:'Reset test settings',
+  dbgVrNoSkip:'Turn off the VR empty-space skip (speed comparison)',dbgVrNoSkipNote:'VR normally skips the empty space just outside a surface to draw faster (the picture is the same). Turn this on to stop the skipping. The VR details menu switches it too.',dbgApplyVr:'applies when you enter VR again',
   evLv0Name:'Trabecular bone',evLv0Mission:'Look at the sponge-like structure inside the bone in a section',evLv1Name:'Mouse head',evLv1Mission:'Look inside the head with a section → show the soft tissue and check the structure of the lungs',evLv2Name:'Mouse abdomen',evLv2Mission:'Look inside the belly with a section → hide the soft tissue and show the fat → in the menu, switch to "Analysis mode" → point the laser at the fat: its label appears (trigger pins it)',evLv3Name:'Rat abdomen',evLv3Mission:'Look at the abdominal cavity with a section → find a kidney and measure its length',
   evHintSection:'Section: B/Y',evHintMove:'Move: stick up / down',evHintToggle:'Show / hide: hold A/X for the menu',evHintMark:'Mark: trigger',evHintDistance:'Distance: hold a mark → Distance',
   evSimple:'Simple',evShow:'Show',evHide:'Hide',evMode:'Mode',evModePoint:'Point mode',evModeAnalysis:'Analysis mode',evModeHintPoint:'A short trigger press records a point (mark)',evModeHintAnalysis:'Laser on a result shows its name, trigger pins it',evAllSettings:'All settings',evExitVr:'Exit VR',evExitAr:'Exit AR',evReset:'Reset to start',evResetAgain:'Press again to reset',evResetDone:'Back to the starting state',
