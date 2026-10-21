@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { eyeMetrics, capFromPpv, nextCap } from '../../docs/vr-render-scale.js';
+const I = () => [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
 import { createAutoQuality, autoFloor, STEP_LEVELS, AUTO_FLOORS, AUTO_MID, GROW_SCALE, GROW_MAX_DROP, marchStep, STEP_VOXELS } from '../../docs/vr-auto-quality.js';
 
 const BUDGET = 1000 / 72;
@@ -506,5 +508,48 @@ describe('rungs below the data-resolution cap', () => {
   it('no cap (ceil = 1): the old behaviour, the floor is the user floor', () => {
     const { aq } = loop(3000, 1, { min: 0.5 }); expect(aq.f).toBeCloseTo(0.5, 6);
     const { aq: c } = loop(3000, 1, { min: 0.25 }); expect(c.f).toBeCloseTo(0.25, 6);
+  });
+});
+
+// the whole chain (eyeMetrics -> data-resolution cap -> ladder) with the head hovering at the 2 cm boundary of a box corner
+describe('hovering at the near boundary (inside hysteresis)', () => {
+  const FPS = 72, VW = 1000, VH = 1000;
+  const P = (() => { const n = 0.05, f = 100; return [n / (n), 0, 0, 0, 0, 1, 0, 0, 0, 0, -(f + n) / (f - n), -1, 0, 0, -2 * f * n / (f - n), 0]; })();
+  const yaw = Math.PI / 6, cy = Math.cos(yaw), sy = Math.sin(yaw), sc = 0.1, SUMABS = sc * (Math.abs(sy) + Math.abs(cy)); // the nearest corner lies SUMABS in front of the centre
+  // the box (half 1 x 1 x 1 scaled by sc, turned about y) centred d in front and 0.35 m to the side: one corner comes nearest; near = depth of that corner
+  const modelAt = near => { const d = near + SUMABS; return [sc * cy, 0, -sc * sy, 0, 0, sc, 0, 0, sc * sy, 0, sc * cy, 0, 0.12, 0, -d, 1]; };
+  const hover = ({ hysteresis, K, near = n => 0.02 + 0.003 * Math.sin(n * 0.9) + 0.0015 * Math.sin(n * 2.3), T = 40 }) => {
+    const aq = createAutoQuality({ min: 0.5 }); let cap = 1, out = {}, flips = 0, last = null, lc = 0, lastF = null, slow = 0, fr = 0, jumpAt = -1; const fs = [];
+    for (let t = 0; t < T * FPS; t++) {
+      const n = t < 6 * FPS ? 0.2 - 0.18 * t / (6 * FPS) : near(t);
+      if (!hysteresis) out = {};
+      eyeMetrics(modelAt(n), [1, 1, 1], [64, 64, 64], I(), P, VW, VH, out);
+      const cover = out.cover * 2;
+      if (out.cover > 0) cap = nextCap(cap, capFromPpv(out.ppvCenter, out.ppvFar));
+      aq.setCeiling(cap);
+      if (last !== null && last !== out.inside) flips++; last = out.inside;
+      const f = aq.f, vol = K * Math.min(1, cover / (2 * VW * VH)) * f * f; fr++; if (vol + 1.5 > BUDGET) slow++;
+      if (t % (FPS / 2) === 0) aq.update({ volMs: f < 1 ? vol : 0, mainMs: f < 1 ? 1.5 : vol + 1.5, interval: Math.max(BUDGET, vol + 1.5), budget: BUDGET, ctx: 'a', cover });
+      if (lastF !== null && aq.f !== lastF) lc++; lastF = aq.f; fs.push(aq.f);
+    }
+    return { flips, lc, slowPct: 100 * slow / fr, fs, cap };
+  };
+  it('the chain is exercised: the corner crossing makes the covered pixels jump by more than the ladder\'s JUMP', () => {
+    const a = eyeMetrics(modelAt(0.021), [1, 1, 1], [64, 64, 64], I(), P, VW, VH, {}), b = eyeMetrics(modelAt(0.019), [1, 1, 1], [64, 64, 64], I(), P, VW, VH, {});
+    expect(b.inside).toBe(true); expect(a.inside).toBe(false); expect(b.cover / a.cover).toBeGreaterThan(1.3);
+  });
+  for (const K of [300, 600]) it(`K ${K}: with the hysteresis the level and the cap do not flip-flop; without it (old behaviour) they do`, () => {
+    const withH = hover({ hysteresis: true, K }), old = hover({ hysteresis: false, K });
+    expect(old.flips).toBeGreaterThan(50); expect(old.lc).toBeGreaterThan(15);   // the old chain: a level change every second or so
+    expect(withH.flips).toBeLessThanOrEqual(1); expect(withH.lc).toBeLessThanOrEqual(6);
+    expect(withH.slowPct).toBeLessThan(old.slowPct);
+  });
+  it('a sustained overload still lowers the level in the same windows (the ladder itself is unchanged)', () => {
+    // far from the box (no inside at all): constant cover, constant over timings: identical to a ladder fed without the render-scale chain
+    const a = createAutoQuality(), b = createAutoQuality(); const ta = [], tb = [];
+    for (let i = 0; i < 30; i++) { a.update({ ...sample(a, 40), ctx: 'x', cover: 500000 }); ta.push(a.f); b.update({ ...sample(b, 40), ctx: 'x', cover: 500000 }); tb.push(b.f); }
+    expect(ta).toEqual(tb); expect(ta[1]).toBeLessThan(1);          // down within two windows (1 s): DOWN_N
+    // and at the boundary: the entry (a real jump of the covered pixels) lowers the level on the first over window
+    const h = hover({ hysteresis: true, K: 300 }); expect(Math.min(...h.fs.slice(6 * FPS))).toBeLessThan(h.fs[6 * FPS - 1]);
   });
 });

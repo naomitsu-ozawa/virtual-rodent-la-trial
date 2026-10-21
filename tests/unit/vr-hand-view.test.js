@@ -123,7 +123,7 @@ describe('vr-hand-view.js: no press without the system ray', () => {
   });
 });
 
-describe('vr-hand-view.js: the carried pinch drag (指差し; 標準 and ホーム方式 have none)', () => {
+describe('vr-hand-view.js: the carried pinch drag (指差し; 標準 has none)', () => {
   const at = h => h.getWorldPosition(new THREE.Vector3());
   it('at the press the group keeps the ray it had (no jump); then it follows the hand 1:1 and turns with the wrist, whatever the system ray does', () => {
     const r = rig('point'), h = r.controllers[0];

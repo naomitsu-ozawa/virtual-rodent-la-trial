@@ -108,7 +108,7 @@ describe('vr-view.js: hand tracking is optional and every hand branch is guarded
   });
   it('every other handIn / wrist use in vr-view.js is behind isHand() or comes from a hand-only call', () => {
     const own = ['import ', 'const handIn=createHandInput(', "session.addEventListener('end',()=>handIn.dispose()", "for(const t of ['selectstart','selectend'])"];
-    const handOnlyApi = ['handIn.frame(', 'handIn.wristHit(', 'handIn.hover(', 'handIn.wristId(', 'handIn.anyHand()', 'handIn.drop(c)', 'handIn.connect(', 'handIn.flash(', 'handIn.dragTh(', 'handIn.holder(', 'handIn.grabbing(', 'handIn.reach(', 'handIn.wristShown', 'handIn.rayOn(', 'handIn.drawLaser('];
+    const handOnlyApi = ['handIn.frame(', 'handIn.wristHit(', 'handIn.hover(', 'handIn.wristId(', 'handIn.anyHand()', 'handIn.drop(c)', 'handIn.connect(', 'handIn.flash(', 'handIn.dragTh(', 'handIn.holder(', 'handIn.grabbing(', 'handIn.reach(', 'handIn.wristShown', 'handIn.rayOn('];
     for (const l of src.split('\n').filter(x => /handIn\.|bd\.wrist|o\.wrist|HAND_LABEL_MOVE_M/.test(x))) {
       if (own.some(w => l.includes(w))) continue;
       const ok = l.includes('isHand(') || l.includes('c.userData.hs') || handOnlyApi.some(w => l.includes(w)) || /bd\.wrist|o\.wrist/.test(l);
@@ -117,7 +117,6 @@ describe('vr-view.js: hand tracking is optional and every hand branch is guarded
     // the hand-only API checks the input source itself
     expect(bodyAfter(hv, 'connect(c,i){')).toMatch(/^if\(!isHand\(c\.userData\.source\)\)return;/);
     expect(bodyAfter(hv, 'rayOn(c){')).toMatch(/^const hs=c\.userData\.hs;return!isHand\(c\.userData\.source\)\|\|!hs\|\|/); // a controller's ray is always on
-    expect(bodyAfter(hv, 'drawLaser(c,dist,cursorOn,at,now){')).toContain('isHand(c.userData.source)');
     expect(bodyAfter(hv, 'flash(c,amp,ms){')).toContain('if(!isHand(c.userData.source)||!hs)return;');
     expect(bodyAfter(hv, 'wristHit(c,raycaster,setRay){').trimStart()).toMatch(/^if\(!isHand\(c\.userData\.source\)\|\|!wrist\.visible\|\|c===leftC\)return null;/);
     expect(bodyAfter(hv, 'frame(now){')).toContain('if(!isHand(s)){ctrl=true;continue}');
