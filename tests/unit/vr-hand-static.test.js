@@ -133,7 +133,7 @@ describe('vr-view.js: hand tracking is optional and every hand branch is guarded
   });
   it('the pre-existing pinned lines are untouched (the controller laser / board order)', () => {
     expect(src).toContain("{const top=!!rh||res.kind==='point'||res.kind==='mlabel'||res.kind==='section'||!!bd.hu;ray.renderOrder=dot.renderOrder=bd.hu?11:top?8:0;");
-    expect(src).toContain("for(const k of ['menu','help','hist','wheel','pwheel','undoBtn','hu','ev'])");
+    expect(src).toContain("for(const k of ['menu','help','hist','wheel','pwheel','undoBtn','hu'])");
     expect(src).toContain('c.userData.gate.update(c.userData.source?.gamepad?.axes?.[2]||0,ay,performance.now());'); // a hand has no gamepad axes: 0 -> the gate always allows recording
     expect(src).toContain('const ay=c.userData.source?.gamepad?.axes?.[3]||0');
     expect(src).toContain('const bt=c.userData.source?.gamepad,ax=bt?.axes?.[2]||0,ay=bt?.axes?.[3]||0;');
@@ -242,7 +242,7 @@ describe('nearGrabTarget run from its own source (units, scales, priorities)', (
     const palm = new THREE.Object3D(), ctrl = { userData: { source: { hand: {} } } };
     const x = {
       THREE, isHand: s => !!(s && s.hand), NEAR_KINDS, pickNearGrab, boxDist, centeredBoxDist, squareOutlineDist,
-      holdOf: c => (c === ctrl ? palm : c), ui: { open: false }, menuHeld: null, helpHeld: null, histHeld: null, huHeld: null, evHeld: null, ev: null,
+      holdOf: c => (c === ctrl ? palm : c), ui: { open: false }, menuHeld: null, helpHeld: null, histHeld: null, huHeld: null,
       menu: { mesh: plane(0.5, 0.3, new THREE.Vector3(0.8, 1.3, -0.5)) }, help: { mesh: plane(0.4, 0.3, new THREE.Vector3(-0.8, 1.3, -0.5)) },
       hist: { isOpen: false, group: new THREE.Group(), board: plane(0.4, 0.3, new THREE.Vector3(0, 2, -0.5)) },
       huLine: { panel: plane(0.3, 0.2, new THREE.Vector3(0, 0.5, -0.5)), isDragging: () => false },
@@ -258,13 +258,6 @@ describe('nearGrabTarget run from its own source (units, scales, priorities)', (
     expect(at(0.1, 1.3, -0.5).kind).toBe('volume'); // exactly on the face (1 unit = 10 cm)
     expect(at(0.14, 1.3, -0.5).kind).toBe('volume'); // 4 cm outside
     expect(at(0.16, 1.3, -0.5)).toBe(null); // 6 cm outside
-  });
-  it('the mission board (ev) is a board candidate like the others: in reach it wins over the volume it overlaps; hidden, held, or no mission: no candidate', () => {
-    const { x, at } = make(); const m = plane(0.3, 0.1, new THREE.Vector3(0.0, 1.3, -0.5)); x.ev = { mesh: m }; m.visible = true;
-    expect(at(0, 1.3, -0.5).kind).toBe('ev'); // inside the volume's box too: a board outranks the volume
-    m.visible = false; expect(at(0, 1.3, -0.5).kind).toBe('volume');
-    m.visible = true; x.evHeld = {}; expect(at(0, 1.3, -0.5).kind).toBe('volume');
-    x.evHeld = null; x.ev = null; expect(at(0, 1.3, -0.5).kind).toBe('volume'); // no mission board at all
   });
   it("a controller (holdOf(c) is c) never gets a target", () => {
     const { x, ctrl } = make(); x.holdOf = c => c;
@@ -306,7 +299,7 @@ describe('disconnect releases everything the input held', () => {
     const attach = vi.fn();
     return {
       c, attach, endDrag: vi.fn(), huLine: { cancelDragOf: vi.fn(), panel: {} }, wheelOwner: null, closeWheel: vi.fn(), pw: null, closePointWheel: vi.fn(),
-      histAxis: null, histAxisEnd: vi.fn(), histHeld: null, hist: { group: {} }, huHeld: null, evHeld: null, ev: null, scene: { attach },
+      histAxis: null, histAxisEnd: vi.fn(), histHeld: null, hist: { group: {} }, huHeld: null, scene: { attach },
       grabbing: new Set(), regrab: vi.fn(), menuHeld: null, menu: { mesh: { n: 'menu' } }, helpHeld: null, help: { mesh: { n: 'help' }, refresh: vi.fn() },
       dragging: null, saveSettings: vi.fn(), settings: {}, ring: { parent: null, visible: true }, handIn: { drop: vi.fn() },
     };
@@ -345,18 +338,17 @@ describe('disconnect releases everything the input held', () => {
 });
 
 // 体験会モード x hands: the help board keeps the mission block AND switches to the hand wording
-describe('help board: hand wording (the mission is its own board)', () => {
+describe('help board: event-mode mission + hand wording together', () => {
   const draw = src.slice(src.indexOf('help.onDraw(()=>{'), src.indexOf('return w;', src.indexOf('help.onDraw(()=>{')));
-  it('the help board has no mission block any more (own board) and uses hand lines when a hand is the input', () => {
+  it('draws the mission block and uses hand lines when a hand is the input', () => {
     expect(draw).toContain('handIn.anyHand()?handIn.texts:null');
-    expect(draw).not.toContain('evH');
-    expect(draw).toContain('y:60,text:L.helpT');
-    expect(draw).toContain('y:140+i*HELP_LINE_PITCH');
-    expect(draw).toContain('w.push(...tabs)');
+    expect(draw).toContain('if(evH){');
+    expect(draw).toContain('y:60+evH');
+    expect(draw).toContain('140+evH+i*HELP_LINE_PITCH');
   });
   it('the かんたん menu (tab 10, buttons only) gets the no-slider hand line, and the board redraws when it opens', () => {
     expect(draw).toContain('ui.tab===10?hx.helpMenuSimple:hx.helpMenu');
-    expect(src).toContain('[section.on,ui.open,ui.open&&ui.tab===10,helpShow].join()');
+    expect(src).toContain('[section.on,ui.open,ui.open&&ui.tab===10].join()');
   });
 });
 

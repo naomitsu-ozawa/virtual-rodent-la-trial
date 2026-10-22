@@ -53,7 +53,7 @@ function world({ hand }) {
     isHand: s => !!(s && s.hand), holdOf: x => (x.wrist ? anchor : x), anchorInHolder: x => ({ p: { x: 0, y: 0, z: 0.3 }, q: { ...x.wrist } }),
     handInHolder: x => ({ p: { ...x.ray.p }, q: { ...x.ray.q } }), holder: { getWorldScale: v => v.set(1, 1, 1) }, tmpHs: new THREE.Vector3(),
     handIn: { dragTh: () => DRAG_HAND }, twoHand: null, grabbing: new Set(), vrHalfExt: [0.1, 0.1, 0.1], planes: [pl], draggedBy: () => false, section: { selected: pl },
-    pulse() {}, emit() {}, HAPTIC: { select: {} }, drawHandle() {}, menu: { refresh() {} }, openPointWheel() {}, pulseTwice() {}, resetPin() {},
+    pulse() {}, HAPTIC: { select: {} }, drawHandle() {}, menu: { refresh() {} }, openPointWheel() {}, pulseTwice() {}, resetPin() {},
     sectionFollowStart, sectionFollowStep, sectionWristTurn, dragShouldStart, DRAG_RECORD, qAngleDeg, qMul, qInv,
   };
   const names = Object.keys(env);

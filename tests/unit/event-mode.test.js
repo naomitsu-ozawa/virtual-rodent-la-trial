@@ -387,22 +387,20 @@ describe('static wiring', () => {
     expect(read('ui-shell.js')).toContain('<input id="set-event-mode" type="checkbox">');
     expect(read('app.js')).toMatch(/addEventListener\('vrl-event-sample',e=>\{[^\n]*e\.detail\.done=startSample\(id\)/);
   });
-  it('the help board has its normal page height (+ the tab strip) and the mission is its own board, only made when there is a mission', () => {
+  it('the VR help board keeps its size and layout without a mission', () => {
     const src = read('vr-view.js');
-    expect(src).toContain('const help=makeMenu(820,560+TAB_H,HELP_WIDTH)');
+    expect(src).toContain('const help=makeMenu(820,560+evH,HELP_WIDTH)');
     expect(src).toContain('evH=evLines.length?');
     expect(src).toContain(':[],evH=');
-    expect(src).toContain('const ev=evH?makeMenu(820,evH+10,EV_WIDTH):null;');
-    expect(src).toMatch(/y:60,text:L\.helpT/);
-    expect(src).toMatch(/y:140\+i\*HELP_LINE_PITCH/);
-    expect(src).not.toMatch(/\+evH\+i/);
+    expect(src).toMatch(/y:60\+evH,text:L\.helpT/);
+    expect(src).toMatch(/y:140\+evH\+i\*HELP_LINE_PITCH/);
   });
   it('VR / AR start with the menu board closed, or open on the かんたん menu in event mode; A/X long press and the ring still open it', () => {
     const src = read('vr-view.js');
     expect(src).toContain("const evMenu=eventModeOn();let evLabels=TRIGGER_AT_START==='label';");
     expect(src).toContain('const menu=makeMenu(MENU_W,MENU_H,MENU_WIDTH);menu.mesh.visible=evMenu;scene.add(menu.mesh);');
     expect(src).toContain('const ui={sliceClear:false,tab:evMenu?10:0,open:evMenu,');
-    expect(src).toContain('const setMenuOpen=open=>{if(open)emit(\'menu-open\');else emit(\'menu-close\');ui.open=open;menu.mesh.visible=open;if(open){placeMenuNow();ui.probeOnOpen=true}menu.refresh()};');
+    expect(src).toContain('const setMenuOpen=open=>{ui.open=open;menu.mesh.visible=open;if(open){placeMenuNow();ui.probeOnOpen=true}menu.refresh()};');
     expect(src).toContain("if(!ui.open){setMenuOpen(true);pulseTwice(c)}");
     expect(src).toContain("case'menu':setMenuOpen(!ui.open);break;");
     expect(src).toContain('const menuHit=c=>{if(!ui.open)return null;');
@@ -416,7 +414,7 @@ describe('static wiring', () => {
     expect(block).toContain('trigger:{show:triggerModeRow(hasRes),label:evLabelOn()}');
     expect(block).not.toMatch(/activeEventLevel|level:|lv\b/); // nothing level-dependent
     // the actions behind the layout's widget ids: 断面 (B/Y's setSection), the trigger switch, 元に戻す (the ring's undo), すべての設定 -> the full menu, 終了 = the full menu's session.end()
-    expect(src).toContain("const acts={section:v=>setSection(v),'trigger:point':()=>{evLabels=false},'trigger:label':()=>{evLabels=true;emit('trigger-label')},undo:()=>{undoLast()},home:goHome,reset:pressReset,all:()=>{ui.tab=0},exit:()=>session.end()};");
+    expect(src).toContain("const acts={section:v=>setSection(v),'trigger:point':()=>{evLabels=false},'trigger:label':()=>{evLabels=true},undo:()=>{undoLast()},home:goHome,reset:pressReset,all:()=>{ui.tab=0},exit:()=>session.end()};");
     expect(src).toContain("exit:tr(mode==='ar'?'evExitAr':'evExitVr')");
     expect(src).toContain("btn(MENU_W-X-260,yb,260,L.exit,true,()=>session.end(),{color:'#b33'})"); // the full menu's own exit, unchanged
     // who decides what the trigger does: label mode only when the switch says so AND the data has results (or the 解析 tab is open, as before)

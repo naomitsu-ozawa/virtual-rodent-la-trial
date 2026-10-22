@@ -232,9 +232,9 @@ describe('vr-view.js wiring (static)', () => {
     expect(src).toContain('secUndo.push(snap,performance.now())');
   });
   it('the undo board is laser-clickable: part of boardHits, handled in selectstart before the help board, hidden until a delete', () => {
-    expect(src).toContain("for(const k of ['menu','help','hist','wheel','pwheel','undoBtn','hu','ev'])"); // + the histogram board,: + the HU line's live panel
+    expect(src).toContain("for(const k of ['menu','help','hist','wheel','pwheel','undoBtn','hu'])"); // + the histogram board,: + the HU line's live panel
     expect(src).toContain('if(bd.undoBtn){restoreSection(c);return}');
-    expect(src.indexOf('if(bd.undoBtn){restoreSection(c);return}')).toBeLessThan(src.indexOf('if(bd.hu||bd.ev)return;'));
+    expect(src.indexOf('if(bd.undoBtn){restoreSection(c);return}')).toBeLessThan(src.indexOf('if(bd.help||bd.hu)return;'));
     expect(read('vr-undo-button.js')).toContain('mesh.visible = false');
   });
   it('the 断面 tab 削除 button goes through the same undoable delete', () => { expect(src).toContain('L.remove,false,()=>deleteSection(pl)'); });
