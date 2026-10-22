@@ -2,7 +2,7 @@
 // (the subtitles / texts carry the tutorial alone). One female voice only (user decision): docs/tutorial/audio/F1/<id>.m4a; settings tutorialVoice 'off' = silent (subtitles only), anything else = F1.
 export const AUDIO_BASE = './tutorial/audio/';
 export const DEFAULT_VOICE = 'F1';
-const AUDIO_QUERY = '?v=20261021-build641'; // same cache-busting form as the other assets (tools/bump-build.mjs rewrites it); the .m4a file name / id is unchanged
+const AUDIO_QUERY = '?v=20261022-build642'; // same cache-busting form as the other assets (tools/bump-build.mjs rewrites it); the .m4a file name / id is unchanged
 export const voiceOf = v => (v === 'off' ? 'off' : DEFAULT_VOICE);
 export const audioSrc = (voice, id, base = AUDIO_BASE) => (!id || voiceOf(voice) === 'off' ? null : `${base}${DEFAULT_VOICE}/${id}.m4a${AUDIO_QUERY}`);
 // ids to speak for one engine snapshot, in order: the earned feedback first (stepClear: ok1..3; missionClear / allClear), then the new step's own voice.
@@ -50,5 +50,28 @@ export function createStepReplay(onReplay) {
     reset(now, timeoutHint) { at = now; hint = timeoutHint > 0 ? timeoutHint : 0; armed = hint > 0; },
     stop() { armed = false; },
     tick(now) { if (armed && now - at >= hint) { armed = false; try { onReplay(); } catch { /* */ } return true; } return false; },
+  };
+}
+// the success sound (a short two-note chime, made with Web Audio: no file) that goes with the ✓ when a page of a step is done. Silent when the voice setting is
+// 'off' or there is no AudioContext (tests, old browsers); one context, made on the first chime. Returns true when a chime was started.
+export const CHIME_NOTES = Object.freeze([[1046.5, 0, 0.12], [1568, 0.09, 0.22]]); // [Hz, start s, length s]: C6 then G6
+export function createChime({ getVoice = () => DEFAULT_VOICE, Ctx = globalThis.AudioContext || globalThis.webkitAudioContext, gain = 0.18 } = {}) {
+  let ctx = null;
+  return {
+    play() {
+      if (voiceOf(getVoice()) === 'off' || typeof Ctx !== 'function') return false;
+      try {
+        ctx ||= new Ctx(); if (ctx.state === 'suspended' && ctx.resume) ctx.resume().catch(() => {});
+        const t0 = ctx.currentTime + 0.01;
+        for (const [hz, at, len] of CHIME_NOTES) {
+          const o = ctx.createOscillator(), g = ctx.createGain(), s = t0 + at;
+          o.type = 'sine'; o.frequency.setValueAtTime(hz, s);
+          g.gain.setValueAtTime(0.0001, s); g.gain.exponentialRampToValueAtTime(gain, s + 0.015); g.gain.exponentialRampToValueAtTime(0.0001, s + len);
+          o.connect(g); g.connect(ctx.destination); o.start(s); o.stop(s + len + 0.02);
+        }
+        return true;
+      } catch { return false; }
+    },
+    close() { try { ctx?.close?.(); } catch { /* */ } ctx = null; },
   };
 }
