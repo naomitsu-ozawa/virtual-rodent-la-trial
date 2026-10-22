@@ -36,7 +36,11 @@ export const HIST_WIDTH = 0.46;
 // line of sight: its bottom edge is 6 deg above the eyes (the volume / its section frame reach about 5 deg at most), its top 27 deg. 0.8 m wide (the help board is 0.45 m): 40 deg across at that distance
 // (the help board 28 deg), its canvas 1280 px = the slide picture's own width. The boards at the sides (menu left, help right, 50 deg out) are untouched. It follows the head like the help board
 // (settings.help: 1 = lazily, 2 = fixed); grip moves it, 正面に戻す puts it back.
-export const EV_OFFSET = { fwd: 1.1, left: 0, down: -0.341 };
+// on the right, straight above the help board (the same 50 deg), at 1.1 m so it keeps its size in the view (40 deg across).
+// The help board's top edge is 4.7 cm below the eyes (0.254 - its 0.414 m / 2): 3 deg down at 0.9 m; the mission board's lower edge is 1.9 cm above the eyes (1 deg up at 1.1 m),
+// its top 23 deg up. Centre 0.244 m above the eyes (0.019 + its 0.45 m / 2). The volume (centre, at most 15 deg out) and the menu (left) are clear of it.
+export const EV_DIST = 1.1;
+export const EV_OFFSET = aside(-BOARD_YAW_DEG, -0.244, EV_DIST);
 export const EV_WIDTH = 0.8, EV_RES = 1280 / 820;
 export const boardDistance = o => Math.hypot(o.fwd, o.left, o.down);
 // head: {x,y,z}; fwd / left: unit horizontal vectors {x,z}
