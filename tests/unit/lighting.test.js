@@ -188,7 +188,10 @@ describe('every view uses the shared lighting (static)', () => {
     expect(src.match(/vrlShade\(n,viewDir,vLightOff,vrlDepth01\(capAt,o,halfExt\),0\.0,segM\[ci\]\.xyz\)/g)).toHaveLength(2);
     expect(src).toContain('uniform vec4 segM[4];');
     expect(src.match(/vrlShade\(/g)).toHaveLength(6); // every call site passes the segment's material
-    expect(src.match(/bool later=acc\.a>0\.0&&!(simple|hitSimple);/g)).toHaveLength(4);
+    expect(src.match(/bool later=acc\.a>0\.0&&!(simple|hitSimple)&&!face;/g)).toHaveLength(4);
+    // entry face: a hit within one step of the box face the ray enters through takes the flat face normal (the gradient is one-sided noise there) at all 4 surface-hit sites, no gradient fetches for it
+    expect(src.match(/bool face=!(simple|hitSimple)&&hi<=faceEnd;vec3 n=(simple|hitSimple)\?-dir:\(face\?entryFaceNormal\(o,dir\):gradientAt\(tc\)\);/g)).toHaveLength(4);
+    expect(src).toContain('float faceEnd=(bounds.x>0.0&&t<=bounds.x+1e-4)?bounds.x+step:-1.0;');
     // the local mean HU the outward side is judged by costs no extra fetch: it is the mean of the fetches of the gradient itself
     expect(src).toMatch(/gHuMean=\(xp\+xm\+yp\+ym\+zp\+zm\)\*\(1\.0\/6\.0\);/);
     expect(src.match(/vec3 viewDir=/g)).toHaveLength(6);
