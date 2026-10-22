@@ -14,8 +14,8 @@
 //   currentStep(), listMissions(), isUnlocked(id), nextMissionId(), setEnv({arAvailable})
 // Unlock: M(n) is open once every earlier mission that exists on this device is done (or skipped); skipAll opens everything. A mission that does not exist
 // here (requiresAr without AR) is neither startable nor in the way of the next one. listMissions() rows carry stepNo = index + 1 (the ステップN of the lists; fixed, also while the step is unavailable).
-import { TUTORIAL_MISSIONS, TUT_FEEDBACK } from './tutorial-data.js?v=20261022-build643';
-import { loadProgress, saveProgress, clearProgress } from './tutorial-progress.js?v=20261022-build643';
+import { TUTORIAL_MISSIONS, TUT_FEEDBACK } from './tutorial-data.js?v=20261022-build644';
+import { loadProgress, saveProgress, clearProgress } from './tutorial-progress.js?v=20261022-build644';
 export function createTutorialEngine({missions=TUTORIAL_MISSIONS,progress={load:loadProgress,save:saveProgress,clear:clearProgress},arAvailable=true}={}){
  const env={arAvailable};
  let prog=progress.load();

@@ -2,7 +2,7 @@
 // (the subtitles / texts carry the tutorial alone). One female voice only (user decision): docs/tutorial/audio/F1/<id>.m4a; settings tutorialVoice 'off' = silent (subtitles only), anything else = F1.
 export const AUDIO_BASE = './tutorial/audio/';
 export const DEFAULT_VOICE = 'F1';
-const AUDIO_QUERY = '?v=20261022-build643'; // same cache-busting form as the other assets (tools/bump-build.mjs rewrites it); the .m4a file name / id is unchanged
+const AUDIO_QUERY = '?v=20261022-build644'; // same cache-busting form as the other assets (tools/bump-build.mjs rewrites it); the .m4a file name / id is unchanged
 export const voiceOf = v => (v === 'off' ? 'off' : DEFAULT_VOICE);
 export const audioSrc = (voice, id, base = AUDIO_BASE) => (!id || voiceOf(voice) === 'off' ? null : `${base}${DEFAULT_VOICE}/${id}.m4a${AUDIO_QUERY}`);
 // ids to speak for one engine snapshot, in order: the earned feedback first (stepClear: ok1..3; missionClear / allClear), then the new step's own voice.

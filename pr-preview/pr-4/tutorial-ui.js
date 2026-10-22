@@ -10,11 +10,11 @@
 // The instance is kept on globalThis.__vrlTutorialEngine, so it stays single even when the module is loaded under two ?v= URLs.
 // Signals: the first getTutorialEngine() also wires document/window 'vrl-tut-signal' ({detail:{kind,count?}}) to engine.onSignal (once; a signal seen on both is counted once).
 // A module that wires signals itself must set globalThis.__vrlTutSignalWired=true BEFORE the first getTutorialEngine() call.
-import { settings } from './app-settings.js?v=20261022-build643';
-import { tr, I18N } from './i18n.js?v=20261022-build643';
-import { TUTORIAL_MISSIONS } from './tutorial-data.js?v=20261022-build643';
-import { createTutorialEngine } from './tutorial-engine.js?v=20261022-build643';
-import { resetPress, resetArmed, RESET_ARM_MS, EVENT_LEVELS } from './event-mode.js?v=20261022-build643';
+import { settings } from './app-settings.js?v=20261022-build644';
+import { tr, I18N } from './i18n.js?v=20261022-build644';
+import { TUTORIAL_MISSIONS } from './tutorial-data.js?v=20261022-build644';
+import { createTutorialEngine } from './tutorial-engine.js?v=20261022-build644';
+import { resetPress, resetArmed, RESET_ARM_MS, EVENT_LEVELS } from './event-mode.js?v=20261022-build644';
 
 // the switch (設定 > 外観 > チュートリアル) off = the engine ignores every signal (nothing advances, nothing is saved); on again = as before
 // true while the tutorial UI is live (the switch is on AND the device supports VR): the Lv0 card of 体験会 acts as the tutorial only then (event-mode-ui.js)

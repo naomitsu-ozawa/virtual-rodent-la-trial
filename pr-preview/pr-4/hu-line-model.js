@@ -3,7 +3,7 @@
 // profile panel all read and write this model, so a line drawn in 2D shows in 3D and vice versa; VR can reuse it later (no VR code
 // here). Pure module: no DOM, no three.js, no app state (unit-tested in tests/unit/hu-line-model.test.js).
 // A change carries a phase: 'live' (the line is being dragged: coarse preview), 'final' (released: full-resolution read), 'clear'.
-import { planeDims } from './crosshair.js?v=20261022-build643';
+import { planeDims } from './crosshair.js?v=20261022-build644';
 
 const store = { a: null, b: null, hover: null, listeners: new Set(), hoverListeners: new Set() };
 const cp = v => (v ? { i: +v.i, j: +v.j, k: +v.k } : null);

@@ -4,11 +4,11 @@
 // On / off: settings key tutorialMode (default false; only the settings switch sets it, no URL parameter). Off = no engine is wired, no voice, no progress: the board shows the help (手順一覧) and
 // a 詳細 tab that opens a READ-ONLY preview of the steps (createTutorialPreview: its own cursor, nothing advances, nothing is saved, nothing is spoken).
 // the board has one tab strip under the page (panelTabs): 手順一覧 | 詳細. The unit is called ステップN (stepNoLabel); the pages inside a step are n/N only.
-import { getTutorialEngine, resetTutorialAll } from './tutorial-ui.js?v=20261022-build643';
-import { createTutorialAudio, createStepReplay, speechFor, isFeedbackId } from './tutorial-audio.js?v=20261022-build643';
-import { resetPress, resetArmed, wrapWords } from './event-mode.js?v=20261022-build643';
-import { I18N, tr } from './i18n.js?v=20261022-build643';
-import { TUTORIAL_MISSIONS } from './tutorial-data.js?v=20261022-build643';
+import { getTutorialEngine, resetTutorialAll } from './tutorial-ui.js?v=20261022-build644';
+import { createTutorialAudio, createStepReplay, speechFor, isFeedbackId } from './tutorial-audio.js?v=20261022-build644';
+import { resetPress, resetArmed, wrapWords } from './event-mode.js?v=20261022-build644';
+import { I18N, tr } from './i18n.js?v=20261022-build644';
+import { TUTORIAL_MISSIONS } from './tutorial-data.js?v=20261022-build644';
 
 export const FLASH_MS = 1100;
 export function tutorialModeOn(api = globalThis.__vrlSettings) {

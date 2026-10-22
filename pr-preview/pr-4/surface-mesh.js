@@ -1,15 +1,15 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { indexedGeometryFromTrianglePositions, makeSource3DCoordinates, makeVolume3DCoordinates, Float32FaceBuilder, appendAnalysisRunBoundaryFaces } from './mesh-geometry.js?v=20261022-build643';
+import { indexedGeometryFromTrianglePositions, makeSource3DCoordinates, makeVolume3DCoordinates, Float32FaceBuilder, appendAnalysisRunBoundaryFaces } from './mesh-geometry.js?v=20261022-build644';
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.webgpu.js';
-import { createSurfaceMaterial } from './mesh-material.js?v=20261022-build643';
-import { list, surfaceSmoothStrength } from './ui-shell.js?v=20261022-build643';
-import { segmentState, segmentEditState } from './segments.js?v=20261022-build643';
-import { surfaceSmoothingActive } from './settings.js?v=20261022-build643';
-import { frameYield } from './utils.js?v=20261022-build643';
-import { constrainedSmoothPositions, constrainedSmoothSchedule } from './constrained-smooth.js?v=20261022-build643';
-import { smoothChunkHalo, createSeamLinker, OrderedChunkSmoother } from './smooth-chunks.js?v=20261022-build643';
-import { smoothMethod } from './smooth-workers.js?v=20261022-build643';
+import { createSurfaceMaterial } from './mesh-material.js?v=20261022-build644';
+import { list, surfaceSmoothStrength } from './ui-shell.js?v=20261022-build644';
+import { segmentState, segmentEditState } from './segments.js?v=20261022-build644';
+import { surfaceSmoothingActive } from './settings.js?v=20261022-build644';
+import { frameYield } from './utils.js?v=20261022-build644';
+import { constrainedSmoothPositions, constrainedSmoothSchedule } from './constrained-smooth.js?v=20261022-build644';
+import { smoothChunkHalo, createSeamLinker, OrderedChunkSmoother } from './smooth-chunks.js?v=20261022-build644';
+import { smoothMethod } from './smooth-workers.js?v=20261022-build644';
 // ignoreCut: runs that are not the segment itself (an analysis region), so the
 // segment's raw cut faces do not apply
 // slices of the neighbouring chunks smoothed with a chunk: smoothChunkHalo
