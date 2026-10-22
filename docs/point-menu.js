@@ -3,11 +3,11 @@
 // 距離 makes the point the START (a pulsing mark + 「終点のポイントを選んでください」), the next point picked is the END, a tap on empty space / Esc / 取消 cancels.
 // This module is the shared DOM part (the menu + a small hint pill that is always visible while a start is armed); the views (comment-ui.js 2D, comment-3d.js 3D)
 // detect the long press (measurements.js createLongPress) and call openPointMenu.
-import { tr } from './i18n.js?v=20261022-build645';
-import { getComments, updateCommentColor, onCommentsChange } from './comments.js?v=20261022-build645';
-import { POINT_PALETTE, pointColor, autoPointColor, inkOn, paletteName } from './point-colors.js?v=20261022-build645';
-import { currentLanguage } from './state.js?v=20261022-build645';
-import { POINT_MENU_ITEMS, startMeasure, cancelMeasure, getMeasureStart, onMeasureStartChange, pickMeasureEnd, measurementsOfPoint, setLabelOffset } from './measurements.js?v=20261022-build645';
+import { tr } from './i18n.js?v=20261022-build646';
+import { getComments, updateCommentColor, onCommentsChange } from './comments.js?v=20261022-build646';
+import { POINT_PALETTE, pointColor, autoPointColor, inkOn, paletteName } from './point-colors.js?v=20261022-build646';
+import { currentLanguage } from './state.js?v=20261022-build646';
+import { POINT_MENU_ITEMS, startMeasure, cancelMeasure, getMeasureStart, onMeasureStartChange, pickMeasureEnd, measurementsOfPoint, setLabelOffset } from './measurements.js?v=20261022-build646';
 let menu=null,openId=null,pill=null,pillText=null,installed=false;
 const handlers={delete:null};
 export const setPointMenuHandlers=h=>Object.assign(handlers,h);
