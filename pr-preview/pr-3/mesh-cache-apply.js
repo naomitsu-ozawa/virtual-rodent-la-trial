@@ -1,17 +1,17 @@
 // Glue between the surface builders and the mesh cache (mesh-cache.js): which builds may use it, the keys from the app state,
 // meshes -> blob descriptors and back to three.js meshes. Everything here only decides WHETHER a stored mesh is used; a
 // disabled, unavailable or failing cache always leaves the normal build untouched.
-import { segmentState, segmentEditState, segmentEditActive, segmentHasManualEditsUpstream, segmentSourceSignature, segmentExclusive, sourceMemoryUsable } from './segments.js?v=20261022-build642';
-import { sourceFilterSignature, sourceFilterStages } from './source-filters.js?v=20261022-build642';
-import { ipadGpuTargetSide } from './state.js?v=20261022-build642';
-import { surfaceSmoothEnabled, surfaceSmoothStrength } from './ui-shell.js?v=20261022-build642';
-import { volumeCache, volumeCacheBudget } from './gpu-volume-data.js?v=20261022-build642';
-import { datasetFingerprint } from './project-file.js?v=20261022-build642';
-import { loadMeshEntry, storeMeshEntry } from './mesh-cache.js?v=20261022-build642';
-import { runSurfaceMeshKey, baseMeshKey, runsDigest, sliceContentDigest } from './mesh-cache-key.js?v=20261022-build642';
-import { runSurfaceRoute, surfaceMaterialParams } from './surface-mesh.js?v=20261022-build642';
-import { describeMeshes, meshesFromEntry } from './mesh-three.js?v=20261022-build642';
-export { meshCacheStats } from './mesh-cache.js?v=20261022-build642';
+import { segmentState, segmentEditState, segmentEditActive, segmentHasManualEditsUpstream, segmentSourceSignature, segmentExclusive, sourceMemoryUsable } from './segments.js?v=20261022-build650';
+import { sourceFilterSignature, sourceFilterStages } from './source-filters.js?v=20261022-build650';
+import { ipadGpuTargetSide } from './state.js?v=20261022-build650';
+import { surfaceSmoothEnabled, surfaceSmoothStrength } from './ui-shell.js?v=20261022-build650';
+import { volumeCache, volumeCacheBudget } from './gpu-volume-data.js?v=20261022-build650';
+import { datasetFingerprint } from './project-file.js?v=20261022-build650';
+import { loadMeshEntry, storeMeshEntry } from './mesh-cache.js?v=20261022-build650';
+import { runSurfaceMeshKey, baseMeshKey, runsDigest, sliceContentDigest } from './mesh-cache-key.js?v=20261022-build650';
+import { runSurfaceRoute, surfaceMaterialParams } from './surface-mesh.js?v=20261022-build650';
+import { describeMeshes, meshesFromEntry } from './mesh-three.js?v=20261022-build650';
+export { meshCacheStats } from './mesh-cache.js?v=20261022-build650';
 
 // ?meshcache=off turns the whole feature off (no lookup, no store) for diagnosing a suspect mesh
 export function meshCacheEnabled(){

@@ -22,7 +22,7 @@
 //   in result.phases[phase] = {stats, info}: shown on the line and in the JSON, not judged. A throw = "✖ …（エラー）". Cancelling (the button, or leaving VR)
 //   makes the pending measure() throw so that your finally blocks run.
 // The runner is created once per VR session (createVrSelfCheck, vr-view.js); registrations are module level, so a feature registers at import time.
-import { DEFAULT_HZ, createFrameRing, computeStats, judge, formatLine, verdictLine, criteriaText, resultText, resultJson, overall, zoomSummaries, PASS_MARK, FAIL_MARK } from './vr-self-check-core.js?v=20261022-build642';
+import { DEFAULT_HZ, createFrameRing, computeStats, judge, formatLine, verdictLine, criteriaText, resultText, resultJson, overall, zoomSummaries, PASS_MARK, FAIL_MARK } from './vr-self-check-core.js?v=20261022-build650';
 
 export { PASS_MARK, FAIL_MARK };
 export const SCENARIO_SECONDS = 5, SETTLE_MS = 800;

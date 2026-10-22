@@ -2,7 +2,7 @@
 // (the subtitles / texts carry the tutorial alone). One female voice only (user decision): docs/tutorial/audio/F1/<id>.m4a; settings tutorialVoice 'off' = silent (subtitles only), anything else = F1.
 export const AUDIO_BASE = './tutorial/audio/';
 export const DEFAULT_VOICE = 'F1';
-const AUDIO_QUERY = '?v=20261022-build642'; // same cache-busting form as the other assets (tools/bump-build.mjs rewrites it); the .m4a file name / id is unchanged
+const AUDIO_QUERY = '?v=20261022-build650'; // same cache-busting form as the other assets (tools/bump-build.mjs rewrites it); the .m4a file name / id is unchanged
 export const voiceOf = v => (v === 'off' ? 'off' : DEFAULT_VOICE);
 export const audioSrc = (voice, id, base = AUDIO_BASE) => (!id || voiceOf(voice) === 'off' ? null : `${base}${DEFAULT_VOICE}/${id}.m4a${AUDIO_QUERY}`);
 // ids to speak for one engine snapshot, in order: the earned feedback first (stepClear: ok1..3; missionClear / allClear, each followed by its `then` line:, 「次へ」を押してください / the end), then the new step's own voice.
@@ -11,7 +11,7 @@ export function speechFor(snap, step, prevKey) {
   const key = snap && snap.mission ? `${snap.mission}:${snap.step}:${snap.finished ? 1 : 0}` : '';
   const ids = [];
   if (snap && snap.feedbackItem && snap.feedbackItem.audio) { ids.push(snap.feedbackItem.audio); if (snap.feedbackItem.then && snap.feedbackItem.then.audio) ids.push(snap.feedbackItem.then.audio); }
-  if (key && key !== prevKey && !snap.finished && step && step.audio) ids.push(step.audio);
+  if (key && key !== prevKey && !snap.finished && step && step.audio) { ids.push(step.audio); if (step.then && step.then.audio) ids.push(step.then.audio); } // a page may carry a second clip (then)
   return { ids, key };
 }
 export function createTutorialAudio({ getVoice = () => DEFAULT_VOICE, AudioCtor = globalThis.Audio, base = AUDIO_BASE } = {}) {
@@ -45,6 +45,8 @@ export function createTutorialAudio({ getVoice = () => DEFAULT_VOICE, AudioCtor 
   return { play, stop, settle };
 }
 export const isFeedbackId = id => /^(ok[123]|mclear|allclear|gonext|end)$/.test(id || '');
+// the ids of a page's voice, in order (audio, then its second clip)
+export const stepVoiceIds = s => (s && s.audio ? [s.audio, ...(s.then && s.then.audio ? [s.then.audio] : [])] : []);
 // no progress for the step's timeoutHint ms -> its voice again, once per quiet period (reset(now) on every progress / page change; tick(now) from the frame loop)
 export function createStepReplay(onReplay) {
   let at = 0, hint = 0, armed = false;
