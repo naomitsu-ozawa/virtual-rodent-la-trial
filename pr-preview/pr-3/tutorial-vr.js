@@ -14,14 +14,14 @@
 // A cleared ステップ waits for 次へ: the page says ステップクリア + 「次のステップに進みましょう。「次へ」を押してください」 (spoken too); the last one ends with the closing line. Nothing is remembered between sessions:
 // a session always starts at the entry guidance and ステップ1.
 // menuTarget() names the かんたんメニュー widget to light (vr-view.js draws the pointer there). Redraws: at most 2 a second, and none 20 s after the board last changed (marks still).
-import { getTutorialEngine, resetTutorialAll, continueTutorial, restartTutorial } from './tutorial-ui.js?v=20261022-build650';
-import { createTutorialAudio, createStepReplay, createChime, speechFor, isFeedbackId, stepVoiceIds } from './tutorial-audio.js?v=20261022-build650';
-import { createOrient, ORIENT_PHASES } from './tutorial-orient.js?v=20261022-build650';
-import { resetPress, resetArmed } from './event-mode.js?v=20261022-build650';
-import { tr } from './i18n.js?v=20261022-build650';
-import { TUTORIAL_MISSIONS, TUT_SAMPLE, TUT_ORIENT, TUT_FEEDBACK, TUT_MENU_OPEN, fillTissue } from './tutorial-data.js?v=20261022-build650';
-import { GUIDE_SLIDES, guideSlide, slideItem, itemRect, loc, createSlideImages, SLIDE_W, SLIDE_H } from './tutorial-slides.js?v=20261022-build650';
-import { drawPointer, drawKnobHint, drawStepFrame, drawDoneMark, animPhase, animKey, GOLD } from './tutorial-marks.js?v=20261022-build650';
+import { getTutorialEngine, resetTutorialAll, continueTutorial, restartTutorial } from './tutorial-ui.js?v=20261022-build651';
+import { createTutorialAudio, createStepReplay, createChime, speechFor, isFeedbackId, stepVoiceIds } from './tutorial-audio.js?v=20261022-build651';
+import { createOrient, ORIENT_PHASES } from './tutorial-orient.js?v=20261022-build651';
+import { resetPress, resetArmed } from './event-mode.js?v=20261022-build651';
+import { tr } from './i18n.js?v=20261022-build651';
+import { TUTORIAL_MISSIONS, TUT_SAMPLE, TUT_ORIENT, TUT_FEEDBACK, TUT_MENU_OPEN, fillTissue } from './tutorial-data.js?v=20261022-build651';
+import { GUIDE_SLIDES, guideSlide, slideItem, itemRect, loc, createSlideImages, SLIDE_W, SLIDE_H } from './tutorial-slides.js?v=20261022-build651';
+import { drawPointer, drawKnobHint, drawStepFrame, drawDoneMark, animPhase, animKey, GOLD } from './tutorial-marks.js?v=20261022-build651';
 
 export const FLASH_MS = 1100;
 export function tutorialModeOn(api = globalThis.__vrlSettings) {
@@ -76,7 +76,7 @@ export function buildPage({ engine, view = 'auto', lang = 'ja', resetArmed: arme
   if (snap.finished) {
     const next = engine.nextMissionId();
     if (!next && engine.listMissions().every(m => m.status === 'unavailable' || m.done || m.optional)) {
-      return { kind: 'allDone', title, mark: t('tutDone'), headline: t('tutAllDone'), note: t(TUT_FEEDBACK.end.text), counter: '', buttons: [BTN('list', t('tutStepList')), BTN('prev', t('tutPrev')), resetBtn] };
+      return { kind: 'allDone', title, mark: t('tutDone'), headline: t('tutAllDone'), note: t('tutIntroLv123'), counter: '', buttons: [BTN('list', t('tutStepList')), BTN('prev', t('tutPrev')), resetBtn] };
     }
     return { kind: 'missionDone', title, mark: t('tutDone'), headline: t('tutMissionDone'), note: t(TUT_FEEDBACK.missionClear.then.text), counter: pi ? `${pi.N}/${pi.N}` : '',
       buttons: [...(next ? [BTN('start:' + next, `${t('tutNext')}: ${titleOf(next)}`, { on: true, point: true })] : []), BTN('list', t('tutStepList')), BTN('prev', t('tutPrev'))] };
@@ -184,7 +184,7 @@ export function getEngine(opts = {}) { return getTutorialEngine(opts); }
 // getSectionOn() = a section frame is up (the page of ステップ5 that asks for one is skipped then); getTissue() is not needed: setTissue(name) tells the first tissue's name (the captions of the menu pages).
 let entryShownOnce = false;
 export const _resetEntryForTest = () => { entryShownOnce = false; };
-export function createTutorialVr({ engine, audio, chime, getImage, getLook = null, entry = 'auto', getSectionOn = null, getMenuOpen = null, getInput = () => 'ctrl', lang = 'ja', doc = globalThis.document, now = () => performance.now(), onChange = () => {}, resetUserState = null } = {}) {
+export function createTutorialVr({ engine, audio, chime, getImage, getLook = null, entry = 'auto', getSectionOn = null, getMenuOpen = null, onMissionStart = null, getInput = () => 'ctrl', lang = 'ja', doc = globalThis.document, now = () => performance.now(), onChange = () => {}, resetUserState = null } = {}) {
   const eng = engine || getEngine();
   // nothing is remembered: a session starts from the beginning. With the entry guidance the engine is idle until it is over; then ステップ1 (the next one not done = the first, after the reset) begins.
   const auto = entry === 'auto', doEntry = auto ? !entryShownOnce : !!entry;
@@ -209,7 +209,11 @@ export function createTutorialVr({ engine, audio, chime, getImage, getLook = nul
   // the slide pictures: loaded on first use; one arriving redraws the board (bump)
   const pics = getImage ? null : createSlideImages({ onLoad: () => bump() }), image = getImage || (id => pics.get(id));
   const guides = createSlideViewer({ lang, onChange: bump, onClose: () => { view = 'list'; bump(); }, getImage });
+  // onMissionStart(id): a ステップ was just entered (first page): the board of vr-view.js puts the volume back within reach for ステップ2
+  let prevSnap = eng.getState();
   const unsub = eng.subscribe(snap => {
+    if (snap.mission && !snap.finished && (!prevSnap || prevSnap.mission !== snap.mission || prevSnap.finished || snap.step < prevSnap.step) && typeof onMissionStart === 'function') { try { onMissionStart(snap.mission); } catch { /* */ } }
+    prevSnap = snap;
     const sp = speechFor(snap, eng.currentStep(), spoken); spoken = sp.key;
     if (snap.feedback === 'stepClear' || snap.feedback === 'missionClear' || snap.feedback === 'allClear') {
       flashUntil = now() + FLASH_MS; flash = { mark: tr('tutDone'), text: snap.feedbackItem ? tr(snap.feedbackItem.text) : '' };
@@ -350,7 +354,9 @@ export function layoutLevelSlide(slide, { W = 820, getImage = noImage } = {}) {
 // where the arrow of the 3D layer (tutorial-3d.js createBoardArrow) goes for a menu step: the rect of the button / the knob in the menu's canvas px and the side the arrow comes from.
 export function menuTargetRect(widgets, target) {
   if (!target || !Array.isArray(widgets)) return null;
+  if (target === 'exit') { const b = widgets.find(x => x.id === 'exit'); return b ? { rect: { x: b.x, y: b.y, w: b.w, h: b.h }, from: 'top' } : null; } // the red 「VRを終了」 / 「ARを終了」 button
   if (target === 'slider') { const s = widgets.find(x => x.type === 'slider'); if (!s) return null; const kx = s.x + s.w * (+s.value || 0), cy = s.y + s.h / 2; return { rect: { x: kx - 26, y: cy - 26, w: 52, h: 52 }, from: 'bottom' }; }
+  if (target === 'exit') { const b = widgets.find(x => x.id === 'exit'); if (!b) return null; return { type: 'draw', tut: 'exit', draw: ctx => drawPointer(ctx, { x: b.x, y: b.y, w: b.w, h: b.h, phase, from: null }) }; }
   const want = target === 'seg-hide' ? 'hide' : target === 'seg-show' ? 'show' : null; if (!want) return null;
   const b = widgets.find(x => typeof x.id === 'string' && x.id.startsWith('seg:') && x.id.endsWith(':' + want) && !x.on); if (!b) return null;
   return { rect: { x: b.x, y: b.y, w: b.w, h: b.h }, from: 'top', key: b.id.split(':')[1] }; // from above: the first tissue's row has nothing above it but the status line

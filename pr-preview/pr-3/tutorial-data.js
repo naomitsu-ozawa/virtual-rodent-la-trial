@@ -15,7 +15,7 @@
 //   text = the caption under the slide on the board and on the 2D card (the 「{tissue}」 of a menu page = the first tissue of the open data, filled in by tutorial-vr.js).
 // Every mission practises on sample4 (骨梁 = the 体験会 Lv0 data). Analysis is not part of the tutorial.
 export const TUT_SAMPLE = 'sample4';
-export const TUT_SIGNALS=Object.freeze(['grab', 'grab-move', 'scale', 'section-add', 'section-drag', 'section-scroll', 'seg-hide', 'seg-show', 'slice-opacity', 'slice-toggle', 'frame-hide']);
+export const TUT_SIGNALS=Object.freeze(['grab', 'grab-move', 'scale', 'section-add', 'section-drag', 'section-scroll', 'seg-hide', 'seg-show', 'slice-opacity', 'slice-toggle', 'frame-hide', 'session-end']);
 export const TUTORIAL_MISSIONS=deepFreeze([
  { id:'controls', sample:TUT_SAMPLE, title:'tutCtlTitle', slide:'controls',
   steps:[
@@ -46,6 +46,12 @@ export const TUTORIAL_MISSIONS=deepFreeze([
      then:{ id:'g4a2', audio:'g4a2', audioText:'ひだりで、すけて、みぎで、はっきりします。' }, done:{ signal:'slice-opacity', count:1 }, timeoutHint:35000 },
    { id:'slice2', text:'tutSliceS2', item:2, ctl:{btn:'stick',motion:'press'}, audio:'g4b', audioText:'どちらのてでも、スティックをみじかく押しこみます。スライスがとうめいになります。', done:{ signal:'slice-toggle', count:1 }, timeoutHint:25000 },
    { id:'slice3', text:'tutSliceS3', item:3, ctl:{btn:'stick',motion:'hold'}, audio:'g4c', audioText:'スティックを押しこんだままにすると、だんめんのわくがかくれます。', done:{ signal:'frame-hide', count:1 }, timeoutHint:25000 }
+  ] },
+ // the way out. The menu's red 「VRを終了」 / 「ARを終了」 button (bottom right of the left menu; its row is row 3 of the g3 slide: 下のボタン): the page is done when the session ends
+ // (signal 'session-end', sent by vr-view.js as the session closes); the page (tutorial-ui.js) then guides to Lv1-Lv3 on the browser screen.
+ { id:'exit', sample:TUT_SAMPLE, title:'tutExitTitle', slide:'g3',
+  steps:[
+   { id:'exit1', text:'tutExitS1', item:3, ctl:{btn:'trigger'}, menu:'exit', board:'menu', audio:'ex1', audioText:'ひだりのメニューの、みぎしたにある、あかいボタンに、こうせんを向けて、トリガーを引くと、おわります。', done:{ signal:'session-end', count:1 }, timeoutHint:35000 }
   ] }
 ]);
 function deepFreeze(o){if(o&&typeof o==='object'&&!Object.isFrozen(o)){Object.freeze(o);for(const v of Object.values(o))deepFreeze(v)}return o}
@@ -55,9 +61,9 @@ export const missionById=id=>TUTORIAL_MISSIONS.find(m=>m.id===id)||null;
 export const TUT_VOICES=Object.freeze(['F1']);
 // Spoken feedback (calm, short). The engine names which to play (snapshot.feedback = 'stepClear' | 'missionClear' | 'allClear'; stepClear rotates through the list).
 // a cleared ステップ waits for 次へ. missionClear / allClear carry `then` = the line spoken right after it (snapshot.feedbackItem.then): goNext = go on with 次へ, end = the tutorial is over
-// (tutorial-audio.js speechFor plays both; the board / panel show the then text as well). The two lines are top-level entries of TUT_FEEDBACK (tools/gen-tutorial-audio.mjs makes their voices).
+// (tutorial-audio.js speechFor plays both; the board / panel show the then text as well). goNext is a top-level entry of TUT_FEEDBACK (tools/gen-tutorial-audio.mjs makes its voice).
+// the last ステップ (exit) ends with the session itself, so allClear has no closing line of its own: the page then guides to Lv1-Lv3 (TUT_INTRO.chooseLv).
 const GO_NEXT=Object.freeze({id:'gonext',text:'tutFbGoNext',audio:'gonext',audioText:'つぎのステップに進みましょう。つぎへ、を押してください。'});
-const END=Object.freeze({id:'end',text:'tutFbEnd',audio:'end',audioText:'これでチュートリアルは、おわりです。じゆうに、そうさしてみましょう。'});
 export const TUT_FEEDBACK=Object.freeze({
  stepClear:Object.freeze([
   Object.freeze({id:'ok1',text:'tutFbOk1',audio:'ok1',audioText:'できました。'}),
@@ -65,9 +71,8 @@ export const TUT_FEEDBACK=Object.freeze({
   Object.freeze({id:'ok3',text:'tutFbOk3',audio:'ok3',audioText:'その調子です。'}),
  ]),
  missionClear:Object.freeze({id:'mclear',text:'tutFbMissionClear',audio:'mclear',audioText:'ステップクリアです。',then:GO_NEXT}),
- allClear:Object.freeze({id:'allclear',text:'tutFbAllClear',audio:'allclear',audioText:'すべてクリアです。おつかれさまでした。',then:END}),
+ allClear:Object.freeze({id:'allclear',text:'tutFbAllClear',audio:'allclear',audioText:'すべてクリアです。おつかれさまでした。'}),
  goNext:GO_NEXT,
- end:END,
 });
 // right after a VR / AR session starts, before ステップ1: look right (the 操作パネル = the help board), then look left (the メニュー). Each line is spoken; its board blinks;
 // turning the head toward the board (tutorial-orient.js) or 次へ goes on. Right = the help board (vr-layout.js HELP_OFFSET, 50 deg right), left = the menu (MENU_OFFSET, 50 deg left).
@@ -77,9 +82,12 @@ export const TUT_ORIENT=deepFreeze({
 });
 // the menu is closed while a page works on it: the caption / voice say how to open it (A or X, long press: vr-view.js onAxLong) and the 3D controller points at the lower face button (A / X) held
 export const TUT_MENU_OPEN=deepFreeze({id:'g3open',text:'tutMenuClosed',audio:'g3open',audioText:'メニューがとじています。エーまたはエックスのボタンを、ながおしすると、ひらきます。',ctl:{btn:'facelow',motion:'hold'}});
+// pressVr = 「VRで見る」か「ARで見る」 (the AR button is there: both are lit), pressVrOnly = only 「VRで見る」 (no AR on this device); chooseLv = after the tutorial: pick Lv1-Lv3 on the page.
 // the page's own introduction (tutorial-ui.js, after 「チュートリアルを始める」): first open the Lv0 practice data, then start VR / AR. Shown as a subtitle bar, spoken once each.
 export const TUT_INTRO=deepFreeze({
  openLv0:{id:'intro1',text:'tutIntroLv0',audio:'intro1',audioText:'まず、レベルゼロの練習データを表示しましょう。'},
- pressVr:{id:'intro2',text:'tutIntroVr',audio:'intro2',audioText:'ブイアールで見る、のボタンを押しましょう。'},
+ pressVr:{id:'intro4',text:'tutIntroVr',audio:'intro4',audioText:'ブイアールで見る、または、エーアールで見る、のボタンを押しましょう。'},
+ pressVrOnly:{id:'intro2',text:'tutIntroVrOnly',audio:'intro2',audioText:'ブイアールで見る、のボタンを押しましょう。'},
+ chooseLv:{id:'intro5',text:'tutIntroLv123',audio:'intro5',audioText:'つぎは、レベルいちからレベルさんの中から、ひとつ、えらびましょう。'},
  startVr:{id:'intro3',text:'tutIntroStart',audio:'intro3',audioText:'がめんの、かいしボタンを押してください。'},
 });

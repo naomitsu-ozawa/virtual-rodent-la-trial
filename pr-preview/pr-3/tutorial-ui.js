@@ -11,12 +11,12 @@
 // The instance is kept on globalThis.__vrlTutorialEngine, so it stays single even when the module is loaded under two ?v= URLs.
 // Signals: the first getTutorialEngine() also wires document/window 'vrl-tut-signal' ({detail:{kind,count?}}) to engine.onSignal (once; a signal seen on both is counted once).
 // A module that wires signals itself must set globalThis.__vrlTutSignalWired=true BEFORE the first getTutorialEngine() call.
-import { settings } from './app-settings.js?v=20261022-build650';
-import { tr, I18N } from './i18n.js?v=20261022-build650';
-import { TUTORIAL_MISSIONS, TUT_SAMPLE, TUT_INTRO, fillTissue } from './tutorial-data.js?v=20261022-build650';
-import { createTutorialAudio } from './tutorial-audio.js?v=20261022-build650';
-import { createTutorialEngine } from './tutorial-engine.js?v=20261022-build650';
-import { resetPress, resetArmed, RESET_ARM_MS, EVENT_LEVELS } from './event-mode.js?v=20261022-build650';
+import { settings } from './app-settings.js?v=20261022-build651';
+import { tr, I18N } from './i18n.js?v=20261022-build651';
+import { TUTORIAL_MISSIONS, TUT_SAMPLE, TUT_INTRO, fillTissue } from './tutorial-data.js?v=20261022-build651';
+import { createTutorialAudio } from './tutorial-audio.js?v=20261022-build651';
+import { createTutorialEngine } from './tutorial-engine.js?v=20261022-build651';
+import { resetPress, resetArmed, RESET_ARM_MS, EVENT_LEVELS } from './event-mode.js?v=20261022-build651';
 
 // the switch (設定 > 外観 > チュートリアル) off = the engine ignores every signal (nothing advances, nothing is saved); on again = as before
 // true while the tutorial UI is live (the switch is on AND the device supports VR): the Lv0 card of 体験会 acts as the tutorial only then (event-mode-ui.js)
@@ -94,11 +94,33 @@ export const sampleReady=(g=globalThis)=>g.__vrlVolumeReady===true;
 // prepared = the page's VR / AR preparation panel (#vr-prepare-panel: shown after 「VRで見る」 when the data of the session is not ready yet) is up with its start button: 'startVr'
 // (a start button that is disabled - the preparation failed or is not finished - is not announced)
 export const preparePanelShown=(doc=globalThis.document)=>{try{const p=doc?.getElementById?.('vr-prepare-panel');const b=p?.querySelector?.('.start');return !!p&&p.style?.display!=='none'&&!!b&&!b.disabled}catch{return false}};
-export const introPhase=(openSample,ready=true,prepared=false)=>openSample!==TUT_SAMPLE?'openLv0':!ready?'loading':prepared?'startVr':'pressVr';
+// the page is done loading only when EVERYTHING the visitor can see is quiet. __vrlVolumeReady is true right after the volume is prepared, but the bundled project is applied after that
+// (the filters are replayed, the segments rebuilt: a job with its own progress dialog, about 100 s on a slow device) and the 「VRで見る」 button can be busy (the session's preparation).
+// readiness = volume ready AND no progress job running or shown (__vrlBusyModal: active / visible) AND the VR button there and enabled AND the AR check finished (__vrlXrChecked: whether the
+// AR button exists is only known then), and all of that holding for quietMs without a break (jobs chain: there is a gap between one and the next).
+export const pageBusy=(g=globalThis)=>{try{const b=g.__vrlBusyModal?.();return !!(b&&(b.active||b.visible))}catch{return false}};
+export const xrChecked=(g=globalThis)=>g.__vrlXrChecked===true;
+export const READY_QUIET_MS=1500;
+export function createReadyGate({now=()=>performance.now(),quietMs=READY_QUIET_MS,volumeReady=()=>sampleReady(),busy=()=>pageBusy(),buttonsOk=()=>true}={}){
+ let since=null;
+ return{
+  ready(){const ok=!!volumeReady()&&!busy()&&!!buttonsOk(),t=now();if(!ok){since=null;return false}if(since==null)since=t;return t-since>=quietMs},
+  reset(){since=null},
+  get since(){return since},
+ };
+}
+// the Lv1-Lv3 practice data (体験会): the data the tutorial leads to after the last ステップ
+export const LV_SAMPLES=Object.freeze(EVENT_LEVELS.filter(l=>l.lv>=1).map(l=>l.sample));
+// mode 'lv0' (after 「チュートリアルを始める」): open Lv0, then press VR / AR. mode 'levels' (after the last ステップ, back on the page): choose one of Lv1-Lv3, then press VR / AR.
+export const introPhase=(openSample,ready=true,prepared=false,mode='lv0')=>{
+ const open=mode==='levels'?LV_SAMPLES.includes(openSample):openSample===TUT_SAMPLE;
+ return !open?(mode==='levels'?'chooseLv':'openLv0'):prepared?'startVr':!ready?'loading':'pressVr';
+};
 const shown=e=>!!e&&!e.hidden&&!e.closest?.('[hidden]');
 export function introTargets(phase,doc=globalThis.document){
  if(!doc)return[];
  if(phase==='openLv0'){const card=doc.querySelector('[data-event-level="lv0"]');if(shown(card))return[card];return[doc.getElementById('sample-demo-button'),doc.querySelector('[data-sample-set="'+TUT_SAMPLE+'"]')].filter(shown)}
+ if(phase==='chooseLv'){const cards=LV_SAMPLES.map((_,i)=>doc.querySelector('[data-event-level="lv'+(i+1)+'"]')).filter(shown);if(cards.length)return cards;return[doc.getElementById('sample-demo-button'),...LV_SAMPLES.map(id=>doc.querySelector('[data-sample-set="'+id+'"]'))].filter(shown)}
  if(phase==='loading')return[];
  if(phase==='startVr'){const b=doc.getElementById('vr-prepare-panel')?.querySelector?.('.start');return shown(b)&&!b.disabled?[b]:[]}
  if(phase==='pressVr')return['vr-view-button','ar-view-button'].map(id=>doc.getElementById(id)).filter(shown);
@@ -106,14 +128,17 @@ export function introTargets(phase,doc=globalThis.document){
 }
 export function introTextKey(phase,doc=globalThis.document){
  if(phase==='openLv0')return shown(doc?.querySelector('[data-event-level="lv0"]'))?'tutIntroLv0':'tutIntroLv0Off';
+ if(phase==='chooseLv')return shown(doc?.querySelector('[data-event-level="lv1"]'))?'tutIntroLv123':'tutIntroLv123Off';
  if(phase==='loading')return'tutIntroLoading';
  if(phase==='startVr')return'tutIntroStart';
  if(phase==='pressVr'){const v=doc?.getElementById('vr-view-button'),a=doc?.getElementById('ar-view-button'),job=doc?.getElementById('job-modal');if(!shown(v)||v.disabled||(job&&!job.classList.contains('is-hidden')))return'tutIntroLoading';return shown(a)?'tutIntroVr':'tutIntroVrOnly'}
  return'';
 }
-export function createTutorialIntro({doc=globalThis.document,audio=null,getOpenSample=()=>globalThis.__vrlOpenSample,getReady=()=>sampleReady(),tickMs=500}={}){
- let phase=null,bar=null,timer=0,lit=new Set();const spoken=new Set();
- const want=()=>introPhase(getOpenSample(),getReady(),preparePanelShown(doc));
+export function createTutorialIntro({doc=globalThis.document,audio=null,getOpenSample=()=>globalThis.__vrlOpenSample,getReady=null,tickMs=500,levelsVoiceDelayMs=3500,now=()=>performance.now()}={}){
+ let phase=null,bar=null,timer=0,voiceTimer=0,mode='lv0',lit=new Set();const spoken=new Set();
+ const gate=createReadyGate({now,buttonsOk:()=>{const v=doc?.getElementById?.('vr-view-button');return xrChecked()&&shown(v)&&!v.disabled}});
+ const ready=getReady||(()=>gate.ready());
+ const want=()=>introPhase(getOpenSample(),ready(),preparePanelShown(doc),mode);
  const paint=()=>{
   if(!phase||!bar)return;
   {const w=want();if(w!==phase){setPhase(w);return}} // the data became ready / was replaced: the phase follows (checked every tick)
@@ -123,9 +148,16 @@ export function createTutorialIntro({doc=globalThis.document,audio=null,getOpenS
   lit=next;
   const key=introTextKey(phase,doc),t=bar.querySelector('.tut-guide-text');
   if(t.dataset.i18n!==key){t.dataset.i18n=key;t.textContent=tr(key)}
-  bar.dataset.tutPhase=phase;
+  bar.dataset.tutPhase=phase;bar.dataset.tutMode=mode;
  };
- const say=()=>{const it=phase&&TUT_INTRO[phase];if(it&&!spoken.has(it.id)){spoken.add(it.id);try{audio?.play([it.audio])}catch{}}};
+ // pressVr says both buttons (intro4) when the AR button is there, only VR (intro2) otherwise; chooseLv waits a little so the closing 「すべてクリアです」 of the last ステップ is not talked over
+ const say=()=>{
+  let it=phase&&TUT_INTRO[phase];if(phase==='pressVr'&&!shown(doc?.getElementById?.('ar-view-button')))it=TUT_INTRO.pressVrOnly;
+  if(!it||spoken.has(it.id))return;spoken.add(it.id);
+  const go=()=>{try{audio?.play([it.audio])}catch{}};
+  clearTimeout(voiceTimer);
+  if(phase==='chooseLv'&&levelsVoiceDelayMs>0){const my=phase;voiceTimer=setTimeout(()=>{if(phase===my)go()},levelsVoiceDelayMs)}else go();
+ };
  const setPhase=p=>{const changed=p!==phase;phase=p;paint();if(changed)say()};
  function mount(){
   bar=doc.createElement('div');bar.id='tut-guide';bar.className='tut-guide';bar.setAttribute('role','status');
@@ -133,11 +165,11 @@ export function createTutorialIntro({doc=globalThis.document,audio=null,getOpenS
   const x=doc.createElement('button');x.type='button';x.className='tut-guide-close';x.dataset.i18n='tutGuideClose';x.textContent=tr('tutGuideClose');x.onclick=()=>stop();
   bar.append(t,x);doc.body.append(bar);
  }
- function start(){if(!bar)mount();spoken.clear();phase=null;setPhase(want());clearInterval(timer);timer=setInterval(paint,tickMs)}
- function stop(){phase=null;clearInterval(timer);timer=0;for(const e of lit)e.classList.remove('tut-hl');lit=new Set();bar?.remove();bar=null}
- doc?.addEventListener?.('vrl-event-sample-open',()=>{if(phase)setPhase(want())});
- doc?.addEventListener?.('vrl-tut-signal',e=>{const k=e.detail?.kind;if(phase&&(k==='vr-start'||k==='ar-start'))stop()});
- return{start,stop,get phase(){return phase},get active(){return!!phase}};
+ function run(m){if(!bar)mount();mode=m;spoken.clear();gate.reset();clearTimeout(voiceTimer);phase=null;setPhase(want());clearInterval(timer);timer=setInterval(paint,tickMs)}
+ function stop(){phase=null;clearInterval(timer);clearTimeout(voiceTimer);timer=0;for(const e of lit)e.classList.remove('tut-hl');lit=new Set();bar?.remove();bar=null}
+ doc?.addEventListener?.('vrl-event-sample-open',()=>{if(phase){gate.reset();setPhase(want())}});
+ doc?.addEventListener?.('vrl-tut-signal',e=>{const k=e.detail?.kind;if(phase&&(k==='vr-start'||k==='ar-start'))stop()}); // a session started: the guidance of this page is over (the VR board takes over / Lv1-Lv3 do not get the tutorial)
+ return{start:()=>run('lv0'),startLevels:()=>run('levels'),stop,get phase(){return phase},get mode(){return mode},get active(){return!!phase},gate};
 }
 export function initTutorialUi({resetUserState}={}){
  const box=document.getElementById('set-tutorial-mode'),voice=document.getElementById('set-tutorial-voice');
@@ -183,7 +215,7 @@ export function initTutorialUi({resetUserState}={}){
    card.replaceChildren();
    const head=el('div','tut-card-head'),count=el('span','tut-count');count.textContent=s.n+'/'+s.N;count.dataset.tutCount='1';
    head.append(count);card.append(head);
-   if(s.finished){card.append(el('p','tut-text',model.allDone?'tutAllDone':'tutMissionDone'));card.append(el('p','tut-next-note',model.allDone?'tutFbEnd':'tutFbGoNext'))} // a cleared ステップ waits for 次へ (it opens the next ステップ)
+   if(s.finished){card.append(el('p','tut-text',model.allDone?'tutAllDone':'tutMissionDone'));card.append(el('p','tut-next-note',model.allDone?'tutIntroLv123':'tutFbGoNext'))} // a cleared ステップ waits for 次へ (it opens the next ステップ)
    else{
     // a caption with {tissue} (the menu pages) says the real first tissue of the open data (globalThis.__vrlTissueName, set by app.js); never the placeholder. Such a line has no data-i18n (a language switch would put the placeholder back)
     const tissue=lang=>{try{return globalThis.__vrlTissueName?.(lang)||''}catch{return ''}};
@@ -223,6 +255,9 @@ export function initTutorialUi({resetUserState}={}){
  document.addEventListener('vrl-event-sample-open',()=>render());
  // 「チュートリアルを始める」 in the top bar, just before 「VRで見る」 (always in view, whichever panel is open; VR devices only): switches the tutorial on, continues it (the next step not done) and starts the introduction
  const intro=createTutorialIntro({audio:createTutorialAudio({getVoice:()=>settings.get('tutorialVoice')})});
+ // the last ステップ (leave VR / AR) cleared = the tutorial is over: back on the page the bar guides to Lv1-Lv3 and then to VR / AR (it ends when that session starts). The signal arrives with the closing
+ // 「すべてクリアです」, from the VR board (session-end) or from the 2D card (完了).
+ getTutorialEngine().subscribe(snap=>{if(snap.feedback==='allClear'&&uiActive)intro.startLevels()});
  const mountCta=()=>{
   if(document.getElementById('tutorial-start-button'))return;
   const b=el('button','tut-cta','tutCta');b.id='tutorial-start-button';b.type='button';
