@@ -1,8 +1,8 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.webgpu.js';
 import dicomParser from 'https://esm.sh/dicom-parser@1.8.21';
-import { canvasBackground3dUnit } from './canvas-theme.js?v=20261022-build646';
-import { lightOffsetExpr, lightingWGSL, MATERIALS, materialKey } from './lighting.js?v=20261022-build646';
-import { EDIT_MASK_MAX_BYTES, editMaskInfoWord, editMaskLayout, editMaskPlanes, fillEditMaskWords, sameU32 } from './edit-mask-texture.js?v=20261022-build646';
+import { canvasBackground3dUnit } from './canvas-theme.js?v=20261022-build648';
+import { lightOffsetExpr, lightingWGSL, MATERIALS, materialKey } from './lighting.js?v=20261022-build648';
+import { EDIT_MASK_MAX_BYTES, editMaskInfoWord, editMaskLayout, editMaskPlanes, fillEditMaskWords, sameU32 } from './edit-mask-texture.js?v=20261022-build648';
 
 const UNCOMPRESSED_TS=new Set(['1.2.840.10008.1.2','1.2.840.10008.1.2.1','1.2.840.10008.1.2.2']);
 const safeWgsl=source=>source.replace(/\bmeta\b/g,'vrlMeta').replace(/\bactive\b/g,'vrlActive').replace(/\btarget\b/g,'vrlTarget');
@@ -112,6 +112,18 @@ fn hitBox(orig:vec3<f32>,dir:vec3<f32>,halfBox:vec3<f32>)->vec2<f32>{
  let a=(-halfBox-orig)*inv;let b=(halfBox-orig)*inv;
  let lo=min(a,b);let hi=max(a,b);
  return vec2<f32>(max(lo.x,max(lo.y,lo.z)),min(hi.x,min(hi.y,hi.z)));
+}
+// Box faces: the box face the ray enters through, as the OUTWARD unit normal (towards the viewer, volume space). A surface hit on the
+// face itself (tissue reaches the edge of the volume: a cropped / cut scan) has no iso-surface there, so the HU gradient is only noise
+// (one-sided, clamped at the edge) and the cut face rendered as a porous granular patch with the inside showing through. It is shaded as
+// the flat face it is.
+fn entryFaceNormal(orig:vec3<f32>,dir:vec3<f32>,halfBox:vec3<f32>)->vec3<f32>{
+ let inv=1.0/dir;
+ let a=(-halfBox-orig)*inv;let b=(halfBox-orig)*inv;
+ let lo=min(a,b);
+ var n=vec3<f32>(0.0);
+ if(lo.x>=lo.y&&lo.x>=lo.z){n.x=-sign(dir.x);}else if(lo.y>=lo.z){n.y=-sign(dir.y);}else{n.z=-sign(dir.z);}
+ return n;
 }
 fn texCoord(p:vec3<f32>)->vec3<f32>{
  return vec3<f32>(p.x/(2.0*u.halfStep.x)+0.5,0.5-p.y/(2.0*u.halfStep.y),p.z/(2.0*u.halfStep.z)+0.5);
@@ -519,19 +531,26 @@ ${lightingWGSL()}
        let tcm=texCoord(u.camOrigin.xyz+dir*mid);let hm=huAt(tcm);
        if(segmentIndexFor(hm,tcm)==idx){hi=mid;f1=hm-thr;}else{lo=mid;f0=hm-thr;}
       }
-     }else{
+     }else if(hi>lo){
+      // lo==hi: the very first sample hit (a ray entering on the box face); every bisection mid is hi itself and the result stays hi,
+      // so the 6 steps and their edit-mask lookups are skipped
       for(var r:u32=0u;r<6u;r=r+1u){
        let mid=(lo+hi)*0.5;let mi=segmentIndexAt(texCoord(u.camOrigin.xyz+dir*mid));
        if(mi==idx){hi=mid;}else{lo=mid;}
       }
      }
      let hp=u.camOrigin.xyz+dir*hi;let tc=texCoord(hp);
-     var n=gradientAt(tc);
+     // a hit on the box face the ray entered through (camera outside the box; within one step of the face) takes the face normal and needs
+     // no gradient (6 fetches, which for a cut face covering much of the view were all spent on a value that was then replaced); n is set
+     // so that inward below comes out as the face's inward direction (the same select as for a gradient)
+     let a=u.segments[u32(idx)*2u];
+     let onBoxFace=bounds.x>0.0&&hi<=bounds.x+step&&previousCutIdx!=idx;
+     var n=vec3<f32>(0.0);
+     if(onBoxFace){n=select(1.0,-1.0,hvPrev<-1e8||hvPrev<a.x)*entryFaceNormal(u.camOrigin.xyz,dir,u.halfStep.xyz);}else{n=gradientAt(tc);}
      if(previousCutIdx==idx){
       let prevTc=texCoord(u.camOrigin.xyz+dir*previousT);
       n=appliedCutNormal(u32(idx),prevTc);
      }
-     let a=u.segments[u32(idx)*2u];
      // inward = towards the segment's range: up the gradient when entered from below its minimum, else down
      let inward=select(-n,n,hvPrev<-1e8||hvPrev<a.x);
      // the one shared lighting model (lighting.js): a headlight above / right of the VIEWER (the camera axes in volume space, so a

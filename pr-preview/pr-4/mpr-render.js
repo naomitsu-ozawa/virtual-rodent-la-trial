@@ -1,18 +1,18 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { wc, ww, planes, footer, state, wcVal, wwVal } from './ui-shell.js?v=20261022-build646';
-import { activeMprSegments, mprSegmentAlpha, analysisRegionShown, segmentEditActive, segmentState, segmentHasProcessedMask, getProcessedSegmentMask, segmentEditState } from './segments.js?v=20261022-build646';
-import { volume, volumeAnalysisMode, analysisRegions, analysisFocusedRegionId, sectionViewPlane, memoryGpuPreviewActive, sourceVolume, setMemoryGpuPreviewActive, sceneState, incSourceMprWarmupToken, sourceMprWarmupPlane, setSourceMprWarmupPlane, residentGpuUploadSeriesId, sourceMprWarmupToken, setCrosshairSlice , sectionViewOpen, threeRenderMode} from './state.js?v=20261022-build646';
-import { analysisRunsContain, runsPlaneMask } from './run-length.js?v=20261022-build646';
-import { mpr3DVisibility, refreshMpr3DPlaneTexture, setSectionCapColors, updateMpr3DPlanePositions, syncMpr3DSliceSliders, mpr3DOrthoSliding, pushCachedMpr3DPlane, mpr3DPreviewCache, mpr3DPreviewSignature, paintMpr3DCacheSliceFast, ensureMpr3DPreviewCache } from './mpr3d-overlay.js?v=20261022-build646';
-import { updateSectionClipPlaneWorld, rebindWebGpuSectionClipGroup, updateSectionViewUi } from './section-view.js?v=20261022-build646';
-import { request3DRender } from './scene3d.js?v=20261022-build646';
-import { planeRenderRevision, sourceFilterStages, getFilteredMemoryPlaneValues, getFilteredSourcePlaneValues, getCachedSourceSlice, sourceFilterSignature, sourceFilterCacheGet, memoryFilterPreviewGet, currentFilterSignature } from './source-filters.js?v=20261022-build646';
-import { cachedSagittalDisplayPlane, cachedSourceMprPlane } from './volume-io.js?v=20261022-build646';
-import { sourceOrthogonalCacheGet, residentGpuMprAvailable, buildSourceOrthogonalPlane } from './mpr-orthogonal.js?v=20261022-build646';
-import { hexRgb, formatCtValue, frameYield } from './utils.js?v=20261022-build646';
+import { wc, ww, planes, footer, state, wcVal, wwVal } from './ui-shell.js?v=20261022-build648';
+import { activeMprSegments, mprSegmentAlpha, analysisRegionShown, segmentEditActive, segmentState, segmentHasProcessedMask, getProcessedSegmentMask, segmentEditState } from './segments.js?v=20261022-build648';
+import { volume, volumeAnalysisMode, analysisRegions, analysisFocusedRegionId, sectionViewPlane, memoryGpuPreviewActive, sourceVolume, setMemoryGpuPreviewActive, sceneState, incSourceMprWarmupToken, sourceMprWarmupPlane, setSourceMprWarmupPlane, residentGpuUploadSeriesId, sourceMprWarmupToken, setCrosshairSlice , sectionViewOpen, threeRenderMode} from './state.js?v=20261022-build648';
+import { analysisRunsContain, runsPlaneMask } from './run-length.js?v=20261022-build648';
+import { mpr3DVisibility, refreshMpr3DPlaneTexture, setSectionCapColors, updateMpr3DPlanePositions, syncMpr3DSliceSliders, mpr3DOrthoSliding, pushCachedMpr3DPlane, mpr3DPreviewCache, mpr3DPreviewSignature, paintMpr3DCacheSliceFast, ensureMpr3DPreviewCache } from './mpr3d-overlay.js?v=20261022-build648';
+import { updateSectionClipPlaneWorld, rebindWebGpuSectionClipGroup, updateSectionViewUi } from './section-view.js?v=20261022-build648';
+import { request3DRender } from './scene3d.js?v=20261022-build648';
+import { planeRenderRevision, sourceFilterStages, getFilteredMemoryPlaneValues, getFilteredSourcePlaneValues, getCachedSourceSlice, sourceFilterSignature, sourceFilterCacheGet, memoryFilterPreviewGet, currentFilterSignature } from './source-filters.js?v=20261022-build648';
+import { cachedSagittalDisplayPlane, cachedSourceMprPlane } from './volume-io.js?v=20261022-build648';
+import { sourceOrthogonalCacheGet, residentGpuMprAvailable, buildSourceOrthogonalPlane } from './mpr-orthogonal.js?v=20261022-build648';
+import { hexRgb, formatCtValue, frameYield } from './utils.js?v=20261022-build648';
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.webgpu.js';
-import { latestOnlyRunner } from './latest-runner.js?v=20261022-build646';
+import { latestOnlyRunner } from './latest-runner.js?v=20261022-build648';
 export function analysisColorCss(color){return '#'+Number(color??0x00d8ff).toString(16).padStart(6,'0')}
 function resultPlaneLayers(p,idx,full){
  const out=[];if(!volume)return out;
