@@ -1,4 +1,4 @@
-import { tr } from './i18n.js?v=20261021-build639';
+import { tr } from './i18n.js?v=20261022-build643';
 
 export const ARM_MS = 4000, NOTE_MS = 3500;
 const workspace = () => document.documentElement.classList.contains('vrl-ipad-ui');

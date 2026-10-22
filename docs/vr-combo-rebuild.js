@@ -14,7 +14,7 @@
 // the distance slabs (1 MB each, several per frame while time is left), the alpha written into the bytes in chunks (an upload once its z slab
 // is complete, at most one per frame); the worker's alpha buffer goes back to it for the next build (no 16 MB allocation per change).
 // Pure (no DOM / GL; the worker is injected), unit-tested.
-import { combinedAlphaRange } from './distance-field.js?v=20261021-build639';
+import { combinedAlphaRange } from './distance-field.js?v=20261022-build643';
 
 export const UPLOAD_BYTES = 2 << 20, SLAB_BYTES = 1 << 20, CHUNK = 1 << 16, WORKER_CHUNK = 1 << 20, BUDGET_MS = 2, WORKER_FRAMES = 600;
 

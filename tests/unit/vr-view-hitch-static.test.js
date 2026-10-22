@@ -20,7 +20,7 @@ describe('vr-view.js: the closed menu costs nothing once a second (V1)', () => {
   it('the menu canvas is redrawn / uploaded only while it is shown; opening it refreshes it', () => {
     expect(loop).toContain('if(ui.open)menu.flush();');
     expect(loop.match(/menu\.flush\(\)/g)).toHaveLength(1);
-    expect(src).toContain('const setMenuOpen=open=>{ui.open=open;menu.mesh.visible=open;if(open){placeMenuNow();ui.probeOnOpen=true}menu.refresh()};');
+    expect(src).toContain('const setMenuOpen=open=>{if(open)emit(\'menu-open\');else emit(\'menu-close\');ui.open=open;menu.mesh.visible=open;if(open){placeMenuNow();ui.probeOnOpen=true}menu.refresh()};');
   });
   it('opening the menu on 詳細 measures once on the next frame (numbers not up to 1 s stale), only if it is still open there', () => {
     expect(loop).toContain('if(ui.probeOnOpen){ui.probeOnOpen=false;if(ui.open&&ui.tab===4&&!selfCheck.measuring){try{measureSamples()}catch(e){console.warn(e)}menu.refresh()}}');

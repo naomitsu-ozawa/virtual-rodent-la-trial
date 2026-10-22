@@ -209,8 +209,8 @@ describe('vr-view.js wiring of the HU line (source guard; the file is a WebXR mo
     expect(m).toContain('function hidePanel() { panel.visible = panelOn = false; }'); // hiding keeps its place in the scene
     expect(src).toContain('scene.add(huLine.panel)');
     expect(src).not.toMatch(/lazyFollow\(huLine\.panel/);
-    expect(src).toContain("case'home':bringVolumeFront();placeMenuNow();placeHelpNow();if(hist.isOpen)placeHistNow();placeHuNow();break;"); // quick ring 正面に戻す
-    expect(src).toContain('()=>{bringVolumeFront();placeMenuNow();placeHelpNow();if(hist.isOpen)placeHistNow();placeHuNow()}'); // 表示 tab button
+    expect(src).toContain("case'home':emit('home');bringVolumeFront();placeMenuNow();placeHelpNow();if(hist.isOpen)placeHistNow();placeHuNow();break;"); // quick ring 正面に戻す
+    expect(src).toContain('()=>{bringVolumeFront();placeMenuNow();placeHelpNow();if(hist.isOpen)placeHistNow();placeHuNow();emit(\'home\')}'); // 表示 tab button
     expect(src).toContain('onPanelShow:()=>{if(!huPlaced&&poseAt)placeHuNow()}');
     // grip on the panel moves it (before the volume grab); release leaves it in the scene facing the head
     const sq = src.slice(src.indexOf('const gripStart=c=>{'), src.indexOf("addEventListener('selectstart'")); // gripStart / gripEnd hold the squeeze handlers' bodies
@@ -220,15 +220,15 @@ describe('vr-view.js wiring of the HU line (source guard; the file is a WebXR mo
     // the laser stops on it (nearest board), the trigger there does nothing and never starts a line; while a line is stretched it is not a target
     const hit = src.slice(src.indexOf('const huPanelHit='), src.indexOf('const huPanelHit=') + 300);
     expect(hit).toContain('huLine.isDragging())return null'); expect(hit).toContain('p.parent===holdOf(c)'); expect(hit).not.toMatch(/intersectObject|new THREE/);
-    expect(src).toContain("for(const k of ['menu','help','hist','wheel','pwheel','undoBtn','hu'])");
+    expect(src).toContain("for(const k of ['menu','help','hist','wheel','pwheel','undoBtn','hu','ev'])");
     const press = src.slice(src.indexOf("addEventListener('selectstart'"), src.indexOf("addEventListener('selectend'"));
-    expect(press.indexOf('if(bd.help||bd.hu)return;')).toBeGreaterThan(0);
-    expect(press.indexOf('if(bd.help||bd.hu)return;')).toBeLessThan(press.indexOf('huLine.start(c)'));
+    expect(press.indexOf('if(bd.hu||bd.ev)return;')).toBeGreaterThan(0);
+    expect(press.indexOf('if(bd.hu||bd.ev)return;')).toBeLessThan(press.indexOf('huLine.start(c)'));
     // on the histogram board the press only grabs an x-axis end or presses 「自動」 (display range), and always returns: it never reaches what is behind it
     const hb = press.indexOf('if(bd.hist){'); expect(hb).toBeGreaterThan(0); expect(hb).toBeLessThan(press.indexOf('huLine.start(c)'));
     expect(press.slice(hb, press.indexOf('return}', hb) + 7)).toMatch(/hist\.startAxisDrag\(t,histLocal\.x\)[\s\S]*return\}$/);
     expect(press).not.toMatch(/hist\.grab\(|setHistogramLine|commitHistogramLine/);
-    expect(src).toContain('board=h||hh||bd.hist||bd.undoBtn||bd.hu||');
+    expect(src).toContain('board=h||hh||bd.hist||bd.undoBtn||bd.hu||bd.ev||');
     // the histogram board is grabbed first, then the HU line panel, both before the volume
     expect(sq.indexOf('c.userData.histHit')).toBeGreaterThan(0); expect(sq.indexOf('c.userData.histHit')).toBeLessThan(sq.indexOf('boardHits(c).hu'));
     expect(src).toContain("ray.renderOrder=dot.renderOrder=bd.hu?11:top?8:0"); // the laser end is drawn over the panel
