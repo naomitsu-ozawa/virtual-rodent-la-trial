@@ -1,10 +1,10 @@
 // 3D status UI that needs no edit tools: busy overlay, GPU volume filter badge.
 // Depends only on the imports below; never imports from app.js.
-import { sceneState, threeRenderMode, threeDCancelRequested, threeDApplying } from './state.js?v=20261022-build643';
-import { threeFilterBadge, threeBusy, threeBusyLabel, threeBusyCancel } from './ui-shell.js?v=20261022-build643';
-import { currentFilterSignature } from './source-filters.js?v=20261022-build643';
-import { tr } from './i18n.js?v=20261022-build643';
-import { setBusySlot, setBusyLabel } from './progress-modal.js?v=20261022-build643';
+import { sceneState, threeRenderMode, threeDCancelRequested, threeDApplying } from './state.js?v=20261022-build644';
+import { threeFilterBadge, threeBusy, threeBusyLabel, threeBusyCancel } from './ui-shell.js?v=20261022-build644';
+import { currentFilterSignature } from './source-filters.js?v=20261022-build644';
+import { tr } from './i18n.js?v=20261022-build644';
+import { setBusySlot, setBusyLabel } from './progress-modal.js?v=20261022-build644';
 export const gpuVolumeRefresh={token:0,running:null};
 export function updateVolumeFilterBadge(){
  if(!threeFilterBadge)return;

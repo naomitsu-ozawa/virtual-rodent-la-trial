@@ -17,8 +17,8 @@
 //    While a pinch is held (指差し only) the group carries the press's ray with the palm anchor (createDragCarry: 1:1, the wrist's turn included)
 //    instead of the live ray; after the release it blends back in blendMs. 標準 has no carry: its live ray stays on the group through the pinch.
 // Per frame: no allocation (reused vectors / typed arrays; the wrist menu's canvas is redrawn only when its state key changes).
-import { isHand, handAlive, fistForming, FIST_GUARD, createGrabHysteresis, grabScore, fingerCurl, GRAB_JOINT_NAMES, GRAB, palmPoint, createPoseFilter, createPinchFusion, createDragCarry, blendPose, DRAG_CARRY, parsePinchTune, parseDragTune, createTrackingLoss, createWristMenuGate, wristMenuMetrics, createOneEuro, PALM_FILTER, parseFilterTune, parseGrabTune, WRIST_ITEMS, WRIST_GRID, wristSlotFromUv, handTexts, RAY_HOLD_MS, palmFacesHead, createPointRay, createPointGate, POINT_JOINTS, pinchDotScale, parsePointTune, normalizeHandRay } from './vr-hand.js?v=20261022-build643';
-import { DRAG_HAND, DRAG_RECORD_HAND, HAND_LABEL_MOVE_M } from './vr-point.js?v=20261022-build643';
+import { isHand, handAlive, fistForming, FIST_GUARD, createGrabHysteresis, grabScore, fingerCurl, GRAB_JOINT_NAMES, GRAB, palmPoint, createPoseFilter, createPinchFusion, createDragCarry, blendPose, DRAG_CARRY, parsePinchTune, parseDragTune, createTrackingLoss, createWristMenuGate, wristMenuMetrics, createOneEuro, PALM_FILTER, parseFilterTune, parseGrabTune, WRIST_ITEMS, WRIST_GRID, wristSlotFromUv, handTexts, RAY_HOLD_MS, palmFacesHead, createPointRay, createPointGate, POINT_JOINTS, pinchDotScale, parsePointTune, normalizeHandRay } from './vr-hand.js?v=20261022-build644';
+import { DRAG_HAND, DRAG_RECORD_HAND, HAND_LABEL_MOVE_M } from './vr-point.js?v=20261022-build644';
 export { HAND_LABEL_MOVE_M };
 
 const TIP_R=0.0045,WRIST_W=WRIST_GRID.cols*WRIST_GRID.cellW,WRIST_H=WRIST_GRID.rows*WRIST_GRID.cellH,WRIST_LIFT=0.085,CW=WRIST_W*5000,CH=WRIST_H*5000,GRAB_TIP=0xffa000,REACH_TIP=0x39ff6a; // the wrist menu: a 3 x 3 grid of 5 x 3.5 cm buttons (WRIST_GRID), 5000 px per metre; the fingertips: orange = holding, green = something is within reach of a fist

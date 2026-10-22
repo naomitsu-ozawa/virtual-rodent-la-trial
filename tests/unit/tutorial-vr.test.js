@@ -152,8 +152,8 @@ describe('tutorial-vr controller', () => {
 
 describe('tutorial-audio', () => {
   it('one fixed female voice F1, independent of any setting', () => {
-    expect(audioSrc('F1', 'm1s2')).toBe('./tutorial/audio/F1/m1s2.m4a?v=20261022-build643'); expect(audioSrc(undefined, 'ok1')).toBe('./tutorial/audio/F1/ok1.m4a?v=20261022-build643');
-    expect(audioSrc('M1', 'ok1')).toBe('./tutorial/audio/F1/ok1.m4a?v=20261022-build643'); expect(audioSrc('off', 'x')).toBeNull(); expect(audioSrc('F1', '')).toBeNull(); expect(voiceOf('M1')).toBe('F1'); expect(voiceOf('off')).toBe('off');
+    expect(audioSrc('F1', 'm1s2')).toBe('./tutorial/audio/F1/m1s2.m4a?v=20261022-build644'); expect(audioSrc(undefined, 'ok1')).toBe('./tutorial/audio/F1/ok1.m4a?v=20261022-build644');
+    expect(audioSrc('M1', 'ok1')).toBe('./tutorial/audio/F1/ok1.m4a?v=20261022-build644'); expect(audioSrc('off', 'x')).toBeNull(); expect(audioSrc('F1', '')).toBeNull(); expect(voiceOf('M1')).toBe('F1'); expect(voiceOf('off')).toBe('off');
   });
   it('speechFor: feedback then the new step, nothing for a count-only change', () => {
     const e = eng(); let last; e.subscribe(s => { last = s; }); e.start('m1'); let r = speechFor(last, e.currentStep(), '');
@@ -164,16 +164,16 @@ describe('tutorial-audio', () => {
     const made = []; const C = function (s) { this.src = s; made.push(this); this.pause = () => {}; this.play = () => (made.length === 1 ? Promise.reject(new Error('x')) : Promise.resolve()); };
     const p = createTutorialAudio({ AudioCtor: C }); p.play(['a', 'b', 'c']);
     made[0].onerror(); await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
-    expect(made.map(x => x.src)).toEqual(['./tutorial/audio/F1/a.m4a?v=20261022-build643', './tutorial/audio/F1/b.m4a?v=20261022-build643']); // b only once (error + reject + a late onended all hit the guard)
+    expect(made.map(x => x.src)).toEqual(['./tutorial/audio/F1/a.m4a?v=20261022-build644', './tutorial/audio/F1/b.m4a?v=20261022-build644']); // b only once (error + reject + a late onended all hit the guard)
     made[0].onended?.();
     expect(made.length).toBe(2);
   });
   it('player: new Audio, sequential, a stop cancels, a failing file is skipped, off plays nothing', async () => {
     const { C, played } = fakeAudio(); const p = createTutorialAudio({ AudioCtor: C });
-    expect(p.play(['ok1', 'm1s2'])).toBe(true); expect(played).toEqual(['./tutorial/audio/F1/ok1.m4a?v=20261022-build643']);
+    expect(p.play(['ok1', 'm1s2'])).toBe(true); expect(played).toEqual(['./tutorial/audio/F1/ok1.m4a?v=20261022-build644']);
     // find the audio object: error -> next
     const first = []; const C2 = function (s) { this.src = s; first.push(this); this.play = () => Promise.resolve(); this.pause = () => {}; };
-    const p2 = createTutorialAudio({ AudioCtor: C2 }); p2.play(['a', 'b']); first[0].onerror(); expect(first.map(x => x.src)).toEqual(['./tutorial/audio/F1/a.m4a?v=20261022-build643', './tutorial/audio/F1/b.m4a?v=20261022-build643']);
+    const p2 = createTutorialAudio({ AudioCtor: C2 }); p2.play(['a', 'b']); first[0].onerror(); expect(first.map(x => x.src)).toEqual(['./tutorial/audio/F1/a.m4a?v=20261022-build644', './tutorial/audio/F1/b.m4a?v=20261022-build644']);
     p2.play(['c']); first.at(-1).onended(); expect(first.length).toBe(3); p2.stop(); first[2].onended?.(); expect(first.length).toBe(3);
     expect(p.play([])).toBe(false); expect(createTutorialAudio({ getVoice: () => 'off', AudioCtor: C }).play(['x'])).toBe(false); expect(createTutorialAudio({ AudioCtor: undefined }).play(['x'])).toBe(false);
   });

@@ -66,19 +66,23 @@ describe('mission board', () => {
     expect(v).not.toMatch(/lazyFollow\(ev\.mesh/);
   });
 });
-describe('CT shading (slice tab row + shader guards, static)', () => {
+describe('CT shading of the slice only (slice tab row + shader guards, static)', () => {
   const v = readFileSync('docs/vr-view.js', 'utf8'), MENU_H = 1180, y0 = 270;
-  it('the CT shading row sits below the air-floor slider (y0+604..+676) and its help line (y0+720), inside the menu', () => {
+  it('the slice-fill row sits below the air-floor slider (y0+604..+676) and its help line (y0+720), inside the menu', () => {
     expect(v).toContain('choice(y0+770,L.ctSh,');
     expect(v).toContain('btn(800,y0+604,70,'); expect(v).toContain('label(X,y0+720,L.airHelp');
     expect(y0 + 770).toBeGreaterThan(y0 + 604 + 72); expect(y0 + 770).toBeGreaterThan(y0 + 720 + 24); expect(y0 + 770 + 72).toBeLessThanOrEqual(MENU_H);
   });
-  it('the row label is short (ja / en)', () => {
-    expect(v).toContain("ctSh:'CT値の濃淡'"); expect(v).toContain("ctSh:'CT shading'");
+  it('the label and the two options are short (ja / en); the default is CT shading', () => {
+    expect(v).toContain("ctSh:'スライスの塗り',ctShV:['単色','CT濃淡']"); expect(v).toContain("ctSh:'Slice fill',ctShV:['Solid','CT shading']");
+    expect(v).toContain('labelHide:LABEL_HIDE_DEFAULT,ctShade:1}'); expect(v).toContain('ctShade:{value:1}');
   });
-  it('shader: rim fallback to the 0.75-voxel HU, caps read the slice HU, 陰影なし (diag 3) is flat', () => {
-    expect(v).toContain('if(hu<a.x||hu>a.y)hu=huAt(texCoord(p));lum=ctLumHU(hu,s);');
-    expect(v.match(/ctLumHU\(sliceHU\(cp\),ci\)/g)).toHaveLength(2); expect(v).not.toContain('ctLum(cp,ci)');
-    expect(v).toContain('if(ctShade<0.5||diag==3||segC[s].w>0.5)return 1.0;'); expect(v).toContain('ctShade>=0.5&&diag!=3&&segC[s].w<0.5');
+  it('shader: only sliceColor uses the CT factor; surface hits and caps keep the flat colour; 陰影なし (diag 3) is flat', () => {
+    expect(v.match(/ctLumHU\(/g)).toHaveLength(2); // the definition + sliceColor
+    expect(v).toContain('regionColor(p,segC[si].rgb,si)*ctLumHU(hu,si)');
+    expect(v).not.toContain('segHitColor'); expect(v).not.toContain('CT_SHADE_DEPTH');
+    expect(v.match(/lit=regionColor\(hp\+dir\*\(0\.75\*voxelMin\),segC\[idx\]\.rgb,idx\)\*diffuse\+vec3\(spec\)/g)).toHaveLength(4);
+    expect(v.match(/lit=mix\(regionColor\(cp,segC\[ci\]\.rgb,ci\),vec3\(1\.0\),0\.22\)\*diffuse/g)).toHaveLength(2);
+    expect(v).toContain('if(ctShade<0.5||diag==3||segC[s].w>0.5)return 1.0;');
   });
 });
