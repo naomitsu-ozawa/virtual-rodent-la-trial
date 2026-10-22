@@ -55,7 +55,8 @@ describe('the AR view toggle leaves the scale alone', () => {
   });
   it('vr-view.js: the start places the volume with startHolderScale (real size), AR and VR through the same line', () => {
     const e = src.indexOf('const bringVolumeFront=');
-    expect(src.slice(e, src.indexOf('\n', e))).toContain('holder.scale.setScalar(startHolderScale(realLongMm(),baseScale))');
+    const fn = src.slice(e, src.indexOf('// grab: one hand', e)); // the function has two lines now (the tutorial's own placement is the first branch of a ternary)
+    expect(fn).toContain('holder.scale.setScalar(tut?tutorialHolderScale(realLongMm()):startHolderScale(realLongMm(),baseScale))');
     expect(src).not.toMatch(/holder\.scale\.setScalar\([^)]*\bar\b/); // no AR-specific scale
   });
 });

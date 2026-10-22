@@ -185,7 +185,7 @@ describe('the かんたん menu: slice-opacity slider (generic: every dataset, n
   });
   it('vr-view.js draws it with the full menu\'s slider widget and the full menu\'s setting (saved on release like any slider), and the hand help names the sliders', () => {
     const src = readFileSync(new URL('../../docs/vr-view.js', import.meta.url), 'utf8');
-    expect(src).toContain("else if(it.type==='slider')w.push({...it,set:v=>{ui.sliceClear=false;settings.sliceOpacity=sliceOpacityValue(v)}});");
+    expect(src).toContain("else if(it.type==='slider')w.push({...it,set:v=>{ui.sliceClear=false;settings.sliceOpacity=sliceOpacityValue(v);emit('slice-opacity')}});"); // + the tutorial signal
     expect(src).toContain('sliceOpacity:settings.sliceOpacity,trigger:');
     expect(src).toContain('sliceOpacity:L.sl,');
     expect(src).toContain('ui.sliceClear=false;settings.sliceOpacity=Math.round(v*20)/20'); // the スライス tab's slider: same steps, and it also cancels the transparent toggle
@@ -387,20 +387,28 @@ describe('static wiring', () => {
     expect(read('ui-shell.js')).toContain('<input id="set-event-mode" type="checkbox">');
     expect(read('app.js')).toMatch(/addEventListener\('vrl-event-sample',e=>\{[^\n]*e\.detail\.done=startSample\(id\)/);
   });
-  it('the VR help board keeps its size and layout without a mission', () => {
+  it('the help board has its normal page height (+ the tab strip) and the mission is its own board, only made when there is a mission', () => {
     const src = read('vr-view.js');
-    expect(src).toContain('const help=makeMenu(820,560+evH,HELP_WIDTH)');
-    expect(src).toContain('evH=evLines.length?');
-    expect(src).toContain(':[],evH=');
-    expect(src).toMatch(/y:60\+evH,text:L\.helpT/);
-    expect(src).toMatch(/y:140\+evH\+i\*HELP_LINE_PITCH/);
+    expect(src).toContain('const help=makeMenu(820,PAGE_H+TAB_H,HELP_WIDTH,HELP_RES)'); // PAGE_H = the 560 px page + the caption band under the slide (tutorial-vr.js)
+    // the mission board shows the level's slide AS A PICTURE (tutorial-vr.js layoutLevelSlide), sized to it; no board without a slide
+    expect(src).toContain("evSlide=evLevel&&!(evLevel.id==='lv0'&&tutLive)?levelSlide(evLevel.id):null;");
+    // the slide's picture over the whole board (16:9 of the 820 px width), redrawn once more when the picture has loaded
+    expect(src).toContain('const evPics=evSlide?createSlideImages({onLoad:()=>{if(ev){ev.refresh();ev.flush()}}}):null,evH=evSlide?levelBoardH(820):0;');
+    expect(src).toContain('const ev=evH?makeMenu(820,evH,EV_WIDTH,EV_RES):null;');
+    expect(src).toContain('ev.onDraw(()=>layoutLevelSlide(evSlide,{W:820,getImage:evPics.get}).widgets)');
+    expect(src).toMatch(/y:60,text:L\.helpT/);
+    expect(src).toMatch(/y:140\+i\*HELP_LINE_PITCH/);
+    expect(src).not.toMatch(/\+evH\+i/);
   });
   it('VR / AR start with the menu board closed, or open on the かんたん menu in event mode; A/X long press and the ring still open it', () => {
     const src = read('vr-view.js');
-    expect(src).toContain("const evMenu=eventModeOn();let evLabels=TRIGGER_AT_START==='label';");
+    // the live tutorial (switch on + its Lv0 data open) starts on the かんたん menu too (its ステップ4 / 5 use it)
+    expect(src).toContain('const tutLive=tutorialModeOn()&&globalThis.__vrlOpenSample===TUT_SAMPLE;');
+    expect(src).toContain("const evMenu=eventModeOn()||tutLive;if(evMenu&&!(settings.help|0))settings.help=DEFAULTS.help;");
+    expect(src).toContain("let evLabels=TRIGGER_AT_START==='label';");
     expect(src).toContain('const menu=makeMenu(MENU_W,MENU_H,MENU_WIDTH);menu.mesh.visible=evMenu;scene.add(menu.mesh);');
     expect(src).toContain('const ui={sliceClear:false,tab:evMenu?10:0,open:evMenu,');
-    expect(src).toContain('const setMenuOpen=open=>{ui.open=open;menu.mesh.visible=open;if(open){placeMenuNow();ui.probeOnOpen=true}menu.refresh()};');
+    expect(src).toContain('const setMenuOpen=open=>{if(open)emit(\'menu-open\');else emit(\'menu-close\');ui.open=open;menu.mesh.visible=open;if(open){placeMenuNow();ui.probeOnOpen=true}menu.refresh()};');
     expect(src).toContain("if(!ui.open){setMenuOpen(true);pulseTwice(c)}");
     expect(src).toContain("case'menu':setMenuOpen(!ui.open);break;");
     expect(src).toContain('const menuHit=c=>{if(!ui.open)return null;');
@@ -414,7 +422,7 @@ describe('static wiring', () => {
     expect(block).toContain('trigger:{show:triggerModeRow(hasRes),label:evLabelOn()}');
     expect(block).not.toMatch(/activeEventLevel|level:|lv\b/); // nothing level-dependent
     // the actions behind the layout's widget ids: 断面 (B/Y's setSection), the trigger switch, 元に戻す (the ring's undo), すべての設定 -> the full menu, 終了 = the full menu's session.end()
-    expect(src).toContain("const acts={section:v=>setSection(v),'trigger:point':()=>{evLabels=false},'trigger:label':()=>{evLabels=true},undo:()=>{undoLast()},home:goHome,reset:pressReset,all:()=>{ui.tab=0},exit:()=>session.end()};");
+    expect(src).toContain("const acts={section:v=>setSection(v),'trigger:point':()=>{evLabels=false},'trigger:label':()=>{evLabels=true;emit('trigger-label')},undo:()=>{undoLast()},home:goHome,reset:pressReset,all:()=>{ui.tab=0},exit:()=>session.end()};");
     expect(src).toContain("exit:tr(mode==='ar'?'evExitAr':'evExitVr')");
     expect(src).toContain("btn(MENU_W-X-260,yb,260,L.exit,true,()=>session.end(),{color:'#b33'})"); // the full menu's own exit, unchanged
     // who decides what the trigger does: label mode only when the switch says so AND the data has results (or the 解析 tab is open, as before)

@@ -59,6 +59,14 @@ export function startHolderScale(longMm, fallbackScale) {
   return clampScale(fallbackScale, longMm);
 }
 
+// while the tutorial runs the volume is put where the hands reach it and large enough to take hold of (the practice bone is a 2.56 cm cube at real size: too small to grab
+// when told to). 0.25 m longest side (not the 0.30 m limit: spreading the hands, 2-3, must still enlarge it by more than the 15 % the step asks for: 0.30 / 0.25 = +20 %), 0.5 m ahead, at chest height (a little below the eyes). Only the tutorial uses this; every other start is startHolderScale.
+export const TUT_VOLUME_FWD = 0.5, TUT_VOLUME_DOWN = 0.25;
+export const TUT_LONG_M = 0.25;
+export const tutorialHolderScale = longMm => clampScale(TUT_LONG_M / NORM_LONG, longMm);
+// the volume is "small" for the tutorial's grab steps when it is displayed at less than 95 % of the tutorial size (the visitor shrank it, or it was never enlarged)
+export const smallForTutorial = (holderScale, longMm) => holderScale < tutorialHolderScale(longMm) * 0.95;
+
 // two-hand pinch: the new scale from the scale and hand distance at the grab (s0, d0) and the current distance d.
 // Always derived from the grab values (not accumulated), so pushing past a limit and coming back resumes exactly where the hands cross the limit.
 export function pinchScale(s0, d0, d, longMm) {

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { createVelocityTracker, flingDecision, flingDebugLines, FLING_SPEED_MPS, FLING_STALE_MS } from '../../docs/vr-section-frame.js';
+import { createVelocityTracker, flingDecision, flingDebugLines, FLING_SPEED_MPS, FLING_STALE_MS, FLING_COS } from '../../docs/vr-section-frame.js';
 import { sectionFollowStart, sectionFollowStep, qMul } from '../../docs/vr-point.js';
 import { VOLUME_FWD, VOLUME_DOWN } from '../../docs/vr-layout.js';
 
@@ -47,11 +47,12 @@ describe('realistic Quest throw: laser drag at ~0.7 m, 45 degree wrist flick + 8
     expect(r.plane.v.speed).toBeGreaterThan(3);
   });
   it('measured the controller and used the axis volume centre -> controller: the throw was kept (the bug)', () => {
-    const old = flingDecision({ v: r.hand.v, from: r.last.hand, center: C, head });
+    const B521 = { minSpeed: 1.5, minCos: 0.5 }; // 's thresholds (this replays that build's measurement)
+    const old = flingDecision({ v: r.hand.v, from: r.last.hand, center: C, head, ...B521 });
     expect(old.fling).toBe(false); expect(old.reason).toBe('slow');
     // even a fast hand would have failed: the hand is between the viewer and the volume, so "centre -> hand" points back at the viewer
     const fastHand = { x: r.plane.v.x, y: r.plane.v.y, z: r.plane.v.z };
-    expect(flingDecision({ v: fastHand, from: r.last.hand, center: C, head }).fling).toBe(false);
+    expect(flingDecision({ v: fastHand, from: r.last.hand, center: C, head, ...B521 }).fling).toBe(false);
   });
   it('measures the frame and uses centre -> frame: the throw deletes', () => {
     const d = flingDecision({ v: r.plane.v, from: r.last.plane, center: C, head });
@@ -91,9 +92,13 @@ describe('releases that must NOT delete (same real follow math)', () => {
   });
   it('sideways: a frame beside the volume swept fast along it (tangentially), short', () => {
     const aim = { x: C.x + 0.25, y: C.y, z: C.z }, X = { x: 1, y: 0, z: 0 };
-    const q = throwSim({ aim, motion: s => ({ q: qAxis(X, 7 * Math.PI / 180 * s), dx: { x: 0, y: 0, z: 0 } }), ms: 55, stillMs: 0, linear: true });
+    // 4 degrees in 33 ms (1.5 m/s, ~78 degrees off the outward axis) stays; the 7 degrees in 55 ms sweep of ends ~70 degrees off the axis and,
+    // with the ~75 degree edge of (FLING_COS 0.26), deletes now (asserted below so the change is visible)
+    const q = throwSim({ aim, motion: s => ({ q: qAxis(X, 4 * Math.PI / 180 * s), dx: { x: 0, y: 0, z: 0 } }), ms: 33, stillMs: 0, linear: true });
     expect(q.plane.v.speed).toBeGreaterThan(FLING_SPEED_MPS);
     expect(decide(q)).toMatchObject({ fling: false, reason: 'inward' });
+    const q7 = throwSim({ aim, motion: s => ({ q: qAxis(X, 7 * Math.PI / 180 * s), dx: { x: 0, y: 0, z: 0 } }), ms: 55, stillMs: 0, linear: true });
+    const d7 = decide(q7); expect(d7.fling).toBe(true); expect(d7.cos).toBeGreaterThan(FLING_COS); expect(d7.cos).toBeLessThan(0.5);
   });
   it('twisting the frame fast about the laser (wrist roll): the frame centre stays, nothing happens', () => {
     const q = throwSim({ motion: s => { const d = norm(sub(C, { x: 0.2, y: 1.1, z: -0.02 })); return { q: qAxis(d, 90 * Math.PI / 180 * s), dx: { x: 0, y: 0, z: 0 } }; } });

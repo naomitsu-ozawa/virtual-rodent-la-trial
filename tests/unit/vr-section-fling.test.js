@@ -23,20 +23,20 @@ const X = { x: 1, y: 0, z: 0 };
 
 describe('fling constants', () => {
   it('named, tunable values', () => {
-    expect(FLING_SPEED_MPS).toBe(1.5); expect(FLING_WINDOW_MS).toBe(150); expect(FLING_STALE_MS).toBe(120); expect(FLING_MIN_SPAN_MS).toBe(30); expect(FLING_COS).toBe(0.5); expect(FLING_FADE_S).toBe(0.3); expect(FLING_UNDO_MS).toBe(5000);
+    expect(FLING_SPEED_MPS).toBe(1.0); expect(FLING_WINDOW_MS).toBe(200); expect(FLING_STALE_MS).toBe(120); expect(FLING_MIN_SPAN_MS).toBe(30); expect(FLING_COS).toBe(0.26);
   });
 });
 
 describe('createVelocityTracker', () => {
-  it('measures the velocity of the last 150 ms (90 Hz samples)', () => {
+  it('measures the velocity of the last FLING_WINDOW_MS (90 Hz samples)', () => {
     const tr = createVelocityTracker(), t = sweep(tr, { dir: X, speed: 3 });
     const v = tr.velocity(t); expect(v.x).toBeCloseTo(3, 5); expect(v.y).toBeCloseTo(0, 6); expect(v.speed).toBeCloseTo(3, 5);
   });
-  it('only the last 150 ms count: a frame that was fast earlier but then stood (nearly) still for longer reads slow', () => {
+  it('only the last FLING_WINDOW_MS count: a frame that was fast earlier but then stood (nearly) still for longer reads slow', () => {
     const tr = createVelocityTracker();
     sweep(tr, { dir: X, speed: 4, ms: 200, t0: 1000 });                       // fast, ends at t = 1198
-    for (let i = 1; i <= 18; i++) tr.push(1198 + i * 11, { x: 0.001 * i, y: 0, z: 0 }); // then nearly still for 198 ms
-    expect(tr.velocity(1198 + 18 * 11).speed).toBeLessThan(0.2);
+    for (let i = 1; i <= 21; i++) tr.push(1198 + i * 11, { x: 0.001 * i, y: 0, z: 0 }); // then nearly still for 231 ms (longer than the 200 ms window)
+    expect(tr.velocity(1198 + 21 * 11).speed).toBeLessThan(0.2);
   });
   it('the PEAK over the window (the trigger is let go a little after the fastest part): a flick that ended 60 ms before the release still reads fast', () => {
     const tr = createVelocityTracker();
@@ -67,18 +67,19 @@ describe('flingDecision: speed, direction, slow release, two-hand', () => {
     expect(flingDecision({ v: mk(X, FLING_SPEED_MPS - 0.01), from, center, head })).toMatchObject({ fling: false, reason: 'slow' });
     expect(flingDecision({ v: mk(X, FLING_SPEED_MPS), from, center, head }).fling).toBe(true);
   });
-  it('normal slow releases never delete (a careful drag is well below 1.5 m/s)', () => {
-    for (const s of [0, 0.1, 0.4, 0.8, 1.2]) for (const d of [X, { x: -1, y: 0, z: 0 }, { x: 0, y: 1, z: 0 }]) expect(flingDecision({ v: mk(d, s) || { x: 0, y: 0, z: 0 }, from, center, head }).fling).toBe(false);
+  it('normal slow releases never delete (a careful drag is below 1.0 m/s), outward included', () => {
+    for (const s of [0, 0.1, 0.4, 0.8, 0.95]) for (const d of [X, { x: -1, y: 0, z: 0 }, { x: 0, y: 1, z: 0 }]) expect(flingDecision({ v: mk(d, s) || { x: 0, y: 0, z: 0 }, from, center, head }).fling).toBe(false);
     expect(flingDecision({ v: { x: 0, y: 0, z: 0 }, from, center, head }).fling).toBe(false);
   });
   it('direction: toward the volume (inward) or across it never deletes, however fast', () => {
     expect(flingDecision({ v: mk({ x: -1, y: 0, z: 0 }, 4), from, center, head })).toMatchObject({ fling: false, reason: 'inward' });
     expect(flingDecision({ v: mk({ x: 0, y: 1, z: 0 }, 4), from, center, head }).fling).toBe(false); // tangential: cos = 0
   });
-  it('direction: 60 degrees is the edge (cos 0.5)', () => {
+  it('direction: ~75 degrees is the edge (cos 0.26)', () => {
     const a = (deg) => ({ x: Math.cos(deg * Math.PI / 180), y: Math.sin(deg * Math.PI / 180), z: 0 });
     expect(flingDecision({ v: mk(a(55), 3), from, center, head }).fling).toBe(true);
-    expect(flingDecision({ v: mk(a(65), 3), from, center, head }).fling).toBe(false);
+    expect(flingDecision({ v: mk(a(70), 3), from, center, head }).fling).toBe(true);
+    expect(flingDecision({ v: mk(a(80), 3), from, center, head }).fling).toBe(false);
   });
   it('a grip / two-hand gesture during the drag blocks it, even for a perfect throw', () => {
     expect(flingDecision({ v: mk(X, 5), from, center, head, blocked: true })).toMatchObject({ fling: false, reason: 'volume-gesture' });
@@ -216,7 +217,7 @@ describe('vr-view.js wiring (static)', () => {
   it('the throw is decided at the trigger release BEFORE endDrag (which would snap the plane back into the box)', () => {
     expect(src).toContain('if(!tryFling(c))endDrag(c)');
     const t = src.slice(src.indexOf('const tryFling='), src.indexOf('const tryFling=') + 900);
-    expect(t).toContain('flingDecision({v:m.v,from:tmpFv,center:tmpFc,head,blocked:!!dg.volTouched||!!twoHand||grabbing.size>0})');
+    expect(t).toContain('const blocked=!!dg.volTouched||!!twoHand||grabbing.size>0'); expect(t).toContain('flingDecision({v:m.v,from:tmpFv,center:tmpFc,head,blocked})'); // blocked also gates the out-of-view delete
     expect(t).not.toContain('.push('); // no extra sample at the release (the event carries the last frame's pose)
   });
   it('the dragged frame is sampled per frame from the press on; a grip / two-hand gesture restarts the record and marks the drag as touched; a new press resets', () => {
@@ -232,9 +233,9 @@ describe('vr-view.js wiring (static)', () => {
     expect(src).toContain('secUndo.push(snap,performance.now())');
   });
   it('the undo board is laser-clickable: part of boardHits, handled in selectstart before the help board, hidden until a delete', () => {
-    expect(src).toContain("for(const k of ['menu','help','hist','wheel','pwheel','undoBtn','hu'])"); // + the histogram board,: + the HU line's live panel
+    expect(src).toContain("for(const k of ['menu','help','hist','wheel','pwheel','undoBtn','hu','ev'])"); // + the histogram board,: + the HU line's live panel
     expect(src).toContain('if(bd.undoBtn){restoreSection(c);return}');
-    expect(src.indexOf('if(bd.undoBtn){restoreSection(c);return}')).toBeLessThan(src.indexOf('if(bd.help||bd.hu)return;'));
+    expect(src.indexOf('if(bd.undoBtn){restoreSection(c);return}')).toBeLessThan(src.indexOf('if(bd.hu||bd.ev)return;'));
     expect(read('vr-undo-button.js')).toContain('mesh.visible = false');
   });
   it('the 断面 tab 削除 button goes through the same undoable delete', () => { expect(src).toContain('L.remove,false,()=>deleteSection(pl)'); });

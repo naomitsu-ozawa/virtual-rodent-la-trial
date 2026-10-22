@@ -2,9 +2,10 @@
 // the levels). A level card asks app.js for its practice dataset ('vrl-event-sample' -> the practice-data chooser's own startSample,
 // so the bundled project.vrlab applies as usual); then the visitor presses 「VRで見る」/「ARで見る」. With the switch off (default)
 // nothing is added to the page.
-import { settings } from './app-settings.js?v=20261022-build653';
-import { tr } from './i18n.js?v=20261022-build653';
-import { EVENT_LEVELS, EVENT_HINT_KEYS, levelForSample, chooseEventLevel, chosenEventLevel, resetPress, resetArmed, RESET_ARM_MS } from './event-mode.js?v=20261022-build653';
+import { settings } from './app-settings.js?v=20261022-build654';
+import { tr } from './i18n.js?v=20261022-build654';
+import { tutorialUiActive, restartTutorial } from './tutorial-ui.js?v=20261022-build654';
+import { EVENT_LEVELS, EVENT_HINT_KEYS, levelForSample, chooseEventLevel, chosenEventLevel, resetPress, resetArmed, RESET_ARM_MS } from './event-mode.js?v=20261022-build654';
 export function initEventModeUi(){
  const box=document.getElementById('set-event-mode');
  if(box){box.checked=settings.get('eventMode')===true;box.onchange=()=>settings.set('eventMode',box.checked)}
@@ -39,6 +40,7 @@ export function initEventModeUi(){
    card.append(top,el('span','event-level-mission',lv.missionKey),hints);
    card.onclick=()=>{
     if(loading)return;chooseEventLevel(lv.id);
+    if(lv.id==='lv0'&&tutorialUiActive()){try{restartTutorial()}catch(e){console.warn('Tutorial: Lv0 card',e)}}
     const ev=new CustomEvent('vrl-event-sample',{detail:{sampleSet:lv.sample,done:null}});document.dispatchEvent(ev);
     if(!ev.detail.done){mark();return}
     loading=true;mark();Promise.resolve(ev.detail.done).catch(()=>{}).finally(()=>{loading=false;mark()});
