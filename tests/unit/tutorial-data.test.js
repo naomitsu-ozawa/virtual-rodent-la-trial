@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
-import { TUTORIAL_MISSIONS, TUT_SIGNALS, TUT_VOICES, TUT_FEEDBACK, TUT_INTRO, TUT_SAMPLE, missionById } from '../../docs/tutorial-data.js';
+import { TUTORIAL_MISSIONS, TUT_SIGNALS, TUT_VOICES, TUT_FEEDBACK, TUT_INTRO, TUT_ORIENT, TUT_SAMPLE, missionById } from '../../docs/tutorial-data.js';
 import { GUIDE_SLIDES, LEVEL_SLIDES, guideSlide, levelSlide, slideItem, loc } from '../../docs/tutorial-slides.js';
 import { SIGNAL_KINDS } from '../../docs/tutorial-signal.js';
 import { I18N } from '../../docs/i18n.js';
@@ -128,12 +128,28 @@ describe('ステップ wording', () => {
     expect(TUT_FEEDBACK.missionClear.audioText).toBe('ステップクリアです。');
     for (const l of ['ja', 'en']) for (const k of Object.keys(I18N[l]).filter(k => /^tutM\d|^tutNoAnalysis$/.test(k))) expect(k).toBe(null); // the old M1..M8 keys are gone
   });
-  it('the narration: one F1 file + manifest entry per audio id (steps, feedback, page intro), nothing stale', () => {
-    const ids = new Set([...steps, ...Object.values(TUT_FEEDBACK).flat(), ...Object.values(TUT_INTRO)].map(e => e.audio));
+  it('the narration: one F1 file + manifest entry per audio id (steps, feedback, page intro, VR entry guidance), nothing stale', () => {
+    const ids = new Set([...steps, ...Object.values(TUT_FEEDBACK).flat(), ...Object.values(TUT_INTRO), ...Object.values(TUT_ORIENT)].map(e => e.audio));
     const files = readdirSync(new URL('../../docs/tutorial/audio/F1/', import.meta.url)).filter(f => f.endsWith('.m4a')).map(f => f.slice(0, -4));
     expect(new Set(files)).toEqual(ids);
     const man = JSON.parse(readFileSync(new URL('../../docs/tutorial/manifest.json', import.meta.url), 'utf8'));
     expect(new Set(Object.keys(man))).toEqual(new Set([...ids].map(id => 'F1/' + id)));
-    for (const v of Object.values(man)) { expect(v.voice).toBe('F1'); expect(v.sec).toBeGreaterThan(0.5); expect(v.sec).toBeLessThan(6); }
+    for (const v of Object.values(man)) { expect(v.voice).toBe('F1'); expect(v.sec).toBeGreaterThan(0.5); expect(v.sec).toBeLessThan(9); }
+    for (const [k, v] of Object.entries(man)) if (!/orient1|orient2|end$/.test(k)) expect(v.sec, k).toBeLessThan(6); // the new, longer lines (entry guidance, closing) may take up to 9 s, the old ones stay short
+    expect(man['F1/orient1'].sec).toBeLessThan(9);
+  });
+});
+
+describe('lines: entry guidance, next-step prompt, closing', () => {
+  it('TUT_ORIENT: right = the 操作パネル (help board), left = the メニュー; spoken with kana-safe readings, ja / en texts', () => {
+    expect(Object.keys(TUT_ORIENT)).toEqual(['right', 'left']);
+    expect(TUT_ORIENT.right).toMatchObject({ audio: 'orient1', text: 'tutOrientRight', board: 'help' }); expect(TUT_ORIENT.left).toMatchObject({ audio: 'orient2', text: 'tutOrientLeft', board: 'menu' });
+    for (const it of Object.values(TUT_ORIENT)) { expect(it.audioText).not.toMatch(/[A-Za-z]/); expect(Object.isFrozen(it)).toBe(true); }
+  });
+  it('missionClear / allClear carry the line that follows: 「次へ」を押してください / the end; both are voiced top-level entries', () => {
+    expect(TUT_FEEDBACK.missionClear.then).toBe(TUT_FEEDBACK.goNext); expect(TUT_FEEDBACK.allClear.then).toBe(TUT_FEEDBACK.end);
+    expect(TUT_FEEDBACK.goNext).toMatchObject({ id: 'gonext', audio: 'gonext', text: 'tutFbGoNext' }); expect(TUT_FEEDBACK.end).toMatchObject({ id: 'end', audio: 'end', text: 'tutFbEnd' });
+    expect(I18N.ja.tutFbGoNext).toBe('次のステップに進みましょう。「次へ」を押してください。'); expect(I18N.ja.tutFbEnd).toContain('終わり');
+    for (const l of ['ja', 'en']) for (const k of ['tutFbGoNext', 'tutFbEnd', 'tutOrientTitle', 'tutOrientHint']) expect(I18N[l][k], `${l}:${k}`).toBeTruthy();
   });
 });

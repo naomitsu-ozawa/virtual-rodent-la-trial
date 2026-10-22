@@ -5,26 +5,28 @@ export const DEFAULT_VOICE = 'F1';
 const AUDIO_QUERY = '?v=20261022-build642'; // same cache-busting form as the other assets (tools/bump-build.mjs rewrites it); the .m4a file name / id is unchanged
 export const voiceOf = v => (v === 'off' ? 'off' : DEFAULT_VOICE);
 export const audioSrc = (voice, id, base = AUDIO_BASE) => (!id || voiceOf(voice) === 'off' ? null : `${base}${DEFAULT_VOICE}/${id}.m4a${AUDIO_QUERY}`);
-// ids to speak for one engine snapshot, in order: the earned feedback first (stepClear: ok1..3; missionClear / allClear), then the new step's own voice.
+// ids to speak for one engine snapshot, in order: the earned feedback first (stepClear: ok1..3; missionClear / allClear, each followed by its `then` line:, 「次へ」を押してください / the end), then the new step's own voice.
 // prev = what was last announced ({mission, step, finished}); returns {ids, key}; ids = [] when nothing changed (counts inside a step do not speak).
 export function speechFor(snap, step, prevKey) {
   const key = snap && snap.mission ? `${snap.mission}:${snap.step}:${snap.finished ? 1 : 0}` : '';
   const ids = [];
-  if (snap && snap.feedbackItem && snap.feedbackItem.audio) ids.push(snap.feedbackItem.audio);
+  if (snap && snap.feedbackItem && snap.feedbackItem.audio) { ids.push(snap.feedbackItem.audio); if (snap.feedbackItem.then && snap.feedbackItem.then.audio) ids.push(snap.feedbackItem.then.audio); }
   if (key && key !== prevKey && !snap.finished && step && step.audio) ids.push(step.audio);
   return { ids, key };
 }
 export function createTutorialAudio({ getVoice = () => DEFAULT_VOICE, AudioCtor = globalThis.Audio, base = AUDIO_BASE } = {}) {
   let cur = null, seq = 0, curList = null, curIdx = -1;
   const stop = () => { seq++; const a = cur; cur = null; curList = null; curIdx = -1; if (a) { try { a.pause(); } catch { /* */ } try { a.onended = a.onerror = null; } catch { /* */ } } };
-  // plays the ids one after another (a missing file is skipped); a new call stops the previous one
-  function play(ids) {
+  // plays the ids one after another (a missing file is skipped); a new call stops the previous one. onEnd (optional) runs once when the last clip has ended (or failed) and nothing
+  // replaced the list meanwhile; it does not run when play returns false (no voice: the caller knows) or the list was stopped
+  function play(ids, onEnd) {
     stop();
     const list = (Array.isArray(ids) ? ids : [ids]).filter(Boolean), v = voiceOf(getVoice()), my = seq;
     if (v === 'off' || !list.length || typeof AudioCtor !== 'function') return false;
     curList = list;
     const go = i => {
-      if (my !== seq || i >= list.length) return;
+      if (my !== seq) return;
+      if (i >= list.length) { if (typeof onEnd === 'function') { try { onEnd(); } catch { /* */ } } return; }
       curIdx = i;
       let a; try { a = new AudioCtor(audioSrc(v, list[i], base)); } catch { go(i + 1); return; }
       cur = a; let fired = false; const nxt = () => { if (fired) return; fired = true; if (my === seq) go(i + 1); }; // error + reject (or ended) both land here: advance once per clip
@@ -42,7 +44,7 @@ export function createTutorialAudio({ getVoice = () => DEFAULT_VOICE, AudioCtor 
   }
   return { play, stop, settle };
 }
-export const isFeedbackId = id => /^(ok[123]|mclear|allclear)$/.test(id || '');
+export const isFeedbackId = id => /^(ok[123]|mclear|allclear|gonext|end)$/.test(id || '');
 // no progress for the step's timeoutHint ms -> its voice again, once per quiet period (reset(now) on every progress / page change; tick(now) from the frame loop)
 export function createStepReplay(onReplay) {
   let at = 0, hint = 0, armed = false;

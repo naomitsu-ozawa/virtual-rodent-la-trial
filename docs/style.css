@@ -1335,6 +1335,7 @@ html.vrl-ipad-ui .ws-settings-embed .settings-cache-list,html.vrl-ipad-ui .ws-se
 .tut-text{margin:0;font-size:17px;line-height:1.5}
 .tut-sub{margin:0;font-size:13px;color:rgb(var(--ui-t2))}
 html[lang="en"] .tut-sub{display:none}
+.tut-next-note{margin:0;font-size:13px;font-weight:600;color:rgb(var(--ui-t1))}
 .tut-nav,.tut-tools{display:flex;flex-wrap:wrap;gap:8px}
 .tut-panel button{min-height:44px;padding:6px 14px;border-radius:10px;border:1px solid rgb(var(--ui-b3));background:rgb(var(--ui-s1));color:rgb(var(--ui-t1));font:inherit;cursor:pointer;touch-action:manipulation}
 .tut-panel button:disabled{opacity:.45;cursor:default}

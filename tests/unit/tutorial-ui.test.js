@@ -1,13 +1,12 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { sanitizeTutorialSettings, SETTINGS_DEFAULTS } from '../../docs/app-settings.js';
-import { tutorialSignalsOn, tutorialUiActive, continueTutorial, getTutorialEngine, resetTutorialAll, isPracticeSample, panelModel, detectVrSupport, _resetTutorialEngineForTest, introPhase, introTargets, introTextKey, createTutorialIntro } from '../../docs/tutorial-ui.js';
+import { tutorialSignalsOn, tutorialUiActive, continueTutorial, getTutorialEngine, resetTutorialAll, isPracticeSample, panelModel, detectVrSupport, _resetTutorialEngineForTest, introPhase, introTargets, introTextKey, createTutorialIntro, sampleReady, restartTutorial, forgetLegacyProgress } from '../../docs/tutorial-ui.js';
 import { createTutorialEngine } from '../../docs/tutorial-engine.js';
 import { TUTORIAL_MISSIONS } from '../../docs/tutorial-data.js';
 import { EVENT_LEVELS } from '../../docs/event-mode.js';
 import { I18N } from '../../docs/i18n.js';
 
-const memProgress = () => { let p = { v: 1, done: {}, skipAll: false, last: null }; return { load: () => JSON.parse(JSON.stringify(p)), save: q => { p = JSON.parse(JSON.stringify(q)); }, clear: () => { p = { v: 1, done: {}, skipAll: false, last: null }; } }; };
-const mk = () => createTutorialEngine({ progress: memProgress(), arAvailable: false }); // no AR step: AR support changes nothing
+const mk = () => createTutorialEngine({ arAvailable: false }); // no AR step: AR support changes nothing
 
 describe('tutorial settings', () => {
   it('defaults: off, voice F1', () => {
@@ -101,8 +100,14 @@ describe('the tutorial has no analysis part', () => {
   });
 });
 
-describe('Lv0 card continues the tutorial', () => {
-  const eng = () => createTutorialEngine({ progress: memProgress(), arAvailable: false });
+describe('Lv0 card: starts the tutorial from ステップ1 every time; continueTutorial stays for the board without the entry guidance', () => {
+  const eng = () => createTutorialEngine({ arAvailable: false });
+  it('restartTutorial (what the card calls): mid-mission, finished or everything skipped, it always ends on ステップ1, page 1, nothing done', () => {
+    const e = eng(); e.start('controls'); e.next(); e.start('grip'); e.next();
+    expect(restartTutorial(e)).toEqual({ action: 'start', id: 'controls' }); expect(e.getState()).toMatchObject({ mission: 'controls', step: 0, finished: false, done: {} });
+    e.skipAll(); expect(restartTutorial(e)).toEqual({ action: 'start', id: 'controls' }); expect(e.getState()).toMatchObject({ mission: 'controls', step: 0, skipAll: false, done: {} });
+    expect(e.isUnlocked('grip')).toBe(false);
+  });
   it('nothing done: starts ステップ1; a mission under way keeps going (not restarted); after finishing it the next one starts', () => {
     const e = eng();
     expect(continueTutorial(e)).toEqual({ action: 'start', id: 'controls' }); expect(e.getState()).toMatchObject({ mission: 'controls', step: 0 });
@@ -120,7 +125,7 @@ describe('Lv0 card continues the tutorial', () => {
   it('wiring: only Lv0 and only while the tutorial UI is live; the switch is never turned on by the card', async () => {
     const { readFileSync } = await import('node:fs');
     const ui = readFileSync(new URL('../../docs/event-mode-ui.js', import.meta.url), 'utf8');
-    expect(ui).toContain("if(lv.id==='lv0'&&tutorialUiActive()){try{continueTutorial()}");
+    expect(ui).toContain("if(lv.id==='lv0'&&tutorialUiActive()){try{restartTutorial()}");
     expect(ui).not.toMatch(/settings\.set\('tutorialMode'/);
     expect(tutorialUiActive()).toBe(false); // no panel mounted in this test: the Lv0 card is the plain card
   });
@@ -176,8 +181,9 @@ function fakeDoc({ lv0Card = false, vrReady = true, ar = true, job = null } = {}
 }
 describe('page introduction', () => {
   it('phase: Lv0 data open = press VR, anything else = open Lv0 first', () => {
-    expect(introPhase('sample4')).toBe('pressVr');
-    for (const o of [undefined, null, 'sample1', 'mine']) expect(introPhase(o)).toBe('openLv0');
+    expect(introPhase('sample4', true)).toBe('pressVr');
+    expect(introPhase('sample4', false)).toBe('loading'); // chosen but not READY yet: wait
+    for (const o of [undefined, null, 'sample1', 'mine']) for (const r of [true, false]) expect(introPhase(o, r)).toBe('openLv0');
   });
   it('what is lit and said: the Lv0 card when 体験会 shows it, else 練習データ and its 骨梁 entry; then the VR (and AR) button, or wait while it loads', () => {
     const a = fakeDoc({ lv0Card: true });
@@ -189,6 +195,7 @@ describe('page introduction', () => {
     expect(introTextKey('pressVr', fakeDoc({ vrReady: false }).doc)).toBe('tutIntroLoading');
     expect(introTextKey('pressVr', fakeDoc({ job: true }).doc)).toBe('tutIntroLoading'); // the data is still loading (the VR button can be enabled already)
     expect(introTextKey('pressVr', fakeDoc({ job: false }).doc)).toBe('tutIntroVr');
+    expect(introTargets('loading', b.doc)).toEqual([]); expect(introTextKey('loading', b.doc)).toBe('tutIntroLoading'); // nothing is lit while the data loads
     expect(introTargets(null, b.doc)).toEqual([]);
     expect(I18N.ja.tutIntroLv0Off).toContain('練習データ'); expect(I18N.ja.tutIntroVr).toContain('VRで見る');
   });
@@ -196,7 +203,7 @@ describe('page introduction', () => {
     vi.useFakeTimers();
     try {
       const f = fakeDoc(), audio = { play: vi.fn() }; let open = null;
-      const it = createTutorialIntro({ doc: f.doc, audio, getOpenSample: () => open });
+      const it = createTutorialIntro({ doc: f.doc, audio, getOpenSample: () => open, getReady: () => true });
       it.start();
       expect(it.phase).toBe('openLv0'); expect(f.bar()).toBeTruthy(); expect(f.bar().dataset.tutPhase).toBe('openLv0');
       expect(f.bar().children[0].textContent).toBe(I18N.ja.tutIntroLv0Off);
@@ -213,13 +220,63 @@ describe('page introduction', () => {
       f.bar().children[1].onclick(); expect(it.active).toBe(false); // 閉じる
     } finally { vi.useRealTimers(); }
   });
+  it('VR / AR guidance waits for the volume: chosen but not ready = wait text, nothing lit, nothing said; ready = the VR button, said once', () => {
+    vi.useFakeTimers();
+    try {
+      const f = fakeDoc({ job: false }), audio = { play: vi.fn() }; let open = null, ready = false; // the progress modal is hidden (its delay) yet the data is NOT ready
+      const it = createTutorialIntro({ doc: f.doc, audio, getOpenSample: () => open, getReady: () => ready });
+      it.start(); expect(it.phase).toBe('openLv0'); audio.play.mockClear();
+      open = 'sample4'; f.doc.dispatchEvent(Object.assign(new Event('vrl-event-sample-open'), { detail: { id: 'sample4' } }));
+      expect(it.phase).toBe('loading'); expect(f.bar().children[0].textContent).toBe(I18N.ja.tutIntroLoading); expect(I18N.ja.tutIntroLoading).toContain('お待ちください');
+      expect(f.byId['vr-view-button'].cls.has('tut-hl')).toBe(false); expect(f.byId['ar-view-button'].cls.has('tut-hl')).toBe(false); expect(audio.play).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(5000); expect(it.phase).toBe('loading'); expect(audio.play).not.toHaveBeenCalled(); // however long it takes
+      ready = true; vi.advanceTimersByTime(600); // the next tick notices (no event needed)
+      expect(it.phase).toBe('pressVr'); expect(f.bar().children[0].textContent).toBe(I18N.ja.tutIntroVr);
+      expect(f.byId['vr-view-button'].cls.has('tut-hl')).toBe(true); expect(audio.play).toHaveBeenCalledTimes(1); expect(audio.play).toHaveBeenCalledWith(['intro2']);
+      ready = false; open = 'sample4'; f.doc.dispatchEvent(Object.assign(new Event('vrl-event-sample-open'), { detail: { id: 'sample4' } })); // the data is opened again: back to waiting
+      expect(it.phase).toBe('loading'); expect(f.byId['vr-view-button'].cls.has('tut-hl')).toBe(false);
+      it.stop();
+    } finally { vi.useRealTimers(); }
+  });
+  it('sampleReady reads data-load.js\'s flag: only a true flag is ready', () => {
+    expect(sampleReady({})).toBe(false); expect(sampleReady({ __vrlVolumeReady: false })).toBe(false); expect(sampleReady({ __vrlVolumeReady: 1 })).toBe(false); expect(sampleReady({ __vrlVolumeReady: true })).toBe(true);
+  });
+  it('the flag is set false when a series starts / a dataset is chosen and true only as the last step of selectSeries (static)', async () => {
+    const { readFileSync } = await import('node:fs');
+    const dl = readFileSync(new URL('../../docs/data-load.js', import.meta.url), 'utf8'), app = readFileSync(new URL('../../docs/app.js', import.meta.url), 'utf8');
+    expect(app).toMatch(/function setOpenSample\(id\)\{[^}]*globalThis\.__vrlVolumeReady=false/);
+    const sel = dl.slice(dl.indexOf('export async function selectSeries'), dl.indexOf('export function openSourceBackedVolume'));
+    expect(sel.indexOf('__vrlVolumeReady=false')).toBeGreaterThan(0); expect(sel.indexOf('__vrlVolumeReady=false')).toBeLessThan(sel.indexOf('await decode'));
+    expect(sel.indexOf('__vrlVolumeReady=true')).toBeGreaterThan(sel.indexOf('renderAll()')); expect(sel.indexOf('__vrlVolumeReady=true')).toBeGreaterThan(sel.indexOf('activateMedicalVolume'));
+    expect(sel.indexOf('__vrlVolumeReady=true')).toBeLessThan(sel.indexOf('}catch(e){')); // never on the failure path
+  });
   it('wiring: the start button sits before 練習データ, only on VR devices, and switches the tutorial on (static)', async () => {
     const { readFileSync } = await import('node:fs');
     const ui = readFileSync(new URL('../../docs/tutorial-ui.js', import.meta.url), 'utf8');
     expect(ui).toContain("b.id='tutorial-start-button'");
     expect(ui).toContain("const at=document.getElementById('vr-view-button');"); // the top bar, just before 「VRで見る」
-    expect(ui).toContain("b.onclick=()=>{if(settings.get('tutorialMode')!==true)settings.set('tutorialMode',true);sync();continueTutorial();intro.start()};");
+    expect(ui).toContain("b.onclick=()=>{if(settings.get('tutorialMode')!==true)settings.set('tutorialMode',true);sync();restartTutorial();intro.start()};"); // every start is from ステップ1: nothing is remembered
+    expect(ui).not.toMatch(/localStorage\.(set|get)Item/); // the tutorial saves nothing and reads nothing (a legacy key is only removed)
     expect(ui).toContain('detectVrSupport().then(ok=>{vr=ok;showRows(ok);if(ok)mountCta();sync()});');
     expect(I18N.ja.tutCta).toBe('チュートリアルを始める');
+  });
+});
+
+describe('nothing is remembered', () => {
+  it('restartTutorial: every start is from ステップ1, whatever this page did before; no storage is touched', () => {
+    const calls = []; const keep = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+    Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: { getItem: k => { calls.push(['get', k]); return JSON.stringify({ v: 1, done: { controls: true, grip: true }, skipAll: true, last: 'grip' }); }, setItem: k => calls.push(['set', k]), removeItem: k => calls.push(['remove', k]) } });
+    try {
+      const e = createTutorialEngine({ arAvailable: false });
+      expect(e.listMissions().map(m => m.status)).toEqual(['available', 'locked', 'locked', 'locked', 'locked']); // the stale value is ignored
+      e.skipMission('controls'); e.start('grip');
+      expect(restartTutorial(e)).toEqual({ action: 'start', id: 'controls' });
+      expect(e.getState()).toMatchObject({ mission: 'controls', step: 0, finished: false, done: {} });
+      expect(calls).toEqual([]);
+    } finally { if (keep) Object.defineProperty(globalThis, 'localStorage', keep); else delete globalThis.localStorage; }
+  });
+  it('forgetLegacyProgress removes the old key (once, guarded) and never throws', () => {
+    const removed = []; forgetLegacyProgress({ removeItem: k => removed.push(k) }); expect(removed).toEqual(['vrl.tutorial.v1']);
+    expect(() => forgetLegacyProgress({ removeItem() { throw new Error('x'); } })).not.toThrow(); expect(() => forgetLegacyProgress(null)).not.toThrow();
   });
 });

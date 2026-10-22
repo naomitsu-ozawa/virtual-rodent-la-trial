@@ -84,6 +84,16 @@
   "sec": 2.96,
   "textHash": "4ae6b7b9b3d0"
  },
+ "F1/gonext": {
+  "voice": "F1",
+  "sec": 4.12,
+  "textHash": "890401c25460"
+ },
+ "F1/end": {
+  "voice": "F1",
+  "sec": 4.96,
+  "textHash": "e777c202d364"
+ },
  "F1/intro1": {
   "voice": "F1",
   "sec": 3.63,
@@ -93,5 +103,15 @@
   "voice": "F1",
   "sec": 2.87,
   "textHash": "8a5fdeda5720"
+ },
+ "F1/orient1": {
+  "voice": "F1",
+  "sec": 6.26,
+  "textHash": "567ba34a94c3"
+ },
+ "F1/orient2": {
+  "voice": "F1",
+  "sec": 3.4,
+  "textHash": "1015c1d71784"
  }
 }

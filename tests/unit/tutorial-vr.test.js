@@ -7,15 +7,17 @@ import { buildPage, layoutPage, slideBox, levelBoardH, tutorialModeOn, createTut
 import { audioSrc, voiceOf, speechFor, createTutorialAudio, createStepReplay, isFeedbackId } from '../../docs/tutorial-audio.js';
 import { I18N } from '../../docs/i18n.js';
 import { ANIM_STEP_MS, ANIM_IDLE_MS } from '../../docs/tutorial-marks.js';
+import { LOOK_DWELL_MS } from '../../docs/tutorial-orient.js';
+import { TUT_ORIENT, TUT_FEEDBACK } from '../../docs/tutorial-data.js';
+import { wrapText } from '../../docs/tutorial-vr.js';
 
 // the board shows the step's slide (controls / g1 / g2 / g3 / g3b), the live tutorial runs on the Lv0 data only, the 詳細 tab without it is the read-only guide
 globalThis.__vrlSettings.set('tutorialMode', true); // the signal tests run with the switch on (off = signals are ignored, tested below)
 globalThis.__vrlOpenSample = 'sample4'; // ... and with the tutorial's data open
 const G = missionById('grip'), SEC = missionById('section');
-const mem = () => { let p = { v: 1, done: {}, skipAll: false, last: null }; return { load: () => JSON.parse(JSON.stringify(p)), save: x => { p = JSON.parse(JSON.stringify(x)); }, clear: () => { p = { v: 1, done: {}, skipAll: false, last: null }; } }; };
-const eng = o => createTutorialEngine({ progress: mem(), arAvailable: false, ...o });
+const eng = o => createTutorialEngine({ arAvailable: false, ...o });
 const fakeAudio = () => { const played = []; const C = function (src) { this.src = src; played.push(src); this.play = () => Promise.resolve(); this.pause = () => {}; }; return { C, played }; };
-const mkVr = (o = {}) => { const a = { play: vi.fn(), stop: vi.fn() }; let t = 1000; const doc = new EventTarget(); const e = o.engine || eng(); const vr = createTutorialVr({ engine: e, audio: a, doc, now: () => t, getInput: () => 'ctrl', ...o }); return { vr, e, a, doc, setT: v => { t = v; }, sig: kind => doc.dispatchEvent(new CustomEvent('vrl-tut-signal', { detail: { kind } })) }; };
+const mkVr = (o = {}) => { const a = { play: vi.fn(), stop: vi.fn() }; let t = 1000; const doc = new EventTarget(); const e = o.engine || eng(); const vr = createTutorialVr({ engine: e, audio: a, doc, now: () => t, getInput: () => 'ctrl', entry: false, ...o }); return { vr, e, a, doc, setT: v => { t = v; }, sig: kind => doc.dispatchEvent(new CustomEvent('vrl-tut-signal', { detail: { kind } })) }; };
 // the voice files' cache-busting query, as tools/bump-build.mjs leaves it in docs/tutorial-audio.js
 const AQ = readFileSync(new URL('../../docs/tutorial-audio.js', import.meta.url), 'utf8').match(/const AUDIO_QUERY = '([^']+)'/)[1];
 const ms = (t, z) => String(t).length * z * 0.6;
@@ -157,7 +159,7 @@ describe('tutorial-vr controller', () => {
   });
   it('the controls page: 次へ (laser + trigger on the board) finishes ステップ1 and the next step is one press away', () => {
     const { vr, e, a } = mkVr(); a.play.mockClear(); vr.act('next');
-    expect(e.getState()).toMatchObject({ mission: 'controls', finished: true }); expect(a.play).toHaveBeenLastCalledWith(['mclear']); expect(vr.page().kind).toBe('missionDone');
+    expect(e.getState()).toMatchObject({ mission: 'controls', finished: true }); expect(a.play).toHaveBeenLastCalledWith(['mclear', 'gonext']); expect(vr.page().kind).toBe('missionDone');
     vr.act('start:grip'); expect(vr.page().kind).toBe('step'); expect(e.getState().mission).toBe('grip');
   });
   it('button actions: prev / next / skip / list / the read-only guide inside the tutorial', () => {
@@ -402,5 +404,107 @@ describe('vr-view.js: tabs, the guide and the mission board (static)', () => {
     expect(src).toContain('EV_OFFSET.fwd'); expect(src).toContain('o.ev=ev?evHit(c):null;');
     expect(src).toContain('if(!evHeld&&c.userData.evHit){holdOf(c).attach(ev.mesh);evHeld=c;'); expect(src).toContain('o[6].d=boardDist(ev.mesh)'); expect(src).toContain("case'ev':if(!evHeld)");
     expect(src).toContain('ev?.dispose()'); expect(src).toContain('placeHelpNow=()=>{readHead();computeHelpTarget();help.mesh.position.copy(helpTarget);help.mesh.lookAt(head);helpPlaced=true;helpMoving=false;placeEvNow()}');
+  });
+});
+
+
+describe('tutorial-vr entry guidance', () => {
+  const look = { right: 90, left: 90 };
+  const mkEntry = (o = {}) => { const m = mkVr({ entry: true, getLook: () => ({ ...look }), ...o }); return m; };
+  it('a session starts at the entry guidance, not at ステップ1: the engine is idle, the page says look right, the help board blinks, the line is spoken', () => {
+    const e = eng(); e.skipMission('controls'); // a page that had progress: a session still starts from the beginning
+    const { vr, a } = mkEntry({ engine: e }); look.right = look.left = 90;
+    expect(e.getState()).toMatchObject({ mission: null, done: {} });
+    vr.update(1000); // both boards are in place (getLook gives angles): the guidance begins
+    expect(vr.page()).toMatchObject({ kind: 'entry', phase: 'right', board: 'help', text: I18N.ja.tutOrientRight });
+    expect(vr.entryBoard()).toBe('help'); expect(a.play).toHaveBeenLastCalledWith([TUT_ORIENT.right.audio], expect.any(Function));
+    expect(vr.menuTarget()).toBeNull();
+  });
+  it('right -> look right -> left (menu blinks, its line spoken) -> look left -> ステップ1 (controls) is up and spoken', () => {
+    const { vr, e, a } = mkEntry(); look.right = look.left = 90; vr.update(1000);
+    const spoken = a.play.mock.calls.at(-1); spoken[1](); // the clip ended
+    look.right = 5; vr.update(1100); expect(vr.entryPhase()).toBe('right'); // not yet: the dwell
+    vr.update(1100 + LOOK_DWELL_MS + 1); expect(vr.entryPhase()).toBe('left'); expect(vr.entryBoard()).toBe('menu');
+    expect(vr.page()).toMatchObject({ kind: 'entry', phase: 'left', text: I18N.ja.tutOrientLeft }); expect(a.play).toHaveBeenLastCalledWith([TUT_ORIENT.left.audio], expect.any(Function));
+    expect(e.getState().mission).toBeNull();
+    a.play.mock.calls.at(-1)[1](); look.right = 90; look.left = 5; vr.update(3000); vr.update(3000 + LOOK_DWELL_MS + 1);
+    expect(vr.entryBoard()).toBeNull(); expect(vr.entryDone).toBe(true);
+    expect(e.getState()).toMatchObject({ mission: 'controls', step: 0, finished: false }); expect(vr.page().kind).toBe('controls');
+    expect(a.play).toHaveBeenLastCalledWith(['controls1']);
+  });
+  it('次へ goes on without turning (both phases) and signals do nothing during the guidance', () => {
+    const { vr, e, a, sig } = mkEntry(); look.right = look.left = 90; vr.update(1000);
+    sig('grab'); expect(e.getState().mission).toBeNull();
+    expect(vr.act('skipAll')).toBe(false); expect(vr.act('list')).toBe(false); expect(e.getState().skipAll).toBe(false);
+    expect(vr.act('next')).toBe(true); expect(vr.entryPhase()).toBe('left'); expect(vr.act('next')).toBe(true);
+    expect(e.getState().mission).toBe('controls'); expect(vr.page().kind).toBe('controls');
+  });
+  it('the guidance waits for both boards to be in place (null angles) and shows its first page meanwhile; 次へ does nothing yet', () => {
+    let up = false; const { vr, e } = mkEntry({ getLook: () => (up ? { right: 90, left: 90 } : { right: null, left: null }) });
+    vr.update(1000); expect(vr.entryPending).toBe(true); expect(vr.entryPhase()).toBeNull(); expect(vr.entryBoard()).toBeNull(); expect(vr.page().kind).toBe('entry'); expect(vr.act('next')).toBe(false);
+    up = true; vr.update(1100); expect(vr.entryPending).toBe(false); expect(vr.entryPhase()).toBe('right'); expect(e.getState().mission).toBeNull();
+  });
+  it('AR starts the same way (the guidance does not depend on the session kind): no getLook = it begins at once', () => {
+    const { vr } = mkVr({ entry: true }); expect(vr.entryPhase()).toBe('right'); expect(vr.page().kind).toBe('entry');
+  });
+  it('the entry page: big text, the hint, a lit and pointed 次へ; the layout fits the 820 x 560 page', () => {
+    const { vr } = mkVr({ entry: true }); const p = vr.page();
+    expect(p.hint).toBe(I18N.ja.tutOrientHint); expect(p.counter).toBe('1/2'); expect(p.buttons).toHaveLength(1); expect(p.buttons[0]).toMatchObject({ id: 'next', label: '次へ', on: true, point: true });
+    const w = layoutPage(p, { W: 820, H: 560 }); const labels = w.filter(x => x.type === 'label'), btn = buttons(w);
+    expect(labels.map(l => l.text).join('')).toContain('右を見てください'); expect(btn).toHaveLength(1);
+    for (const x of [...labels, ...btn]) expect(x.y, x.text || x.label).toBeLessThan(560);
+    expect(btn[0].y + btn[0].h).toBeLessThanOrEqual(560); expect(Math.max(...labels.map(l => l.y))).toBeLessThan(btn[0].y);
+    expect(w.some(x => x.type === 'draw')).toBe(true); // the pointer around 次へ
+    const en = buildPage({ engine: eng(), lang: 'en', t: k => I18N.en[k], entry: { phase: 'left', index: 1, N: 2 } }); expect(en.text).toBe(I18N.en.tutOrientLeft); expect(en.counter).toBe('2/2');
+  });
+  it('wrapText keeps every line within the width (ja: 1 em per character, Latin 0.55 em) and loses no character', () => {
+    for (const [txt, size] of [[I18N.ja.tutOrientRight, 44], [I18N.en.tutOrientRight, 44], [I18N.ja.tutFbGoNext, 32], [I18N.en.tutFbEnd, 32]]) {
+      const lines = wrapText(txt, size, 748);
+      expect(lines.join('').replace(/ /g, '')).toBe(txt.replace(/ /g, ''));
+      for (const ln of lines) expect([...ln].reduce((a, c) => a + (/[\u0000-\u00ff]/.test(c) ? 0.55 : 1), 0) * size, ln).toBeLessThanOrEqual(748 + 1);
+      expect(lines.length).toBeLessThanOrEqual(4);
+    }
+  });
+});
+describe('a cleared ステップ waits for 次へ', () => {
+  it('ステップ1 cleared: 「ステップクリアです。」 then 「次のステップに進みましょう…次へ」 (spoken + on the page); the mission stays until 次へ; 次へ opens ステップ2', () => {
+    const { vr, e, a } = mkVr(); a.play.mockClear(); vr.act('next');
+    expect(a.play).toHaveBeenLastCalledWith(['mclear', 'gonext']);
+    expect(e.getState()).toMatchObject({ mission: 'controls', finished: true });
+    const p = vr.page(); expect(p).toMatchObject({ kind: 'missionDone', headline: 'ステップ完了', note: I18N.ja.tutFbGoNext }); expect(p.buttons[0]).toMatchObject({ id: 'start:grip', on: true, point: true });
+    expect(I18N.ja.tutFbGoNext).toContain('「次へ」'); expect(TUT_FEEDBACK.goNext.audioText).toMatch(/つぎのステップ/);
+    expect(layoutPage(p, {}).filter(x => x.type === 'label').map(l => l.text).join('')).toContain('次のステップに進みましょう');
+    for (const x of buttons(layoutPage(p, {}))) expect(x.y + x.h).toBeLessThanOrEqual(560);
+    a.play.mockClear(); expect(e.getState().mission).toBe('controls'); // nothing started by itself
+    vr.act('start:grip'); expect(e.getState()).toMatchObject({ mission: 'grip', step: 0, finished: false }); expect(a.play).toHaveBeenLastCalledWith(['grip1']);
+  });
+  it('a ステップ cleared by its signals waits the same way; the pages inside a ステップ still go on by themselves', () => {
+    const e = eng(); for (const id of ['controls', 'grip', 'section']) e.skipMission(id); const { vr, a } = mkVr({ engine: e }); e.start('menu'); a.play.mockClear();
+    e.onSignal({ kind: 'seg-hide' }); expect(e.getState()).toMatchObject({ mission: 'menu', step: 1, finished: false }); // page 2 of the same ステップ: automatic, as before
+    a.play.mockClear(); e.onSignal({ kind: 'seg-show' });
+    expect(e.getState()).toMatchObject({ mission: 'menu', finished: true }); expect(a.play).toHaveBeenLastCalledWith(['mclear', 'gonext']); expect(vr.page().kind).toBe('missionDone');
+    expect(vr.page().buttons[0].id).toBe('start:slice');
+  });
+  it('the last ステップ: allclear then the closing line; the page says it is over; no next button', () => {
+    const e = eng(); e.skipMission('controls'); e.skipMission('grip'); e.skipMission('section'); e.skipMission('menu'); const { vr, a } = mkVr({ engine: e }); e.start('slice'); a.play.mockClear();
+    for (const k of ['slice-opacity', 'slice-toggle', 'frame-hide']) e.onSignal({ kind: k });
+    expect(a.play).toHaveBeenLastCalledWith(['allclear', 'end']);
+    const p = vr.page(); expect(p).toMatchObject({ kind: 'allDone', note: I18N.ja.tutFbEnd }); expect(p.buttons.map(b => b.id)).not.toContain('next'); expect(p.buttons.some(b => b.id.startsWith('start:'))).toBe(false);
+    expect(TUT_FEEDBACK.end.audioText).toMatch(/おわり/);
+    for (const x of buttons(layoutPage(p, {}))) expect(x.y + x.h).toBeLessThanOrEqual(560);
+  });
+  it('the closing clips survive the end of the session like the other feedback; the new ids are all feedback ids', () => {
+    for (const id of ['gonext', 'end', 'mclear', 'allclear', 'ok1']) expect(isFeedbackId(id), id).toBe(true);
+    for (const id of ['orient1', 'orient2', 'controls1', 'intro1']) expect(isFeedbackId(id), id).toBe(false);
+    const e = eng(); let last; e.subscribe(s => { last = s; }); e.start('controls'); e.next();
+    expect(speechFor(last, e.currentStep(), '').ids).toEqual(['mclear', 'gonext']);
+  });
+  it('createTutorialAudio.play(ids, onEnd): onEnd runs once after the last clip, not when stopped or replaced', async () => {
+    const { C } = fakeAudio(); const clips = []; const A = function (src) { const a = new C(src); clips.push(a); return a; };
+    const au = createTutorialAudio({ AudioCtor: A, getVoice: () => 'F1' }); let n = 0;
+    au.play(['a', 'b'], () => n++); expect(n).toBe(0); clips[0].onended(); expect(n).toBe(0); clips[1].onended(); expect(n).toBe(1); clips[1].onended?.();
+    au.play(['c'], () => n++); au.stop(); clips[2].onended?.(); expect(n).toBe(1);
+    au.play(['d'], () => n++); au.play(['e']); clips[3].onended?.(); expect(n).toBe(1);
+    expect(createTutorialAudio({ AudioCtor: A, getVoice: () => 'off' }).play(['x'], () => n++)).toBe(false); expect(n).toBe(1);
   });
 });
