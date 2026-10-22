@@ -1,8 +1,8 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Self-contained: depends only on the imports below (no module state).
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.webgpu.js';
-import { analysisRunRows, forEachUncoveredRun } from './run-length.js?v=20261022-build649';
-import { weldTrianglePositions } from './smooth-prepare.js?v=20261022-build649';
+import { analysisRunRows, forEachUncoveredRun } from './run-length.js?v=20261022-build653';
+import { weldTrianglePositions } from './smooth-prepare.js?v=20261022-build653';
 export function appendAnalysisRunBoundaryFaces(builder,records,prevRecords,nextRecords,coords,z,cutRecords=null,cutPrevRecords=null,cutNextRecords=null,pinnedKeys=null){
  const {xs,ys,zs}=coords,z0=zs[z],z1=zs[z+1],rows=analysisRunRows(records),prev=analysisRunRows(prevRecords),next=analysisRunRows(nextRecords),cut=analysisRunRows(cutRecords),cutPrev=analysisRunRows(cutPrevRecords),cutNext=analysisRunRows(cutNextRecords);
  const has=(map,x,y)=>{const a=map.get(y);if(!a)return false;for(let i=0;i<a.length;i+=2)if(x>=a[i]&&x<=a[i+1])return true;return false};

@@ -80,7 +80,7 @@ const TEXT = lang => {
   return { show: t.evShow, hide: t.evHide, section: ja ? '断面' : 'Sections', sliceOpacity: ja ? 'スライス不透明度' : 'Slice opacity', trigger: t.evMode, trigPoint: t.evModePoint, trigLabel: t.evModeAnalysis, trigHintPoint: t.evModeHintPoint, trigHintLabel: t.evModeHintAnalysis, results: ja ? '解析結果（体積）' : 'Analysis results (volume)', total: ja ? '合計' : 'Total', noSeg: 'none', home: ja ? '正面に戻す' : 'Bring to front', undo: ja ? '元に戻す' : 'Undo', reset: t.evReset, resetAgain: t.evResetAgain, all: t.evAllSettings, exit: t.evExitVr };
 };
 const SEG_NAMES = { ja: { bone: '骨', soft: '軟部組織', fat: '脂肪', lung: '肺', contrast: '造影剤' }, en: { bone: 'Bone', soft: 'Soft tissue', fat: 'Fat', lung: 'Lung', contrast: 'Contrast' } };
-const COLORS = { bone: '#f3f0e8', soft: '#d97f7f', fat: '#e7c85d', lung: '#7fb3d9', contrast: '#9b7fd9' };
+const COLORS = { bone: '#f3f0e8', soft: '#f7a99c', fat: '#e7c85d', lung: '#7fb3d9', contrast: '#9b7fd9' };
 // the bundled projects (what the data shows when a level is opened)
 const bundled = sample => JSON.parse(strFromU8(unzipSync(new Uint8Array(readFileSync(new URL(`../../docs/demo/${sample}/project.vrlab`, import.meta.url))))['project.json']));
 const SEG_ORDER = ['bone', 'soft', 'fat', 'lung', 'contrast'];
