@@ -11,12 +11,12 @@
 // The instance is kept on globalThis.__vrlTutorialEngine, so it stays single even when the module is loaded under two ?v= URLs.
 // Signals: the first getTutorialEngine() also wires document/window 'vrl-tut-signal' ({detail:{kind,count?}}) to engine.onSignal (once; a signal seen on both is counted once).
 // A module that wires signals itself must set globalThis.__vrlTutSignalWired=true BEFORE the first getTutorialEngine() call.
-import { settings } from './app-settings.js?v=20261022-build651';
-import { tr, I18N } from './i18n.js?v=20261022-build651';
-import { TUTORIAL_MISSIONS, TUT_SAMPLE, TUT_INTRO, fillTissue } from './tutorial-data.js?v=20261022-build651';
-import { createTutorialAudio } from './tutorial-audio.js?v=20261022-build651';
-import { createTutorialEngine } from './tutorial-engine.js?v=20261022-build651';
-import { resetPress, resetArmed, RESET_ARM_MS, EVENT_LEVELS } from './event-mode.js?v=20261022-build651';
+import { settings } from './app-settings.js?v=20261022-build652';
+import { tr, I18N } from './i18n.js?v=20261022-build652';
+import { TUTORIAL_MISSIONS, TUT_SAMPLE, TUT_INTRO, fillTissue } from './tutorial-data.js?v=20261022-build652';
+import { createTutorialAudio } from './tutorial-audio.js?v=20261022-build652';
+import { createTutorialEngine } from './tutorial-engine.js?v=20261022-build652';
+import { resetPress, resetArmed, RESET_ARM_MS, EVENT_LEVELS } from './event-mode.js?v=20261022-build652';
 
 // the switch (設定 > 外観 > チュートリアル) off = the engine ignores every signal (nothing advances, nothing is saved); on again = as before
 // true while the tutorial UI is live (the switch is on AND the device supports VR): the Lv0 card of 体験会 acts as the tutorial only then (event-mode-ui.js)
@@ -117,6 +117,16 @@ export const introPhase=(openSample,ready=true,prepared=false,mode='lv0')=>{
  return !open?(mode==='levels'?'chooseLv':'openLv0'):prepared?'startVr':!ready?'loading':'pressVr';
 };
 const shown=e=>!!e&&!e.hidden&&!e.closest?.('[hidden]');
+// laid out on screen (not inside a closed drawer tab / display:none); an element of a fake / old DOM without offsetParent counts as laid out
+export const laidOut=e=>!!e&&(e.offsetParent===undefined||e.offsetParent!==null||e.tagName==='BODY');
+// The cards / the 練習データ button are in the データ tab of the drawer, but after a load the page switches to the 表示 tab (data-load.js selectSeries): lit, yet invisible. When the targets of the
+// openLv0 / chooseLv phases are not laid out, the データ tab is opened for the visitor (and the first target is centred in its scrolling panel).
+export function revealTargets(phase,targets,doc=globalThis.document){
+ if(phase!=='openLv0'&&phase!=='chooseLv')return false;
+ if(!targets.length||targets.some(laidOut))return false;
+ const tab=doc?.querySelector?.('[data-ipad-drawer-tab="data"]');if(!tab)return false;
+ try{tab.click();return true}catch{return false}
+}
 export function introTargets(phase,doc=globalThis.document){
  if(!doc)return[];
  if(phase==='openLv0'){const card=doc.querySelector('[data-event-level="lv0"]');if(shown(card))return[card];return[doc.getElementById('sample-demo-button'),doc.querySelector('[data-sample-set="'+TUT_SAMPLE+'"]')].filter(shown)}
@@ -135,16 +145,19 @@ export function introTextKey(phase,doc=globalThis.document){
  return'';
 }
 export function createTutorialIntro({doc=globalThis.document,audio=null,getOpenSample=()=>globalThis.__vrlOpenSample,getReady=null,tickMs=500,levelsVoiceDelayMs=3500,now=()=>performance.now()}={}){
- let phase=null,bar=null,timer=0,voiceTimer=0,mode='lv0',lit=new Set();const spoken=new Set();
+ let phase=null,bar=null,timer=0,voiceTimer=0,mode='lv0',lit=new Set();const spoken=new Set(),scrolled=new WeakSet();
  const gate=createReadyGate({now,buttonsOk:()=>{const v=doc?.getElementById?.('vr-view-button');return xrChecked()&&shown(v)&&!v.disabled}});
  const ready=getReady||(()=>gate.ready());
  const want=()=>introPhase(getOpenSample(),ready(),preparePanelShown(doc),mode);
  const paint=()=>{
   if(!phase||!bar)return;
   {const w=want();if(w!==phase){setPhase(w);return}} // the data became ready / was replaced: the phase follows (checked every tick)
-  const next=new Set(introTargets(phase,doc));
+  const targets=introTargets(phase,doc),next=new Set(targets);
   for(const e of lit)if(!next.has(e))e.classList.remove('tut-hl');
-  for(const e of next)if(!lit.has(e)){e.classList.add('tut-hl');try{e.scrollIntoView?.({block:'nearest',behavior:'smooth'})}catch{}}
+  revealTargets(phase,targets,doc); // the データ tab if the targets sit in a hidden tab
+  for(const e of next)if(!lit.has(e)){e.classList.add('tut-hl');if(phase!=='openLv0'&&phase!=='chooseLv'){try{e.scrollIntoView?.({block:'nearest',behavior:'smooth'})}catch{}}}
+  // the first target that is on screen is scrolled into its panel once (the cards from the top, the 練習データ button centred); a target in a hidden tab waits until the tab is open
+  if(phase==='openLv0'||phase==='chooseLv'){const first=targets.find(laidOut);if(first&&!scrolled.has(first)){scrolled.add(first);try{first.scrollIntoView?.({block:phase==='chooseLv'?'start':'center',behavior:'auto'})}catch{}}}
   lit=next;
   const key=introTextKey(phase,doc),t=bar.querySelector('.tut-guide-text');
   if(t.dataset.i18n!==key){t.dataset.i18n=key;t.textContent=tr(key)}

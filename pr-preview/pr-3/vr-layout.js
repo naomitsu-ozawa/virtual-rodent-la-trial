@@ -32,8 +32,12 @@ export const HIST_WIDTH = 0.46;
 // of the volume (centre, low), the HU live panel (centre, 16 cm above eye level, 0.15 m either side) and the help board (right, below eye level) / histogram board (right, above).
 // 0.45 m left + 0.25 m up at 0.78 m ahead = about 30 deg to the left and 18 deg up; same width as the help board so the text keeps its size; placed once, grip moves it, 正面に戻す puts it back.
 // with the menu, 50 deg to the left (0.9 m), 0.25 m up: its bottom edge (0.45 m wide, 16:9 slide: 0.25 m high) is 3.5 cm above the menu's top edge
-export const EV_OFFSET = aside(BOARD_YAW_DEG, -0.25);
-export const EV_WIDTH = HELP_WIDTH, EV_RES = HELP_RES;
+// the mission board of Lv1-Lv3 sits straight ahead, BEHIND the volume (1.1 m; the volume is at 0.65 m and at most 0.30 m across) and a little above the
+// line of sight: its bottom edge is 6 deg above the eyes (the volume / its section frame reach about 5 deg at most), its top 27 deg. 0.8 m wide (the help board is 0.45 m): 40 deg across at that distance
+// (the help board 28 deg), its canvas 1280 px = the slide picture's own width. The boards at the sides (menu left, help right, 50 deg out) are untouched. It follows the head like the help board
+// (settings.help: 1 = lazily, 2 = fixed); grip moves it, 正面に戻す puts it back.
+export const EV_OFFSET = { fwd: 1.1, left: 0, down: -0.341 };
+export const EV_WIDTH = 0.8, EV_RES = 1280 / 820;
 export const boardDistance = o => Math.hypot(o.fwd, o.left, o.down);
 // head: {x,y,z}; fwd / left: unit horizontal vectors {x,z}
 export const placeFromHead = (head, fwd, left, o) => ({ x: head.x + fwd.x * o.fwd + left.x * o.left, y: head.y - o.down, z: head.z + fwd.z * o.fwd + left.z * o.left });
