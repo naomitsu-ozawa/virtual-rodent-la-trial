@@ -30,7 +30,7 @@ const recCtx = () => { const calls = []; const rec = n => (...a) => calls.push([
 describe('tutorial-vr page model', () => {
   it('idle engine -> list page: ステップ1 startable, the rest locked; the guide, skip-all and start-over below', () => {
     const p = buildPage({ engine: eng() });
-    expect(p.kind).toBe('list'); expect(p.missions.map(m => m.status)).toEqual(['available', 'locked', 'locked', 'locked', 'locked']);
+    expect(p.kind).toBe('list'); expect(p.missions.map(m => m.status)).toEqual(['available', 'locked', 'locked', 'locked', 'locked', 'locked']);
     expect(p.buttons.map(b => b.id)).toEqual(['guides', 'skipAll', 'reset']);
   });
   it('ステップ1 is the controls slide as it is (its picture, nothing framed), with a lit, pointed 次へ', () => {
@@ -370,9 +370,9 @@ describe('ステップ numbering in the board', () => {
   it('stepNoLabel: ステップ3 / Step 3', () => {
     expect(stepNoLabel(3, k => ({ tutStepWord: 'ステップ' })[k])).toBe('ステップ3'); expect(stepNoLabel(3, k => ({ tutStepWord: 'Step' })[k])).toBe('Step 3');
   });
-  it('the list says ステップN before each name (fixed 1..5); a step page title carries it, the page counter is only n/N', () => {
+  it('the list says ステップN before each name (fixed 1..6); a step page title carries it, the page counter is only n/N', () => {
     const p = buildPage({ engine: eng() });
-    expect(p.missions.map(m => m.label.match(/^ステップ(\d)/)?.[1])).toEqual(['1', '2', '3', '4', '5']);
+    expect(p.missions.map(m => m.label.match(/^ステップ(\d)/)?.[1])).toEqual(['1', '2', '3', '4', '5', '6']);
     const e = eng(); e.skipMission('controls'); e.skipMission('grip'); e.start('section'); const q = buildPage({ engine: e });
     expect(q.title).toBe('ステップ3 断面を出して動かす'); expect(q.counter).toBe('1/' + SEC.steps.length); expect(q.counter).not.toMatch(/ステップ/);
     e.skipMission(); const d = buildPage({ engine: e });
@@ -459,7 +459,7 @@ describe('tutorial-vr entry guidance', () => {
     const en = buildPage({ engine: eng(), lang: 'en', t: k => I18N.en[k], entry: { phase: 'left', index: 1, N: 2 } }); expect(en.text).toBe(I18N.en.tutOrientLeft); expect(en.counter).toBe('2/2');
   });
   it('wrapText keeps every line within the width (ja: 1 em per character, Latin 0.55 em) and loses no character', () => {
-    for (const [txt, size] of [[I18N.ja.tutOrientRight, 44], [I18N.en.tutOrientRight, 44], [I18N.ja.tutFbGoNext, 32], [I18N.en.tutFbEnd, 32]]) {
+    for (const [txt, size] of [[I18N.ja.tutOrientRight, 44], [I18N.en.tutOrientRight, 44], [I18N.ja.tutFbGoNext, 32], [I18N.en.tutIntroLv123, 32]]) {
       const lines = wrapText(txt, size, 748);
       expect(lines.join('').replace(/ /g, '')).toBe(txt.replace(/ /g, ''));
       for (const ln of lines) expect([...ln].reduce((a, c) => a + (/[\u0000-\u00ff]/.test(c) ? 0.55 : 1), 0) * size, ln).toBeLessThanOrEqual(748 + 1);
@@ -486,16 +486,20 @@ describe('a cleared ステップ waits for 次へ', () => {
     expect(e.getState()).toMatchObject({ mission: 'menu', finished: true }); expect(a.play).toHaveBeenLastCalledWith(['mclear', 'gonext']); expect(vr.page().kind).toBe('missionDone');
     expect(vr.page().buttons[0].id).toBe('start:slice');
   });
-  it('the last ステップ: allclear then the closing line; the page says it is over; no next button', () => {
-    const e = eng(); e.skipMission('controls'); e.skipMission('grip'); e.skipMission('section'); e.skipMission('menu'); const { vr, a } = mkVr({ engine: e }); e.setEnv({ cond: { 'no-section': () => false } }); e.start('slice'); a.play.mockClear(); // a section is up
+  it('the last ステップ is the way out: after ステップ5 the next-step prompt, then the exit page (the red button of the left menu); the session ending clears it: allclear, no closing line of its own', () => {
+    const e = eng(); for (const id of ['controls', 'grip', 'section', 'menu']) e.skipMission(id); const { vr, a } = mkVr({ engine: e }); e.setEnv({ cond: { 'no-section': () => false } }); e.start('slice'); a.play.mockClear(); // a section is up
     for (const k of ['slice-opacity', 'slice-toggle', 'frame-hide']) e.onSignal({ kind: k });
-    expect(a.play).toHaveBeenLastCalledWith(['allclear', 'end']);
-    const p = vr.page(); expect(p).toMatchObject({ kind: 'allDone', note: I18N.ja.tutFbEnd }); expect(p.buttons.map(b => b.id)).not.toContain('next'); expect(p.buttons.some(b => b.id.startsWith('start:'))).toBe(false);
-    expect(TUT_FEEDBACK.end.audioText).toMatch(/おわり/);
-    for (const x of buttons(layoutPage(p, {}))) expect(x.y + x.h).toBeLessThanOrEqual(PAGE_H);
+    expect(a.play).toHaveBeenLastCalledWith(['mclear', 'gonext']); expect(vr.page().kind).toBe('missionDone'); expect(vr.page().buttons[0].id).toBe('start:exit');
+    vr.act('start:exit'); a.play.mockClear();
+    expect(e.currentStep().id).toBe('exit1'); const pg = vr.page(); expect(pg).toMatchObject({ kind: 'step', slide: 'g3', item: 3, title: 'ステップ6 おわり：VR・ARを終える' }); expect(pg.caption).toBe(I18N.ja.tutExitS1);
+    expect(vr.menuTarget()).toBe('exit'); expect(vr.stepBoard()).toBe('menu'); expect(vr.controllerHint()).toEqual({ btn: 'trigger' }); expect(I18N.ja.tutExitS1).toMatch(/左のメニュー.*右下.*赤い.*VRを終了.*ARを終了/); expect(wrapText(I18N.ja.tutExitS1, 23, 784 - 28).length).toBeLessThanOrEqual(3);
+    e.onSignal({ kind: 'session-end' }); // the session closes (vr-view.js emits it): the way out is done
+    expect(a.play).toHaveBeenLastCalledWith(['allclear']); expect(e.getState()).toMatchObject({ mission: 'exit', finished: true }); expect(e.listMissions().every(m => m.done)).toBe(true);
+    const done = vr.page(); expect(done).toMatchObject({ kind: 'allDone', note: I18N.ja.tutIntroLv123 }); expect(done.buttons.map(b => b.id)).not.toContain('next'); expect(done.buttons.some(b => b.id.startsWith('start:'))).toBe(false);
+    for (const x of buttons(layoutPage(done, {}))) expect(x.y + x.h).toBeLessThanOrEqual(PAGE_H);
   });
   it('the closing clips survive the end of the session like the other feedback; the new ids are all feedback ids', () => {
-    for (const id of ['gonext', 'end', 'mclear', 'allclear', 'ok1']) expect(isFeedbackId(id), id).toBe(true);
+    for (const id of ['gonext', 'mclear', 'allclear', 'ok1']) expect(isFeedbackId(id), id).toBe(true); expect(isFeedbackId('end')).toBe(false); // the closing line is gone
     for (const id of ['orient1', 'orient2', 'ctl1', 'g1a', 'intro1']) expect(isFeedbackId(id), id).toBe(false);
     const e = eng(); let last; e.subscribe(s => { last = s; }); e.start('controls'); e.next(); e.next();
     expect(speechFor(last, e.currentStep(), '').ids).toEqual(['mclear', 'gonext']);
@@ -637,5 +641,18 @@ describe('hands, the closed menu and the other review fixes', () => {
   it('the English caption line takes the English name of the tissue (the 2D card hook gets lang)', () => {
     const ui = readFileSync(new URL('../../docs/tutorial-ui.js', import.meta.url), 'utf8'), app = readFileSync(new URL('../../docs/app.js', import.meta.url), 'utf8');
     expect(ui).toContain("line(I18N.en?.[s.textKey]||'',I18N.en?.tutTissueFallback,'en')"); expect(app).toContain("lang==='en'?I18N.en?.[k]||tr(k):tr(k)");
+  });
+});
+
+describe('onMissionStart', () => {
+  it('fires when a ステップ is entered (first page), again when it is restarted, not for pages inside it; grip is where the volume is put back within reach', () => {
+    const seen = []; const e = eng(); const { vr } = mkVr({ engine: e, onMissionStart: id => seen.push(id) });
+    expect(seen).toEqual([]); // the board opens on ステップ1 before it listens (nothing to put back yet)
+    e.next(); e.next(); expect(seen).toEqual([]); // pages inside ステップ1 / finished
+    vr.act('start:grip'); expect(seen).toEqual(['grip']);
+    e.onSignal({ kind: 'grab' }); expect(seen).toEqual(['grip']); // pages inside
+    vr.act('start:grip'); expect(seen).toEqual(['grip', 'grip']); // restarted
+    e.prev(); e.prev(); expect(seen).toEqual(['grip', 'grip']); // going back inside the ステップ is not a new entry
+    const bad = mkVr({ engine: eng(), onMissionStart: () => { throw new Error('x'); } }); bad.e.next(); bad.e.next(); bad.vr.act('start:grip'); expect(bad.e.getState().mission).toBe('grip'); // a throwing callback does not break the board
   });
 });

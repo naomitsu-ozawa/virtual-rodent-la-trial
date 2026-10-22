@@ -172,3 +172,43 @@ describe('startHolderScale (VR / AR start = 1x)', () => {
     expect(startHolderScale(NaN, DEFAULT_SCALE)).toBeCloseTo(DEFAULT_SCALE, 12);
   });
 });
+
+// the tutorial puts the volume within reach, large enough to take hold of
+import { tutorialHolderScale, smallForTutorial, TUT_VOLUME_FWD, TUT_VOLUME_DOWN, TUT_LONG_M, MAX_LONG_M } from '../../docs/vr-real-scale.js';
+import { readFileSync } from 'node:fs';
+describe('the tutorial placement of the volume', () => {
+  const bone = 25.6; // the practice bone (Lv0): a 25.6 mm cube
+  it('size = 0.25 m longest side (below the 0.30 m cap: spreading the hands can still enlarge it) for any data; oversize data stays fitted to 0.30 m; the normal start (real size) is untouched', () => {
+    expect(TUT_LONG_M).toBe(0.25); expect(TUT_LONG_M).toBeLessThan(MAX_LONG_M); expect(MAX_LONG_M / TUT_LONG_M).toBeGreaterThan(1.15); // the room above it is more than the 15 % of the step
+    expect(NORM_LONG * tutorialHolderScale(bone)).toBeCloseTo(0.25, 6); expect(NORM_LONG * tutorialHolderScale(80)).toBeCloseTo(0.25, 6); expect(NORM_LONG * tutorialHolderScale(0)).toBeCloseTo(0.25, 6); // unknown size too
+    expect(NORM_LONG * tutorialHolderScale(500)).toBeCloseTo(0.30, 6); // oversize data: fitted to 0.30 m (locked) as always
+    expect(NORM_LONG * startHolderScale(bone, DEFAULT_SCALE)).toBeCloseTo(0.0256, 6); // the normal start: real size, 2.56 cm: this is what the tutorial no longer starts with
+    expect(realMagnification(tutorialHolderScale(bone), bone)).toBeGreaterThan(9.7); // about 9.8 x
+  });
+  it('within reach: 0.5 m ahead, a quarter metre below the eyes (chest); the normal 0.65 m / 0.12 m are separate constants', () => {
+    expect(TUT_VOLUME_FWD).toBe(0.5); expect(TUT_VOLUME_DOWN).toBe(0.25); expect(TUT_VOLUME_FWD).toBeLessThan(0.65); expect(TUT_VOLUME_DOWN).toBeGreaterThan(0.12);
+    expect(TUT_VOLUME_FWD + MAX_LONG_M / 2).toBeLessThan(0.8); // the far side stays in front of the HU panel (0.80 m)
+    expect(Math.atan((MAX_LONG_M / 2) / TUT_VOLUME_FWD) * 180 / Math.PI).toBeLessThan(34); // its half width stays inside the boards' inner edges (34.5 deg)
+  });
+  it('smallForTutorial: shrunk or never enlarged = small; at (or near) the tutorial size = not', () => {
+    const t = tutorialHolderScale(bone);
+    expect(smallForTutorial(realHolderScale(bone), bone)).toBe(true); expect(smallForTutorial(t * 0.5, bone)).toBe(true); expect(smallForTutorial(t * 0.94, bone)).toBe(true);
+    expect(smallForTutorial(t * 0.96, bone)).toBe(false); expect(smallForTutorial(t, bone)).toBe(false);
+  });
+  it('the two-hand scale step (15 %) works both ways from the tutorial size: shrinking and spreading both pass (the cap is 20 % above)', () => {
+    const t = tutorialHolderScale(bone);
+    expect(scaleChangedFromSignal(t, pinchScale(t, 0.3, 0.2, bone))).toBe(true); // hands 2/3 apart: -33 %
+    expect(pinchScale(t, 0.3, 0.6, bone)).toBeCloseTo(t * (MAX_LONG_M / TUT_LONG_M), 9); // spreading stops at the 0.30 m cap: +20 %
+    expect(scaleChangedFromSignal(t, pinchScale(t, 0.3, 0.6, bone))).toBe(true); // ... which is more than the 15 % the step needs: 「広げると大きく」 really works
+    expect(scaleChangedFromSignal(t, pinchScale(t, 0.3, 0.33, bone))).toBe(false); // +10 %: not yet
+    expect(scaleChangedFromSignal(t, pinchScale(t, 0.3, 0.27, bone))).toBe(false); // -10 %: not yet
+  });
+  it('vr-view.js: only while the tutorial runs (tutVr), at bringVolumeFront; ステップ2\'s start puts it back when it is small; the section / other data placement is the old one', () => {
+    const src = readFileSync(new URL('../../docs/vr-view.js', import.meta.url), 'utf8');
+    expect(src).toContain('const tut=!!tutVr&&!tutBad;');
+    expect(src).toContain('holder.position.copy(head).addScaledVector(headFwd,tut?TUT_VOLUME_FWD:VOLUME_FWD).add(new THREE.Vector3(0,-(tut?TUT_VOLUME_DOWN:VOLUME_DOWN),0));');
+    expect(src).toContain('holder.scale.setScalar(tut?tutorialHolderScale(realLongMm()):startHolderScale(realLongMm(),baseScale))');
+    expect(src).toContain("onMissionStart:id=>{if(id==='grip'&&smallForTutorial(holder.scale.x,realLongMm()))bringVolumeFront()}");
+  });
+});
+import { scaleChanged as scaleChangedFromSignal } from '../../docs/tutorial-signal.js';

@@ -8,9 +8,9 @@ import { SAMPLE_SETS } from '../../docs/sample-sets.js';
 
 const steps = TUTORIAL_MISSIONS.flatMap(m => m.steps);
 describe('tutorial data', () => {
-  it('five steps in the slides\' order; g4 is not a step; no AR, no approach / walking, no analysis step', () => {
-    expect(TUTORIAL_MISSIONS.map(m => m.id)).toEqual(['controls', 'grip', 'section', 'menu', 'slice']);
-    expect(TUTORIAL_MISSIONS.map(m => m.slide)).toEqual(['controls', 'g1', 'g2', 'g3', 'g3b']);
+  it('five steps in the slides\' order + the way out (ステップ6); g4 is not a step; no AR, no approach / walking, no analysis step', () => {
+    expect(TUTORIAL_MISSIONS.map(m => m.id)).toEqual(['controls', 'grip', 'section', 'menu', 'slice', 'exit']);
+    expect(TUTORIAL_MISSIONS.map(m => m.slide)).toEqual(['controls', 'g1', 'g2', 'g3', 'g3b', 'g3']); // the way out is row 3 of g3 (下のボタン ... VRを終了)
     expect(missionById('grip').title).toBe('tutGripTitle');
     expect(missionById('x')).toBeNull();
     for (const old of ['m1', 'm5', 'm6', 'm7']) expect(missionById(old)).toBeNull();
@@ -75,7 +75,7 @@ describe('tutorial data', () => {
     const used = [...new Set(steps.filter(s => s.done).map(s => s.done.signal))].sort();
     expect([...TUT_SIGNALS].sort()).toEqual(used);
     for (const k of TUT_SIGNALS) expect(SIGNAL_KINDS, k).toContain(k);
-    expect(TUT_SIGNALS).toHaveLength(11);
+    expect(TUT_SIGNALS).toHaveLength(12); expect(TUT_SIGNALS).toContain('session-end');
   });
   it('steps are well formed (audio script, timeout)', () => {
     for (const s of steps) {
@@ -85,10 +85,10 @@ describe('tutorial data', () => {
     }
   });
   it('the page introduction: open Lv0, then press VR / AR (its own voice lines)', () => {
-    expect(Object.keys(TUT_INTRO)).toEqual(['openLv0', 'pressVr', 'startVr']); expect(TUT_INTRO.startVr).toMatchObject({ audio: 'intro3', text: 'tutIntroStart' });
-    expect(TUT_INTRO.openLv0.audio).toBe('intro1'); expect(TUT_INTRO.pressVr.audio).toBe('intro2');
-    for (const it of Object.values(TUT_INTRO)) { expect(it.audioText).not.toMatch(/[A-Za-z]/); expect(it.audioText.length).toBeLessThanOrEqual(25); }
-    expect(I18N.ja.tutIntroLv0).toContain('Lv0'); expect(I18N.ja.tutIntroVr).toContain('VRで見る');
+    expect(Object.keys(TUT_INTRO)).toEqual(['openLv0', 'pressVr', 'pressVrOnly', 'chooseLv', 'startVr']); expect(TUT_INTRO.pressVr).toMatchObject({ audio: 'intro4', text: 'tutIntroVr' }); expect(TUT_INTRO.pressVrOnly).toMatchObject({ audio: 'intro2', text: 'tutIntroVrOnly' }); expect(TUT_INTRO.chooseLv).toMatchObject({ audio: 'intro5', text: 'tutIntroLv123' }); expect(TUT_INTRO.startVr).toMatchObject({ audio: 'intro3', text: 'tutIntroStart' });
+    expect(TUT_INTRO.openLv0.audio).toBe('intro1');
+    for (const it of Object.values(TUT_INTRO)) { expect(it.audioText).not.toMatch(/[A-Za-z]/); expect(it.audioText.length).toBeLessThanOrEqual(40); }
+    expect(I18N.ja.tutIntroLv0).toContain('Lv0'); expect(I18N.ja.tutIntroVr).toBe('「VRで見る」か「ARで見る」を押しましょう'); expect(TUT_INTRO.pressVr.audioText).toMatch(/ブイアールで見る、または、エーアールで見る/);
   });
   it('voices and the data are frozen', () => {
     expect(TUT_VOICES).toEqual(['F1']);
@@ -155,10 +155,10 @@ describe('lines: entry guidance, next-step prompt, closing', () => {
     for (const it of Object.values(TUT_ORIENT)) { expect(it.audioText).not.toMatch(/[A-Za-z]/); expect(Object.isFrozen(it)).toBe(true); }
   });
   it('missionClear / allClear carry the line that follows: 「次へ」を押してください / the end; both are voiced top-level entries', () => {
-    expect(TUT_FEEDBACK.missionClear.then).toBe(TUT_FEEDBACK.goNext); expect(TUT_FEEDBACK.allClear.then).toBe(TUT_FEEDBACK.end);
-    expect(TUT_FEEDBACK.goNext).toMatchObject({ id: 'gonext', audio: 'gonext', text: 'tutFbGoNext' }); expect(TUT_FEEDBACK.end).toMatchObject({ id: 'end', audio: 'end', text: 'tutFbEnd' });
-    expect(I18N.ja.tutFbGoNext).toBe('次のステップに進みましょう。「次へ」を押してください。'); expect(I18N.ja.tutFbEnd).toContain('終わり');
-    for (const l of ['ja', 'en']) for (const k of ['tutFbGoNext', 'tutFbEnd', 'tutOrientTitle', 'tutOrientHint']) expect(I18N[l][k], `${l}:${k}`).toBeTruthy();
+    expect(TUT_FEEDBACK.missionClear.then).toBe(TUT_FEEDBACK.goNext); expect(TUT_FEEDBACK.allClear.then).toBeUndefined(); expect(TUT_FEEDBACK.end).toBeUndefined(); // the way out ends with the session, the page guides to Lv1-Lv3 itself
+    expect(TUT_FEEDBACK.goNext).toMatchObject({ id: 'gonext', audio: 'gonext', text: 'tutFbGoNext' });
+    expect(I18N.ja.tutFbGoNext).toBe('次のステップに進みましょう。「次へ」を押してください。');
+    for (const l of ['ja', 'en']) for (const k of ['tutFbGoNext', 'tutOrientTitle', 'tutOrientHint', 'tutExitTitle', 'tutExitS1', 'tutIntroLv123', 'tutIntroLv123Off']) expect(I18N[l][k], `${l}:${k}`).toBeTruthy();
   });
 });
 

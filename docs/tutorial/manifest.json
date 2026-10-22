@@ -74,6 +74,11 @@
   "sec": 4.4,
   "textHash": "45cd6f3c4480"
  },
+ "F1/ex1": {
+  "voice": "F1",
+  "sec": 7.22,
+  "textHash": "78288505c26b"
+ },
  "F1/ok1": {
   "voice": "F1",
   "sec": 1.3,
@@ -104,20 +109,25 @@
   "sec": 4.12,
   "textHash": "890401c25460"
  },
- "F1/end": {
-  "voice": "F1",
-  "sec": 4.96,
-  "textHash": "e777c202d364"
- },
  "F1/intro1": {
   "voice": "F1",
   "sec": 3.63,
   "textHash": "cf196b63984a"
  },
+ "F1/intro4": {
+  "voice": "F1",
+  "sec": 4.86,
+  "textHash": "94ab60e4cde1"
+ },
  "F1/intro2": {
   "voice": "F1",
   "sec": 2.87,
   "textHash": "8a5fdeda5720"
+ },
+ "F1/intro5": {
+  "voice": "F1",
+  "sec": 5.18,
+  "textHash": "519232f3305c"
  },
  "F1/intro3": {
   "voice": "F1",

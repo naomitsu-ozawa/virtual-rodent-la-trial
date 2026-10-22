@@ -24,12 +24,12 @@ describe('tutorial settings', () => {
 });
 
 describe('panel model', () => {
-  it('idle: ステップ1 (controls) available, the rest locked; the ステップ numbers are fixed 1..5; nothing is unavailable (no AR step)', () => {
+  it('idle: ステップ1 (controls) available, the rest locked; the ステップ numbers are fixed 1..6; nothing is unavailable (no AR step)', () => {
     const m = panelModel(mk());
     expect(m.step).toBeNull();
-    expect(m.missions.map(x => x.id)).toEqual(['controls', 'grip', 'section', 'menu', 'slice']);
-    expect(m.missions.map(x => x.status)).toEqual(['available', 'locked', 'locked', 'locked', 'locked']);
-    expect(m.missions.map(x => x.stepNo)).toEqual([1, 2, 3, 4, 5]);
+    expect(m.missions.map(x => x.id)).toEqual(['controls', 'grip', 'section', 'menu', 'slice', 'exit']);
+    expect(m.missions.map(x => x.status)).toEqual(['available', 'locked', 'locked', 'locked', 'locked', 'locked']);
+    expect(m.missions.map(x => x.stepNo)).toEqual([1, 2, 3, 4, 5, 6]);
     expect(m.missions[0].canStart).toBe(true);
     expect(m.missions[1].canStart).toBe(false);
   });
@@ -46,7 +46,7 @@ describe('panel model', () => {
   });
   it('skipAll opens every mission and marks them done; reset clears', () => {
     const e = mk(); e.skipAll();
-    expect(panelModel(e).missions.filter(x => x.status === 'done').length).toBe(5);
+    expect(panelModel(e).missions.filter(x => x.status === 'done').length).toBe(6);
     expect(panelModel(e).allDone).toBe(true);
     e.reset();
     expect(panelModel(e).missions[0].status).toBe('available');
@@ -212,7 +212,7 @@ describe('page introduction', () => {
       vi.advanceTimersByTime(2000); expect(audio.play).toHaveBeenCalledTimes(1); // said once
       f.doc.dispatchEvent(Object.assign(new Event('vrl-event-sample-open'), { detail: { id: 'sample3' } })); expect(it.phase).toBe('openLv0'); // other data: still Lv0 first
       open = 'sample4'; f.doc.dispatchEvent(Object.assign(new Event('vrl-event-sample-open'), { detail: { id: 'sample4' } }));
-      expect(it.phase).toBe('pressVr'); expect(audio.play).toHaveBeenLastCalledWith(['intro2']);
+      expect(it.phase).toBe('pressVr'); expect(audio.play).toHaveBeenLastCalledWith(['intro4']); // both buttons (the AR button is there)
       expect(f.byId['sample-demo-button'].cls.has('tut-hl')).toBe(false); expect(f.byId['vr-view-button'].cls.has('tut-hl')).toBe(true);
       f.doc.dispatchEvent(Object.assign(new Event('vrl-tut-signal'), { detail: { kind: 'vr-start' } }));
       expect(it.active).toBe(false); expect(f.bar()).toBeNull(); expect(f.byId['vr-view-button'].cls.has('tut-hl')).toBe(false);
@@ -232,7 +232,7 @@ describe('page introduction', () => {
       vi.advanceTimersByTime(5000); expect(it.phase).toBe('loading'); expect(audio.play).not.toHaveBeenCalled(); // however long it takes
       ready = true; vi.advanceTimersByTime(600); // the next tick notices (no event needed)
       expect(it.phase).toBe('pressVr'); expect(f.bar().children[0].textContent).toBe(I18N.ja.tutIntroVr);
-      expect(f.byId['vr-view-button'].cls.has('tut-hl')).toBe(true); expect(audio.play).toHaveBeenCalledTimes(1); expect(audio.play).toHaveBeenCalledWith(['intro2']);
+      expect(f.byId['vr-view-button'].cls.has('tut-hl')).toBe(true); expect(audio.play).toHaveBeenCalledTimes(1); expect(audio.play).toHaveBeenCalledWith(['intro4']);
       ready = false; open = 'sample4'; f.doc.dispatchEvent(Object.assign(new Event('vrl-event-sample-open'), { detail: { id: 'sample4' } })); // the data is opened again: back to waiting
       expect(it.phase).toBe('loading'); expect(f.byId['vr-view-button'].cls.has('tut-hl')).toBe(false);
       it.stop();
@@ -268,7 +268,7 @@ describe('nothing is remembered', () => {
     Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: { getItem: k => { calls.push(['get', k]); return JSON.stringify({ v: 1, done: { controls: true, grip: true }, skipAll: true, last: 'grip' }); }, setItem: k => calls.push(['set', k]), removeItem: k => calls.push(['remove', k]) } });
     try {
       const e = createTutorialEngine({ arAvailable: false });
-      expect(e.listMissions().map(m => m.status)).toEqual(['available', 'locked', 'locked', 'locked', 'locked']); // the stale value is ignored
+      expect(e.listMissions().map(m => m.status)).toEqual(['available', 'locked', 'locked', 'locked', 'locked', 'locked']); // the stale value is ignored
       e.skipMission('controls'); e.start('grip');
       expect(restartTutorial(e)).toEqual({ action: 'start', id: 'controls' });
       expect(e.getState()).toMatchObject({ mission: 'controls', step: 0, finished: false, done: {} });
@@ -288,8 +288,89 @@ describe('the preparation panel phase', () => {
     expect(preparePanelShown(panel({ start: { disabled: true } }))).toBe(false); // the preparation failed (or is still running)
     expect(preparePanelShown(panel({ style: { display: 'none' } }))).toBe(false); // the page's progress modal is up instead
     expect(preparePanelShown({ getElementById: () => null })).toBe(false); expect(preparePanelShown(null)).toBe(false);
-    expect(introPhase('sample4', true, true)).toBe('startVr'); expect(introPhase('sample4', true, false)).toBe('pressVr'); expect(introPhase('sample4', false, true)).toBe('loading'); expect(introPhase('sample3', true, true)).toBe('openLv0');
+    expect(introPhase('sample4', true, true)).toBe('startVr'); expect(introPhase('sample4', true, false)).toBe('pressVr'); expect(introPhase('sample4', false, true)).toBe('startVr'); // the panel's own start button wins over the (busy) VR button expect(introPhase('sample3', true, true)).toBe('openLv0');
     const d = panel({ start: { disabled: true } }); d.byId = {}; expect(introTargets('startVr', { getElementById: id => d.getElementById(id), querySelector: () => null })).toEqual([]);
     const ok = panel(); expect(introTargets('startVr', { getElementById: id => ok.getElementById(id), querySelector: () => null })).toEqual([ok.start]);
+  });
+});
+
+// the page is done loading only when everything is quiet; VR and AR on equal terms; the way out; Lv1-Lv3
+import { createReadyGate, pageBusy, xrChecked, READY_QUIET_MS, LV_SAMPLES } from '../../docs/tutorial-ui.js';
+describe('the ready gate: guidance after the REAL end of loading', () => {
+  const mkGate = o => { let t = 0; const st = { vol: true, busy: false, btn: true, ...o }; const g = createReadyGate({ now: () => t, volumeReady: () => st.vol, busy: () => st.busy, buttonsOk: () => st.btn }); return { g, st, at: v => { t = v; return g.ready(); } }; };
+  it('volume ready alone is not enough: a job (the bundled project\'s filters) running or its dialog shown, a busy / missing VR button or an unfinished AR check keep it closed', () => {
+    const m = mkGate(); expect(m.at(0)).toBe(false); expect(m.at(READY_QUIET_MS - 1)).toBe(false); expect(m.at(READY_QUIET_MS)).toBe(true); // all quiet for the quiet time: open
+    m.st.busy = true; expect(m.at(READY_QUIET_MS + 10)).toBe(false); // the job after "ready" (see the timeline: ready at 19.0 s, 「フィルターを適用中…」 from 19.3 s to 122 s)
+    m.st.busy = false; expect(m.at(READY_QUIET_MS + 20)).toBe(false); expect(m.at(READY_QUIET_MS * 2 + 19)).toBe(false); expect(m.at(READY_QUIET_MS * 2 + 20)).toBe(true); // the quiet time starts again after the job
+    m.st.btn = false; expect(m.at(10000)).toBe(false); m.st.btn = true; expect(m.at(10001)).toBe(false); expect(m.at(10001 + READY_QUIET_MS)).toBe(true);
+    m.st.vol = false; expect(m.at(20000)).toBe(false);
+  });
+  it('a gap between two jobs shorter than the quiet time does not open it (jobs chain)', () => {
+    const m = mkGate(); m.at(0); expect(m.at(1000)).toBe(false); m.st.busy = true; m.at(1100); m.st.busy = false; expect(m.at(1200)).toBe(false); expect(m.at(2500)).toBe(false); m.st.busy = true; m.at(2600); m.st.busy = false; expect(m.at(2700)).toBe(false); expect(m.at(2700 + READY_QUIET_MS)).toBe(true);
+  });
+  it('pageBusy reads the progress modal state (active OR visible); xrChecked only a true flag', () => {
+    expect(pageBusy({ __vrlBusyModal: () => ({ active: true, visible: false }) })).toBe(true); expect(pageBusy({ __vrlBusyModal: () => ({ active: false, visible: true }) })).toBe(true);
+    expect(pageBusy({ __vrlBusyModal: () => ({ active: false, visible: false }) })).toBe(false); expect(pageBusy({})).toBe(false); expect(pageBusy({ __vrlBusyModal: () => { throw new Error('x'); } })).toBe(false);
+    expect(xrChecked({})).toBe(false); expect(xrChecked({ __vrlXrChecked: true })).toBe(true); expect(xrChecked({ __vrlXrChecked: 1 })).toBe(false);
+  });
+  it('the intro uses the gate by default: a data set whose volume is ready is announced only after the quiet time with the page idle; a busy page keeps the wait text', () => {
+    vi.useFakeTimers(); const keepB = globalThis.__vrlBusyModal, keepR = globalThis.__vrlVolumeReady, keepX = globalThis.__vrlXrChecked, keepN = performance.now.bind(performance);
+    try {
+      let busy = false, t = 0; vi.spyOn(performance, 'now').mockImplementation(() => t);
+      globalThis.__vrlBusyModal = () => ({ active: busy, visible: false }); globalThis.__vrlVolumeReady = true; globalThis.__vrlXrChecked = true;
+      const f = fakeDoc({ ar: true, job: false }), audio = { play: vi.fn() }; let open = 'sample4';
+      const it = createTutorialIntro({ doc: f.doc, audio, getOpenSample: () => open }); it.start(); expect(it.phase).toBe('loading');
+      for (let i = 0; i < 2; i++) { t += 500; vi.advanceTimersByTime(500); } expect(it.phase).toBe('loading'); // 1.0 s of quiet: not yet
+      t += 600; vi.advanceTimersByTime(500); expect(it.phase).toBe('pressVr'); expect(audio.play).toHaveBeenLastCalledWith(['intro4']);
+      busy = true; t += 500; vi.advanceTimersByTime(500); expect(it.phase).toBe('loading'); // a job started (e.g. the project's filters): back to waiting
+      globalThis.__vrlXrChecked = false; busy = false; t += 5000; vi.advanceTimersByTime(500); expect(it.phase).toBe('loading'); // the AR check has not answered: no wording yet
+      it.stop();
+    } finally { vi.useRealTimers(); vi.restoreAllMocks(); globalThis.__vrlBusyModal = keepB; globalThis.__vrlVolumeReady = keepR; globalThis.__vrlXrChecked = keepX; }
+  });
+});
+describe('VR and AR on equal terms', () => {
+  it('both buttons there: 「VRで見る」か「ARで見る」, both lit, the voice names both (intro4); VR only: the old wording and voice (intro2)', () => {
+    const f = fakeDoc({ ar: true }); expect(introTextKey('pressVr', f.doc)).toBe('tutIntroVr'); expect(I18N.ja.tutIntroVr).toBe('「VRで見る」か「ARで見る」を押しましょう'); expect(I18N.en.tutIntroVr).toBe('Press “View in VR” or “View in AR”');
+    expect(introTargets('pressVr', f.doc)).toEqual([f.byId['vr-view-button'], f.byId['ar-view-button']]);
+    const v = fakeDoc({ ar: false }); expect(introTextKey('pressVr', v.doc)).toBe('tutIntroVrOnly'); expect(introTargets('pressVr', v.doc)).toEqual([v.byId['vr-view-button']]);
+    vi.useFakeTimers(); try {
+      for (const [ar, id] of [[true, 'intro4'], [false, 'intro2']]) { const d = fakeDoc({ ar }), audio = { play: vi.fn() }; const it = createTutorialIntro({ doc: d.doc, audio, getOpenSample: () => 'sample4', getReady: () => true }); it.start(); expect(audio.play).toHaveBeenCalledWith([id]); it.stop(); }
+    } finally { vi.useRealTimers(); }
+  });
+});
+describe('after the last ステップ: Lv1-Lv3 on the page', () => {
+  it('LV_SAMPLES = the Lv1-Lv3 data (sample3 / sample2 / sample1); phases of the levels mode', () => {
+    expect(LV_SAMPLES).toEqual(['sample3', 'sample2', 'sample1']);
+    expect(introPhase('sample4', true, false, 'levels')).toBe('chooseLv'); expect(introPhase(undefined, true, false, 'levels')).toBe('chooseLv'); // Lv0 / nothing is not what is asked for
+    for (const s of LV_SAMPLES) { expect(introPhase(s, false, false, 'levels'), s).toBe('loading'); expect(introPhase(s, true, false, 'levels'), s).toBe('pressVr'); expect(introPhase(s, true, true, 'levels'), s).toBe('startVr'); }
+    expect(introPhase('sample3', true, false, 'lv0')).toBe('openLv0'); // the first guidance is unchanged
+  });
+  it('what is lit: the Lv1-Lv3 cards when 体験会 shows them, else 練習データ and its three entries; the words for each', () => {
+    const f = fakeDoc(); const cards = ['lv1', 'lv2', 'lv3'].map(id => { const c = f.doc.createElement('button'); f.bySel[`[data-event-level="${id}"]`] = c; return c; });
+    expect(introTargets('chooseLv', f.doc)).toEqual(cards); expect(introTextKey('chooseLv', f.doc)).toBe('tutIntroLv123');
+    const g = fakeDoc(); const ent = ['sample3', 'sample2', 'sample1'].map(id => { const c = g.doc.createElement('button'); g.bySel[`[data-sample-set="${id}"]`] = c; return c; });
+    expect(introTargets('chooseLv', g.doc)).toEqual([g.byId['sample-demo-button'], ...ent]); expect(introTextKey('chooseLv', g.doc)).toBe('tutIntroLv123Off'); // 体験会 off: the practice-data chooser
+    expect(I18N.ja.tutIntroLv123).toBe('次は Lv1〜Lv3 のカードから選びましょう'); expect(I18N.ja.tutIntroLv123Off).toMatch(/練習データ.*マウス頭部.*マウス腹部.*ラット腹部/);
+  });
+  it('startLevels: choose (lit, said after the closing clip) -> chosen: wait -> ready: VR / AR -> a session starts: the guidance is over; Lv1-Lv3 get no tutorial wording', () => {
+    vi.useFakeTimers();
+    try {
+      const f = fakeDoc({ ar: true }), audio = { play: vi.fn() }; let open = 'sample4', ready = false; const cards = ['lv1', 'lv2', 'lv3'].map(id => { const c = f.doc.createElement('button'); f.bySel[`[data-event-level="${id}"]`] = c; return c; });
+      const it = createTutorialIntro({ doc: f.doc, audio, getOpenSample: () => open, getReady: () => ready, levelsVoiceDelayMs: 3500 }); it.startLevels();
+      expect(it.phase).toBe('chooseLv'); expect(it.mode).toBe('levels'); expect(f.bar().dataset.tutMode).toBe('levels'); expect(cards.every(c => c.cls.has('tut-hl'))).toBe(true); expect(f.bar().children[0].textContent).toBe(I18N.ja.tutIntroLv123);
+      expect(audio.play).not.toHaveBeenCalled(); vi.advanceTimersByTime(3400); expect(audio.play).not.toHaveBeenCalled(); vi.advanceTimersByTime(200); expect(audio.play).toHaveBeenCalledWith(['intro5']); // after the 「すべてクリアです」 clip
+      open = 'sample3'; f.doc.dispatchEvent(Object.assign(new Event('vrl-event-sample-open'), { detail: { id: 'sample3' } })); expect(it.phase).toBe('loading'); expect(cards.some(c => c.cls.has('tut-hl'))).toBe(false);
+      ready = true; vi.advanceTimersByTime(600); expect(it.phase).toBe('pressVr'); expect(audio.play).toHaveBeenLastCalledWith(['intro4']); expect(f.byId['vr-view-button'].cls.has('tut-hl')).toBe(true); expect(f.byId['ar-view-button'].cls.has('tut-hl')).toBe(true);
+      f.doc.dispatchEvent(Object.assign(new Event('vrl-tut-signal'), { detail: { kind: 'ar-start' } })); expect(it.active).toBe(false); expect(f.bar()).toBeNull();
+      // closing the bar before the voice: nothing is said later
+      const it2 = createTutorialIntro({ doc: fakeDoc().doc, audio: { play: vi.fn() }, getOpenSample: () => 'sample4', getReady: () => true }); const a2 = { play: vi.fn() }; it2.startLevels(); it2.stop(); vi.advanceTimersByTime(5000);
+    } finally { vi.useRealTimers(); }
+  });
+  it('wiring (static): the last ステップ cleared (allClear) starts the Lv guidance, only while the tutorial UI is live; the VR board does not create the Lv wording; a VR session of Lv1-Lv3 has no tutorial (the live tutorial runs on sample4 only)', async () => {
+    const { readFileSync } = await import('node:fs'); const ui = readFileSync(new URL('../../docs/tutorial-ui.js', import.meta.url), 'utf8'), vv = readFileSync(new URL('../../docs/vr-view.js', import.meta.url), 'utf8'), app = readFileSync(new URL('../../docs/app.js', import.meta.url), 'utf8');
+    expect(ui).toContain("getTutorialEngine().subscribe(snap=>{if(snap.feedback==='allClear'&&uiActive)intro.startLevels()});");
+    expect(vv).toContain("const tutLive=tutorialModeOn()&&globalThis.__vrlOpenSample===TUT_SAMPLE;"); // sample1-3: no tutorial board, no entry guidance, no steps
+    expect(vv).toContain("emit('session-end');cleanup()"); // the way out's signal
+    expect(app).toContain("globalThis.__vrlXrChecked=true"); expect(app).toMatch(/Promise\.all\(\[xrShow\('immersive-vr',vrViewBtn\),xrShow\('immersive-ar',arViewBtn\)\]\)/);
   });
 });
