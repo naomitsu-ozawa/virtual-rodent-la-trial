@@ -1,7 +1,7 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Self-contained: depends only on the imports below (no module state).
-import { frameYield } from './utils.js?v=20261022-build644';
-import { spacingRatios, unsharpAxes, unsharpWeight } from './filter-units.js?v=20261022-build644';
+import { frameYield } from './utils.js?v=20261022-build645';
+import { spacingRatios, unsharpAxes, unsharpWeight } from './filter-units.js?v=20261022-build645';
 export function valuesToSegmentBits(values,segments){
  const out=new Uint32Array(values.length);
  for(let i=0;i<values.length;i++){const v=values[i];let bits=0;for(let s=0;s<segments.length&&s<4;s++)if(v>=segments[s].seg.min&&v<=segments[s].seg.max)bits|=(1<<s);out[i]=bits}

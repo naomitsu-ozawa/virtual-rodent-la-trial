@@ -30,7 +30,7 @@ export function chooseEventLevel(id){chosen=levelById(id)?.id??null;return chose
 export const chosenEventLevel=()=>levelById(chosen);
 // the switch, read through the settings api (globalThis.__vrlSettings by default); any failure reads as off
 export function eventModeOn(api=globalThis.__vrlSettings){try{return api?.get?.('eventMode')===true}catch{return false}}
-// the level whose mission is shown (on its own VR mission panel, separate from the help board): null when the mode is off or no level was chosen
+// the level whose mission is shown (VR help board): null when the mode is off or no level was chosen
 export const activeEventLevel=api=>eventModeOn(api)?chosenEventLevel():null;
 // The VR かんたん menu is GENERIC: the same for every level, for every dataset and with no level chosen (the level only picks the mission shown on
 // the help board). Its contents come from the loaded dataset: one 表示 / 非表示 row per shown segment (active and enabled; at most MAX_SEG_ROWS, the
