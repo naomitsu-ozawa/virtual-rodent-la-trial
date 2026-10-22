@@ -1,5 +1,5 @@
 // チュートリアル progress, saved on this device (localStorage key vrl.tutorial.v1, separate from vrl.settings.v1). Pure: no DOM, no THREE;
-// unit-tested (tests/unit/tutorial-progress.test.js). Shape {v:1, done:{m1:true,…}, skipAll:false, last:'m3'|null}. Every storage access is guarded: when
+// unit-tested (tests/unit/tutorial-progress.test.js). Shape {v:1, done:{controls:true,…}, skipAll:false, last:'section'|null}. Every storage access is guarded: when
 // localStorage is missing / throws / holds garbage, the progress lives in memory only (this page) and loading never throws.
 export const TUT_KEY='vrl.tutorial.v1';
 export const emptyProgress=()=>({v:1,done:{},skipAll:false,last:null});

@@ -1,15 +1,17 @@
 import { describe, it, expect } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
-import { emit, SIGNAL_KINDS, createMoveTracker, scaleChanged } from '../../docs/tutorial-signal.js';
+import { emit, SIGNAL_KINDS, poseMoved, scaleChanged } from '../../docs/tutorial-signal.js';
 
 const DOCS = new URL('../../docs/', import.meta.url);
 const files = readdirSync(DOCS).filter(f => f.endsWith('.js') && f !== 'tutorial-signal.js');
 const src = Object.fromEntries(files.map(f => [f, readFileSync(new URL(f, DOCS), 'utf8')]));
 
 describe('tutorial signals', () => {
-  it('has the agreed kinds', () => {
-    expect(SIGNAL_KINDS.length).toBe(19);
-    expect(new Set(SIGNAL_KINDS).size).toBe(19);
+  it('has the agreed kinds (trigger-label / label-show stay as signals even though no tutorial step waits for them;: no \'move\' (no walking task), + the deck\'s operations)', () => {
+    expect(SIGNAL_KINDS.length).toBe(25);
+    expect(new Set(SIGNAL_KINDS).size).toBe(25);
+    expect(SIGNAL_KINDS).not.toContain('move');
+    for (const k of ['grab', 'grab-move', 'seg-hide', 'seg-show', 'section-scroll', 'slice-opacity', 'slice-toggle']) expect(SIGNAL_KINDS).toContain(k);
   });
   it('every kind has an emit site in docs/', () => {
     for (const k of SIGNAL_KINDS) {
@@ -37,21 +39,36 @@ describe('tutorial signals', () => {
       }
     }
   });
-  it('move tracker fires once after 0.3 m of travel', () => {
-    const t = createMoveTracker();
-    expect(t.step({ x: 0, y: 1.6, z: 0 })).toBe(false);
-    expect(t.step({ x: 0.2, y: 1.6, z: 0 })).toBe(false);
-    expect(t.step({ x: 0.4, y: 1.6, z: 0 })).toBe(true);
-    expect(t.step({ x: 2, y: 1.6, z: 0 })).toBe(false);
+  it('rate limits: section-scroll and slice-opacity (they fire every frame / every drag step) at most once per 400 ms', () => {
+    const got = [];
+    globalThis.document = { dispatchEvent: e => got.push(e.detail.kind) };
+    try { for (let i = 0; i < 5; i++) { emit('section-scroll'); emit('slice-opacity'); emit('grab'); } } finally { delete globalThis.document; }
+    expect(got.filter(k => k === 'section-scroll')).toHaveLength(1);
+    expect(got.filter(k => k === 'slice-opacity')).toHaveLength(1);
+    expect(got.filter(k => k === 'grab')).toHaveLength(5);
   });
-  it('move tracker reset() re-arms it (sum 0, next position is the new start)', () => {
-    const t = createMoveTracker();
-    t.step({ x: 0, y: 1.6, z: 0 }); t.step({ x: 0.2, y: 1.6, z: 0 }); expect(t.step({ x: 0.4, y: 1.6, z: 0 })).toBe(true);
-    t.reset();
-    expect(t.step({ x: 5, y: 1.6, z: 0 })).toBe(false); // the first position after reset is only the baseline (no jump counted)
-    expect(t.step({ x: 5.2, y: 1.6, z: 0 })).toBe(false);
-    expect(t.step({ x: 5.4, y: 1.6, z: 0 })).toBe(true);
-    expect(t.step({ x: 6, y: 1.6, z: 0 })).toBe(false);
+  it('poseMoved: a one-hand hold counts as moved over 3 cm or 15 degrees', () => {
+    const p = { x: 0, y: 1, z: -0.5 }, q = { x: 0, y: 0, z: 0, w: 1 };
+    expect(poseMoved(p, q, { x: 0.02, y: 1, z: -0.5 }, q)).toBe(false);
+    expect(poseMoved(p, q, { x: 0.04, y: 1, z: -0.5 }, q)).toBe(true);
+    const turn = deg => ({ x: 0, y: Math.sin(deg * Math.PI / 360), z: 0, w: Math.cos(deg * Math.PI / 360) });
+    expect(poseMoved(p, q, p, turn(10))).toBe(false);
+    expect(poseMoved(p, q, p, turn(20))).toBe(true);
+    expect(poseMoved(p, q, p, { x: -0, y: -0, z: -0, w: -1 })).toBe(false); // the same rotation (q and -q)
+    expect(poseMoved(null, q, p, q)).toBe(false);
+  });
+  it('vr-view.js emits the tutorial signals where the operation really happens', () => {
+    const v = src['vr-view.js'];
+    expect(v).toContain("if(grab1&&poseMoved(grabP,grabQ,holder.position,holder.quaternion))emit('grab-move');grab1=null;");
+    expect(v).toContain("if(grabbing.size>grabN)emit('grab');grabN=grabbing.size;");
+    // review: 正面に戻す drops the grab (grabbing.clear()); the grab bookkeeping goes with it, else the next grip change compares against the pose before the jump and fires grab-move
+    expect(v).toContain('const bringVolumeFront=()=>{readHead();scene.attach(holder);grabbing.clear();twoHand=null;grabN=0;grab1=null;');
+    expect(v).toContain("sp.obj.translateX(-scroll*SCROLL_SPEED*dt/ps);if(!sweepOn)emit('section-scroll');");
+    expect(v).toContain("menu.refresh();emit('slice-toggle');if(ui.sliceClear)emit('slice-clear')};");
+    expect(v).toContain("if(v&&was===2)emit('seg-show');else if(!v&&was!==2)emit('seg-hide')");
+    expect(v).toContain("if(j===2&&m!==2)emit('seg-hide');else if(j!==2&&m===2)emit('seg-show');segMode[key]=j");
+    expect(v).not.toContain("emit('move')");
+    expect(v).not.toContain('createMoveTracker');
   });
   it('scale threshold is 15 %', () => {
     expect(scaleChanged(1, 1.14)).toBe(false);

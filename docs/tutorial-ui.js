@@ -10,17 +10,20 @@
 // The instance is kept on globalThis.__vrlTutorialEngine, so it stays single even when the module is loaded under two ?v= URLs.
 // Signals: the first getTutorialEngine() also wires document/window 'vrl-tut-signal' ({detail:{kind,count?}}) to engine.onSignal (once; a signal seen on both is counted once).
 // A module that wires signals itself must set globalThis.__vrlTutSignalWired=true BEFORE the first getTutorialEngine() call.
-import { settings } from './app-settings.js?v=20261021-build641';
-import { tr, I18N } from './i18n.js?v=20261021-build641';
-import { TUTORIAL_MISSIONS } from './tutorial-data.js?v=20261021-build641';
-import { createTutorialEngine } from './tutorial-engine.js?v=20261021-build641';
-import { resetPress, resetArmed, RESET_ARM_MS, EVENT_LEVELS } from './event-mode.js?v=20261021-build641';
+import { settings } from './app-settings.js?v=20261022-build642';
+import { tr, I18N } from './i18n.js?v=20261022-build642';
+import { TUTORIAL_MISSIONS, TUT_SAMPLE, TUT_INTRO } from './tutorial-data.js?v=20261022-build642';
+import { createTutorialAudio } from './tutorial-audio.js?v=20261022-build642';
+import { createTutorialEngine } from './tutorial-engine.js?v=20261022-build642';
+import { resetPress, resetArmed, RESET_ARM_MS, EVENT_LEVELS } from './event-mode.js?v=20261022-build642';
 
 // the switch (設定 > 外観 > チュートリアル) off = the engine ignores every signal (nothing advances, nothing is saved); on again = as before
 // true while the tutorial UI is live (the switch is on AND the device supports VR): the Lv0 card of 体験会 acts as the tutorial only then (event-mode-ui.js)
 let uiActive=false;
 export const tutorialUiActive=()=>uiActive;
-export const tutorialSignalsOn=()=>{try{return globalThis.__vrlSettings?.get?.('tutorialMode')===true}catch{return false}}; // = settings (app-settings.js sets globalThis.__vrlSettings; the same switch tutorialModeOn() reads)
+// signals count only while the switch is on AND the tutorial's practice data (TUT_SAMPLE = the Lv0 data) is the open one: on any other practice data (Lv1-Lv3) or the
+// visitor's own data nothing advances (the tutorial never takes over another dataset)
+export const tutorialSignalsOn=()=>{try{return globalThis.__vrlSettings?.get?.('tutorialMode')===true&&globalThis.__vrlOpenSample===TUT_SAMPLE}catch{return false}}; // = settings (app-settings.js sets globalThis.__vrlSettings; the same switch tutorialModeOn() reads)
 export function getTutorialEngine(opts){
  const g=globalThis;
  if(g.__vrlTutorialEngine)return g.__vrlTutorialEngine;
@@ -31,12 +34,7 @@ export function getTutorialEngine(opts){
   const on=e=>{if(seen.has(e))return;seen.add(e);if(!tutorialSignalsOn())return;const d=e.detail;if(d&&typeof d.kind==='string')eng.onSignal({kind:d.kind,count:d.count})};
   document.addEventListener('vrl-tut-signal',on);g.addEventListener?.('vrl-tut-signal',on);
  }
- try{ // no XR on Mac / iPad: ステップ7 (M7, AR) becomes 'unavailable'
-  const xr=g.navigator?.xr;
-  if(!xr?.isSessionSupported)eng.setEnv({arAvailable:false});
-  else xr.isSessionSupported('immersive-ar').then(ok=>eng.setEnv({arAvailable:!!ok}),()=>eng.setEnv({arAvailable:false}));
- }catch{}
- return eng;
+ return eng; // no AR step any more (nothing depends on AR support)
 }
 // pure-ish: true only when the device can start an immersive-vr session (never throws)
 export async function detectVrSupport(nav=globalThis.navigator){
@@ -69,6 +67,50 @@ export function continueTutorial(engine=getTutorialEngine()){
  const id=engine.nextMissionId();
  if(id&&engine.start(id))return{action:'start',id};
  return{action:'none',id:null};
+}
+// the page's introduction after 「チュートリアルを始める」 (the topbar button, VR devices only): a subtitle bar (+ the voice once per phase) that guides
+//   'openLv0': open the Lv0 practice data (the 体験会 Lv0 card when it is there, else 「練習データ」 and its 骨梁 entry are lit; nothing is opened for the visitor)
+//   'pressVr': the Lv0 data is open: press 「VRで見る」 (or 「ARで見る」); while it is still loading (the progress modal #job-modal is up) the bar says to wait for it
+// A target that is newly lit is scrolled into view (nearest: nothing moves when it is already visible).
+// and ends when a VR / AR session starts (signal 'vr-start' / 'ar-start'; the VR board then shows ステップ1) or with its 閉じる button. Opening other data goes back to 'openLv0'.
+export const introPhase=openSample=>openSample===TUT_SAMPLE?'pressVr':'openLv0';
+const shown=e=>!!e&&!e.hidden&&!e.closest?.('[hidden]');
+export function introTargets(phase,doc=globalThis.document){
+ if(!doc)return[];
+ if(phase==='openLv0'){const card=doc.querySelector('[data-event-level="lv0"]');if(shown(card))return[card];return[doc.getElementById('sample-demo-button'),doc.querySelector('[data-sample-set="'+TUT_SAMPLE+'"]')].filter(shown)}
+ if(phase==='pressVr')return['vr-view-button','ar-view-button'].map(id=>doc.getElementById(id)).filter(shown);
+ return[];
+}
+export function introTextKey(phase,doc=globalThis.document){
+ if(phase==='openLv0')return shown(doc?.querySelector('[data-event-level="lv0"]'))?'tutIntroLv0':'tutIntroLv0Off';
+ if(phase==='pressVr'){const v=doc?.getElementById('vr-view-button'),a=doc?.getElementById('ar-view-button'),job=doc?.getElementById('job-modal');if(!shown(v)||v.disabled||(job&&!job.classList.contains('is-hidden')))return'tutIntroLoading';return shown(a)?'tutIntroVr':'tutIntroVrOnly'}
+ return'';
+}
+export function createTutorialIntro({doc=globalThis.document,audio=null,getOpenSample=()=>globalThis.__vrlOpenSample,tickMs=500}={}){
+ let phase=null,bar=null,timer=0,lit=new Set();const spoken=new Set();
+ const paint=()=>{
+  if(!phase||!bar)return;
+  const next=new Set(introTargets(phase,doc));
+  for(const e of lit)if(!next.has(e))e.classList.remove('tut-hl');
+  for(const e of next)if(!lit.has(e)){e.classList.add('tut-hl');try{e.scrollIntoView?.({block:'nearest',behavior:'smooth'})}catch{}}
+  lit=next;
+  const key=introTextKey(phase,doc),t=bar.querySelector('.tut-guide-text');
+  if(t.dataset.i18n!==key){t.dataset.i18n=key;t.textContent=tr(key)}
+  bar.dataset.tutPhase=phase;
+ };
+ const say=()=>{const it=phase&&TUT_INTRO[phase];if(it&&!spoken.has(it.id)){spoken.add(it.id);try{audio?.play([it.audio])}catch{}}};
+ const setPhase=p=>{const changed=p!==phase;phase=p;paint();if(changed)say()};
+ function mount(){
+  bar=doc.createElement('div');bar.id='tut-guide';bar.className='tut-guide';bar.setAttribute('role','status');
+  const t=doc.createElement('span');t.className='tut-guide-text';
+  const x=doc.createElement('button');x.type='button';x.className='tut-guide-close';x.dataset.i18n='tutGuideClose';x.textContent=tr('tutGuideClose');x.onclick=()=>stop();
+  bar.append(t,x);doc.body.append(bar);
+ }
+ function start(){if(!bar)mount();spoken.clear();phase=null;setPhase(introPhase(getOpenSample()));clearInterval(timer);timer=setInterval(paint,tickMs)}
+ function stop(){phase=null;clearInterval(timer);timer=0;for(const e of lit)e.classList.remove('tut-hl');lit=new Set();bar?.remove();bar=null}
+ doc?.addEventListener?.('vrl-event-sample-open',e=>{if(phase)setPhase(introPhase(e.detail?.id))});
+ doc?.addEventListener?.('vrl-tut-signal',e=>{const k=e.detail?.kind;if(phase&&(k==='vr-start'||k==='ar-start'))stop()});
+ return{start,stop,get phase(){return phase},get active(){return!!phase}};
 }
 export function initTutorialUi({resetUserState}={}){
  const box=document.getElementById('set-tutorial-mode'),voice=document.getElementById('set-tutorial-voice');
@@ -147,6 +189,16 @@ export function initTutorialUi({resetUserState}={}){
  };
  window.addEventListener('vrl-settings',e=>{if(e.detail?.key==='tutorialMode'||e.detail?.key==='tutorialVoice')sync()});
  document.addEventListener('vrl-event-sample-open',()=>render());
+ // 「チュートリアルを始める」 in the top bar, just before 「VRで見る」 (always in view, whichever panel is open; VR devices only): switches the tutorial on, continues it (the next step not done) and starts the introduction
+ const intro=createTutorialIntro({audio:createTutorialAudio({getVoice:()=>settings.get('tutorialVoice')})});
+ const mountCta=()=>{
+  if(document.getElementById('tutorial-start-button'))return;
+  const b=el('button','tut-cta','tutCta');b.id='tutorial-start-button';b.type='button';
+  b.onclick=()=>{if(settings.get('tutorialMode')!==true)settings.set('tutorialMode',true);sync();continueTutorial();intro.start()};
+  const at=document.getElementById('vr-view-button');
+  if(at?.parentNode)at.parentNode.insertBefore(b,at);else document.querySelector('.topbar-actions')?.prepend(b);
+ };
+ window.addEventListener('vrl-settings',e=>{if(e.detail?.key==='tutorialMode'&&settings.get('tutorialMode')!==true)intro.stop()});
  showRows(false);
- detectVrSupport().then(ok=>{vr=ok;showRows(ok);sync()});
+ detectVrSupport().then(ok=>{vr=ok;showRows(ok);if(ok)mountCta();sync()});
 }

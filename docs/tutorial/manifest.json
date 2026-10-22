@@ -1,93 +1,63 @@
 {
- "F1/m1s2": {
+ "F1/controls1": {
   "voice": "F1",
-  "sec": 3.42,
-  "textHash": "1043a2866fdc"
+  "sec": 3.74,
+  "textHash": "0cf68dc19170"
  },
- "F1/m1s3": {
+ "F1/grip1": {
   "voice": "F1",
-  "sec": 2.48,
-  "textHash": "b8553dcc9919"
+  "sec": 3.16,
+  "textHash": "d6589d7f793e"
  },
- "F1/m1s4": {
+ "F1/grip2": {
   "voice": "F1",
-  "sec": 2.87,
-  "textHash": "f984aeab1873"
+  "sec": 3.94,
+  "textHash": "6304f4954e3f"
  },
- "F1/m2s1": {
+ "F1/grip3": {
   "voice": "F1",
-  "sec": 1.83,
-  "textHash": "c638f7a1f263"
+  "sec": 3.6,
+  "textHash": "faf8ad933127"
  },
- "F1/m2s2": {
+ "F1/section1": {
   "voice": "F1",
-  "sec": 3.11,
-  "textHash": "6553654d939b"
+  "sec": 3.23,
+  "textHash": "d93a0e661cce"
  },
- "F1/m2s3": {
+ "F1/section2": {
   "voice": "F1",
-  "sec": 1.68,
-  "textHash": "4c4cbf5ab631"
+  "sec": 3.56,
+  "textHash": "ef0856b733e9"
  },
- "F1/m3s1": {
+ "F1/section3": {
   "voice": "F1",
-  "sec": 1.99,
-  "textHash": "4b44a67dffde"
+  "sec": 3.39,
+  "textHash": "2207a9f95520"
  },
- "F1/m3s2": {
+ "F1/menu1": {
   "voice": "F1",
-  "sec": 2.69,
-  "textHash": "3ba78c4d2aa7"
+  "sec": 5.18,
+  "textHash": "89126130de70"
  },
- "F1/m3s3": {
+ "F1/menu2": {
   "voice": "F1",
-  "sec": 3.11,
-  "textHash": "069e3b34f128"
+  "sec": 5.55,
+  "textHash": "49e2c48b26ea"
  },
- "F1/m4s1": {
+ "F1/slice1": {
   "voice": "F1",
-  "sec": 2.65,
-  "textHash": "836cc921bbc1"
+  "sec": 2.46,
+  "textHash": "2b9d34ff8c3d"
  },
- "F1/m4s2": {
+ "F1/slice2": {
   "voice": "F1",
-  "sec": 2.01,
-  "textHash": "3f06e1fdcd00"
+  "sec": 2.93,
+  "textHash": "3760494e1bbc"
  },
- "F1/m5s1": {
+ "F1/slice3": {
   "voice": "F1",
-  "sec": 2.55,
-  "textHash": "5245cd5dec86"
- },
- "F1/m5s2": {
-  "voice": "F1",
-  "sec": 2.29,
-  "textHash": "8522c540d46a"
- },
- "F1/m6s1": {
-  "voice": "F1",
-  "sec": 2.62,
-  "textHash": "d0a6247a43be"
- },
- "F1/m6s2": {
-  "voice": "F1",
-  "sec": 3,
-  "textHash": "21b42971b16b"
- },
- "F1/m7s1": {
-  "voice": "F1",
-  "sec": 3.2,
-  "textHash": "79e3fd361cfe"
- },
- "F1/m7s2": {
-  "voice": "F1",
-  "sec": 2.35,
-  "textHash": "96d5e2d5b290"
- },
- "F1/m7s3": {
-  "voice": "F1",
-  "sec": 2.07,
-  "textHash": "0912d4f8208d"
+  "sec": 2.98,
+  "textHash": "85334ef51d8b"
  },
  "F1/ok1": {
   "voice": "F1",
@@ -113,5 +83,15 @@
   "voice": "F1",
   "sec": 2.96,
   "textHash": "4ae6b7b9b3d0"
+ },
+ "F1/intro1": {
+  "voice": "F1",
+  "sec": 3.63,
+  "textHash": "cf196b63984a"
+ },
+ "F1/intro2": {
+  "voice": "F1",
+  "sec": 2.87,
+  "textHash": "8a5fdeda5720"
  }
 }

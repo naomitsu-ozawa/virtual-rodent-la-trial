@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { VOLUME_FWD, MENU_OFFSET, HELP_OFFSET, HIST_OFFSET, HIST_WIDTH, MENU_WIDTH, HELP_WIDTH, EV_OFFSET, EV_WIDTH, HU_PANEL_OFFSET, boardDistance, placeFromHead, volumeFromHead } from '../../docs/vr-layout.js';
+import { VOLUME_FWD, MENU_OFFSET, HELP_OFFSET, HIST_OFFSET, HIST_WIDTH, MENU_WIDTH, HELP_WIDTH, HELP_RES, EV_OFFSET, EV_WIDTH, EV_RES, HU_PANEL_OFFSET, FOLLOW_ANGLE, FOLLOW_DIST, BOARD_DIST, boardDistance, placeFromHead, volumeFromHead } from '../../docs/vr-layout.js';
+import { levelBoardH } from '../../docs/tutorial-vr.js';
 
 import { PANEL_W, PANEL_H } from '../../docs/vr-histogram-layout.js';
 const HELP_W = 820, HELP_H = 560 + 72; // the help board canvas (makeMenu(820,560+TAB_H,...) in vr-view.js;: the 手順一覧 | 詳細 tab strip is 72 px)
@@ -16,8 +17,25 @@ describe('default VR/AR layout', () => {
     expect(MENU_OFFSET.left).toBeGreaterThan(0); expect(HELP_OFFSET.left).toBeLessThan(0);
     const m = placeFromHead(head, fwd, left, MENU_OFFSET); expect(m.x).toBeCloseTo(1 - MENU_OFFSET.left); expect(m.y).toBeCloseTo(1.6 - MENU_OFFSET.down);
   });
-  it('board physical size is unchanged (not scaled up with the distance)', () => {
-    expect(MENU_WIDTH).toBe(0.5); expect(HELP_WIDTH).toBe(0.32);
+  it('board physical size: the menu as before, the help board 1.4 times, its canvas finer by as much (same texels per metre, not more)', () => {
+    expect(MENU_WIDTH).toBe(0.5); expect(HELP_WIDTH).toBe(0.45);
+    expect(HELP_RES).toBeCloseTo(HELP_WIDTH / 0.32, 1); expect(Math.round(820 * HELP_RES)).toBeLessThanOrEqual(1152); // 1148 px wide: the 1280 px slide pictures are not drawn larger than they are
+    expect(EV_WIDTH).toBe(HELP_WIDTH); expect(EV_RES).toBe(HELP_RES);
+  });
+  const yawDeg = o => Math.atan2(Math.abs(o.left), o.fwd) * 180 / Math.PI, innerDeg = (o, w) => yawDeg(o) - Math.atan(w / 2 / Math.hypot(o.fwd, o.left)) * 180 / Math.PI;
+  it('menu / help / ev boards far out to the sides: centres 55-65 deg out, inner edges 40-50 deg (inside the 55 deg edge of the view), all at the same 0.9 m', () => {
+    for (const [o, w] of [[MENU_OFFSET, MENU_WIDTH], [HELP_OFFSET, HELP_WIDTH], [EV_OFFSET, EV_WIDTH]]) {
+      expect(yawDeg(o)).toBeGreaterThan(55); expect(yawDeg(o)).toBeLessThan(65);
+      expect(innerDeg(o, w)).toBeGreaterThan(40); expect(innerDeg(o, w)).toBeLessThan(50);
+      expect(Math.hypot(o.fwd, o.left)).toBeCloseTo(BOARD_DIST, 3);
+    }
+  });
+  it('a board in follow mode does not glide away when the head turns to read it (FOLLOW_ANGLE beyond the boards\' yaw + 10 deg)', () => {
+    expect(FOLLOW_ANGLE * 180 / Math.PI).toBeGreaterThan(yawDeg(HELP_OFFSET) + 10); expect(FOLLOW_ANGLE * 180 / Math.PI).toBeGreaterThan(yawDeg(MENU_OFFSET) + 10);
+    expect(FOLLOW_DIST).toBeGreaterThan(0.3);
+    const v = readFileSync('docs/vr-view.js', 'utf8');
+    expect(v).toContain('if(ang>FOLLOW_ANGLE||Math.abs(rm-rt)>FOLLOW_DIST||Math.abs(m.position.y-target.y)>FOLLOW_DIST)moving=true;');
+    expect(v).not.toMatch(/ang>0\.6\|\|/);
   });
   it('boards stay clear of the default volume as seen from the head (half extent 0.1 m, volume is 0.165 m across)', () => {
     const volHalf = Math.atan(0.1 / VOLUME_FWD);
@@ -47,7 +65,7 @@ describe('default VR/AR layout', () => {
 });
 
 describe('mission board', () => {
-  const MENU_H = 1180, MENU_W = 1024, evH = 64 + 5 * 32 + 10; // the tallest mission (5 lines) on its own board
+  const MENU_H = 1180, MENU_W = 1024, evH = levelBoardH(820); // the board is the level's 16:9 slide
   const h = EV_WIDTH * evH / 820, wH = HELP_WIDTH * (560 + 72) / 820;
   it('upper left at reading distance, same width as the help board (the text keeps its size), clear of the volume, the menu, the help board and the HU panel', () => {
     expect(EV_WIDTH).toBe(HELP_WIDTH);

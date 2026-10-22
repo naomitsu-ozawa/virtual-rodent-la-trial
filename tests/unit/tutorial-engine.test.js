@@ -4,9 +4,21 @@ import { TUTORIAL_MISSIONS } from '../../docs/tutorial-data.js';
 
 const memProgress = (init) => { let p = init || { v: 1, done: {}, skipAll: false, last: null }; const log = { saves: 0, clears: 0 };
   return { load: () => ({ ...p, done: { ...p.done } }), save: q => { p = JSON.parse(JSON.stringify(q)); log.saves++; }, clear: () => { p = { v: 1, done: {}, skipAll: false, last: null }; log.clears++; }, get: () => p, log }; };
-const mk = (o = {}) => { const progress = o.progress || memProgress(); return { progress, e: createTutorialEngine({ progress, ...o }) }; };
+// the engine is generic; its rules are tested on a FIXTURE of seven missions (the shape of the list: a count-2 step, an AR-only last mission),
+// the real steps (tutorial-data.js: controls / grip / section / menu / slice) in 'tutorial engine: the real steps' below
+const st = (id, signal, count = 1) => ({ id, text: 't', audio: id, audioText: 'abcd', done: { signal, count }, timeoutHint: 1000 });
+const FIX = [
+  { id: 'm1', sample: 'sample4', title: 't', steps: [st('m1s1', 'move'), st('m1s2', 'scale'), st('m1s3', 'home')] },
+  { id: 'm2', sample: 'sample4', title: 't', steps: [st('m2s1', 'menu-open'), st('m2s2', 'seg-toggle'), st('m2s3', 'menu-close')] },
+  { id: 'm3', sample: 'sample4', title: 't', steps: [st('m3s1', 'section-add'), st('m3s2', 'section-drag')] },
+  { id: 'm4', sample: 'sample4', title: 't', steps: [st('m4s1', 'slice-clear'), st('m4s2', 'frame-hide')] },
+  { id: 'm5', sample: 'sample4', title: 't', steps: [st('m5s1', 'point-record'), st('m5s2', 'undo')] },
+  { id: 'm6', sample: 'sample4', title: 't', steps: [st('m6s1', 'point-record', 2), st('m6s2', 'measure-done')] },
+  { id: 'm7', sample: 'sample4', title: 't', requiresAr: true, steps: [st('m7s1', 'ar-start')] },
+];
+const mk = (o = {}) => { const progress = o.progress || memProgress(); return { progress, e: createTutorialEngine({ missions: FIX, progress, ...o }) }; };
 const sig = (e, kind, count) => e.onSignal({ kind, count });
-function finish(e, id) { e.start(id); for (const s of e.currentStep() ? TUTORIAL_MISSIONS.find(m => m.id === id).steps : []) for (let i = 0; i < s.done.count; i++) sig(e, s.done.signal); }
+function finish(e, id) { e.start(id); for (const s of e.currentStep() ? FIX.find(m => m.id === id).steps : []) for (let i = 0; i < s.done.count; i++) sig(e, s.done.signal); }
 
 describe('tutorial engine: sequencing', () => {
   it('idle at first; only m1 is unlocked', () => {
@@ -55,7 +67,7 @@ describe('tutorial engine: sequencing', () => {
     const { e, progress } = mk();
     finish(e, 'm1');
     expect(progress.get().done).toEqual({ m1: true });
-    const e2 = createTutorialEngine({ progress });
+    const e2 = createTutorialEngine({ missions: FIX, progress });
     expect(e2.isDone('m1')).toBe(true);
     expect(e2.isUnlocked('m2')).toBe(true);
     expect(e2.getState().mission).toBeNull();
@@ -87,7 +99,7 @@ describe('tutorial engine: unlock rules', () => {
   it('there is no analysis step any more (no m8, no analysis flag, no hasAnalysis env)', () => {
     const { e } = mk();
     expect(e.listMissions()).toHaveLength(7);
-    expect(TUTORIAL_MISSIONS.some(m => m.requiresAnalysis)).toBe(false);
+    expect([...FIX, ...TUTORIAL_MISSIONS].some(m => m.requiresAnalysis)).toBe(false);
     expect(e.listMissions().every(m => m.reason !== 'tutNoAnalysis')).toBe(true);
     e.setEnv({ hasAnalysis: false }); // an unknown key is ignored
     expect(e.listMissions().map(m => m.status)).toEqual(['available', 'locked', 'locked', 'locked', 'locked', 'locked', 'locked']);
@@ -201,7 +213,7 @@ describe('tutorial engine: subscription', () => {
   });
   it('a failing progress store does not break the engine', () => {
     const progress = { load: () => ({ v: 1, done: {}, skipAll: false, last: null }), save() { throw new Error('x'); }, clear() { throw new Error('x'); } };
-    const e = createTutorialEngine({ progress });
+    const e = createTutorialEngine({ missions: FIX, progress });
     finish(e, 'm1'); e.reset();
     expect(e.getState().mission).toBeNull();
   });
@@ -261,5 +273,32 @@ describe('tutorial feedback data', () => {
     expect(all.map(x => x.id)).toEqual(['ok1', 'ok2', 'ok3', 'mclear', 'allclear']);
     for (const x of all) { expect(x.audio).toBe(x.id); expect(x.audioText.length).toBeLessThanOrEqual(20); for (const l of ['ja', 'en']) expect(I18N[l][x.text]).toBeTruthy(); }
     expect(TUTORIAL_MISSIONS.flatMap(m => m.steps).map(s => s.audio)).not.toContain('ok1');
+  });
+});
+
+describe('tutorial engine: the real steps', () => {
+  const real = () => createTutorialEngine({ progress: memProgress() });
+  it('ステップ1..5 in the deck order, only the first open; the controls page finishes with 次へ, not with a signal', () => {
+    const e = real();
+    expect(e.listMissions().map(m => [m.id, m.stepNo, m.status])).toEqual([['controls', 1, 'available'], ['grip', 2, 'locked'], ['section', 3, 'locked'], ['menu', 4, 'locked'], ['slice', 5, 'locked']]);
+    const fb = []; e.subscribe(x => fb.push(x.feedback));
+    e.start('controls');
+    for (const k of ['grab', 'scale', 'vr-start']) expect(sig(e, k)).toBe(false);
+    expect(e.pageInfo()).toMatchObject({ n: 1, N: 1, isLast: true });
+    e.next();
+    expect(e.getState().finished).toBe(true); expect(fb.at(-1)).toBe('missionClear');
+    expect(e.nextMissionId()).toBe('grip');
+  });
+  it('each step waits for its own signal, in order; the last one gives allClear', () => {
+    const e = real(); e.skipMission('controls'); const fb = []; e.subscribe(x => fb.push(x.feedback));
+    const order = { grip: ['grab', 'grab-move', 'scale'], section: ['section-add', 'section-drag', 'section-scroll'], menu: ['seg-hide', 'seg-show'], slice: ['slice-opacity', 'slice-toggle', 'frame-hide'] };
+    for (const [id, kinds] of Object.entries(order)) {
+      expect(e.start(id)).toBe(true);
+      expect(sig(e, kinds.at(-1) === kinds[0] ? 'nope' : kinds.at(-1))).toBe(kinds.length === 1); // a later step's signal does not skip ahead
+      for (const k of kinds) expect(sig(e, k), `${id}:${k}`).toBe(true);
+      expect(e.getState().finished).toBe(true);
+    }
+    expect(fb.at(-1)).toBe('allClear');
+    expect(e.nextMissionId()).toBeNull();
   });
 });
