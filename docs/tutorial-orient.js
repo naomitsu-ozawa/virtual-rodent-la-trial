@@ -1,5 +1,9 @@
+// the entry guidance of the VR / AR tutorial. Pure: no DOM, no THREE; unit-tested (tests/unit/tutorial-orient.test.js).
+// Right after a session starts the tutorial first shows where its boards are: 'right' (the 操作パネル = the help board, 50 deg to the right) then 'left' (the メニュー, 50 deg to the left);
+// then ステップ1 begins. A phase ends when the visitor TURNS THE HEAD toward the board (the horizontal angle between the gaze and the direction to the board is <= LOOK_DEG, 25 deg = a turn of 25 deg or more toward a board 50 deg out, held for
+// LOOK_DWELL_MS; not before the phase's voice has ended, or SAY_MAX_MS passed, so the narration is not cut off) or presses 次へ (next(), at once).
 export const ORIENT_PHASES = Object.freeze(['right', 'left']);
-export const LOOK_DEG = 30, LOOK_DWELL_MS = 600, SAY_MAX_MS = 9000;
+export const LOOK_DEG = 25, LOOK_DWELL_MS = 600, SAY_MAX_MS = 9000;
 // the horizontal angle (deg, 0..180) between the gaze (gx, gz) and the direction (dx, dz) from the head to a board; null when either has no horizontal extent
 export function horizAngleDeg(gx, gz, dx, dz) {
   const a = Math.hypot(gx, gz), b = Math.hypot(dx, dz);

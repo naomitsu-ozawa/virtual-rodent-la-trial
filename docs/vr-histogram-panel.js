@@ -1,6 +1,6 @@
-import { rebinHist, niceStep, huToX, windowFor, HIST_MIN, HIST_MAX } from './histogram.js?v=20261022-build642';
-import { PLOT_OV, PLOT_OV_SCALE, AXIS_GRAB, AUTO_BTN, END_LABEL_Y, DRAG_REDRAW_MS, axisTarget, localToPxX, localToPxY, dragWindow, PANEL_W, PANEL_H, PLOT, LEGEND, STATUS_Y, TITLE_Y, X_TICK_Y, X_AXIS_Y, Y_AXIS_X, PROG_PX, PROG_W_M, boardHeightM, pxToLocalX, pxToLocalY, columnsFor, barFraction, countLabel, yTicks, STACK_ORDER, stackColumn, legendItems, legendLayout, titleText, yAxisText, progressText, shouldRedraw } from './vr-histogram-layout.js?v=20261022-build642';
-import { registerVrSelfCheck } from './vr-self-check.js?v=20261022-build642';
+import { rebinHist, niceStep, huToX, windowFor, HIST_MIN, HIST_MAX } from './histogram.js?v=20261022-build650';
+import { PLOT_OV, PLOT_OV_SCALE, AXIS_GRAB, AUTO_BTN, END_LABEL_Y, DRAG_REDRAW_MS, axisTarget, localToPxX, localToPxY, dragWindow, PANEL_W, PANEL_H, PLOT, LEGEND, STATUS_Y, TITLE_Y, X_TICK_Y, X_AXIS_Y, Y_AXIS_X, PROG_PX, PROG_W_M, boardHeightM, pxToLocalX, pxToLocalY, columnsFor, barFraction, countLabel, yTicks, STACK_ORDER, stackColumn, legendItems, legendLayout, titleText, yAxisText, progressText, shouldRedraw } from './vr-histogram-layout.js?v=20261022-build650';
+import { registerVrSelfCheck } from './vr-self-check.js?v=20261022-build650';
 
 // VR self-check scenario: the frame rate while the histogram pass runs. env.histogram (vr-view.js) =
 // { isOpen(), open(), close(), forceCompute(), busy() }. The board is opened and the pass is started again each time it finishes, so it runs during

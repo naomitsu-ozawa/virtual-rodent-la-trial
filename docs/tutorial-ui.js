@@ -1,9 +1,22 @@
-import { settings } from './app-settings.js?v=20261022-build642';
-import { tr, I18N } from './i18n.js?v=20261022-build642';
-import { TUTORIAL_MISSIONS, TUT_SAMPLE, TUT_INTRO } from './tutorial-data.js?v=20261022-build642';
-import { createTutorialAudio } from './tutorial-audio.js?v=20261022-build642';
-import { createTutorialEngine } from './tutorial-engine.js?v=20261022-build642';
-import { resetPress, resetArmed, RESET_ARM_MS, EVENT_LEVELS } from './event-mode.js?v=20261022-build642';
+// チュートリアル 2D panel (設定 > 外観 switch -> a panel at the top of the データ panel, above the 体験会 level cards when both are on).
+// Mission list (✓ / locked / unavailable + reason), a start button per available mission (engine.start + the mission's practice dataset through the
+// same 'vrl-event-sample' route the level cards use), 全部スキップ, 最初から (double press, event-mode.js resetPress; clears vrl.tutorial.v1; resetUserState only while a practice dataset is open, see resetTutorialAll),
+// and the current step as a carousel card (n/N, 前へ / 次へ, Japanese body + English subtitle). No new assets are fetched.
+// NOTHING of the progress is saved or read (tutorial-engine.js keeps it in memory): every 「チュートリアルを始める」 starts from ステップ1 (restartTutorial); an old vrl.tutorial.v1 is removed once and never read.
+// VR-ONLY: the tutorial is for VR/AR. The switch, the voice select and the panel appear only on a device where navigator.xr.isSessionSupported('immersive-vr') resolves true
+// (decided asynchronously; hidden until known; no navigator.xr / rejection / false = hidden). The saved setting is never rewritten.
+//
+// SHARED ENGINE: getTutorialEngine() is the ONE engine of the page. The VR module (tutorial-vr.js) must import it from here and never call createTutorialEngine itself:
+//   (import getTutorialEngine from this file)  const eng = getTutorialEngine();  eng.subscribe(snap => ...)
+// The instance is kept on globalThis.__vrlTutorialEngine, so it stays single even when the module is loaded under two ?v= URLs.
+// Signals: the first getTutorialEngine() also wires document/window 'vrl-tut-signal' ({detail:{kind,count?}}) to engine.onSignal (once; a signal seen on both is counted once).
+// A module that wires signals itself must set globalThis.__vrlTutSignalWired=true BEFORE the first getTutorialEngine() call.
+import { settings } from './app-settings.js?v=20261022-build650';
+import { tr, I18N } from './i18n.js?v=20261022-build650';
+import { TUTORIAL_MISSIONS, TUT_SAMPLE, TUT_INTRO, fillTissue } from './tutorial-data.js?v=20261022-build650';
+import { createTutorialAudio } from './tutorial-audio.js?v=20261022-build650';
+import { createTutorialEngine } from './tutorial-engine.js?v=20261022-build650';
+import { resetPress, resetArmed, RESET_ARM_MS, EVENT_LEVELS } from './event-mode.js?v=20261022-build650';
 
 // the switch (設定 > 外観 > チュートリアル) off = the engine ignores every signal (nothing advances, nothing is saved); on again = as before
 // true while the tutorial UI is live (the switch is on AND the device supports VR): the Lv0 card of 体験会 acts as the tutorial only then (event-mode-ui.js)
@@ -56,6 +69,7 @@ export function continueTutorial(engine=getTutorialEngine()){
  if(id&&engine.start(id))return{action:'start',id};
  return{action:'none',id:null};
 }
+// forget the progress of this page and open ステップ1. Only the engine's own (in-memory) progress goes; the marks / distances of the data are not touched here.
 export function restartTutorial(engine=getTutorialEngine(),{start=true}={}){
  engine.reset();
  if(!start)return{action:'none',id:null};
@@ -69,6 +83,7 @@ export function forgetLegacyProgress(storage){
 // the page's introduction after 「チュートリアルを始める」 (the topbar button, VR devices only): a subtitle bar (+ the voice once per phase) that guides
 //   'openLv0': open the Lv0 practice data (the 体験会 Lv0 card when it is there, else 「練習データ」 and its 骨梁 entry are lit; nothing is opened for the visitor)
 //   'loading': the Lv0 data was chosen but is not READY yet: the bar says to wait (no VR / AR button is lit, nothing is spoken)
+//   'startVr': after 「VRで見る」 the page's preparation panel shows its 「VRを開始」 button: the bar says to press it (lit)
 //   'pressVr': the Lv0 data is READY (the volume is prepared, see sampleReady): press 「VRで見る」 (or 「ARで見る」)
 // A target that is newly lit is scrolled into view (nearest: nothing moves when it is already visible).
 // and ends when a VR / AR session starts (signal 'vr-start' / 'ar-start'; the VR board then shows ステップ1) or with its 閉じる button. Opening other data goes back to 'openLv0'.
@@ -76,24 +91,29 @@ export function forgetLegacyProgress(storage){
 // preparation and the first render) and false when a series starts loading; app.js setOpenSample sets it false when a dataset is chosen. The progress modal (#job-modal) is no
 // signal by itself: it stays hidden for the first moments of a load (progress-modal.js showAfter delay), which is why 「VRで見る」 used to be announced at once.
 export const sampleReady=(g=globalThis)=>g.__vrlVolumeReady===true;
-export const introPhase=(openSample,ready=true)=>openSample!==TUT_SAMPLE?'openLv0':ready?'pressVr':'loading';
+// prepared = the page's VR / AR preparation panel (#vr-prepare-panel: shown after 「VRで見る」 when the data of the session is not ready yet) is up with its start button: 'startVr'
+// (a start button that is disabled - the preparation failed or is not finished - is not announced)
+export const preparePanelShown=(doc=globalThis.document)=>{try{const p=doc?.getElementById?.('vr-prepare-panel');const b=p?.querySelector?.('.start');return !!p&&p.style?.display!=='none'&&!!b&&!b.disabled}catch{return false}};
+export const introPhase=(openSample,ready=true,prepared=false)=>openSample!==TUT_SAMPLE?'openLv0':!ready?'loading':prepared?'startVr':'pressVr';
 const shown=e=>!!e&&!e.hidden&&!e.closest?.('[hidden]');
 export function introTargets(phase,doc=globalThis.document){
  if(!doc)return[];
  if(phase==='openLv0'){const card=doc.querySelector('[data-event-level="lv0"]');if(shown(card))return[card];return[doc.getElementById('sample-demo-button'),doc.querySelector('[data-sample-set="'+TUT_SAMPLE+'"]')].filter(shown)}
  if(phase==='loading')return[];
+ if(phase==='startVr'){const b=doc.getElementById('vr-prepare-panel')?.querySelector?.('.start');return shown(b)&&!b.disabled?[b]:[]}
  if(phase==='pressVr')return['vr-view-button','ar-view-button'].map(id=>doc.getElementById(id)).filter(shown);
  return[];
 }
 export function introTextKey(phase,doc=globalThis.document){
  if(phase==='openLv0')return shown(doc?.querySelector('[data-event-level="lv0"]'))?'tutIntroLv0':'tutIntroLv0Off';
  if(phase==='loading')return'tutIntroLoading';
+ if(phase==='startVr')return'tutIntroStart';
  if(phase==='pressVr'){const v=doc?.getElementById('vr-view-button'),a=doc?.getElementById('ar-view-button'),job=doc?.getElementById('job-modal');if(!shown(v)||v.disabled||(job&&!job.classList.contains('is-hidden')))return'tutIntroLoading';return shown(a)?'tutIntroVr':'tutIntroVrOnly'}
  return'';
 }
 export function createTutorialIntro({doc=globalThis.document,audio=null,getOpenSample=()=>globalThis.__vrlOpenSample,getReady=()=>sampleReady(),tickMs=500}={}){
  let phase=null,bar=null,timer=0,lit=new Set();const spoken=new Set();
- const want=()=>introPhase(getOpenSample(),getReady());
+ const want=()=>introPhase(getOpenSample(),getReady(),preparePanelShown(doc));
  const paint=()=>{
   if(!phase||!bar)return;
   {const w=want();if(w!==phase){setPhase(w);return}} // the data became ready / was replaced: the phase follows (checked every tick)
@@ -165,8 +185,13 @@ export function initTutorialUi({resetUserState}={}){
    head.append(count);card.append(head);
    if(s.finished){card.append(el('p','tut-text',model.allDone?'tutAllDone':'tutMissionDone'));card.append(el('p','tut-next-note',model.allDone?'tutFbEnd':'tutFbGoNext'))} // a cleared ステップ waits for 次へ (it opens the next ステップ)
    else{
-    card.append(el('p','tut-text',s.textKey));
-    const sub=el('p','tut-sub');sub.textContent=I18N.en?.[s.textKey]||'';sub.lang='en';card.append(sub);
+    // a caption with {tissue} (the menu pages) says the real first tissue of the open data (globalThis.__vrlTissueName, set by app.js); never the placeholder. Such a line has no data-i18n (a language switch would put the placeholder back)
+    const tissue=lang=>{try{return globalThis.__vrlTissueName?.(lang)||''}catch{return ''}};
+    const line=(text,fb,lang)=>fillTissue(text,tissue(lang),fb);
+    if(String(tr(s.textKey)).includes('{tissue}')){const p=el('p','tut-text');p.textContent=line(tr(s.textKey),tr('tutTissueFallback'));card.append(p)}
+    else card.append(el('p','tut-text',s.textKey));
+    // (the English line names the tissue in English)
+    const sub=el('p','tut-sub');sub.textContent=line(I18N.en?.[s.textKey]||'',I18N.en?.tutTissueFallback,'en');sub.lang='en';card.append(sub);
    }
    const nav=el('div','tut-nav');
    const prev=btn('tut-prev','tutPrev',()=>getTutorialEngine().prev());prev.disabled=!s.hasPrev;

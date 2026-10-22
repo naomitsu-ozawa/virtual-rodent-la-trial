@@ -1,7 +1,7 @@
 // Theme picker: the select in the top bar and the cards in settings > Appearance. Both show the same choice
 // (theme.js keeps it, localStorage 'vrl-theme'; with no choice it follows the OS light / dark setting).
-import { THEMES, createThemeController } from './theme.js?v=20261022-build642';
-import { tr } from './i18n.js?v=20261022-build642';
+import { THEMES, createThemeController } from './theme.js?v=20261022-build650';
+import { tr } from './i18n.js?v=20261022-build650';
 const key=id=>id.replace(/-/g,'_');
 export function initThemeUi(){
  const ctl=createThemeController(),select=document.getElementById('theme-quick'),box=document.getElementById('theme-options');

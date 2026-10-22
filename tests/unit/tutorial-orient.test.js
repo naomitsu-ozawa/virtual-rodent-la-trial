@@ -1,15 +1,16 @@
 import { describe, it, expect } from 'vitest';
 import { horizAngleDeg, createOrient, ORIENT_PHASES, LOOK_DEG, LOOK_DWELL_MS, SAY_MAX_MS } from '../../docs/tutorial-orient.js';
 import { TUT_ORIENT } from '../../docs/tutorial-data.js';
-import { HELP_OFFSET, MENU_OFFSET } from '../../docs/vr-layout.js';
+import { HELP_OFFSET, MENU_OFFSET, BOARD_YAW_DEG } from '../../docs/vr-layout.js';
 import { I18N } from '../../docs/i18n.js';
 
+// the entry guidance of the VR / AR tutorial: look right (操作パネル = the help board), look left (メニュー), then ステップ1
 describe('horizAngleDeg', () => {
   it('0 straight at the board, 90 at right angles, 180 behind; null without a horizontal extent', () => {
     expect(horizAngleDeg(0, -1, 0, -2)).toBeCloseTo(0, 6);
     expect(horizAngleDeg(0, -1, 1, 0)).toBeCloseTo(90, 6);
     expect(horizAngleDeg(0, -1, 0, 3)).toBeCloseTo(180, 6);
-    expect(horizAngleDeg(0, -1, Math.sin(Math.PI / 3), -Math.cos(Math.PI / 3))).toBeCloseTo(60, 6); // a board 60 deg out, the head looking straight
+    expect(horizAngleDeg(0, -1, Math.sin(Math.PI / 3), -Math.cos(Math.PI / 3))).toBeCloseTo(60, 6); // (a board 60 deg out, any angle works), the head looking straight
     expect(horizAngleDeg(0, 0, 1, 1)).toBeNull(); expect(horizAngleDeg(1, 0, 0, 0)).toBeNull();
   });
 });
@@ -23,10 +24,10 @@ describe('the phases match the real layout: right = the help board, left = the m
     expect(TUT_ORIENT.right.audioText).toMatch(/^みぎ/); expect(TUT_ORIENT.left.audioText).toMatch(/^ひだり/);
     for (const it of Object.values(TUT_ORIENT)) for (const l of ['ja', 'en']) expect(I18N[l][it.text]).toBeTruthy();
   });
-  it('a board 60 deg out is found by turning the head 30 deg or more toward it, not before', () => {
-    expect(LOOK_DEG).toBe(30); const board = 60; // deg from straight ahead
+  it('a board 50 deg out (BOARD_YAW_DEG) is found by turning the head 25 deg or more toward it, not before', () => {
+    expect(LOOK_DEG).toBe(25); expect(BOARD_YAW_DEG).toBe(50); const board = BOARD_YAW_DEG; // deg from straight ahead
     const ang = head => Math.abs(board - head);
-    expect(ang(0)).toBeGreaterThan(LOOK_DEG); expect(ang(29)).toBeGreaterThan(LOOK_DEG); expect(ang(30)).toBeLessThanOrEqual(LOOK_DEG);
+    expect(ang(0)).toBeGreaterThan(LOOK_DEG); expect(ang(24)).toBeGreaterThan(LOOK_DEG); expect(ang(25)).toBeLessThanOrEqual(LOOK_DEG);
   });
 });
 describe('createOrient', () => {

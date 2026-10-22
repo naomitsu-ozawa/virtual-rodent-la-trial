@@ -389,7 +389,7 @@ describe('static wiring', () => {
   });
   it('the help board has its normal page height (+ the tab strip) and the mission is its own board, only made when there is a mission', () => {
     const src = read('vr-view.js');
-    expect(src).toContain('const help=makeMenu(820,560+TAB_H,HELP_WIDTH,HELP_RES)');
+    expect(src).toContain('const help=makeMenu(820,PAGE_H+TAB_H,HELP_WIDTH,HELP_RES)'); // PAGE_H = the 560 px page + the caption band under the slide (tutorial-vr.js)
     // the mission board shows the level's slide AS A PICTURE (tutorial-vr.js layoutLevelSlide), sized to it; no board without a slide
     expect(src).toContain("evSlide=evLevel&&!(evLevel.id==='lv0'&&tutLive)?levelSlide(evLevel.id):null;");
     // the slide's picture over the whole board (16:9 of the 820 px width), redrawn once more when the picture has loaded

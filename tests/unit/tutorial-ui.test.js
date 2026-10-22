@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { sanitizeTutorialSettings, SETTINGS_DEFAULTS } from '../../docs/app-settings.js';
-import { tutorialSignalsOn, tutorialUiActive, continueTutorial, getTutorialEngine, resetTutorialAll, isPracticeSample, panelModel, detectVrSupport, _resetTutorialEngineForTest, introPhase, introTargets, introTextKey, createTutorialIntro, sampleReady, restartTutorial, forgetLegacyProgress } from '../../docs/tutorial-ui.js';
+import { tutorialSignalsOn, tutorialUiActive, continueTutorial, getTutorialEngine, resetTutorialAll, isPracticeSample, panelModel, detectVrSupport, _resetTutorialEngineForTest, introPhase, introTargets, introTextKey, createTutorialIntro, sampleReady, restartTutorial, forgetLegacyProgress, preparePanelShown } from '../../docs/tutorial-ui.js';
 import { createTutorialEngine } from '../../docs/tutorial-engine.js';
 import { TUTORIAL_MISSIONS } from '../../docs/tutorial-data.js';
 import { EVENT_LEVELS } from '../../docs/event-mode.js';
@@ -37,7 +37,7 @@ describe('panel model', () => {
     const e = mk(); e.skipMission('controls'); e.start('grip');
     let m = panelModel(e);
     expect(m.step).toMatchObject({ n: 1, N: 3, hasPrev: false, hasNext: true, isLast: false, missionId: 'grip' });
-    expect(I18N.ja[m.step.textKey]).toBe('光線を向けてグリップ');
+    expect(I18N.ja[m.step.textKey]).toBe('どちらの手でも：目の前のデータに光線を向けて、中指のグリップを握る');
     for (let i = 0; i < 3; i++) e.next();
     m = panelModel(e);
     expect(m.missions[1]).toMatchObject({ status: 'done', mark: 'tutDone' });
@@ -103,7 +103,7 @@ describe('the tutorial has no analysis part', () => {
 describe('Lv0 card: starts the tutorial from ステップ1 every time; continueTutorial stays for the board without the entry guidance', () => {
   const eng = () => createTutorialEngine({ arAvailable: false });
   it('restartTutorial (what the card calls): mid-mission, finished or everything skipped, it always ends on ステップ1, page 1, nothing done', () => {
-    const e = eng(); e.start('controls'); e.next(); e.start('grip'); e.next();
+    const e = eng(); e.start('controls'); e.next(); e.next(); e.start('grip'); e.next();
     expect(restartTutorial(e)).toEqual({ action: 'start', id: 'controls' }); expect(e.getState()).toMatchObject({ mission: 'controls', step: 0, finished: false, done: {} });
     e.skipAll(); expect(restartTutorial(e)).toEqual({ action: 'start', id: 'controls' }); expect(e.getState()).toMatchObject({ mission: 'controls', step: 0, skipAll: false, done: {} });
     expect(e.isUnlocked('grip')).toBe(false);
@@ -111,7 +111,7 @@ describe('Lv0 card: starts the tutorial from ステップ1 every time; continueT
   it('nothing done: starts ステップ1; a mission under way keeps going (not restarted); after finishing it the next one starts', () => {
     const e = eng();
     expect(continueTutorial(e)).toEqual({ action: 'start', id: 'controls' }); expect(e.getState()).toMatchObject({ mission: 'controls', step: 0 });
-    e.next(); expect(e.getState().finished).toBe(true);
+    e.next(); e.next(); expect(e.getState().finished).toBe(true); // ステップ1 has two pages
     expect(continueTutorial(e)).toEqual({ action: 'start', id: 'grip' });
     e.next(); expect(e.getState().step).toBe(1);
     expect(continueTutorial(e)).toEqual({ action: 'resume', id: 'grip' }); expect(e.getState()).toMatchObject({ mission: 'grip', step: 1 }); // untouched
@@ -278,5 +278,18 @@ describe('nothing is remembered', () => {
   it('forgetLegacyProgress removes the old key (once, guarded) and never throws', () => {
     const removed = []; forgetLegacyProgress({ removeItem: k => removed.push(k) }); expect(removed).toEqual(['vrl.tutorial.v1']);
     expect(() => forgetLegacyProgress({ removeItem() { throw new Error('x'); } })).not.toThrow(); expect(() => forgetLegacyProgress(null)).not.toThrow();
+  });
+});
+
+describe('the preparation panel phase', () => {
+  const panel = (o = {}) => { const start = { disabled: false, hidden: false, closest: () => null, ...o.start }; const p = { style: { display: '', ...o.style }, querySelector: s => (s === '.start' ? start : null) }; return { getElementById: id => (id === 'vr-prepare-panel' ? p : null), start }; };
+  it('announced only while its start button is there, shown and ENABLED; a failed / unfinished preparation (button disabled) or a hidden panel is not announced', () => {
+    expect(preparePanelShown(panel())).toBe(true);
+    expect(preparePanelShown(panel({ start: { disabled: true } }))).toBe(false); // the preparation failed (or is still running)
+    expect(preparePanelShown(panel({ style: { display: 'none' } }))).toBe(false); // the page's progress modal is up instead
+    expect(preparePanelShown({ getElementById: () => null })).toBe(false); expect(preparePanelShown(null)).toBe(false);
+    expect(introPhase('sample4', true, true)).toBe('startVr'); expect(introPhase('sample4', true, false)).toBe('pressVr'); expect(introPhase('sample4', false, true)).toBe('loading'); expect(introPhase('sample3', true, true)).toBe('openLv0');
+    const d = panel({ start: { disabled: true } }); d.byId = {}; expect(introTargets('startVr', { getElementById: id => d.getElementById(id), querySelector: () => null })).toEqual([]);
+    const ok = panel(); expect(introTargets('startVr', { getElementById: id => ok.getElementById(id), querySelector: () => null })).toEqual([ok.start]);
   });
 });

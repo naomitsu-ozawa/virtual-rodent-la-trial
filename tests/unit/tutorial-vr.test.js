@@ -4,12 +4,12 @@ import { createTutorialEngine } from '../../docs/tutorial-engine.js';
 import { TUTORIAL_MISSIONS, missionById } from '../../docs/tutorial-data.js';
 import { GUIDE_SLIDES, LEVEL_SLIDES, guideSlide, slideItem, itemRect, slideSrc, SLIDE_W } from '../../docs/tutorial-slides.js';
 import { buildPage, layoutPage, slideBox, levelBoardH, tutorialModeOn, createTutorialVr, createSlideViewer, createTutorialPreview, panelTabs, stepNoLabel, TAB_H, FLASH_MS, menuAnnotation, layoutLevelSlide } from '../../docs/tutorial-vr.js';
-import { audioSrc, voiceOf, speechFor, createTutorialAudio, createStepReplay, isFeedbackId } from '../../docs/tutorial-audio.js';
+import { audioSrc, voiceOf, speechFor, createTutorialAudio, createStepReplay, isFeedbackId, stepVoiceIds } from '../../docs/tutorial-audio.js';
 import { I18N } from '../../docs/i18n.js';
 import { ANIM_STEP_MS, ANIM_IDLE_MS } from '../../docs/tutorial-marks.js';
 import { LOOK_DWELL_MS } from '../../docs/tutorial-orient.js';
-import { TUT_ORIENT, TUT_FEEDBACK } from '../../docs/tutorial-data.js';
-import { wrapText } from '../../docs/tutorial-vr.js';
+import { TUT_ORIENT, TUT_FEEDBACK, TUT_MENU_OPEN } from '../../docs/tutorial-data.js';
+import { wrapText, captionOf, menuTargetRect, _resetEntryForTest, PAGE_H, CAPTION_H } from '../../docs/tutorial-vr.js';
 
 // the board shows the step's slide (controls / g1 / g2 / g3 / g3b), the live tutorial runs on the Lv0 data only, the 詳細 tab without it is the read-only guide
 globalThis.__vrlSettings.set('tutorialMode', true); // the signal tests run with the switch on (off = signals are ignored, tested below)
@@ -35,8 +35,8 @@ describe('tutorial-vr page model', () => {
   });
   it('ステップ1 is the controls slide as it is (its picture, nothing framed), with a lit, pointed 次へ', () => {
     const e = eng(); e.start('controls'); const p = buildPage({ engine: e });
-    expect(p).toMatchObject({ kind: 'controls', title: 'ステップ1 コントローラーの使い方', counter: '1/1', slide: 'controls', item: null, done: [] });
-    expect(p.buttons.map(b => b.id)).toEqual(['list', 'skipAll', 'next']); expect(p.buttons[2]).toMatchObject({ label: '次へ', on: true, point: true });
+    expect(p).toMatchObject({ kind: 'controls', title: 'ステップ1 コントローラーの使い方', counter: '1/2', slide: 'controls', item: null, done: [], caption: I18N.ja.tutCtlS1 });
+    expect(p.buttons.map(b => b.id)).toEqual(['prev', 'list', 'skipAll', 'next']); expect(p.buttons[0].disabled).toBe(true); expect(p.buttons[3]).toMatchObject({ label: '次へ', on: true, point: true });
   });
   it('a step page: the step\'s slide, the numbered row of the page now (item) and the rows done before it (✓); one row of buttons', () => {
     const e = eng(); e.skipMission('controls'); e.start('grip'); let p = buildPage({ engine: e });
@@ -54,7 +54,7 @@ describe('tutorial-vr page model', () => {
   });
   it('English board: the same slide picture; the title row and buttons in English', () => {
     const e = eng(); e.start('controls'); const en = k => I18N.en[k];
-    const p = buildPage({ engine: e, lang: 'en', t: en }); expect(p.slide).toBe('controls'); expect(p.title).toBe('Step 1 ' + I18N.en.tutCtlTitle); expect(p.buttons[2].label).toBe(I18N.en.tutNext);
+    const p = buildPage({ engine: e, lang: 'en', t: en }); expect(p.slide).toBe('controls'); expect(p.title).toBe('Step 1 ' + I18N.en.tutCtlTitle); expect(p.buttons.at(-1).label).toBe(I18N.en.tutNext); expect(p.caption).toBe(I18N.en.tutCtlS1);
   });
   it('last step: 完了 finishes; finished -> missionDone with a lit, pointed next-step button; allDone at the end', () => {
     const e = eng(); e.skipMission('controls'); e.start('grip'); e.next(); e.next();
@@ -79,11 +79,11 @@ describe('tutorial-vr layout', () => {
   const pages = () => { const out = []; const e = eng(); out.push(['list', buildPage({ engine: e })]); e.start('controls'); out.push(['controls', buildPage({ engine: e })]);
     for (const id of ['grip', 'section', 'menu', 'slice']) { e.skipMission(e.getState().mission); e.start(id); for (let i = 0; i < missionById(id).steps.length; i++) { out.push([id + i, buildPage({ engine: e })]); out.push([id + i + 'en', buildPage({ engine: e, lang: 'en' })]); e.next(); } out.push([id + 'done', buildPage({ engine: e })]); }
     return out; };
-  it('every page keeps its buttons inside the 820 x 560 page (the tab strip is extra height), each with an action', () => {
+  it('every page keeps its buttons inside the 820 x PAGE_H page (the tab strip is extra height), each with an action', () => {
     for (const [name, p] of pages()) {
       const act = vi.fn(), w = layoutPage(p, { act, getImage: pic });
-      for (const b of buttons(w)) { expect(b.x, name).toBeGreaterThanOrEqual(0); expect(b.x + b.w, name).toBeLessThanOrEqual(820); expect(b.y + b.h, name).toBeLessThanOrEqual(560); expect(typeof b.action, name).toBe('function'); }
-      for (const l of w.filter(x => x.type === 'label')) expect(l.y, name).toBeLessThan(560);
+      for (const b of buttons(w)) { expect(b.x, name).toBeGreaterThanOrEqual(0); expect(b.x + b.w, name).toBeLessThanOrEqual(820); expect(b.y + b.h, name).toBeLessThanOrEqual(PAGE_H); expect(typeof b.action, name).toBe('function'); }
+      for (const l of w.filter(x => x.type === 'label')) expect(l.y, name).toBeLessThan(PAGE_H);
     }
   });
   it('the step page: the title row, the slide picture under it, the frame EXACTLY on the slide\'s numbered row of the page now, ✓ on the rows done; 次へ calls act', () => {
@@ -91,8 +91,8 @@ describe('tutorial-vr layout', () => {
     expect(e.getState()).toMatchObject({ mission: 'section', step: 1 });
     const act = vi.fn(), w = layoutPage(buildPage({ engine: e }), { act, phase: 0.5, getImage: pic }), box = slideBox(820);
     expect(box).toEqual({ x: 18, y: 52, w: 784, h: 441 });
-    // labels: only the title and n/N (nothing of the slide redrawn as text)
-    expect(w.filter(x => x.type === 'label').map(x => x.text)).toEqual(['ステップ3 断面を出して動かす', '2/3']);
+    // labels: the title, n/N and the caption's lines (nothing of the slide redrawn as text)
+    const labs = w.filter(x => x.type === 'label').map(x => x.text); expect(labs.slice(0, 2)).toEqual(['ステップ3 断面を出して動かす', '2/3']); expect(labs.slice(2).join('')).toBe(I18N.ja.tutSecS2);
     const sl = w.find(x => x.slide); expect(sl).toMatchObject({ slide: 'g2', loaded: true });
     const c = recCtx(); sl.draw(c); expect(c.calls.find(x => x[0] === 'drawImage')).toEqual(['drawImage', { fake: 'g2' }, 18, 52, 784, 441]);
     const fr = w.find(x => x.tut === 'item:2'); expect(fr.rect).toEqual(itemRect(slideItem('g2', 2), box));
@@ -102,7 +102,7 @@ describe('tutorial-vr layout', () => {
     const disc = dc.calls.find(x => x[0] === 'arc'); expect(disc[1]).toBeCloseTo(18 + (r1.x + 30) * k); expect(disc[2]).toBeCloseTo(52 + (r1.y + 30) * k); // the ✓ on the number badge of row 1
     expect(w.filter(x => x.tut && x.tut.startsWith('done:')).length).toBe(1); expect(w.some(x => x.tut === 'done:2' || x.tut === 'item:3')).toBe(false);
     // the buttons under the picture, inside the page
-    for (const b of buttons(w)) { expect(b.y).toBeGreaterThanOrEqual(box.y + box.h); expect(b.y + b.h).toBeLessThanOrEqual(560); }
+    for (const b of buttons(w)) { expect(b.y).toBeGreaterThanOrEqual(box.y + box.h); expect(b.y + b.h).toBeLessThanOrEqual(PAGE_H); }
     buttons(w).at(-1).action(); expect(act).toHaveBeenCalledWith('next');
   });
   it('a picture not loaded yet: its place in the slide\'s background colour (no text drawn)', () => {
@@ -112,10 +112,10 @@ describe('tutorial-vr layout', () => {
   });
   it('the controls page: the picture, no frame, and the pointer on the lit 次へ', () => {
     const e = eng(); e.start('controls'); const w = layoutPage(buildPage({ engine: e }), { getImage: pic });
-    const bs = buttons(w); expect(bs.map(b => b.label)).toEqual(['ステップ一覧', '経験者はすべてスキップ', '次へ']); expect(bs[2].on).toBe(true);
-    expect(w.filter(x => x.type === 'label').map(x => x.text)).toEqual(['ステップ1 コントローラーの使い方', '1/1']);
-    expect(w.filter(x => x.type === 'draw').length).toBe(2); // the picture + the pointer
-    expect(w.some(x => x.tut)).toBe(false);
+    const bs = buttons(w); expect(bs.map(b => b.label)).toEqual(['戻る', 'ステップ一覧', '経験者はすべてスキップ', '次へ']); expect(bs[3].on).toBe(true);
+    const labs = w.filter(x => x.type === 'label').map(x => x.text); expect(labs.slice(0, 2)).toEqual(['ステップ1 コントローラーの使い方', '1/2']); expect(labs.slice(2).join('')).toBe(I18N.ja.tutCtlS1);
+    expect(w.filter(x => x.type === 'draw').length).toBe(3); // the picture + the caption band + the pointer
+    expect(w.filter(x => x.tut).map(x => x.tut)).toEqual(['caption']); // no frame, no ✓
   });
   it('flash adds the ✓ mark', () => {
     const e = eng(); e.start('controls'); const w = layoutPage(buildPage({ engine: e }), { flash: { mark: '✓', text: 'x' } });
@@ -134,7 +134,7 @@ describe('tutorial-vr controller', () => {
   });
   it('the board opens on a step, never on an empty list: no step under way = the next not done starts (ステップ1 on a first visit) and is spoken', () => {
     const { vr, e, a } = mkVr();
-    expect(e.getState().mission).toBe('controls'); expect(vr.page().kind).toBe('controls'); expect(a.play).toHaveBeenCalledWith(['controls1']);
+    expect(e.getState().mission).toBe('controls'); expect(vr.page().kind).toBe('controls'); expect(a.play).toHaveBeenCalledWith(['ctl1']);
     const e2 = eng(); e2.skipMission('controls'); const m = mkVr({ engine: e2 }); expect(m.vr.page().kind).toBe('step'); expect(e2.getState().mission).toBe('grip');
     const e3 = eng(); e3.skipAll(); expect(mkVr({ engine: e3 }).vr.page().kind).toBe('list'); // everything done: the list
   });
@@ -158,12 +158,12 @@ describe('tutorial-vr controller', () => {
     sig('grab'); expect(e.getState().step).toBe(1); vr.dispose();
   });
   it('the controls page: 次へ (laser + trigger on the board) finishes ステップ1 and the next step is one press away', () => {
-    const { vr, e, a } = mkVr(); a.play.mockClear(); vr.act('next');
+    const { vr, e, a } = mkVr(); a.play.mockClear(); vr.act('next'); expect(e.getState()).toMatchObject({ mission: 'controls', step: 1, finished: false }); expect(a.play).toHaveBeenLastCalledWith(['ctl2']); vr.act('next'); // two pages
     expect(e.getState()).toMatchObject({ mission: 'controls', finished: true }); expect(a.play).toHaveBeenLastCalledWith(['mclear', 'gonext']); expect(vr.page().kind).toBe('missionDone');
     vr.act('start:grip'); expect(vr.page().kind).toBe('step'); expect(e.getState().mission).toBe('grip');
   });
   it('button actions: prev / next / skip / list / the read-only guide inside the tutorial', () => {
-    const { vr, e } = mkVr(); vr.act('next'); vr.act('start:grip'); vr.act('next'); expect(e.getState().step).toBe(1); vr.act('prev'); expect(e.getState().step).toBe(0);
+    const { vr, e } = mkVr(); vr.act('next'); vr.act('next'); vr.act('start:grip'); vr.act('next'); expect(e.getState().step).toBe(1); vr.act('prev'); expect(e.getState().step).toBe(0);
     vr.act('list'); expect(vr.page().kind).toBe('list'); vr.act('start:grip'); expect(vr.page().kind).toBe('step');
     vr.act('list'); vr.act('guides'); const w = vr.widgets({ measure: ms }); expect(buttons(w).map(b => b.label)).toContain('6. ラベルを出す・距離を測る');
     vr.act('slide:g2'); expect(vr.widgets({ measure: ms })[0].text).toBe('操作ガイド：断面を出して動かす'); vr.act('list'); vr.act('close'); expect(vr.page().kind).toBe('list');
@@ -194,7 +194,7 @@ describe('tutorial-vr controller', () => {
     setT(1000 + ANIM_IDLE_MS + 10); expect(vr.menuKey()).toBe('seg-hides'); expect(vr.menuPhase()).toBe(0); // still 20 s after the board last changed
     e.onSignal({ kind: 'seg-hide' }); expect(vr.menuTarget()).toBe('seg-show');
     e.onSignal({ kind: 'seg-show' }); expect(vr.menuTarget()).toBeNull(); expect(vr.menuKey()).toBe(''); // finished
-    vr.act('start:slice'); expect(vr.menuTarget()).toBe('slider'); e.next(); expect(vr.menuTarget()).toBeNull();
+    vr.act('start:slice'); expect(vr.menuTarget()).toBeNull(); e.next(); expect(vr.menuTarget()).toBe('slider'); e.next(); expect(vr.menuTarget()).toBeNull(); // slice0 (the section page) has no menu target
     vr.act('list'); expect(vr.menuTarget()).toBeNull();
   });
   it('the board blinks at most twice a second, only on a page with a frame or a pointer, and stops 20 s after it last changed (Quest: each redraw re-uploads the board)', () => {
@@ -235,8 +235,8 @@ describe('tutorial-vr controller', () => {
   });
   it('replays the step voice after timeoutHint of no progress, once', () => {
     const e = eng(); e.skipMission('controls'); const { vr, a, setT } = mkVr({ engine: e }); a.play.mockClear();
-    setT(1000 + 19000); vr.update(); expect(a.play).not.toHaveBeenCalled();
-    setT(1000 + 21000); vr.update(); expect(a.play).toHaveBeenCalledWith([G.steps[0].audio]);
+    setT(1000 + 24000); vr.update(); expect(a.play).not.toHaveBeenCalled();
+    setT(1000 + 26000); vr.update(); expect(a.play).toHaveBeenCalledWith([G.steps[0].audio]);
     a.play.mockClear(); setT(1000 + 90000); vr.update(); expect(a.play).not.toHaveBeenCalled();
   });
 });
@@ -276,8 +276,8 @@ describe('the read-only operation guide (the 詳細 tab without the live tutoria
     expect(buttons(v.widgets())).toHaveLength(6);
     for (const s of GUIDE_SLIDES) {
       v.act('slide:' + s.id); const w = v.widgets();
-      for (const b of buttons(w)) { expect(b.y + b.h, s.id).toBeLessThanOrEqual(560); expect(typeof b.action).toBe('function'); }
-      for (const t of w.filter(x => x.type === 'label')) expect(t.y, s.id).toBeLessThan(560 - 70);
+      for (const b of buttons(w)) { expect(b.y + b.h, s.id).toBeLessThanOrEqual(PAGE_H); expect(typeof b.action).toBe('function'); }
+      for (const t of w.filter(x => x.type === 'label')) expect(t.y, s.id).toBeLessThan(PAGE_H - 70);
     }
   });
   it('touches nothing: no engine, no voice, no storage, no signal wiring', () => {
@@ -346,17 +346,17 @@ describe('vr-view.js hooks (static)', () => {
     expect(src).toContain("from './tutorial-vr.js?v=");
     expect(src).toContain('const tutLive=tutorialModeOn()&&globalThis.__vrlOpenSample===TUT_SAMPLE;');
     expect(src).toMatch(/tutVr=tutLive\?createTutorialVr\(\{resetUserState,/);
-    expect(src).toContain('if(tutVr)return [...tutVr.widgets({W:820,H:560}),...tabs]');
+    expect(src).toContain('if(tutVr)return [...tutVr.widgets({W:820,H:PAGE_H}),...tabs]');
     expect(src).toContain('tutVr.update(performance.now())'); expect(src).toContain('try{tutVr?.dispose()}catch');
     expect(src).not.toContain('moveTracker'); expect(src).not.toContain('tutMove');
     expect(src).toContain("if(r&&faint)emit('label-show')"); // only the hover card, never the pinned card redrawn on re-entry
-    expect(src).toContain("if(!sweepOn)emit('section-add')"); expect(src).toContain("if(!sweepOn)emit('section-toggle')");
+    expect(src).toContain("if(!sweepOn)emit('section-add')"); expect(src).toContain("if(!sweepOn){emit('section-toggle');if(on)emit('section-add')}"); // a hidden frame shown again also counts as section-add (ステップ3 / 5 do not hang)
     expect(src).toMatch(/begin:\(\)=>\{[^}]*sweepOn=true/); expect(src).toContain('tmp=pl=null;sweepOn=false');
     expect(src).toContain('help.mesh.visible=(settings.help|0)>0||!!tutVr');
     expect(src).toContain('if(bd.help){const i=help.hit(bd.help.uv);if(i>=0){help.press(i);pulse(c)}return}');
     expect(src).toContain('(tutVr?tutVr.drawKey():\'\')');
     expect(src).toContain('if(tutVr&&ui.open&&ui.tab===10){const mk=tutVr.menuKey();if(mk!==tutMenuKey){tutMenuKey=mk;menu.refresh()}}');
-    expect(src).toContain('if(tutVr&&!tutBad){try{const an=menuAnnotation(w,tutVr.menuTarget(),tutVr.menuPhase());if(an)w.push(an)}catch(e){tutFail(e)}}');
+    expect(src).toContain('if(tutVr&&!tutBad){try{const an=menuAnnotation(w,tutVr.menuTarget(),tutVr.menuPhase());if(an)w.push(an);tutMenuRect=menuTargetRect(w,tutVr.menuTarget());if(tutMenuRect?.key)tutVr.setTissue(tr(tutMenuRect.key))}catch(e){tutFail(e)}}');
     expect(src).toContain("if(w.type==='draw'){ctx.save();try{w.draw(ctx)}catch(e){console.warn('[menu] draw widget',e)}ctx.restore();");
     for (const l of src.split('\n').filter(x => /tutVr/.test(x) && !/^ let tutVr=null/.test(x))) expect(l, l.slice(0, 80)).toMatch(/tutVr\s*(\?|&&|\)|\|\||\.|;|:)|if\(tutVr\)|\?tutVr|&&tutVr|!!tutVr/);
   });
@@ -381,10 +381,10 @@ describe('ステップ numbering in the board', () => {
 });
 
 describe('手順一覧 | 詳細 tabs under the help board', () => {
-  it('two buttons in the strip below the 560 px page, the shown one lit; pressing the other switches', () => {
+  it('two buttons in the strip below the page (PAGE_H), the shown one lit; pressing the other switches', () => {
     const act = vi.fn(), t = panelTabs('detail', { act });
     expect(t.map(b => b.label)).toEqual(['手順一覧', '詳細']); expect(t.map(b => !!b.on)).toEqual([false, true]);
-    for (const b of t) { expect(b.y).toBeGreaterThanOrEqual(560); expect(b.y + b.h).toBeLessThanOrEqual(560 + TAB_H); expect(b.x).toBeGreaterThanOrEqual(0); expect(b.x + b.w).toBeLessThanOrEqual(820); }
+    for (const b of t) { expect(b.y).toBeGreaterThanOrEqual(PAGE_H); expect(b.y + b.h).toBeLessThanOrEqual(PAGE_H + TAB_H); expect(b.x).toBeGreaterThanOrEqual(0); expect(b.x + b.w).toBeLessThanOrEqual(820); }
     t[0].action(); expect(act).toHaveBeenLastCalledWith('list'); t[1].action(); expect(act).toHaveBeenLastCalledWith('detail');
     expect(panelTabs('list').map(b => !!b.on)).toEqual([true, false]);
   });
@@ -408,6 +408,7 @@ describe('vr-view.js: tabs, the guide and the mission board (static)', () => {
 });
 
 
+// the entry guidance (look right = 操作パネル, look left = メニュー), then ステップ1; a cleared ステップ waits for 次へ; nothing is remembered
 describe('tutorial-vr entry guidance', () => {
   const look = { right: 90, left: 90 };
   const mkEntry = (o = {}) => { const m = mkVr({ entry: true, getLook: () => ({ ...look }), ...o }); return m; };
@@ -430,7 +431,7 @@ describe('tutorial-vr entry guidance', () => {
     a.play.mock.calls.at(-1)[1](); look.right = 90; look.left = 5; vr.update(3000); vr.update(3000 + LOOK_DWELL_MS + 1);
     expect(vr.entryBoard()).toBeNull(); expect(vr.entryDone).toBe(true);
     expect(e.getState()).toMatchObject({ mission: 'controls', step: 0, finished: false }); expect(vr.page().kind).toBe('controls');
-    expect(a.play).toHaveBeenLastCalledWith(['controls1']);
+    expect(a.play).toHaveBeenLastCalledWith(['ctl1']);
   });
   it('次へ goes on without turning (both phases) and signals do nothing during the guidance', () => {
     const { vr, e, a, sig } = mkEntry(); look.right = look.left = 90; vr.update(1000);
@@ -450,10 +451,10 @@ describe('tutorial-vr entry guidance', () => {
   it('the entry page: big text, the hint, a lit and pointed 次へ; the layout fits the 820 x 560 page', () => {
     const { vr } = mkVr({ entry: true }); const p = vr.page();
     expect(p.hint).toBe(I18N.ja.tutOrientHint); expect(p.counter).toBe('1/2'); expect(p.buttons).toHaveLength(1); expect(p.buttons[0]).toMatchObject({ id: 'next', label: '次へ', on: true, point: true });
-    const w = layoutPage(p, { W: 820, H: 560 }); const labels = w.filter(x => x.type === 'label'), btn = buttons(w);
+    const w = layoutPage(p, { W: 820, H: PAGE_H }); const labels = w.filter(x => x.type === 'label'), btn = buttons(w);
     expect(labels.map(l => l.text).join('')).toContain('右を見てください'); expect(btn).toHaveLength(1);
-    for (const x of [...labels, ...btn]) expect(x.y, x.text || x.label).toBeLessThan(560);
-    expect(btn[0].y + btn[0].h).toBeLessThanOrEqual(560); expect(Math.max(...labels.map(l => l.y))).toBeLessThan(btn[0].y);
+    for (const x of [...labels, ...btn]) expect(x.y, x.text || x.label).toBeLessThan(PAGE_H);
+    expect(btn[0].y + btn[0].h).toBeLessThanOrEqual(PAGE_H); expect(Math.max(...labels.map(l => l.y))).toBeLessThan(btn[0].y);
     expect(w.some(x => x.type === 'draw')).toBe(true); // the pointer around 次へ
     const en = buildPage({ engine: eng(), lang: 'en', t: k => I18N.en[k], entry: { phase: 'left', index: 1, N: 2 } }); expect(en.text).toBe(I18N.en.tutOrientLeft); expect(en.counter).toBe('2/2');
   });
@@ -468,15 +469,15 @@ describe('tutorial-vr entry guidance', () => {
 });
 describe('a cleared ステップ waits for 次へ', () => {
   it('ステップ1 cleared: 「ステップクリアです。」 then 「次のステップに進みましょう…次へ」 (spoken + on the page); the mission stays until 次へ; 次へ opens ステップ2', () => {
-    const { vr, e, a } = mkVr(); a.play.mockClear(); vr.act('next');
+    const { vr, e, a } = mkVr(); a.play.mockClear(); vr.act('next'); vr.act('next');
     expect(a.play).toHaveBeenLastCalledWith(['mclear', 'gonext']);
     expect(e.getState()).toMatchObject({ mission: 'controls', finished: true });
     const p = vr.page(); expect(p).toMatchObject({ kind: 'missionDone', headline: 'ステップ完了', note: I18N.ja.tutFbGoNext }); expect(p.buttons[0]).toMatchObject({ id: 'start:grip', on: true, point: true });
     expect(I18N.ja.tutFbGoNext).toContain('「次へ」'); expect(TUT_FEEDBACK.goNext.audioText).toMatch(/つぎのステップ/);
     expect(layoutPage(p, {}).filter(x => x.type === 'label').map(l => l.text).join('')).toContain('次のステップに進みましょう');
-    for (const x of buttons(layoutPage(p, {}))) expect(x.y + x.h).toBeLessThanOrEqual(560);
+    for (const x of buttons(layoutPage(p, {}))) expect(x.y + x.h).toBeLessThanOrEqual(PAGE_H);
     a.play.mockClear(); expect(e.getState().mission).toBe('controls'); // nothing started by itself
-    vr.act('start:grip'); expect(e.getState()).toMatchObject({ mission: 'grip', step: 0, finished: false }); expect(a.play).toHaveBeenLastCalledWith(['grip1']);
+    vr.act('start:grip'); expect(e.getState()).toMatchObject({ mission: 'grip', step: 0, finished: false }); expect(a.play).toHaveBeenLastCalledWith(['g1d']);
   });
   it('a ステップ cleared by its signals waits the same way; the pages inside a ステップ still go on by themselves', () => {
     const e = eng(); for (const id of ['controls', 'grip', 'section']) e.skipMission(id); const { vr, a } = mkVr({ engine: e }); e.start('menu'); a.play.mockClear();
@@ -486,17 +487,17 @@ describe('a cleared ステップ waits for 次へ', () => {
     expect(vr.page().buttons[0].id).toBe('start:slice');
   });
   it('the last ステップ: allclear then the closing line; the page says it is over; no next button', () => {
-    const e = eng(); e.skipMission('controls'); e.skipMission('grip'); e.skipMission('section'); e.skipMission('menu'); const { vr, a } = mkVr({ engine: e }); e.start('slice'); a.play.mockClear();
+    const e = eng(); e.skipMission('controls'); e.skipMission('grip'); e.skipMission('section'); e.skipMission('menu'); const { vr, a } = mkVr({ engine: e }); e.setEnv({ cond: { 'no-section': () => false } }); e.start('slice'); a.play.mockClear(); // a section is up
     for (const k of ['slice-opacity', 'slice-toggle', 'frame-hide']) e.onSignal({ kind: k });
     expect(a.play).toHaveBeenLastCalledWith(['allclear', 'end']);
     const p = vr.page(); expect(p).toMatchObject({ kind: 'allDone', note: I18N.ja.tutFbEnd }); expect(p.buttons.map(b => b.id)).not.toContain('next'); expect(p.buttons.some(b => b.id.startsWith('start:'))).toBe(false);
     expect(TUT_FEEDBACK.end.audioText).toMatch(/おわり/);
-    for (const x of buttons(layoutPage(p, {}))) expect(x.y + x.h).toBeLessThanOrEqual(560);
+    for (const x of buttons(layoutPage(p, {}))) expect(x.y + x.h).toBeLessThanOrEqual(PAGE_H);
   });
   it('the closing clips survive the end of the session like the other feedback; the new ids are all feedback ids', () => {
     for (const id of ['gonext', 'end', 'mclear', 'allclear', 'ok1']) expect(isFeedbackId(id), id).toBe(true);
-    for (const id of ['orient1', 'orient2', 'controls1', 'intro1']) expect(isFeedbackId(id), id).toBe(false);
-    const e = eng(); let last; e.subscribe(s => { last = s; }); e.start('controls'); e.next();
+    for (const id of ['orient1', 'orient2', 'ctl1', 'g1a', 'intro1']) expect(isFeedbackId(id), id).toBe(false);
+    const e = eng(); let last; e.subscribe(s => { last = s; }); e.start('controls'); e.next(); e.next();
     expect(speechFor(last, e.currentStep(), '').ids).toEqual(['mclear', 'gonext']);
   });
   it('createTutorialAudio.play(ids, onEnd): onEnd runs once after the last clip, not when stopped or replaced', async () => {
@@ -506,5 +507,135 @@ describe('a cleared ステップ waits for 次へ', () => {
     au.play(['c'], () => n++); au.stop(); clips[2].onended?.(); expect(n).toBe(1);
     au.play(['d'], () => n++); au.play(['e']); clips[3].onended?.(); expect(n).toBe(1);
     expect(createTutorialAudio({ AudioCtor: A, getVoice: () => 'off' }).play(['x'], () => n++)).toBe(false); expect(n).toBe(1);
+  });
+});
+
+
+// (step-by-step guidance)
+describe('entry guidance only the first time after the page was opened', () => {
+  it('auto: the first session plays look right / left, later sessions start at ステップ1 at once (still from the beginning); no replay of the entry lines', () => {
+    _resetEntryForTest();
+    const e = eng(); const first = mkVr({ engine: e, entry: 'auto', getLook: () => ({ right: 90, left: 90 }) });
+    expect(first.vr.entryPending).toBe(true); first.vr.update(1000); expect(first.vr.entryPhase()).toBe('right'); expect(first.a.play).toHaveBeenLastCalledWith([TUT_ORIENT.right.audio], expect.any(Function));
+    first.a.play.mockClear(); first.setT(1000 + 120000); first.vr.update(); expect(first.a.play).not.toHaveBeenCalled(); // 2 minutes of no progress: the entry line is not said again
+    first.vr.dispose();
+    // a later session on the same page (the engine is the page's one engine and has progress): from ステップ1, no guidance
+    e.skipMission('controls'); e.skipMission('grip');
+    const second = mkVr({ engine: e, entry: 'auto', getLook: () => ({ right: 90, left: 90 }) });
+    expect(second.vr.entryPending).toBe(false); expect(second.vr.entryPhase()).toBeNull(); expect(second.vr.page().kind).toBe('controls');
+    expect(e.getState()).toMatchObject({ mission: 'controls', step: 0, finished: false, done: {} }); expect(second.a.play).toHaveBeenCalledWith(['ctl1']);
+    second.vr.dispose();
+    _resetEntryForTest(); // a reload of the page: the guidance plays again
+    const third = mkVr({ engine: e, entry: 'auto', getLook: () => ({ right: 90, left: 90 }) }); expect(third.vr.entryPending).toBe(true); third.vr.dispose();
+    _resetEntryForTest();
+  });
+  it('the guidance counts as shown once it began (leaving during it does not repeat it next time); entry:true always plays it, entry:false never touches the engine', () => {
+    _resetEntryForTest();
+    const a = mkVr({ entry: 'auto' }); expect(a.vr.entryPhase()).toBe('right'); a.vr.dispose();
+    const b = mkVr({ entry: 'auto' }); expect(b.vr.entryPhase()).toBeNull(); b.vr.dispose();
+    const c = mkVr({ entry: true }); expect(c.vr.entryPhase()).toBe('right'); c.vr.dispose();
+    const e = eng(); e.skipMission('controls'); const d = mkVr({ engine: e, entry: false }); expect(e.getState().mission).toBe('grip'); d.vr.dispose(); // legacy: continues where it is
+    _resetEntryForTest();
+  });
+});
+describe('captions, 3D hints and the conditional section page', () => {
+  it('captionOf: the step text; {tissue} = the first tissue of the open data (its real name), else the fallback words', () => {
+    const e = eng(); for (const id of ['controls', 'grip', 'section']) e.skipMission(id); e.start('menu');
+    expect(captionOf(e.currentStep(), k => I18N.ja[k], '骨')).toBe('左のメニュー：光っている行（骨）の「非表示」に光線を向けてトリガーを引く');
+    expect(captionOf(e.currentStep(), k => I18N.ja[k], '脂肪')).toContain('（脂肪）');
+    expect(captionOf(e.currentStep(), k => I18N.ja[k], '')).toContain('（組織）'); expect(captionOf(e.currentStep(), k => I18N.en[k], 'Fat')).toContain('highlighted row (Fat)');
+    expect(captionOf(null)).toBe('');
+    const p = buildPage({ engine: e, tissue: '骨' }); expect(p.caption).toContain('（骨）');
+  });
+  it('the live board says the tissue of the data: setTissue redraws it; the caption is on the board (labels) and never fixed to a name', () => {
+    const e = eng(); for (const id of ['controls', 'grip', 'section']) e.skipMission(id); const { vr } = mkVr({ engine: e }); let n = 0; const r0 = vr.rev;
+    expect(vr.page().caption).toContain('（組織）'); vr.setTissue('軟部組織'); expect(vr.rev).toBeGreaterThan(r0); expect(vr.page().caption).toContain('（軟部組織）'); const r1 = vr.rev; vr.setTissue('軟部組織'); expect(vr.rev).toBe(r1); // no change: no redraw
+    expect(vr.widgets({}).filter(x => x.type === 'label').map(x => x.text).join('')).toContain('軟部組織');
+    expect(JSON.stringify(TUT_ORIENT) + JSON.stringify(TUTORIAL_MISSIONS)).not.toMatch(/骨の行/); expect(I18N.ja.tutMenuS1).not.toContain('骨');
+  });
+  it('controllerHint / stepBoard follow the page; none during the entry guidance, on a cleared page or in the lists', () => {
+    const e = eng(); for (const id of ['controls', 'grip', 'section']) e.skipMission(id); const { vr } = mkVr({ engine: e });
+    expect(vr.controllerHint()).toEqual({ btn: 'trigger' }); expect(vr.stepBoard()).toBe('menu');
+    e.onSignal({ kind: 'seg-hide' }); e.onSignal({ kind: 'seg-show' }); // cleared
+    expect(vr.controllerHint()).toBeNull(); expect(vr.stepBoard()).toBeNull();
+    vr.act('start:slice'); expect(vr.controllerHint()).toEqual({ btn: 'face' }); expect(vr.stepBoard()).toBeNull(); e.next(); expect(vr.controllerHint()).toEqual({ btn: 'trigger' }); expect(vr.stepBoard()).toBe('menu');
+    vr.act('list'); expect(vr.controllerHint()).toBeNull();
+    const en = mkVr({ entry: true }); expect(en.vr.controllerHint()).toBeNull(); expect(en.vr.stepBoard()).toBeNull(); // the entry guidance has its own blink
+  });
+  it('ステップ5 starts at the section page only when no section frame is up (getSectionOn); with one it starts at the slider', () => {
+    let on = false; const e = eng(); for (const id of ['controls', 'grip', 'section', 'menu']) e.skipMission(id);
+    const { vr } = mkVr({ engine: e, getSectionOn: () => on });
+    vr.act('start:slice'); expect(e.currentStep().id).toBe('slice0'); expect(vr.controllerHint()).toEqual({ btn: 'face' }); expect(vr.page().caption).toBe(I18N.ja.tutSliceS0); expect(vr.page().counter).toBe('1/4');
+    on = true; vr.act('start:slice'); expect(e.currentStep().id).toBe('slice1'); expect(vr.page().counter).toBe('1/3'); expect(vr.page().item).toBe(1); expect(vr.page().done).toEqual([]);
+    on = false; vr.act('start:slice'); e.onSignal({ kind: 'section-add' }); expect(e.currentStep().id).toBe('slice1'); expect(vr.page().done).toEqual([]); // slice0 has no row to tick
+  });
+  it('menuTargetRect: the rect of the button / knob in the menu\'s px, from above (buttons) / below (the slider), the key of the tissue row', () => {
+    const w = [{ type: 'button', id: 'seg:bone:show', x: 440, y: 180, w: 250, h: 72, on: true }, { type: 'button', id: 'seg:bone:hide', x: 710, y: 180, w: 250, h: 72, on: false },
+      { type: 'button', id: 'seg:fat:show', x: 440, y: 262, w: 250, h: 72, on: false }, { type: 'button', id: 'seg:fat:hide', x: 710, y: 262, w: 250, h: 72, on: true }, { type: 'slider', id: 'sliceOpacity', x: 440, y: 426, w: 330, h: 72, value: 0.5 }];
+    expect(menuTargetRect(w, 'seg-hide')).toEqual({ rect: { x: 710, y: 180, w: 250, h: 72 }, from: 'top', key: 'bone' });
+    expect(menuTargetRect(w, 'seg-show')).toEqual({ rect: { x: 440, y: 262, w: 250, h: 72 }, from: 'top', key: 'fat' });
+    expect(menuTargetRect(w, 'slider')).toEqual({ rect: { x: 440 + 165 - 26, y: 426 + 36 - 26, w: 52, h: 52 }, from: 'bottom' });
+    expect(menuTargetRect(w, null)).toBeNull(); expect(menuTargetRect(w.slice(0, 2), 'slider')).toBeNull(); expect(menuTargetRect(null, 'seg-hide')).toBeNull();
+  });
+  it('every step has its voice file ids (audio + then) in order; the second clip of the slider page follows the first', () => {
+    const sl = missionById('slice').steps[1]; expect(stepVoiceIds(sl)).toEqual(['g4d', 'g4a2']); expect(stepVoiceIds(missionById('grip').steps[1])).toEqual(['grip2']); expect(stepVoiceIds(null)).toEqual([]);
+    const e = eng(); let last; e.subscribe(x => { last = x; }); e.setEnv({ cond: { 'no-section': () => false } }); for (const id of ['controls', 'grip', 'section', 'menu']) e.skipMission(id); e.start('slice');
+    expect(speechFor(last, e.currentStep(), '').ids).toEqual(['g4d', 'g4a2']);
+  });
+});
+
+describe('a hidden section frame shown again does not hang ステップ3 / 5', () => {
+  it('slice0 / section1 wait for section-add; the page is also passed over by itself when the section is up (engine refresh each frame)', () => {
+    let on = false; const e = eng(); for (const id of ['controls', 'grip', 'section', 'menu']) e.skipMission(id);
+    const { vr, a, setT } = mkVr({ engine: e, getSectionOn: () => on });
+    vr.act('start:slice'); expect(e.currentStep().id).toBe('slice0'); expect(vr.page().counter).toBe('1/4');
+    on = true; a.play.mockClear(); setT(2000); vr.update(); // the section appeared by another way (or its frame was shown again without a signal)
+    expect(e.currentStep().id).toBe('slice1'); expect(vr.page().counter).toBe('2/4'); expect(a.play).toHaveBeenLastCalledWith(['g4d', 'g4a2']); // the next page's voice, N fixed
+    on = false; vr.act('start:slice'); expect(e.currentStep().id).toBe('slice0'); on = true; e.onSignal({ kind: 'section-add' }); expect(e.currentStep().id).toBe('slice1'); // the signal route (setSection(true) now emits it)
+  });
+});
+
+// , review fixes
+describe('the caption is under the slide, never over it', () => {
+  it('step / controls pages: the slide box is untouched, the caption band starts below it, the buttons below the band; all inside PAGE_H', () => {
+    const e = eng(); for (const id of ['controls', 'grip']) e.skipMission(id); e.start('section'); e.next();
+    const box = slideBox(820), w = layoutPage(buildPage({ engine: e }), { getImage: pic });
+    const band = w.find(x => x.tut === 'caption'); const c = recCtx(); band.draw(c); const rr = c.calls.find(x => x[0] === 'roundRect'); // [name, x, y, w, h, r]
+    expect(rr[2]).toBeGreaterThanOrEqual(box.y + box.h); expect(rr[2] + rr[4]).toBeLessThanOrEqual(box.y + box.h + CAPTION_H);
+    const caps = w.filter(x => x.type === 'label' && x.y > 60); expect(caps.length).toBeGreaterThan(0); for (const l of caps) expect(l.y - 22, l.text).toBeGreaterThanOrEqual(box.y + box.h);
+    for (const b of buttons(w)) { expect(b.y).toBeGreaterThanOrEqual(box.y + box.h + CAPTION_H); expect(b.y + b.h).toBeLessThanOrEqual(PAGE_H); expect(b.h).toBeGreaterThan(60); }
+    // the slide picture is drawn whole: its widget is the only thing over its box besides the step's frame and the ✓ marks
+    const over = w.filter(x => x.type === 'draw' && x.tut === 'caption'); expect(over).toHaveLength(1);
+    for (const p of [buildPage({ engine: (() => { const x = eng(); x.start('controls'); return x; })() })]) { const ww = layoutPage(p, { getImage: pic }); for (const l of ww.filter(x => x.type === 'label' && x.y > 60)) expect(l.y - 22).toBeGreaterThanOrEqual(box.y + box.h); }
+  });
+  it('the slide viewer\'s buttons stay normal-sized on the taller board', () => {
+    const v = createSlideViewer({ getImage: pic }); v.act('slide:g2'); const w = v.widgets({}); for (const b of buttons(w)) expect(b.h).toBeLessThanOrEqual(74);
+  });
+});
+describe('hands, the closed menu and the other review fixes', () => {
+  it('grip1 / section2 / section3 / slice1 say either hand (voice + caption) and the 3D hint shows on both hands (no hand restriction)', () => {
+    for (const id of ['grip1', 'section2', 'section3', 'slice1']) { const st = TUTORIAL_MISSIONS.flatMap(m => m.steps).find(x => x.id === id); expect(st.audioText, id).toMatch(/^(ひだりのメニュー.*)?どちらの?て/); expect(I18N.ja[st.text], id).toContain('どちらの手でも'); expect(I18N.en[st.text], id).toMatch(/^Either hand/); expect(st.ctl.hand, id).toBeUndefined(); }
+    expect(TUTORIAL_MISSIONS.flatMap(m => m.steps).find(x => x.id === 'slice1').audioText).toMatch(/どちらのてでも、こうせんを向け/);
+  });
+  it('menu closed while a menu page is up: caption says how to open it (A / X long press), the voice says it once, the 3D controller points at the lower face button held; opening again restores the page', () => {
+    let open = true; const e = eng(); for (const id of ['controls', 'grip', 'section']) e.skipMission(id);
+    const { vr, a, setT } = mkVr({ engine: e, getMenuOpen: () => open }); a.play.mockClear();
+    expect(vr.page().caption).toContain('左のメニュー'); expect(vr.controllerHint()).toEqual({ btn: 'trigger' });
+    open = false; setT(2000); vr.update();
+    expect(vr.page().caption).toBe(I18N.ja.tutMenuClosed); expect(I18N.ja.tutMenuClosed).toMatch(/A または X.*長押し/); expect(vr.controllerHint()).toEqual({ btn: 'facelow', motion: 'hold' });
+    expect(a.play).toHaveBeenLastCalledWith([TUT_MENU_OPEN.audio]); expect(TUT_MENU_OPEN.audioText).toMatch(/エーまたはエックス.*ながおし/);
+    a.play.mockClear(); setT(3000); vr.update(); expect(a.play).not.toHaveBeenCalled(); // said once
+    open = true; setT(4000); vr.update(); expect(vr.page().caption).toContain('左のメニュー'); expect(vr.controllerHint()).toEqual({ btn: 'trigger' }); expect(a.play).toHaveBeenLastCalledWith(['g3c']); // the page's own voice again
+    // pages that do not work on the menu are not affected; no getMenuOpen = never closed
+    open = false; e.skipMission('menu'); vr.act('start:slice'); e.next(); // slice1 is a menu page
+    setT(5000); vr.update(); expect(vr.controllerHint()).toEqual({ btn: 'facelow', motion: 'hold' });
+    const plain = mkVr({ engine: eng() }); expect(plain.vr.controllerHint()).toEqual({ btn: 'trigger' });
+  });
+  it('menu1\'s voice and its arrow agree: it says the lit row, the caption names the row the arrow marks', () => {
+    const m1 = missionById('menu').steps[0]; expect(m1.audioText).toMatch(/ひかっているぎょう/); expect(I18N.ja.tutMenuS1).toContain('光っている行（{tissue}）');
+  });
+  it('the English caption line takes the English name of the tissue (the 2D card hook gets lang)', () => {
+    const ui = readFileSync(new URL('../../docs/tutorial-ui.js', import.meta.url), 'utf8'), app = readFileSync(new URL('../../docs/app.js', import.meta.url), 'utf8');
+    expect(ui).toContain("line(I18N.en?.[s.textKey]||'',I18N.en?.tutTissueFallback,'en')"); expect(app).toContain("lang==='en'?I18N.en?.[k]||tr(k):tr(k)");
   });
 });

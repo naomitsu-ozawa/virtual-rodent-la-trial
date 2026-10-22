@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { VOLUME_FWD, MENU_OFFSET, HELP_OFFSET, HIST_OFFSET, HIST_WIDTH, MENU_WIDTH, HELP_WIDTH, HELP_RES, EV_OFFSET, EV_WIDTH, EV_RES, HU_PANEL_OFFSET, FOLLOW_ANGLE, FOLLOW_DIST, BOARD_DIST, boardDistance, placeFromHead, volumeFromHead } from '../../docs/vr-layout.js';
-import { levelBoardH } from '../../docs/tutorial-vr.js';
+import { VOLUME_FWD, MENU_OFFSET, HELP_OFFSET, HIST_OFFSET, HIST_WIDTH, MENU_WIDTH, HELP_WIDTH, HELP_RES, EV_OFFSET, EV_WIDTH, EV_RES, HU_PANEL_OFFSET, FOLLOW_ANGLE, FOLLOW_DIST, BOARD_DIST, BOARD_YAW_DEG, boardDistance, placeFromHead, volumeFromHead } from '../../docs/vr-layout.js';
+import { levelBoardH, PAGE_H, TAB_H } from '../../docs/tutorial-vr.js';
 
 import { PANEL_W, PANEL_H } from '../../docs/vr-histogram-layout.js';
-const HELP_W = 820, HELP_H = 560 + 72; // the help board canvas (makeMenu(820,560+TAB_H,...) in vr-view.js;: the 手順一覧 | 詳細 tab strip is 72 px)
+const HELP_W = 820, HELP_H = PAGE_H + TAB_H; // the help board canvas (makeMenu(820,PAGE_H+TAB_H,...) in vr-view.js: the page + the caption band under the slide + the 手順一覧 | 詳細 tab strip)
 const head = { x: 1, y: 1.6, z: 2 }, fwd = { x: 0, z: -1 }, left = { x: -1, z: 0 };
 describe('default VR/AR layout', () => {
   it('volume 0.6-0.7 m ahead, a little below the eyes', () => {
@@ -22,16 +22,17 @@ describe('default VR/AR layout', () => {
     expect(HELP_RES).toBeCloseTo(HELP_WIDTH / 0.32, 1); expect(Math.round(820 * HELP_RES)).toBeLessThanOrEqual(1152); // 1148 px wide: the 1280 px slide pictures are not drawn larger than they are
     expect(EV_WIDTH).toBe(HELP_WIDTH); expect(EV_RES).toBe(HELP_RES);
   });
+  // seen only when the head turns, yet the inner edges just peek in at the edge of the view with the head straight (Quest 3: about 55 deg each side)
   const yawDeg = o => Math.atan2(Math.abs(o.left), o.fwd) * 180 / Math.PI, innerDeg = (o, w) => yawDeg(o) - Math.atan(w / 2 / Math.hypot(o.fwd, o.left)) * 180 / Math.PI;
-  it('menu / help / ev boards far out to the sides: centres 55-65 deg out, inner edges 40-50 deg (inside the 55 deg edge of the view), all at the same 0.9 m', () => {
+  it('menu / help / ev boards far out to the sides: centres 45-55 deg out (BOARD_YAW_DEG 50), inner edges 30-40 deg (well inside the 55 deg edge of the view), all at the same 0.9 m', () => {
     for (const [o, w] of [[MENU_OFFSET, MENU_WIDTH], [HELP_OFFSET, HELP_WIDTH], [EV_OFFSET, EV_WIDTH]]) {
-      expect(yawDeg(o)).toBeGreaterThan(55); expect(yawDeg(o)).toBeLessThan(65);
-      expect(innerDeg(o, w)).toBeGreaterThan(40); expect(innerDeg(o, w)).toBeLessThan(50);
+      expect(yawDeg(o)).toBeCloseTo(BOARD_YAW_DEG, 1); expect(yawDeg(o)).toBeGreaterThan(45); expect(yawDeg(o)).toBeLessThan(55);
+      expect(innerDeg(o, w)).toBeGreaterThan(30); expect(innerDeg(o, w)).toBeLessThan(40);
       expect(Math.hypot(o.fwd, o.left)).toBeCloseTo(BOARD_DIST, 3);
     }
   });
-  it('a board in follow mode does not glide away when the head turns to read it (FOLLOW_ANGLE beyond the boards\' yaw + 10 deg)', () => {
-    expect(FOLLOW_ANGLE * 180 / Math.PI).toBeGreaterThan(yawDeg(HELP_OFFSET) + 10); expect(FOLLOW_ANGLE * 180 / Math.PI).toBeGreaterThan(yawDeg(MENU_OFFSET) + 10);
+  it('a board in follow mode does not glide away when the head turns to read it (FOLLOW_ANGLE 65 deg = the boards\' 50 + 15)', () => {
+    expect(FOLLOW_ANGLE * 180 / Math.PI).toBeCloseTo(65, 6); expect(FOLLOW_ANGLE * 180 / Math.PI).toBeGreaterThan(yawDeg(HELP_OFFSET) + 10); expect(FOLLOW_ANGLE * 180 / Math.PI).toBeGreaterThan(yawDeg(MENU_OFFSET) + 10);
     expect(FOLLOW_DIST).toBeGreaterThan(0.3);
     const v = readFileSync('docs/vr-view.js', 'utf8');
     expect(v).toContain('if(ang>FOLLOW_ANGLE||Math.abs(rm-rt)>FOLLOW_DIST||Math.abs(m.position.y-target.y)>FOLLOW_DIST)moving=true;');
@@ -66,7 +67,7 @@ describe('default VR/AR layout', () => {
 
 describe('mission board', () => {
   const MENU_H = 1180, MENU_W = 1024, evH = levelBoardH(820); // the board is the level's 16:9 slide
-  const h = EV_WIDTH * evH / 820, wH = HELP_WIDTH * (560 + 72) / 820;
+  const h = EV_WIDTH * evH / 820, wH = HELP_WIDTH * HELP_H / 820;
   it('upper left at reading distance, same width as the help board (the text keeps its size), clear of the volume, the menu, the help board and the HU panel', () => {
     expect(EV_WIDTH).toBe(HELP_WIDTH);
     expect(boardDistance(EV_OFFSET)).toBeGreaterThanOrEqual(0.8); expect(boardDistance(EV_OFFSET)).toBeLessThanOrEqual(1.0);
@@ -82,5 +83,13 @@ describe('mission board', () => {
     expect(v).toContain("evTarget.copy(head).addScaledVector(headFwd,EV_OFFSET.fwd).addScaledVector(headLeft,EV_OFFSET.left);evTarget.y-=EV_OFFSET.down;");
     expect(v).toContain('if(ev.mesh.visible&&!evPlaced&&poseAt)placeEvNow()');
     expect(v).not.toMatch(/lazyFollow\(ev\.mesh/);
+  });
+});
+
+describe('the help board with the caption band', () => {
+  it('the caption sits under the slide: the board is taller, its top edge did not move (it stays under the histogram board), and it still clears the volume and the HU panel', () => {
+    expect(PAGE_H).toBeGreaterThan(560); const h = HELP_WIDTH * HELP_H / HELP_W;
+    expect(HELP_OFFSET.down - h / 2).toBeCloseTo(0.22 - HELP_WIDTH * (560 + 72) / HELP_W / 2, 2); // the top edge as before (0.22 with the old height)
+    expect(HELP_OFFSET.down + h / 2).toBeLessThan(0.55); // the bottom edge is still a comfortable 55 cm below the eyes
   });
 });
