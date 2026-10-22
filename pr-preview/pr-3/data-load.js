@@ -189,6 +189,7 @@ export function resetDatasetState(){
 }
 export async function selectSeries(s){
  // per-dataset reset only for another series (the same card again re-decodes the same data and keeps its edits, as before)
+ globalThis.__vrlVolumeReady=false; // the tutorial's guidance (tutorial-ui.js sampleReady) waits for this: true only when this function has finished preparing the volume (below)
  const prevSeries=activeSeries;setActiveId(s.id);setActiveSeries(s);clear3DForSeriesChange();if(s!==prevSeries)resetDatasetState();const sourceBacked=s.sourceBacked||smallSeriesGpuVolume(s);
  requestIPadSettingsTab('display');
  for(const n of list.children)n.classList.toggle('is-selected',n.dataset.id===activeId);
@@ -216,6 +217,7 @@ export async function selectSeries(s){
   if(badge)badge.textContent=sourceBacked?(gpuResident?'CT source ready · GPU volume':(volume.mprData?'CT source ready · MPR cached':'CT source ready · streaming MPR')):'CT volume ready · 2D ready';
   footer.textContent=sourceBacked?(gpuResident?'Full-resolution source DICOM · GPU-resident MPR':(volume.mprData?'Full-resolution source DICOM · MPR memory cache '+fmt(volume.mprData.byteLength):'Full-resolution source-backed DICOM · streaming MPR')):'CT range: '+Math.round(volume.min)+' to '+Math.round(volume.max)+' · '+volume.data.constructor.name+' '+fmt(volume.data.byteLength);
   syncMpr3DSliceSliders();void applyPendingProject();
+  globalThis.__vrlVolumeReady=true; // the volume is ready (decoded, configured, GPU / MPR prepared, first render done)
  }catch(e){
   console.error(e);const label=phase==='decode'?'Decode failed':phase==='configure'?'Configure failed':'Render failed';
   selected.querySelector('.ready-badge').textContent=label;footer.textContent=label+': '+String(e.message||e)

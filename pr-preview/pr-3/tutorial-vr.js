@@ -1,8 +1,9 @@
-import { getTutorialEngine, resetTutorialAll, continueTutorial } from './tutorial-ui.js?v=20261022-build642';
+import { getTutorialEngine, resetTutorialAll, continueTutorial, restartTutorial } from './tutorial-ui.js?v=20261022-build642';
 import { createTutorialAudio, createStepReplay, createChime, speechFor, isFeedbackId } from './tutorial-audio.js?v=20261022-build642';
+import { createOrient, ORIENT_PHASES } from './tutorial-orient.js?v=20261022-build642';
 import { resetPress, resetArmed } from './event-mode.js?v=20261022-build642';
 import { tr } from './i18n.js?v=20261022-build642';
-import { TUTORIAL_MISSIONS, TUT_SAMPLE } from './tutorial-data.js?v=20261022-build642';
+import { TUTORIAL_MISSIONS, TUT_SAMPLE, TUT_ORIENT, TUT_FEEDBACK } from './tutorial-data.js?v=20261022-build642';
 import { GUIDE_SLIDES, guideSlide, slideItem, itemRect, loc, createSlideImages, SLIDE_W, SLIDE_H } from './tutorial-slides.js?v=20261022-build642';
 import { drawPointer, drawKnobHint, drawStepFrame, drawDoneMark, animPhase, animKey, GOLD } from './tutorial-marks.js?v=20261022-build642';
 
@@ -11,6 +12,23 @@ export function tutorialModeOn(api = globalThis.__vrlSettings) {
   try { return api?.get?.('tutorialMode') === true; } catch { return false; }
 }
 const BTN = (id, label, o = {}) => ({ id, label, ...o });
+// text -> lines that fit widthPx at sizePx (no canvas here: a wide character (CJK) counts 1 em, others 0.55 em). Japanese breaks at the end of a phrase (after 。 / 、) when the next phrase
+// would not fit on the line; a phrase wider than a line is cut by characters; Latin text breaks at spaces.
+const emOf = c => (/[\u0000-\u00ff]/.test(c) ? 0.55 : 1);
+const emsOf = t => [...t].reduce((a, c) => a + emOf(c), 0);
+export function wrapText(text, sizePx, widthPx) {
+  const max = widthPx / sizePx, lines = []; let cur = '';
+  const flush = () => { if (cur.trim()) lines.push(cur.trim()); cur = ''; };
+  // tokens: a Japanese phrase up to 。 / 、, or a Latin word with its trailing space
+  for (const tok of String(text || '').match(/[^。、\s]*[。、]|[\u0000-\u00ff]+\s*|[^。、\s\u0000-\u00ff]+/g) || []) {
+    if (emsOf(cur + tok) <= max + 1e-9 || (emsOf(tok.trim()) <= max && emsOf((cur + tok).trimEnd()) <= max + 1e-9)) { cur += tok; continue; }
+    flush();
+    if (emsOf(tok.trim()) <= max) { cur = tok; continue; }
+    for (const ch of tok) { if (emsOf(cur + ch) > max) flush(); cur += ch; } // a phrase longer than a line: by characters
+  }
+  flush();
+  return lines;
+}
 // 'ステップ3' / 'Step 3': the word of the language (tutStepWord) + the fixed number (1..5)
 export const stepNoLabel = (n, t = tr) => { const w = t('tutStepWord'); return /[A-Za-z]$/.test(w) ? `${w} ${n}` : `${w}${n}`; };
 // 'A：B' (ja) / 'A: B' (en)
@@ -24,7 +42,12 @@ export function panelTabs(which, { W = 820, H = 560, act = () => {}, t = tr } = 
 }
 // The page model of the board from an engine snapshot. kind: 'list' | 'step' | 'controls' | 'missionDone' | 'allDone'. buttons: [{id,label,disabled?,on?,warn?,size?,point?}] in display order.
 // A step / controls page: slide = the slide shown (its picture), item = its numbered row to frame (null: none), done = the rows to mark ✓ (the earlier pages' rows, not the current one).
-export function buildPage({ engine, view = 'auto', lang = 'ja', resetArmed: armed = false, t = tr, missions = TUTORIAL_MISSIONS }) {
+export function buildPage({ engine, view = 'auto', lang = 'ja', resetArmed: armed = false, t = tr, missions = TUTORIAL_MISSIONS, entry = null }) {
+  // the entry guidance (entry = {phase, index, N}) comes before everything else
+  if (entry && TUT_ORIENT[entry.phase]) {
+    return { kind: 'entry', phase: entry.phase, board: TUT_ORIENT[entry.phase].board, title: t('tutOrientTitle'), counter: `${entry.index + 1}/${entry.N}`, text: t(TUT_ORIENT[entry.phase].text), hint: t('tutOrientHint'),
+      buttons: [BTN('next', t('tutNext'), { on: true, point: true, size: 34 })] };
+  }
   const snap = engine.getState(), list = engine.listMissions(), pi = engine.pageInfo();
   const resetBtn = BTN('reset', armed ? t('tutResetAgain') : t('tutReset'), { warn: armed, size: 24 });
   const skipAllBtn = BTN('skipAll', t('tutSkipAll'), { size: 24 });
@@ -37,9 +60,9 @@ export function buildPage({ engine, view = 'auto', lang = 'ja', resetArmed: arme
   if (snap.finished) {
     const next = engine.nextMissionId();
     if (!next && engine.listMissions().every(m => m.status === 'unavailable' || m.done || m.optional)) {
-      return { kind: 'allDone', title, mark: t('tutDone'), headline: t('tutAllDone'), counter: '', buttons: [BTN('list', t('tutStepList')), BTN('prev', t('tutPrev')), resetBtn] };
+      return { kind: 'allDone', title, mark: t('tutDone'), headline: t('tutAllDone'), note: t(TUT_FEEDBACK.end.text), counter: '', buttons: [BTN('list', t('tutStepList')), BTN('prev', t('tutPrev')), resetBtn] };
     }
-    return { kind: 'missionDone', title, mark: t('tutDone'), headline: t('tutMissionDone'), counter: pi ? `${pi.N}/${pi.N}` : '',
+    return { kind: 'missionDone', title, mark: t('tutDone'), headline: t('tutMissionDone'), note: t(TUT_FEEDBACK.missionClear.then.text), counter: pi ? `${pi.N}/${pi.N}` : '',
       buttons: [...(next ? [BTN('start:' + next, `${t('tutNext')}: ${titleOf(next)}`, { on: true, point: true })] : []), BTN('list', t('tutStepList')), BTN('prev', t('tutPrev'))] };
   }
   const step = engine.currentStep();
@@ -94,6 +117,14 @@ export function layoutPage(page, { W = 820, H = 560, act = () => {}, flash = nul
     row(page.buttons, H - 72, 58);
     return w;
   }
+  if (page.kind === 'entry') {
+    lab(M, 40, page.title, { bold: true, size: 28, color: GOLD });
+    if (page.counter) lab(W - M - 64, 40, page.counter, { bold: true, size: 28, color: '#fff' });
+    wrapText(page.text, 44, inner).forEach((ln, k) => lab(M, 130 + k * 64, ln, { bold: true, size: 44, color: '#fff' }));
+    wrapText(page.hint, 26, inner).forEach((ln, k) => lab(M, H - 150 + k * 32, ln, { size: 26, color: '#cfe3f0' }));
+    row(page.buttons, H - 84, 70);
+    return w;
+  }
   if (page.kind === 'controls' || page.kind === 'step') {
     const box = slideBox(W);
     lab(M, 30, page.title, { bold: true, size: 26, color: GOLD });
@@ -104,9 +135,11 @@ export function layoutPage(page, { W = 820, H = 560, act = () => {}, flash = nul
   } else {
     lab(M, 40, page.title, { bold: true, size: 28, color: GOLD });
     if (page.counter) lab(W - M - 80, 40, page.counter, { bold: true, size: 30, color: '#fff' });
-    lab(M, 150, `${page.mark} ${page.headline}`, { bold: true, size: 44, color: '#7fd1a0' });
-    lab(M, 210, page.title, { size: 30, color: '#cfe3f0' });
-    page.buttons.forEach((b, i) => btn(b, M, 250 + i * 76, inner, 64));
+    lab(M, 130, `${page.mark} ${page.headline}`, { bold: true, size: 44, color: '#7fd1a0' });
+    lab(M, 184, page.title, { size: 30, color: '#cfe3f0' });
+    const note = wrapText(page.note || '', 32, inner); note.forEach((ln, k) => lab(M, 240 + k * 40, ln, { bold: true, size: 32, color: GOLD }));
+    const y0 = 240 + Math.max(1, note.length) * 40 + 14, bh = 56, step = bh + 8;
+    page.buttons.forEach((b, i) => btn(b, M, y0 + i * step, inner, bh));
   }
   if (flash) { // the ✓ flash: a dark box in the middle of the picture
     const fx = W / 2 - 160, fy = 150;
@@ -118,14 +151,25 @@ export function layoutPage(page, { W = 820, H = 560, act = () => {}, flash = nul
 // the live controller. env: {engine?, audio?, getInput() -> 'ctrl'|'hand', lang, doc (EventTarget), now()}
 // ONE place that gets the engine: tutorial-ui.js getTutorialEngine (the page's single engine, kept on globalThis.__vrlTutorialEngine; it also wires the signals once)
 export function getEngine(opts = {}) { return getTutorialEngine(opts); }
-export function createTutorialVr({ engine, audio, chime, getImage, getInput = () => 'ctrl', lang = 'ja', doc = globalThis.document, now = () => performance.now(), onChange = () => {}, resetUserState = null } = {}) {
+// getLook() -> {right, left} = the horizontal angle (deg) between the gaze and the direction to the help board (right) / the menu (left); null / a null member = not placed yet (vr-view.js).
+// entry (default true): the session starts with the entry guidance, then ステップ1; false = the board opens straight on the step (tests, the self-check).
+export function createTutorialVr({ engine, audio, chime, getImage, getLook = null, entry = true, getInput = () => 'ctrl', lang = 'ja', doc = globalThis.document, now = () => performance.now(), onChange = () => {}, resetUserState = null } = {}) {
   const eng = engine || getEngine();
+  if (entry) { try { restartTutorial(eng, { start: false }); } catch { /* */ } }
   // the board opens on a step, never on an empty list: no step under way = the next one not done starts (ステップ1 = the controls slide on a first visit)
-  if (!eng.getState().mission) { try { continueTutorial(eng); } catch { /* */ } }
+  else if (!eng.getState().mission) { try { continueTutorial(eng); } catch { /* */ } }
   const getVoice = () => { try { return globalThis.__vrlSettings?.get?.('tutorialVoice') || 'F1'; } catch { return 'F1'; } };
   const voice = audio || createTutorialAudio({ getVoice }), ding = chime || createChime({ getVoice });
-  let view = 'auto', rev = 1, armedUntil = 0, flashUntil = 0, flash = null, spoken = '', changedAt = now();
-  const replay = createStepReplay(() => { const s = eng.currentStep(); if (s && !eng.getState().finished) voice.play([s.audio]); });
+  let view = 'auto', rev = 1, armedUntil = 0, flashUntil = 0, flash = null, spoken = '', changedAt = now(), voiceDone = true;
+  // the entry guidance: each phase says its line (voiceDone = the clip ended; false while it plays), a phase end starts the next one, the last one starts ステップ1
+  const ENTRY_REPLAY_MS = 25000;
+  const sayEntry = () => { const it = TUT_ORIENT[orient.phase]; if (!it) return; voiceDone = false; const ok = voice.play([it.audio], () => { voiceDone = true; }); if (!ok) voiceDone = true; replay.reset(now(), ENTRY_REPLAY_MS); };
+  const orient = createOrient({ phases: ORIENT_PHASES, onChange: () => {
+    if (orient.active) sayEntry();
+    else if (orient.done) { replay.stop(); voiceDone = true; try { restartTutorial(eng); } catch { /* */ } }
+    bump();
+  } });
+  const replay = createStepReplay(() => { if (orient.active) { sayEntry(); return; } const s = eng.currentStep(); if (s && !eng.getState().finished) voice.play([s.audio]); });
   const bump = () => { rev++; changedAt = now(); onChange(); };
   // the slide pictures: loaded on first use; one arriving redraws the board (bump)
   const pics = getImage ? null : createSlideImages({ onLoad: () => bump() }), image = getImage || (id => pics.get(id));
@@ -145,8 +189,13 @@ export function createTutorialVr({ engine, audio, chime, getImage, getInput = ()
   const onSignal = e => { try { if (!modeOff() && !otherData()) eng.onSignal(e.detail); } catch { /* */ } };
   // the page side (tutorial-ui.js getTutorialEngine) wires the signals once and sets __vrlTutSignalWired; only when nobody wired yet does this board wire itself (never twice: double counting)
   const ownWire = !globalThis.__vrlTutSignalWired; if (ownWire) { try { globalThis.__vrlTutSignalWired = true; } catch { /* */ } doc?.addEventListener?.('vrl-tut-signal', onSignal); }
-  { const s = eng.currentStep(), st = eng.getState(); if (s && !st.finished) { spoken = `${st.mission}:${st.step}:0`; voice.play([s.audio]); replay.reset(now(), s.timeoutHint); } }
+  // with getLook the guidance begins once both boards are in place (the session may still be preparing the volume: the boards are not up yet); the page shows its first phase meanwhile
+  let entryPending = entry && typeof getLook === 'function';
+  if (entry && !entryPending) orient.start(now());
+  else if (!entry) { const s = eng.currentStep(), st = eng.getState(); if (s && !st.finished) { spoken = `${st.mission}:${st.step}:0`; voice.play([s.audio]); replay.reset(now(), s.timeoutHint); } }
   function act(id) {
+    if (entryPending) return false;
+    if (orient.active) return id === 'next' ? orient.next(now()) : false; // the entry guidance: only 次へ
     if (view === 'guides') return guides.act(id);
     if (id.startsWith('start:')) { view = 'auto'; eng.start(id.slice(6)); bump(); return true; }
     switch (id) {
@@ -160,17 +209,19 @@ export function createTutorialVr({ engine, audio, chime, getImage, getInput = ()
     }
     return false;
   }
-  const page = () => buildPage({ engine: eng, view, lang, resetArmed: resetArmed(armedUntil, now()) });
+  const page = () => buildPage({ engine: eng, view, lang, resetArmed: resetArmed(armedUntil, now()), entry: orient.active ? { phase: orient.phase, index: orient.index, N: ORIENT_PHASES.length } : entryPending ? { phase: ORIENT_PHASES[0], index: 0, N: ORIENT_PHASES.length } : null });
   // the page blinks (the frame of the step's row / the pointer of a lit button) while a step page with a row to frame or a lit 次へ is up (and only for ANIM_IDLE_MS after a change)
-  const animated = p => (p.kind === 'step' || p.kind === 'controls' || p.kind === 'missionDone') && (!!p.item || p.buttons.some(b => b.point));
+  const animated = p => (p.kind === 'step' || p.kind === 'controls' || p.kind === 'missionDone' || p.kind === 'entry') && (!!p.item || p.buttons.some(b => b.point));
   // the かんたんメニュー widget to light for the page up now (null: none): 'seg-hide' | 'seg-show' | 'slider'
-  const menuTargetNow = () => { const st = eng.getState(); if (view !== 'auto' || !st.mission || st.finished) return null; return eng.currentStep()?.menu || null; };
+  const menuTargetNow = () => { const st = eng.getState(); if (orient.active || entryPending || view !== 'auto' || !st.mission || st.finished) return null; return eng.currentStep()?.menu || null; };
   // per-frame questions (drawKey / menuKey) are answered from a cache that is rebuilt only when the board changed (rev) or the input did: no page model per frame
   let cRev = -1, cIn = '', cAnim = false, cMenu = null;
   const cache = () => { const inp = getInput(); if (cRev !== rev || cIn !== inp) { cRev = rev; cIn = inp; const p = view === 'guides' ? null : page(); cAnim = !!p && animated(p); cMenu = menuTargetNow(); } };
   const menuTarget = () => { cache(); return cMenu; };
   return {
     engine: eng, act, get rev() { return rev; }, page, menuTarget,
+    // the entry guidance: which board blinks now ('help' | 'menu' | null) and the phase; vr-view.js puts a pulsing halo on that board (a mesh: no canvas upload)
+    entryBoard: () => (orient.active ? TUT_ORIENT[orient.phase].board : null), get entryPending() { return entryPending; }, entryPhase: () => orient.phase, get entryDone() { return orient.done; },
     widgets: (opts = {}) => {
       if (view === 'guides') return guides.widgets(opts);
       return layoutPage(page(), { ...opts, act, flash: now() < flashUntil ? flash : null, phase: animPhase(now(), changedAt), getImage: image });
@@ -179,13 +230,15 @@ export function createTutorialVr({ engine, audio, chime, getImage, getInput = ()
     update(t = now()) {
       if (armedUntil && t >= armedUntil) { armedUntil = 0; bump(); }
       if (flashUntil && t >= flashUntil) { flashUntil = 0; flash = null; bump(); }
+      if (entryPending) { let look = null; try { look = getLook(); } catch { look = null; } if (look && look.right != null && look.left != null) { entryPending = false; orient.start(t); } }
+      else if (orient.active) { let look = null; try { look = getLook ? getLook() : null; } catch { look = null; } orient.update(t, look || {}, voiceDone); }
       replay.tick(t);
     },
     drawKey: (t = now()) => { cache(); return `${rev}|${cIn}|${armedUntil ? 1 : 0}|${flashUntil ? 1 : 0}|${view === 'guides' ? 'g' + guides.drawKey() : cAnim ? animKey(t, changedAt) : ''}`; },
     // the menu's redraw key: the target and the blink step ('' = nothing to light: the menu is drawn as before); still 20 s after the board last changed
     menuKey: (t = now()) => { const m = menuTarget(); return m ? m + animKey(t, changedAt) : ''; },
     menuPhase: (t = now()) => animPhase(t, changedAt),
-    dispose() { unsub(); if (ownWire) { doc?.removeEventListener?.('vrl-tut-signal', onSignal); try { globalThis.__vrlTutSignalWired = false; } catch { /* */ } } if (typeof voice.settle === 'function') voice.settle(isFeedbackId); else voice.stop(); replay.stop(); }, // the ✓ feedback that the closing signal (session-end) just earned is not cut off
+    dispose() { unsub(); replay.stop(); if (ownWire) { doc?.removeEventListener?.('vrl-tut-signal', onSignal); try { globalThis.__vrlTutSignalWired = false; } catch { /* */ } } if (typeof voice.settle === 'function') voice.settle(isFeedbackId); else voice.stop(); replay.stop(); }, // the ✓ feedback that the closing signal (session-end) just earned is not cut off
   };
 }
 

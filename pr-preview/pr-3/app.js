@@ -383,7 +383,7 @@ const sampleProjectNow={value:null};
 // 体験会モード: the practice dataset open now (null = none, or other data opened afterwards). The データ panel's 「最初の状態に戻す」 (event-mode-ui.js) replays it through startSample, the
 // one route the level cards and the chooser use (nothing new is loaded from anywhere else); 'vrl-event-sample-open' tells the panel whether the button has something to reset.
 const openSample={id:null};
-function setOpenSample(id){openSample.id=id;globalThis.__vrlOpenSample=id;try{document.dispatchEvent(new CustomEvent('vrl-event-sample-open',{detail:{id}}))}catch{}}
+function setOpenSample(id){openSample.id=id;globalThis.__vrlOpenSample=id;globalThis.__vrlVolumeReady=false;try{document.dispatchEvent(new CustomEvent('vrl-event-sample-open',{detail:{id}}))}catch{}}
 async function loadSampleProject(setId){
  if(pendingProject.value)return null; // a project the user opened for other data stays pending
  let res=null;try{res=await fetch(sampleProjectUrl(setId),{credentials:'omit',cache:'no-cache'})}catch{return null}

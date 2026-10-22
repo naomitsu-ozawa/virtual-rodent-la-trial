@@ -34,7 +34,8 @@ import { resetUserState } from './event-fresh.js?v=20261022-build642'; // 最初
 import { tutorialModeOn, createTutorialVr, createSlideViewer, panelTabs, TAB_H, layoutLevelSlide, levelBoardH, menuAnnotation } from './tutorial-vr.js?v=20261022-build642'; // チュートリアル on the help board (only made when tutorialMode is on);: the read-only guide, the level slide, the menu pointer
 import { levelSlide, createSlideImages } from './tutorial-slides.js?v=20261022-build642'; // the 体験会 level slides (ev board: the slide's picture)
 import { TUT_SAMPLE } from './tutorial-data.js?v=20261022-build642'; // the live tutorial runs on its practice data only
-import { emit, scaleChanged, poseMoved } from './tutorial-signal.js?v=20261022-build642'; // tutorial: one-line signals at the action sites (no-op without a listener)
+import { emit, scaleChanged, poseMoved } from './tutorial-signal.js?v=20261022-build642';
+import { horizAngleDeg } from './tutorial-orient.js?v=20261022-build642'; // the entry guidance of the tutorial (look right / left): head turn toward a board // tutorial: one-line signals at the action sites (no-op without a listener)
 import { MAX_SECTION_PLANES, nextPlaneColor, frameDepthTest, ARROW_LEN, ARROW_FLASH_MS, arrowFade, arrowShown, tagBehindTissue, sectionPage, pageOfPlane, SECTION_ROWS_PER_PAGE, FLING_UNDO_MS, FLING_DEBUG_MS, createVelocityTracker, flingDecision, frameOutOfView, outOfViewNow, createOutOfViewTracker, outOfViewRelease, flingDebugLines, capVelocity, flyStep, makeSectionSnapshot, restorePlan, createSectionUndo, undoButtonPlace } from './vr-section-frame.js?v=20261022-build642';
 import { createUndoButton } from './vr-undo-button.js?v=20261022-build642';
 import { createFlingDebugTag } from './vr-fling-debug.js?v=20261022-build642';
@@ -1279,8 +1280,11 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
  const ev=evH?makeMenu(820,evH,EV_WIDTH,EV_RES):null;
  if(ev){scene.add(ev.mesh);ev.mesh.visible=false;ev.onDraw(()=>layoutLevelSlide(evSlide,{W:820,getImage:evPics.get}).widgets);ev.refresh();ev.flush()} // static: drawn now and once more when the picture has loaded
  let tutBad=false,sweepOn=false,tutPreview=null,tutMenuKey=''; // sweepOn: the self-check's section sweep is running (it adds / toggles a plane itself: no tutorial signal)
- const tutFail=e=>{if(!tutBad){tutBad=true;helpShow='list';console.warn('[tutorial] board error, falling back to the normal help board',e)}}; // one warning, then the plain help board
- let tutVr=null;tutVr=tutLive?createTutorialVr({resetUserState,getInput:()=>handIn.anyHand()?'hand':'ctrl',lang:ja?'ja':'en',onChange:()=>{if(tutVr)help.refresh()}}):null; // チュートリアル: the help board shows the carousel page (tutorial-vr.js); null = the board is as before
+ const tutFail=e=>{if(!tutBad){tutBad=true;helpShow='list';console.warn('[tutorial] board error, falling back to the normal help board',e)}};
+ const lookV=new THREE.Vector3(),boardAngle=(mesh,placed)=>{if(!placed||!poseAt)return null;mesh.getWorldPosition(lookV);return horizAngleDeg(headGaze.x,headGaze.z,lookV.x-head.x,lookV.z-head.z)};
+ const makeGlow=(board,wM,hM)=>{const g=new THREE.Mesh(new THREE.PlaneGeometry(wM*1.07,hM*1.07),new THREE.MeshBasicMaterial({color:0xE8508F,transparent:true,opacity:0,toneMapped:false,depthWrite:false}));g.position.z=-0.003;g.visible=false;board.add(g);return g};
+ const glowHelp=makeGlow(help.mesh,HELP_WIDTH,HELP_WIDTH*(560+TAB_H)/820),glowMenu=makeGlow(menu.mesh,MENU_WIDTH,MENU_WIDTH*MENU_H/MENU_W);
+ let tutVr=null;tutVr=tutLive?createTutorialVr({resetUserState,getLook:()=>({right:boardAngle(help.mesh,helpPlaced),left:boardAngle(menu.mesh,menuPlaced)}),getInput:()=>handIn.anyHand()?'hand':'ctrl',lang:ja?'ja':'en',onChange:()=>{if(tutVr)help.refresh()}}):null; // チュートリアル: the help board shows the carousel page (tutorial-vr.js); null = the board is as before
  let helpShow=tutVr?'detail':'list'; // which tab of the help board is up
  const helpTarget=new THREE.Vector3();let helpMoving=false,helpPlaced=false,helpHeld=null,helpKey='';
  const computeHelpTarget=()=>helpTarget.copy(head).addScaledVector(headFwd,HELP_OFFSET.fwd).addScaledVector(headLeft,HELP_OFFSET.left).add(new THREE.Vector3(0,-HELP_OFFSET.down,0));
@@ -2670,6 +2674,8 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
   help.mesh.visible=(settings.help|0)>0||!!tutVr; // with the tutorial on the board is shown
   if(ev){ev.mesh.visible=(settings.help|0)>0;if(ev.mesh.visible&&!evPlaced&&poseAt)placeEvNow()} // the mission board follows the help setting (it was a part of the help board); placed once, never follows the head
   if(tutVr&&!tutBad){try{tutVr.update(performance.now())}catch(e){tutFail(e);help.refresh()}}
+  {const eb=tutVr&&!tutBad?tutVr.entryBoard():null,pl=0.45+0.55*(0.5+0.5*Math.cos(performance.now()/1000*4*Math.PI)); // 2 Hz blink
+   glowHelp.visible=eb==='help';glowMenu.visible=eb==='menu';if(eb){const m=(eb==='help'?glowHelp:glowMenu).material;m.opacity=pl}} // the board the entry guidance points at blinks
   if(help.mesh.visible&&!helpPlaced&&poseAt)placeHelpNow();
   if(help.mesh.visible&&settings.help===1&&!helpHeld){computeHelpTarget();helpMoving=lazyFollow(help.mesh,helpTarget,helpMoving,false)}
   if(!huPlaced&&poseAt&&huLine.panel.visible)placeHuNow(); // shown before the first pose (rare): placed once the pose is there; never follows the head after that
@@ -2940,7 +2946,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    for(const k in sums){sums[k]=0;counts[k]=0}
   }
  });
- const cleanup=()=>{try{tutVr?.dispose()}catch(e){console.warn('[tutorial] dispose',e)}
+ const cleanup=()=>{try{tutVr?.dispose()}catch(e){console.warn('[tutorial] dispose',e)}for(const g of [glowHelp,glowMenu]){try{g.geometry.dispose();g.material.dispose()}catch{}}
   renderer.setAnimationLoop(null);if(probeReq){const q=probeReq;probeReq=null;q.res(null)}selfCheck.dispose(); // a pending self-check probe resolves (no frame will serve it) //: unwinds a running scenario, shows the result panel on the page
   sliceToast.dispose();probeTarget.dispose();volTex?.dispose();brickTex?.dispose();comboT?.combo?.dispose();comboTs.forEach(t=>{t.rb.dispose();t.rb=null});comboTs.length=0;disposeExtra();disposeEdits();material?.dispose();if(variants)for(const [k,m] of Object.entries(variants))if(k!=='full')m.dispose();if(rayVariants)Object.values(rayVariants).forEach(m=>m.dispose());gpu?.warm.forEach(m=>m.dispose());compMaterial?.dispose();lowTarget?.dispose();periTarget?.dispose();mesh?.geometry.dispose();scaleTag.dispose();menu.dispose();help.dispose();ev?.dispose();unsubHist();unsubLabelHist();labelHist.dispose();hist.dispose();badge.userData.dispose();
   background.traverse(o=>{o.geometry?.dispose();o.material?.dispose()});planes.forEach(disposePlane);flying.forEach(f=>disposePlane(f.pl));flying.length=0;secUndo.clear();undoBtn.dispose();flingDbg?.dispose();unsubComments();huLine.dispose();setHuLineDeferred(false);vpMarkers.dispose();vpMeasure.dispose();cancelMeasure();surfCursors.forEach(x=>x.dispose());wheel.dispose();pointWheel.dispose();ringGeo.dispose();ring.material.dispose();

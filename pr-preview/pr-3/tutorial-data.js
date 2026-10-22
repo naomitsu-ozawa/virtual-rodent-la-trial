@@ -42,15 +42,22 @@ export const TUTORIAL_MISSIONS=deepFreeze([
 function deepFreeze(o){if(o&&typeof o==='object'&&!Object.isFrozen(o)){Object.freeze(o);for(const v of Object.values(o))deepFreeze(v)}return o}
 export const missionById=id=>TUTORIAL_MISSIONS.find(m=>m.id===id)||null;
 export const TUT_VOICES=Object.freeze(['F1']);
-// Spoken feedback (calm, short). The engine names which to play (snapshot.feedback = 'stepClear' | 'missionClear' | 'allClear'; stepClear rotates through the list).
+const GO_NEXT=Object.freeze({id:'gonext',text:'tutFbGoNext',audio:'gonext',audioText:'つぎのステップに進みましょう。つぎへ、を押してください。'});
+const END=Object.freeze({id:'end',text:'tutFbEnd',audio:'end',audioText:'これでチュートリアルは、おわりです。じゆうに、そうさしてみましょう。'});
 export const TUT_FEEDBACK=Object.freeze({
  stepClear:Object.freeze([
   Object.freeze({id:'ok1',text:'tutFbOk1',audio:'ok1',audioText:'できました。'}),
   Object.freeze({id:'ok2',text:'tutFbOk2',audio:'ok2',audioText:'いいですね。'}),
   Object.freeze({id:'ok3',text:'tutFbOk3',audio:'ok3',audioText:'その調子です。'}),
  ]),
- missionClear:Object.freeze({id:'mclear',text:'tutFbMissionClear',audio:'mclear',audioText:'ステップクリアです。'}),
- allClear:Object.freeze({id:'allclear',text:'tutFbAllClear',audio:'allclear',audioText:'すべてクリアです。おつかれさまでした。'}),
+ missionClear:Object.freeze({id:'mclear',text:'tutFbMissionClear',audio:'mclear',audioText:'ステップクリアです。',then:GO_NEXT}),
+ allClear:Object.freeze({id:'allclear',text:'tutFbAllClear',audio:'allclear',audioText:'すべてクリアです。おつかれさまでした。',then:END}),
+ goNext:GO_NEXT,
+ end:END,
+});
+export const TUT_ORIENT=deepFreeze({
+ right:{id:'orient1',text:'tutOrientRight',audio:'orient1',audioText:'みぎを見てください。これが、そうさパネルです。やることが、ここに表示されます。',board:'help'},
+ left:{id:'orient2',text:'tutOrientLeft',audio:'orient2',audioText:'ひだりを見てください。これが、メニューです。',board:'menu'},
 });
 // the page's own introduction (tutorial-ui.js, after 「チュートリアルを始める」): first open the Lv0 practice data, then start VR / AR. Shown as a subtitle bar, spoken once each.
 export const TUT_INTRO=deepFreeze({
