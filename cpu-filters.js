@@ -4,9 +4,9 @@
 // this module has no UI dependencies and is unit-tested
 // (tests/unit/cpu-filters.test.js). The loops are the former app.js
 // apply* bodies, unchanged apart from reading params instead of sliders.
-import { frameYield } from './utils.js?v=20261022-build653';
-import { boxBlur3D } from './mask-ops.js?v=20261022-build653';
-import { anisotropicLambda, spacingWeights, spacingRatios, bilateralRadii, nlmRadii } from './filter-units.js?v=20261022-build653';
+import { frameYield } from './utils.js?v=20261022-build654';
+import { boxBlur3D } from './mask-ops.js?v=20261022-build654';
+import { anisotropicLambda, spacingWeights, spacingRatios, bilateralRadii, nlmRadii } from './filter-units.js?v=20261022-build654';
 export async function cpuGaussian3D(v,params,onProgress=()=>{}){
  const {columns:w,rows:h,slices:d}=v,n=w*h*d,src=v.data;
  const strength=params.strength;

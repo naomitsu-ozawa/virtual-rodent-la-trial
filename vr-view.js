@@ -1,58 +1,65 @@
-import { effectiveFlag } from './debug-flags.js?v=20261022-build653';
+import { effectiveFlag } from './debug-flags.js?v=20261022-build654';
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js';
-import { volumeTexturePlan, reduceSliceArea, packedRgSlice, packCtSlice, gpuRunsForTexture } from './medical-volume.js?v=20261022-build653';
-import { ensureSegmentBaseRuns } from './segment-runs.js?v=20261022-build653';
-import { gpuVolumeTarget, gpuVolumeEditDescriptors } from './gpu-volume-data.js?v=20261022-build653';
-import { SEGMENT_PRESET_ORDER, gpuSegmentOrder, segmentHasProcessedMask, segmentState, segmentEditState, segmentSourceSignature } from './segments.js?v=20261022-build653';
-import { sceneState, analysisRegions, activeSeries } from './state.js?v=20261022-build653';
-import { datasetFingerprint } from './project-file.js?v=20261022-build653';
-import { HAND_PICK_TOL, sectionRayHit, recordVrPoint, resolveTriggerTarget, createTriggerPress, dragShouldStart, DRAG_RECORD, sectionFollowStart, sectionFollowStep, sectionWristTurn, snapPlaneCenterIntoBox, chooseSectionForRay, rayLocalPlaneX, squareBandContains, squareContains, createHoverPulse, qMul, qInv, qRot, qAngleDeg, clampPlaneCenter, HAPTIC, normalizePointMode, surfaceVoxelFromHit, voxelToLocal, voxelSize, createStickGate, deleteSelected, createUndoStack, applyUndo, pointIsHidden } from './vr-point.js?v=20261022-build653';
-import { createVrPointMarkers, createSurfaceCursor } from './vr-point-markers.js?v=20261022-build653';
-import { buildClsData } from './point-cls.js?v=20261022-build653';
-import { createHiddenClsManager } from './hidden-cls-state.js?v=20261022-build653';
-import { onDatasetChange } from './dataset-reset.js?v=20261022-build653';
-import { WHEEL_ITEMS, DEFAULT_WHEEL, normalizeWheelItems, migrateWheelSectionFlip, setWheelItem, moveWheelItem, clearWheelItem, createRingMenu, createWheelStick, createButtonPress } from './vr-ring.js?v=20261022-build653';
-import { getComments, onCommentsChange, commentMatchesSeries, removeComment, restoreComment, updateCommentPosition, updateCommentText, updateCommentColor } from './comments.js?v=20261022-build653';
-import { POINT_PALETTE, pointColor, normalizeColor } from './point-colors.js?v=20261022-build653';
-import { buildDistanceBytes, combineClassificationDistance, fourthChannelBytes } from './distance-field.js?v=20261022-build653';
-import { classifiedAt, marchClassificationHitInfo } from './vr-pick.js?v=20261022-build653';
-import { createSkipState, skipGrid } from './vr-skip-occupancy.js?v=20261022-build653'; // the creep-skip occupancy bits of the combined texture (VR max-zoom cost)
-import { createComboRebuild } from './vr-combo-rebuild.js?v=20261022-build653'; // the combined texture rebuilt off the frame when the shown segments change
-import { setBusySlot, reportBusyProgress } from './progress-modal.js?v=20261022-build653';
-import { tr } from './i18n.js?v=20261022-build653';
-import { wrapMenuText, stackMenuRows } from './vr-menu-text.js?v=20261022-build653';
-import { activeEventLevel, eventModeOn, missionLines, simpleMenuSegments, triggerModeRow, triggerMode, TRIGGER_AT_START, resetPress, resetArmed, RESET_ARM_MS, simpleMenuLayout, SIMPLE_MENU, sliceOpacityValue, sliceDrawState } from './event-mode.js?v=20261022-build653'; // 体験会モード - the chosen level's mission on the help board, the かんたん menu
-import { VIEW_TOGGLE_ID, VIEW_TOGGLE_BUTTON, SECTION_DELETE_ID, createViewToggle, createDoublePress, ringIdsFor } from './vr-view-toggle.js?v=20261022-build653';
-import { vrSpacingNote, vrVolumeText } from './vr-spacing-note.js?v=20261022-build653';
-import { NORM_LONG, physicalExtentsMm, longestMm, realMagnification, realHolderScale, startHolderScale, magnificationText, createScaleTag, clampScale, pinchScale, scaleLimits, oversizeNote, planeFrameLocalScale, planeTagLocalScale, scaleLineText } from './vr-real-scale.js?v=20261022-build653';
-import { createAutoQuality, autoFloor, STEP_LEVELS, marchStep } from './vr-auto-quality.js?v=20261022-build653';
-import { createVrHuLine } from './vr-hu-line.js?v=20261022-build653';
-import { huMenuTexts, voxelFromHits } from './vr-hu-line-core.js?v=20261022-build653';
-import { setHuLineDeferred } from './hu-line-model.js?v=20261022-build653';
-import { createVrMeasure, LABEL_LIT_SCALE } from './vr-measure.js?v=20261022-build653';
-import { MAX_SECTION_PLANES, nextPlaneColor, frameDepthTest, ARROW_LEN, ARROW_FLASH_MS, arrowFade, arrowShown, tagBehindTissue, sectionPage, pageOfPlane, SECTION_ROWS_PER_PAGE, FLING_UNDO_MS, FLING_DEBUG_MS, createVelocityTracker, flingDecision, flingDebugLines, capVelocity, flyStep, makeSectionSnapshot, restorePlan, createSectionUndo, undoButtonPlace } from './vr-section-frame.js?v=20261022-build653';
-import { createUndoButton } from './vr-undo-button.js?v=20261022-build653';
-import { createFlingDebugTag } from './vr-fling-debug.js?v=20261022-build653';
-import { EMPTY_PINCH, isHand, wristScrollGain, wristScrollSign, wristScrollKeep, NEAR_KINDS, boxDist, centeredBoxDist, squareOutlineDist, pickNearGrab, HAND_RAY_MODES, normalizeHandRay } from './vr-hand.js?v=20261022-build653'; // hand tracking (Quest 3): pure helpers
-import { createHandInput, HAND_LABEL_MOVE_M } from './vr-hand-view.js?v=20261022-build653'; // the hand's ray, wrist menu, fingertips
-import { LABEL_HIDE_DEFAULT, normalizeLabelHide, gpuOcclusionActive, depthVoxelSize, boardVisible, GHOST_ALPHA, occludedPass } from './vr-depth.js?v=20261022-build653';
-import { brickOccupancy, writeBrickOccupancy } from './vr-brick-occupancy.js?v=20261022-build653';
-import { createProbeGate } from './measure-label.js?v=20261022-build653';
-import { sliceIndex, sliceRange, boxFromRange, createSegScan, segScanStart, segScanStep, segsSubset, segsFromUniforms, contentKeyChanged, KEY_LEN } from './vr-content-box.js?v=20261022-build653'; // the proxy box = the box of what can be drawn
-import { setRegionLabel, setRegionLabelOffset, voxelFromLocalVr, clampVoxel, labelLocal, offsetForLocal, vrVoxelStep, rectEdgePoint, leaderVisible, labelSegmentsShown } from './analysis-label.js?v=20261022-build653';
-import { createVrSelfCheck, selfCheckTexts } from './vr-self-check.js?v=20261022-build653'; // 詳細 > 自己診断 (automated frame-time scenarios)
-import { createScaleGuard, createFlapGuard, variantFallback } from './vr-flicker-guard.js?v=20261022-build653'; // flicker safety guard
-import { eyeMetrics, capFromPpv, nextCap, foveaRect, outsideFovea, foveaWorth, qualityText, FOVEA_K, CAP_MIN } from './vr-render-scale.js?v=20261022-build653'; // data-resolution render scale + offscreen foveation
-import { getMeasureStart, startMeasure, cancelMeasure, pickMeasureEnd, onMeasureStartChange, removeMeasurement, restoreMeasurements, measurementsOfPoint, seriesSpacing } from './measurements.js?v=20261022-build653';
-import { APP_BUILD } from './version.js?v=20261022-build653';
-import { wc, ww } from './ui-shell.js?v=20261022-build653';
-import { VOLUME_FWD, VOLUME_DOWN, MENU_OFFSET, HELP_OFFSET, HU_PANEL_OFFSET, MENU_WIDTH, HELP_WIDTH, HIST_OFFSET, HIST_WIDTH } from './vr-layout.js?v=20261022-build653';
-import { onHistogramChange, getHistogramRange, getHistogramLog, setHistogramLog, setHistogramRange } from './histogram-ui.js?v=20261022-build653';
-import { createVrLabelHistogram, UNLABELED_COLOR, labelSlot, labelRegion } from './vr-label-histogram.js?v=20261022-build653';
-import { rangeRes } from './vr-histogram-layout.js?v=20261022-build653';
-import { getHuMode, setHuMode, HU_MODE_FILTERED, HU_MODE_RAW } from './effective-hu.js?v=20261022-build653';
-import { createVrHistogramPanel } from './vr-histogram-panel.js?v=20261022-build653';
-import { lightingGLSL, lightingVertexGLSL, materialVec, MATERIALS, materialKey } from './lighting.js?v=20261022-build653'; // one lighting model for the desktop volume, this VR / AR volume and the 3D-view meshes
+import { volumeTexturePlan, reduceSliceArea, packedRgSlice, packCtSlice, gpuRunsForTexture } from './medical-volume.js?v=20261022-build654';
+import { ensureSegmentBaseRuns } from './segment-runs.js?v=20261022-build654';
+import { gpuVolumeTarget, gpuVolumeEditDescriptors } from './gpu-volume-data.js?v=20261022-build654';
+import { SEGMENT_PRESET_ORDER, gpuSegmentOrder, segmentHasProcessedMask, segmentState, segmentEditState, segmentSourceSignature } from './segments.js?v=20261022-build654';
+import { sceneState, analysisRegions, activeSeries } from './state.js?v=20261022-build654';
+import { datasetFingerprint } from './project-file.js?v=20261022-build654';
+import { HAND_PICK_TOL, sectionRayHit, recordVrPoint, resolveTriggerTarget, createTriggerPress, dragShouldStart, DRAG_RECORD, sectionFollowStart, sectionFollowStep, sectionWristTurn, snapPlaneCenterIntoBox, chooseSectionForRay, rayLocalPlaneX, squareBandContains, squareContains, createHoverPulse, qMul, qInv, qRot, qAngleDeg, clampPlaneCenter, HAPTIC, normalizePointMode, surfaceVoxelFromHit, voxelToLocal, voxelSize, createStickGate, deleteSelected, createUndoStack, applyUndo, pointIsHidden } from './vr-point.js?v=20261022-build654';
+import { createVrPointMarkers, createSurfaceCursor } from './vr-point-markers.js?v=20261022-build654';
+import { buildClsData } from './point-cls.js?v=20261022-build654';
+import { createHiddenClsManager } from './hidden-cls-state.js?v=20261022-build654';
+import { onDatasetChange } from './dataset-reset.js?v=20261022-build654';
+import { WHEEL_ITEMS, DEFAULT_WHEEL, normalizeWheelItems, migrateWheelSectionFlip, setWheelItem, moveWheelItem, clearWheelItem, createRingMenu, createWheelStick, createButtonPress } from './vr-ring.js?v=20261022-build654';
+import { getComments, onCommentsChange, commentMatchesSeries, removeComment, restoreComment, updateCommentPosition, updateCommentText, updateCommentColor } from './comments.js?v=20261022-build654';
+import { POINT_PALETTE, pointColor, normalizeColor } from './point-colors.js?v=20261022-build654';
+import { buildDistanceBytes, combineClassificationDistance, fourthChannelBytes } from './distance-field.js?v=20261022-build654';
+import { classifiedAt, marchClassificationHitInfo } from './vr-pick.js?v=20261022-build654';
+import { createSkipState, skipGrid } from './vr-skip-occupancy.js?v=20261022-build654'; // the creep-skip occupancy bits of the combined texture (VR max-zoom cost)
+import { createComboRebuild } from './vr-combo-rebuild.js?v=20261022-build654'; // the combined texture rebuilt off the frame when the shown segments change
+import { setBusySlot, reportBusyProgress } from './progress-modal.js?v=20261022-build654';
+import { tr } from './i18n.js?v=20261022-build654';
+import { wrapMenuText, stackMenuRows } from './vr-menu-text.js?v=20261022-build654';
+import { activeEventLevel, eventModeOn, missionLines, simpleMenuSegments, triggerModeRow, triggerMode, TRIGGER_AT_START, resetPress, resetArmed, RESET_ARM_MS, simpleMenuLayout, SIMPLE_MENU, sliceOpacityValue, sliceDrawState } from './event-mode.js?v=20261022-build654'; // 体験会モード - the chosen level's mission on the help board, the かんたん menu
+import { VIEW_TOGGLE_ID, VIEW_TOGGLE_BUTTON, SECTION_DELETE_ID, createViewToggle, createDoublePress, ringIdsFor } from './vr-view-toggle.js?v=20261022-build654';
+import { vrSpacingNote, vrVolumeText } from './vr-spacing-note.js?v=20261022-build654';
+import { NORM_LONG, physicalExtentsMm, longestMm, realMagnification, realHolderScale, startHolderScale, tutorialHolderScale, smallForTutorial, TUT_VOLUME_FWD, TUT_VOLUME_DOWN, magnificationText, createScaleTag, clampScale, pinchScale, scaleLimits, oversizeNote, planeFrameLocalScale, planeTagLocalScale, scaleLineText } from './vr-real-scale.js?v=20261022-build654';
+import { createAutoQuality, autoFloor, STEP_LEVELS, marchStep } from './vr-auto-quality.js?v=20261022-build654';
+import { createVrHuLine } from './vr-hu-line.js?v=20261022-build654';
+import { huMenuTexts, voxelFromHits } from './vr-hu-line-core.js?v=20261022-build654';
+import { setHuLineDeferred } from './hu-line-model.js?v=20261022-build654';
+import { createVrMeasure, LABEL_LIT_SCALE } from './vr-measure.js?v=20261022-build654';
+import { resetUserState } from './event-fresh.js?v=20261022-build654'; // 最初から in the tutorial (practice data only, see tutorial-ui.js resetTutorialAll)
+import { tutorialModeOn, createTutorialVr, createSlideViewer, panelTabs, TAB_H, PAGE_H, layoutLevelSlide, levelBoardH, menuAnnotation, menuTargetRect } from './tutorial-vr.js?v=20261022-build654'; // チュートリアル on the help board (only made when tutorialMode is on);: the read-only guide, the level slide, the menu pointer
+import { levelSlide, createSlideImages } from './tutorial-slides.js?v=20261022-build654'; // the 体験会 level slides (ev board: the slide's picture)
+import { TUT_SAMPLE } from './tutorial-data.js?v=20261022-build654'; // the live tutorial runs on its practice data only
+import { emit, scaleChanged, poseMoved } from './tutorial-signal.js?v=20261022-build654'; // tutorial: one-line signals at the action sites (no-op without a listener)
+import { horizAngleDeg } from './tutorial-orient.js?v=20261022-build654'; // the tutorial's entry guidance (look right / left): head turn toward a board
+import { createControllerHints, createEdgeArrow, createBoardArrow, boardSide, edgeArrowShown } from './tutorial-3d.js?v=20261022-build654'; // the tutorial's 3D guides (controller button, edge arrow, arrow over the menu)
+import { MAX_SECTION_PLANES, nextPlaneColor, frameDepthTest, ARROW_LEN, ARROW_FLASH_MS, arrowFade, arrowShown, tagBehindTissue, sectionPage, pageOfPlane, SECTION_ROWS_PER_PAGE, FLING_UNDO_MS, FLING_DEBUG_MS, createVelocityTracker, flingDecision, frameOutOfView, outOfViewNow, createOutOfViewTracker, outOfViewRelease, flingDebugLines, capVelocity, flyStep, makeSectionSnapshot, restorePlan, createSectionUndo, undoButtonPlace } from './vr-section-frame.js?v=20261022-build654';
+import { createUndoButton } from './vr-undo-button.js?v=20261022-build654';
+import { createFlingDebugTag } from './vr-fling-debug.js?v=20261022-build654';
+import { EMPTY_PINCH, isHand, wristScrollGain, wristScrollSign, wristScrollKeep, NEAR_KINDS, boxDist, centeredBoxDist, squareOutlineDist, pickNearGrab, HAND_RAY_MODES, normalizeHandRay } from './vr-hand.js?v=20261022-build654'; // hand tracking (Quest 3): pure helpers
+import { createHandInput, HAND_LABEL_MOVE_M } from './vr-hand-view.js?v=20261022-build654'; // the hand's ray, wrist menu, fingertips
+import { LABEL_HIDE_DEFAULT, normalizeLabelHide, gpuOcclusionActive, depthVoxelSize, boardVisible, GHOST_ALPHA, occludedPass } from './vr-depth.js?v=20261022-build654';
+import { brickOccupancy, writeBrickOccupancy } from './vr-brick-occupancy.js?v=20261022-build654';
+import { createProbeGate } from './measure-label.js?v=20261022-build654';
+import { sliceIndex, sliceRange, boxFromRange, createSegScan, segScanStart, segScanStep, segsSubset, segsFromUniforms, contentKeyChanged, KEY_LEN } from './vr-content-box.js?v=20261022-build654'; // the proxy box = the box of what can be drawn
+import { setRegionLabel, setRegionLabelOffset, voxelFromLocalVr, clampVoxel, labelLocal, offsetForLocal, vrVoxelStep, rectEdgePoint, leaderVisible, labelSegmentsShown } from './analysis-label.js?v=20261022-build654';
+import { createVrSelfCheck, selfCheckTexts } from './vr-self-check.js?v=20261022-build654'; // 詳細 > 自己診断 (automated frame-time scenarios)
+import { createScaleGuard, createFlapGuard, variantFallback } from './vr-flicker-guard.js?v=20261022-build654'; // flicker safety guard
+import { eyeMetrics, capFromPpv, nextCap, foveaRect, outsideFovea, foveaWorth, qualityText, FOVEA_K, CAP_MIN } from './vr-render-scale.js?v=20261022-build654'; // data-resolution render scale + offscreen foveation
+import { getMeasureStart, startMeasure, cancelMeasure, pickMeasureEnd, onMeasureStartChange, removeMeasurement, restoreMeasurements, measurementsOfPoint, seriesSpacing } from './measurements.js?v=20261022-build654';
+import { APP_BUILD } from './version.js?v=20261022-build654';
+import { wc, ww } from './ui-shell.js?v=20261022-build654';
+import { VOLUME_FWD, VOLUME_DOWN, MENU_OFFSET, HELP_OFFSET, HU_PANEL_OFFSET, EV_OFFSET, EV_WIDTH, EV_RES, MENU_WIDTH, HELP_WIDTH, HELP_RES, HIST_OFFSET, HIST_WIDTH, FOLLOW_ANGLE, FOLLOW_DIST } from './vr-layout.js?v=20261022-build654';
+import { onHistogramChange, getHistogramRange, getHistogramLog, setHistogramLog, setHistogramRange } from './histogram-ui.js?v=20261022-build654';
+import { createVrLabelHistogram, UNLABELED_COLOR, labelSlot, labelRegion } from './vr-label-histogram.js?v=20261022-build654';
+import { rangeRes } from './vr-histogram-layout.js?v=20261022-build654';
+import { getHuMode, setHuMode, HU_MODE_FILTERED, HU_MODE_RAW } from './effective-hu.js?v=20261022-build654';
+import { createVrHistogramPanel } from './vr-histogram-panel.js?v=20261022-build654';
+import { lightingGLSL, lightingVertexGLSL, materialVec, MATERIALS, materialKey } from './lighting.js?v=20261022-build654'; // one lighting model for the desktop volume, this VR / AR volume and the 3D-view meshes
 
 const BG=new THREE.Color(0.035,0.045,0.05);
 const BRICK=8;
@@ -859,16 +866,18 @@ function makeBackground(){
 // {type:'slider',x,y,w,h,value(0..1),text,set(v)}. The trigger presses a
 // button or drags a slider while held.: canvas size and width in
 // metres are parameters (the left-hand section panel uses a small one).
+// res = canvas pixels per layout pixel (the help / ev boards: HELP_RES): the widgets keep their W x H layout, the canvas is drawn res times finer
 const MENU_W=1024,MENU_H=1180;
-function makeMenu(W=MENU_W,H=MENU_H,widthM=0.5){
- const canvas=document.createElement('canvas');canvas.width=W;canvas.height=H;
+function makeMenu(W=MENU_W,H=MENU_H,widthM=0.5,res=1){
+ const canvas=document.createElement('canvas');canvas.width=Math.round(W*res);canvas.height=Math.round(H*res);
  const ctx=canvas.getContext('2d'),tex=new THREE.CanvasTexture(canvas);tex.colorSpace=THREE.SRGBColorSpace;
  const mesh=new THREE.Mesh(new THREE.PlaneGeometry(widthM,widthM*H/W),new THREE.MeshBasicMaterial({map:tex,transparent:true,toneMapped:false}));
  let widgets=[],hover=-1,draw=()=>[],dirty=true;
  const render=()=>{
-  ctx.clearRect(0,0,W,H);ctx.fillStyle='rgba(14,20,27,.94)';ctx.beginPath();ctx.roundRect(0,0,W,H,30);ctx.fill();
+  ctx.setTransform(res,0,0,res,0,0);ctx.clearRect(0,0,W,H);ctx.fillStyle='rgba(14,20,27,.94)';ctx.beginPath();ctx.roundRect(0,0,W,H,30);ctx.fill();
   ctx.textBaseline='middle';
   widgets.forEach((w,i)=>{
+   if(w.type==='draw'){ctx.save();try{w.draw(ctx)}catch(e){console.warn('[menu] draw widget',e)}ctx.restore();ctx.textBaseline='middle';return} // a widget that draws itself (the slide pictures and the tutorial's marks / pointers: tutorial-vr.js, tutorial-marks.js)
    if(w.type==='label'){ctx.fillStyle=w.color||'#cfe3f0';ctx.font=(w.bold?'bold ':'')+(w.size||30)+'px system-ui,sans-serif';ctx.textAlign='left';
     if(w.lines){w.lines.forEach((ln,k)=>ctx.fillText(ln,w.x,w.y+k*w.lh));return}
     ctx.fillText(w.text,w.x,w.y);return}
@@ -1229,7 +1238,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
  step('session');
  try{session=await navigator.xr.requestSession(ar?'immersive-ar':'immersive-vr',{optionalFeatures:['local-floor','hand-tracking']})}
  catch(e){if(gpu)gpuPrepared=gpu;else{renderer.dispose();renderer.domElement.remove()}throw e}
- running={session};step('in-session');
+ running={session};step('in-session');if(ar)emit('ar-start');else emit('vr-start');
  const scene=new THREE.Scene();scene.background=ar?null:BG.clone();
  const background=makeBackground();if(ar){background.visible=false;renderer.setClearColor(0x000000,0)}else scene.add(background);
  // AR only: in-session switch passthrough <-> "VR view" (opaque background drawn instead of the transparent clear; nothing else is touched). A new session starts as passthrough.
@@ -1251,7 +1260,10 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    stHeld:'Section: being moved',stFixed:'Section: fixed',stNone:'Grip to grab, both hands to scale',preparing:'Preparing VR volume… ',uploading:'Uploading the image to the GPU… (the view may pause for a few seconds)',compiling:'Preparing the renderer… (almost there)',failed:'VR failed: ',shotDone:'Screenshot taken (save it on the page after exit)',filtered:' filtered'};
  // the menu board starts closed (only the volume and the help board at launch); A/X long press or the ring's メニュー opens it as before.
  // 体験会モード: it starts open on the かんたん menu (tab 10: show / hide of the level's segments, the analysis labels, すべての設定 -> the full menu)
- const evMenu=eventModeOn();let evLabels=TRIGGER_AT_START==='label'; // the かんたん menu's trigger switch (event-mode.js): every VR / AR session starts in point mode, whatever the dataset or level (the board shows which one is on)
+ // the live tutorial = the switch is on AND its practice data (TUT_SAMPLE, the Lv0 data) is the one open; on other data the board is the normal help (+ the read-only guide)
+ const tutLive=tutorialModeOn()&&globalThis.__vrlOpenSample===TUT_SAMPLE;
+ const evMenu=eventModeOn()||tutLive;if(evMenu&&!(settings.help|0))settings.help=DEFAULTS.help; // a practice session shows the operation panel (right) and the mission panel from the start, whatever an old setting said
+ let evLabels=TRIGGER_AT_START==='label'; // the live tutorial opens the かんたん menu too (its ステップ4 / 5 use it; it is up from the start, never 「メニューを出して」).: the かんたん menu's trigger switch (event-mode.js): every VR / AR session starts in point mode, whatever the dataset or level (the board shows which one is on)
  const menu=makeMenu(MENU_W,MENU_H,MENU_WIDTH);menu.mesh.visible=evMenu;scene.add(menu.mesh);
  const ui={sliceClear:false,tab:evMenu?10:0,open:evMenu,status:L.preparing,fpsLine:'',sizeLine:'',flash:'',flashUntil:0,benchLine:'',qualityLine:''};
  const holder=new THREE.Group();holder.position.set(0,1.3,-VOLUME_FWD);scene.add(holder);
@@ -1269,7 +1281,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
  }
  // hand tracking (optional 'hand-tracking'; vr-hand-view.js). Every hand branch below is guarded by isHand(c.userData.source); a controller never takes one
  // the hand laser's mode lives in the device settings (app-settings.js handRay, shared with 設定 > 描画 on the page; localStorage vrl.settings.v1); read every frame, so a change applies at once
- const noHits={menu:null,help:null,hist:null,wheel:null,pwheel:null,undoBtn:null,hu:null,wrist:null}; // a hand whose laser is off (指差し, not pointing) hits nothing
+ const noHits={menu:null,help:null,hist:null,wheel:null,pwheel:null,undoBtn:null,hu:null,ev:null,wrist:null}; // a hand whose laser is off (指差し, not pointing) hits nothing
  const handRayMode=()=>normalizeHandRay(globalThis.__vrlSettings?.get?.('handRay')),setHandRayMode=v=>{try{globalThis.__vrlSettings?.set?.('handRay',normalizeHandRay(v))}catch{}};
  const handIn=createHandInput(THREE,{renderer,scene,controllers,ja,getHead:()=>head,rayMode:()=>handRayMode(),colorOf:c=>handColor(c),release:c=>c.userData.release?.(true),handInHolder:c=>handInHolder(c),sectionOn:()=>section.on,avail:id=>id==='undo'?wheelAvail('undo'):id==='add'?wheelAvail('section-add'):id==='secUp'||id==='secDown'?!!(section.on&&section.selected&&planes.includes(section.selected)):true,
   grab:(c,t)=>{if(t){gripStartNear(c,t);return true}if(c.userData.wristOn)return false;gripStart(c);return true},ungrab:c=>{if(c.userData.drag?.fist){endDrag(c);return}gripEnd(c)},near:(c,nm)=>nearGrabTarget(c,nm),busy:c=>!!(c.userData.drag||c.userData.lblDrag||histAxis===c||dragging?.c===c||huLine.isDragging())}); // phase 2: the fist = the grip (gripStart / gripEnd below); never starts while this hand drags something
@@ -1292,15 +1304,33 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
  // help board: the controls for the current state, front-right,
  // mirrored from the menu; follows lazily, or fixed, or hidden (settings.help);
  // no widgets, but the grip moves it like the menu
- // 体験会モード (event-mode.js): the chosen level's mission above the controls - the board grows by the mission block (same width,
- // so the text keeps its size); with the mode off or no level chosen evH is 0 and the board is as before
- const evLevel=activeEventLevel(),evText=evLevel?tr(evLevel.missionKey):'';
- const evLines=evText?(()=>{const c=document.createElement('canvas').getContext('2d');c.font='24px system-ui,sans-serif';return missionLines(evText,820-72,z=>c.measureText(z).width).slice(0,5)})():[],evH=evLines.length?64+evLines.length*32:0;
- const help=makeMenu(820,560+evH,HELP_WIDTH);help.mesh.visible=false;scene.add(help.mesh);
+ // 体験会モード (event-mode.js): the chosen level's mission.: on its OWN board (ev, below), no longer a block of the help board; the help board keeps its normal height.
+ // Shown while the mode is on and the chosen level has a mission text; not for Lv0 while the tutorial is on (Lv0 = the tutorial then). Without a mission there is no ev board at all.
+ // the board shows the level's slide as it is: its picture (tutorial-slides.js, docs/tutorial/slides/<lv>.webp) over the whole 16:9 board (tutorial-vr.js layoutLevelSlide);
+ // drawn when the picture arrives (until then its place is empty), then still. Not for Lv0 while the live tutorial runs.
+ const evLevel=activeEventLevel(),evSlide=evLevel&&!(evLevel.id==='lv0'&&tutLive)?levelSlide(evLevel.id):null;
+ const evPics=evSlide?createSlideImages({onLoad:()=>{if(ev){ev.refresh();ev.flush()}}}):null,evH=evSlide?levelBoardH(820):0;
+ // the help board is TAB_H taller than its page (PAGE_H = 560 px + the caption band under the slide): the strip under it holds the 手順一覧 | 詳細 tabs (tutorial-vr.js panelTabs)
+ const help=makeMenu(820,PAGE_H+TAB_H,HELP_WIDTH,HELP_RES);help.mesh.visible=false;scene.add(help.mesh);
+ const ev=evH?makeMenu(820,evH,EV_WIDTH,EV_RES):null;
+ if(ev){scene.add(ev.mesh);ev.mesh.visible=false;ev.onDraw(()=>layoutLevelSlide(evSlide,{W:820,getImage:evPics.get}).widgets);ev.refresh();ev.flush()} // static: drawn now and once more when the picture has loaded
+ let tutBad=false,sweepOn=false,tutPreview=null,tutMenuKey='',tutMenuRect=null; // tutMenuRect: where the step's button / knob is on the menu (menuTargetRect), for the 3D arrow over it; // sweepOn: the self-check's section sweep is running (it adds / toggles a plane itself: no tutorial signal)
+ const tutFail=e=>{if(!tutBad){tutBad=true;helpShow='list';console.warn('[tutorial] board error, falling back to the normal help board',e)}};
+ const lookV=new THREE.Vector3(),boardAngle=(mesh,placed)=>{if(!placed||!poseAt)return null;mesh.getWorldPosition(lookV);return horizAngleDeg(headGaze.x,headGaze.z,lookV.x-head.x,lookV.z-head.z)};
+ const makeGlow=(board,wM,hM)=>{const g=new THREE.Mesh(new THREE.PlaneGeometry(wM*1.07,hM*1.07),new THREE.MeshBasicMaterial({color:0xE8508F,transparent:true,opacity:0,toneMapped:false,depthWrite:false}));g.position.z=-0.003;g.visible=false;board.add(g);return g};
+ const glowHelp=makeGlow(help.mesh,HELP_WIDTH,HELP_WIDTH*(PAGE_H+TAB_H)/820),glowMenu=makeGlow(menu.mesh,MENU_WIDTH,MENU_WIDTH*MENU_H/MENU_W);
+ const ctlHints=createControllerHints(THREE,{controllers,isHand:src=>isHand(src)}),edgeArrow=createEdgeArrow(THREE),boardArrow=createBoardArrow(THREE,menu.mesh);scene.add(edgeArrow.mesh);
+ let tutVr=null;tutVr=tutLive?createTutorialVr({resetUserState,getSectionOn:()=>section.on,onMissionStart:id=>{if(id==='grip'&&smallForTutorial(holder.scale.x,realLongMm()))bringVolumeFront()},getMenuOpen:()=>ui.open,getLook:()=>({right:boardAngle(help.mesh,helpPlaced),left:boardAngle(menu.mesh,menuPlaced)}),getInput:()=>handIn.anyHand()?'hand':'ctrl',lang:ja?'ja':'en',onChange:()=>{if(tutVr)help.refresh()}}):null; // チュートリアル: the help board shows the carousel page (tutorial-vr.js); null = the board is as before
+ let helpShow=tutVr?'detail':'list'; // which tab of the help board is up
  const helpTarget=new THREE.Vector3();let helpMoving=false,helpPlaced=false,helpHeld=null,helpKey='';
  const computeHelpTarget=()=>helpTarget.copy(head).addScaledVector(headFwd,HELP_OFFSET.fwd).addScaledVector(headLeft,HELP_OFFSET.left).add(new THREE.Vector3(0,-HELP_OFFSET.down,0));
- const placeHelpNow=()=>{readHead();computeHelpTarget();help.mesh.position.copy(helpTarget);help.mesh.lookAt(head);helpPlaced=true;helpMoving=false};
+ // the mission board (ev): placed at EV_OFFSET;: it follows the head like the help board (settings.help 1), fixed otherwise; grip moves it, 正面に戻す (= every placeHelpNow) puts it back
+ const evTarget=new THREE.Vector3();let evPlaced=false,evHeld=null,evMoving=false;
+ const computeEvTarget=()=>{evTarget.copy(head).addScaledVector(headFwd,EV_OFFSET.fwd).addScaledVector(headLeft,EV_OFFSET.left);evTarget.y-=EV_OFFSET.down}; // straight ahead behind the volume, a little above the gaze (vr-layout.js EV_OFFSET)
+ const placeEvNow=()=>{if(!ev)return;readHead();computeEvTarget();if(evHeld){scene.attach(ev.mesh);evHeld=null}ev.mesh.position.copy(evTarget);ev.mesh.lookAt(head);evPlaced=true;evMoving=false};
+ const placeHelpNow=()=>{readHead();computeHelpTarget();help.mesh.position.copy(helpTarget);help.mesh.lookAt(head);helpPlaced=true;helpMoving=false;placeEvNow()};
  const helpHit=c=>{if(!help.mesh.visible||help.mesh.parent===holdOf(c))return null;setRay(c);return raycaster.intersectObject(help.mesh,false)[0]||null};
+ const evHit=c=>{if(!ev||!ev.mesh.visible||ev.mesh.parent===holdOf(c))return null;setRay(c);return raycaster.intersectObject(ev.mesh,false)[0]||null};
  // the HU line's live panel (huLine / huHits: made below, used only once the loop runs). Not a target while held by this hand or while a line is being stretched
  const huPanelHit=c=>{const p=huLine.panel;if(!p.visible||p.parent===holdOf(c)||huLine.isDragging())return null;setRay(c);huHits.length=0;p.raycast(raycaster,huHits);return huHits[0]||null};
  const histSlotKeys=()=>gpuSegmentOrder();
@@ -1344,7 +1374,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
  const histTargetOf=hit=>{histLocal.copy(hit.point);hist.board.worldToLocal(histLocal);return hist.axisTargetAt(histLocal.x,histLocal.y)};
  // while dragging, that hand's laser ends on the board's plane and hovers nothing behind it (3D, points, menu, rings): the controller
  // loop uses histAxisBd (reused) for that hand instead of its board hits, as the old histDragOut did
- const histAxisOut={distance:0.6},histAxisBd={menu:null,help:null,hist:histAxisOut,wheel:null,pwheel:null,undoBtn:null,hu:null};
+ const histAxisOut={distance:0.6},histAxisBd={menu:null,help:null,hist:histAxisOut,wheel:null,pwheel:null,undoBtn:null,hu:null,ev:null};
  const histAxisFollow=()=>{const c=histAxis;if(!c)return;setRay(c);hist.board.getWorldQuaternion(histQ);hist.board.getWorldPosition(histO);histN.set(0,0,1).applyQuaternion(histQ);histPlane.setFromNormalAndCoplanarPoint(histN,histO);
   if(raycaster.ray.intersectPlane(histPlane,histLocal)){histAxisOut.distance=raycaster.ray.origin.distanceTo(histLocal);hist.board.worldToLocal(histLocal);hist.moveAxisDrag(histLocal.x)}};
  const histAxisEnd=commit=>{if(!histAxis)return;histAxis=null;if(!commit){hist.cancelAxisDrag();return}const w=hist.endAxisDrag();if(w)setHistogramRange({mode:'manual',lo:w[0],hi:w[1]})};
@@ -1375,25 +1405,35 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
  // Nothing behind the disc is hit while the ray is inside it (menu / help / points / planes / volume).
  const ringHit=(c,ring)=>{if(!ring.mesh.visible)return null;setRay(c);const x=raycaster.intersectObject(ring.mesh,false)[0];if(!x||!x.uv)return null;const k=ring.slotFromUv(x.uv);return k===null&&!ring.inDisk(x.uv)?null:{distance:x.distance,slot:k}};
  // the nearest of the menu, the help board and the ring items along the ray wins; {menu,help,wheel,pwheel}
- const bhOut={menu:null,help:null,hist:null,wheel:null,pwheel:null,undoBtn:null,hu:null}; // reused (read at once by the caller, never kept)
+ const bhOut={menu:null,help:null,hist:null,wheel:null,pwheel:null,undoBtn:null,hu:null,ev:null}; // reused (read at once by the caller, never kept)
  const boardHits=c=>{
   const o=bhOut;o.menu=menuHit(c);o.help=helpHit(c);o.hist=histHit(c);o.wheel=ringHit(c,wheel);o.pwheel=ringHit(c,pointWheel);o.undoBtn=undoBtn.mesh.visible?(setRay(c),undoBtn.hit(raycaster)):null; // drawn without a depth test, like the rings: not hidden by tissue
   o.hu=huPanelHit(c); // the HU line's live panel (no depth test either)
+  o.ev=ev?evHit(c):null; // the mission board (depth tested like the help board)
   o.wrist=handIn.wristHit(c,raycaster,setRay); // the wrist menu (a hand's ray only; null for a controller)
   // the boards are depth tested, so tissue in front of a board hides it: a board the volume surface covers along the ray is not hit (no invisible buttons, the laser goes on to the tissue).
   // The rings are drawn without a depth test and stay hit. (the surface hit is marched only when a board is under the ray)
-  if(o.menu||o.help||o.hist){const tv=volumeHit(c)?.distance;if(!boardVisible(o.menu,tv))o.menu=null;if(!boardVisible(o.help,tv))o.help=null;if(!boardVisible(o.hist,tv))o.hist=null}
-  let bd=Infinity,bk=null;for(const k of ['menu','help','hist','wheel','pwheel','undoBtn','hu']){const x=o[k];if(x&&x.distance<bd){bd=x.distance;bk=k}}
-  for(const k of ['menu','help','hist','wheel','pwheel','undoBtn','hu'])if(k!==bk)o[k]=null;
+  if(o.menu||o.help||o.hist||o.ev){const tv=volumeHit(c)?.distance;if(!boardVisible(o.menu,tv))o.menu=null;if(!boardVisible(o.help,tv))o.help=null;if(!boardVisible(o.hist,tv))o.hist=null;if(!boardVisible(o.ev,tv))o.ev=null}
+  let bd=Infinity,bk=null;for(const k of ['menu','help','hist','wheel','pwheel','undoBtn','hu','ev']){const x=o[k];if(x&&x.distance<bd){bd=x.distance;bk=k}}
+  for(const k of ['menu','help','hist','wheel','pwheel','undoBtn','hu','ev'])if(k!==bk)o[k]=null;
   if(o.wrist){if(bk&&bd<o.wrist.distance)o.wrist=null;else if(bk)o[bk]=null} // the wrist menu takes part in the nearest-board choice
   return o};
  const HELP_LINE_PITCH=66; // 7 lines (the 断面 board too) on the 560 px board: the last one at 140 + 6 x 66 = 536
  help.onDraw(()=>{
+  // two tabs under the page, 手順一覧 (this board's normal help text) | 詳細 (the step slides: the live tutorial while the switch is on, a READ-ONLY preview while it is off). On: starts on 詳細; off: on 手順一覧
+  const tabs=tutBad?[]:panelTabs(helpShow,{act:id=>{if(id!==helpShow){helpShow=id;help.refresh()}}});
+  if(helpShow==='detail'&&!tutBad){
+   try{
+    if(tutVr)return [...tutVr.widgets({W:820,H:PAGE_H}),...tabs]; // an exception = the normal help text
+    tutPreview||=createSlideViewer({lang:ja?'ja':'en',onChange:()=>help.refresh()}); // the read-only operation guide (the deck's slides); made on the first press of 詳細 only (off: no cost before)
+    return [...tutPreview.widgets({W:820,H:PAGE_H}),...tabs];
+   }catch(e){tutFail(e)}
+  }
   const hx=handIn.anyHand()?handIn.texts:null,w=[],lines=hx?(section.on?hx.helpSec:hx.helpBasic).slice():section.on?L.helpSec.slice():L.helpBasic.slice(); // hands: pinch / wrist menu lines
   if(ui.open)lines[lines.length-1]=hx?(ui.tab===10?hx.helpMenuSimple:hx.helpMenu):L.helpMenu; // 体験会モード: the かんたん menu (tab 10): buttons and the slice-opacity slider
-  if(evH){w.push({type:'label',x:36,y:46,text:'Lv'+evLevel.lv+' '+tr(evLevel.nameKey)+' — '+tr('evMissionCap'),bold:true,size:28,color:'#ffd27a'});w.push({type:'label',x:36,y:90,text:'',lines:evLines,lh:32,size:24,color:'#ffe9b8'})}
-  w.push({type:'label',x:36,y:60+evH,text:L.helpT,bold:true,size:36,color:'#fff'});
-  lines.forEach((t,i)=>w.push({type:'label',x:36,y:140+evH+i*HELP_LINE_PITCH,text:'・'+t,size:30}));
+  w.push({type:'label',x:36,y:60,text:L.helpT,bold:true,size:36,color:'#fff'});
+  lines.forEach((t,i)=>w.push({type:'label',x:36,y:140+i*HELP_LINE_PITCH,text:'・'+t,size:30}));
+  w.push(...tabs);
   return w;
  });
  // the XR camera sits at the origin (floor height) until the first
@@ -1404,16 +1444,20 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
  let frameNo=0,poseAt=0,placePending=false;ui.placeLine='';
  // menu grab: grip while pointing at the menu moves it with the hand; released, it stays there (position becomes fixed)
  let menuHeld=null;
- const setMenuOpen=open=>{ui.open=open;menu.mesh.visible=open;if(open){placeMenuNow();ui.probeOnOpen=true}menu.refresh()}; // the 詳細 numbers are measured on the next frame after opening (not measured while closed)
- const bringVolumeFront=()=>{readHead();scene.attach(holder);grabbing.clear();twoHand=null;holder.position.copy(head).addScaledVector(headFwd,VOLUME_FWD).add(new THREE.Vector3(0,-VOLUME_DOWN,0));holder.quaternion.identity();holder.scale.setScalar(startHolderScale(realLongMm(),baseScale))}; // starts at 1x (real size); oversize: fitted to 0.30 m; unknown size: the old default fit
+ const setMenuOpen=open=>{if(open)emit('menu-open');else emit('menu-close');ui.open=open;menu.mesh.visible=open;if(open){placeMenuNow();ui.probeOnOpen=true}menu.refresh()}; // the 詳細 numbers are measured on the next frame after opening (not measured while closed)
+ const bringVolumeFront=()=>{readHead();scene.attach(holder);grabbing.clear();twoHand=null;grabN=0;grab1=null;const tut=!!tutVr&&!tutBad; // while the tutorial runs the volume is within reach and large enough to grab (vr-real-scale.js tutorialHolderScale); every other start is as before
+  holder.position.copy(head).addScaledVector(headFwd,tut?TUT_VOLUME_FWD:VOLUME_FWD).add(new THREE.Vector3(0,-(tut?TUT_VOLUME_DOWN:VOLUME_DOWN),0));holder.quaternion.identity();holder.scale.setScalar(tut?tutorialHolderScale(realLongMm()):startHolderScale(realLongMm(),baseScale))}; // starts at 1x (real size); oversize: fitted to 0.30 m; unknown size: the old default fit
  // grab: one hand moves/rotates (holder follows the controller); two hands
  // scale by the change in hand distance
- const grabbing=new Set();let twoHand=null;const tmpA=new THREE.Vector3(),tmpB=new THREE.Vector3();
+ const grabbing=new Set();let twoHand=null,grabN=0,grab1=null;const grabP=new THREE.Vector3(),grabQ=new THREE.Quaternion();const tmpA=new THREE.Vector3(),tmpB=new THREE.Vector3();
  const handDist=()=>{holdOf(controllers[0]).getWorldPosition(tmpA);holdOf(controllers[1]).getWorldPosition(tmpB);return tmpA.distanceTo(tmpB)};
  const regrab=()=>{
-  scene.attach(holder);twoHand=null;
-  if(grabbing.size===2)twoHand={d0:Math.max(handDist(),1e-3),s0:holder.scale.x};
-  else if(grabbing.size===1)holdOf([...grabbing][0]).attach(holder);
+  scene.attach(holder);if(twoHand&&scaleChanged(twoHand.sg,holder.scale.x))emit('scale');twoHand=null;
+  // tutorial signals: 'grab' when a grip takes the volume, 'grab-move' when a one-hand hold ends having moved / turned it (tutorial-signal.js poseMoved)
+  if(grab1&&poseMoved(grabP,grabQ,holder.position,holder.quaternion))emit('grab-move');grab1=null;
+  if(grabbing.size>grabN)emit('grab');grabN=grabbing.size;
+  if(grabbing.size===2)twoHand={d0:Math.max(handDist(),1e-3),s0:holder.scale.x,sg:holder.scale.x};
+  else if(grabbing.size===1){grabP.copy(holder.position);grabQ.copy(holder.quaternion);grab1=true;holdOf([...grabbing][0]).attach(holder)}
  };
  const MAX_PLANES=MAX_SECTION_PLANES,LONG_PRESS=600; // 10 planes (4 before); PLANE_COLORS: vr-section-frame.js
  // thumbstick scroll: world m/s along the selected plane's normal at full deflection
@@ -1525,7 +1569,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
   if(section.selected!==pl){section.selected=pl;pulse(c,HAPTIC.select.amp,HAPTIC.select.ms)}
   const fl=sectionFollowStart({p0:hp.p,q0:hp.q,c0,Qp0});
   c.userData.drag={pl,rel:fl.rel,Qrel:fl.Qrel,wq0:wristQ(c),Q0:Qp0,volTouched:false}; // volTouched = a grip / two-hand gesture moved the volume during the drag (no throw then).: wq0 (hands): the wrist at the grab, Q0 the section's turn then
-  pr.consumed=true; // a press that became a drag never records / selects on release
+  emit('section-drag');pr.consumed=true; // a press that became a drag never records / selects on release
   menu.refresh();
  };
  const updatePress=(c,now)=>{
@@ -1606,7 +1650,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
  // already checked the priority and the thumbstick gate); null: the menu button, any controller whose laser is on a section (the pressing one
  // points at the menu). Nothing is recorded in 断面 without a section, or when no laser meets a section (表面: tissue surface) inside the volume (never a clamped or guessed place).
  const FRAME_HIDE_MS=300,framesHidden=()=>controllers.some(x=>x.userData.hideFrames&&(!!x.userData.source?.gamepad||isHand(x.userData.source))); // a held thumbstick click (a hand: the empty-space pinch held on the left hand) hides the section frames (see the controller loop)
- const toggleSliceClear=c=>{ui.sliceClear=!ui.sliceClear;pulse(c,0.4,40);sliceToast.set(L.sliceT+(ui.sliceClear?L.sliceClear:Math.round(settings.sliceOpacity*100)+'%'));sliceToast.until=performance.now()+SLICE_TOAST_MS;if(sliceToast.mesh.parent!==c)c.add(sliceToast.mesh);sliceToast.mesh.visible=true;menu.refresh()};
+ const toggleSliceClear=c=>{ui.sliceClear=!ui.sliceClear;pulse(c,0.4,40);sliceToast.set(L.sliceT+(ui.sliceClear?L.sliceClear:Math.round(settings.sliceOpacity*100)+'%'));sliceToast.until=performance.now()+SLICE_TOAST_MS;if(sliceToast.mesh.parent!==c)c.add(sliceToast.mesh);sliceToast.mesh.visible=true;menu.refresh();emit('slice-toggle');if(ui.sliceClear)emit('slice-clear')}; // slice-toggle = every switch (tutorial ステップ5)
  // the empty-space pinch of a hand (hands only; vr-hand.js EMPTY_PINCH). "Empty" = the laser hits nothing interactive (resolveTriggerTarget: 'empty' / 'none': no point, label,
  // frame, tissue, board, ring or wrist menu). RIGHT hand = the B/Y button (c.userData.vB is read by the B/Y code of the controller loop: short = sections shown / hidden, long = add one, the same
  // functions and progress ring); LEFT hand held FRAME_HIDE_MS = the thumbstick click's hold (the frames hidden while held; its short click, the slice transparent, is the double pinch below).
@@ -1630,7 +1674,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
   if(!c.userData.empOn)return;const e=c.userData.emp,rk=c.userData.res?.kind;
   if(!c.userData.press||c.userData.drag||c.userData.lblDrag||!isEmptyKind(rk)||handIn.grabbing(c)||handIn.wristShown){empStop(c,true);return}
   holdOf(c).getWorldPosition(empP);empQ.set(empP.x-e.x,empP.y-e.y,empP.z-e.z);if(empQ.length()>EMPTY_PINCH.moveM){empStop(c,true);return}
-  if(!e.right&&!e.hid&&now-e.t0>=FRAME_HIDE_MS){e.hid=true;c.userData.hideFrames=true;pulse(c,0.3,25)}
+  if(!e.right&&!e.hid&&now-e.t0>=FRAME_HIDE_MS){e.hid=true;c.userData.hideFrames=true;emit('frame-hide');pulse(c,0.3,25)}
  };
  const flashMsg=(t,ms=2500)=>{ui.flash=t;ui.flashUntil=performance.now()+ms;menu.refresh()};
  const pulseTwice=c=>{pulse(c,0.35,18);setTimeout(()=>pulse(c,0.35,18),90)};
@@ -1645,7 +1689,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
   if(hit.plane!==undefined&&!sectionTissue(hit))return null;
   const rec=recordVrPoint({voxel:hit.voxel,series:vrFp,language:ja?'ja':'en'});
   if(!rec)return null;
-  undo.push({type:'add',id:rec.id});pulse(c,HAPTIC.record.amp,HAPTIC.record.ms);flashMsg(L.ptDone+rec.text+' · i '+hit.voxel.i+' · j '+hit.voxel.j+' · k '+hit.voxel.k,4000);return rec;
+  undo.push({type:'add',id:rec.id});emit('point-record');pulse(c,HAPTIC.record.amp,HAPTIC.record.ms);flashMsg(L.ptDone+rec.text+' · i '+hit.voxel.i+' · j '+hit.voxel.j+' · k '+hit.voxel.k,4000);return rec;
  };
  const selectPoint=(c,id)=>{vpSel=vpSel===id?null:id;pulse(c,HAPTIC.select.amp,HAPTIC.select.ms);menu.refresh()}; // one pulse (was two)
  const commentStore={getComments,removeComment,restoreComment};
@@ -1660,7 +1704,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
  const undoLast=()=>{
   const op=undo.pop();if(!op){flashMsg(L.undoNone);return false}
   if(!applyUndo(op,undoStore)){flashMsg(L.undoFail);return false}
-  vpSel=op.type==='add'?null:op.type==='delete'?op.c.id:op.type.startsWith('measure')?vpSel:op.id;flashMsg(L.undoDone);return true;
+  vpSel=op.type==='add'?null:op.type==='delete'?op.c.id:op.type.startsWith('measure')?vpSel:op.id;flashMsg(L.undoDone);emit('undo');return true;
  };
  // 体験会モード: the かんたん menu's 「最初の状態に戻す」 (event-mode.js resetPress: a second press within RESET_ARM_MS), IN PLACE: the session stays, nothing is decoded or uploaded again.
  // The page side (app.js -> data-load.js restoreProjectAnnotations) puts the project file's points / distances / pinned labels, the segments' visibility and the CT window back and empties the HU choice, histogram range and
@@ -1674,7 +1718,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
   undo.clear();vpSel=null;cancelMeasure();
   huLine.setArmed(false,true);huLine.clear();setHistOpen(false);hist.invalidate();
   evLabels=TRIGGER_AT_START==='label';vrWindow.c=+wc.value||0;vrWindow.w=Math.max(1,+ww.value||1);ui.anPage=0;
-  ui.sliceClear=false;sliceToast.until=0;sliceToast.mesh.visible=false;resetEventViewSettings(settings);saveSettings(settings);if(menuHeld){scene.attach(menu.mesh);menuHeld=null}if(helpHeld){scene.attach(help.mesh);helpHeld=null}
+  ui.sliceClear=false;sliceToast.until=0;sliceToast.mesh.visible=false;resetEventViewSettings(settings);saveSettings(settings);if(menuHeld){scene.attach(menu.mesh);menuHeld=null}if(helpHeld){scene.attach(help.mesh);helpHeld=null}if(evHeld){scene.attach(ev.mesh);evHeld=null}
   initialVrModes();bringVolumeFront();ui.open=true;menu.mesh.visible=true;ui.tab=10;placeMenuNow();placeHelpNow();placeHuNow();
   flashMsg(tr('evResetDone'),3500);return req.detail.done;
  };
@@ -1765,7 +1809,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
  let snFrame; // the note is judged once per frame for the cards (reset at the start of the label block of the frame loop)
  const spacingNoteF=()=>snFrame!==undefined?snFrame:(snFrame=spacingNote());
  const drawLabel=(lb,hit,faint,lit=false)=>{
-  const r=hit.id?regionList[hit.id-1]:null,sn=r?spacingNoteF():null,seg=tr(hit.key)||hit.key,hc=lb.hand?handColor(lb.hand):0,key=(r?hit.id+'r'+r.rid:'n'+hit.key)+(faint?'f':'p')+hc+(lit?'L':'')+(sn?'w'+language:'');if(lb.key===key)return;lb.key=key;
+  const r=hit.id?regionList[hit.id-1]:null,sn=r?spacingNoteF():null,seg=tr(hit.key)||hit.key,hc=lb.hand?handColor(lb.hand):0,key=(r?hit.id+'r'+r.rid:'n'+hit.key)+(faint?'f':'p')+hc+(lit?'L':'')+(sn?'w'+language:'');if(lb.key===key)return;lb.key=key;if(r&&faint)emit('label-show'); // only the hover card (faint) counts: a pinned card redrawn on re-entry does not
   const ctx=lb.ctx;ctx.clearRect(0,0,512,154);ctx.fillStyle='rgba(17,23,27,0.92)';ctx.beginPath();ctx.roundRect(4,4,504,146,26);ctx.fill();
   if(lb.hand){ctx.strokeStyle='#'+hc.toString(16).padStart(6,'0');ctx.lineWidth=6;ctx.stroke()}else if(lit){ctx.strokeStyle='#ffffff';ctx.lineWidth=8;ctx.stroke()}
   ctx.textBaseline='middle';ctx.fillStyle='#eef5f8';
@@ -1850,7 +1894,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
   if(c){c.getWorldPosition(pl.obj.position);tmpB.set(0,0,-1).transformDirection(c.matrixWorld);pl.obj.position.addScaledVector(tmpB,0.12)}
   else holder.getWorldPosition(pl.obj.position);
   tmpA.subVectors(head,pl.obj.position).normalize();pl.obj.quaternion.setFromUnitVectors(new THREE.Vector3(1,0,0),tmpA);pl.obj.scale.setScalar(1);
-  holder.attach(pl.obj);pl.obj.scale.setScalar(planeFrameLocalScale(holder.scale.x));chooseSide(pl);section.on=true;section.selected=pl;planes.forEach(p=>{p.obj.visible=true});refreshHandles();menu.refresh();return pl;
+  holder.attach(pl.obj);pl.obj.scale.setScalar(planeFrameLocalScale(holder.scale.x));chooseSide(pl);section.on=true;section.selected=pl;planes.forEach(p=>{p.obj.visible=true});refreshHandles();menu.refresh();if(!sweepOn)emit('section-add');return pl;
  };
  const detachPlane=pl=>{for(const c of controllers){if(c.userData.drag?.pl===pl)c.userData.drag=null;const pr=c.userData.press;if(pr&&pr.res?.ref?.pl===pl)pr.res={kind:'none',ref:null};if(pr&&pr.dragPl===pl)pr.dragPl=null}const i=planes.indexOf(pl);if(i>=0)planes.splice(i,1);if(section.selected===pl)section.selected=planes[planes.length-1]||null;if(!planes.length)section.on=false;refreshHandles();menu.refresh()}; // out of the list (clip uniforms, numbers) but not disposed
  const removePlane=pl=>{detachPlane(pl);disposePlane(pl)};
@@ -1862,12 +1906,12 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
   scene.attach(pl.obj);pl.obj.visible=true;pl.glow.visible=false;pl.arrow.visible=false;pl.mat.depthTest=false;pl.handle.material.depthTest=false;pl.mat.opacity=1;pl.handle.material.opacity=1;
   flying.push({pl,v:capVelocity(v),age:0});
  };
- const showUndoBoard=(c,n)=>{
-  if(c){c.getWorldPosition(tmpFv)}else{readHead();tmpFv.copy(head).addScaledVector(headFwd,0.45);tmpFv.y-=0.12} // no hand (the 断面 tab's button): in front of the face, nearer than the menu (0.78 m) and the volume (0.65 m)
+ const showUndoBoard=(c,n,front=false)=>{
+  if(c&&!front){c.getWorldPosition(tmpFv)}else{readHead();tmpFv.copy(head).addScaledVector(headFwd,0.45);tmpFv.y-=0.12} // no hand (the 断面 tab's button), or: deleted out of view (the hand is behind the shoulder): in front of the face, nearer than the menu (0.78 m) and the volume (0.65 m)
   readHead();const pos=undoButtonPlace(tmpFv,head);undoAt={x:pos.x,y:pos.y,z:pos.z};
   undoBtn.show(pos,head,tr('vrSecUndo'),tr('vrSecDeletedShort').replace('{n}',n));
  };
- const deleteSection=(pl,{c=null,vel=null}={})=>{
+ const deleteSection=(pl,{c=null,vel=null,front=false}={})=>{
   const i=planes.indexOf(pl);if(i<0)return false;
   // the saved position is where a normal release would have left it (snapSection: the centre brought back into the volume box); the flying frame itself keeps its current place
   const wasSel=section.selected===pl,rest=vrHalfExt?snapPlaneCenterIntoBox(pl.obj.position,qRot({x:pl.obj.quaternion.x,y:pl.obj.quaternion.y,z:pl.obj.quaternion.z,w:pl.obj.quaternion.w},{x:1,y:0,z:0}),vrHalfExt):pl.obj.position;
@@ -1875,7 +1919,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
   detachPlane(pl);
   if(wasSel)section.selected=planes[Math.min(i,planes.length-1)]||null; // the neighbour takes over the selection (detachPlane took the last one)
   if(vel)startFly(pl,vel);else disposePlane(pl);
-  secUndo.push(snap,performance.now());showUndoBoard(c,i+1);
+  secUndo.push(snap,performance.now());showUndoBoard(c,i+1,front);
   flashMsg(tr('vrSecDeleted').replace('{n}',i+1),FLING_UNDO_MS);
   if(c)pulse(c,HAPTIC.ringConfirm.amp,HAPTIC.ringConfirm.ms);
   menu.refresh();return true;
@@ -1907,13 +1951,25 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
   flingDbg.show(flingDebugLines(d,ja),!!d.fling,p,head,performance.now(),FLING_DEBUG_MS);
   try{console.info('[vr fling]',JSON.stringify({...d,at:{x:+at.x.toFixed(3),y:+at.y.toFixed(3),z:+at.z.toFixed(3)}}))}catch{}
  };
+ // the frame's 4 corners + centre (world) against the XR eyes' frustums (vr-section-frame.js frameOutOfView, 10 % margin); no XR eye = never out of view
+ // asked EVERY FRAME while a section is dragged (the drag loop below feeds dg.oov, vr-section-frame.js createOutOfViewTracker): out of view and >= 0.35 m from the
+ // head; the release deletes only after 200 ms of that without a break. No allocation per frame (the eye matrices go into two fixed arrays).
+ const oovPts=[0,1,2,3,4].map(()=>new THREE.Vector3()),oovM=new THREE.Matrix4(),oovEyes=[new Array(16).fill(0),new Array(16).fill(0)],oovC=new THREE.Vector3();
+ const sectionOutOfView=pl=>{
+  const xc=renderer.xr.getCamera(),cams=xc?.cameras?.length?xc.cameras:(xc?[xc]:[]);if(!cams.length)return false;
+  const h=0.12;[[0,-h,-h],[0,h,-h],[0,h,h],[0,-h,h],[0,0,0]].forEach((q,i)=>{oovPts[i].set(q[0],q[1],q[2]);pl.obj.localToWorld(oovPts[i])}); // square(h) of makePlane
+  const n=Math.min(cams.length,2);for(let i=0;i<n;i++){const k=cams[i];oovM.multiplyMatrices(k.projectionMatrix,k.matrixWorldInverse);for(let j=0;j<16;j++)oovEyes[i][j]=oovM.elements[j]}
+  if(!frameOutOfView(oovPts,n===2?oovEyes:[oovEyes[0]]))return false;
+  xc.getWorldPosition(oovC);return outOfViewNow(true,oovPts[4].distanceTo(oovC)); // the centre's distance from the head
+ };
  const tryFling=c=>{
   const dg=c.userData.drag,fv=c.userData.fv;if(!dg||!fv||!planes.includes(dg.pl))return false;
   const now=performance.now();readHead();dg.pl.obj.getWorldPosition(tmpFv);holder.getWorldPosition(tmpFc);
-  const m=fv.measure(now),r=flingDecision({v:m.v,from:tmpFv,center:tmpFc,head,blocked:!!dg.volTouched||!!twoHand||grabbing.size>0});
+  const blocked=!!dg.volTouched||!!twoHand||grabbing.size>0,m=fv.measure(now);let r=flingDecision({v:m.v,from:tmpFv,center:tmpFc,head,blocked});
+  if(!r.fling&&!blocked&&outOfViewRelease(dg.oov,now))r={...r,fling:true,reason:'out-of-view'}; // the whole frame out of view (>= 0.35 m from the head) for >= 200 ms up to the release = deleted (same exclusions as the throw)
   if(flingDebugOn())showFlingDebug({...r,n:m.n,spanMs:m.spanMs,ageMs:m.ageMs,why:m.why,hand:c.userData.fvHand?.measure(now).v?.speed??null},tmpFv); // every release, deleted or not
   if(!r.fling)return false;
-  c.userData.drag=null;return deleteSection(dg.pl,{c,vel:m.v});
+  c.userData.drag=null;return deleteSection(dg.pl,{c,vel:m.v,front:r.reason==='out-of-view'});
  };
  // snap: the selected plane onto a volume axis, frame edges along the other two axes.
  // axis 0 axial (normal = volume z), 1 coronal (y), 2 sagittal (x); holder space = volume object space.
@@ -1933,7 +1989,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
  const planeAxis=pl=>{if(!pl)return -1;const n=normalInHolder(pl,tmpNh);for(let i=0;i<3;i++)if(Math.abs(n.dot(AXES[i]))>0.9998)return i;return -1};
  const setSection=on=>{
   if(on&&!planes.length){addPlane();return}
-  section.on=on;if(!on)endAllDrags();planes.forEach(p=>{p.obj.visible=on});menu.refresh();
+  section.on=on;if(!on)endAllDrags();planes.forEach(p=>{p.obj.visible=on});menu.refresh();if(!sweepOn){emit('section-toggle');if(on)emit('section-add')} // a frame that was only hidden and is shown again counts as 'a section frame appeared' (the tutorial's ステップ3 / 5 wait for it)
  };
  // long-press progress ring shown on the pressing controller
  const ringGeo=new THREE.BufferGeometry().setFromPoints(Array.from({length:33},(_,i)=>new THREE.Vector3(Math.cos(i/32*Math.PI*2)*0.025,Math.sin(i/32*Math.PI*2)*0.025,0)));
@@ -1945,6 +2001,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
  const gripStart=c=>{
    if(ui.open&&!menuHeld&&boardHits(c).menu){holdOf(c).attach(menu.mesh);menuHeld=c;menuMoving=false;settings.menuMode=1;saveSettings(settings);pulse(c);menu.refresh();return}
    if(!helpHeld&&c.userData.helpHit){holdOf(c).attach(help.mesh);helpHeld=c;helpMoving=false;settings.help=2;saveSettings(settings);pulse(c);menu.refresh();return}
+   if(!evHeld&&c.userData.evHit){holdOf(c).attach(ev.mesh);evHeld=c;pulse(c);return} // the mission board moves with the hand, not the volume behind it
    if(!histHeld&&c.userData.histHit){holdOf(c).attach(hist.group);histHeld=c;pulse(c);return} // the grip moves the histogram board (as the help board); never takes the volume
    if(!huHeld&&boardHits(c).hu){holdOf(c).attach(huLine.panel);huHeld=c;pulse(c);return} // the HU live panel moves with the hand, not the volume behind it
    grabbing.add(c);regrab(); // the grip always moves the volume (it never takes a section)
@@ -1952,6 +2009,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
  const gripEnd=c=>{
    if(menuHeld===c){scene.attach(menu.mesh);menuHeld=null;readHead();menu.mesh.lookAt(head);pulse(c,0.2);return}
    if(helpHeld===c){scene.attach(help.mesh);helpHeld=null;readHead();help.mesh.lookAt(head);pulse(c,0.2);return}
+   if(evHeld===c){scene.attach(ev.mesh);evHeld=null;readHead();ev.mesh.lookAt(head);pulse(c,0.2);return}
    if(histHeld===c){scene.attach(hist.group);histHeld=null;readHead();hist.group.lookAt(head);pulse(c,0.2);return}
    if(huHeld===c){scene.attach(huLine.panel);huHeld=null;readHead();huLine.panel.lookAt(head);pulse(c,0.2);return}
    if(grabbing.delete(c))regrab();
@@ -1964,6 +2022,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    if(wheelOwner===c)closeWheel();if(pw?.c===c)closePointWheel();
    if(histAxis===c)histAxisEnd(false); // a drag by a hand that went away is dropped (the range stays as it was)
    if(histHeld===c){scene.attach(hist.group);histHeld=null} // a board held by a hand that went away stays where it was
+   if(evHeld===c){scene.attach(ev.mesh);evHeld=null}
    if(huHeld===c){scene.attach(huLine.panel);huHeld=null} // the same for the HU line's live panel
    // everything else this input held is released too: a volume held by a lost controller / hand stayed attached to it and jumped on reconnect
    if(grabbing.delete(c))regrab();if(menuHeld===c){scene.attach(menu.mesh);menuHeld=null}if(helpHeld===c){scene.attach(help.mesh);helpHeld=null}if(dragging?.c===c){dragging=null;saveSettings(settings)}
@@ -1996,7 +2055,8 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
     const t=histTargetOf(bd.hist);
     if(t==='auto'){setHistogramRange({mode:'auto'});pulse(c)}else if(t&&!histAxis&&hist.startAxisDrag(t,histLocal.x)){histAxis=c;histAxisOut.distance=bd.hist.distance;pulse(c)}
     return}
-   if(bd.help||bd.hu)return; // the HU live panel has no buttons (no line start). A press on it or the help board does nothing and does not reach what is behind it
+   if(bd.help){const i=help.hit(bd.help.uv);if(i>=0){help.press(i);pulse(c)}return} // the tutorial's buttons;: and the 手順一覧 | 詳細 tabs (with the tutorial off too)
+   if(bd.hu||bd.ev)return; // the HU live panel has no buttons (no line start). A press on it or the help board does nothing and does not reach what is behind it
    if((bd.wheel||bd.pwheel)&&wheelOwner!==c&&pw?.c!==c)return; // blank part of a ring disc, not this hand's ring: nothing, and it does not pass through
    const r0=c.userData.res,res=r0&&r0.kind!=='board'?r0:{kind:'none',ref:null},now=performance.now(),hp=handInHolder(c);
    // this hand's ring is open: the press confirms the lit item, or only closes the ring
@@ -2058,6 +2118,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
   if(help.mesh.visible&&!helpHeld&&help.mesh.parent!==mine)o[1].d=boardDist(help.mesh);
   if(hist.isOpen&&!histHeld&&hist.group.parent!==mine)o[2].d=boardDist(hist.board);
   if(huLine.panel.visible&&!huHeld&&huLine.panel.parent!==mine&&!huLine.isDragging())o[3].d=boardDist(huLine.panel);
+  if(ev&&ev.mesh.visible&&!evHeld&&ev.mesh.parent!==mine)o[6].d=boardDist(ev.mesh); // the mission board (NEAR_KINDS[6])
   if(vrHalfExt&&section.on){
    for(const pl of planes){
     if(draggedBy(pl,c))continue;
@@ -2075,7 +2136,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
   const hand=c.userData.source?.handedness||null;if(hand!==pl.hand){pl.hand=hand;drawHandle(pl,planes.indexOf(pl))}
   if(section.selected!==pl)section.selected=pl;
   const fl=sectionFollowStart({p0:hp.p,q0:hp.q,c0,Qp0});
-  c.userData.drag={pl,rel:fl.rel,Qrel:fl.Qrel,volTouched:false,fist:true}; // the same drag record as a pinch's (glow, status, draggedBy, snap on release); fist: the palm anchor drives it
+  emit('section-drag');c.userData.drag={pl,rel:fl.rel,Qrel:fl.Qrel,volTouched:false,fist:true}; // the same drag record as a pinch's (glow, status, draggedBy, snap on release); fist: the palm anchor drives it
   pulse(c,HAPTIC.select.amp,HAPTIC.select.ms);menu.refresh();return true;
  };
  const updateFistDrag=c=>{
@@ -2091,6 +2152,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    case'help':if(!helpHeld){holdOf(c).attach(help.mesh);helpHeld=c;helpMoving=false;settings.help=2;saveSettings(settings);pulse(c);menu.refresh();return}break;
    case'hist':if(!histHeld){holdOf(c).attach(hist.group);histHeld=c;pulse(c);return}break;
    case'hu':if(!huHeld){holdOf(c).attach(huLine.panel);huHeld=c;pulse(c);return}break;
+   case'ev':if(!evHeld){holdOf(c).attach(ev.mesh);evHeld=c;pulse(c);return}break;
    case'section':if(startFistSection(c,t.ref))return;break;
    case'volume':grabbing.add(c);regrab();return;
   }
@@ -2173,7 +2235,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    case'snap-sagittal':snapPlane(section.selected,2);break;
    case'section-clip':{const sp=section.selected;if(sp){sp.cut=!sp.cut;if(sp.cut&&settings.cut===2)chooseSide(sp);menu.refresh()}break}
    case'section-flip':flipPlane(section.selected);break;
-   case'home':bringVolumeFront();placeMenuNow();placeHelpNow();if(hist.isOpen)placeHistNow();placeHuNow();break;
+   case'home':emit('home');bringVolumeFront();placeMenuNow();placeHelpNow();if(hist.isOpen)placeHistNow();placeHuNow();break;
    case'screenshot':shotRequested=true;break;
    case'menu':setMenuOpen(!ui.open);break;
    case VIEW_TOGGLE_ID:toggleView(null);break; // confirmWheel already pulsed
@@ -2198,7 +2260,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
  const endMeasureTap=(c,id)=>{
   if(!id){cancelMeasure();flashMsg(L.ptDistCancel,2000);return}
   const r=pickMeasureEnd(id);
-  if(r.kind==='created'){undo.push({type:'measure-add',id:r.m.id});pulse(c,HAPTIC.measureEnd.amp,HAPTIC.measureEnd.ms);flashMsg(L.ptDistDone,3500)}
+  if(r.kind==='created'){undo.push({type:'measure-add',id:r.m.id});emit('measure-done');pulse(c,HAPTIC.measureEnd.amp,HAPTIC.measureEnd.ms);flashMsg(L.ptDistDone,3500)}
   else if(r.kind==='existed'){pulse(c,HAPTIC.measureEnd.amp,HAPTIC.measureEnd.ms);flashMsg(L.ptDistExists,3000)}
   else if(r.kind==='same')flashMsg(L.ptDistSame,2500); // no vibration: nothing was confirmed (still armed)
   else if(r.kind==='refused')flashMsg(L.ptDistRefused,3000);
@@ -2352,8 +2414,8 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
   // ray probe for the self-check (vr-self-check.js probeAfter): taken on the next frame (measureSamples: a 48×48 diag-5 render read back synchronously), resolved one frame later
   probe:()=>new Promise(res=>{if(!mesh||!material||!rayMesh)return res(null);probeReq={res,stage:0,out:null}}),
   sectionSweep:(()=>{let tmp=null,pl=null,base=null,wasOn=false;return{
-   begin:()=>{if(!material||!vrHalfExt)return null;wasOn=section.on;tmp=planes.length<MAX_PLANES?addPlane(null,planes.length===0):null;pl=tmp||planes[0];if(!pl)return null;base=pl.obj.position.clone();return{set:u=>{tmpB.set(1,0,0).applyQuaternion(pl.obj.quaternion);pl.obj.position.copy(base).addScaledVector(tmpB,u*0.8*vrHalfExt[0])}}},
-   end:()=>{if(pl&&!tmp)pl.obj.position.copy(base);if(tmp)removePlane(tmp);if(!wasOn&&planes.length)setSection(false);tmp=pl=null}}})(),
+   begin:()=>{if(!material||!vrHalfExt)return null;sweepOn=true;wasOn=section.on;tmp=planes.length<MAX_PLANES?addPlane(null,planes.length===0):null;pl=tmp||planes[0];if(!pl){sweepOn=false;return null}base=pl.obj.position.clone();return{set:u=>{tmpB.set(1,0,0).applyQuaternion(pl.obj.quaternion);pl.obj.position.copy(base).addScaledVector(tmpB,u*0.8*vrHalfExt[0])}}},
+   end:()=>{if(pl&&!tmp)pl.obj.position.copy(base);if(tmp)removePlane(tmp);if(!wasOn&&planes.length)setSection(false);tmp=pl=null;sweepOn=false}}})(),
   renderToggle:(()=>{let sv={};return{begin:()=>{sv={...segMode}},set:on=>{for(const k in sv)segMode[k]=sv[k]===2?2:on?1:sv[k]},end:()=>{Object.assign(segMode,sv)}}})()}});
  selfCheck.env.histogram={isOpen:()=>hist.isOpen,open:()=>setHistOpen(true),close:()=>setHistOpen(false),forceCompute:histForce,busy:()=>labelHist.busy}; // ヒストグラム scenario (vr-histogram-panel.js)
  // HU線 scenario (vr-hu-line.js): the synthetic laser (huSynth) stretches a line across the middle of the data (20 % -> 80 % of the columns and rows,
@@ -2387,22 +2449,23 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    // loaded data, 断面, the mode switch (ポイントモード / 解析モード, only with analysis results), the analysis results (volumes), 正面に戻す / 元に戻す / すべての設定 / VR・AR 終了.
    // No advanced settings here.
    const act=SEGMENT_PRESET_ORDER.filter(k=>segAvail(segmentState[k])),keys=simpleMenuSegments(act),sn=spacingNote(),hasRes=regionList.length>0;
-   const goHome=()=>{bringVolumeFront();placeMenuNow();placeHelpNow();if(hist.isOpen)placeHistNow();placeHuNow()};
-   const acts={section:v=>setSection(v),'trigger:point':()=>{evLabels=false},'trigger:label':()=>{evLabels=true},undo:()=>{undoLast()},home:goHome,reset:pressReset,all:()=>{ui.tab=0},exit:()=>session.end()};
-   for(const key of keys)acts['seg:'+key]=v=>{segMode[key]=v?((segMode[key]|0)===2?0:segMode[key]|0):2};
+   const goHome=()=>{emit('home');bringVolumeFront();placeMenuNow();placeHelpNow();if(hist.isOpen)placeHistNow();placeHuNow()};
+   const acts={section:v=>setSection(v),'trigger:point':()=>{evLabels=false},'trigger:label':()=>{evLabels=true;emit('trigger-label')},undo:()=>{undoLast()},home:goHome,reset:pressReset,all:()=>{ui.tab=0},exit:()=>session.end()};
+   for(const key of keys)acts['seg:'+key]=v=>{emit('seg-toggle');const was=segMode[key]|0;segMode[key]=v?(was===2?0:was):2;if(v&&was===2)emit('seg-show');else if(!v&&was!==2)emit('seg-hide')}; // seg-hide / seg-show = the tissue really went hidden / shown (tutorial ステップ4)
    const simple=simpleMenuLayout({segments:keys.map(k=>({key:k,name:tr(k),color:segmentState[k].color,on:segMode[k]!==2})),sectionOn:section.on,sliceOpacity:settings.sliceOpacity,trigger:{show:triggerModeRow(hasRes),label:evLabelOn()},
     results:regionList.map(r=>({hex:'#'+r.color.toString(16).padStart(6,'0'),name:String(r.rid)+'. '+r.segmentKeys.map(k2=>tr(k2)).join('+'),text:vrVolumeText(r.mm3,sn)})),total:(sn?sn.mark+' ':'')+regionList.reduce((a,r)=>a+r.mm3,0).toFixed(2)+' mm³',resetArmed:resetArmed(ui.resetUntil||0,performance.now()), // 元に戻す is always pressable: with nothing to undo it only says so (undoLast)
     text:{show:tr('evShow'),hide:tr('evHide'),section:L.sec,sliceOpacity:L.sl,trigger:tr('evMode'),trigPoint:tr('evModePoint'),trigLabel:tr('evModeAnalysis'),trigHintPoint:tr('evModeHintPoint'),trigHintLabel:tr('evModeHintAnalysis'),results:L.anT,total:L.anTotal,noSeg:L.noSeg,home:L.home,undo:L.ptUndo,reset:tr('evReset'),resetAgain:tr('evResetAgain'),all:tr('evAllSettings'),exit:tr(mode==='ar'?'evExitAr':'evExitVr')}});
    for(const it of simple){
     if(it.type==='label')label(it.x,it.y,it.text,{bold:it.bold,size:it.size,color:it.color});
-    else if(it.type==='slider')w.push({...it,set:v=>{ui.sliceClear=false;settings.sliceOpacity=sliceOpacityValue(v)}}); // the full menu's slider widget (drag: trigger or pinch; saved on release), same setting as the スライス tab
+    else if(it.type==='slider')w.push({...it,set:v=>{ui.sliceClear=false;settings.sliceOpacity=sliceOpacityValue(v);emit('slice-opacity')}}); // the full menu's slider widget (drag: trigger or pinch; saved on release), same setting as the スライス tab
     else{const m=/^(.+):(show|hide)$/.exec(it.id),action=m?()=>acts[m[1]]?.(m[2]==='show'):()=>acts[it.id]?.();w.push({...it,action})}
    }
+   if(tutVr&&!tutBad){try{const an=menuAnnotation(w,tutVr.menuTarget(),tutVr.menuPhase());if(an)w.push(an);tutMenuRect=menuTargetRect(w,tutVr.menuTarget());if(tutMenuRect?.key)tutVr.setTissue(tr(tutMenuRect.key))}catch(e){tutFail(e)}} // the tutorial step's widget pulses with an arrow (the 非表示 / 表示 of a tissue, the slider knob)
   }else if(ui.tab===0){
    const active=SEGMENT_PRESET_ORDER.filter(k=>segAvail(segmentState[k])); // only the shown ones (at most 4 rows; a switched-off segment has nothing to set)
    if(!active.length)label(X,y0+40,L.noSeg);
    active.forEach((key,i)=>{const seg=segmentState[key],y=y0+i*76,m=segMode[key]|0;label(X,y+36,tr(key),{color:seg.color||'#fff',bold:true,size:28});
-    L.segModes.forEach((t,j)=>btn(250+j*160,y,150,t,m===j,()=>{segMode[key]=j},{color:j===0?seg.color:undefined,size:28}));});
+    L.segModes.forEach((t,j)=>btn(250+j*160,y,150,t,m===j,()=>{emit('seg-toggle');if(j===2&&m!==2)emit('seg-hide');else if(j!==2&&m===2)emit('seg-show');segMode[key]=j},{color:j===0?seg.color:undefined,size:28}));});
    const yb=MENU_H-110;
    // 持ち方 moved here from the 断面 tab (room for the snap row)
    choice(yb-370,L.helpT,L.helpModes.map((t,i)=>({label:t,value:i})),settings.help|0,v=>{settings.help=v;saveSettings(settings);if(v===1)helpMoving=true});
@@ -2414,7 +2477,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    // with hands the two controller lines give way to the hand laser's choice (標準 / 指差し) (the device setting handRay, also in 設定 > 描画 on the page); with controllers: the lines as before
    if(handIn.anyHand())choice(yb-100,L.hrT,L.hrV.map((t,i)=>({label:t,value:HAND_RAY_MODES[i]})),handRayMode(),v=>setHandRayMode(v));
    else{label(X,yb-96,L.menuKey,{size:26,color:'#9fb3c3'});label(X,yb-60,L.menuGrab,{size:26,color:'#9fb3c3'})}
-   btn(X,yb,300,L.home,false,()=>{bringVolumeFront();placeMenuNow();placeHelpNow();if(hist.isOpen)placeHistNow();placeHuNow()});btn(X+320,yb,320,L.shot,false,()=>{shotRequested=true});btn(MENU_W-X-260,yb,260,L.exit,true,()=>session.end(),{color:'#b33'});
+   btn(X,yb,300,L.home,false,()=>{bringVolumeFront();placeMenuNow();placeHelpNow();if(hist.isOpen)placeHistNow();placeHuNow();emit('home')});btn(X+320,yb,320,L.shot,false,()=>{shotRequested=true});btn(MENU_W-X-260,yb,260,L.exit,true,()=>session.end(),{color:'#b33'});
   }else if(ui.tab===1){
    choice(y0,L.sec,[{label:L.offOn[0],value:false},{label:L.offOn[1],value:true}],section.on,v=>{if(v!==section.on)setSection(v)});
    if(planes.length<MAX_PLANES)btn(800,y0,184,L.addPlane,false,()=>{addPlane()},{size:26});
@@ -2450,7 +2513,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    // VR-local window: slider 0..1 over the app's slider range, presets set it as given
    const cr=[+wc.min,+wc.max],[cMin,cMax]=Number.isFinite(cr[0])&&Number.isFinite(cr[1])&&cr[0]<cr[1]?cr:[-2000,4000],wMax=Number.isFinite(+ww.max)&&+ww.max>1?+ww.max:8000,cl=(v,a,b)=>Math.min(b,Math.max(a,v));
    label(X,y0+10,L.win,{size:26,color:'#9fb3c3'});
-   label(X,y0+86,L.sl);w.push({type:'slider',x:CX+26,y:y0+50,w:300,h:72,value:settings.sliceOpacity,text:Math.round(settings.sliceOpacity*100)+'%',set:v=>{ui.sliceClear=false;settings.sliceOpacity=Math.round(v*20)/20}});
+   label(X,y0+86,L.sl);w.push({type:'slider',x:CX+26,y:y0+50,w:300,h:72,value:settings.sliceOpacity,text:Math.round(settings.sliceOpacity*100)+'%',set:v=>{ui.sliceClear=false;settings.sliceOpacity=Math.round(v*20)/20;emit('slice-opacity')}});
    label(X,y0+176,L.tint);w.push({type:'slider',x:CX+26,y:y0+140,w:300,h:72,value:settings.sliceTint,text:settings.sliceTint?Math.round(settings.sliceTint*100)+'%':L.offOn[0],set:v=>{settings.sliceTint=Math.round(v*20)/20}});
    const row=(y,text,key,lo,hi)=>{label(X,y+36,text);const floor=key==='w'?1:-Infinity;w.push({type:'slider',x:CX+26,y,w:300,h:72,value:cl((vrWindow[key]-lo)/(hi-lo),0,1),text:String(Math.round(vrWindow[key])),set:v=>{vrWindow[key]=Math.max(floor,Math.round((lo+v*(hi-lo))/WIN_STEP)*WIN_STEP)}});
     btn(800,y,70,'−',false,()=>{vrWindow[key]=Math.max(floor,cl(vrWindow[key]-WIN_STEP,lo,hi))},{size:30});btn(890,y,70,'＋',false,()=>{vrWindow[key]=Math.max(floor,cl(vrWindow[key]+WIN_STEP,lo,hi))},{size:30})};
@@ -2579,7 +2642,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
  const takeScreenshot=()=>{
   const sub=renderer.xr.getCamera().cameras[0];if(!sub||!mesh)return;
   const v=sub.viewport,W=1600,H=Math.max(1,Math.round(W*v.w/Math.max(1,v.z)));
-  const rt=new THREE.WebGLRenderTarget(W,H),prev=renderer.getRenderTarget(),hidden=[menu.mesh,badge,sliceToast.mesh,help.mesh,hist.group,huLine.panel,wheel.mesh,pointWheel.mesh,...controllers.map(c=>c.userData.ray)].filter(o=>o.visible);
+  const rt=new THREE.WebGLRenderTarget(W,H),prev=renderer.getRenderTarget(),hidden=[menu.mesh,badge,sliceToast.mesh,help.mesh,hist.group,huLine.panel,ev?.mesh,wheel.mesh,pointWheel.mesh,edgeArrow.mesh,...ctlHints.groups(),...controllers.map(c=>c.userData.ray)].filter(o=>o&&o.visible);
   hidden.forEach(o=>{o.visible=false});const matBefore=mesh.material;mesh.material=variants[cls4On?'full4':'full']; // the full variant of the data in use (VRL_CLS4 with four stored segments)
   renderer.xr.enabled=false;renderer.setRenderTarget(rt);renderer.setClearColor(vt.passthrough?0x000000:BG,vt.passthrough?0:1);renderer.clear();renderer.render(scene,sub);
   const px=new Uint8Array(W*H*4);renderer.readRenderTargetPixels(rt,0,0,W,H,px);
@@ -2594,9 +2657,10 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
  // lazy follow: a board moves back in front once the head
  // has turned well away or it is far off; returns the new 'moving' state
  const lazyFollow=(m,target,moving,hold)=>{
-  tmpD.subVectors(m.position,head);tmpD.y=0;
-  const ang=tmpD.lengthSq()>1e-6?tmpD.normalize().angleTo(tmpE.subVectors(target,head).setY(0).normalize()):0;
-  if(ang>0.6||m.position.distanceTo(target)>0.45)moving=true;
+  // the boards sit 50 deg out (vr-layout.js): it follows only past FOLLOW_ANGLE of head turn, or when the head moved FOLLOW_DIST nearer / farther / up / down
+  tmpD.subVectors(m.position,head);tmpD.y=0;tmpE.subVectors(target,head).setY(0);const rm=tmpD.length(),rt=tmpE.length();
+  const ang=rm>1e-3&&rt>1e-3?tmpD.angleTo(tmpE):0;
+  if(ang>FOLLOW_ANGLE||Math.abs(rm-rt)>FOLLOW_DIST||Math.abs(m.position.y-target.y)>FOLLOW_DIST)moving=true;
   if(moving&&!hold){m.position.lerp(target,0.08);m.lookAt(head);if(m.position.distanceTo(target)<0.01)moving=false}
   return moving;
  };
@@ -2648,9 +2712,19 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
   if(placePending&&poseAt){placePending=false;bringVolumeFront();if(oversizeNote(realLongMm(),language))flashMsg(ja?'30cm超のため30cmに縮小・固定（拡大縮小不可）':'Over 30 cm: fitted to 30 cm, locked',12000);ui.placeLine=(ja?'初期配置: 姿勢取得 フレーム ':'placed: pose at frame ')+poseAt+(ja?' / 配置 フレーム ':' / placed at frame ')+frameNo+(ja?' / 頭の高さ ':' / head height ')+head.y.toFixed(2)+' m';if(ui.tab===4)menu.refresh()}
   // lazy follow: move back in front once the head has turned well away
   if(ui.open&&settings.menuMode===0&&!menuHeld){computeMenuTarget();menuMoving=lazyFollow(menu.mesh,menuTarget,menuMoving,!!dragging)}
-  help.mesh.visible=(settings.help|0)>0;
+  help.mesh.visible=(settings.help|0)>0||!!tutVr; // with the tutorial on the board is shown
+  if(ev){ev.mesh.visible=(settings.help|0)>0;if(ev.mesh.visible&&!evPlaced&&poseAt)placeEvNow()} // the mission board follows the help setting (it was a part of the help board); placed once;: follows the head with help=Follow (below) the head
+  if(tutVr&&!tutBad){try{tutVr.update(performance.now())}catch(e){tutFail(e);help.refresh()}}
+  { // the 3D guides: the controller's button (blinking ring + moving arrow), the direction arrow at the edge of the view towards the menu while it is out of view, the arrow over the menu's button
+   const tn=performance.now(),okT=tutVr&&!tutBad,sb=okT?tutVr.stepBoard():null;ctlHints.update(tn,okT?tutVr.controllerHint():null);
+   let es=null;if(sb==='menu'&&menuPlaced&&ui.open&&poseAt){menu.mesh.getWorldPosition(lookV);const bs=boardSide(headGaze.x,headGaze.z,headLeft.x,headLeft.z,lookV.x-head.x,lookV.z-head.z);if(bs&&edgeArrowShown(bs.deg))es={show:true,side:bs.side,head,gaze:headGaze,left:headLeft}}
+   edgeArrow.update(tn,es);boardArrow.update(tn,sb==='menu'&&ui.open&&ui.tab===10&&menu.mesh.visible&&tutMenuRect?{rect:tutMenuRect.rect,from:tutMenuRect.from,W:MENU_W,H:MENU_H,widthM:MENU_WIDTH}:null);
+  }
+  {const eb=tutVr&&!tutBad?tutVr.entryBoard():null,pl=0.45+0.55*(0.5+0.5*Math.cos(performance.now()/1000*4*Math.PI)); // 2 Hz blink
+   glowHelp.visible=eb==='help';glowMenu.visible=eb==='menu';if(eb){const m=(eb==='help'?glowHelp:glowMenu).material;m.opacity=pl}} // the board the entry guidance points at blinks
   if(help.mesh.visible&&!helpPlaced&&poseAt)placeHelpNow();
   if(help.mesh.visible&&settings.help===1&&!helpHeld){computeHelpTarget();helpMoving=lazyFollow(help.mesh,helpTarget,helpMoving,false)}
+  if(ev&&ev.mesh.visible&&evPlaced&&settings.help===1&&!evHeld){computeEvTarget();evMoving=lazyFollow(ev.mesh,evTarget,evMoving,false)} // the mission board follows the head like the help board (the same setting, the same rule)
   if(!huPlaced&&poseAt&&huLine.panel.visible)placeHuNow(); // shown before the first pose (rare): placed once the pose is there; never follows the head after that
   if(hist.isOpen){if(!histPlaced&&poseAt)placeHistNow();histRun();histAxisFollow();hist.update(js0);releaseHistWaiters()} // no allocation; the board only on data / range change (567: histRun starts a pass when the data or the shown segments changed).: fixed where placed (no follow); the waiting histogram pass goes on after this frame
   handIn.frame(js0); // hands only: the filtered / delayed ray, tracking loss, wrist menu, fingertips.: before the two-hand scale (it reads the palm anchors: this frame's, not last frame's)
@@ -2661,14 +2735,14 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    if(lm>0&&!bench.active&&!anBench.active){const cs=clampScale(holder.scale.x,lm);if(cs!==holder.scale.x)holder.scale.setScalar(cs)} // initial placement, restored or any other out-of-range scale
    scaleTag.mesh.visible=!!(mesh&&vrHalfExt&&lm>0);
    if(scaleTag.mesh.visible){scaleTag.setText(magnificationText(realMagnification(holder.scale.x,lm),language)+(lim.locked?'\n'+(ja?'30cmに縮小・固定':'fitted to 30 cm, locked'):''));readHead();scaleTag.place(holder,vrHalfExt,head)}}
-  let hover=-1,scroll=0,undoLit=false,histHov=null;const hoverIds=new Set();
+  let tutHov=-1,hover=-1,scroll=0,undoLit=false,histHov=null;const hoverIds=new Set();
   if(sliceToast.until&&performance.now()>sliceToast.until){sliceToast.until=0;sliceToast.mesh.visible=false}
   badge.visible=!(wheelOwner&&wheelOwner===leftHand()); // the cue hides while the left hand's ring is open
   const fHide=framesHidden();
   for(const c of controllers){
    // this hand's candidates (the press uses the values of the previous frame: c.userData.res); a section's plane is not a candidate
    // (only its thin frame band and number tag), so it can no longer take the laser from what is behind it
-   const rOff=!handIn.rayOn(c),bd=rOff?noHits:histAxis===c?histAxisBd:boardHits(c),h=bd.menu,hh=bd.help,rh=bd.wheel||bd.pwheel,board=h||hh||bd.hist||bd.undoBtn||bd.hu||bd.wrist||(rh&&rh.slot!==null?rh:null),ray=c.userData.ray,nowF=performance.now();
+   const rOff=!handIn.rayOn(c),bd=rOff?noHits:histAxis===c?histAxisBd:boardHits(c),h=bd.menu,hh=bd.help,rh=bd.wheel||bd.pwheel,board=h||hh||bd.hist||bd.undoBtn||bd.hu||bd.ev||bd.wrist||(rh&&rh.slot!==null?rh:null),ray=c.userData.ray,nowF=performance.now();
    if(bd.undoBtn)undoLit=true;
    if(bd.wrist)handIn.hover(bd.wrist.slot);
    let tab=null,pt=null,mlb=null,band=null,vh=null,sh=null,gl=null;
@@ -2683,7 +2757,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
     if(surfaceActive()||labelMode()||anyOk){vh=volumeHit(c);c.userData.vhFrame=frameNo} // in 断面 mode too, to tell "laser on the 3D object" (no section grab) from empty space
     if(!surfaceActive()&&selOk){sh=sectionPointOf(c);c.userData.secFrame=frameNo}
    }
-   c.userData.volHit=vh;c.userData.secHit=sh;c.userData.helpHit=!!hh;c.userData.histHit=!!bd.hist;c.userData.wristOn=!!bd.wrist; // a hand's fist on the wrist menu does not grab
+   c.userData.volHit=vh;c.userData.secHit=sh;c.userData.helpHit=!!hh;c.userData.evHit=!!bd.ev;c.userData.histHit=!!bd.hist;c.userData.wristOn=!!bd.wrist; // a hand's fist on the wrist menu does not grab
    if(bd.hist&&!histHov&&histAxis!==c)histHov=histTargetOf(bd.hist); // the grab target under a laser is lit
    // how much nearer than the plane the object surface must be to hide it (0.75 voxel in world metres: the surface march and the plane meet at a cut face)
    let occEps=1e-4;if(vh&&(sh||tab)&&vrHalfExt&&vrDims&&mesh?.parent){const vs=voxelSize(vrHalfExt,vrDims);mesh.getWorldScale(tmpSs);occEps=0.75*Math.min(vs[0]*tmpSs.x,vs[1]*tmpSs.y,vs[2]*tmpSs.z)}
@@ -2702,7 +2776,8 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    // the dragged FRAME's centre in world metres (after updatePress moved it this frame), stamped with the frame time; before the drag starts, the frame the press may drag
    // (it stands still then, so the record has no jump when the drag starts). The controller is recorded beside it only for the debug readout.
    {const dg=c.userData.drag,pr=c.userData.press,fv=c.userData.fv||=createVelocityTracker(),fh=c.userData.fvHand||=createVelocityTracker(),fp=dg?dg.pl:pr?pr.dragPl:null;
-    if(twoHand||grabbing.size){fv.reset();fh.reset();if(dg)dg.volTouched=true}else if(fp){fp.obj.getWorldPosition(tmpFv);fv.push(js0,tmpFv);c.getWorldPosition(tmpFv);fh.push(js0,tmpFv)}}
+    if(twoHand||grabbing.size){fv.reset();fh.reset();if(dg)dg.volTouched=true}else if(fp){fp.obj.getWorldPosition(tmpFv);fv.push(js0,tmpFv);c.getWorldPosition(tmpFv);fh.push(js0,tmpFv)}
+    if(dg&&planes.includes(dg.pl))(dg.oov||=createOutOfViewTracker()).update(js0,!dg.volTouched&&sectionOutOfView(dg.pl))}
    {const ld=c.userData.lblDrag;if(ld&&c.userData.press){setRay(c);const o=raycaster.ray.origin,q=raycaster.ray.direction;tmpRc.set(o.x+q.x*ld.dist+ld.grab.x,o.y+q.y*ld.dist+ld.grab.y,o.z+q.z*ld.dist+ld.grab.z);if(ld.pin){if(!ld.moved&&!ld.done&&tmpRc.distanceTo(ld.pos0)>(isHand(c.userData.source)?HAND_LABEL_MOVE_M:0.008))ld.moved=true;if(ld.moved&&!ld.done)dragPin(ld.id,tmpRc)}else vpMeasure.dragLabel(ld.id,tmpRc)}} // the grabbed label follows the laser
    const ref=res.ref,dist=board?board.distance:rh?rh.distance:(ref&&(res.kind==='point'||res.kind==='mlabel'||res.kind==='section'||res.kind==='record'||res.kind==='label'||res.kind==='move'||res.kind==='tissue')?(ref.t??ref.distance):null);
    const busy=!!c.userData.drag,rec=res.kind==='record'||res.kind==='move',cur=!busy&&rec&&!!ref?.voxel,curSurf=cur&&surfaceActive(),curSec=cur&&!surfaceActive();
@@ -2712,7 +2787,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    // the volume writes depth now, so a laser that ends on something drawn without a depth test INSIDE the volume (a point, a distance label, a section frame) would be cut at the tissue surface: those are on top too
    {const top=!!rh||res.kind==='point'||res.kind==='mlabel'||res.kind==='section'||!!bd.hu;ray.renderOrder=dot.renderOrder=bd.hu?11:top?8:0;ray.material.depthTest=dot.material.depthTest=!top} // on the HU live panel (renderOrder 10, no depth test) the laser and its dot are drawn after it
    if(isHand(c.userData.source)){if(bd.wrist){ray.renderOrder=dot.renderOrder=8;ray.material.depthTest=dot.material.depthTest=false}if(!c.visible)dot.visible=false} // a hand: on the wrist menu (renderOrder 7, no depth test) the laser is on top; no end dot while its tracking is lost
-   if(dist!=null){ray.scale.z=dist;ray.material.opacity=1;setRay(c);raycaster.ray.at(dist,dot.position);if(h){const i=menu.hit(h.uv);if(i>=0)hover=i}}
+   if(dist!=null){ray.scale.z=dist;ray.material.opacity=1;setRay(c);raycaster.ray.at(dist,dot.position);if(h){const i=menu.hit(h.uv);if(i>=0)hover=i}if(hh){const i=help.hit(hh.uv);if(i>=0)tutHov=i}}
    else{ray.scale.z=0.6;ray.material.opacity=0.35}
    ray.visible=!rOff;if(rOff)dot.visible=false; // a hand's laser: 指差し not pointing = none; 標準 / 指差し / a controller: this line and dot
    if(curSurf)placeSurfCursor(c,ref);else if(curSec)placeSecCursor(c,ref);else surfCursors[controllers.indexOf(c)].set(null);
@@ -2728,7 +2803,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    // thumbstick click (button 3, either hand; free in VR:), short / hold like A/X: a SHORT press (released before FRAME_HIDE_MS) makes the slice transparent / back to the slider's value (ui.sliceClear;
    // settings.sliceOpacity is not touched); HOLDING it hides the section frames (outline, tag, hover fill, arrow) for as long as it is held (c.userData.hideFrames; the clipping stays), a hold fires no toggle.
    // In an AR session the same click is also the double press of the view switch: the two short presses toggle twice (net: unchanged) and the second one switches the view
-   {const tc=!!bt?.[3]?.pressed,ev=(c.userData.tcPress||=createButtonPress({longMs:FRAME_HIDE_MS})).update(tc,nowF);
+   {const tc=!!bt?.[3]?.pressed,ev=(c.userData.tcPress||=createButtonPress({longMs:FRAME_HIDE_MS})).update(tc,nowF);if(ev==='long')emit('frame-hide');
     if(ev==='short')toggleSliceClear(c);
     else if(ev==='long'){c.userData.hideFrames=true;pulse(c,0.3,25)}
     if(!tc&&c.userData.hideFrames){c.userData.hideFrames=false;pulse(c,0.2,25)}}
@@ -2745,7 +2820,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    if(!b)c.userData.vCancel=false;c.userData.bDown=b;
   }
   huLine.update(js0); // after the controller loop (it reuses that loop's hits): the HU line's pick / sampling (while the trigger is held) and its mesh
-  menu.setHover(hover);
+  menu.setHover(hover);help.setHover(tutHov);
   if(hist.isOpen)hist.setAxisHover(histAxis?null:histHov); // the lit grab target (none while an end is dragged: that one is lit by the panel)
   if(undoBtn.mesh.visible){const nowU=performance.now();if(!secUndo.peek(nowU))undoBtn.hide();else undoBtn.update(secUndo.remainingMs(nowU)/FLING_UNDO_MS,undoLit)}
   flingDbg?.update(performance.now()); // debug readout hides after FLING_DEBUG_MS
@@ -2757,7 +2832,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
   // thumbstick scroll: the selected plane along its own normal, same world speed fixed in the scaled holder or held
   const sp=section.selected;
   if(section.on&&sp&&scroll&&dt&&!controllers.some(c=>c.userData.drag?.pl===sp)){
-   const ps=sp.obj.parent?sp.obj.parent.getWorldScale(tmpS).x||1:1;sp.obj.translateX(-scroll*SCROLL_SPEED*dt/ps);
+   const ps=sp.obj.parent?sp.obj.parent.getWorldScale(tmpS).x||1:1;sp.obj.translateX(-scroll*SCROLL_SPEED*dt/ps);if(!sweepOn)emit('section-scroll'); // tutorial signal (at most one per 400 ms: tutorial-signal.js)
    if(vrHalfExt){const cc=clampPlaneCenter(sp.obj.position,qRot(sp.obj.quaternion,{x:1,y:0,z:0}),vrHalfExt);sp.obj.position.set(cc.x,cc.y,cc.z)} // the plane keeps meeting the box
   }
   // frame: own colour; a glow band in the hand's colour while that hand points at its band / tag or drags it
@@ -2895,8 +2970,9 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    }else{mesh.material=(diagAn.noRegion?plainSets().vars:variants)[vk];rs.low=false;rs.w=w;rs.h=h}
    if(firstDrawMs<0)firstDrawMs=performance.now()-sessionAt;
   }
+  if(tutVr&&ui.open&&ui.tab===10){const mk=tutVr.menuKey();if(mk!==tutMenuKey){tutMenuKey=mk;menu.refresh()}} // the menu's tutorial pointer animates (at most 2 redraws a second, only while a step lights a widget, and still 20 s after the board last changed)
   if(ui.open)menu.flush(); // a closed menu is not redrawn / re-sent (its texture is not drawn); setMenuOpen(true) refreshes it
-  const hk=[section.on,ui.open,ui.open&&ui.tab===10].join();if(hk!==helpKey){helpKey=hk;help.refresh()}help.flush();
+  const hk=[section.on,ui.open,ui.open&&ui.tab===10,helpShow].join()+(tutVr?tutVr.drawKey():'')+(tutPreview&&helpShow==='detail'?tutPreview.drawKey():'');if(hk!==helpKey){helpKey=hk;help.refresh()}help.flush();
   sums.js+=performance.now()-js0;counts.js++;
   timed('main',()=>renderer.render(scene,camera));
   if(shotRequested){shotRequested=false;try{takeScreenshot()}catch(e){console.error(e)}}
@@ -2920,16 +2996,16 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    for(const k in sums){sums[k]=0;counts[k]=0}
   }
  });
- const cleanup=()=>{
+ const cleanup=()=>{try{tutVr?.dispose()}catch(e){console.warn('[tutorial] dispose',e)}for(const g of [glowHelp,glowMenu]){try{g.geometry.dispose();g.material.dispose()}catch{}}try{ctlHints.dispose();edgeArrow.dispose();boardArrow.dispose()}catch(e){console.warn('[tutorial] 3D guides dispose',e)}
   renderer.setAnimationLoop(null);if(probeReq){const q=probeReq;probeReq=null;q.res(null)}selfCheck.dispose(); // a pending self-check probe resolves (no frame will serve it) //: unwinds a running scenario, shows the result panel on the page
-  sliceToast.dispose();probeTarget.dispose();volTex?.dispose();brickTex?.dispose();comboT?.combo?.dispose();comboTs.forEach(t=>{t.rb.dispose();t.rb=null});comboTs.length=0;disposeExtra();disposeEdits();material?.dispose();if(variants)for(const [k,m] of Object.entries(variants))if(k!=='full')m.dispose();if(rayVariants)Object.values(rayVariants).forEach(m=>m.dispose());gpu?.warm.forEach(m=>m.dispose());compMaterial?.dispose();lowTarget?.dispose();periTarget?.dispose();mesh?.geometry.dispose();scaleTag.dispose();menu.dispose();help.dispose();unsubHist();unsubLabelHist();labelHist.dispose();hist.dispose();badge.userData.dispose();
+  sliceToast.dispose();probeTarget.dispose();volTex?.dispose();brickTex?.dispose();comboT?.combo?.dispose();comboTs.forEach(t=>{t.rb.dispose();t.rb=null});comboTs.length=0;disposeExtra();disposeEdits();material?.dispose();if(variants)for(const [k,m] of Object.entries(variants))if(k!=='full')m.dispose();if(rayVariants)Object.values(rayVariants).forEach(m=>m.dispose());gpu?.warm.forEach(m=>m.dispose());compMaterial?.dispose();lowTarget?.dispose();periTarget?.dispose();mesh?.geometry.dispose();scaleTag.dispose();menu.dispose();help.dispose();ev?.dispose();unsubHist();unsubLabelHist();labelHist.dispose();hist.dispose();badge.userData.dispose();
   background.traverse(o=>{o.geometry?.dispose();o.material?.dispose()});planes.forEach(disposePlane);flying.forEach(f=>disposePlane(f.pl));flying.length=0;secUndo.clear();undoBtn.dispose();flingDbg?.dispose();unsubComments();huLine.dispose();setHuLineDeferred(false);vpMarkers.dispose();vpMeasure.dispose();cancelMeasure();surfCursors.forEach(x=>x.dispose());wheel.dispose();pointWheel.dispose();ringGeo.dispose();ring.material.dispose();
   // the session's WebGL context is ended now, not left to the garbage collector: headless, it was still alive (not lost) after the session ended and
   // a forced GC; every session start makes a new one (prepareVrGpu). On Quest VR -> AR -> VR crashed the browser
   renderer.dispose();try{renderer.forceContextLoss?.()}catch{}renderer.domElement.remove();running=null;
   showShotsPanel(ja);showBenchPanel(ja);
  };
- session.addEventListener('end',()=>{cleanup();step('ended')},{once:true});
+ session.addEventListener('end',()=>{emit('session-end');cleanup();step('ended')},{once:true});
  try{
   // prepared before the session (or now, if the data changed meanwhile)
   const P=await prepareVrData(({phase,done,total})=>{ui.status=L.preparing+(phase==='read'?done+' / '+total:phase);menu.refresh()});

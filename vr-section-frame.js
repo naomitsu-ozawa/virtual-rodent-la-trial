@@ -30,7 +30,7 @@ export function sectionPage(count, page = 0, per = SECTION_ROWS_PER_PAGE) {
 // the page that holds plane index i
 export const pageOfPlane = (i, per = SECTION_ROWS_PER_PAGE) => Math.max(0, Math.floor(i / per));
 
-export const FLING_SPEED_MPS = 1.5, FLING_WINDOW_MS = 150, FLING_MIN_SPAN_MS = 30, FLING_STALE_MS = 120, FLING_COS = 0.5, FLING_MIN_RADIUS_M = 0.03;
+export const FLING_SPEED_MPS = 1.0, FLING_WINDOW_MS = 200, FLING_MIN_SPAN_MS = 30, FLING_STALE_MS = 120, FLING_COS = 0.26, FLING_MIN_RADIUS_M = 0.03;
 export const FLING_FADE_S = 0.3, FLING_MAX_FLY_MPS = 4, FLING_UNDO_MS = 5000; // fly-off / fade time, speed cap of the flying frame, how long 「元に戻す」 stays
 export const FLING_DEBUG_MS = 8000; // ?debug / デバッグモード: how long the measured values of the last release stay on screen
 // Velocity of a sampled point (the dragged frame): push(t ms, {x,y,z} world m) once per frame. measure(now) looks at the samples of the last windowMs before `now` (the release) and
@@ -73,14 +73,39 @@ export function flingDecision({ v, from, center, head = null, blocked = false, m
   if (!axis) return { fling: false, reason: 'no-axis', speed, cos: 0 };
   return cos >= minCos ? { fling: true, reason: 'fling', speed, cos } : { fling: false, reason: 'inward', speed, cos };
 }
+export const OUT_OF_VIEW_MARGIN = 0.1;
+export function pointInView(p, m, margin = OUT_OF_VIEW_MARGIN) {
+  const w = m[3] * p.x + m[7] * p.y + m[11] * p.z + m[15];
+  if (!(w > 1e-6)) return false; // behind the eye
+  const x = m[0] * p.x + m[4] * p.y + m[8] * p.z + m[12], y = m[1] * p.x + m[5] * p.y + m[9] * p.z + m[13], k = w * (1 + margin);
+  return Math.abs(x) <= k && Math.abs(y) <= k;
+}
+export function frameOutOfView(points, views, { margin = OUT_OF_VIEW_MARGIN } = {}) {
+  if (!points?.length || !views?.length) return false;
+  for (const m of views) { if (!m || m.length < 16) return false; for (const p of points) if (pointInView(p, m, margin)) return false; }
+  return true;
+}
+// one frame is not enough. While a section is dragged, vr-view.js asks every frame whether the frame is out of view AND at least OUT_OF_VIEW_MIN_DIST_M
+// from the head (a frame held against the face is "out of view" of nothing); the release deletes only when that state has lasted OUT_OF_VIEW_HOLD_MS without a break.
+export const OUT_OF_VIEW_HOLD_MS = 200, OUT_OF_VIEW_MIN_DIST_M = 0.35;
+export const outOfViewNow = (outOfView, distM, minDist = OUT_OF_VIEW_MIN_DIST_M) => !!outOfView && Number.isFinite(distM) && distM >= minDist;
+export function createOutOfViewTracker() {
+  let since = null; // the time the unbroken out-of-view run began (null = in view now)
+  return {
+    update(now, out) { if (!out) since = null; else if (since == null) since = now; return this.heldMs(now); },
+    heldMs(now) { return since == null ? 0 : Math.max(0, now - since); },
+    reset() { since = null; },
+  };
+}
+export const outOfViewRelease = (tracker, now, holdMs = OUT_OF_VIEW_HOLD_MS) => !!tracker && tracker.heldMs(now) >= holdMs;
 // ?debug readout of the last section release (vr-view.js shows it for FLING_DEBUG_MS): d = flingDecision's result + the tracker's {n, spanMs, ageMs, why} + hand (controller
 // peak speed, m/s, or null). -> lines of text (the first one is the verdict).
-const FLING_WHY = { ja: { fling: '削除した', slow: '遅い', inward: '外向きでない', 'volume-gesture': 'グリップ／両手操作あり', 'no-velocity': '速さを測れず', 'no-axis': '方向が決まらない' },
-  en: { fling: 'deleted', slow: 'too slow', inward: 'not outward', 'volume-gesture': 'grip / two-hand used', 'no-velocity': 'no speed estimate', 'no-axis': 'no direction' } };
+const FLING_WHY = { ja: { fling: '削除した', 'out-of-view': '視界の外で離した', slow: '遅い', inward: '外向きでない', 'volume-gesture': 'グリップ／両手操作あり', 'no-velocity': '速さを測れず', 'no-axis': '方向が決まらない' },
+  en: { fling: 'deleted', 'out-of-view': 'released out of view', slow: 'too slow', inward: 'not outward', 'volume-gesture': 'grip / two-hand used', 'no-velocity': 'no speed estimate', 'no-axis': 'no direction' } };
 const FLING_WHY_V = { ja: { samples: 'サンプル不足', stale: '最後のサンプルが古い', span: '区間が短い' }, en: { samples: 'too few samples', stale: 'last sample too old', span: 'span too short' } };
 export function flingDebugLines(d, ja = true) {
   const L = ja ? 'ja' : 'en', f2 = x => (Number.isFinite(x) ? x.toFixed(2) : '-'), why = FLING_WHY[L][d.reason] || d.reason, wv = d.why ? (FLING_WHY_V[L][d.why] || d.why) : '';
-  const head = d.fling ? (ja ? '投げ判定: 削除した' : 'Throw: deleted') : (ja ? '投げ判定: 削除しない（' : 'Throw: kept (') + why + (wv ? ' / ' + wv : '') + (ja ? '）' : ')');
+  const head = d.fling ? (d.reason === 'out-of-view' ? (ja ? '投げ判定: 削除した（視界の外で離した）' : 'Throw: deleted (released out of view)') : (ja ? '投げ判定: 削除した' : 'Throw: deleted')) : (ja ? '投げ判定: 削除しない（' : 'Throw: kept (') + why + (wv ? ' / ' + wv : '') + (ja ? '）' : ')');
   return [
     head,
     (ja ? '枠の速さ ' : 'frame speed ') + f2(d.speed) + ' m/s (≥ ' + FLING_SPEED_MPS + ')' + (d.hand != null ? (ja ? '  手 ' : '  hand ') + f2(d.hand) + ' m/s' : ''),
