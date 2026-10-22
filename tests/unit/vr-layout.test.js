@@ -20,12 +20,12 @@ describe('default VR/AR layout', () => {
   it('board physical size: the menu as before, the help board 1.4 times, its canvas finer by as much (same texels per metre, not more)', () => {
     expect(MENU_WIDTH).toBe(0.5); expect(HELP_WIDTH).toBe(0.45);
     expect(HELP_RES).toBeCloseTo(HELP_WIDTH / 0.32, 1); expect(Math.round(820 * HELP_RES)).toBeLessThanOrEqual(1152); // 1148 px wide: the 1280 px slide pictures are not drawn larger than they are
-    expect(EV_WIDTH).toBe(HELP_WIDTH); expect(EV_RES).toBe(HELP_RES);
+    expect(EV_WIDTH).toBeGreaterThanOrEqual(HELP_WIDTH); expect(EV_RES).toBeCloseTo(1280 / 820, 6); // the mission board is larger than the help board, drawn at the slide's own 1280 px
   });
   // seen only when the head turns, yet the inner edges just peek in at the edge of the view with the head straight (Quest 3: about 55 deg each side)
   const yawDeg = o => Math.atan2(Math.abs(o.left), o.fwd) * 180 / Math.PI, innerDeg = (o, w) => yawDeg(o) - Math.atan(w / 2 / Math.hypot(o.fwd, o.left)) * 180 / Math.PI;
   it('menu / help / ev boards far out to the sides: centres 45-55 deg out (BOARD_YAW_DEG 50), inner edges 30-40 deg (well inside the 55 deg edge of the view), all at the same 0.9 m', () => {
-    for (const [o, w] of [[MENU_OFFSET, MENU_WIDTH], [HELP_OFFSET, HELP_WIDTH], [EV_OFFSET, EV_WIDTH]]) {
+    for (const [o, w] of [[MENU_OFFSET, MENU_WIDTH], [HELP_OFFSET, HELP_WIDTH]]) { // the mission board is in front now (own test below)
       expect(yawDeg(o)).toBeCloseTo(BOARD_YAW_DEG, 1); expect(yawDeg(o)).toBeGreaterThan(45); expect(yawDeg(o)).toBeLessThan(55);
       expect(innerDeg(o, w)).toBeGreaterThan(30); expect(innerDeg(o, w)).toBeLessThan(40);
       expect(Math.hypot(o.fwd, o.left)).toBeCloseTo(BOARD_DIST, 3);
@@ -66,23 +66,35 @@ describe('default VR/AR layout', () => {
 });
 
 describe('mission board', () => {
-  const MENU_H = 1180, MENU_W = 1024, evH = levelBoardH(820); // the board is the level's 16:9 slide
-  const h = EV_WIDTH * evH / 820, wH = HELP_WIDTH * HELP_H / 820;
-  it('upper left at reading distance, same width as the help board (the text keeps its size), clear of the volume, the menu, the help board and the HU panel', () => {
-    expect(EV_WIDTH).toBe(HELP_WIDTH);
-    expect(boardDistance(EV_OFFSET)).toBeGreaterThanOrEqual(0.8); expect(boardDistance(EV_OFFSET)).toBeLessThanOrEqual(1.0);
-    expect(EV_OFFSET.left).toBeGreaterThan(0); expect(EV_OFFSET.down).toBeLessThan(0); // left of and above the eyes
-    expect(EV_OFFSET.down + h / 2).toBeLessThan(MENU_OFFSET.down - MENU_WIDTH * MENU_H / MENU_W / 2); // above the menu's top edge (no overlap)
-    expect(EV_OFFSET.down + h / 2).toBeLessThan(-0.1); // far above the volume (which is below the eyes)
-    expect(EV_OFFSET.left - EV_WIDTH / 2).toBeGreaterThan(0.15 + 0.1); // clear of the HU panel (centre, 0.15 m either side)
-    expect(EV_OFFSET.left).toBeGreaterThan(0); expect(HELP_OFFSET.left).toBeLessThan(0); // the help board is on the other side
-    expect(HELP_OFFSET.down - wH / 2).toBeGreaterThan(-0.2); expect(HU_PANEL_OFFSET.left).toBe(0);
+  const evH = levelBoardH(820), h = EV_WIDTH * evH / 820, volRadius = 0.25 / 2 + 0.05; // the tutorial volume is 0.25 m, 0.5 m ahead
+  const deg = r => r * 180 / Math.PI, bottom = EV_OFFSET.down + h / 2, top = EV_OFFSET.down - h / 2; // down is positive below the eyes: bottom/top are the lower/upper edges
+  it('straight ahead behind the volume, a little above the gaze, larger than the help board', () => {
+    expect(EV_OFFSET.left).toBe(0); expect(EV_OFFSET.fwd).toBeGreaterThan(VOLUME_FWD + volRadius); // behind the volume
+    expect(EV_WIDTH).toBeGreaterThan(HELP_WIDTH); expect(EV_WIDTH).toBeGreaterThanOrEqual(0.6);
+    expect(boardDistance(EV_OFFSET)).toBeGreaterThanOrEqual(1.0); expect(boardDistance(EV_OFFSET)).toBeLessThanOrEqual(1.2);
+    expect(EV_OFFSET.down).toBeLessThan(0); // above the eyes
   });
-  it('vr-view.js places it once at EV_OFFSET (like the HU panel: no follow) and 正面に戻す re-places it', () => {
+  it('the lower edge is above the line of sight to the volume (the volume does not overlap it); the whole board stays inside the view', () => {
+    expect(deg(Math.atan2(-bottom, boardDistance(EV_OFFSET)))).toBeGreaterThanOrEqual(4); // lower edge at least 4 deg above the gaze: the volume sits below it
+    expect(deg(Math.atan2(-top, boardDistance(EV_OFFSET)))).toBeLessThanOrEqual(35); // upper edge within the view
+    expect(deg(Math.atan(EV_WIDTH / 2 / boardDistance(EV_OFFSET)))).toBeLessThan(25); // the half width: inside the view and well inside the menu / help boards' 30 deg inner edges
+  });
+  it('clear of the menu (left) and the help board (right) and the HU panel is nearer', () => {
+    expect(EV_OFFSET.left + EV_WIDTH / 2).toBeLessThan(MENU_OFFSET.left - MENU_WIDTH / 2); // nothing shares the side boards\' space
+    expect(-HELP_OFFSET.left - HELP_WIDTH / 2).toBeGreaterThan(EV_WIDTH / 2); expect(HELP_OFFSET.left).toBeLessThan(0);
+    expect(HU_PANEL_OFFSET.left).toBe(0); expect(HU_PANEL_OFFSET.fwd).toBeLessThan(EV_OFFSET.fwd);
+  });
+  it('vr-view.js places it at EV_OFFSET, 正面に戻す re-places it, and it follows the head with the same setting and rule as the help board', () => {
     const v = readFileSync('docs/vr-view.js', 'utf8');
-    expect(v).toContain("evTarget.copy(head).addScaledVector(headFwd,EV_OFFSET.fwd).addScaledVector(headLeft,EV_OFFSET.left);evTarget.y-=EV_OFFSET.down;");
+    expect(v).toContain("const computeEvTarget=()=>{evTarget.copy(head).addScaledVector(headFwd,EV_OFFSET.fwd).addScaledVector(headLeft,EV_OFFSET.left);evTarget.y-=EV_OFFSET.down};");
     expect(v).toContain('if(ev.mesh.visible&&!evPlaced&&poseAt)placeEvNow()');
-    expect(v).not.toMatch(/lazyFollow\(ev\.mesh/);
+    expect(v).toContain('if(ev&&ev.mesh.visible&&evPlaced&&settings.help===1&&!evHeld){computeEvTarget();evMoving=lazyFollow(ev.mesh,evTarget,evMoving,false)}');
+    expect(v).toMatch(/const placeHelpNow=[^\n]*placeEvNow\(\)/);
+  });
+  it('a practice session shows the operation panel on the right: help never hidden by an old setting', () => {
+    const v = readFileSync('docs/vr-view.js', 'utf8');
+    expect(v).toContain('const evMenu=eventModeOn()||tutLive;if(evMenu&&!(settings.help|0))settings.help=DEFAULTS.help;');
+    expect(HELP_OFFSET.left).toBeLessThan(0); expect(Math.atan2(Math.abs(HELP_OFFSET.left), HELP_OFFSET.fwd) * 180 / Math.PI).toBeCloseTo(50, 1);
   });
 });
 

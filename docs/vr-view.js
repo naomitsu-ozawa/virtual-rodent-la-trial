@@ -1,65 +1,65 @@
-import { effectiveFlag } from './debug-flags.js?v=20261022-build651';
+import { effectiveFlag } from './debug-flags.js?v=20261022-build652';
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js';
-import { volumeTexturePlan, reduceSliceArea, packedRgSlice, packCtSlice, gpuRunsForTexture } from './medical-volume.js?v=20261022-build651';
-import { ensureSegmentBaseRuns } from './segment-runs.js?v=20261022-build651';
-import { gpuVolumeTarget, gpuVolumeEditDescriptors } from './gpu-volume-data.js?v=20261022-build651';
-import { SEGMENT_PRESET_ORDER, gpuSegmentOrder, segmentHasProcessedMask, segmentState, segmentEditState, segmentSourceSignature } from './segments.js?v=20261022-build651';
-import { sceneState, analysisRegions, activeSeries } from './state.js?v=20261022-build651';
-import { datasetFingerprint } from './project-file.js?v=20261022-build651';
-import { HAND_PICK_TOL, sectionRayHit, recordVrPoint, resolveTriggerTarget, createTriggerPress, dragShouldStart, DRAG_RECORD, sectionFollowStart, sectionFollowStep, sectionWristTurn, snapPlaneCenterIntoBox, chooseSectionForRay, rayLocalPlaneX, squareBandContains, squareContains, createHoverPulse, qMul, qInv, qRot, qAngleDeg, clampPlaneCenter, HAPTIC, normalizePointMode, surfaceVoxelFromHit, voxelToLocal, voxelSize, createStickGate, deleteSelected, createUndoStack, applyUndo, pointIsHidden } from './vr-point.js?v=20261022-build651';
-import { createVrPointMarkers, createSurfaceCursor } from './vr-point-markers.js?v=20261022-build651';
-import { buildClsData } from './point-cls.js?v=20261022-build651';
-import { createHiddenClsManager } from './hidden-cls-state.js?v=20261022-build651';
-import { onDatasetChange } from './dataset-reset.js?v=20261022-build651';
-import { WHEEL_ITEMS, DEFAULT_WHEEL, normalizeWheelItems, migrateWheelSectionFlip, setWheelItem, moveWheelItem, clearWheelItem, createRingMenu, createWheelStick, createButtonPress } from './vr-ring.js?v=20261022-build651';
-import { getComments, onCommentsChange, commentMatchesSeries, removeComment, restoreComment, updateCommentPosition, updateCommentText, updateCommentColor } from './comments.js?v=20261022-build651';
-import { POINT_PALETTE, pointColor, normalizeColor } from './point-colors.js?v=20261022-build651';
-import { buildDistanceBytes, combineClassificationDistance, fourthChannelBytes } from './distance-field.js?v=20261022-build651';
-import { classifiedAt, marchClassificationHitInfo } from './vr-pick.js?v=20261022-build651';
-import { createSkipState, skipGrid } from './vr-skip-occupancy.js?v=20261022-build651'; // the creep-skip occupancy bits of the combined texture (VR max-zoom cost)
-import { createComboRebuild } from './vr-combo-rebuild.js?v=20261022-build651'; // the combined texture rebuilt off the frame when the shown segments change
-import { setBusySlot, reportBusyProgress } from './progress-modal.js?v=20261022-build651';
-import { tr } from './i18n.js?v=20261022-build651';
-import { wrapMenuText, stackMenuRows } from './vr-menu-text.js?v=20261022-build651';
-import { activeEventLevel, eventModeOn, missionLines, simpleMenuSegments, triggerModeRow, triggerMode, TRIGGER_AT_START, resetPress, resetArmed, RESET_ARM_MS, simpleMenuLayout, SIMPLE_MENU, sliceOpacityValue } from './event-mode.js?v=20261022-build651'; // 体験会モード - the chosen level's mission on the help board, the かんたん menu
-import { VIEW_TOGGLE_ID, VIEW_TOGGLE_BUTTON, SECTION_DELETE_ID, createViewToggle, createDoublePress, ringIdsFor } from './vr-view-toggle.js?v=20261022-build651';
-import { vrSpacingNote, vrVolumeText } from './vr-spacing-note.js?v=20261022-build651';
-import { NORM_LONG, physicalExtentsMm, longestMm, realMagnification, realHolderScale, startHolderScale, tutorialHolderScale, smallForTutorial, TUT_VOLUME_FWD, TUT_VOLUME_DOWN, magnificationText, createScaleTag, clampScale, pinchScale, scaleLimits, oversizeNote, planeFrameLocalScale, planeTagLocalScale, scaleLineText } from './vr-real-scale.js?v=20261022-build651';
-import { createAutoQuality, autoFloor, STEP_LEVELS, marchStep } from './vr-auto-quality.js?v=20261022-build651';
-import { createVrHuLine } from './vr-hu-line.js?v=20261022-build651';
-import { huMenuTexts, voxelFromHits } from './vr-hu-line-core.js?v=20261022-build651';
-import { setHuLineDeferred } from './hu-line-model.js?v=20261022-build651';
-import { createVrMeasure, LABEL_LIT_SCALE } from './vr-measure.js?v=20261022-build651';
-import { resetUserState } from './event-fresh.js?v=20261022-build651'; // 最初から in the tutorial (practice data only, see tutorial-ui.js resetTutorialAll)
-import { tutorialModeOn, createTutorialVr, createSlideViewer, panelTabs, TAB_H, PAGE_H, layoutLevelSlide, levelBoardH, menuAnnotation, menuTargetRect } from './tutorial-vr.js?v=20261022-build651'; // チュートリアル on the help board (only made when tutorialMode is on);: the read-only guide, the level slide, the menu pointer
-import { levelSlide, createSlideImages } from './tutorial-slides.js?v=20261022-build651'; // the 体験会 level slides (ev board: the slide's picture)
-import { TUT_SAMPLE } from './tutorial-data.js?v=20261022-build651'; // the live tutorial runs on its practice data only
-import { emit, scaleChanged, poseMoved } from './tutorial-signal.js?v=20261022-build651'; // tutorial: one-line signals at the action sites (no-op without a listener)
-import { horizAngleDeg } from './tutorial-orient.js?v=20261022-build651'; // the tutorial's entry guidance (look right / left): head turn toward a board
-import { createControllerHints, createEdgeArrow, createBoardArrow, boardSide, edgeArrowShown } from './tutorial-3d.js?v=20261022-build651'; // the tutorial's 3D guides (controller button, edge arrow, arrow over the menu)
-import { MAX_SECTION_PLANES, nextPlaneColor, frameDepthTest, ARROW_LEN, ARROW_FLASH_MS, arrowFade, arrowShown, tagBehindTissue, sectionPage, pageOfPlane, SECTION_ROWS_PER_PAGE, FLING_UNDO_MS, FLING_DEBUG_MS, createVelocityTracker, flingDecision, frameOutOfView, outOfViewNow, createOutOfViewTracker, outOfViewRelease, flingDebugLines, capVelocity, flyStep, makeSectionSnapshot, restorePlan, createSectionUndo, undoButtonPlace } from './vr-section-frame.js?v=20261022-build651';
-import { createUndoButton } from './vr-undo-button.js?v=20261022-build651';
-import { createFlingDebugTag } from './vr-fling-debug.js?v=20261022-build651';
-import { EMPTY_PINCH, isHand, wristScrollGain, wristScrollSign, wristScrollKeep, NEAR_KINDS, boxDist, centeredBoxDist, squareOutlineDist, pickNearGrab, HAND_RAY_MODES, normalizeHandRay } from './vr-hand.js?v=20261022-build651'; // hand tracking (Quest 3): pure helpers
-import { createHandInput, HAND_LABEL_MOVE_M } from './vr-hand-view.js?v=20261022-build651'; // the hand's ray, wrist menu, fingertips
-import { LABEL_HIDE_DEFAULT, normalizeLabelHide, gpuOcclusionActive, depthVoxelSize, boardVisible, GHOST_ALPHA, occludedPass } from './vr-depth.js?v=20261022-build651';
-import { brickOccupancy, writeBrickOccupancy } from './vr-brick-occupancy.js?v=20261022-build651';
-import { createProbeGate } from './measure-label.js?v=20261022-build651';
-import { sliceIndex, sliceRange, boxFromRange, createSegScan, segScanStart, segScanStep, segsSubset, segsFromUniforms, contentKeyChanged, KEY_LEN } from './vr-content-box.js?v=20261022-build651'; // the proxy box = the box of what can be drawn
-import { setRegionLabel, setRegionLabelOffset, voxelFromLocalVr, clampVoxel, labelLocal, offsetForLocal, vrVoxelStep, rectEdgePoint, leaderVisible, labelSegmentsShown } from './analysis-label.js?v=20261022-build651';
-import { createVrSelfCheck, selfCheckTexts } from './vr-self-check.js?v=20261022-build651'; // 詳細 > 自己診断 (automated frame-time scenarios)
-import { createScaleGuard, createFlapGuard, variantFallback } from './vr-flicker-guard.js?v=20261022-build651'; // flicker safety guard
-import { eyeMetrics, capFromPpv, nextCap, foveaRect, outsideFovea, foveaWorth, qualityText, FOVEA_K, CAP_MIN } from './vr-render-scale.js?v=20261022-build651'; // data-resolution render scale + offscreen foveation
-import { getMeasureStart, startMeasure, cancelMeasure, pickMeasureEnd, onMeasureStartChange, removeMeasurement, restoreMeasurements, measurementsOfPoint, seriesSpacing } from './measurements.js?v=20261022-build651';
-import { APP_BUILD } from './version.js?v=20261022-build651';
-import { wc, ww } from './ui-shell.js?v=20261022-build651';
-import { VOLUME_FWD, VOLUME_DOWN, MENU_OFFSET, HELP_OFFSET, HU_PANEL_OFFSET, EV_OFFSET, EV_WIDTH, EV_RES, MENU_WIDTH, HELP_WIDTH, HELP_RES, HIST_OFFSET, HIST_WIDTH, FOLLOW_ANGLE, FOLLOW_DIST } from './vr-layout.js?v=20261022-build651';
-import { onHistogramChange, getHistogramRange, getHistogramLog, setHistogramLog, setHistogramRange } from './histogram-ui.js?v=20261022-build651';
-import { createVrLabelHistogram, UNLABELED_COLOR, labelSlot, labelRegion } from './vr-label-histogram.js?v=20261022-build651';
-import { rangeRes } from './vr-histogram-layout.js?v=20261022-build651';
-import { getHuMode, setHuMode, HU_MODE_FILTERED, HU_MODE_RAW } from './effective-hu.js?v=20261022-build651';
-import { createVrHistogramPanel } from './vr-histogram-panel.js?v=20261022-build651';
-import { lightingGLSL, lightingVertexGLSL, materialVec, MATERIALS, materialKey } from './lighting.js?v=20261022-build651'; // one lighting model for the desktop volume, this VR / AR volume and the 3D-view meshes
+import { volumeTexturePlan, reduceSliceArea, packedRgSlice, packCtSlice, gpuRunsForTexture } from './medical-volume.js?v=20261022-build652';
+import { ensureSegmentBaseRuns } from './segment-runs.js?v=20261022-build652';
+import { gpuVolumeTarget, gpuVolumeEditDescriptors } from './gpu-volume-data.js?v=20261022-build652';
+import { SEGMENT_PRESET_ORDER, gpuSegmentOrder, segmentHasProcessedMask, segmentState, segmentEditState, segmentSourceSignature } from './segments.js?v=20261022-build652';
+import { sceneState, analysisRegions, activeSeries } from './state.js?v=20261022-build652';
+import { datasetFingerprint } from './project-file.js?v=20261022-build652';
+import { HAND_PICK_TOL, sectionRayHit, recordVrPoint, resolveTriggerTarget, createTriggerPress, dragShouldStart, DRAG_RECORD, sectionFollowStart, sectionFollowStep, sectionWristTurn, snapPlaneCenterIntoBox, chooseSectionForRay, rayLocalPlaneX, squareBandContains, squareContains, createHoverPulse, qMul, qInv, qRot, qAngleDeg, clampPlaneCenter, HAPTIC, normalizePointMode, surfaceVoxelFromHit, voxelToLocal, voxelSize, createStickGate, deleteSelected, createUndoStack, applyUndo, pointIsHidden } from './vr-point.js?v=20261022-build652';
+import { createVrPointMarkers, createSurfaceCursor } from './vr-point-markers.js?v=20261022-build652';
+import { buildClsData } from './point-cls.js?v=20261022-build652';
+import { createHiddenClsManager } from './hidden-cls-state.js?v=20261022-build652';
+import { onDatasetChange } from './dataset-reset.js?v=20261022-build652';
+import { WHEEL_ITEMS, DEFAULT_WHEEL, normalizeWheelItems, migrateWheelSectionFlip, setWheelItem, moveWheelItem, clearWheelItem, createRingMenu, createWheelStick, createButtonPress } from './vr-ring.js?v=20261022-build652';
+import { getComments, onCommentsChange, commentMatchesSeries, removeComment, restoreComment, updateCommentPosition, updateCommentText, updateCommentColor } from './comments.js?v=20261022-build652';
+import { POINT_PALETTE, pointColor, normalizeColor } from './point-colors.js?v=20261022-build652';
+import { buildDistanceBytes, combineClassificationDistance, fourthChannelBytes } from './distance-field.js?v=20261022-build652';
+import { classifiedAt, marchClassificationHitInfo } from './vr-pick.js?v=20261022-build652';
+import { createSkipState, skipGrid } from './vr-skip-occupancy.js?v=20261022-build652'; // the creep-skip occupancy bits of the combined texture (VR max-zoom cost)
+import { createComboRebuild } from './vr-combo-rebuild.js?v=20261022-build652'; // the combined texture rebuilt off the frame when the shown segments change
+import { setBusySlot, reportBusyProgress } from './progress-modal.js?v=20261022-build652';
+import { tr } from './i18n.js?v=20261022-build652';
+import { wrapMenuText, stackMenuRows } from './vr-menu-text.js?v=20261022-build652';
+import { activeEventLevel, eventModeOn, missionLines, simpleMenuSegments, triggerModeRow, triggerMode, TRIGGER_AT_START, resetPress, resetArmed, RESET_ARM_MS, simpleMenuLayout, SIMPLE_MENU, sliceOpacityValue } from './event-mode.js?v=20261022-build652'; // 体験会モード - the chosen level's mission on the help board, the かんたん menu
+import { VIEW_TOGGLE_ID, VIEW_TOGGLE_BUTTON, SECTION_DELETE_ID, createViewToggle, createDoublePress, ringIdsFor } from './vr-view-toggle.js?v=20261022-build652';
+import { vrSpacingNote, vrVolumeText } from './vr-spacing-note.js?v=20261022-build652';
+import { NORM_LONG, physicalExtentsMm, longestMm, realMagnification, realHolderScale, startHolderScale, tutorialHolderScale, smallForTutorial, TUT_VOLUME_FWD, TUT_VOLUME_DOWN, magnificationText, createScaleTag, clampScale, pinchScale, scaleLimits, oversizeNote, planeFrameLocalScale, planeTagLocalScale, scaleLineText } from './vr-real-scale.js?v=20261022-build652';
+import { createAutoQuality, autoFloor, STEP_LEVELS, marchStep } from './vr-auto-quality.js?v=20261022-build652';
+import { createVrHuLine } from './vr-hu-line.js?v=20261022-build652';
+import { huMenuTexts, voxelFromHits } from './vr-hu-line-core.js?v=20261022-build652';
+import { setHuLineDeferred } from './hu-line-model.js?v=20261022-build652';
+import { createVrMeasure, LABEL_LIT_SCALE } from './vr-measure.js?v=20261022-build652';
+import { resetUserState } from './event-fresh.js?v=20261022-build652'; // 最初から in the tutorial (practice data only, see tutorial-ui.js resetTutorialAll)
+import { tutorialModeOn, createTutorialVr, createSlideViewer, panelTabs, TAB_H, PAGE_H, layoutLevelSlide, levelBoardH, menuAnnotation, menuTargetRect } from './tutorial-vr.js?v=20261022-build652'; // チュートリアル on the help board (only made when tutorialMode is on);: the read-only guide, the level slide, the menu pointer
+import { levelSlide, createSlideImages } from './tutorial-slides.js?v=20261022-build652'; // the 体験会 level slides (ev board: the slide's picture)
+import { TUT_SAMPLE } from './tutorial-data.js?v=20261022-build652'; // the live tutorial runs on its practice data only
+import { emit, scaleChanged, poseMoved } from './tutorial-signal.js?v=20261022-build652'; // tutorial: one-line signals at the action sites (no-op without a listener)
+import { horizAngleDeg } from './tutorial-orient.js?v=20261022-build652'; // the tutorial's entry guidance (look right / left): head turn toward a board
+import { createControllerHints, createEdgeArrow, createBoardArrow, boardSide, edgeArrowShown } from './tutorial-3d.js?v=20261022-build652'; // the tutorial's 3D guides (controller button, edge arrow, arrow over the menu)
+import { MAX_SECTION_PLANES, nextPlaneColor, frameDepthTest, ARROW_LEN, ARROW_FLASH_MS, arrowFade, arrowShown, tagBehindTissue, sectionPage, pageOfPlane, SECTION_ROWS_PER_PAGE, FLING_UNDO_MS, FLING_DEBUG_MS, createVelocityTracker, flingDecision, frameOutOfView, outOfViewNow, createOutOfViewTracker, outOfViewRelease, flingDebugLines, capVelocity, flyStep, makeSectionSnapshot, restorePlan, createSectionUndo, undoButtonPlace } from './vr-section-frame.js?v=20261022-build652';
+import { createUndoButton } from './vr-undo-button.js?v=20261022-build652';
+import { createFlingDebugTag } from './vr-fling-debug.js?v=20261022-build652';
+import { EMPTY_PINCH, isHand, wristScrollGain, wristScrollSign, wristScrollKeep, NEAR_KINDS, boxDist, centeredBoxDist, squareOutlineDist, pickNearGrab, HAND_RAY_MODES, normalizeHandRay } from './vr-hand.js?v=20261022-build652'; // hand tracking (Quest 3): pure helpers
+import { createHandInput, HAND_LABEL_MOVE_M } from './vr-hand-view.js?v=20261022-build652'; // the hand's ray, wrist menu, fingertips
+import { LABEL_HIDE_DEFAULT, normalizeLabelHide, gpuOcclusionActive, depthVoxelSize, boardVisible, GHOST_ALPHA, occludedPass } from './vr-depth.js?v=20261022-build652';
+import { brickOccupancy, writeBrickOccupancy } from './vr-brick-occupancy.js?v=20261022-build652';
+import { createProbeGate } from './measure-label.js?v=20261022-build652';
+import { sliceIndex, sliceRange, boxFromRange, createSegScan, segScanStart, segScanStep, segsSubset, segsFromUniforms, contentKeyChanged, KEY_LEN } from './vr-content-box.js?v=20261022-build652'; // the proxy box = the box of what can be drawn
+import { setRegionLabel, setRegionLabelOffset, voxelFromLocalVr, clampVoxel, labelLocal, offsetForLocal, vrVoxelStep, rectEdgePoint, leaderVisible, labelSegmentsShown } from './analysis-label.js?v=20261022-build652';
+import { createVrSelfCheck, selfCheckTexts } from './vr-self-check.js?v=20261022-build652'; // 詳細 > 自己診断 (automated frame-time scenarios)
+import { createScaleGuard, createFlapGuard, variantFallback } from './vr-flicker-guard.js?v=20261022-build652'; // flicker safety guard
+import { eyeMetrics, capFromPpv, nextCap, foveaRect, outsideFovea, foveaWorth, qualityText, FOVEA_K, CAP_MIN } from './vr-render-scale.js?v=20261022-build652'; // data-resolution render scale + offscreen foveation
+import { getMeasureStart, startMeasure, cancelMeasure, pickMeasureEnd, onMeasureStartChange, removeMeasurement, restoreMeasurements, measurementsOfPoint, seriesSpacing } from './measurements.js?v=20261022-build652';
+import { APP_BUILD } from './version.js?v=20261022-build652';
+import { wc, ww } from './ui-shell.js?v=20261022-build652';
+import { VOLUME_FWD, VOLUME_DOWN, MENU_OFFSET, HELP_OFFSET, HU_PANEL_OFFSET, EV_OFFSET, EV_WIDTH, EV_RES, MENU_WIDTH, HELP_WIDTH, HELP_RES, HIST_OFFSET, HIST_WIDTH, FOLLOW_ANGLE, FOLLOW_DIST } from './vr-layout.js?v=20261022-build652';
+import { onHistogramChange, getHistogramRange, getHistogramLog, setHistogramLog, setHistogramRange } from './histogram-ui.js?v=20261022-build652';
+import { createVrLabelHistogram, UNLABELED_COLOR, labelSlot, labelRegion } from './vr-label-histogram.js?v=20261022-build652';
+import { rangeRes } from './vr-histogram-layout.js?v=20261022-build652';
+import { getHuMode, setHuMode, HU_MODE_FILTERED, HU_MODE_RAW } from './effective-hu.js?v=20261022-build652';
+import { createVrHistogramPanel } from './vr-histogram-panel.js?v=20261022-build652';
+import { lightingGLSL, lightingVertexGLSL, materialVec, MATERIALS, materialKey } from './lighting.js?v=20261022-build652'; // one lighting model for the desktop volume, this VR / AR volume and the 3D-view meshes
 
 const BG=new THREE.Color(0.035,0.045,0.05);
 const BRICK=8;
@@ -1229,7 +1229,8 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
  // 体験会モード: it starts open on the かんたん menu (tab 10: show / hide of the level's segments, the analysis labels, すべての設定 -> the full menu)
  // the live tutorial = the switch is on AND its practice data (TUT_SAMPLE, the Lv0 data) is the one open; on other data the board is the normal help (+ the read-only guide)
  const tutLive=tutorialModeOn()&&globalThis.__vrlOpenSample===TUT_SAMPLE;
- const evMenu=eventModeOn()||tutLive;let evLabels=TRIGGER_AT_START==='label'; // the live tutorial opens the かんたん menu too (its ステップ4 / 5 use it; it is up from the start, never 「メニューを出して」).: the かんたん menu's trigger switch (event-mode.js): every VR / AR session starts in point mode, whatever the dataset or level (the board shows which one is on)
+ const evMenu=eventModeOn()||tutLive;if(evMenu&&!(settings.help|0))settings.help=DEFAULTS.help; // a practice session shows the operation panel (right) and the mission panel from the start, whatever an old setting said
+ let evLabels=TRIGGER_AT_START==='label'; // the live tutorial opens the かんたん menu too (its ステップ4 / 5 use it; it is up from the start, never 「メニューを出して」).: the かんたん menu's trigger switch (event-mode.js): every VR / AR session starts in point mode, whatever the dataset or level (the board shows which one is on)
  const menu=makeMenu(MENU_W,MENU_H,MENU_WIDTH);menu.mesh.visible=evMenu;scene.add(menu.mesh);
  const ui={sliceClear:false,tab:evMenu?10:0,open:evMenu,status:L.preparing,fpsLine:'',sizeLine:'',flash:'',flashUntil:0,benchLine:'',qualityLine:''};
  const holder=new THREE.Group();holder.position.set(0,1.3,-VOLUME_FWD);scene.add(holder);
@@ -1290,9 +1291,10 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
  let helpShow=tutVr?'detail':'list'; // which tab of the help board is up
  const helpTarget=new THREE.Vector3();let helpMoving=false,helpPlaced=false,helpHeld=null,helpKey='';
  const computeHelpTarget=()=>helpTarget.copy(head).addScaledVector(headFwd,HELP_OFFSET.fwd).addScaledVector(headLeft,HELP_OFFSET.left).add(new THREE.Vector3(0,-HELP_OFFSET.down,0));
- // the mission board (ev): world-fixed like the HU panel (placed once at EV_OFFSET, never follows the head); grip moves it, 正面に戻す (= every placeHelpNow) puts it back
- const evTarget=new THREE.Vector3();let evPlaced=false,evHeld=null;
- const placeEvNow=()=>{if(!ev)return;readHead();evTarget.copy(head).addScaledVector(headFwd,EV_OFFSET.fwd).addScaledVector(headLeft,EV_OFFSET.left);evTarget.y-=EV_OFFSET.down;if(evHeld){scene.attach(ev.mesh);evHeld=null}ev.mesh.position.copy(evTarget);ev.mesh.lookAt(head);evPlaced=true};
+ // the mission board (ev): placed at EV_OFFSET;: it follows the head like the help board (settings.help 1), fixed otherwise; grip moves it, 正面に戻す (= every placeHelpNow) puts it back
+ const evTarget=new THREE.Vector3();let evPlaced=false,evHeld=null,evMoving=false;
+ const computeEvTarget=()=>{evTarget.copy(head).addScaledVector(headFwd,EV_OFFSET.fwd).addScaledVector(headLeft,EV_OFFSET.left);evTarget.y-=EV_OFFSET.down}; // straight ahead behind the volume, a little above the gaze (vr-layout.js EV_OFFSET)
+ const placeEvNow=()=>{if(!ev)return;readHead();computeEvTarget();if(evHeld){scene.attach(ev.mesh);evHeld=null}ev.mesh.position.copy(evTarget);ev.mesh.lookAt(head);evPlaced=true;evMoving=false};
  const placeHelpNow=()=>{readHead();computeHelpTarget();help.mesh.position.copy(helpTarget);help.mesh.lookAt(head);helpPlaced=true;helpMoving=false;placeEvNow()};
  const helpHit=c=>{if(!help.mesh.visible||help.mesh.parent===holdOf(c))return null;setRay(c);return raycaster.intersectObject(help.mesh,false)[0]||null};
  const evHit=c=>{if(!ev||!ev.mesh.visible||ev.mesh.parent===holdOf(c))return null;setRay(c);return raycaster.intersectObject(ev.mesh,false)[0]||null};
@@ -2675,7 +2677,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
   // lazy follow: move back in front once the head has turned well away
   if(ui.open&&settings.menuMode===0&&!menuHeld){computeMenuTarget();menuMoving=lazyFollow(menu.mesh,menuTarget,menuMoving,!!dragging)}
   help.mesh.visible=(settings.help|0)>0||!!tutVr; // with the tutorial on the board is shown
-  if(ev){ev.mesh.visible=(settings.help|0)>0;if(ev.mesh.visible&&!evPlaced&&poseAt)placeEvNow()} // the mission board follows the help setting (it was a part of the help board); placed once, never follows the head
+  if(ev){ev.mesh.visible=(settings.help|0)>0;if(ev.mesh.visible&&!evPlaced&&poseAt)placeEvNow()} // the mission board follows the help setting (it was a part of the help board); placed once;: follows the head with help=Follow (below) the head
   if(tutVr&&!tutBad){try{tutVr.update(performance.now())}catch(e){tutFail(e);help.refresh()}}
   { // the 3D guides: the controller's button (blinking ring + moving arrow), the direction arrow at the edge of the view towards the menu while it is out of view, the arrow over the menu's button
    const tn=performance.now(),okT=tutVr&&!tutBad,sb=okT?tutVr.stepBoard():null;ctlHints.update(tn,okT?tutVr.controllerHint():null);
@@ -2686,6 +2688,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    glowHelp.visible=eb==='help';glowMenu.visible=eb==='menu';if(eb){const m=(eb==='help'?glowHelp:glowMenu).material;m.opacity=pl}} // the board the entry guidance points at blinks
   if(help.mesh.visible&&!helpPlaced&&poseAt)placeHelpNow();
   if(help.mesh.visible&&settings.help===1&&!helpHeld){computeHelpTarget();helpMoving=lazyFollow(help.mesh,helpTarget,helpMoving,false)}
+  if(ev&&ev.mesh.visible&&evPlaced&&settings.help===1&&!evHeld){computeEvTarget();evMoving=lazyFollow(ev.mesh,evTarget,evMoving,false)} // the mission board follows the head like the help board (the same setting, the same rule)
   if(!huPlaced&&poseAt&&huLine.panel.visible)placeHuNow(); // shown before the first pose (rare): placed once the pose is there; never follows the head after that
   if(hist.isOpen){if(!histPlaced&&poseAt)placeHistNow();histRun();histAxisFollow();hist.update(js0);releaseHistWaiters()} // no allocation; the board only on data / range change (567: histRun starts a pass when the data or the shown segments changed).: fixed where placed (no follow); the waiting histogram pass goes on after this frame
   handIn.frame(js0); // hands only: the filtered / delayed ray, tracking loss, wrist menu, fingertips.: before the two-hand scale (it reads the palm anchors: this frame's, not last frame's)

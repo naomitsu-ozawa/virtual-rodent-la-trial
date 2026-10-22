@@ -404,7 +404,8 @@ describe('static wiring', () => {
     const src = read('vr-view.js');
     // the live tutorial (switch on + its Lv0 data open) starts on the かんたん menu too (its ステップ4 / 5 use it)
     expect(src).toContain('const tutLive=tutorialModeOn()&&globalThis.__vrlOpenSample===TUT_SAMPLE;');
-    expect(src).toContain("const evMenu=eventModeOn()||tutLive;let evLabels=TRIGGER_AT_START==='label';");
+    expect(src).toContain("const evMenu=eventModeOn()||tutLive;if(evMenu&&!(settings.help|0))settings.help=DEFAULTS.help;");
+    expect(src).toContain("let evLabels=TRIGGER_AT_START==='label';");
     expect(src).toContain('const menu=makeMenu(MENU_W,MENU_H,MENU_WIDTH);menu.mesh.visible=evMenu;scene.add(menu.mesh);');
     expect(src).toContain('const ui={sliceClear:false,tab:evMenu?10:0,open:evMenu,');
     expect(src).toContain('const setMenuOpen=open=>{if(open)emit(\'menu-open\');else emit(\'menu-close\');ui.open=open;menu.mesh.visible=open;if(open){placeMenuNow();ui.probeOnOpen=true}menu.refresh()};');

@@ -374,3 +374,29 @@ describe('after the last ステップ: Lv1-Lv3 on the page', () => {
     expect(app).toContain("globalThis.__vrlXrChecked=true"); expect(app).toMatch(/Promise\.all\(\[xrShow\('immersive-vr',vrViewBtn\),xrShow\('immersive-ar',arViewBtn\)\]\)/);
   });
 });
+
+// after the VR session the left pane shows the 表示 tab (selectSeries): the Lv cards / the 練習データ button are in the データ tab and were lit but invisible
+import { revealTargets, laidOut } from '../../docs/tutorial-ui.js';
+describe('the left pane follows the guidance', () => {
+  it('laidOut: an element in a hidden tab (offsetParent null) is not; one without offsetParent info (fake DOM) is', () => {
+    expect(laidOut({ offsetParent: null })).toBe(false); expect(laidOut({ offsetParent: {} })).toBe(true); expect(laidOut({})).toBe(true); expect(laidOut(null)).toBe(false);
+  });
+  it('revealTargets: openLv0 / chooseLv with every target hidden -> the データ tab is clicked; visible targets, other phases or no tab -> nothing', () => {
+    let clicks = 0; const doc = { querySelector: s => (s === '[data-ipad-drawer-tab="data"]' ? { click: () => clicks++ } : null) };
+    const hidden = [{ offsetParent: null }, { offsetParent: null }], shownEl = [{ offsetParent: null }, { offsetParent: {} }];
+    expect(revealTargets('chooseLv', hidden, doc)).toBe(true); expect(clicks).toBe(1); expect(revealTargets('openLv0', hidden, doc)).toBe(true); expect(clicks).toBe(2);
+    expect(revealTargets('chooseLv', shownEl, doc)).toBe(false); expect(revealTargets('chooseLv', [], doc)).toBe(false); expect(revealTargets('pressVr', hidden, doc)).toBe(false); expect(revealTargets('loading', hidden, doc)).toBe(false); expect(clicks).toBe(2);
+    expect(revealTargets('chooseLv', hidden, { querySelector: () => null })).toBe(false); expect(revealTargets('chooseLv', hidden, { querySelector: () => ({ click() { throw new Error('x'); } }) })).toBe(false);
+  });
+  it('the intro opens the tab and scrolls the first on-screen card to the top once (the paint loop), not every tick', () => {
+    vi.useFakeTimers();
+    try {
+      const f = fakeDoc(); let tabClicks = 0; const cards = ['lv1', 'lv2', 'lv3'].map(id => { const c = f.doc.createElement('button'); c.offsetParent = null; c.scrolls = []; c.scrollIntoView = o => c.scrolls.push(o); f.bySel[`[data-event-level="${id}"]`] = c; return c; });
+      f.bySel['[data-ipad-drawer-tab="data"]'] = { click: () => { tabClicks++; for (const c of cards) c.offsetParent = {}; } };
+      const it = createTutorialIntro({ doc: f.doc, audio: { play: vi.fn() }, getOpenSample: () => 'sample4', getReady: () => true, levelsVoiceDelayMs: 0 }); it.startLevels();
+      expect(tabClicks).toBe(1); // opened at the first paint
+      vi.advanceTimersByTime(2000); expect(tabClicks).toBe(1); expect(cards[0].scrolls).toHaveLength(1); expect(cards[0].scrolls[0]).toMatchObject({ block: 'start' }); expect(cards[1].scrolls).toHaveLength(0); // once, the first card, from the top
+      it.stop();
+    } finally { vi.useRealTimers(); }
+  });
+});
