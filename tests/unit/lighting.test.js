@@ -192,6 +192,15 @@ describe('every view uses the shared lighting (static)', () => {
     // entry face: a hit within one step of the box face the ray enters through takes the flat face normal (the gradient is one-sided noise there) at all 4 surface-hit sites, no gradient fetches for it
     expect(src.match(/bool face=!(simple|hitSimple)&&hi<=faceEnd;vec3 n=(simple|hitSimple)\?-dir:\(face\?entryFaceNormal\(o,dir\):gradientAt\(tc\)\);/g)).toHaveLength(4);
     expect(src).toContain('float faceEnd=(bounds.x>0.0&&t<=bounds.x+1e-4)?bounds.x+step:-1.0;');
+    // the entry sample on a box face inside a segment never takes a distance-field jump (the field treats the box exterior as the same class,
+    // so a solid region at the face jumped past it and the face was hit voxels deep, gradient-lit): every jump site (3 combined-field, 1 separate field) is guarded
+    expect(src).toContain('float faceT=faceEnd>=0.0?t:-1.0;');
+    expect(src.match(/if\(dd>=2\.7\)\{/g)).toHaveLength(3);
+    expect(src.match(/if\(dd>=2\.7&&t<=faceT\)\{vec4 qf=(q|qHere);/g)).toHaveLength(3);
+    expect(src.match(/max\(max\(dot\(qfc,sel0\)-off0,dot\(qfc,sel1\)-off1\),max\(dot\(qfc,sel2\)-off2,dot\(qfc,sel3\)-off3\)\)>=0\.0\)dd=0\.0;/g)).toHaveLength(2);
+    expect(src).toContain('if(segmentIndexFromQ(qf)>=0)dd=0.0;}');
+    expect(src.match(/if\(dd>=3\.0\)\{/g)).toHaveLength(1);
+    expect(src).toContain('if(dd>=3.0&&t<=faceT&&segmentIndexAt(tc0)>=0)dd=0.0;');
     // the local mean HU the outward side is judged by costs no extra fetch: it is the mean of the fetches of the gradient itself
     expect(src).toMatch(/gHuMean=\(xp\+xm\+yp\+ym\+zp\+zm\)\*\(1\.0\/6\.0\);/);
     expect(src.match(/vec3 viewDir=/g)).toHaveLength(6);
