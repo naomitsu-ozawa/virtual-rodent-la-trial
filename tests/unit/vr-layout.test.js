@@ -141,7 +141,7 @@ describe('slice fill (slice tab row + shader guards, static)', () => {
     expect(v).not.toMatch(/URLSearchParams[^;]*ctShadeBright|get\('ctShadeBright'\)/);
   });
   it('ctShadeContrast: 50..200 % in 10 % steps, default 170 %, a menu preference like ctShadeBright (not an event view value, no URL parameter); clamped before the shader', () => {
-    expect(v).toContain('ctShade:1,ctShadeBright:1.8,ctShadeContrast:1.7}');
+    expect(v).toContain('ctShade:1,ctShadeBright:1.8,ctShadeContrast:1.7,laserStyle:1}');
     expect(v).toContain('const CT_CONTRAST_MIN=0.5,CT_CONTRAST_MAX=2,CT_CONTRAST_STEP=0.1,ctContrastOf=v=>{v=+v;return Number.isFinite(v)?Math.min(CT_CONTRAST_MAX,Math.max(CT_CONTRAST_MIN,Math.round(v*10)/10)):DEFAULTS.ctShadeContrast};');
     expect(v).toContain('ctShadeContrast:{value:1.7}'); expect(v).toContain('u.ctShadeContrast.value=ctContrastOf(settings.ctShadeContrast);');
     expect(v).toContain("const EVENT_VIEW_KEYS=['cut','cap','sliceAir','sliceTint','sliceOpacity','labelSize'];");

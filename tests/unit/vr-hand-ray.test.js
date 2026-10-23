@@ -243,7 +243,7 @@ describe('the view: each mode on the group, 標準 untouched, 指差し gated, t
     const pose = (o = {}) => { cur = { ...cur, ...o }; const h = handPose({ ...cur, p: OFF }); for (const k in h.j) mk(k, h.j[k]); return h; };
     pose();
     const c = new THREE.Group(); c.matrixAutoUpdate = false; c.visible = true; c.userData.source = { hand: {}, handedness: 'right' };
-    const ray = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineBasicMaterial()); c.add(ray); c.userData.ray = ray;
+    const ray = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial()); c.add(ray); c.userData.ray = ray;
     const dot = new THREE.Mesh(new THREE.SphereGeometry(0.004), new THREE.MeshBasicMaterial()); c.userData.dot = dot;
     const scene = new THREE.Scene(), m = { mode };
     scene.add(c);
@@ -349,7 +349,7 @@ describe('the sources: where the setting lives, the VR / 2D labels, the hooks in
   const dbg = readFileSync(new URL('../../docs/debug-switches-ui.js', import.meta.url), 'utf8') + readFileSync(new URL('../../docs/debug-flags.js', import.meta.url), 'utf8');
   it('the VR menu 表示 tab: 「ハンドのレーザー」 標準 / 指差し in the order of HAND_RAY_MODES, only with hands', () => {
     expect(src).toContain("hrT:'ハンドのレーザー',hrV:['標準','指差し']"); expect(src).toContain("hrT:'Hand laser',hrV:['Standard','Pointing']");
-    expect(src).toContain('if(handIn.anyHand())choice(yb-100,L.hrT,L.hrV.map((t,i)=>({label:t,value:HAND_RAY_MODES[i]})),handRayMode(),v=>setHandRayMode(v));');
+    expect(src).toContain('if(handIn.anyHand())choice(yb-80,L.hrT,L.hrV.map((t,i)=>({label:t,value:HAND_RAY_MODES[i]})),handRayMode(),v=>setHandRayMode(v));');
     expect(src).toContain("normalizeHandRay(globalThis.__vrlSettings?.get?.('handRay'))"); expect(src).toContain("globalThis.__vrlSettings?.set?.('handRay',normalizeHandRay(v))");
     expect(src).not.toMatch(/'指先'|'手のひら'|wristRay|'Fingertip'|'Palm'|ホーム方式|'Home style'|drawLaser|getHeadQ/);
   });

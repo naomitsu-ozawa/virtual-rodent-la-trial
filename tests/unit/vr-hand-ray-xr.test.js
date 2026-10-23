@@ -51,8 +51,8 @@ function session(mode, { pointing = false } = {}) {
     getPose: s => (s === src.targetRaySpace ? { transform: mat(aimP, aimQ) } : null),
     getJointPose: j => { let p = W(j.jointName); if (gap !== null && j.jointName === 'thumb-tip') p = W('index-finger-tip').add(new THREE.Vector3(-gap, 0, 0)); return { radius: 0.008, transform: mat(p, new THREE.Quaternion()) }; } };
   const xc = [new WebXRController(), new WebXRController()], scene = new THREE.Scene();
-  const controllers = [0, 1].map(i => { const c = xc[i].getTargetRaySpace(); scene.add(c); // vr-view.js: renderer.xr.getController(i); scene.add(c); a Line (0,0,0) -> (0,0,-1) as the laser
-    const ray = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 0, -1)]), new THREE.LineBasicMaterial()); ray.scale.z = 0.6; c.add(ray); c.userData.ray = ray; return c; });
+  const controllers = [0, 1].map(i => { const c = xc[i].getTargetRaySpace(); scene.add(c); // vr-view.js: renderer.xr.getController(i); scene.add(c); a 2 mm tube (0,0,0) -> (0,0,-1) as the laser
+    const ray = new THREE.Mesh(new THREE.CylinderGeometry(0.001, 0.001, 1, 6, 1, true).translate(0, 0.5, 0).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial()); ray.scale.z = 0.6; c.add(ray); c.userData.ray = ray; return c; });
   const cur = { mode }, events = [];
   const hi = createHandInput(THREE, { renderer: { xr: { getHand: i => xc[i].getHandSpace() } }, scene, controllers, ja: true, getHead: () => new THREE.Vector3(0, 1.6, 0), rayMode: () => cur.mode,
     colorOf: () => 0xffffff, release() {}, handInHolder: c => ({ p: c.getWorldPosition(new THREE.Vector3()), q: c.getWorldQuaternion(new THREE.Quaternion()) }), sectionOn: () => false, avail: () => true, grab: () => true, ungrab() {}, busy: () => false, near: null });
@@ -119,5 +119,14 @@ describe('the hand laser from a synthetic XRFrame: what is drawn and what is hit
     for (const m of ['standard', 'point', 'home', 'standard']) { s.cur.mode = m; for (let i = 0; i < 60; i++) s.tick(); at[m] = s.drawn(); sameRay(s.hit(), s.drawn(), 1e-12, 1e-9); }
     expect(at.standard.o.distanceTo(AIM_P)).toBeLessThan(1e-9); sameRay(at.standard, s.aim(), 1e-12, 1e-9); sameRay(at.home, s.aim(), 1e-12, 1e-9);
     expect(at.point.o.distanceTo(at.standard.o)).toBeGreaterThan(0.05); expect(deg(at.point.d, at.standard.d)).toBeGreaterThan(5);
+  });
+
+  it('the laser is a light beam (flat ribbon, per-eye billboard, additive, fading), z=0..-1 with scale.z as its length, never hit by a raycast', () => {
+    const m = viewSrc.match(/const makeLaser=\(\)=>\{[\s\S]*?return r\};/)[0];
+    expect(viewSrc).toContain('const ray=makeLaser();ray.scale.z=0.08;c.add(ray);c.userData.ray=ray;');
+    expect(viewSrc).not.toContain('const ray=new THREE.Line(');
+    expect(m).toContain('cameraPosition'); expect(m).toContain('blending:THREE.AdditiveBlending'); expect(m).toContain('depthWrite:false'); expect(m).toContain('toneMapped:false');
+    expect(m).toContain('mix(1.,0.3,vU.y)'); expect(m).toContain('r.raycast=()=>{}'); expect(m).toContain('position.x*width*mix(1.,taper,t)'); // 2 mm at the hand, 0.6 mm at the tip expect(m).toContain('m.color=m.uniforms.color.value');
+    expect(m).toContain('[-1,0,0,1,0,0,-1,0,-1,1,0,-1]'); // x = -1..1 (feathered width), z = 0..-1 (length)
   });
 });
