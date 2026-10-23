@@ -1,9 +1,9 @@
 // 設定 > デバッグ > テスト機能: a collapsed list with the one test switch (debug-flags.js). A switch that only applies after a
 // reload says so and, when changed, shows a reload button.
-import { settings } from './app-settings.js?v=20261022-build656';
-import { tr } from './i18n.js?v=20261022-build656';
-import { armConfirm } from './inline-ask.js?v=20261022-build656';
-import { DEBUG_SWITCHES, debugFlag, resetDebugFlags } from './debug-flags.js?v=20261022-build656';
+import { settings } from './app-settings.js?v=20261023-build658';
+import { tr } from './i18n.js?v=20261023-build658';
+import { armConfirm } from './inline-ask.js?v=20261023-build658';
+import { DEBUG_SWITCHES, debugFlag, resetDebugFlags } from './debug-flags.js?v=20261023-build658';
 const WHEN_KEY={reload:'dbgApplyReload',vr:'dbgApplyVr'};
 const GROUP_KEY={light:'dbgGroupLight'};
 export function initDebugSwitches(){

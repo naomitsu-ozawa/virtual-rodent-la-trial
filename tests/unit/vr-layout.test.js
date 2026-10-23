@@ -108,29 +108,59 @@ describe('the help board with the caption band', () => {
 });
 describe('slice fill (slice tab row + shader guards, static)', () => {
   const v = readFileSync('docs/vr-view.js', 'utf8'), MENU_H = 1180, y0 = 270;
-  it('the fill row sits below the air-floor slider (y0+604..+676) and its help line (y0+704, centred, 24 px), inside the menu', () => {
-    expect(v).toContain('choice(y0+740,L.ctSh,');
-    expect(v).toContain('btn(800,y0+604,70,'); expect(v).toContain('label(X,y0+704,L.airHelp');
-    expect(y0 + 740).toBeGreaterThan(y0 + 604 + 72); expect(y0 + 740).toBeGreaterThan(y0 + 704 + 12); expect(y0 + 704 - 12).toBeGreaterThan(y0 + 604 + 72); expect(y0 + 740 + 72).toBeLessThanOrEqual(MENU_H);
+  it('the fill row sits below the air-floor slider (y0+520..+592) and its help line (y0+618, centred, 24 px), inside the menu', () => {
+    expect(v).toContain('choice(y0+650,L.ctSh,');
+    expect(v).toContain('btn(800,y0+520,70,'); expect(v).toContain('label(X,y0+618,L.airHelp');
+    expect(y0 + 650).toBeGreaterThan(y0 + 520 + 72); expect(y0 + 650).toBeGreaterThan(y0 + 618 + 12); expect(y0 + 618 - 12).toBeGreaterThan(y0 + 520 + 72); expect(y0 + 650 + 72).toBeLessThanOrEqual(MENU_H);
   });
   it('the 濃淡の明るさ slider (+ − buttons) is the row right below the fill row, overlaps nothing, and ends inside the menu', () => {
-    expect(v).toContain("label(X,y0+856,L.ctBr)"); expect(v).toContain("type:'slider',x:CX+26,y:y0+820,w:300,h:72,value:(b-CT_BRIGHT_MIN)/(CT_BRIGHT_MAX-CT_BRIGHT_MIN),text:Math.round(b*100)+'%'");
-    expect(v).toContain('btn(800,y0+820,70,'); expect(v).toContain('btn(890,y0+820,70,');
-    expect(y0 + 820).toBeGreaterThanOrEqual(y0 + 740 + 72); expect(y0 + 820 + 72).toBeLessThanOrEqual(MENU_H); expect(y0 + 856).toBe(y0 + 820 + 36); // label centred on the slider like the others
+    expect(v).toContain("label(X,y0+770,L.ctBr)"); expect(v).toContain("type:'slider',x:CX+26,y:y0+734,w:300,h:72,value:(b-CT_BRIGHT_MIN)/(CT_BRIGHT_MAX-CT_BRIGHT_MIN),text:Math.round(b*100)+'%'");
+    expect(v).toContain('btn(800,y0+734,70,'); expect(v).toContain('btn(890,y0+734,70,');
+    expect(y0 + 734).toBeGreaterThanOrEqual(y0 + 650 + 72); expect(y0 + 734 + 72).toBeLessThanOrEqual(MENU_H); expect(y0 + 770).toBe(y0 + 734 + 36); // label centred on the slider like the others
     expect(v).toContain("ctBr:'濃淡の明るさ'"); expect(v).toContain("ctBr:'Shading brightness'");
-    // the other slice-tab rows end above the fill row (their y0 offsets: opacity 50, tint 140, centre 250, width 340, presets 440, help 550, air 604)
-    for (const y of [50, 140, 250, 340, 440, 550, 604]) expect(y + 72).toBeLessThanOrEqual(740);
+    // the other slice-tab rows end above the fill row (their y0 offsets: opacity 44, tint 126, centre 216, width 298, presets 390, air 520)
+    for (const y of [44, 126, 216, 298, 390, 520]) expect(y + 72).toBeLessThanOrEqual(650);
   });
-  it('ctShadeBright: 50..200 % in 10 % steps, default 130 %, a menu preference like ctShade (not an event view value, no URL parameter); the setting is clamped before it reaches the shader', () => {
-    expect(v).toContain('labelHide:LABEL_HIDE_DEFAULT,ctShade:1,ctShadeBright:1.3}');
+  it('the 濃淡のコントラスト slider (+ − buttons) is the row right below 濃淡の明るさ and ends inside the menu; the packed slice-tab rows do not overlap', () => {
+    expect(v).toContain("label(X,y0+854,L.ctCo)"); expect(v).toContain("type:'slider',x:CX+26,y:y0+818,w:300,h:72,value:(c-CT_CONTRAST_MIN)/(CT_CONTRAST_MAX-CT_CONTRAST_MIN),text:Math.round(c*100)+'%'");
+    expect(v).toContain('btn(800,y0+818,70,'); expect(v).toContain('btn(890,y0+818,70,');
+    expect(y0 + 818).toBeGreaterThanOrEqual(y0 + 734 + 72); expect(y0 + 818 + 72).toBeLessThanOrEqual(MENU_H); expect(y0 + 854).toBe(y0 + 818 + 36);
+    expect(v).toContain("ctCo:'濃淡のコントラスト'"); expect(v).toContain("ctCo:'Shading contrast'");
+    expect(v.indexOf('label(X,y0+854,L.ctCo)')).toBeGreaterThan(v.indexOf('label(X,y0+770,L.ctBr)'));
+    // 72-px rows (top offsets) and centred help labels (centre, 24 px): opacity, tint, centre, width, presets, [window help 490], air, [air help 618], fill, brightness, contrast
+    expect(v).toContain('label(X,y0+490,L.winHelp,'); expect(v).toContain('btn(X+i*244,y0+390,232,'); expect(v).toContain("row(y0+216,L.wcL,'c',cMin,cMax);row(y0+298,L.wwL,'w',1,wMax);");
+    const rows = [[44, 116], [126, 198], [216, 288], [298, 370], [390, 462], [478, 502], [520, 592], [606, 630], [650, 722], [734, 806], [818, 890]];
+    for (let i = 1; i < rows.length; i++) expect(rows[i][0]).toBeGreaterThan(rows[i - 1][1]);
+    expect(y0 + 10 + 13).toBeLessThan(y0 + 44); // the window heading line above the first row
+  });
+  it('ctShadeBright: 50..200 % in 10 % steps, default 180 %, a menu preference like ctShade (not an event view value, no URL parameter); the setting is clamped before it reaches the shader', () => {
+    expect(v).toContain('labelHide:LABEL_HIDE_DEFAULT,ctShade:1,ctShadeBright:1.8,'); // ctShadeContrast follows
     expect(v).toContain('const CT_BRIGHT_MIN=0.5,CT_BRIGHT_MAX=2,CT_BRIGHT_STEP=0.1,ctBrightOf=v=>{v=+v;return Number.isFinite(v)?Math.min(CT_BRIGHT_MAX,Math.max(CT_BRIGHT_MIN,Math.round(v*10)/10)):DEFAULTS.ctShadeBright};');
-    expect(v).toContain('ctShadeBright:{value:1.3}'); expect(v).toContain('u.ctShadeBright.value=ctBrightOf(settings.ctShadeBright);');
+    expect(v).toContain('ctShadeBright:{value:1.8}'); expect(v).toContain('u.ctShadeBright.value=ctBrightOf(settings.ctShadeBright);');
     expect(v).toContain("const EVENT_VIEW_KEYS=['cut','cap','sliceAir','sliceTint','sliceOpacity','labelSize'];");
     expect(v).not.toMatch(/URLSearchParams[^;]*ctShadeBright|get\('ctShadeBright'\)/);
   });
+  it('ctShadeContrast: 50..200 % in 10 % steps, default 170 %, a menu preference like ctShadeBright (not an event view value, no URL parameter); clamped before the shader', () => {
+    expect(v).toContain('ctShade:1,ctShadeBright:1.8,ctShadeContrast:1.7}');
+    expect(v).toContain('const CT_CONTRAST_MIN=0.5,CT_CONTRAST_MAX=2,CT_CONTRAST_STEP=0.1,ctContrastOf=v=>{v=+v;return Number.isFinite(v)?Math.min(CT_CONTRAST_MAX,Math.max(CT_CONTRAST_MIN,Math.round(v*10)/10)):DEFAULTS.ctShadeContrast};');
+    expect(v).toContain('ctShadeContrast:{value:1.7}'); expect(v).toContain('u.ctShadeContrast.value=ctContrastOf(settings.ctShadeContrast);');
+    expect(v).toContain("const EVENT_VIEW_KEYS=['cut','cap','sliceAir','sliceTint','sliceOpacity','labelSize'];");
+    expect(v).not.toMatch(/URLSearchParams[^;]*ctShadeContrast|get\('ctShadeContrast'\)/);
+  });
+  it('shader: the contrast spreads the gamma value about the middle of its range, clamped to 0.05..1; exactly 1 returns the gamma value unchanged; only inside ctLumHU', () => {
+    expect(v).toContain('uniform float ctShadeContrast;');
+    expect(v).toContain(' float g=1.0/max(ctShadeBright,0.1),l=pow(mix(CT_SHADE_MIN,1.0,clamp((hu-a.x)/max(min(a.y-a.x,CT_SHADE_SPAN),1.0),0.0,1.0)),g);');
+    expect(v).toContain(' if(ctShadeContrast==1.0)return l;'); expect(v).toContain(' float p=0.5*(pow(CT_SHADE_MIN,g)+1.0);return clamp(p+(l-p)*ctShadeContrast,0.05,1.0);');
+    const sh = v.slice(0, v.indexOf('bool editAllows(')); expect(sh.match(/ctShadeContrast/g).length).toBe(5); // the comment above ctLumHU, the uniform and its comment, and the two uses in ctLumHU
+    const lum = (t, b, c) => { const g = 1 / b, l = Math.pow(0.35 + 0.65 * t, g); if (c === 1) return l; const p = 0.5 * (Math.pow(0.35, g) + 1); return Math.min(1, Math.max(0.05, p + (l - p) * c)); };
+    for (const b of [0.5, 1, 1.3, 2]) for (let i = 0; i <= 10; i++) { const t = i / 10; expect(lum(t, b, 1)).toBe(Math.pow(0.35 + 0.65 * t, 1 / b)); }
+    for (const b of [1, 1.3, 2]) { const span = c => lum(1, b, c) - lum(0, b, c); expect(span(1.5)).toBeGreaterThan(span(1)); expect(span(2)).toBeGreaterThan(span(1.5)); expect(span(0.5)).toBeLessThan(span(1)); }
+    for (const c of [0.5, 1.5, 2]) for (let i = 1; i <= 10; i++) expect(lum(i / 10, 1.3, c)).toBeGreaterThanOrEqual(lum((i - 1) / 10, 1.3, c)); // the order of the shading is kept
+    for (const c of [0.5, 1.5, 2]) for (let i = 0; i <= 10; i++) { const x = lum(i / 10, 2, c); expect(x).toBeGreaterThanOrEqual(0.05); expect(x).toBeLessThanOrEqual(1); }
+  });
   it('shader: the brightness is a gamma on the CT factor (pow(lum,1/b)): 1 at the top whatever b is, identity at 100 %, only inside ctLumHU (so only CT shading uses it)', () => {
     expect(v).toContain('uniform float ctShadeBright;'); expect(v.match(/ctShadeBright/g).length).toBeGreaterThanOrEqual(2);
-    expect(v).toContain('return pow(mix(CT_SHADE_MIN,1.0,clamp((hu-a.x)/max(min(a.y-a.x,CT_SHADE_SPAN),1.0),0.0,1.0)),1.0/max(ctShadeBright,0.1));');
+    expect(v).toContain(' float g=1.0/max(ctShadeBright,0.1),l=pow(mix(CT_SHADE_MIN,1.0,clamp((hu-a.x)/max(min(a.y-a.x,CT_SHADE_SPAN),1.0),0.0,1.0)),g);'); // the gamma value l (the contrast step after it returns l itself at 100 %)
     const lum = (t, b) => Math.pow(0.35 + 0.65 * t, 1 / b); // the same formula in JS
     for (const b of [0.5, 1, 1.3, 2]) { expect(lum(1, b)).toBe(1); expect(lum(0, b)).toBeGreaterThan(0); }
     for (let i = 0; i <= 9; i++) { const t = i / 10; expect(lum(t, 1)).toBeCloseTo(0.35 + 0.65 * t, 12); expect(lum(t, 1.3)).toBeGreaterThan(lum(t, 1)); expect(lum(t, 2)).toBeGreaterThan(lum(t, 1.3)); expect(lum(t, 1.3)).toBeLessThanOrEqual(1); }
