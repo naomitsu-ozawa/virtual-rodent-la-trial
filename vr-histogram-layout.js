@@ -1,5 +1,5 @@
-import { HIST_MIN, HIST_MAX, MIN_WINDOW } from './histogram.js?v=20261023-build659';
-import { LABELS, SLOTS, UNLABELED } from './vr-label-histogram.js?v=20261023-build659';
+import { HIST_MIN, HIST_MAX, MIN_WINDOW } from './histogram.js?v=20261023-build663';
+import { LABELS, SLOTS, UNLABELED } from './vr-label-histogram.js?v=20261023-build663';
 
 // canvas size and the plot rectangle inside it (px)
 export const PANEL_W = 1024, PANEL_H = 640;

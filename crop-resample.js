@@ -7,7 +7,7 @@
 //   pre-filtered copy of the whole source region, too much memory for large volumes); it can overshoot, hence the clamp.
 // A position inside the source volume (index -0.5 .. size-0.5 per axis, i.e. within the outer faces of the outermost voxels) is sampled
 // (neighbours outside are replaced by the nearest voxel); a position outside gets the fill value.
-import { boxSteps, sourcePosition } from './crop-geometry.js?v=20261023-build659';
+import { boxSteps, sourcePosition } from './crop-geometry.js?v=20261023-build663';
 
 const NEAREST_EPS = 1e-7;
 // block: a sub-box of the source {x0,y0,z0,w,h,d,data} (data[(z*h+y)*w+x], z/y/x relative to x0/y0/z0); dims: the whole source {columns,rows,slices}
