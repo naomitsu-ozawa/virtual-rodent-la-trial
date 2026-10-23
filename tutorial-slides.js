@@ -6,7 +6,7 @@
 //   LEVEL_SLIDES: the 体験会 mission board (vr-view.js ev board) shows the chosen level's slide (event mode only).
 // items: the numbered rows of the slide (the round number badge + its texts), measured on the rendered slide in slide pixels (SLIDE_W x SLIDE_H): {n, x, y, w, h}.
 export const SLIDE_W = 1920, SLIDE_H = 1080;
-const SLIDE_QUERY = '?v=20261023-build658'; // same cache-busting form as the other assets (tools/bump-build.mjs rewrites it)
+const SLIDE_QUERY = '?v=20261023-build659'; // same cache-busting form as the other assets (tools/bump-build.mjs rewrites it)
 export const SLIDE_BASE = './tutorial/slides/';
 export const slideSrc = (id, base = SLIDE_BASE) => (id ? `${base}${id}.webp${SLIDE_QUERY}` : null);
 const t = (ja, en) => Object.freeze({ ja, en });
