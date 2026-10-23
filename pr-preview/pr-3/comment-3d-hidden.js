@@ -2,7 +2,7 @@
 // feeds it the points, the camera and the classification bytes. The RULE is VR's, not a copy: vr-point.js pointIsHidden (march half a voxel at a
 // time from the point towards the eye; a voxel of a shown segment (>= 128) on the kept side of every cutting plane before the eye = hidden;
 // the point's own voxel is skipped; segment opacity ignored; nothing shown = exposed). On PC the eye is the camera position.
-import { pointIsHidden } from './vr-point.js?v=20261023-build657';
+import { pointIsHidden } from './vr-point.js?v=20261023-build659';
 
 export const HIDDEN_INTERVAL_MS=100; // while the view moves the judgement is refreshed about 10 times a second, never every frame
 
