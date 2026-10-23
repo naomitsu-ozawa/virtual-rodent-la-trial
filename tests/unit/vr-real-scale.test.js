@@ -185,9 +185,9 @@ describe('the tutorial placement of the volume', () => {
     expect(NORM_LONG * startHolderScale(bone, DEFAULT_SCALE)).toBeCloseTo(0.0256, 6); // the normal start: real size, 2.56 cm: this is what the tutorial no longer starts with
     expect(realMagnification(tutorialHolderScale(bone), bone)).toBeGreaterThan(9.7); // about 9.8 x
   });
-  it('within reach: 0.5 m ahead, a quarter metre below the eyes (chest); the normal 0.65 m / 0.12 m are separate constants', () => {
-    expect(TUT_VOLUME_FWD).toBe(0.5); expect(TUT_VOLUME_DOWN).toBe(0.25); expect(TUT_VOLUME_FWD).toBeLessThan(0.65); expect(TUT_VOLUME_DOWN).toBeGreaterThan(0.12);
-    expect(TUT_VOLUME_FWD + MAX_LONG_M / 2).toBeLessThan(0.8); // the far side stays in front of the HU panel (0.80 m)
+  it('0.65 m ahead like the normal start, a quarter metre below the eyes (chest; the normal start is 0.12 m)', () => {
+    expect(TUT_VOLUME_FWD).toBe(0.65); expect(TUT_VOLUME_DOWN).toBe(0.25); expect(TUT_VOLUME_DOWN).toBeGreaterThan(0.12);
+    expect(TUT_VOLUME_DOWN - MAX_LONG_M / 2).toBeGreaterThan(0); // the top stays below the eyes: clear of the HU panel (16 cm above the eyes)
     expect(Math.atan((MAX_LONG_M / 2) / TUT_VOLUME_FWD) * 180 / Math.PI).toBeLessThan(34); // its half width stays inside the boards' inner edges (34.5 deg)
   });
   it('smallForTutorial: shrunk or never enlarged = small; at (or near) the tutorial size = not', () => {
