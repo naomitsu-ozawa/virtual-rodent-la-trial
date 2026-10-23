@@ -1,79 +1,80 @@
 
-import { ledgerText } from './mem-ledger.js?v=20261022-build652';
-import * as memVolumeIo from './volume-io.js?v=20261022-build652';
-import * as memSourceFilters from './source-filters.js?v=20261022-build652';
-import * as memState from './state.js?v=20261022-build652';
-import * as memGpu from './gpu-compute.js?v=20261022-build652';
-import { initSettingsDialog } from './settings-ui.js?v=20261022-build652';
-import { initTutorialUi } from './tutorial-ui.js?v=20261022-build652';
-import { initEventModeUi } from './event-mode-ui.js?v=20261022-build652';
-import { logGpuError } from './gpu-diagnostics.js?v=20261022-build652';
-import { initThemeUi } from './theme-ui.js?v=20261022-build652';
-import { mark3DCurrent, mark3DStale, set3DState } from './three-state.js?v=20261022-build652';
-import { gpuVolumeRefresh, set3DBusy } from './three-status.js?v=20261022-build652';
+import { ledgerText } from './mem-ledger.js?v=20261023-build657';
+import * as memVolumeIo from './volume-io.js?v=20261023-build657';
+import * as memSourceFilters from './source-filters.js?v=20261023-build657';
+import * as memState from './state.js?v=20261023-build657';
+import * as memGpu from './gpu-compute.js?v=20261023-build657';
+import { initSettingsDialog } from './settings-ui.js?v=20261023-build657';
+import { initTutorialUi } from './tutorial-ui.js?v=20261023-build657';
+import { initEventModeUi } from './event-mode-ui.js?v=20261023-build657';
+import { logGpuError } from './gpu-diagnostics.js?v=20261023-build657';
+import { initThemeUi } from './theme-ui.js?v=20261023-build657';
+import { mark3DCurrent, mark3DStale, set3DState } from './three-state.js?v=20261023-build657';
+import { gpuVolumeRefresh, set3DBusy } from './three-status.js?v=20261023-build657';
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.webgpu.js';
 import 'https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js';
 import dicomParser from 'https://esm.sh/dicom-parser@1.8.21';
-import { MedicalVolumeRenderer } from './medical-volume.js?v=20261022-build652';
+import { MedicalVolumeRenderer } from './medical-volume.js?v=20261023-build657';
 import 'https://esm.sh/fflate@0.8.2';
-import { rangeWheelSteps, installRangeEntry, setRangeEntryBounds } from './range-entry.js?v=20261022-build652';
-import { clampRangeValue, esc, fmt, frameYield, isIPadRuntime, rangeNumber, rangeStep } from './utils.js?v=20261022-build652';
-import { setMeshMaterialBackend, updateMeshDepth, setSegmentMeshMaterial } from './mesh-material.js?v=20261022-build652'; // the surface meshes evaluate the same lighting formula as the two volume shaders (lighting.js)
-import { materialKey } from './lighting.js?v=20261022-build652';
-import { groupSeries, parseFiles } from './dicom.js?v=20261022-build652';
-import './mask-ops.js?v=20261022-build652';
-import './run-length.js?v=20261022-build652';
-import './mesh-geometry.js?v=20261022-build652';
-import { applyLanguage, tr, I18N } from './i18n.js?v=20261022-build652';
-import { installComments, refreshCommentsUi } from './comment-ui.js?v=20261022-build652';
-import { installComment3d, updateComment3dMarkers } from './comment-3d.js?v=20261022-build652';
-import { installHuLine3d, updateHuLine3d } from './hu-line-3d.js?v=20261022-build652';
-import { installCrosshair, crosshairPointerDown, crosshairPointerMove, crosshairPointerEnd, setCrosshairMode, refreshCrosshairUi } from './crosshair-ui.js?v=20261022-build652';
-import './gpu-shaders.js?v=20261022-build652';
-import { analysisCutApplying, analysisCutScreen, analysisEditPreparing, analysisEditTargetKey, analysisEditTargetMode, analysisEditTool, analysisPendingCut, analysisRegions, ctRangeMode, current3DVolume, currentLanguage, cutControlPreviewRaf, filterRebuildTimer, incFilterRebuildRevision, incSourceRenderRevision, MPR3D_SURFACE_OPACITY_DEFAULT, mpr3DSurfaceOpacity, mpr3DVolumeOpacity, precisionRangeDrag, sceneState, sectionCapEnabled, sectionCapHatch, sectionCapOpacity, sectionSliceImageVisible, sectionViewOpen, sectionViewPlane, sectionViewReverse, setActiveId, setActiveSeries, setAnalysisCutApplying, setAnalysisCutScreen, setAnalysisCutStroke, setAnalysisEditPreparing, setAnalysisEditTargetKey, setAnalysisEditTargetMode, setAnalysisEditTool, setAnalysisPendingCut, setCtRangeMode, setCtRangeProfile, setCurrent3DVolume, setCutControlPreviewRaf, setFilterOrder, setMemoryGpuPreviewActive, setMpr3DSurfaceOpacity, setMpr3DVolumeOpacity, setPrecisionRangeDrag, setSceneState, setSectionCapEnabled, setSectionCapHatch, setSectionCapOpacity, setSectionSliceImageVisible, setSectionViewOpen, setSectionViewPlane, setSectionViewReverse, setSmoothingRefreshTimer, setSourceOrthogonalPlaneCacheBytes, setSourceVolume, setThreeDCancelRequested, setThreeRenderMode, setVolume, setVolumeAnalysisBusy, setVolumeAnalysisMode, smoothingRefreshTimer, sourceVolume, threeDApplying, threeDCancelRequested, threeDDirty, threeRenderMode, volume, volumeAnalysisBusy, volumeAnalysisMode, clearCrosshair } from './state.js?v=20261022-build652';
-import { $, sampleDemoBtn, sampleDialog, sampleDialogClose, sampleChoiceButtons, vrViewBtn, arViewBtn, analysisClearButton, analysisCutApply, analysisCutButton, analysisCutCancel, analysisCutDepth, analysisCutOffset, analysisCutPitch, analysisCutWidth, analysisCutYaw, analysisEditRemoveSelected, analysisEditTargetSelect, analysisExportSelected, analysisKeepSelected, analysisLassoButton, analysisLassoDeselectButton, analysisDeselectAll, analysisEditDeselectAll, analysisLineCutButton, analysisMergeButton, analysisNavigateButton, analysisRedo, analysisRemoveSelected, analysisResetEdit, analysisSelectRegionButton, analysisUndo, anisotropicBtn, anisotropicIterations, anisotropicIterationsValue, anisotropicStrength, anisotropicStrengthValue, app, appVersionBadge, bar, bilateralBtn, bilateralIntensity, bilateralIntensityValue, bilateralPasses, bilateralPassesValue, bilateralSpatial, bilateralSpatialValue, bilateralStrength, bilateralStrengthValue, ctRangeAuto, ctRangeFull, filterRebuild3D, footer, gaussianBtn, gaussianStrength, gaussianStrengthValue, languageToggle, list, mainViewSlot, mpr3DSliceSliders, mprSurfaceOpacity, mprSurfaceOpacityValue, mprVolumeOpacity, mprVolumeOpacityValue, nlmBtn, nlmPatchRadius, nlmPatchRadiusValue, nlmSearchRadius, nlmSearchRadiusValue, nlmStrength, nlmStrengthValue, planes, prog, renderModeToggle, resetFilterBtn, sectionCapEnabledControl, sectionCapHatchControl, sectionCapOpacityControl, sectionCapOpacityValue, sectionPosition, sectionReverse, sectionSliceImageControl, sectionViewToggle, segmentAddButton, segmentAddSelect, selected, sigmoidBtn, sigmoidCenter, sigmoidCenterValue, sigmoidWidth, sigmoidWidthValue, sigmoidStrength, sigmoidStrengthValue, smoothingType, spatialPasses, spatialPassesValue, spikeHoleBtn, spikeHoleStrength, spikeHoleStrengthValue, spikeHoleThreshold, spikeHoleThresholdValue, state, status, surfaceSmoothEnabled, surfaceSmoothStrength, surfaceSmoothValue, threeBusyCancel, threeBusyLabel, threeEditOverlay, threeLabel, tvBtn, tvIterations, tvIterationsValue, tvWeight, tvWeightValue, unsharpAmount, unsharpAmountValue, unsharpBtn, unsharpRadius, unsharpRadiusValue, unsharpThreshold, unsharpThresholdValue, viewport, volumeAnalysisResult, volumeAnalysisToggle, volumeCacheClearBtn, wc, wcVal, ww, wwVal, anisotropicKappa, anisotropicKappaValue } from './ui-shell.js?v=20261022-build652';
-import './latest-runner.js?v=20261022-build652';
-import { saveDeviceSmoothing, applyDeviceSmoothing } from './settings.js?v=20261022-build652';
-import { ensureGpuFilterDevice, setGpuComputeBackend, updateGpuStatus } from './gpu-compute.js?v=20261022-build652';
-import { sourceSliceCache } from './volume-io.js?v=20261022-build652';
-import './lasso.js?v=20261022-build652';
-import { spacingWarningText } from './slice-spacing.js?v=20261022-build652';
-import { resolveProjectMatch, datasetFingerprint, unpackProject } from './project-file.js?v=20261022-build652';
-import './gpu-volume-cache.js?v=20261022-build652';
-import { filterState, getFilteredSourceAxialBlock, currentFilterSignature } from './source-filters.js?v=20261022-build652';
-import { sourceOrthogonalPlaneCache, sourceOrthogonalPlanePending } from './mpr-orthogonal.js?v=20261022-build652';
-import { request3DRender } from './scene3d.js?v=20261022-build652';
-import { makeAxisWidget, create3DRenderer, makeViewOverlays, makeViewRotation, makeCutTools } from './scene-view.js?v=20261022-build652';
-import './cpu-filters.js?v=20261022-build652';
-import { mpr3DOpacitySource, mpr3DOrthoSliding, mpr3DPreviewCache, mpr3DVisibility, recomposeSectionCaps, restoreSectionAutoPlane, setMpr3DOverlayVisible, showSectionPlaneOverlay, syncMpr3DOverlayPresentation, syncMpr3DSliceSliders, syncSectionCapPresentation, updateMpr3DPlanePositions } from './mpr3d-overlay.js?v=20261022-build652';
-import { SEGMENT_PRESET_ORDER, gpuSegmentOrder, segmentEditActive, segmentEditState, segmentNeedsGlobalMask, segmentNeedsVoxelMask, segmentHasProcessedMask, segmentState, segmentExclusive, applyExclusiveRanges, commitExclusiveRanges } from './segments.js?v=20261022-build652';
-import { rebindWebGpuSectionClipGroup, sectionPlaneLabel, updateSectionClipPlaneWorld, updateSectionViewUi } from './section-view.js?v=20261022-build652';
-import { cancelSourceMprWarmup, renderAll, renderSectionPlaneLive, schedulePlaneRender, updateMprCanvasPhysicalAspect } from './mpr-render.js?v=20261022-build652';
-import './busy.js?v=20261022-build652';
-import { setBusySlot } from './progress-modal.js?v=20261022-build652';
-import { createXrFeedback } from './xr-feedback.js?v=20261022-build652';
-import { ensureSegmentBaseRuns, getFinalSegmentRuns, setSegmentStatus } from './segment-runs.js?v=20261022-build652';
-import { dispose } from './surface-mesh.js?v=20261022-build652';
-import { clearCutResultPreview, refreshCutControlReadouts, scheduleCutResultPreview, updateAnalysisEditorControls, updateCutPreview, updateThreeEditUi } from './edit-tools.js?v=20261022-build652';
-import { applySectionClippingMaterials, ensureEditRaycastReady, ensureGpuResidentCpuPositions, refreshEditedSegmentSurface, segmentHasSurface, setSegmentSurfaceShown, syncSectionClipParent } from './surface-build.js?v=20261022-build652';
-import { removeAnalysisRegion, renderAnalysisResults, setAnalysisFocusedRegion } from './analysis-results.js?v=20261022-build652';
-import { syncGpuVolumeEdits, updateVolumeCacheControl, volumeCache } from './gpu-volume-data.js?v=20261022-build652';
-import { clearMemoryFilterPreviewCache, progress, rebuildCurrent3D, surfaceEditsPending, surfaceRebuildPending } from './rebuild-3d.js?v=20261022-build652';
-import { formatHU, restoreFilterUnitRange, resetFilterUnitControls, currentMainViewKey, installFilterReorder, invalidateSourceFilters, liveFilterState, renderFilterOrder, scheduleFilterRebuild, syncFilterControls } from './filter-pipeline.js?v=20261022-build652';
-import { APP_BUILD, APP_VERSION } from './version.js?v=20261022-build652';
-import { addSegmentPreset, refuseSegmentEnable, setSegmentEnabled, ctSliderFullBounds, installSegmentReorder, applyCtRangeMode, clearAnalysisHighlight, clearSegmentEditCache, removeSegmentPreset, renderSegmentPresets, scheduleSegment3D, updateSegmentOutputs, THIN_SLIDERS, formatMmVoxels, thinSliderValue } from './segment-ui.js?v=20261022-build652';
-import { installSegmentHistogram } from './histogram-ui.js?v=20261022-build652';
-import { installLineProfile, lineProfilePointerDown, lineProfilePointerMove, lineProfilePointerEnd } from './line-profile-ui.js?v=20261022-build652';
-import { installCropExport, installCrop3d, updateCrop3d, cropPointerDown, cropPointerMove, cropPointerEnd } from './crop-ui.js?v=20261022-build652';
-import { sampleProjectUrl } from './sample-sets.js?v=20261022-build652';
-import { syncProcessedSegmentsToVolume, loadSampleDemo, activateMedicalVolume, applyPendingProject, busy, loadPhase, detectedSeries, enableProcessingControls, refreshSpacingWarning, pendingProject, requestIPadSettingsTab, selectSeries, setThreeVolumeOverlay, updateRenderModeControl, restoreProjectAnnotations } from './data-load.js?v=20261022-build652';
-import { initIPadGpuQualityControl, initIPadWorkspaceUi } from './workspace-ui.js?v=20261022-build652';
-import { installAnalysisDock } from './analysis-dock.js?v=20261022-build652';
-import { installPaneResize } from './pane-resize.js?v=20261022-build652';
-import { askInline, armConfirm } from './inline-ask.js?v=20261022-build652';
-import { freshForEventSelection, resetUserState, EVENT_FRESH_EVENT } from './event-fresh.js?v=20261022-build652';
-import { eventModeOn } from './event-mode.js?v=20261022-build652'; // 体験会モード: every practice dataset opens fresh from its project file
-import { deselectAllAnalysisRegions, deselectRegionsInLasso, analysisRegionAtVoxel, analyzeEditRegionAtPointer, analyzeVolumeAtPointer, analyzeVolumeAtVoxel, applyCutStroke, applyEditKeepSelected, applyEditRemoveSelected, clearAllSegmentEdits, clearThreeEditOverlay, exportFocusedAnalysisRegionStl, exportSegmentStl, mergeSelectedAnalysisRegions, redoSegmentEdit, resetFocusedSegmentEdit, returnToNavigate, scheduleAnalysisRunPrewarm, selectRegionsInLasso, syncVolumeAnalysisOverlay, undoSegmentEdit } from './analysis-ops.js?v=20261022-build652';
+import { rangeWheelSteps, installRangeEntry, setRangeEntryBounds } from './range-entry.js?v=20261023-build657';
+import { clampRangeValue, esc, fmt, frameYield, isIPadRuntime, rangeNumber, rangeStep } from './utils.js?v=20261023-build657';
+import { setMeshMaterialBackend, updateMeshDepth, setSegmentMeshMaterial } from './mesh-material.js?v=20261023-build657'; // the surface meshes evaluate the same lighting formula as the two volume shaders (lighting.js)
+import { materialKey } from './lighting.js?v=20261023-build657';
+import { groupSeries, parseFiles } from './dicom.js?v=20261023-build657';
+import './mask-ops.js?v=20261023-build657';
+import './run-length.js?v=20261023-build657';
+import './mesh-geometry.js?v=20261023-build657';
+import { applyLanguage, tr, I18N } from './i18n.js?v=20261023-build657';
+import { installComments, refreshCommentsUi } from './comment-ui.js?v=20261023-build657';
+import { installComment3d, updateComment3dMarkers } from './comment-3d.js?v=20261023-build657';
+import { installHuLine3d, updateHuLine3d } from './hu-line-3d.js?v=20261023-build657';
+import { installCrosshair, crosshairPointerDown, crosshairPointerMove, crosshairPointerEnd, setCrosshairMode, refreshCrosshairUi } from './crosshair-ui.js?v=20261023-build657';
+import './gpu-shaders.js?v=20261023-build657';
+import { analysisCutApplying, analysisCutScreen, analysisEditPreparing, analysisEditTargetKey, analysisEditTargetMode, analysisEditTool, analysisPendingCut, analysisRegions, ctRangeMode, current3DVolume, currentLanguage, cutControlPreviewRaf, filterRebuildTimer, incFilterRebuildRevision, incSourceRenderRevision, MPR3D_SURFACE_OPACITY_DEFAULT, mpr3DSurfaceOpacity, mpr3DVolumeOpacity, precisionRangeDrag, sceneState, sectionCapEnabled, sectionCapHatch, sectionCapOpacity, sectionSliceImageVisible, sectionViewOpen, sectionViewPlane, sectionViewReverse, setActiveId, setActiveSeries, setAnalysisCutApplying, setAnalysisCutScreen, setAnalysisCutStroke, setAnalysisEditPreparing, setAnalysisEditTargetKey, setAnalysisEditTargetMode, setAnalysisEditTool, setAnalysisPendingCut, setCtRangeMode, setCtRangeProfile, setCurrent3DVolume, setCutControlPreviewRaf, setFilterOrder, setMemoryGpuPreviewActive, setMpr3DSurfaceOpacity, setMpr3DVolumeOpacity, setPrecisionRangeDrag, setSceneState, setSectionCapEnabled, setSectionCapHatch, setSectionCapOpacity, setSectionSliceImageVisible, setSectionViewOpen, setSectionViewPlane, setSectionViewReverse, setSmoothingRefreshTimer, setSourceOrthogonalPlaneCacheBytes, setSourceVolume, setThreeDCancelRequested, setThreeRenderMode, setVolume, setVolumeAnalysisBusy, setVolumeAnalysisMode, smoothingRefreshTimer, sourceVolume, threeDApplying, threeDCancelRequested, threeDDirty, threeRenderMode, volume, volumeAnalysisBusy, volumeAnalysisMode, clearCrosshair } from './state.js?v=20261023-build657';
+import { $, sampleDemoBtn, sampleDialog, sampleDialogClose, sampleChoiceButtons, vrViewBtn, arViewBtn, analysisClearButton, analysisCutApply, analysisCutButton, analysisCutCancel, analysisCutDepth, analysisCutOffset, analysisCutPitch, analysisCutWidth, analysisCutYaw, analysisEditRemoveSelected, analysisEditTargetSelect, analysisExportSelected, analysisKeepSelected, analysisLassoButton, analysisLassoDeselectButton, analysisDeselectAll, analysisEditDeselectAll, analysisLineCutButton, analysisMergeButton, analysisNavigateButton, analysisRedo, analysisRemoveSelected, analysisResetEdit, analysisSelectRegionButton, analysisUndo, anisotropicBtn, anisotropicIterations, anisotropicIterationsValue, anisotropicStrength, anisotropicStrengthValue, app, appVersionBadge, bar, bilateralBtn, bilateralIntensity, bilateralIntensityValue, bilateralPasses, bilateralPassesValue, bilateralSpatial, bilateralSpatialValue, bilateralStrength, bilateralStrengthValue, ctRangeAuto, ctRangeFull, filterRebuild3D, footer, gaussianBtn, gaussianStrength, gaussianStrengthValue, languageToggle, list, mainViewSlot, mpr3DSliceSliders, mprSurfaceOpacity, mprSurfaceOpacityValue, mprVolumeOpacity, mprVolumeOpacityValue, nlmBtn, nlmPatchRadius, nlmPatchRadiusValue, nlmSearchRadius, nlmSearchRadiusValue, nlmStrength, nlmStrengthValue, planes, prog, renderModeToggle, resetFilterBtn, sectionCapEnabledControl, sectionCapHatchControl, sectionCapOpacityControl, sectionCapOpacityValue, sectionPosition, sectionReverse, sectionSliceImageControl, sectionViewToggle, segmentAddButton, segmentAddSelect, selected, sigmoidBtn, sigmoidCenter, sigmoidCenterValue, sigmoidWidth, sigmoidWidthValue, sigmoidStrength, sigmoidStrengthValue, smoothingType, spatialPasses, spatialPassesValue, spikeHoleBtn, spikeHoleStrength, spikeHoleStrengthValue, spikeHoleThreshold, spikeHoleThresholdValue, state, status, surfaceSmoothEnabled, surfaceSmoothStrength, surfaceSmoothValue, threeBusyCancel, threeBusyLabel, threeEditOverlay, threeLabel, tvBtn, tvIterations, tvIterationsValue, tvWeight, tvWeightValue, unsharpAmount, unsharpAmountValue, unsharpBtn, unsharpRadius, unsharpRadiusValue, unsharpThreshold, unsharpThresholdValue, viewport, volumeAnalysisResult, volumeAnalysisToggle, volumeCacheClearBtn, wc, wcVal, ww, wwVal, anisotropicKappa, anisotropicKappaValue } from './ui-shell.js?v=20261023-build657';
+import './latest-runner.js?v=20261023-build657';
+import { saveDeviceSmoothing, applyDeviceSmoothing } from './settings.js?v=20261023-build657';
+import { ensureGpuFilterDevice, setGpuComputeBackend, updateGpuStatus } from './gpu-compute.js?v=20261023-build657';
+import { sourceSliceCache } from './volume-io.js?v=20261023-build657';
+import './lasso.js?v=20261023-build657';
+import { spacingWarningText } from './slice-spacing.js?v=20261023-build657';
+import { resolveProjectMatch, datasetFingerprint, unpackProject } from './project-file.js?v=20261023-build657';
+import './gpu-volume-cache.js?v=20261023-build657';
+import { filterState, getFilteredSourceAxialBlock, currentFilterSignature } from './source-filters.js?v=20261023-build657';
+import { sourceOrthogonalPlaneCache, sourceOrthogonalPlanePending } from './mpr-orthogonal.js?v=20261023-build657';
+import { request3DRender } from './scene3d.js?v=20261023-build657';
+import { makeAxisWidget, create3DRenderer, makeViewOverlays, makeViewRotation, makeCutTools } from './scene-view.js?v=20261023-build657';
+import './cpu-filters.js?v=20261023-build657';
+import { mpr3DOpacitySource, mpr3DOrthoSliding, mpr3DPreviewCache, mpr3DVisibility, recomposeSectionCaps, restoreSectionAutoPlane, setMpr3DOverlayVisible, showSectionPlaneOverlay, syncMpr3DOverlayPresentation, syncMpr3DSliceSliders, syncSectionCapPresentation, updateMpr3DPlanePositions } from './mpr3d-overlay.js?v=20261023-build657';
+import { SEGMENT_PRESET_ORDER, gpuSegmentOrder, segmentEditActive, segmentEditState, segmentNeedsGlobalMask, segmentNeedsVoxelMask, segmentHasProcessedMask, segmentState, segmentExclusive, applyExclusiveRanges, commitExclusiveRanges } from './segments.js?v=20261023-build657';
+import { rebindWebGpuSectionClipGroup, sectionPlaneLabel, updateSectionClipPlaneWorld, updateSectionViewUi } from './section-view.js?v=20261023-build657';
+import { cancelSourceMprWarmup, renderAll, renderSectionPlaneLive, schedulePlaneRender, updateMprCanvasPhysicalAspect } from './mpr-render.js?v=20261023-build657';
+import './busy.js?v=20261023-build657';
+import { setBusySlot } from './progress-modal.js?v=20261023-build657';
+import { createXrFeedback } from './xr-feedback.js?v=20261023-build657';
+import { ensureSegmentBaseRuns, getFinalSegmentRuns, setSegmentStatus } from './segment-runs.js?v=20261023-build657';
+import { dispose } from './surface-mesh.js?v=20261023-build657';
+import { clearCutResultPreview, refreshCutControlReadouts, scheduleCutResultPreview, updateAnalysisEditorControls, updateCutPreview, updateThreeEditUi } from './edit-tools.js?v=20261023-build657';
+import { applySectionClippingMaterials, ensureEditRaycastReady, ensureGpuResidentCpuPositions, refreshEditedSegmentSurface, segmentHasSurface, setSegmentSurfaceShown, syncSectionClipParent } from './surface-build.js?v=20261023-build657';
+import { removeAnalysisRegion, renderAnalysisResults, setAnalysisFocusedRegion } from './analysis-results.js?v=20261023-build657';
+import { syncGpuVolumeEdits, updateVolumeCacheControl, volumeCache } from './gpu-volume-data.js?v=20261023-build657';
+import { clearMemoryFilterPreviewCache, progress, rebuildCurrent3D, surfaceEditsPending, surfaceRebuildPending } from './rebuild-3d.js?v=20261023-build657';
+import { formatHU, restoreFilterUnitRange, resetFilterUnitControls, currentMainViewKey, installFilterReorder, invalidateSourceFilters, liveFilterState, renderFilterOrder, scheduleFilterRebuild, syncFilterControls } from './filter-pipeline.js?v=20261023-build657';
+import { APP_BUILD, APP_VERSION } from './version.js?v=20261023-build657';
+import { addSegmentPreset, refuseSegmentEnable, setSegmentEnabled, ctSliderFullBounds, installSegmentReorder, applyCtRangeMode, clearAnalysisHighlight, clearSegmentEditCache, removeSegmentPreset, renderSegmentPresets, scheduleSegment3D, updateSegmentOutputs, THIN_SLIDERS, formatMmVoxels, thinSliderValue } from './segment-ui.js?v=20261023-build657';
+import { installSegmentHistogram } from './histogram-ui.js?v=20261023-build657';
+import { installLineProfile, lineProfilePointerDown, lineProfilePointerMove, lineProfilePointerEnd } from './line-profile-ui.js?v=20261023-build657';
+import { installCropExport, installCrop3d, updateCrop3d, cropPointerDown, cropPointerMove, cropPointerEnd } from './crop-ui.js?v=20261023-build657';
+import { sampleProjectUrl } from './sample-sets.js?v=20261023-build657';
+import { syncProcessedSegmentsToVolume, loadSampleDemo, activateMedicalVolume, applyPendingProject, busy, loadPhase, detectedSeries, enableProcessingControls, refreshSpacingWarning, pendingProject, requestIPadSettingsTab, selectSeries, setThreeVolumeOverlay, updateRenderModeControl, restoreProjectAnnotations } from './data-load.js?v=20261023-build657';
+import { initIPadGpuQualityControl, initIPadWorkspaceUi } from './workspace-ui.js?v=20261023-build657';
+import { installAnalysisDock } from './analysis-dock.js?v=20261023-build657';
+import { installPaneResize } from './pane-resize.js?v=20261023-build657';
+import { askInline, armConfirm } from './inline-ask.js?v=20261023-build657';
+import { freshForEventSelection, resetUserState, EVENT_FRESH_EVENT } from './event-fresh.js?v=20261023-build657';
+import { eventModeOn } from './event-mode.js?v=20261023-build657'; // 体験会モード: every practice dataset opens fresh from its project file
+import { deselectAllAnalysisRegions, deselectRegionsInLasso, analysisRegionAtVoxel, analyzeEditRegionAtPointer, analyzeVolumeAtPointer, analyzeVolumeAtVoxel, applyCutStroke, applyEditKeepSelected, applyEditRemoveSelected, clearAllSegmentEdits, clearThreeEditOverlay, exportFocusedAnalysisRegionStl, exportSegmentStl, mergeSelectedAnalysisRegions, redoSegmentEdit, resetFocusedSegmentEdit, returnToNavigate, scheduleAnalysisRunPrewarm, selectRegionsInLasso, syncVolumeAnalysisOverlay, undoSegmentEdit } from './analysis-ops.js?v=20261023-build657';
+import { makeDeferredEnd } from './deferred-end.js?v=20261023-build657';
 async function ensureLatestDeployedBuild(){
  try{
   const res=await fetch('./version.json?t='+Date.now(),{cache:'no-store',headers:{'Cache-Control':'no-cache'}});
@@ -360,7 +361,7 @@ volumeAnalysisToggle.onclick=async()=>{
 };
 // practice dataset on this site (docs/demo/sample1)
 // VR prototype (WebXR + WebGL2, own module; loaded on first use)
-{const vrModule=()=>import('./vr-view.js?v=20261022-build652');const xrShow=(kind,btn)=>navigator.xr?.isSessionSupported?navigator.xr.isSessionSupported(kind).then(ok=>{if(ok)btn.hidden=false},()=>{}):Promise.resolve();Promise.all([xrShow('immersive-vr',vrViewBtn),xrShow('immersive-ar',arViewBtn)]).then(()=>{globalThis.__vrlXrChecked=true}); // true once both support checks have answered (whether the AR button exists is only known then: the tutorial's guidance waits for it)
+{const vrModule=()=>import('./vr-view.js?v=20261023-build657');const xrShow=(kind,btn)=>navigator.xr?.isSessionSupported?navigator.xr.isSessionSupported(kind).then(ok=>{if(ok)btn.hidden=false},()=>{}):Promise.resolve();Promise.all([xrShow('immersive-vr',vrViewBtn),xrShow('immersive-ar',arViewBtn)]).then(()=>{globalThis.__vrlXrChecked=true}); // true once both support checks have answered (whether the AR button exists is only known then: the tutorial's guidance waits for it)
 // prepared data for the same series / filter / segments / edits is
 // reused and the session starts at once; otherwise a page panel prepares it
 // with progress and ends with a start button (a session needs a click)
@@ -705,9 +706,14 @@ async function start3D(){
    }
   }
  };
+ // the end of a drag waits DRAG_END_DELAY_MS before the full resolution comes back (the heavy frame at the moment of release); a new
+ // drag / wheel / slider interaction cancels it (setFastInteraction(true)), the wheel passes its own 120 ms and ends at once
+ const DRAG_END_DELAY_MS=200;
+ const dragEnd=makeDeferredEnd(()=>{setMpr3DInteractive(false);setFastInteraction(false);hideViewPivot()});
  const interactionQualityTier=()=>distance<2.15?2:distance<3.45?1:0;
  const setFastInteraction=(active,keepOverlays=false)=>{
   const next=!!active,tier=next?interactionQualityTier():-1;
+  if(next)dragEnd.cancel();
   // slider drags (keepOverlays) must keep MPR planes visible in the volume:
   // the render loop hides them during fast camera moves only
   fastKeepOverlays=next&&!!keepOverlays;
@@ -721,8 +727,8 @@ async function start3D(){
   if(nextRatio!==active3DPixelRatio){active3DPixelRatio=nextRatio;renderer.setPixelRatio(active3DPixelRatio);if(viewport.clientWidth>=8&&viewport.clientHeight>=8){renderer.setSize(viewport.clientWidth,viewport.clientHeight,false);globalThis.__vrlThreeResizes=(globalThis.__vrlThreeResizes||0)+1}}
   sceneState?.medicalVolume?.setInteractive?.(next,next?tier:0);setHeavyOverlayInteraction(next&&!keepOverlays);request3DRender();
  };
- const begin3DInteraction=()=>{setFastInteraction(true);setMpr3DInteractive(true)};
- const end3DInteraction=()=>{setMpr3DInteractive(false);setFastInteraction(false);hideViewPivot()};
+ const begin3DInteraction=()=>{dragEnd.cancel();setFastInteraction(true);setMpr3DInteractive(true)};
+ const end3DInteraction=(delay=0)=>dragEnd.end(delay);
  sceneState.setFastInteraction=setFastInteraction;
  const isMousePanStart=e=>e.pointerType==='mouse'&&(e.button===1||e.button===2||e.shiftKey);
  const {viewCenterPivot,rotateAroundViewCenter,applyQuaternionAroundViewCenter,rollAroundViewCenter}=makeViewRotation(camera);
@@ -767,7 +773,7 @@ async function start3D(){
   if(isLasso&&e.type==='pointerup')appendCutScreenPoints(e,'lasso');
   const screenCurve=isCut||isLasso?[...analysisCutScreen]:null;
   clear3DPointerState(e.pointerId);
-  if(!pointers.size&&!isCut&&!isLasso&&!isSectionDrag)end3DInteraction();
+  if(!pointers.size&&!isCut&&!isLasso&&!isSectionDrag)end3DInteraction(DRAG_END_DELAY_MS);
   if(isLasso){
    setAnalysisCutScreen([]);clearThreeEditOverlay();
    if(e.type!=='pointerup'||!screenCurve||screenCurve.length<3){updateThreeEditUi(currentLanguage==='ja'?'囲みをキャンセルしました':'Lasso cancelled');return}
@@ -788,7 +794,7 @@ async function start3D(){
   if(e.type==='pointerup'&&e.button===0&&wasSingle&&start?.mode==='rotate'&&Math.hypot(e.clientX-start.x,e.clientY-start.y)<6&&!volumeAnalysisBusy){if(analysisEditTool==='region')void analyzeEditRegionAtPointer(e,renderer.domElement,camera);else if(volumeAnalysisMode)void analyzeVolumeAtPointer(e,renderer.domElement,camera)}
  };
  renderer.domElement.onpointerup=endPointer;renderer.domElement.onpointercancel=endPointer;
- renderer.domElement.onlostpointercapture=e=>{const start=pointerStarts.get(e.pointerId);pointers.delete(e.pointerId);pointerStarts.delete(e.pointerId);if(!analysisPendingCut){setAnalysisCutScreen([]);clearThreeEditOverlay()}renderer.domElement.style.cursor='';if(pointers.size<2){lastPinch=0;lastCenter=null;lastTwist=null}if(!pointers.size&&start?.mode!=='section-drag')end3DInteraction()};
+ renderer.domElement.onlostpointercapture=e=>{const start=pointerStarts.get(e.pointerId);pointers.delete(e.pointerId);pointerStarts.delete(e.pointerId);if(!analysisPendingCut){setAnalysisCutScreen([]);clearThreeEditOverlay()}renderer.domElement.style.cursor='';if(pointers.size<2){lastPinch=0;lastCenter=null;lastTwist=null}if(!pointers.size&&start?.mode!=='section-drag')end3DInteraction(DRAG_END_DELAY_MS)};
  renderer.domElement.addEventListener('wheel',e=>{e.preventDefault();begin3DInteraction();showViewPivot();clearTimeout(wheelQualityTimer);distance=THREE.MathUtils.clamp(distance+e.deltaY*.004,MIN_3D_DISTANCE,MAX_3D_DISTANCE);camera.position.z=distance;setFastInteraction(true);request3DRender();wheelQualityTimer=setTimeout(()=>end3DInteraction(),120)},{passive:false});
  let appliedSize='';const resize=()=>{const rect=viewport.getBoundingClientRect(),w=Math.round(rect.width),h=Math.round(rect.height);if(w<8||h<8)return;const key=w+'x'+h+'@'+active3DPixelRatio;if(key===appliedSize)return;appliedSize=key; // unchanged size: nothing to do (renderer.setSize clears the canvas even for the same size, and the render that follows is a full volume pass): the panel switches of the workspace UI call this without moving the view
  camera.aspect=w/h;camera.updateProjectionMatrix();updateAxisWidget();renderer.setPixelRatio(active3DPixelRatio);renderer.setSize(w,h,false);resizeEditOverlay(w,h);sceneState?.medicalVolume?.resize();request3DRender()};sceneState.resize=resize;new ResizeObserver(resize).observe(viewport);resize();
