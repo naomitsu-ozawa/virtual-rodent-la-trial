@@ -5,6 +5,7 @@ import { levelBoardH, PAGE_H, TAB_H } from '../../docs/tutorial-vr.js';
 
 import { PANEL_W, PANEL_H } from '../../docs/vr-histogram-layout.js';
 const HELP_W = 820, HELP_H = PAGE_H + TAB_H; // the help board canvas (makeMenu(820,PAGE_H+TAB_H,...) in vr-view.js: the page + the caption band under the slide + the 手順一覧 | 詳細 tab strip)
+import { sliceDrawState, SLICE_SEG_ALPHA } from '../../docs/event-mode.js';
 const head = { x: 1, y: 1.6, z: 2 }, fwd = { x: 0, z: -1 }, left = { x: -1, z: 0 };
 describe('default VR/AR layout', () => {
   it('volume 0.6-0.7 m ahead, a little below the eyes', () => {
@@ -66,23 +67,23 @@ describe('default VR/AR layout', () => {
 });
 
 describe('mission board', () => {
-  const evH = levelBoardH(820), h = EV_WIDTH * evH / 820, volRadius = 0.25 / 2 + 0.05; // the tutorial volume is 0.25 m, 0.5 m ahead
-  const deg = r => r * 180 / Math.PI, bottom = EV_OFFSET.down + h / 2, top = EV_OFFSET.down - h / 2; // down is positive below the eyes: bottom/top are the lower/upper edges
-  it('straight ahead behind the volume, a little above the gaze, larger than the help board', () => {
-    expect(EV_OFFSET.left).toBe(0); expect(EV_OFFSET.fwd).toBeGreaterThan(VOLUME_FWD + volRadius); // behind the volume
+  const evH = levelBoardH(820), h = EV_WIDTH * evH / 820, helpH = HELP_WIDTH * HELP_H / HELP_W;
+  const deg = r => r * 180 / Math.PI, horiz = o => Math.hypot(o.fwd, o.left), yaw = o => deg(Math.atan2(-o.left, o.fwd)); // yaw: + = right
+  const bottom = EV_OFFSET.down + h / 2, top = EV_OFFSET.down - h / 2, helpTop = HELP_OFFSET.down - helpH / 2; // down is positive below the eyes
+  it('on the right, in the help board\'s direction, at 1.1 m, larger than the help board', () => {
+    expect(yaw(EV_OFFSET)).toBeCloseTo(yaw(HELP_OFFSET), 1); expect(EV_OFFSET.left).toBeLessThan(0);
+    expect(horiz(EV_OFFSET)).toBeCloseTo(1.1, 3);
     expect(EV_WIDTH).toBeGreaterThan(HELP_WIDTH); expect(EV_WIDTH).toBeGreaterThanOrEqual(0.6);
-    expect(boardDistance(EV_OFFSET)).toBeGreaterThanOrEqual(1.0); expect(boardDistance(EV_OFFSET)).toBeLessThanOrEqual(1.2);
-    expect(EV_OFFSET.down).toBeLessThan(0); // above the eyes
   });
-  it('the lower edge is above the line of sight to the volume (the volume does not overlap it); the whole board stays inside the view', () => {
-    expect(deg(Math.atan2(-bottom, boardDistance(EV_OFFSET)))).toBeGreaterThanOrEqual(4); // lower edge at least 4 deg above the gaze: the volume sits below it
-    expect(deg(Math.atan2(-top, boardDistance(EV_OFFSET)))).toBeLessThanOrEqual(35); // upper edge within the view
-    expect(deg(Math.atan(EV_WIDTH / 2 / boardDistance(EV_OFFSET)))).toBeLessThan(25); // the half width: inside the view and well inside the menu / help boards' 30 deg inner edges
+  it('above the help board: its lower edge above the help board\'s top edge (by angle from the eyes), its top inside the view', () => {
+    const elev = (y, o) => deg(Math.atan2(-y, horiz(o)));
+    expect(elev(bottom, EV_OFFSET) - elev(helpTop, HELP_OFFSET)).toBeGreaterThanOrEqual(3);
+    expect(elev(bottom, EV_OFFSET)).toBeLessThanOrEqual(3); // close above it, not far up
+    expect(elev(top, EV_OFFSET)).toBeLessThanOrEqual(30);
   });
-  it('clear of the menu (left) and the help board (right) and the HU panel is nearer', () => {
-    expect(EV_OFFSET.left + EV_WIDTH / 2).toBeLessThan(MENU_OFFSET.left - MENU_WIDTH / 2); // nothing shares the side boards\' space
-    expect(-HELP_OFFSET.left - HELP_WIDTH / 2).toBeGreaterThan(EV_WIDTH / 2); expect(HELP_OFFSET.left).toBeLessThan(0);
-    expect(HU_PANEL_OFFSET.left).toBe(0); expect(HU_PANEL_OFFSET.fwd).toBeLessThan(EV_OFFSET.fwd);
+  it('clear of the volume (centre) and the menu (left)', () => {
+    expect(yaw(EV_OFFSET) - deg(Math.atan(EV_WIDTH / 2 / horiz(EV_OFFSET)))).toBeGreaterThan(20); // inner edge: the volume is within about 15 deg
+    expect(EV_OFFSET.left).toBeLessThan(0); expect(MENU_OFFSET.left).toBeGreaterThan(0);
   });
   it('vr-view.js places it at EV_OFFSET, 正面に戻す re-places it, and it follows the head with the same setting and rule as the help board', () => {
     const v = readFileSync('docs/vr-view.js', 'utf8');
@@ -103,5 +104,108 @@ describe('the help board with the caption band', () => {
     expect(PAGE_H).toBeGreaterThan(560); const h = HELP_WIDTH * HELP_H / HELP_W;
     expect(HELP_OFFSET.down - h / 2).toBeCloseTo(0.22 - HELP_WIDTH * (560 + 72) / HELP_W / 2, 2); // the top edge as before (0.22 with the old height)
     expect(HELP_OFFSET.down + h / 2).toBeLessThan(0.55); // the bottom edge is still a comfortable 55 cm below the eyes
+  });
+});
+describe('slice fill (slice tab row + shader guards, static)', () => {
+  const v = readFileSync('docs/vr-view.js', 'utf8'), MENU_H = 1180, y0 = 270;
+  it('the fill row sits below the air-floor slider (y0+520..+592) and its help line (y0+618, centred, 24 px), inside the menu', () => {
+    expect(v).toContain('choice(y0+650,L.ctSh,');
+    expect(v).toContain('btn(800,y0+520,70,'); expect(v).toContain('label(X,y0+618,L.airHelp');
+    expect(y0 + 650).toBeGreaterThan(y0 + 520 + 72); expect(y0 + 650).toBeGreaterThan(y0 + 618 + 12); expect(y0 + 618 - 12).toBeGreaterThan(y0 + 520 + 72); expect(y0 + 650 + 72).toBeLessThanOrEqual(MENU_H);
+  });
+  it('the 濃淡の明るさ slider (+ − buttons) is the row right below the fill row, overlaps nothing, and ends inside the menu', () => {
+    expect(v).toContain("label(X,y0+770,L.ctBr)"); expect(v).toContain("type:'slider',x:CX+26,y:y0+734,w:300,h:72,value:(b-CT_BRIGHT_MIN)/(CT_BRIGHT_MAX-CT_BRIGHT_MIN),text:Math.round(b*100)+'%'");
+    expect(v).toContain('btn(800,y0+734,70,'); expect(v).toContain('btn(890,y0+734,70,');
+    expect(y0 + 734).toBeGreaterThanOrEqual(y0 + 650 + 72); expect(y0 + 734 + 72).toBeLessThanOrEqual(MENU_H); expect(y0 + 770).toBe(y0 + 734 + 36); // label centred on the slider like the others
+    expect(v).toContain("ctBr:'濃淡の明るさ'"); expect(v).toContain("ctBr:'Shading brightness'");
+    // the other slice-tab rows end above the fill row (their y0 offsets: opacity 44, tint 126, centre 216, width 298, presets 390, air 520)
+    for (const y of [44, 126, 216, 298, 390, 520]) expect(y + 72).toBeLessThanOrEqual(650);
+  });
+  it('the 濃淡のコントラスト slider (+ − buttons) is the row right below 濃淡の明るさ and ends inside the menu; the packed slice-tab rows do not overlap', () => {
+    expect(v).toContain("label(X,y0+854,L.ctCo)"); expect(v).toContain("type:'slider',x:CX+26,y:y0+818,w:300,h:72,value:(c-CT_CONTRAST_MIN)/(CT_CONTRAST_MAX-CT_CONTRAST_MIN),text:Math.round(c*100)+'%'");
+    expect(v).toContain('btn(800,y0+818,70,'); expect(v).toContain('btn(890,y0+818,70,');
+    expect(y0 + 818).toBeGreaterThanOrEqual(y0 + 734 + 72); expect(y0 + 818 + 72).toBeLessThanOrEqual(MENU_H); expect(y0 + 854).toBe(y0 + 818 + 36);
+    expect(v).toContain("ctCo:'濃淡のコントラスト'"); expect(v).toContain("ctCo:'Shading contrast'");
+    expect(v.indexOf('label(X,y0+854,L.ctCo)')).toBeGreaterThan(v.indexOf('label(X,y0+770,L.ctBr)'));
+    // 72-px rows (top offsets) and centred help labels (centre, 24 px): opacity, tint, centre, width, presets, [window help 490], air, [air help 618], fill, brightness, contrast
+    expect(v).toContain('label(X,y0+490,L.winHelp,'); expect(v).toContain('btn(X+i*244,y0+390,232,'); expect(v).toContain("row(y0+216,L.wcL,'c',cMin,cMax);row(y0+298,L.wwL,'w',1,wMax);");
+    const rows = [[44, 116], [126, 198], [216, 288], [298, 370], [390, 462], [478, 502], [520, 592], [606, 630], [650, 722], [734, 806], [818, 890]];
+    for (let i = 1; i < rows.length; i++) expect(rows[i][0]).toBeGreaterThan(rows[i - 1][1]);
+    expect(y0 + 10 + 13).toBeLessThan(y0 + 44); // the window heading line above the first row
+  });
+  it('ctShadeBright: 50..200 % in 10 % steps, default 130 %, a menu preference like ctShade (not an event view value, no URL parameter); the setting is clamped before it reaches the shader', () => {
+    expect(v).toContain('labelHide:LABEL_HIDE_DEFAULT,ctShade:1,ctShadeBright:1.3,'); // ctShadeContrast follows
+    expect(v).toContain('const CT_BRIGHT_MIN=0.5,CT_BRIGHT_MAX=2,CT_BRIGHT_STEP=0.1,ctBrightOf=v=>{v=+v;return Number.isFinite(v)?Math.min(CT_BRIGHT_MAX,Math.max(CT_BRIGHT_MIN,Math.round(v*10)/10)):DEFAULTS.ctShadeBright};');
+    expect(v).toContain('ctShadeBright:{value:1.3}'); expect(v).toContain('u.ctShadeBright.value=ctBrightOf(settings.ctShadeBright);');
+    expect(v).toContain("const EVENT_VIEW_KEYS=['cut','cap','sliceAir','sliceTint','sliceOpacity','labelSize'];");
+    expect(v).not.toMatch(/URLSearchParams[^;]*ctShadeBright|get\('ctShadeBright'\)/);
+  });
+  it('ctShadeContrast: 50..200 % in 10 % steps, default 100 %, a menu preference like ctShadeBright (not an event view value, no URL parameter); clamped before the shader', () => {
+    expect(v).toContain('ctShade:1,ctShadeBright:1.3,ctShadeContrast:1}');
+    expect(v).toContain('const CT_CONTRAST_MIN=0.5,CT_CONTRAST_MAX=2,CT_CONTRAST_STEP=0.1,ctContrastOf=v=>{v=+v;return Number.isFinite(v)?Math.min(CT_CONTRAST_MAX,Math.max(CT_CONTRAST_MIN,Math.round(v*10)/10)):DEFAULTS.ctShadeContrast};');
+    expect(v).toContain('ctShadeContrast:{value:1}'); expect(v).toContain('u.ctShadeContrast.value=ctContrastOf(settings.ctShadeContrast);');
+    expect(v).toContain("const EVENT_VIEW_KEYS=['cut','cap','sliceAir','sliceTint','sliceOpacity','labelSize'];");
+    expect(v).not.toMatch(/URLSearchParams[^;]*ctShadeContrast|get\('ctShadeContrast'\)/);
+  });
+  it('shader: the contrast spreads the gamma value about the middle of its range, clamped to 0.05..1; exactly 1 returns the gamma value unchanged; only inside ctLumHU', () => {
+    expect(v).toContain('uniform float ctShadeContrast;');
+    expect(v).toContain(' float g=1.0/max(ctShadeBright,0.1),l=pow(mix(CT_SHADE_MIN,1.0,clamp((hu-a.x)/max(min(a.y-a.x,CT_SHADE_SPAN),1.0),0.0,1.0)),g);');
+    expect(v).toContain(' if(ctShadeContrast==1.0)return l;'); expect(v).toContain(' float p=0.5*(pow(CT_SHADE_MIN,g)+1.0);return clamp(p+(l-p)*ctShadeContrast,0.05,1.0);');
+    const sh = v.slice(0, v.indexOf('bool editAllows(')); expect(sh.match(/ctShadeContrast/g).length).toBe(5); // the comment above ctLumHU, the uniform and its comment, and the two uses in ctLumHU
+    const lum = (t, b, c) => { const g = 1 / b, l = Math.pow(0.35 + 0.65 * t, g); if (c === 1) return l; const p = 0.5 * (Math.pow(0.35, g) + 1); return Math.min(1, Math.max(0.05, p + (l - p) * c)); };
+    for (const b of [0.5, 1, 1.3, 2]) for (let i = 0; i <= 10; i++) { const t = i / 10; expect(lum(t, b, 1)).toBe(Math.pow(0.35 + 0.65 * t, 1 / b)); }
+    for (const b of [1, 1.3, 2]) { const span = c => lum(1, b, c) - lum(0, b, c); expect(span(1.5)).toBeGreaterThan(span(1)); expect(span(2)).toBeGreaterThan(span(1.5)); expect(span(0.5)).toBeLessThan(span(1)); }
+    for (const c of [0.5, 1.5, 2]) for (let i = 1; i <= 10; i++) expect(lum(i / 10, 1.3, c)).toBeGreaterThanOrEqual(lum((i - 1) / 10, 1.3, c)); // the order of the shading is kept
+    for (const c of [0.5, 1.5, 2]) for (let i = 0; i <= 10; i++) { const x = lum(i / 10, 2, c); expect(x).toBeGreaterThanOrEqual(0.05); expect(x).toBeLessThanOrEqual(1); }
+  });
+  it('shader: the brightness is a gamma on the CT factor (pow(lum,1/b)): 1 at the top whatever b is, identity at 100 %, only inside ctLumHU (so only CT shading uses it)', () => {
+    expect(v).toContain('uniform float ctShadeBright;'); expect(v.match(/ctShadeBright/g).length).toBeGreaterThanOrEqual(2);
+    expect(v).toContain(' float g=1.0/max(ctShadeBright,0.1),l=pow(mix(CT_SHADE_MIN,1.0,clamp((hu-a.x)/max(min(a.y-a.x,CT_SHADE_SPAN),1.0),0.0,1.0)),g);'); // the gamma value l (the contrast step after it returns l itself at 100 %)
+    const lum = (t, b) => Math.pow(0.35 + 0.65 * t, 1 / b); // the same formula in JS
+    for (const b of [0.5, 1, 1.3, 2]) { expect(lum(1, b)).toBe(1); expect(lum(0, b)).toBeGreaterThan(0); }
+    for (let i = 0; i <= 9; i++) { const t = i / 10; expect(lum(t, 1)).toBeCloseTo(0.35 + 0.65 * t, 12); expect(lum(t, 1.3)).toBeGreaterThan(lum(t, 1)); expect(lum(t, 2)).toBeGreaterThan(lum(t, 1.3)); expect(lum(t, 1.3)).toBeLessThanOrEqual(1); }
+    for (let i = 1; i <= 10; i++) expect(lum(i / 10, 1.3)).toBeGreaterThan(lum((i - 1) / 10, 1.3)); // still monotone: the shading keeps its order
+  });
+  it('the label and the two options are short (ja / en); the default is CT shading', () => {
+    expect(v).toContain("ctSh:'スライスの塗り',ctShV:['単色','CT濃淡']"); expect(v).toContain("ctSh:'Slice fill',ctShV:['Solid','CT shading']");
+    expect(v).toContain('labelHide:LABEL_HIDE_DEFAULT,ctShade:1,'); expect(v).toContain('ctShade:{value:1}'); expect(v).toContain('sliceSegOnly:{value:0}');
+  });
+  it('shader: the CT factor is used by the two slice branches only; surface hits and caps keep the flat colour; 陰影なし (diag 3) is flat', () => {
+    expect(v.match(/ctLumHU\(/g)).toHaveLength(3); // the definition + the 0 % branch + the above-0 % tint
+    expect(v).toContain('vec4(regionColor(p,segC[si].rgb,si)*ctLumHU(hu,si),ctShade>0.5?SEG_ALPHA:sliceTint)'); // 0 %: CT shading at the fixed opacity, solid at the tint
+    expect(v).toContain('vec4(mix(vec3(g),regionColor(p,segC[si].rgb,si)*ctLumHU(hu,si),sliceTint),a)'); // above 0 %: the tint colour carries the CT value (factor 1 when solid = the old slice)
+    expect(v).not.toContain('segHitColor'); expect(v).not.toContain('CT_SHADE_DEPTH');
+    expect(v.match(/lit=regionColor\(hp\+dir\*\(0\.75\*voxelMin\),segC\[idx\]\.rgb,idx\)\*diffuse\+vec3\(spec\)/g)).toHaveLength(4);
+    expect(v.match(/lit=mix\(regionColor\(cp,segC\[ci\]\.rgb,ci\),vec3\(1\.0\),0\.22\)\*diffuse/g)).toHaveLength(2);
+    expect(v).toContain('if(ctShade<0.5||diag==3||segC[s].w>0.5)return 1.0;');
+  });
+  it('the shader\'s fixed fill opacity equals the JS constant (0.95)', () => {
+    expect(SLICE_SEG_ALPHA).toBe(0.95); expect(v).toContain('#define SEG_ALPHA 0.95 ');
+  });
+  it('host: the slice state comes from sliceDrawState, fed with ui.sliceClear (so the thumbstick click and the double pinch, which only toggle it, draw the same as 0 %)', () => {
+    expect(v).toContain('sliceDrawState({on:section.on&&!bench.noSection,clear:ui.sliceClear,opacity:settings.sliceOpacity,tint:settings.sliceTint,ctShade:settings.ctShade})');
+    expect(v).toContain('u.sliceSegOnly.value=d.segOnly;u.sliceOpacity.value=d.opacity');
+    const i0 = v.indexOf('u.sliceOpacity.value=section.on&&!bench.noSection&&!ui.sliceClear?settings.sliceOpacity:0;'), i1 = v.indexOf('const d=sliceDrawState(');
+    expect(i0).toBeGreaterThan(0); expect(i1).toBeGreaterThan(i0); // the original assignment stays; sliceDrawState overrides it right after (a cleared slice no longer ends as nothing)
+    expect(v.match(/ui\.sliceClear=/g).length).toBeGreaterThan(2); // toggled by toggleSliceClear (stick / pinch), reset by the slider and the reset
+    expect(v).toContain('const toggleSliceClear=c=>{ui.sliceClear=!ui.sliceClear;');
+    expect(v).toContain("if(ev==='short')toggleSliceClear(c);"); expect(v).toContain('toggleSliceClear(c)}}'); // stick click, double pinch
+  });
+});
+describe('sliceDrawState (what the slice draws)', () => {
+  const on = { on: true, clear: false, opacity: 0.6, tint: 0.45, ctShade: 1 };
+  it('above 0 % the slice is the CT image at the slider value (segOnly 0), solid or shaded', () => {
+    expect(sliceDrawState(on)).toEqual({ opacity: 0.6, segOnly: 0 }); expect(sliceDrawState({ ...on, ctShade: 0 })).toEqual({ opacity: 0.6, segOnly: 0 });
+  });
+  it('0 % and the thumbstick-cleared slice give the same segment-only fill, even with a slider above 0 %', () => {
+    for (const ctShade of [0, 1]) {
+      const zero = sliceDrawState({ ...on, opacity: 0, ctShade }), cleared = sliceDrawState({ ...on, clear: true, ctShade }), clearedAt0 = sliceDrawState({ ...on, clear: true, opacity: 0, ctShade });
+      expect(zero).toEqual({ opacity: 1, segOnly: 1 }); expect(cleared).toEqual(zero); expect(clearedAt0).toEqual(zero);
+    }
+  });
+  it('section off (or bench no-section) draws nothing; solid without a tint draws nothing, CT shading does not need the tint', () => {
+    expect(sliceDrawState({ ...on, on: false })).toEqual({ opacity: 0, segOnly: 0 }); expect(sliceDrawState({ ...on, on: false, clear: true, opacity: 0 })).toEqual({ opacity: 0, segOnly: 0 });
+    expect(sliceDrawState({ ...on, opacity: 0, ctShade: 0, tint: 0 })).toEqual({ opacity: 0, segOnly: 0 }); expect(sliceDrawState({ ...on, clear: true, ctShade: 0, tint: 0 })).toEqual({ opacity: 0, segOnly: 0 });
+    expect(sliceDrawState({ ...on, opacity: 0, ctShade: 1, tint: 0 })).toEqual({ opacity: 1, segOnly: 1 });
   });
 });

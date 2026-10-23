@@ -280,7 +280,7 @@ describe('the image does not change with the theme; the backgrounds around it fo
   });
   it('segment preset colours are data, not theme colours', () => {
     const seg = read('docs/segments.js');
-    for (const c of ['#f3f0e8', '#d97f7f', '#e7c85d', '#6fb8d6']) expect(seg).toContain(c);
+    for (const c of ['#f3f0e8', '#f7a99c', '#e7c85d', '#6fb8d6']) expect(seg).toContain(c);
   });
   it('annotations drawn over the 3D view have a dark outline, so they read on any background', () => {
     const sv = read('docs/scene-view.js');

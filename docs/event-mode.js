@@ -56,6 +56,15 @@ export const SIMPLE_MENU=Object.freeze({W:1024,H:1180,X:40,STATUS:140,TOP:180,RO
 // The slice-opacity slider row (always there, for every dataset: it only shows once a section is) sits under the 断面 row; its steps are 5 % (sliceOpacityValue).
 export const SLICE_OPACITY_DEFAULT=0.6;
 export const sliceOpacityValue=v=>Math.round(Math.min(1,Math.max(0,+v||0))*20)/20;
+// What the slice draws this frame (pure, the one place that decides it). The slice is "at 0 %" when the slider is 0 OR the slice is cleared (thumbstick click / double pinch: ui.sliceClear), and both draw the same thing:
+// the segments' own region only (segOnly 1, sent to the shader with opacity 1), never the grey CT image. Solid (ctShade 0) needs a tint above 0 (the fill's opacity IS the tint); CT shading draws at SLICE_SEG_ALPHA whatever the tint is.
+// Above 0 % the slice is the CT image as before (segOnly 0, opacity = the slider).
+export const SLICE_SEG_ALPHA=0.95;
+export function sliceDrawState({on,clear,opacity,tint,ctShade}){
+ if(!on)return{opacity:0,segOnly:0};
+ if(!clear&&opacity>0)return{opacity,segOnly:0};
+ return ctShade||(+tint||0)>0?{opacity:1,segOnly:1}:{opacity:0,segOnly:0};
+}
 export function simpleMenuLayout(o){
  const M=SIMPLE_MENU,t=o.text,w=[],X=M.X,label=(id,x,y,text,extra={})=>w.push({type:'label',id,x,y,text,...extra});
  const btn=(id,x,y,wd,text,on,extra={})=>w.push({type:'button',id,x,y,w:wd,h:M.BTN_H,label:text,on,...extra});
