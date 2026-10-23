@@ -2,7 +2,7 @@
 // reports it as hardware accelerated, unless Chrome is launched with --enable-features=ForceEnableWebGpuInterop
 // (Wayland only; X11 is unsupported). This module shows a short note + expandable explanation under the GPU status
 // bar, only on Linux and only when WebGPU is unavailable. Self-contained: one call from updateGpuStatus().
-import { tr } from './i18n.js?v=20261022-build655';
+import { tr } from './i18n.js?v=20261022-build656';
 
 export const isLinuxUserAgent=ua=>/Linux/i.test(ua||'')&&!/Android|CrOS/i.test(ua||'');
 // pure decision: show only on Linux, and only when WebGPU is unavailable
