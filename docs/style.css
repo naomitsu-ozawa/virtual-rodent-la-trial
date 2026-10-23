@@ -1344,6 +1344,8 @@ html[lang="en"] .tut-sub{display:none}
 /* 「チュートリアルを始める」 (top bar, VR devices only), the introduction's subtitle bar and the pulsing outline on what to press next (the pink = the event slides' accent, as on the VR board) */
 .tut-cta{min-height:40px;padding:6px 16px;white-space:nowrap;flex:0 0 auto;border-radius:999px;border:2px solid #e8508f;background:#e8508f;color:#fff;font:inherit;font-weight:700;cursor:pointer;touch-action:manipulation}
 .tut-cta:hover{filter:brightness(1.08)}
+.tut-voice-credit{margin-top:14px;font-size:12px;line-height:1.5;opacity:.85;overflow-wrap:anywhere}
+.tut-voice-credit>div:first-child{font-weight:700}
 .tut-guide{position:fixed;left:50%;top:84px;transform:translateX(-50%);z-index:60;display:flex;align-items:center;gap:12px;max-width:min(92vw,760px);padding:12px 14px 12px 18px;border-radius:14px;background:rgb(var(--ui-s1));color:rgb(var(--ui-t1));font-size:18px;font-weight:700;line-height:1.45;box-shadow:0 6px 24px rgba(0,0,0,.35);border:3px solid #e8508f}
 .tut-guide-text{flex:1 1 auto}
 .tut-guide-close{flex:none;min-height:40px;padding:4px 14px;border-radius:10px;border:1px solid rgb(var(--ui-b3));background:transparent;color:rgb(var(--ui-t1));font:inherit;font-size:15px;cursor:pointer}

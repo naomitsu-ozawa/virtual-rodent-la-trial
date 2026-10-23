@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
-import { TUTORIAL_MISSIONS, TUT_SIGNALS, TUT_VOICES, TUT_FEEDBACK, TUT_INTRO, TUT_ORIENT, TUT_MENU_OPEN, TUT_SAMPLE, missionById } from '../../docs/tutorial-data.js';
+import { TUTORIAL_MISSIONS, TUT_SIGNALS, TUT_VOICES, TUT_FEEDBACK, TUT_INTRO, TUT_ORIENT, TUT_MENU_OPEN, TUT_VOICE_PICK, TUT_SAMPLE, missionById } from '../../docs/tutorial-data.js';
 import { GUIDE_SLIDES, LEVEL_SLIDES, guideSlide, levelSlide, slideItem, loc } from '../../docs/tutorial-slides.js';
 import { SIGNAL_KINDS } from '../../docs/tutorial-signal.js';
 import { I18N } from '../../docs/i18n.js';
@@ -91,7 +91,7 @@ describe('tutorial data', () => {
     expect(I18N.ja.tutIntroLv0).toContain('Lv0'); expect(I18N.ja.tutIntroVr).toBe('「VRで見る」か「ARで見る」を押しましょう'); expect(TUT_INTRO.pressVr.audioText).toMatch(/ブイアールで見る、または、エーアールで見る/);
   });
   it('voices and the data are frozen', () => {
-    expect(TUT_VOICES).toEqual(['F1']);
+    expect(TUT_VOICES).toEqual(['F1', 'M1']);
     expect(() => { 'use strict'; TUTORIAL_MISSIONS[0].steps[0].id = 'z'; }).toThrow();
     expect(() => { 'use strict'; GUIDE_SLIDES[1].items[0].y = 0; }).toThrow();
   });
@@ -137,14 +137,16 @@ describe('ステップ wording', () => {
     expect(TUT_FEEDBACK.missionClear.audioText).toBe('ステップクリアです。');
     for (const l of ['ja', 'en']) for (const k of Object.keys(I18N[l]).filter(k => /^tutM\d|^tutNoAnalysis$/.test(k))) expect(k).toBe(null); // the old M1..M8 keys are gone
   });
-  it('the narration: one F1 file + manifest entry per audio id (steps, feedback, page intro, VR entry guidance, menu closed), nothing stale', () => {
-    const ids = new Set([...steps, ...Object.values(TUT_FEEDBACK).flat(), ...Object.values(TUT_INTRO), ...Object.values(TUT_ORIENT), TUT_MENU_OPEN, ...steps.filter(s => s.then).map(s => s.then)].map(e => e.audio));
-    const files = readdirSync(new URL('../../docs/tutorial/audio/F1/', import.meta.url)).filter(f => f.endsWith('.m4a')).map(f => f.slice(0, -4));
-    expect(new Set(files)).toEqual(ids);
+  it('the narration: one file per voice (F1, M1) + manifest entry per audio id (steps, feedback, page intro, VR entry guidance, menu closed, voice choice), nothing stale', () => {
+    const ids = new Set([...steps, ...Object.values(TUT_FEEDBACK).flat(), ...Object.values(TUT_INTRO), ...Object.values(TUT_ORIENT), TUT_MENU_OPEN, TUT_VOICE_PICK, ...steps.filter(s => s.then).map(s => s.then)].map(e => e.audio));
+    for (const v of TUT_VOICES) {
+      const files = readdirSync(new URL(`../../docs/tutorial/audio/${v}/`, import.meta.url)).filter(f => f.endsWith('.m4a')).map(f => f.slice(0, -4));
+      expect(new Set(files), v).toEqual(ids);
+    }
     const man = JSON.parse(readFileSync(new URL('../../docs/tutorial/manifest.json', import.meta.url), 'utf8'));
-    expect(new Set(Object.keys(man))).toEqual(new Set([...ids].map(id => 'F1/' + id)));
-    for (const [k, v] of Object.entries(man)) { expect(v.voice).toBe('F1'); expect(v.sec, k).toBeGreaterThan(0.5); expect(v.sec, k).toBeLessThan(12); } // the step-by-step lines are longer (up to about 12 s: the slider line)
-    for (const k of ['F1/ok1', 'F1/ok2', 'F1/ok3', 'F1/mclear', 'F1/intro1', 'F1/intro2']) expect(man[k].sec, k).toBeLessThan(6); // the short feedback / intro lines stay short
+    expect(new Set(Object.keys(man))).toEqual(new Set(TUT_VOICES.flatMap(v => [...ids].map(id => v + '/' + id))));
+    for (const [k, v] of Object.entries(man)) { expect(v.voice).toBe(k.split('/')[0]); expect(v.sec, k).toBeGreaterThan(0.5); expect(v.sec, k).toBeLessThan(12); } // the step-by-step lines are longer (up to about 12 s: the slider line)
+    for (const k of ['ok1', 'ok2', 'ok3', 'mclear', 'intro1', 'intro2', 'pick'].flatMap(id => TUT_VOICES.map(v => v + '/' + id))) expect(man[k].sec, k).toBeLessThan(6); // the short feedback / intro lines stay short
   });
 });
 
