@@ -243,7 +243,7 @@ describe('the view: each mode on the group, 標準 untouched, 指差し gated, t
     const pose = (o = {}) => { cur = { ...cur, ...o }; const h = handPose({ ...cur, p: OFF }); for (const k in h.j) mk(k, h.j[k]); return h; };
     pose();
     const c = new THREE.Group(); c.matrixAutoUpdate = false; c.visible = true; c.userData.source = { hand: {}, handedness: 'right' };
-    const ray = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineBasicMaterial()); c.add(ray); c.userData.ray = ray;
+    const ray = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial()); c.add(ray); c.userData.ray = ray;
     const dot = new THREE.Mesh(new THREE.SphereGeometry(0.004), new THREE.MeshBasicMaterial()); c.userData.dot = dot;
     const scene = new THREE.Scene(), m = { mode };
     scene.add(c);
