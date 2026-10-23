@@ -133,17 +133,17 @@ describe('slice fill (slice tab row + shader guards, static)', () => {
     for (let i = 1; i < rows.length; i++) expect(rows[i][0]).toBeGreaterThan(rows[i - 1][1]);
     expect(y0 + 10 + 13).toBeLessThan(y0 + 44); // the window heading line above the first row
   });
-  it('ctShadeBright: 50..200 % in 10 % steps, default 130 %, a menu preference like ctShade (not an event view value, no URL parameter); the setting is clamped before it reaches the shader', () => {
-    expect(v).toContain('labelHide:LABEL_HIDE_DEFAULT,ctShade:1,ctShadeBright:1.3,'); // ctShadeContrast follows
+  it('ctShadeBright: 50..200 % in 10 % steps, default 180 %, a menu preference like ctShade (not an event view value, no URL parameter); the setting is clamped before it reaches the shader', () => {
+    expect(v).toContain('labelHide:LABEL_HIDE_DEFAULT,ctShade:1,ctShadeBright:1.8,'); // ctShadeContrast follows
     expect(v).toContain('const CT_BRIGHT_MIN=0.5,CT_BRIGHT_MAX=2,CT_BRIGHT_STEP=0.1,ctBrightOf=v=>{v=+v;return Number.isFinite(v)?Math.min(CT_BRIGHT_MAX,Math.max(CT_BRIGHT_MIN,Math.round(v*10)/10)):DEFAULTS.ctShadeBright};');
-    expect(v).toContain('ctShadeBright:{value:1.3}'); expect(v).toContain('u.ctShadeBright.value=ctBrightOf(settings.ctShadeBright);');
+    expect(v).toContain('ctShadeBright:{value:1.8}'); expect(v).toContain('u.ctShadeBright.value=ctBrightOf(settings.ctShadeBright);');
     expect(v).toContain("const EVENT_VIEW_KEYS=['cut','cap','sliceAir','sliceTint','sliceOpacity','labelSize'];");
     expect(v).not.toMatch(/URLSearchParams[^;]*ctShadeBright|get\('ctShadeBright'\)/);
   });
-  it('ctShadeContrast: 50..200 % in 10 % steps, default 100 %, a menu preference like ctShadeBright (not an event view value, no URL parameter); clamped before the shader', () => {
-    expect(v).toContain('ctShade:1,ctShadeBright:1.3,ctShadeContrast:1}');
+  it('ctShadeContrast: 50..200 % in 10 % steps, default 170 %, a menu preference like ctShadeBright (not an event view value, no URL parameter); clamped before the shader', () => {
+    expect(v).toContain('ctShade:1,ctShadeBright:1.8,ctShadeContrast:1.7}');
     expect(v).toContain('const CT_CONTRAST_MIN=0.5,CT_CONTRAST_MAX=2,CT_CONTRAST_STEP=0.1,ctContrastOf=v=>{v=+v;return Number.isFinite(v)?Math.min(CT_CONTRAST_MAX,Math.max(CT_CONTRAST_MIN,Math.round(v*10)/10)):DEFAULTS.ctShadeContrast};');
-    expect(v).toContain('ctShadeContrast:{value:1}'); expect(v).toContain('u.ctShadeContrast.value=ctContrastOf(settings.ctShadeContrast);');
+    expect(v).toContain('ctShadeContrast:{value:1.7}'); expect(v).toContain('u.ctShadeContrast.value=ctContrastOf(settings.ctShadeContrast);');
     expect(v).toContain("const EVENT_VIEW_KEYS=['cut','cap','sliceAir','sliceTint','sliceOpacity','labelSize'];");
     expect(v).not.toMatch(/URLSearchParams[^;]*ctShadeContrast|get\('ctShadeContrast'\)/);
   });

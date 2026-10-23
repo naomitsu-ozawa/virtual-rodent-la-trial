@@ -1,65 +1,65 @@
-import { effectiveFlag } from './debug-flags.js?v=20261023-build657';
+import { effectiveFlag } from './debug-flags.js?v=20261023-build659';
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js';
-import { volumeTexturePlan, reduceSliceArea, packedRgSlice, packCtSlice, gpuRunsForTexture } from './medical-volume.js?v=20261023-build657';
-import { ensureSegmentBaseRuns } from './segment-runs.js?v=20261023-build657';
-import { gpuVolumeTarget, gpuVolumeEditDescriptors } from './gpu-volume-data.js?v=20261023-build657';
-import { SEGMENT_PRESET_ORDER, gpuSegmentOrder, segmentHasProcessedMask, segmentState, segmentEditState, segmentSourceSignature } from './segments.js?v=20261023-build657';
-import { sceneState, analysisRegions, activeSeries } from './state.js?v=20261023-build657';
-import { datasetFingerprint } from './project-file.js?v=20261023-build657';
-import { HAND_PICK_TOL, sectionRayHit, recordVrPoint, resolveTriggerTarget, createTriggerPress, dragShouldStart, DRAG_RECORD, sectionFollowStart, sectionFollowStep, sectionWristTurn, snapPlaneCenterIntoBox, chooseSectionForRay, rayLocalPlaneX, squareBandContains, squareContains, createHoverPulse, qMul, qInv, qRot, qAngleDeg, clampPlaneCenter, HAPTIC, normalizePointMode, surfaceVoxelFromHit, voxelToLocal, voxelSize, createStickGate, deleteSelected, createUndoStack, applyUndo, pointIsHidden } from './vr-point.js?v=20261023-build657';
-import { createVrPointMarkers, createSurfaceCursor } from './vr-point-markers.js?v=20261023-build657';
-import { buildClsData } from './point-cls.js?v=20261023-build657';
-import { createHiddenClsManager } from './hidden-cls-state.js?v=20261023-build657';
-import { onDatasetChange } from './dataset-reset.js?v=20261023-build657';
-import { WHEEL_ITEMS, DEFAULT_WHEEL, normalizeWheelItems, migrateWheelSectionFlip, setWheelItem, moveWheelItem, clearWheelItem, createRingMenu, createWheelStick, createButtonPress } from './vr-ring.js?v=20261023-build657';
-import { getComments, onCommentsChange, commentMatchesSeries, removeComment, restoreComment, updateCommentPosition, updateCommentText, updateCommentColor } from './comments.js?v=20261023-build657';
-import { POINT_PALETTE, pointColor, normalizeColor } from './point-colors.js?v=20261023-build657';
-import { buildDistanceBytes, combineClassificationDistance, fourthChannelBytes } from './distance-field.js?v=20261023-build657';
-import { classifiedAt, marchClassificationHitInfo } from './vr-pick.js?v=20261023-build657';
-import { createSkipState, skipGrid } from './vr-skip-occupancy.js?v=20261023-build657'; // the creep-skip occupancy bits of the combined texture (VR max-zoom cost)
-import { createComboRebuild } from './vr-combo-rebuild.js?v=20261023-build657'; // the combined texture rebuilt off the frame when the shown segments change
-import { setBusySlot, reportBusyProgress } from './progress-modal.js?v=20261023-build657';
-import { tr } from './i18n.js?v=20261023-build657';
-import { wrapMenuText, stackMenuRows } from './vr-menu-text.js?v=20261023-build657';
-import { activeEventLevel, eventModeOn, missionLines, simpleMenuSegments, triggerModeRow, triggerMode, TRIGGER_AT_START, resetPress, resetArmed, RESET_ARM_MS, simpleMenuLayout, SIMPLE_MENU, sliceOpacityValue, sliceDrawState } from './event-mode.js?v=20261023-build657'; // 体験会モード - the chosen level's mission on the help board, the かんたん menu
-import { VIEW_TOGGLE_ID, VIEW_TOGGLE_BUTTON, SECTION_DELETE_ID, createViewToggle, createDoublePress, ringIdsFor } from './vr-view-toggle.js?v=20261023-build657';
-import { vrSpacingNote, vrVolumeText } from './vr-spacing-note.js?v=20261023-build657';
-import { NORM_LONG, physicalExtentsMm, longestMm, realMagnification, realHolderScale, startHolderScale, tutorialHolderScale, smallForTutorial, TUT_VOLUME_FWD, TUT_VOLUME_DOWN, magnificationText, createScaleTag, clampScale, pinchScale, scaleLimits, oversizeNote, planeFrameLocalScale, planeTagLocalScale, scaleLineText } from './vr-real-scale.js?v=20261023-build657';
-import { createAutoQuality, autoFloor, STEP_LEVELS, marchStep } from './vr-auto-quality.js?v=20261023-build657';
-import { createVrHuLine } from './vr-hu-line.js?v=20261023-build657';
-import { huMenuTexts, voxelFromHits } from './vr-hu-line-core.js?v=20261023-build657';
-import { setHuLineDeferred } from './hu-line-model.js?v=20261023-build657';
-import { createVrMeasure, LABEL_LIT_SCALE } from './vr-measure.js?v=20261023-build657';
-import { resetUserState } from './event-fresh.js?v=20261023-build657'; // 最初から in the tutorial (practice data only, see tutorial-ui.js resetTutorialAll)
-import { tutorialModeOn, createTutorialVr, createSlideViewer, panelTabs, TAB_H, PAGE_H, layoutLevelSlide, levelBoardH, menuAnnotation, menuTargetRect } from './tutorial-vr.js?v=20261023-build657'; // チュートリアル on the help board (only made when tutorialMode is on);: the read-only guide, the level slide, the menu pointer
-import { levelSlide, createSlideImages } from './tutorial-slides.js?v=20261023-build657'; // the 体験会 level slides (ev board: the slide's picture)
-import { TUT_SAMPLE } from './tutorial-data.js?v=20261023-build657'; // the live tutorial runs on its practice data only
-import { emit, scaleChanged, poseMoved } from './tutorial-signal.js?v=20261023-build657'; // tutorial: one-line signals at the action sites (no-op without a listener)
-import { horizAngleDeg } from './tutorial-orient.js?v=20261023-build657'; // the tutorial's entry guidance (look right / left): head turn toward a board
-import { createControllerHints, createEdgeArrow, createBoardArrow, boardSide, edgeArrowShown } from './tutorial-3d.js?v=20261023-build657'; // the tutorial's 3D guides (controller button, edge arrow, arrow over the menu)
-import { MAX_SECTION_PLANES, nextPlaneColor, frameDepthTest, ARROW_LEN, ARROW_FLASH_MS, arrowFade, arrowShown, tagBehindTissue, sectionPage, pageOfPlane, SECTION_ROWS_PER_PAGE, FLING_UNDO_MS, FLING_DEBUG_MS, createVelocityTracker, flingDecision, frameOutOfView, outOfViewNow, createOutOfViewTracker, outOfViewRelease, flingDebugLines, capVelocity, flyStep, makeSectionSnapshot, restorePlan, createSectionUndo, undoButtonPlace } from './vr-section-frame.js?v=20261023-build657';
-import { createUndoButton } from './vr-undo-button.js?v=20261023-build657';
-import { createFlingDebugTag } from './vr-fling-debug.js?v=20261023-build657';
-import { EMPTY_PINCH, isHand, wristScrollGain, wristScrollSign, wristScrollKeep, NEAR_KINDS, boxDist, centeredBoxDist, squareOutlineDist, pickNearGrab, HAND_RAY_MODES, normalizeHandRay } from './vr-hand.js?v=20261023-build657'; // hand tracking (Quest 3): pure helpers
-import { createHandInput, HAND_LABEL_MOVE_M } from './vr-hand-view.js?v=20261023-build657'; // the hand's ray, wrist menu, fingertips
-import { LABEL_HIDE_DEFAULT, normalizeLabelHide, gpuOcclusionActive, depthVoxelSize, boardVisible, GHOST_ALPHA, occludedPass } from './vr-depth.js?v=20261023-build657';
-import { brickOccupancy, writeBrickOccupancy } from './vr-brick-occupancy.js?v=20261023-build657';
-import { createProbeGate } from './measure-label.js?v=20261023-build657';
-import { sliceIndex, sliceRange, boxFromRange, createSegScan, segScanStart, segScanStep, segsSubset, segsFromUniforms, contentKeyChanged, KEY_LEN } from './vr-content-box.js?v=20261023-build657'; // the proxy box = the box of what can be drawn
-import { setRegionLabel, setRegionLabelOffset, voxelFromLocalVr, clampVoxel, labelLocal, offsetForLocal, vrVoxelStep, rectEdgePoint, leaderVisible, labelSegmentsShown } from './analysis-label.js?v=20261023-build657';
-import { createVrSelfCheck, selfCheckTexts } from './vr-self-check.js?v=20261023-build657'; // 詳細 > 自己診断 (automated frame-time scenarios)
-import { createScaleGuard, createFlapGuard, variantFallback } from './vr-flicker-guard.js?v=20261023-build657'; // flicker safety guard
-import { eyeMetrics, capFromPpv, nextCap, foveaRect, outsideFovea, foveaWorth, qualityText, FOVEA_K, CAP_MIN } from './vr-render-scale.js?v=20261023-build657'; // data-resolution render scale + offscreen foveation
-import { getMeasureStart, startMeasure, cancelMeasure, pickMeasureEnd, onMeasureStartChange, removeMeasurement, restoreMeasurements, measurementsOfPoint, seriesSpacing } from './measurements.js?v=20261023-build657';
-import { APP_BUILD } from './version.js?v=20261023-build657';
-import { wc, ww } from './ui-shell.js?v=20261023-build657';
-import { VOLUME_FWD, VOLUME_DOWN, MENU_OFFSET, HELP_OFFSET, HU_PANEL_OFFSET, EV_OFFSET, EV_WIDTH, EV_RES, MENU_WIDTH, HELP_WIDTH, HELP_RES, HIST_OFFSET, HIST_WIDTH, FOLLOW_ANGLE, FOLLOW_DIST } from './vr-layout.js?v=20261023-build657';
-import { onHistogramChange, getHistogramRange, getHistogramLog, setHistogramLog, setHistogramRange } from './histogram-ui.js?v=20261023-build657';
-import { createVrLabelHistogram, UNLABELED_COLOR, labelSlot, labelRegion } from './vr-label-histogram.js?v=20261023-build657';
-import { rangeRes } from './vr-histogram-layout.js?v=20261023-build657';
-import { getHuMode, setHuMode, HU_MODE_FILTERED, HU_MODE_RAW } from './effective-hu.js?v=20261023-build657';
-import { createVrHistogramPanel } from './vr-histogram-panel.js?v=20261023-build657';
-import { lightingGLSL, lightingVertexGLSL, materialVec, MATERIALS, materialKey } from './lighting.js?v=20261023-build657'; // one lighting model for the desktop volume, this VR / AR volume and the 3D-view meshes
+import { volumeTexturePlan, reduceSliceArea, packedRgSlice, packCtSlice, gpuRunsForTexture } from './medical-volume.js?v=20261023-build659';
+import { ensureSegmentBaseRuns } from './segment-runs.js?v=20261023-build659';
+import { gpuVolumeTarget, gpuVolumeEditDescriptors } from './gpu-volume-data.js?v=20261023-build659';
+import { SEGMENT_PRESET_ORDER, gpuSegmentOrder, segmentHasProcessedMask, segmentState, segmentEditState, segmentSourceSignature } from './segments.js?v=20261023-build659';
+import { sceneState, analysisRegions, activeSeries } from './state.js?v=20261023-build659';
+import { datasetFingerprint } from './project-file.js?v=20261023-build659';
+import { HAND_PICK_TOL, sectionRayHit, recordVrPoint, resolveTriggerTarget, createTriggerPress, dragShouldStart, DRAG_RECORD, sectionFollowStart, sectionFollowStep, sectionWristTurn, snapPlaneCenterIntoBox, chooseSectionForRay, rayLocalPlaneX, squareBandContains, squareContains, createHoverPulse, qMul, qInv, qRot, qAngleDeg, clampPlaneCenter, HAPTIC, normalizePointMode, surfaceVoxelFromHit, voxelToLocal, voxelSize, createStickGate, deleteSelected, createUndoStack, applyUndo, pointIsHidden } from './vr-point.js?v=20261023-build659';
+import { createVrPointMarkers, createSurfaceCursor } from './vr-point-markers.js?v=20261023-build659';
+import { buildClsData } from './point-cls.js?v=20261023-build659';
+import { createHiddenClsManager } from './hidden-cls-state.js?v=20261023-build659';
+import { onDatasetChange } from './dataset-reset.js?v=20261023-build659';
+import { WHEEL_ITEMS, DEFAULT_WHEEL, normalizeWheelItems, migrateWheelSectionFlip, setWheelItem, moveWheelItem, clearWheelItem, createRingMenu, createWheelStick, createButtonPress } from './vr-ring.js?v=20261023-build659';
+import { getComments, onCommentsChange, commentMatchesSeries, removeComment, restoreComment, updateCommentPosition, updateCommentText, updateCommentColor } from './comments.js?v=20261023-build659';
+import { POINT_PALETTE, pointColor, normalizeColor } from './point-colors.js?v=20261023-build659';
+import { buildDistanceBytes, combineClassificationDistance, fourthChannelBytes } from './distance-field.js?v=20261023-build659';
+import { classifiedAt, marchClassificationHitInfo } from './vr-pick.js?v=20261023-build659';
+import { createSkipState, skipGrid } from './vr-skip-occupancy.js?v=20261023-build659'; // the creep-skip occupancy bits of the combined texture (VR max-zoom cost)
+import { createComboRebuild } from './vr-combo-rebuild.js?v=20261023-build659'; // the combined texture rebuilt off the frame when the shown segments change
+import { setBusySlot, reportBusyProgress } from './progress-modal.js?v=20261023-build659';
+import { tr } from './i18n.js?v=20261023-build659';
+import { wrapMenuText, stackMenuRows } from './vr-menu-text.js?v=20261023-build659';
+import { activeEventLevel, eventModeOn, missionLines, simpleMenuSegments, triggerModeRow, triggerMode, TRIGGER_AT_START, resetPress, resetArmed, RESET_ARM_MS, simpleMenuLayout, SIMPLE_MENU, sliceOpacityValue, sliceDrawState } from './event-mode.js?v=20261023-build659'; // 体験会モード - the chosen level's mission on the help board, the かんたん menu
+import { VIEW_TOGGLE_ID, VIEW_TOGGLE_BUTTON, SECTION_DELETE_ID, createViewToggle, createDoublePress, ringIdsFor } from './vr-view-toggle.js?v=20261023-build659';
+import { vrSpacingNote, vrVolumeText } from './vr-spacing-note.js?v=20261023-build659';
+import { NORM_LONG, physicalExtentsMm, longestMm, realMagnification, realHolderScale, startHolderScale, tutorialHolderScale, smallForTutorial, TUT_VOLUME_FWD, TUT_VOLUME_DOWN, magnificationText, createScaleTag, clampScale, pinchScale, scaleLimits, oversizeNote, planeFrameLocalScale, planeTagLocalScale, scaleLineText } from './vr-real-scale.js?v=20261023-build659';
+import { createAutoQuality, autoFloor, STEP_LEVELS, marchStep } from './vr-auto-quality.js?v=20261023-build659';
+import { createVrHuLine } from './vr-hu-line.js?v=20261023-build659';
+import { huMenuTexts, voxelFromHits } from './vr-hu-line-core.js?v=20261023-build659';
+import { setHuLineDeferred } from './hu-line-model.js?v=20261023-build659';
+import { createVrMeasure, LABEL_LIT_SCALE } from './vr-measure.js?v=20261023-build659';
+import { resetUserState } from './event-fresh.js?v=20261023-build659'; // 最初から in the tutorial (practice data only, see tutorial-ui.js resetTutorialAll)
+import { tutorialModeOn, createTutorialVr, createSlideViewer, panelTabs, TAB_H, PAGE_H, layoutLevelSlide, levelBoardH, menuAnnotation, menuTargetRect } from './tutorial-vr.js?v=20261023-build659'; // チュートリアル on the help board (only made when tutorialMode is on);: the read-only guide, the level slide, the menu pointer
+import { levelSlide, createSlideImages } from './tutorial-slides.js?v=20261023-build659'; // the 体験会 level slides (ev board: the slide's picture)
+import { TUT_SAMPLE } from './tutorial-data.js?v=20261023-build659'; // the live tutorial runs on its practice data only
+import { emit, scaleChanged, poseMoved } from './tutorial-signal.js?v=20261023-build659'; // tutorial: one-line signals at the action sites (no-op without a listener)
+import { horizAngleDeg } from './tutorial-orient.js?v=20261023-build659'; // the tutorial's entry guidance (look right / left): head turn toward a board
+import { createControllerHints, createEdgeArrow, createBoardArrow, boardSide, edgeArrowShown } from './tutorial-3d.js?v=20261023-build659'; // the tutorial's 3D guides (controller button, edge arrow, arrow over the menu)
+import { MAX_SECTION_PLANES, nextPlaneColor, frameDepthTest, ARROW_LEN, ARROW_FLASH_MS, arrowFade, arrowShown, tagBehindTissue, sectionPage, pageOfPlane, SECTION_ROWS_PER_PAGE, FLING_UNDO_MS, FLING_DEBUG_MS, createVelocityTracker, flingDecision, frameOutOfView, outOfViewNow, createOutOfViewTracker, outOfViewRelease, flingDebugLines, capVelocity, flyStep, makeSectionSnapshot, restorePlan, createSectionUndo, undoButtonPlace } from './vr-section-frame.js?v=20261023-build659';
+import { createUndoButton } from './vr-undo-button.js?v=20261023-build659';
+import { createFlingDebugTag } from './vr-fling-debug.js?v=20261023-build659';
+import { EMPTY_PINCH, isHand, wristScrollGain, wristScrollSign, wristScrollKeep, NEAR_KINDS, boxDist, centeredBoxDist, squareOutlineDist, pickNearGrab, HAND_RAY_MODES, normalizeHandRay } from './vr-hand.js?v=20261023-build659'; // hand tracking (Quest 3): pure helpers
+import { createHandInput, HAND_LABEL_MOVE_M } from './vr-hand-view.js?v=20261023-build659'; // the hand's ray, wrist menu, fingertips
+import { LABEL_HIDE_DEFAULT, normalizeLabelHide, gpuOcclusionActive, depthVoxelSize, boardVisible, GHOST_ALPHA, occludedPass } from './vr-depth.js?v=20261023-build659';
+import { brickOccupancy, writeBrickOccupancy } from './vr-brick-occupancy.js?v=20261023-build659';
+import { createProbeGate } from './measure-label.js?v=20261023-build659';
+import { sliceIndex, sliceRange, boxFromRange, createSegScan, segScanStart, segScanStep, segsSubset, segsFromUniforms, contentKeyChanged, KEY_LEN } from './vr-content-box.js?v=20261023-build659'; // the proxy box = the box of what can be drawn
+import { setRegionLabel, setRegionLabelOffset, voxelFromLocalVr, clampVoxel, labelLocal, offsetForLocal, vrVoxelStep, rectEdgePoint, leaderVisible, labelSegmentsShown } from './analysis-label.js?v=20261023-build659';
+import { createVrSelfCheck, selfCheckTexts } from './vr-self-check.js?v=20261023-build659'; // 詳細 > 自己診断 (automated frame-time scenarios)
+import { createScaleGuard, createFlapGuard, variantFallback } from './vr-flicker-guard.js?v=20261023-build659'; // flicker safety guard
+import { eyeMetrics, capFromPpv, nextCap, foveaRect, outsideFovea, foveaWorth, qualityText, FOVEA_K, CAP_MIN } from './vr-render-scale.js?v=20261023-build659'; // data-resolution render scale + offscreen foveation
+import { getMeasureStart, startMeasure, cancelMeasure, pickMeasureEnd, onMeasureStartChange, removeMeasurement, restoreMeasurements, measurementsOfPoint, seriesSpacing } from './measurements.js?v=20261023-build659';
+import { APP_BUILD } from './version.js?v=20261023-build659';
+import { wc, ww } from './ui-shell.js?v=20261023-build659';
+import { VOLUME_FWD, VOLUME_DOWN, MENU_OFFSET, HELP_OFFSET, HU_PANEL_OFFSET, EV_OFFSET, EV_WIDTH, EV_RES, MENU_WIDTH, HELP_WIDTH, HELP_RES, HIST_OFFSET, HIST_WIDTH, FOLLOW_ANGLE, FOLLOW_DIST } from './vr-layout.js?v=20261023-build659';
+import { onHistogramChange, getHistogramRange, getHistogramLog, setHistogramLog, setHistogramRange } from './histogram-ui.js?v=20261023-build659';
+import { createVrLabelHistogram, UNLABELED_COLOR, labelSlot, labelRegion } from './vr-label-histogram.js?v=20261023-build659';
+import { rangeRes } from './vr-histogram-layout.js?v=20261023-build659';
+import { getHuMode, setHuMode, HU_MODE_FILTERED, HU_MODE_RAW } from './effective-hu.js?v=20261023-build659';
+import { createVrHistogramPanel } from './vr-histogram-panel.js?v=20261023-build659';
+import { lightingGLSL, lightingVertexGLSL, materialVec, MATERIALS, materialKey } from './lighting.js?v=20261023-build659'; // one lighting model for the desktop volume, this VR / AR volume and the 3D-view meshes
 
 const BG=new THREE.Color(0.035,0.045,0.05);
 const BRICK=8;
@@ -124,8 +124,8 @@ uniform vec4 segM[4]; // material of the segment (lighting.js materialVec): ambi
 // ctLumHU is normalised to the segment's own HU range (segA min..max) and floored at CT_SHADE_MIN so a low value never goes black. ctShadeBright is a gamma on that factor (pow(lum,1/b)): above 1 it lifts the dark end most and leaves the top at 1, so the bright end never clips; below 1 it darkens. ctShadeContrast then spreads that value about the middle of its range (pivot = (min+1)/2, min = CT_SHADE_MIN^(1/b)) by the factor c, clamped to 0.05..1: above 1 the dark and bright parts move apart again after the gamma has pulled them together; exactly 1 returns the gamma value untouched. The 3D surface and the cut-face cap always keep the flat segment colour.
 uniform float sliceSegOnly;
 uniform float ctShade;
-uniform float ctShadeBright; // setting ctShadeBright (menu: 濃淡の明るさ 50..200 %, default 130 %): gamma on the CT factor, 1 = as before
-uniform float ctShadeContrast; // setting ctShadeContrast (menu: 濃淡のコントラスト 50..200 %, default 100 %): spread of the CT factor about the middle of its range, 1 = as before (the value is returned unchanged)
+uniform float ctShadeBright; // setting ctShadeBright (menu: 濃淡の明るさ 50..200 %, default 180 %): gamma on the CT factor, 1 = as before
+uniform float ctShadeContrast; // setting ctShadeContrast (menu: 濃淡のコントラスト 50..200 %, default 170 %): spread of the CT factor about the middle of its range, 1 = as before (the value is returned unchanged)
 #define CT_SHADE_MIN 0.35
 #define SEG_ALPHA 0.95 // 0 % + CT shading: the fill's opacity, whatever sliceTint is (the shader source is a plain template, so event-mode.js SLICE_SEG_ALPHA is checked equal by a unit test)
 #define CT_SHADE_SPAN 1500.0 // a segment's max can be open-ended (bone 698..61535): the window's top is at most this far above its min
@@ -390,6 +390,10 @@ void main(){
  if(capOn==0||capT>endT){capT=-1.0;capPlane=-1;}
  // entry face: a surface hit with t <= faceEnd lies on the box face the ray entered through (camera outside the box, the march starts at that face: no section plane / content box moved it): -1 = none (every hit has t >= 0)
  float faceEnd=(bounds.x>0.0&&t<=bounds.x+1e-4)?bounds.x+step:-1.0;
+ // faceT = the entry sample on that face (-1 = none). The distance field treats the box exterior as the same class (edge replicated), so a solid region reaching the face
+ // has a large distance there and the first sample jumped past the face: the hit was found voxels deep, gradient-lit (the uncapped granular box faces). At faceT a jump is not
+ // taken when the sample is inside a shown segment; any other sample jumps as before (same image off the box faces)
+ float faceT=faceEnd>=0.0?t:-1.0;
 #ifndef VRL_NO_EVENTS
  // slices inside the kept interval, sorted front to back
  if(sliceOpacity>0.0){
@@ -447,6 +451,11 @@ void main(){
    }
 #endif
    vec4 q=texture(clsTex,clamp(tcO+tcD*t,vec3(0.0),vec3(0.999999)));float dd=q.a*255.0;
+   if(dd>=2.7&&t<=faceT){vec4 qf=q;
+#ifdef VRL_CLS4
+    qf.a=texture(cls4Tex,clamp(tcO+tcD*t,vec3(0.0),vec3(0.999999))).r;
+#endif
+    VRL_MP vec4 qfc=qf-0.5;if(max(max(dot(qfc,sel0)-off0,dot(qfc,sel1)-off1),max(dot(qfc,sel2)-off2,dot(qfc,sel3)-off3))>=0.0)dd=0.0;} // the entry sample on a box face inside a segment: no jump (faceT)
    // a jump is never shorter than a normal step
    if(dd>=2.7){float nextJ=max(t+(dd-1.8)*voxelMin,t+step);jumpLen+=nextJ-t;previousT=nextJ-step*0.05;prevValid=false;t=nextJ;continue;}
 #ifdef VRL_CLS4
@@ -538,6 +547,11 @@ void main(){
    }
 #endif
    vec4 q=texture(clsTex,clamp(tcO+tcD*t,vec3(0.0),vec3(0.999999)));float dd=q.a*255.0;
+   if(dd>=2.7&&t<=faceT){vec4 qf=q;
+#ifdef VRL_CLS4
+    qf.a=texture(cls4Tex,clamp(tcO+tcD*t,vec3(0.0),vec3(0.999999))).r;
+#endif
+    VRL_MP vec4 qfc=qf-0.5;if(max(max(dot(qfc,sel0)-off0,dot(qfc,sel1)-off1),max(dot(qfc,sel2)-off2,dot(qfc,sel3)-off3))>=0.0)dd=0.0;} // the entry sample on a box face inside a segment: no jump (faceT)
    // a jump is never shorter than a normal step
    if(dd>=2.7){float nextJ=max(t+(dd-1.8)*voxelMin,t+step);jumpLen+=nextJ-t;previousT=nextJ-step*0.05;prevValid=false;t=nextJ;continue;}
 #ifdef VRL_CLS4
@@ -650,6 +664,11 @@ void main(){
    // trilinearly: every corner value is a lower bound of the distance to the seeds and the distance is
    // 1-Lipschitz, so the surface is at least dd - 1.74 voxels away; jump dd - 1.8 when that is 0.9 or more
    qHere=texture(clsTex,clamp(tc0,vec3(0.0),vec3(0.999999)));haveQ=true;float dd=qHere.a*255.0;
+   if(dd>=2.7&&t<=faceT){vec4 qf=qHere;
+#ifdef VRL_CLS4
+    qf.a=texture(cls4Tex,clamp(tc0,vec3(0.0),vec3(0.999999))).r;
+#endif
+    if(segmentIndexFromQ(qf)>=0)dd=0.0;} // no jump at the entry sample on a box face inside a segment (faceT)
    if(dd>=2.7){float nextJ=t+(dd-1.8)*voxelMin;jumpLen+=nextJ-t;previousT=nextJ-step*0.05;prevValid=false;t=nextJ;continue;}
 #ifdef VRL_CLS4
    qHere.a=texture(cls4Tex,clamp(tc0,vec3(0.0),vec3(0.999999))).r;
@@ -660,6 +679,7 @@ void main(){
    // axis (chamfer 5 = 1.5 in field units, floor: +2), so after a read of 0 the next value is at most 2 and the read is
    // skipped; the bound grows by distInc per skipped step (steps longer than a voxel: more). Same jumps, same image.
    if(lastDd>=1.0){float dd=distAt(tc0);lastDd=dd;
+    if(dd>=3.0&&t<=faceT&&segmentIndexAt(tc0)>=0)dd=0.0; // no jump at the entry sample on a box face inside a segment (faceT)
     if(dd>=3.0){float nextJ=t+(dd-2.0)*voxelMin;jumpLen+=nextJ-t;previousT=nextJ-step*0.05;prevValid=false;t=nextJ;lastDd=99.0;continue;}
    }else{lastDd+=distInc;}
   }
@@ -795,18 +815,18 @@ async function buildVolumeData(maxDim,onProgress,{noBricks=false}={}){
 
 // VR settings kept per browser (resolution only applies when a session starts)
 const SETTINGS_KEY='vrl-vr-settings-5',OLD_KEYS=['vrl-vr-settings-4','vrl-vr-settings-3'];
-const DEFAULTS_VERSION=2,DEFAULTS_VERSION_KEYS=['sliceAir','sliceTint','sliceOpacity','menuMode','help','cut'];
+const DEFAULTS_VERSION=3,DEFAULTS_VERSION_KEYS=['sliceAir','sliceTint','sliceOpacity','menuMode','help','cut'],DEFAULTS_VERSION_STEPS=[[2,DEFAULTS_VERSION_KEYS],[3,['ctShadeBright','ctShadeContrast']]];
 // menuMode 0 follows the head lazily, 1 stays where it is (the default now; help: 0 hidden / 1 follows / 2 fixed, default 2; cut: 0 off / 1 near side / 2 one side, default 2)
-const DEFAULTS={cap:1,sliceAir:-600,sliceTint:0.45,menuMode:1,wheel:[...DEFAULT_WHEEL],wheelMig:0,cut:2,sliceOpacity:0.6,data:1,quality:0,vres:0,autoMin:0,foveation:2,rate:0,help:2,refine:1,labelSize:0,labelHide:LABEL_HIDE_DEFAULT,ctShade:1,ctShadeBright:1.3,ctShadeContrast:1}; // labelHide: 1 = distance labels / lines hidden for real behind the tissue (GPU depth), 0 = faded (CPU probes)
+const DEFAULTS={cap:1,sliceAir:-600,sliceTint:0.45,menuMode:1,wheel:[...DEFAULT_WHEEL],wheelMig:0,cut:2,sliceOpacity:0.6,data:1,quality:0,vres:0,autoMin:0,foveation:2,rate:0,help:2,refine:1,labelSize:0,labelHide:LABEL_HIDE_DEFAULT,ctShade:1,ctShadeBright:1.8,ctShadeContrast:1.7}; // labelHide: 1 = distance labels / lines hidden for real behind the tissue (GPU depth), 0 = faded (CPU probes)
 // ctShade: how the slice's segment fill is drawn — 1 = segment colour x CT value (default; also at 0 % / cleared, where only the segments' region is drawn), 0 = the flat segment colour as before; the 3D surface / cap never use it
-// ctShadeBright: brightness of that shading, 0.5..2 in steps of 0.1 (default 1.3 = a little brighter than the first CT shading, which is 1.0); only used with ctShade 1. Like ctShade it is not in EVENT_VIEW_KEYS (a menu preference, not a view value)
+// ctShadeBright: brightness of that shading, 0.5..2 in steps of 0.1 (default 1.8; it was 1.3, and the first CT shading is 1.0); only used with ctShade 1. Like ctShade it is not in EVENT_VIEW_KEYS (a menu preference, not a view value)
 const CT_BRIGHT_MIN=0.5,CT_BRIGHT_MAX=2,CT_BRIGHT_STEP=0.1,ctBrightOf=v=>{v=+v;return Number.isFinite(v)?Math.min(CT_BRIGHT_MAX,Math.max(CT_BRIGHT_MIN,Math.round(v*10)/10)):DEFAULTS.ctShadeBright};
-// ctShadeContrast: contrast of that shading, 0.5..2 in steps of 0.1 (default 1 = the shading as it was); only used with ctShade 1, a menu preference like ctShadeBright (not in EVENT_VIEW_KEYS)
+// ctShadeContrast: contrast of that shading, 0.5..2 in steps of 0.1 (default 1.7; 1 = the shading as it was); only used with ctShade 1, a menu preference like ctShadeBright (not in EVENT_VIEW_KEYS)
 const CT_CONTRAST_MIN=0.5,CT_CONTRAST_MAX=2,CT_CONTRAST_STEP=0.1,ctContrastOf=v=>{v=+v;return Number.isFinite(v)?Math.min(CT_CONTRAST_MAX,Math.max(CT_CONTRAST_MIN,Math.round(v*10)/10)):DEFAULTS.ctShadeContrast};
 // an older key is migrated once, with the slice opacity reset to the new default
 function loadSettings(){try{const n=localStorage.getItem(SETTINGS_KEY),o=n==null&&OLD_KEYS.map(k=>localStorage.getItem(k)).find(Boolean);const st=JSON.parse(n||o||'{}'),v={...DEFAULTS,...st,...(o?{sliceOpacity:DEFAULTS.sliceOpacity}:{})};v.dv=st.dv|0;v.wheel=normalizeWheelItems(v.wheel);const m=migrateWheelSectionFlip(v);v.wheel=m.wheel;v.wheelMig=m.wheelMig;const dm=migrateStartValues(v);if(m.changed||dm)saveSettings(v);return v}catch{return{...DEFAULTS,wheel:[...DEFAULT_WHEEL]}}}
 // the one-time step to the start values above (see DEFAULTS_VERSION): true = v was changed (the caller saves it)
-function migrateStartValues(v){if((v.dv|0)>=DEFAULTS_VERSION)return false;for(const k of DEFAULTS_VERSION_KEYS)v[k]=DEFAULTS[k];v.dv=DEFAULTS_VERSION;return true}
+function migrateStartValues(v){const d=v.dv|0;if(d>=DEFAULTS_VERSION)return false;for(const[n,ks]of DEFAULTS_VERSION_STEPS)if(d<n)for(const k of ks)v[k]=DEFAULTS[k];v.dv=DEFAULTS_VERSION;return true}
 function saveSettings(v){try{localStorage.setItem(SETTINGS_KEY,JSON.stringify(v))}catch{}}
 // 体験会モード: what a visitor can change in the full menu's 表示 / 詳細 tabs and that shows in the picture (the section's cut / cap / slice look / air floor, the label size) goes back to its default
 // by 最初の状態に戻す and by a new practice dataset (like menuMode / help: the board positions). Quality / data size / frame rate / diagnostics are the device's, not the visitor's: untouched.
@@ -1037,7 +1057,7 @@ const VARIANT_KEYS=['full','combined','noEvents'],VARIANT_KEYS4=VARIANT_KEYS.map
 const rayMaterialOf=m=>{const r=m.clone();r.uniforms=m.uniforms;r.defines={...m.defines};r.blending=THREE.NoBlending;r.transparent=false;return r};
 const rayVariantsOf=vars=>Object.fromEntries(Object.entries(vars).map(([k,m])=>[k,rayMaterialOf(m)]));
 const volumeUniforms=(vd,full,settings)=>({vol:{value:full.v},bricks:{value:full.b},halfExt:{value:new THREE.Vector3(...vd.halfExt)},boxC:{value:new THREE.Vector3()},boxH:{value:new THREE.Vector3()},boxEntry:{value:0},texDims:{value:new THREE.Vector3(...vd.dims)},brickDims:{value:new THREE.Vector3(...vd.brickDims)},
- stepSize:{value:vd.step},diag:{value:0},calib:{value:new THREE.Vector3(...vd.calibration)},segA:{value:[0,1,2,3].map(()=>new THREE.Vector4())},segC:{value:[0,1,2,3].map(()=>new THREE.Vector4())},ctShade:{value:1},ctShadeBright:{value:1.3},ctShadeContrast:{value:1},sliceSegOnly:{value:0},segM:{value:[0,1,2,3].map(()=>new THREE.Vector4(...materialVec('standard')))},
+ stepSize:{value:vd.step},diag:{value:0},calib:{value:new THREE.Vector3(...vd.calibration)},segA:{value:[0,1,2,3].map(()=>new THREE.Vector4())},segC:{value:[0,1,2,3].map(()=>new THREE.Vector4())},ctShade:{value:1},ctShadeBright:{value:1.8},ctShadeContrast:{value:1.7},sliceSegOnly:{value:0},segM:{value:[0,1,2,3].map(()=>new THREE.Vector4(...materialVec('standard')))},
  cutPlanes:{value:Array.from({length:MAX_SECTION_PLANES},()=>new THREE.Vector4(0,0,1,0))},planeCount:{value:0},planeCut:{value:0},capOn:{value:1},sliceTint:{value:0.45},sliceOpacity:{value:0},sliceWindow:{value:new THREE.Vector2(0,1)},sliceAir:{value:-600},regionTex:{value:null},regionSeg:{value:new Array(14).fill(0)},regionC:{value:Array.from({length:14},()=>new THREE.Vector3())},sliceVol:{value:full.v},refine:{value:settings.refine|0},useCls:{value:0},clsTex:{value:null},cls4Tex:{value:null},useSkip:{value:0},skipTex:{value:skipDummy()},clsChan:{value:new THREE.Vector4(-1,-1,-1,-1)},editMask:{value:0},editMaskOnly:{value:0},editTex:{value:null},useDist:{value:0},distInCls:{value:0},distTex:{value:null},voxelMin:{value:1},voxelSize:{value:new THREE.Vector3(1,1,1)}});
 // ---- GPU preparation before the session ----
 // The renderer (an XR-compatible context), the textures of the grid in use, the
