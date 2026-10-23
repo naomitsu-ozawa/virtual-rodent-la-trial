@@ -126,7 +126,7 @@ describe('the hand laser from a synthetic XRFrame: what is drawn and what is hit
     expect(viewSrc).toContain('const ray=makeLaser();ray.scale.z=0.08;c.add(ray);c.userData.ray=ray;');
     expect(viewSrc).not.toContain('const ray=new THREE.Line(');
     expect(m).toContain('cameraPosition'); expect(m).toContain('blending:THREE.AdditiveBlending'); expect(m).toContain('depthWrite:false'); expect(m).toContain('toneMapped:false');
-    expect(m).toContain('mix(1.,0.3,vU.y)'); expect(m).toContain('r.raycast=()=>{}'); expect(m).toContain('position.x*0.001'); expect(m).toContain('m.color=m.uniforms.color.value');
+    expect(m).toContain('mix(1.,0.3,vU.y)'); expect(m).toContain('r.raycast=()=>{}'); expect(m).toContain('position.x*0.001*mix(1.,0.3,t)'); // 2 mm at the hand, 0.6 mm at the tip expect(m).toContain('m.color=m.uniforms.color.value');
     expect(m).toContain('[-1,0,0,1,0,0,-1,0,-1,1,0,-1]'); // x = -1..1 (feathered width), z = 0..-1 (length)
   });
 });
