@@ -1,29 +1,29 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { mark3DStale, mark3DCurrent } from './three-state.js?v=20261024-build665';
-import { set3DBusy } from './three-status.js?v=20261024-build665';
-import { sceneState, deferAutomatic3D, threeDCancelRequested, currentLanguage, analysisEditTool, threeRenderMode, current3DVolume, volume, incSourceRenderRevision, sourceRenderRevision, sectionViewOpen, sectionViewPlane } from './state.js?v=20261024-build665';
-import { request3DRender } from './scene3d.js?v=20261024-build665';
-import { threeLabel, footer, surfaceSmoothStrength } from './ui-shell.js?v=20261024-build665';
-import { surfaceSmoothingActive } from './settings.js?v=20261024-build665';
-import { frameYield, isDesktopRuntime } from './utils.js?v=20261024-build665';
-import { gpuFilterRuntime, setGpuComputeBackend, ensureGpuFilterDevice, runGpuSourceFilters, gpuStagesSupported } from './gpu-compute.js?v=20261024-build665';
-import { setProcessingBusy } from './busy.js?v=20261024-build665';
-import { SEGMENT_PRESET_ORDER, segmentEditState, segmentEditActive, segmentState, segmentHasProcessedMask } from './segments.js?v=20261024-build665';
-import { dispose, buildEditableRunsGroup, geometryFromSourcePositions } from './surface-mesh.js?v=20261024-build665';
-import { SmoothedSurfaceStream, smoothChunkHalo } from './smooth-chunks.js?v=20261024-build665';
-import { smoothMethod } from './smooth-workers.js?v=20261024-build665';
+import { mark3DStale, mark3DCurrent } from './three-state.js?v=20261024-build666';
+import { set3DBusy } from './three-status.js?v=20261024-build666';
+import { sceneState, deferAutomatic3D, threeDCancelRequested, currentLanguage, analysisEditTool, threeRenderMode, current3DVolume, volume, incSourceRenderRevision, sourceRenderRevision, sectionViewOpen, sectionViewPlane } from './state.js?v=20261024-build666';
+import { request3DRender } from './scene3d.js?v=20261024-build666';
+import { threeLabel, footer, surfaceSmoothStrength } from './ui-shell.js?v=20261024-build666';
+import { surfaceSmoothingActive } from './settings.js?v=20261024-build666';
+import { frameYield, isDesktopRuntime } from './utils.js?v=20261024-build666';
+import { gpuFilterRuntime, setGpuComputeBackend, ensureGpuFilterDevice, runGpuSourceFilters, gpuStagesSupported } from './gpu-compute.js?v=20261024-build666';
+import { setProcessingBusy } from './busy.js?v=20261024-build666';
+import { SEGMENT_PRESET_ORDER, segmentEditState, segmentEditActive, segmentState, segmentHasProcessedMask } from './segments.js?v=20261024-build666';
+import { dispose, buildEditableRunsGroup, geometryFromSourcePositions } from './surface-mesh.js?v=20261024-build666';
+import { SmoothedSurfaceStream, smoothChunkHalo } from './smooth-chunks.js?v=20261024-build666';
+import { smoothMethod } from './smooth-workers.js?v=20261024-build666';
 // the GPU path of the surface smoothing registers itself with smooth-workers.js
-import './smooth-gpu.js?v=20261024-build665';
-import { renderAll } from './mpr-render.js?v=20261024-build665';
-import { getFinalSegmentRuns, decodeSourceSegmentMasks } from './segment-runs.js?v=20261024-build665';
+import './smooth-gpu.js?v=20261024-build666';
+import { renderAll } from './mpr-render.js?v=20261024-build666';
+import { getFinalSegmentRuns, decodeSourceSegmentMasks } from './segment-runs.js?v=20261024-build666';
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.webgpu.js';
-import { createSurfaceMaterial } from './mesh-material.js?v=20261024-build665';
-import { updateSectionClipPlaneWorld } from './section-view.js?v=20261024-build665';
-import { makeVolume3DCoordinates, Float32FaceBuilder, appendSourceFacesFromCompactTile, makeSource3DCoordinates, appendSourceSliceFacesFast } from './mesh-geometry.js?v=20261024-build665';
-import { fitSourceTile, readMemoryRegion, sourceFilterStages, sourceFilterRuntime, sourceFilterHalo, readSourceRegion, runSourceFilterWorker } from './source-filters.js?v=20261024-build665';
-import { compactFaceFlags, valuesToFaceFlags } from './mask-ops.js?v=20261024-build665';
-import { meshCacheContext, runSurfaceCacheable, runSurfaceCacheKey, baseCacheKey, meshEntryInfo, loadCachedMeshes, storeBuiltMeshes, meshCacheStats } from './mesh-cache-apply.js?v=20261024-build665';
+import { createSurfaceMaterial } from './mesh-material.js?v=20261024-build666';
+import { updateSectionClipPlaneWorld } from './section-view.js?v=20261024-build666';
+import { makeVolume3DCoordinates, Float32FaceBuilder, appendSourceFacesFromCompactTile, makeSource3DCoordinates, appendSourceSliceFacesFast } from './mesh-geometry.js?v=20261024-build666';
+import { fitSourceTile, readMemoryRegion, sourceFilterStages, sourceFilterRuntime, sourceFilterHalo, readSourceRegion, runSourceFilterWorker } from './source-filters.js?v=20261024-build666';
+import { compactFaceFlags, valuesToFaceFlags } from './mask-ops.js?v=20261024-build666';
+import { meshCacheContext, runSurfaceCacheable, runSurfaceCacheKey, baseCacheKey, meshEntryInfo, loadCachedMeshes, storeBuiltMeshes, meshCacheStats } from './mesh-cache-apply.js?v=20261024-build666';
 export function applySectionClippingMaterials(root=sceneState?.obj){
  if(!root||!sceneState)return;
  const active=sectionViewOpen&&!!sectionViewPlane&&sceneState.backend!=='WEBGPU';
