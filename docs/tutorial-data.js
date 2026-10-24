@@ -58,7 +58,10 @@ function deepFreeze(o){if(o&&typeof o==='object'&&!Object.isFrozen(o)){Object.fr
 // {tissue} of a caption = the first tissue of the open data (its real name); without one the fallback words (tutTissueFallback)
 export const fillTissue=(text,name,fallback)=>String(text||'').replace('{tissue}',name||fallback||'');
 export const missionById=id=>TUTORIAL_MISSIONS.find(m=>m.id===id)||null;
-export const TUT_VOICES=Object.freeze(['F1']);
+export const TUT_VOICES=Object.freeze(['F1','M1']);
+// the line each voice says when the ray / pointer comes onto its button in the voice choice dialog (tutorial-ui.js). Kanji on purpose: the kana spelling gave 案内 a rising
+// accent; both voices' 案内 is slowed to 0.70 by hand (tools/tts/pick_f.py; M1: tools/tts/SETUP.md), so regenerating from this text alone would not give the shipped files.
+export const TUT_VOICE_PICK=deepFreeze({id:'pick',text:'tutVoicePick',audio:'pick',audioText:'私が案内します。'});
 // Spoken feedback (calm, short). The engine names which to play (snapshot.feedback = 'stepClear' | 'missionClear' | 'allClear'; stepClear rotates through the list).
 // a cleared ステップ waits for 次へ. missionClear / allClear carry `then` = the line spoken right after it (snapshot.feedbackItem.then): goNext = go on with 次へ, end = the tutorial is over
 // (tutorial-audio.js speechFor plays both; the board / panel show the then text as well). goNext is a top-level entry of TUT_FEEDBACK (tools/gen-tutorial-audio.mjs makes its voice).

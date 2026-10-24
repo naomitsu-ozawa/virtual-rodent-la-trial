@@ -299,10 +299,10 @@ describe('the level slide on the 体験会 mission board (layoutLevelSlide)', ()
 });
 
 describe('tutorial-audio', () => {
-  it('one fixed female voice F1, independent of any setting', () => {
+  it('the voice folder follows the setting: F1 (default) / M1; off = none; anything else F1', () => {
     expect(AQ).toMatch(/^\?v=\d{8}-build\d+$/); expect(readFileSync(new URL('../../docs/index.html', import.meta.url), 'utf8')).toContain(AQ); // the same query as the page's assets
     expect(audioSrc('F1', 'm1s2')).toBe('./tutorial/audio/F1/m1s2.m4a' + AQ); expect(audioSrc(undefined, 'ok1')).toBe('./tutorial/audio/F1/ok1.m4a' + AQ);
-    expect(audioSrc('M1', 'ok1')).toBe('./tutorial/audio/F1/ok1.m4a' + AQ); expect(audioSrc('off', 'x')).toBeNull(); expect(audioSrc('F1', '')).toBeNull(); expect(voiceOf('M1')).toBe('F1'); expect(voiceOf('off')).toBe('off');
+    expect(audioSrc('M1', 'ok1')).toBe('./tutorial/audio/M1/ok1.m4a' + AQ); expect(audioSrc('X', 'ok1')).toBe('./tutorial/audio/F1/ok1.m4a' + AQ); expect(audioSrc('off', 'x')).toBeNull(); expect(audioSrc('F1', '')).toBeNull(); expect(voiceOf('M1')).toBe('M1'); expect(voiceOf('X')).toBe('F1'); expect(voiceOf('off')).toBe('off');
   });
   it('speechFor: feedback then the new step, nothing for a count-only change', () => {
     const e = eng(); let last; e.subscribe(s => { last = s; }); e.skipMission('controls'); e.start('grip'); let r = speechFor(last, e.currentStep(), '');

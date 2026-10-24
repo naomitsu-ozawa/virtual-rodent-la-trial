@@ -13,13 +13,13 @@ describe('tutorial settings', () => {
     expect(SETTINGS_DEFAULTS.tutorialMode).toBe(false);
     expect(SETTINGS_DEFAULTS.tutorialVoice).toBe('F1');
   });
-  it('sanitize: only true switches on; voice F1 / off only (M1 is gone), anything else F1', () => {
+  it('sanitize: only true switches on; voice F1 / M1 / off, anything else F1', () => {
     expect(sanitizeTutorialSettings({ tutorialMode: 'yes', tutorialVoice: 'X' })).toEqual({ tutorialMode: false, tutorialVoice: 'F1' });
-    expect(sanitizeTutorialSettings({ tutorialMode: true, tutorialVoice: 'M1' })).toEqual({ tutorialMode: true, tutorialVoice: 'F1' });
+    expect(sanitizeTutorialSettings({ tutorialMode: true, tutorialVoice: 'M1' })).toEqual({ tutorialMode: true, tutorialVoice: 'M1' });
     expect(sanitizeTutorialSettings({ tutorialVoice: 'off' }).tutorialVoice).toBe('off');
   });
   it('i18n has the switch and voice keys in both languages', () => {
-    for (const l of ['ja', 'en']) for (const k of ['setTutorial', 'setTutorialNote', 'tutVoiceF1', 'tutVoiceOff']) expect(I18N[l][k], l + k).toBeTruthy();
+    for (const l of ['ja', 'en']) for (const k of ['setTutorial', 'setTutorialNote', 'tutVoiceF1', 'tutVoiceM1', 'tutVoiceOff', 'tutVoiceTitle', 'tutVoicePick', 'tutVoiceCredit', 'tutVoiceCreditF1', 'tutVoiceCreditM1']) expect(I18N[l][k], l + k).toBeTruthy();
   });
 });
 
@@ -255,7 +255,12 @@ describe('page introduction', () => {
     const ui = readFileSync(new URL('../../docs/tutorial-ui.js', import.meta.url), 'utf8');
     expect(ui).toContain("b.id='tutorial-start-button'");
     expect(ui).toContain("const at=document.getElementById('vr-view-button');"); // the top bar, just before 「VRで見る」
-    expect(ui).toContain("b.onclick=()=>{if(settings.get('tutorialMode')!==true)settings.set('tutorialMode',true);sync();restartTutorial();intro.start()};"); // every start is from ステップ1: nothing is remembered
+    expect(ui).toContain("const begin=()=>{if(settings.get('tutorialMode')!==true)settings.set('tutorialMode',true);sync();restartTutorial();intro.start()};"); // every start is from ステップ1: nothing is remembered
+    expect(ui).toContain('b.onclick=()=>chooseVoice(begin);'); // the voice is chosen first
+    // the dialog: 女性 / 男性 buttons, each says 「私が案内します」 in its own voice on hover / focus, a press saves the voice and starts; × (the first focus) closes silently; the credits are shown
+    expect(ui).toContain("for(const v of ['F1','M1'])"); expect(ui).toContain("settings.set('tutorialVoice',v);d._onPick?.()");
+    expect(ui).toContain("b.addEventListener('pointerenter',say);b.addEventListener('focus',say);"); expect(ui).toContain('pickAudio.play([TUT_VOICE_PICK.audio])');
+    expect(ui).toContain('x.autofocus=true;'); expect(ui).toContain("el('div','','tutVoiceCreditF1'),el('div','','tutVoiceCreditM1')");
     expect(ui).not.toMatch(/localStorage\.(set|get)Item/); // the tutorial saves nothing and reads nothing (a legacy key is only removed)
     expect(ui).toContain('detectVrSupport().then(ok=>{vr=ok;showRows(ok);if(ok)mountCta();sync()});');
     expect(I18N.ja.tutCta).toBe('チュートリアルを始める');
