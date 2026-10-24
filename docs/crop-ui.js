@@ -6,19 +6,19 @@
 // and in 3D (12 edges, SVG overlay like the HU line). "Export" writes a folder of DICOM files (showDirectoryPicker) or a .zip.
 // The values come from the ORIGINAL source files (crop-export.js), never from the display texture or the filter pipeline.
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.webgpu.js';
-import { volume, activeSeries, sourceVolume, sceneState } from './state.js?v=20261023-build663';
-import { planes } from './ui-shell.js?v=20261023-build663';
-import { tr } from './i18n.js?v=20261023-build663';
-import { setCropOverlayPainter, requestOverlayDraw } from './crosshair-ui.js?v=20261023-build663';
-import { clientToFraction, voxelToLocal3D } from './crosshair.js?v=20261023-build663';
-import { schedulePlaneRender } from './mpr-render.js?v=20261023-build663';
-import { request3DRender } from './scene3d.js?v=20261023-build663';
-import { downloadBlob, isIPhoneRuntime, isTabletRuntime } from './utils.js?v=20261023-build663';
-import { decodeCompressedDicomSlice } from './volume-io.js?v=20261023-build663';
-import { defaultCropBox, effectiveBox, boxAligned, boxRotation, setBoxRotation, rotationMatrix, IDENTITY3, planeSection, pointInPolygon, boxCorners, BOX_EDGES, clampCenter, seriesGeometry, rotationBlockReason } from './crop-geometry.js?v=20261023-build663';
-import { exportCrop, directorySink, zipSink, rotatedBlockBytes, rotatedBlockLimitFor, checkExportable, CropExportError } from './crop-export.js?v=20261023-build663';
-import { namingFor } from './crop-dicom.js?v=20261023-build663';
-import { classifyPoint, pointerAngle, wrapDelta, rotateAboutViewStep, ROTATE_BAND_PX, SNAP_STEP_DEG, FINE_STEP_DEG } from './crop-interact.js?v=20261023-build663';
+import { volume, activeSeries, sourceVolume, sceneState } from './state.js?v=20261024-build665';
+import { planes } from './ui-shell.js?v=20261024-build665';
+import { tr } from './i18n.js?v=20261024-build665';
+import { setCropOverlayPainter, requestOverlayDraw } from './crosshair-ui.js?v=20261024-build665';
+import { clientToFraction, voxelToLocal3D } from './crosshair.js?v=20261024-build665';
+import { schedulePlaneRender } from './mpr-render.js?v=20261024-build665';
+import { request3DRender } from './scene3d.js?v=20261024-build665';
+import { downloadBlob, isIPhoneRuntime, isTabletRuntime } from './utils.js?v=20261024-build665';
+import { decodeCompressedDicomSlice } from './volume-io.js?v=20261024-build665';
+import { defaultCropBox, effectiveBox, boxAligned, boxRotation, setBoxRotation, rotationMatrix, IDENTITY3, planeSection, pointInPolygon, boxCorners, BOX_EDGES, clampCenter, seriesGeometry, rotationBlockReason } from './crop-geometry.js?v=20261024-build665';
+import { exportCrop, directorySink, zipSink, rotatedBlockBytes, rotatedBlockLimitFor, checkExportable, CropExportError } from './crop-export.js?v=20261024-build665';
+import { namingFor } from './crop-dicom.js?v=20261024-build665';
+import { classifyPoint, pointerAngle, wrapDelta, rotateAboutViewStep, ROTATE_BAND_PX, SNAP_STEP_DEG, FINE_STEP_DEG } from './crop-interact.js?v=20261024-build665';
 
 // Hide the whole feature (button and panel) until the experts have verified the output: set to false.
 export const CROP_EXPORT_UI_ENABLED = true;
