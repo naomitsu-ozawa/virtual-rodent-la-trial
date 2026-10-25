@@ -95,7 +95,12 @@ export async function textureCacheHandle(cache,key,{slices,bytesPerSlice,info}){
 // the same 3D resolution for volumes) made with another filter setting are
 // dropped when a new one is stored. Entries without this info (older builds)
 // are left to the LRU budget.
+// dataset ids are compared by value (volume / segment-runs store the fingerprint object, which is a
+// different object after an IndexedDB read; filtered-plane stores its JSON string), so the same dataset matches
+// whichever form was stored.
+const datasetId=d=>typeof d==='string'?d:JSON.stringify(d??null);
 export async function pruneOtherFilterSettings(cache,{kind,dataset,plan=null,filter},keep){
  if(globalThis.__vrlSettings?.get?.('cacheAutoPrune')===false)return;
- try{for(const e of await cache.list()){const i=e.info||{};if(e.key!==keep&&i.kind===kind&&i.dataset===dataset&&(plan==null||i.plan===plan)&&i.filter!=null&&i.filter!==filter)await cache.remove(e.key)}}catch(e){console.warn('Cache auto-prune failed.',e)}
+ const id=datasetId(dataset);
+ try{for(const e of await cache.list()){const i=e.info||{};if(e.key!==keep&&i.kind===kind&&datasetId(i.dataset)===id&&(plan==null||i.plan===plan)&&i.filter!=null&&i.filter!==filter)await cache.remove(e.key)}}catch(e){console.warn('Cache auto-prune failed.',e)}
 }

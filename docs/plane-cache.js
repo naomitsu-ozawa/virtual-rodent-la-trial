@@ -4,8 +4,8 @@
 // cache" button as segment-runs (run-cache.js). Values stay Float32 (no
 // quantizing). Browser storage can be evicted; this is only a cache.
 // Kept free of DOM-bound imports (the volume cache is passed in) for unit tests.
-import { cacheKey, pruneOtherFilterSettings } from './gpu-volume-cache.js?v=20261025-build667';
-import { datasetFingerprint } from './project-file.js?v=20261025-build667';
+import { cacheKey, pruneOtherFilterSettings } from './gpu-volume-cache.js?v=20261025-build668';
+import { datasetFingerprint } from './project-file.js?v=20261025-build668';
 
 export const PLANE_FORMAT = 1;
 export const MAX_PLANES_PER_FILTER = 6;
@@ -19,8 +19,8 @@ globalThis.__vrlPlaneCacheStats = planeCacheStats;
 // only the MPR panes are stored; analysis-pick / hu-analysis planes are not
 export function isCacheablePlane(keyPrefix) { return typeof keyPrefix === 'string' && keyPrefix.startsWith('mpr:'); }
 
-// The dataset id is stored as a string: pruneOtherFilterSettings compares info.dataset with ===, which never
-// matches an object read back from IndexedDB (volume / segment-runs entries store the object).
+// The dataset id is stored as a string (pruneOtherFilterSettings compares datasets by value, so this matches the
+// object form of volume / segment-runs entries too).
 const datasetId = series => JSON.stringify(datasetFingerprint(series));
 export function planeCacheInfo(series, filterSignature) { return { kind: 'filtered-plane', dataset: datasetId(series), filter: filterSignature || '' }; }
 export function planeCacheKey(series, filterSignature, plane, idx) {
