@@ -1,7 +1,7 @@
 // three.js side of the mesh cache (mesh-cache-apply.js): meshes -> descriptors for the blob (mesh-pack.js) and back. DOM-free,
 // so the unit tests can run it in Node.
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.webgpu.js';
-import { createSurfaceMaterial } from './mesh-material.js?v=20261024-build666';
+import { createSurfaceMaterial } from './mesh-material.js?v=20261025-build667';
 // meshes under root -> blob descriptors, or null when any of them is not a plain mesh this cache can reproduce exactly
 // (GPU-resident positions, several materials, geometry groups, a draw range, extra attributes)
 export function describeMeshes(root){
