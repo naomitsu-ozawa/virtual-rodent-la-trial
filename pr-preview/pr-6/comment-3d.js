@@ -11,22 +11,22 @@
 // view's cut plane included; refreshed at most about 10 times a second while the view moves and once more when it stops
 // (comment-3d-hidden.js). Until the bytes are ready, or when no segment is shown / no source data is in memory, every point is exposed.
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.webgpu.js';
-import { sceneState, volume, activeSeries, volumeAnalysisMode, analysisEditTool, sectionViewOpen, sectionViewPlane, analysisRegions } from './state.js?v=20261023-build664';
-import { tr } from './i18n.js?v=20261023-build664';
-import { datasetFingerprint } from './project-file.js?v=20261023-build664';
-import { voxelToLocal3D } from './crosshair.js?v=20261023-build664';
-import { pointColor, darkFill, inkOn } from './point-colors.js?v=20261023-build664';
-import { getComments, onCommentsChange, commentMatchesSeries, commentTarget, getMarkersShown, onMarkersShownChange } from './comments.js?v=20261023-build664';
-import { getMeasurements, setLabelOffset, onMeasurementsChange, measurementMm, measureLabel, seriesSpacing, spacingLevel, getMeasureStart, onMeasureStartChange, createLongPress } from './measurements.js?v=20261023-build664';
-import { openPointMenu, endMeasureAt, cancelMeasureUi } from './point-menu.js?v=20261023-build664';
-import { request3DRender } from './scene3d.js?v=20261023-build664';
-import { gpuVolumeTarget } from './gpu-volume-data.js?v=20261023-build664';
-import { analysisRegionShown, segmentState, segmentEditState, SEGMENT_PRESET_ORDER, gpuSegmentOrder } from './segments.js?v=20261023-build664';
-import { sectionLocalPoint, sectionLocalNormal } from './section-view.js?v=20261023-build664';
-import { planeLabelPlacement, clampLabelCenter, stepDelta, createFocusTracker, LINE_SAMPLES, probeKey, labelPart, lineSamplePoints, lineAlphas, lineStopOffsets, createIdMaker } from './measure-label.js?v=20261023-build664';
-import { planeRelations, boxHalfExtent, clipSegmentNear } from './comment-3d-section.js?v=20261023-build664';
-import { computeHiddenIds, shownChannels, sectionPlaneLocal, createHiddenThrottle } from './comment-3d-hidden.js?v=20261023-build664';
-import { setRegionLabelOffset, onAnalysisLabelsChange, leaderVisible, labelLocal, offsetForLocal, rectEdgePoint, pcVoxelStep } from './analysis-label.js?v=20261023-build664';
+import { sceneState, volume, activeSeries, volumeAnalysisMode, analysisEditTool, sectionViewOpen, sectionViewPlane, analysisRegions } from './state.js?v=20261025-build669';
+import { tr } from './i18n.js?v=20261025-build669';
+import { datasetFingerprint } from './project-file.js?v=20261025-build669';
+import { voxelToLocal3D } from './crosshair.js?v=20261025-build669';
+import { pointColor, darkFill, inkOn } from './point-colors.js?v=20261025-build669';
+import { getComments, onCommentsChange, commentMatchesSeries, commentTarget, getMarkersShown, onMarkersShownChange } from './comments.js?v=20261025-build669';
+import { getMeasurements, setLabelOffset, onMeasurementsChange, measurementMm, measureLabel, seriesSpacing, spacingLevel, getMeasureStart, onMeasureStartChange, createLongPress } from './measurements.js?v=20261025-build669';
+import { openPointMenu, endMeasureAt, cancelMeasureUi } from './point-menu.js?v=20261025-build669';
+import { request3DRender } from './scene3d.js?v=20261025-build669';
+import { gpuVolumeTarget } from './gpu-volume-data.js?v=20261025-build669';
+import { analysisRegionShown, segmentState, segmentEditState, SEGMENT_PRESET_ORDER, gpuSegmentOrder } from './segments.js?v=20261025-build669';
+import { sectionLocalPoint, sectionLocalNormal } from './section-view.js?v=20261025-build669';
+import { planeLabelPlacement, clampLabelCenter, stepDelta, createFocusTracker, LINE_SAMPLES, probeKey, labelPart, lineSamplePoints, lineAlphas, lineStopOffsets, createIdMaker } from './measure-label.js?v=20261025-build669';
+import { planeRelations, boxHalfExtent, clipSegmentNear } from './comment-3d-section.js?v=20261025-build669';
+import { computeHiddenIds, shownChannels, sectionPlaneLocal, createHiddenThrottle } from './comment-3d-hidden.js?v=20261025-build669';
+import { setRegionLabelOffset, onAnalysisLabelsChange, leaderVisible, labelLocal, offsetForLocal, rectEdgePoint, pcVoxelStep } from './analysis-label.js?v=20261025-build669';
 
 // analysis result labels (analysis-label.js, region.label): a chip (colour, number, segments, volume) at its anchor, MOVABLE by a drag (mouse / pen / touch) in the camera-facing plane through the label's
 // depth; a moved label keeps a leader line to its anchor and is judged hidden-behind-tissue like a dragged distance label (the same pass). Stored in voxel units: the same place in VR and on the PC, saved in the project.
@@ -69,7 +69,7 @@ function refreshHidden(obj,camera,pts,plane){
  if(!anyShown||!pts.length){const had=hiddenIds.size>0;hiddenIds=new Set();return had}
  if(vrModFailed)return false; // the builder could not be loaded: every point stays exposed
  if(!vrMod){ // the classification builder lives in vr-view.js: loaded once, on the first need; until then the previous judgement stays
-  if(!vrModLoading){vrModLoading=true;import('./vr-view.js?v=20261023-build664').then(m=>{vrMod=m;throttle.reset();refreshSoon()},()=>{vrModFailed=true;if(hiddenIds.size){hiddenIds=new Set();refreshSoon()}})}
+  if(!vrModLoading){vrModLoading=true;import('./vr-view.js?v=20261025-build669').then(m=>{vrMod=m;throttle.reset();refreshSoon()},()=>{vrModFailed=true;if(hiddenIds.size){hiddenIds=new Set();refreshSoon()}})}
   return false;
  }
  const prep=vrMod.hiddenClsFor(()=>{throttle.reset();refreshSoon()});

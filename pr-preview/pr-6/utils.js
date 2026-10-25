@@ -20,7 +20,7 @@ export function withTimeout(promise,ms,timeoutValue){
 export function isIPhoneRuntime(){return /iPhone|iPod/i.test(navigator.userAgent||'')}
 export function isIPadRuntime(){return /iPad/i.test(navigator.userAgent||'')||((navigator.maxTouchPoints||0)>1&&/Mac/i.test(navigator.platform||''))}
 export function isDesktopRuntime(){return (navigator.maxTouchPoints||0)===0&&!isIPhoneRuntime()}
-// the iPad memory / texture caps also for the Meta Quest browser and Android tablets (mobile OS in the UA); a touch-screen laptop stays a desktop
+export function isVrHeadsetRuntime(){return /OculusBrowser|\bQuest\b|\bPico\b|Wolvic/i.test(navigator.userAgent||'')}
 export function isTabletRuntime(){return isIPadRuntime()||/Android|OculusBrowser|Quest/i.test(navigator.userAgent||'')}
 export const frameYield=()=>new Promise(resolve=>setTimeout(resolve,0));
 export function niceCtStep(span){
