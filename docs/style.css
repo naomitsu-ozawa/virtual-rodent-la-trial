@@ -1352,3 +1352,8 @@ html[lang="en"] .tut-sub{display:none}
 .tut-hl{outline:4px solid #e8508f;outline-offset:3px;animation:tut-hl-pulse 1.2s ease-in-out infinite}
 @keyframes tut-hl-pulse{0%,100%{box-shadow:0 0 0 0 rgba(232,80,143,.55)}50%{box-shadow:0 0 0 12px rgba(232,80,143,0)}}
 @media (prefers-reduced-motion:reduce){.tut-hl{animation:none}}
+/* Quest などで、トリガーを押したまま手が動いてもボタンが文字選択にならないよう、UI 全体の文字選択を止める。入力欄だけ選択・編集を許す。 */
+body{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+input,textarea,select,[contenteditable],[contenteditable] *{-webkit-user-select:text;user-select:text}
+.tut-voice-credit,.tut-voice-credit *{-webkit-user-select:text;user-select:text} /* the voice credit (with its URL) can be selected and copied */
+button,a,img,svg{-webkit-user-drag:none}
