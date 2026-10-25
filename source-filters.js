@@ -1,13 +1,14 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { gpuStagesSupported, runGpuSourceFilters, gpuFilterRuntime, setGpuComputeBackend, addGpuStepTime } from './gpu-compute.js?v=20261024-build665';
-import { sourceVolume, filterOrder } from './state.js?v=20261024-build665';
-import { ww, spikeHoleStrength, spikeHoleThreshold, nlmStrength, nlmSearchRadius, nlmPatchRadius, anisotropicStrength, anisotropicKappa, anisotropicIterations, smoothingType, gaussianStrength, spatialPasses, sigmoidStrength, sigmoidCenter, sigmoidWidth, bilateralStrength, bilateralSpatial, bilateralIntensity, bilateralPasses, tvWeight, tvEps, tvIterations, unsharpRadius, unsharpAmount, unsharpThreshold } from './ui-shell.js?v=20261024-build665';
-import { frameYield, isIPhoneRuntime, isTabletRuntime, isDesktopRuntime } from './utils.js?v=20261024-build665';
-import { isNativeDicomTransferSyntax } from './dicom.js?v=20261024-build665';
-import { decodeSourceSlice, sourceSliceCache } from './volume-io.js?v=20261024-build665';
-import { cacheKey } from './gpu-volume-cache.js?v=20261024-build665';
-import { sourceFilterSignature as signatureOf, withSpacingWeights } from './filter-units.js?v=20261024-build665';
+import { gpuStagesSupported, runGpuSourceFilters, gpuFilterRuntime, setGpuComputeBackend, addGpuStepTime } from './gpu-compute.js?v=20261025-build668';
+import { sourceVolume, filterOrder } from './state.js?v=20261025-build668';
+import { ww, spikeHoleStrength, spikeHoleThreshold, nlmStrength, nlmSearchRadius, nlmPatchRadius, anisotropicStrength, anisotropicKappa, anisotropicIterations, smoothingType, gaussianStrength, spatialPasses, sigmoidStrength, sigmoidCenter, sigmoidWidth, bilateralStrength, bilateralSpatial, bilateralIntensity, bilateralPasses, tvWeight, tvEps, tvIterations, unsharpRadius, unsharpAmount, unsharpThreshold } from './ui-shell.js?v=20261025-build668';
+import { frameYield, isIPhoneRuntime, isTabletRuntime, isDesktopRuntime } from './utils.js?v=20261025-build668';
+import { isNativeDicomTransferSyntax } from './dicom.js?v=20261025-build668';
+import { decodeSourceSlice, sourceSliceCache } from './volume-io.js?v=20261025-build668';
+import { cacheKey } from './gpu-volume-cache.js?v=20261025-build668';
+import { isCacheablePlane, planeCacheInfo, planeCacheKey, loadCachedPlane, storeCachedPlane, createPlaneWriteQueue, planeCacheStats, planeCacheProvider } from './plane-cache.js?v=20261025-build668';
+import { sourceFilterSignature as signatureOf, withSpacingWeights } from './filter-units.js?v=20261025-build668';
 export const memoryFilterPreviewCache={map:new Map(),bytes:0};
 export const filterState={spikeHole:false,nlm:false,anisotropic:false,gaussian:false,sigmoid:false,bilateral:false,tv:false,unsharp:false};
 export function sourceSliceCacheLimit(){return isIPhoneRuntime()?64*1024*1024:isTabletRuntime()?192*1024*1024:256*1024*1024}
@@ -198,6 +199,13 @@ export function fitSourceTile(a,b,fixed,halo,startA,startB,budget=sourceTileBudg
 export async function getFilteredSourcePlaneValues(p,idx,series,keyPrefix='mpr',requestRevision=null){
  const stages=sourceFilterStages();if(!stages.length)return null;const stale=()=>requestRevision!=null&&requestRevision!==planeRenderRevision[p];if(stale())throw new Error('__SUPERSEDED__');
  const signature=sourceFilterSignature(stages),cacheKey=signature+'|'+p+'|'+idx,hit=sourceFilterCacheGet(cacheKey);if(hit)return hit;
+ const persist=isCacheablePlane(keyPrefix),expected=p==='axial'?series.columns*series.rows:p==='coronal'?series.columns*series.slices.length:series.rows*series.slices.length;
+ if(persist){
+  planePersistQueue.keepOnly(it=>it.info.filter===signature);planePersistQueue.touch();
+  const stored=await loadCachedPlane(await planeVolumeCache(),await planeCacheKey(series,signature,p,idx),expected);
+  if(stored){planeCacheStats.hit++;if(stale())throw new Error('__SUPERSEDED__');sourceFilterCacheSet(cacheKey,stored);return stored}
+  planeCacheStats.miss++;if(stale())throw new Error('__SUPERSEDED__');
+ }
  const revision=sourceFilterRuntime.revision,w=series.columns,h=series.rows,d=series.slices.length,halo=sourceFilterHalo(stages);
  let out;
  if(p==='axial'){
@@ -222,7 +230,18 @@ export async function getFilteredSourcePlaneValues(p,idx,series,keyPrefix='mpr',
    for(let zz=0;zz<td;zz++)for(let yy=0;yy<th;yy++)out[(d-1-(z+zz))*h+y+yy]=tile[zz*th+yy];
   }
  }
- if(revision!==sourceFilterRuntime.revision||stale())throw new Error('__SUPERSEDED__');sourceFilterCacheSet(cacheKey,out);return out;
+ if(revision!==sourceFilterRuntime.revision||stale())throw new Error('__SUPERSEDED__');sourceFilterCacheSet(cacheKey,out);
+ if(persist)planeCacheEnqueue(series,signature,p,idx,out);
+ return out;
+}
+// filtered MPR planes are also kept in the device-local volume cache (plane-cache.js).
+// Written only after requests have stopped (slider released), never awaited, failures ignored.
+async function planeVolumeCache(){try{return await planeCacheProvider.cache()}catch{return null}}
+const planePersistQueue=createPlaneWriteQueue(async it=>{
+ await storeCachedPlane(await planeCacheProvider.cache(),await planeCacheKey(it.series,it.info.filter,it.p,it.idx),it.info,it.values,{budget:await planeCacheProvider.budget()});
+});
+function planeCacheEnqueue(series,signature,p,idx,values){
+ try{planePersistQueue.add({series,info:planeCacheInfo(series,signature),p,idx,key:signature+'|'+p+'|'+idx,values})}catch{}
 }
 // Budget for one filtered GPU-volume block: whole slices, as deep
 // as fits. The old 8-slice blocks in 384x128 tiles re-read and re-filtered
