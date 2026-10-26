@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { sanitizeTutorialSettings, SETTINGS_DEFAULTS } from '../../docs/app-settings.js';
-import { tutorialSignalsOn, tutorialUiActive, getTutorialEngine, resetTutorialAll, isPracticeSample, panelModel, detectVrSupport, _resetTutorialEngineForTest, introPhase, introTargets, introTextKey, createTutorialIntro, sampleReady, restartTutorial, forgetLegacyProgress, preparePanelShown } from '../../docs/tutorial-ui.js';
+import { tutorialSignalsOn, tutorialUiActive, getTutorialEngine, resetTutorialAll, isPracticeSample, detectVrSupport, _resetTutorialEngineForTest, introPhase, introTargets, introTextKey, createTutorialIntro, sampleReady, restartTutorial, forgetLegacyProgress, preparePanelShown } from '../../docs/tutorial-ui.js';
 import { createTutorialEngine } from '../../docs/tutorial-engine.js';
 import { TUTORIAL_MISSIONS } from '../../docs/tutorial-data.js';
 import { EVENT_LEVELS } from '../../docs/event-mode.js';
@@ -20,37 +20,6 @@ describe('tutorial settings', () => {
   });
   it('i18n has the switch and voice keys in both languages', () => {
     for (const l of ['ja', 'en']) for (const k of ['setTutorial', 'setTutorialNote', 'tutVoiceF1', 'tutVoiceM1', 'tutVoiceOff', 'tutVoiceTitle', 'tutVoicePick', 'tutVoiceCredit', 'tutVoiceCreditF1', 'tutVoiceCreditM1']) expect(I18N[l][k], l + k).toBeTruthy();
-  });
-});
-
-describe('panel model', () => {
-  it('idle: ステップ1 (controls) available, the rest locked; the ステップ numbers are fixed 1..6; nothing is unavailable (no AR step)', () => {
-    const m = panelModel(mk());
-    expect(m.step).toBeNull();
-    expect(m.missions.map(x => x.id)).toEqual(['controls', 'grip', 'section', 'menu', 'slice', 'exit']);
-    expect(m.missions.map(x => x.status)).toEqual(['available', 'locked', 'locked', 'locked', 'locked', 'locked']);
-    expect(m.missions.map(x => x.stepNo)).toEqual([1, 2, 3, 4, 5, 6]);
-    expect(m.missions[0].canStart).toBe(true);
-    expect(m.missions[1].canStart).toBe(false);
-  });
-  it('carousel n/N while running; finishing a step by next() gives a check and unlocks the next', () => {
-    const e = mk(); e.skipMission('controls'); e.start('grip');
-    let m = panelModel(e);
-    expect(m.step).toMatchObject({ n: 1, N: 3, hasPrev: false, hasNext: true, isLast: false, missionId: 'grip' });
-    expect(I18N.ja[m.step.textKey]).toBe('どちらの手でも：目の前のデータに光線を向けて、中指のグリップを握る');
-    for (let i = 0; i < 3; i++) e.next();
-    m = panelModel(e);
-    expect(m.missions[1]).toMatchObject({ status: 'done', mark: 'tutDone' });
-    expect(m.missions[2].status).toBe('available');
-    expect(m.step.finished).toBe(true);
-  });
-  it('skipAll opens every mission and marks them done; reset clears', () => {
-    const e = mk(); e.skipAll();
-    expect(panelModel(e).missions.filter(x => x.status === 'done').length).toBe(6);
-    expect(panelModel(e).allDone).toBe(true);
-    e.reset();
-    expect(panelModel(e).missions[0].status).toBe('available');
-    expect(panelModel(e).allDone).toBe(false);
   });
 });
 
@@ -108,12 +77,13 @@ describe('Lv0 card: starts the tutorial from ステップ1 every time; nothing i
     e.skipAll(); expect(restartTutorial(e)).toEqual({ action: 'start', id: 'controls' }); expect(e.getState()).toMatchObject({ mission: 'controls', step: 0, skipAll: false, done: {} });
     expect(e.isUnlocked('grip')).toBe(false);
   });
-  it('no resume and no jump: continueTutorial does not exist; the 2D panel has no list of steps and no per-step start buttons', async () => {
+  it('no resume and no jump: continueTutorial does not exist; the 2D チュートリアル panel (list, step card, 次へ / スキップ / 最初から buttons) is gone altogether', async () => {
     const ui = await import('../../docs/tutorial-ui.js');
     expect(ui.continueTutorial).toBeUndefined();
     const { readFileSync } = await import('node:fs');
     const src = readFileSync(new URL('../../docs/tutorial-ui.js', import.meta.url), 'utf8').split('\n').filter(l => !l.startsWith('//')).join('\n');
-    expect(src).not.toMatch(/tut-list|tut-row|data-tut-start|dataset\.tutStart|dataset\.tutMission|startMission|continueTutorial/);
+    expect(src).not.toMatch(/tut-list|tut-row|data-tut-start|dataset\.tutStart|dataset\.tutMission|startMission|continueTutorial|panelModel|tutorial-panel|tut-panel|tut-card|tut-count|tut-reset|tut-skip|tut-next|tut-prev/);
+    expect(Object.keys(ui)).not.toContain('panelModel');
     const vr = readFileSync(new URL('../../docs/tutorial-vr.js', import.meta.url), 'utf8');
     expect(vr).not.toMatch(/continueTutorial\(/);
   });
@@ -137,10 +107,10 @@ describe('tutorial switch off: signals are ignored', () => {
 });
 
 describe('最初から wiring (static)', () => {
-  it('2D and VR both go through resetTutorialAll, and nothing else calls engine.reset / resetUserState directly', async () => {
+  it('the VR board goes through resetTutorialAll (the 2D 最初から button is gone), and nothing else calls engine.reset / resetUserState directly', async () => {
     const { readFileSync } = await import('node:fs');
     const ui = readFileSync(new URL('../../docs/tutorial-ui.js', import.meta.url), 'utf8'), vr = readFileSync(new URL('../../docs/tutorial-vr.js', import.meta.url), 'utf8');
-    expect(ui).toContain('resetTutorialAll({resetUserState})'); expect(ui).not.toMatch(/getTutorialEngine\(\)\.reset\(\)/);
+    expect(ui).not.toMatch(/getTutorialEngine\(\)\.reset\(\)/); expect(ui).not.toContain('resetTutorialAll({resetUserState})'); // the 2D 最初から button is gone, only the VR board resets
     expect(vr).toContain('resetTutorialAll({ engine: eng, resetUserState })'); expect(vr).not.toMatch(/eng\.reset\(\)/);
   });
 });

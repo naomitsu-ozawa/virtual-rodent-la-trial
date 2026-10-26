@@ -638,9 +638,9 @@ describe('hands, the closed menu and the other review fixes', () => {
   it('menu1\'s voice and its arrow agree: it says the lit row, the caption names the row the arrow marks', () => {
     const m1 = missionById('menu').steps[0]; expect(m1.audioText).toMatch(/ひかっているぎょう/); expect(I18N.ja.tutMenuS1).toContain('光っている行（{tissue}）');
   });
-  it('the English caption line takes the English name of the tissue (the 2D card hook gets lang)', () => {
-    const ui = readFileSync(new URL('../../docs/tutorial-ui.js', import.meta.url), 'utf8'), app = readFileSync(new URL('../../docs/app.js', import.meta.url), 'utf8');
-    expect(ui).toContain("line(I18N.en?.[s.textKey]||'',I18N.en?.tutTissueFallback,'en')"); expect(app).toContain("lang==='en'?I18N.en?.[k]||tr(k):tr(k)");
+  it('the English caption line takes the English name of the tissue (the lang hook;: the 2D card that used it is gone)', () => {
+    const app = readFileSync(new URL('../../docs/app.js', import.meta.url), 'utf8');
+    expect(app).toContain("lang==='en'?I18N.en?.[k]||tr(k):tr(k)");
   });
 });
 
