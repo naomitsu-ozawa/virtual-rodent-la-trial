@@ -399,8 +399,8 @@ describe('vr-view.js: tabs, the guide and the mission board (static)', () => {
     expect(src).toContain('help.setHover(tutHov)');
   });
   it('the mission board: own board, placed once at EV_OFFSET, grip / near-grab / ray like the others, the level slide, none for Lv0 while the live tutorial runs', () => {
-    expect(src).toContain("evSlide=evLevel&&!(evLevel.id==='lv0'&&tutLive)?levelSlide(evLevel.id):null;");
-    expect(src).toContain('const ev=evH?makeMenu(820,evH,EV_WIDTH,EV_RES):null;');
+    expect(src).toContain("const evSlideFor=()=>{const l=activeEventLevel();return l&&!(l.id==='lv0'&&tutLive&&!tutEnded)?levelSlide(l.id):null};"); // also re-read after a data switch
+    expect(src).toContain('ev=makeMenu(820,levelBoardH(820),EV_WIDTH,EV_RES);');
     expect(src).toContain('EV_OFFSET.fwd'); expect(src).toContain('o.ev=ev?evHit(c):null;');
     expect(src).toContain('if(!evHeld&&c.userData.evHit){holdOf(c).attach(ev.mesh);evHeld=c;'); expect(src).toContain('o[6].d=boardDist(ev.mesh)'); expect(src).toContain("case'ev':if(!evHeld)");
     expect(src).toContain('ev?.dispose()'); expect(src).toContain('placeHelpNow=()=>{readHead();computeHelpTarget();help.mesh.position.copy(helpTarget);help.mesh.lookAt(head);helpPlaced=true;helpMoving=false;placeEvNow()}');

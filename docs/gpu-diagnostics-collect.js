@@ -1,12 +1,12 @@
 // Connects the GPU info tab (gpu-diagnostics-ui.js) to the app: reads gpuFilterRuntime, the settings and the Linux note, and hands
 // them to gatherGpuDiagnostics (gpu-diagnostics.js). Called only from the debug-mode GPU info tab, never at start-up.
-import { settings } from './app-settings.js?v=20261026-build673';
-import { gpuFilterRuntime, gpuForceCompat, GPU_BUFFER_LIMIT_CAPS, requestVrlGpuAdapter, vrlGpuPreference, vrlHybridMode, gpuDeviceMode } from './gpu-compute.js?v=20261026-build673';
-import { gpuPlatformOs, gpuPreferenceSupported } from './gpu-preference.js?v=20261026-build673';
-import { linuxWebgpuNoteState } from './linux-webgpu-note.js?v=20261026-build673';
-import { gatherGpuDiagnostics, collectWebglInfo } from './gpu-diagnostics.js?v=20261026-build673';
-import { tr } from './i18n.js?v=20261026-build673';
-import { APP_BUILD } from './version.js?v=20261026-build673';
+import { settings } from './app-settings.js?v=20261026-build674';
+import { gpuFilterRuntime, gpuForceCompat, GPU_BUFFER_LIMIT_CAPS, requestVrlGpuAdapter, vrlGpuPreference, vrlHybridMode, gpuDeviceMode } from './gpu-compute.js?v=20261026-build674';
+import { gpuPlatformOs, gpuPreferenceSupported } from './gpu-preference.js?v=20261026-build674';
+import { linuxWebgpuNoteState } from './linux-webgpu-note.js?v=20261026-build674';
+import { gatherGpuDiagnostics, collectWebglInfo } from './gpu-diagnostics.js?v=20261026-build674';
+import { tr } from './i18n.js?v=20261026-build674';
+import { APP_BUILD } from './version.js?v=20261026-build674';
 // One requestAdapter pass, made only when the app itself never asked for an adapter. role 'probe' keeps its record apart from the
 // compute / render devices' own (gpuFilterRuntime.adapterRequest / renderAdapterRequest).
 async function probeAdapter() {

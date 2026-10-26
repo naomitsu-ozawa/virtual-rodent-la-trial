@@ -82,6 +82,6 @@ describe('xr feedback wiring', () => {
   it('in-session statuses are shown before the long synchronous steps', () => {
     expect(vr).toMatch(/ui\.status=L\.uploading;menu\.refresh\(\);await nextFrames/);
     expect(vr).toMatch(/ui\.status=L\.compiling;menu\.refresh\(\);await nextFrames/);
-    expect(vr.indexOf('ui.status=L.compiling')).toBeLessThan(vr.indexOf('material=new THREE.ShaderMaterial'));
+    expect(vr.indexOf('ui.status=L.compiling')).toBeLessThan(vr.indexOf('install(P,{full:')); // the session's material is made by install, after this status
   });
 });

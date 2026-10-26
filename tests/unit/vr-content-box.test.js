@@ -248,7 +248,7 @@ describe('render-scale cap on the content box', () => {
 describe('vr-view.js wiring (static)', () => {
   const src = readFileSync(new URL('../../docs/vr-view.js', import.meta.url), 'utf8');
   it('the proxy geometry stays the full box; a ray missing the content box is discarded and the march ends at its exit (entry unchanged)', () => {
-    expect(src).toMatch(/vPos=position\*halfExt;/); expect(src).toMatch(/mesh=new THREE\.Mesh\(new THREE\.BoxGeometry\(2,2,2\),material\)/);
+    expect(src).toMatch(/vPos=position\*halfExt;/); expect(src).toMatch(/meshObj=new THREE\.Mesh\(new THREE\.BoxGeometry\(2,2,2\),st\.base\)/);
     expect(src).toMatch(/if\(boxH\.x>0\.0\)\{vec2 cb=hitContent\(o,dir\);if\(cb\.x>cb\.y\|\|cb\.y<0\.0\)discard;endT=min\(endT,cb\.y\);if\(boxEntry==1\)t=max\(t,cb\.x\);\}/);
     expect(src).toMatch(/boxEntry:\{value:0\}/); // the app never starts the march at the content box
   });

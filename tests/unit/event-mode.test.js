@@ -391,11 +391,12 @@ describe('static wiring', () => {
     const src = read('vr-view.js');
     expect(src).toContain('const help=makeMenu(820,PAGE_H+TAB_H,HELP_WIDTH,HELP_RES)'); // PAGE_H = the 560 px page + the caption band under the slide (tutorial-vr.js)
     // the mission board shows the level's slide AS A PICTURE (tutorial-vr.js layoutLevelSlide), sized to it; no board without a slide
-    expect(src).toContain("evSlide=evLevel&&!(evLevel.id==='lv0'&&tutLive)?levelSlide(evLevel.id):null;");
+    // the slide follows the level of the data in view (a data switch inside the session: refreshEvBoard), the board is made the first time a level has a slide
+    expect(src).toContain("const evSlideFor=()=>{const l=activeEventLevel();return l&&!(l.id==='lv0'&&tutLive&&!tutEnded)?levelSlide(l.id):null};");
     // the slide's picture over the whole board (16:9 of the 820 px width), redrawn once more when the picture has loaded
-    expect(src).toContain('const evPics=evSlide?createSlideImages({onLoad:()=>{if(ev){ev.refresh();ev.flush()}}}):null,evH=evSlide?levelBoardH(820):0;');
-    expect(src).toContain('const ev=evH?makeMenu(820,evH,EV_WIDTH,EV_RES):null;');
-    expect(src).toContain('ev.onDraw(()=>layoutLevelSlide(evSlide,{W:820,getImage:evPics.get}).widgets)');
+    expect(src).toContain('let evSlide=evSlideFor(),evPics=null,ev=null;');
+    expect(src).toContain('evPics||=createSlideImages({onLoad:()=>{if(ev){ev.refresh();ev.flush()}}});ev=makeMenu(820,levelBoardH(820),EV_WIDTH,EV_RES);');
+    expect(src).toContain('ev.onDraw(()=>evSlide?layoutLevelSlide(evSlide,{W:820,getImage:evPics.get}).widgets:[])');
     expect(src).toMatch(/y:60,text:L\.helpT/);
     expect(src).toMatch(/y:140\+i\*HELP_LINE_PITCH/);
     expect(src).not.toMatch(/\+evH\+i/);
@@ -415,12 +416,13 @@ describe('static wiring', () => {
   });
   it('the かんたん menu: tab 10 hides the tab bar, rows come from the loaded data (no level), すべての設定 opens the full menu, かんたん comes back (event mode only)', () => {
     const src = read('vr-view.js');
-    expect(src).toContain('if(ui.tab!==10){const tw=(MENU_W-2*X)/L.tabs.length,TAB_IDS=[0,1,2,3,4,5,6,9];');
+    expect(src).toContain('if(ui.tab!==10){const tw=(MENU_W-2*X)/L.tabs.length,TAB_IDS=[0,1,2,3,4,5,6,9,11];'); // the 9th tab is データ (11)
     expect(src).toContain("if(evMenu&&ui.tab!==10)btn(560,18,200,tr('evSimple'),false,()=>{ui.tab=10},{size:28});");
     const block = src.match(/if\(ui\.tab===10\)\{[\s\S]*?\}else if\(ui\.tab===0\)\{/)[0];
     expect(block).toContain('keys=simpleMenuSegments(act)');
     expect(block).toContain('trigger:{show:triggerModeRow(hasRes),label:evLabelOn()}');
-    expect(block).not.toMatch(/activeEventLevel|level:|lv\b/); // nothing level-dependent
+    expect(block).not.toMatch(/activeEventLevel|\blv\b/); // nothing level-dependent in the rows;: the one level-aware part is the data-switch row (levels, 'level:<id>' ids: simpleMenuLayout's levels option)
+    expect(block).toContain("acts['level:'+l.id]=()=>swapPress(l.sample)");
     // the actions behind the layout's widget ids: 断面 (B/Y's setSection), the trigger switch, 元に戻す (the ring's undo), すべての設定 -> the full menu, 終了 = the full menu's session.end()
     expect(src).toContain("const acts={section:v=>setSection(v),'trigger:point':()=>{evLabels=false},'trigger:label':()=>{evLabels=true;emit('trigger-label')},undo:()=>{undoLast()},home:goHome,reset:pressReset,all:()=>{ui.tab=0},exit:()=>session.end()};");
     expect(src).toContain("exit:tr(mode==='ar'?'evExitAr':'evExitVr')");
@@ -613,7 +615,7 @@ describe('hidden segments in VR (event mode): prepared, listed, shown from the s
     expect(src).toContain('const segAvail=g=>!!g?.active&&(!!g.enabled||eventModeOn());');
     expect(src).toContain('return [g.active?1:0,segAvail(g)?1:0,g.min,g.max,g.opening,');
     expect(src).toContain('if(segAvail(seg)&&segMode[key]!==2)mask|=1<<i}return mask};');
-    expect(src).toContain('buildClsData(small,vd.calibration,edit,vrSegments(),gpuSegmentOrder())');
+    expect(src).toContain('order=gpuSegmentOrder(),segs=vrSegments(),state={}'); // the classification is built in the worker from the segment state resolved here (vr-volume-prep.js prepRun -> buildClsData)
     expect(src).toContain('gpuVolumeEditDescriptors(undefined,segAvail)');
     expect(src).toContain('r.segmentKeys.some(k=>segAvail(segmentState[k]))');
     expect(src).toContain('const act=SEGMENT_PRESET_ORDER.filter(k=>segAvail(segmentState[k])),keys=simpleMenuSegments(act)');
@@ -628,7 +630,7 @@ describe('hidden segments in VR (event mode): prepared, listed, shown from the s
     expect(src).toContain('if(g?.active&&!g.enabled)segMode[k]=2');
   });
   it('the processing masks of hidden segments are computed before the VR data is keyed and built; the page\'s own hidden-point judgement keeps the page\'s meaning', () => {
-    expect(src).toContain('export async function prepareVrData(onProgress=()=>{}){\n await ensureHiddenSegmentRuns();\n const key=vrDataKey();');
+    expect(src).toContain('export async function prepareVrData(onProgress=()=>{},{sliceMs=0}={}){\n await ensureHiddenSegmentRuns();\n const key=vrDataKey();');
     expect(src).toContain('!(eventModeOn()&&SEGMENT_PRESET_ORDER.some(k=>segmentState[k]?.active&&!segmentState[k].enabled))');
   });
   it('gpuVolumeEditDescriptors keeps its default (shown = active and enabled) for every other caller', () => {

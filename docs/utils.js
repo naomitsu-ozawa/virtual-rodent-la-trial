@@ -23,6 +23,9 @@ export function isDesktopRuntime(){return (navigator.maxTouchPoints||0)===0&&!is
 export function isVrHeadsetRuntime(){return /OculusBrowser|\bQuest\b|\bPico\b|Wolvic/i.test(navigator.userAgent||'')}
 export function isTabletRuntime(){return isIPadRuntime()||/Android|OculusBrowser|Quest/i.test(navigator.userAgent||'')}
 export const frameYield=()=>new Promise(resolve=>setTimeout(resolve,0));
+// the next animation frame OR a timer, whichever comes first. The window's requestAnimationFrame does not run while a WebXR session is presented (the headset's own frame loop
+// takes over), so a step that awaits the page's rAF would stand still for as long as a VR session runs: the 2D uploads that run while the data is switched inside VR wait with this.
+export const frameOrTimer=(ms=32)=>new Promise(resolve=>{let done=false,t=0;const fin=()=>{if(done)return;done=true;clearTimeout(t);resolve()};t=setTimeout(fin,ms);try{requestAnimationFrame(fin)}catch{}});
 export function niceCtStep(span){
  const target=Math.max(Math.abs(span)/700,1e-6),power=10**Math.floor(Math.log10(target)),scaled=target/power;
  const nice=scaled<=1?1:scaled<=2?2:scaled<=5?5:10;

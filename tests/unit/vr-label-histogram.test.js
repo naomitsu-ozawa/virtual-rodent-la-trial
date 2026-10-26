@@ -213,6 +213,13 @@ describe('the pass: time slicing, progress, cancellation, redraws', () => {
     // a real change redraws once
     await h.run({ key: 'b', grid: g, cls, region: null, shownMask: 0b01 }); expect(n).toBe(3); expect(h.result.key).toBe('b');
   });
+  it('reset() (the data of the session was replaced) drops the result and the last input (it held the old data), cancels a pass, and redraws once; a rerun then has nothing to run', async () => {
+    const { g } = volume(6), cls = buildClsData(g, g.calibration, { data: null, dims: g.dims, active: 0, maskOnly: 0 }, segs);
+    const h = createVrLabelHistogram({ makeWorker: fakeWorker, yieldFn: async () => {} }); let n = 0; h.onChange(() => n++);
+    await h.run({ key: 'a', grid: g, cls, region: null, shownMask: 0b11 }); expect(h.result).not.toBe(null); n = 0;
+    h.reset(); expect(h.result).toBe(null); expect(h.error).toBe(''); expect(h.busy).toBe(false); expect(n).toBe(1);
+    expect(await h.rerun()).toBe(false); // the input is gone: nothing of the old data can be counted again
+  });
   it('after an error, the same good result again is a change (the board leaves the error)', async () => {
     const { g } = volume(6), cls = buildClsData(g, g.calibration, { data: null, dims: g.dims, active: 0, maskOnly: 0 }, segs);
     const h = createVrLabelHistogram({ makeWorker: fakeWorker, yieldFn: async () => {} }); let n = 0; h.onChange(() => n++);

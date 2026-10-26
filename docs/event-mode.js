@@ -24,6 +24,11 @@ export function segmentVisibilityPlan(projectSegments,state,order=Object.keys(st
 }
 export const levelById=id=>EVENT_LEVELS.find(l=>l.id===id)||null;
 export const levelForSample=sample=>EVENT_LEVELS.find(l=>l.sample===sample)||null;
+// the buttons that switch the data INSIDE the VR session (the かんたん menu's row, the full menu's データ tab): one per level, 'Lv0 骨梁'; on = its data is open now,
+// armed = it was pressed once (the second press switches). nameOf(key) is the i18n lookup. Pure.
+export function levelSwitchItems(nameOf,openSample,armedId=null,levels=EVENT_LEVELS){
+ return levels.map(l=>({id:l.id,sample:l.sample,label:'Lv'+l.lv+' '+nameOf(l.nameKey),on:l.sample===openSample,armed:armedId===l.id}));
+}
 let chosen=null;
 // id of a level, or null / unknown = none chosen
 export function chooseEventLevel(id){chosen=levelById(id)?.id??null;return chosen}
@@ -50,9 +55,10 @@ export const triggerMode=(labelsOn,hasResults)=>hasResults&&labelsOn?'label':'po
 // the かんたん menu's board layout (1024 x 1180 px canvas), pure so that it can be tested and drawn without a headset. Widgets only carry an id;
 // vr-view.js maps the id to its action: 'seg:<key>:show|hide', 'section:show|hide', 'sliceOpacity' (the one slider: the same widget and setting as the full menu's スライス tab), 'trigger:point|label', 'undo', 'home', 'reset', 'all', 'exit'.
 // Advanced settings (quality, foveation, HU window, ...) are not here: すべての設定 opens the full menu.
-export const SIMPLE_MENU=Object.freeze({W:1024,H:1180,X:40,STATUS:140,TOP:180,ROW:82,TRIG_ROW:104,BTN_H:72,LIST_ROW:46,BOTTOM:1086});
+export const SIMPLE_MENU=Object.freeze({W:1024,H:1180,X:40,STATUS:140,TOP:180,ROW:82,TRIG_ROW:104,BTN_H:72,LIST_ROW:46,BOTTOM:1086,LEVEL_Y:1004});
 // There is no title line and no level text; the board's status line sits at STATUS and the rows start at TOP.
-// o: {segments:[{key,name,color,on}], sectionOn, sliceOpacity (0..1, the slider's value; default SLICE_OPACITY_DEFAULT), trigger:{show,label}, results:[{hex,name,text}], total, resetArmed, text:{...}}
+// o: {segments:[{key,name,color,on}], sectionOn, sliceOpacity (0..1, the slider's value; default SLICE_OPACITY_DEFAULT), trigger:{show,label}, results:[{hex,name,text}], total, resetArmed, text:{...},
+//     levels?: {items:[{id,label,on,armed}], busy, hint, text:{title,again}}}
 // The slice-opacity slider row (always there, for every dataset: it only shows once a section is) sits under the 断面 row; its steps are 5 % (sliceOpacityValue).
 export const SLICE_OPACITY_DEFAULT=0.6;
 export const sliceOpacityValue=v=>Math.round(Math.min(1,Math.max(0,+v||0))*20)/20;
@@ -85,15 +91,21 @@ export function simpleMenuLayout(o){
   btn('trigger:point',440,y,250,t.trigPoint,!lab,{size:32,color:!lab?'#cfe3f0':undefined});btn('trigger:label',710,y,250,t.trigLabel,lab,{size:32,color:lab?'#cfe3f0':undefined});
   label('trigger:hint',X,y+M.BTN_H+22,lab?t.trigHintLabel:t.trigHintPoint,{size:24,color:'#ffd27a'});y+=M.TRIG_ROW;
  }
- const res=o.results||[];
+ const res=o.results||[],listEnd=o.levels?M.LEVEL_Y-M.ROW/2:M.BOTTOM;
  if(res.length){
   label('results',X,y+30,t.results,{bold:true,size:28});
-  const top=y+56,cap=Math.max(0,Math.floor((M.BOTTOM-24-30-top)/M.LIST_ROW)),shown=res.slice(0,cap);
+  const top=y+56,cap=Math.max(0,Math.floor((listEnd-24-30-top)/M.LIST_ROW)),shown=res.slice(0,cap);
   shown.forEach((r,i)=>{const ry=top+i*M.LIST_ROW;
    w.push({type:'button',id:'result:'+i,x:X,y:ry,w:56,h:40,label:'',on:true,color:r.hex});
    label('result:'+i+':name',X+76,ry+30,r.name,{size:28,bold:true,color:r.hex});label('result:'+i+':vol',X+520,ry+30,r.text,{size:28})});
   const more=res.length-shown.length;
   label('total',X,top+shown.length*M.LIST_ROW+26,t.total+' '+o.total+' · '+res.length+(more>0?'  (… +'+more+')':''),{size:24,color:'#9fb3c3'});
+ }
+ if(o.levels){
+  const lv=o.levels,n=lv.items.length,gap=10,x0=270,bw=Math.floor((M.W-X-x0-(n-1)*gap)/Math.max(1,n));
+  label('levels:name',X,M.LEVEL_Y+40,lv.text.title,{color:'#cfe3f0',bold:true,size:34});
+  if(lv.hint)label('levels:hint',X,M.LEVEL_Y-12,lv.hint,{size:22,color:'#ffd27a'});
+  lv.items.forEach((it,i)=>btn('level:'+it.id,x0+i*(bw+gap),M.LEVEL_Y,bw,it.armed?lv.text.again:it.label,!!it.on||!!it.armed,{size:24,disabled:!!lv.busy,color:it.armed?'#c77a00':it.on?'#2d6cdf':undefined}));
  }
  // bottom row: 正面に戻す / 元に戻す / 最初の状態に戻す / すべての設定 / 終了 (the exit one red). The widths follow the texts (BOTTOM_WEIGHTS; a label wider than its
  // button shrinks horizontally, vr-view.js); 最初の状態に戻す is the widest one: while armed it says 「もう一度押すとリセット」 (resetPress below).
@@ -101,7 +113,7 @@ export function simpleMenuLayout(o){
  let bx=X;
  items.forEach(([id,text],i)=>{
   const bw=i===items.length-1?M.W-X-bx:Math.floor(inner*BOTTOM_WEIGHTS[id]/sum);
-  btn(id,bx,M.BOTTOM,bw,text,id==='exit'||(id==='reset'&&!!o.resetArmed),{size:id==='reset'?26:28,...(id==='exit'?{color:'#b33'}:id==='reset'&&o.resetArmed?{color:'#c77a00'}:{})});
+  btn(id,bx,M.BOTTOM,bw,text,id==='exit'||(id==='reset'&&!!o.resetArmed),{size:id==='reset'?26:28,...(id==='exit'?{color:'#b33'}:id==='reset'&&o.resetArmed?{color:'#c77a00'}:{}),...(id==='reset'&&o.levels?.busy?{disabled:true}:{})});
   bx+=bw+gap;
  });
  return w;
