@@ -59,12 +59,16 @@ export function startHolderScale(longMm, fallbackScale) {
   return clampScale(fallbackScale, longMm);
 }
 
-// while the tutorial runs the volume is put where the hands reach it and large enough to take hold of (the practice bone is a 2.56 cm cube at real size: too small to grab
-// when told to). 0.25 m longest side (not the 0.30 m limit: spreading the hands, 2-3, must still enlarge it by more than the 15 % the step asks for: 0.30 / 0.25 = +20 %), 0.5 m ahead, at chest height (a little below the eyes;: 0.65 m ahead, was 0.5 m). Only the tutorial uses this; every other start is startHolderScale.
-// 0.65 m ahead like every other start (VOLUME_FWD; was 0.5 m); still at chest height (0.25 m below the eyes).
+export const LV0_START_MAG = 4;
+export const lv0HolderScale = (longMm, fallbackScale) => {
+  const r = realHolderScale(longMm); // null: unknown physical size or oversize data -> same as every other start
+  return r ? clampScale(r * LV0_START_MAG, longMm) : clampScale(fallbackScale, longMm);
+};
+// while the tutorial runs the volume is put where the hands reach it (0.65 m ahead, at chest height, a quarter metre below the eyes).: its size is x4 real size (LV0_START_MAG; was 0.25 m = about x9.8).
+// Only the tutorial uses TUT_VOLUME_*; unknown physical size: TUT_LONG_M (0.1 m longest side).
 export const TUT_VOLUME_FWD = 0.65, TUT_VOLUME_DOWN = 0.25;
-export const TUT_LONG_M = 0.25;
-export const tutorialHolderScale = longMm => clampScale(TUT_LONG_M / NORM_LONG, longMm);
+export const TUT_LONG_M = 0.1;
+export const tutorialHolderScale = longMm => (longMm > 0 ? lv0HolderScale(longMm, TUT_LONG_M / NORM_LONG) : clampScale(TUT_LONG_M / NORM_LONG, longMm));
 // the volume is "small" for the tutorial's grab steps when it is displayed at less than 95 % of the tutorial size (the visitor shrank it, or it was never enlarged)
 export const smallForTutorial = (holderScale, longMm) => holderScale < tutorialHolderScale(longMm) * 0.95;
 

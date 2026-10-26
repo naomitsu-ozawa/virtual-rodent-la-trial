@@ -1,15 +1,15 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { volume, incNextSegmentMaskVolumeId } from './state.js?v=20261026-build670';
-import { hexRgb } from './utils.js?v=20261026-build670';
-import { settings } from './app-settings.js?v=20261026-build670';
-import { buildThresholdMask, morphMask, fillMaskHoles, removeSmallMaskComponents } from './mask-ops.js?v=20261026-build670';
-import { thinSuppressActive, suppressThinMask } from './thin-suppress.js?v=20261026-build670';
-import { effectiveRanges } from './segment-exclusive.js?v=20261026-build670';
-import { maskFromAnalysisRuns } from './run-length.js?v=20261026-build670';
-import { sourceFilterStages } from './source-filters.js?v=20261026-build670';
-import { gpuSlotOrder, slotSignature } from './segment-slots.js?v=20261026-build670';
-import { segmentPresetDefaults } from './dataset-reset.js?v=20261026-build670';
+import { volume, incNextSegmentMaskVolumeId } from './state.js?v=20261026-build671';
+import { hexRgb } from './utils.js?v=20261026-build671';
+import { settings } from './app-settings.js?v=20261026-build671';
+import { buildThresholdMask, morphMask, fillMaskHoles, removeSmallMaskComponents } from './mask-ops.js?v=20261026-build671';
+import { thinSuppressActive, suppressThinMask } from './thin-suppress.js?v=20261026-build671';
+import { effectiveRanges } from './segment-exclusive.js?v=20261026-build671';
+import { maskFromAnalysisRuns } from './run-length.js?v=20261026-build671';
+import { sourceFilterStages } from './source-filters.js?v=20261026-build671';
+import { gpuSlotOrder, slotSignature } from './segment-slots.js?v=20261026-build671';
+import { segmentPresetDefaults } from './dataset-reset.js?v=20261026-build671';
 // 'contrast' (造影領域) is the fifth preset; at most GPU_SEGMENT_SLOTS (4) are enabled at once (segment-slots.js)
 export const SEGMENT_PRESET_ORDER=['bone','soft','fat','lung','contrast'];
 export const segmentEditState=Object.fromEntries(SEGMENT_PRESET_ORDER.map(key=>[key,{baseRuns:null,baseSignature:'',keepRuns:null,excludeRuns:null,cutRuns:null,finalRuns:null,revision:0,undo:[],redo:[],surfaceGroup:null,rawCutSurface:false}]));
