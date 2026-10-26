@@ -11,12 +11,12 @@
 // The instance is kept on globalThis.__vrlTutorialEngine, so it stays single even when the module is loaded under two ?v= URLs.
 // Signals: the first getTutorialEngine() also wires document/window 'vrl-tut-signal' ({detail:{kind,count?}}) to engine.onSignal (once; a signal seen on both is counted once).
 // A module that wires signals itself must set globalThis.__vrlTutSignalWired=true BEFORE the first getTutorialEngine() call.
-import { settings } from './app-settings.js?v=20261025-build668';
-import { tr, I18N } from './i18n.js?v=20261025-build668';
-import { TUTORIAL_MISSIONS, TUT_SAMPLE, TUT_INTRO, fillTissue } from './tutorial-data.js?v=20261025-build668';
-import { createTutorialAudio } from './tutorial-audio.js?v=20261025-build668';
-import { createTutorialEngine } from './tutorial-engine.js?v=20261025-build668';
-import { resetPress, resetArmed, RESET_ARM_MS, EVENT_LEVELS } from './event-mode.js?v=20261025-build668';
+import { settings } from './app-settings.js?v=20261025-build669';
+import { tr, I18N } from './i18n.js?v=20261025-build669';
+import { TUTORIAL_MISSIONS, TUT_SAMPLE, TUT_INTRO, TUT_VOICE_PICK, fillTissue } from './tutorial-data.js?v=20261025-build669';
+import { createTutorialAudio } from './tutorial-audio.js?v=20261025-build669';
+import { createTutorialEngine } from './tutorial-engine.js?v=20261025-build669';
+import { resetPress, resetArmed, RESET_ARM_MS, EVENT_LEVELS } from './event-mode.js?v=20261025-build669';
 
 // the switch (設定 > 外観 > チュートリアル) off = the engine ignores every signal (nothing advances, nothing is saved); on again = as before
 // true while the tutorial UI is live (the switch is on AND the device supports VR): the Lv0 card of 体験会 acts as the tutorial only then (event-mode-ui.js)
@@ -274,11 +274,36 @@ export function initTutorialUi({resetUserState}={}){
  const mountCta=()=>{
   if(document.getElementById('tutorial-start-button'))return;
   const b=el('button','tut-cta','tutCta');b.id='tutorial-start-button';b.type='button';
-  b.onclick=()=>{if(settings.get('tutorialMode')!==true)settings.set('tutorialMode',true);sync();restartTutorial();intro.start()}; // every start is from ステップ1 (nothing is remembered)
+  const begin=()=>{if(settings.get('tutorialMode')!==true)settings.set('tutorialMode',true);sync();restartTutorial();intro.start()}; // every start is from ステップ1 (nothing is remembered)
+  b.onclick=()=>chooseVoice(begin); // the guide voice is chosen first (女性 / 男性); × closes without starting
   const at=document.getElementById('vr-view-button');
   if(at?.parentNode)at.parentNode.insertBefore(b,at);else document.querySelector('.topbar-actions')?.prepend(b);
  };
  window.addEventListener('vrl-settings',e=>{if(e.detail?.key==='tutorialMode'&&settings.get('tutorialMode')!==true)intro.stop()});
+ // the voice choice dialog. A button says 「私が案内します」 in its own voice when the ray / pointer comes onto it (or it gets the focus); a press saves tutorialVoice and starts.
+ // The credits of both voices are shown under the buttons.
+ let pickDlg=null,pickVoice='F1';
+ const pickAudio=createTutorialAudio({getVoice:()=>pickVoice});
+ function chooseVoice(onPick){
+  if(!pickDlg){
+   const d=pickDlg=el('dialog','settings-dialog tut-voice-dialog');d.id='tutorial-voice-dialog';
+   const head=el('div','settings-head'),title=el('strong','','tutVoiceTitle'),x=btn('secondary-button','',()=>close());x.textContent='×';x.setAttribute('aria-label','Close');x.autofocus=true; // the first focus is ×, so opening says nothing
+   head.append(title,x);
+   const list=el('div','sample-choices');
+   for(const v of ['F1','M1']){
+    const b=btn('secondary-button sample-choice tut-voice-choice','tutVoice'+v,()=>{pickAudio.stop();close();settings.set('tutorialVoice',v);d._onPick?.()});b.dataset.voice=v;
+    const say=()=>{if(d._said===v)return;d._said=v;pickVoice=v;pickAudio.play([TUT_VOICE_PICK.audio])};
+    b.addEventListener('pointerenter',say);b.addEventListener('focus',say);b.addEventListener('pointerleave',()=>{d._said=null});
+    list.append(b);
+   }
+   const credit=el('div','hint tut-voice-credit');credit.append(el('div','','tutVoiceCredit'),el('div','','tutVoiceCreditF1'),el('div','','tutVoiceCreditM1'));
+   d.append(head,list,credit);d.addEventListener('close',()=>pickAudio.stop());document.body.append(d);
+   function close(){try{d.close()}catch{d.removeAttribute('open')}}
+  }
+  pickDlg._onPick=onPick;pickDlg._said=null;
+  for(const e of pickDlg.querySelectorAll('[data-i18n]'))e.textContent=tr(e.dataset.i18n);
+  pickDlg.showModal?pickDlg.showModal():pickDlg.setAttribute('open','');
+ }
  forgetLegacyProgress();
  showRows(false);
  detectVrSupport().then(ok=>{vr=ok;showRows(ok);if(ok)mountCta();sync()});

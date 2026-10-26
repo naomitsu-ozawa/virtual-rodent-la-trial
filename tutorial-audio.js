@@ -1,10 +1,11 @@
 // チュートリアル voice player (VR board + 2D panel). Plain `new Audio(src)` (never fetch: the public gate inspects fetch); a missing file fails silently
-// (the subtitles / texts carry the tutorial alone). One female voice only (user decision): docs/tutorial/audio/F1/<id>.m4a; settings tutorialVoice 'off' = silent (subtitles only), anything else = F1.
+// (the subtitles / texts carry the tutorial alone).: two voices, docs/tutorial/audio/<F1|M1>/<id>.m4a (F1 女性 = default, M1 男性); settings tutorialVoice 'off' = silent (subtitles only), anything else = F1.
 export const AUDIO_BASE = './tutorial/audio/';
 export const DEFAULT_VOICE = 'F1';
-const AUDIO_QUERY = '?v=20261025-build668'; // same cache-busting form as the other assets (tools/bump-build.mjs rewrites it); the .m4a file name / id is unchanged
-export const voiceOf = v => (v === 'off' ? 'off' : DEFAULT_VOICE);
-export const audioSrc = (voice, id, base = AUDIO_BASE) => (!id || voiceOf(voice) === 'off' ? null : `${base}${DEFAULT_VOICE}/${id}.m4a${AUDIO_QUERY}`);
+const AUDIO_QUERY = '?v=20261025-build669'; // same cache-busting form as the other assets (tools/bump-build.mjs rewrites it); the .m4a file name / id is unchanged
+export const VOICES = Object.freeze(['F1', 'M1']);
+export const voiceOf = v => (v === 'off' ? 'off' : VOICES.includes(v) ? v : DEFAULT_VOICE);
+export const audioSrc = (voice, id, base = AUDIO_BASE) => { const v = voiceOf(voice); return !id || v === 'off' ? null : `${base}${v}/${id}.m4a${AUDIO_QUERY}`; };
 // ids to speak for one engine snapshot, in order: the earned feedback first (stepClear: ok1..3; missionClear / allClear, each followed by its `then` line:, 「次へ」を押してください / the end), then the new step's own voice.
 // prev = what was last announced ({mission, step, finished}); returns {ids, key}; ids = [] when nothing changed (counts inside a step do not speak).
 export function speechFor(snap, step, prevKey) {
