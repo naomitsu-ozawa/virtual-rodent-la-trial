@@ -1,0 +1,312 @@
+{
+ "F1/ctl1": {
+  "voice": "F1",
+  "sec": 7.62,
+  "textHash": "116143a356ee"
+ },
+ "F1/ctl2": {
+  "voice": "F1",
+  "sec": 4.23,
+  "textHash": "46e87ec7c6bc"
+ },
+ "F1/g1d": {
+  "voice": "F1",
+  "sec": 6.46,
+  "textHash": "a93158b15e9b"
+ },
+ "F1/grip2": {
+  "voice": "F1",
+  "sec": 3.94,
+  "textHash": "6304f4954e3f"
+ },
+ "F1/g1c": {
+  "voice": "F1",
+  "sec": 5.51,
+  "textHash": "f8a27c2361c7"
+ },
+ "F1/g2a": {
+  "voice": "F1",
+  "sec": 4.93,
+  "textHash": "f59075d2ebf1"
+ },
+ "F1/g2d": {
+  "voice": "F1",
+  "sec": 5.91,
+  "textHash": "0eca09a80cbc"
+ },
+ "F1/g2e": {
+  "voice": "F1",
+  "sec": 6.23,
+  "textHash": "8946296e1fb4"
+ },
+ "F1/g3c": {
+  "voice": "F1",
+  "sec": 6.91,
+  "textHash": "e37ddf27a826"
+ },
+ "F1/g3b": {
+  "voice": "F1",
+  "sec": 3.56,
+  "textHash": "a09f5bc8ce78"
+ },
+ "F1/g4pre": {
+  "voice": "F1",
+  "sec": 6.57,
+  "textHash": "890f5630c2c8"
+ },
+ "F1/g4d": {
+  "voice": "F1",
+  "sec": 9.98,
+  "textHash": "d1cb9b6c190c"
+ },
+ "F1/g4a2": {
+  "voice": "F1",
+  "sec": 3.9,
+  "textHash": "c7c4800e0cce"
+ },
+ "F1/g4b": {
+  "voice": "F1",
+  "sec": 5.6,
+  "textHash": "57be087bb469"
+ },
+ "F1/g4c": {
+  "voice": "F1",
+  "sec": 4.4,
+  "textHash": "45cd6f3c4480"
+ },
+ "F1/ex1": {
+  "voice": "F1",
+  "sec": 7.22,
+  "textHash": "78288505c26b"
+ },
+ "F1/ok1": {
+  "voice": "F1",
+  "sec": 1.3,
+  "textHash": "33f2393574ac"
+ },
+ "F1/ok2": {
+  "voice": "F1",
+  "sec": 1.25,
+  "textHash": "2ace1e0d28ea"
+ },
+ "F1/ok3": {
+  "voice": "F1",
+  "sec": 1.44,
+  "textHash": "50824059e858"
+ },
+ "F1/mclear": {
+  "voice": "F1",
+  "sec": 1.65,
+  "textHash": "524d37f276b0"
+ },
+ "F1/allclear": {
+  "voice": "F1",
+  "sec": 2.96,
+  "textHash": "4ae6b7b9b3d0"
+ },
+ "F1/gonext": {
+  "voice": "F1",
+  "sec": 4.12,
+  "textHash": "890401c25460"
+ },
+ "F1/intro1": {
+  "voice": "F1",
+  "sec": 3.63,
+  "textHash": "cf196b63984a"
+ },
+ "F1/intro4": {
+  "voice": "F1",
+  "sec": 4.86,
+  "textHash": "94ab60e4cde1"
+ },
+ "F1/intro2": {
+  "voice": "F1",
+  "sec": 2.87,
+  "textHash": "8a5fdeda5720"
+ },
+ "F1/intro5": {
+  "voice": "F1",
+  "sec": 5.18,
+  "textHash": "519232f3305c"
+ },
+ "F1/intro3": {
+  "voice": "F1",
+  "sec": 2.94,
+  "textHash": "1d83dc5e6265"
+ },
+ "F1/orient1": {
+  "voice": "F1",
+  "sec": 6.26,
+  "textHash": "567ba34a94c3"
+ },
+ "F1/orient2": {
+  "voice": "F1",
+  "sec": 3.4,
+  "textHash": "1015c1d71784"
+ },
+ "F1/g3open": {
+  "voice": "F1",
+  "sec": 5.77,
+  "textHash": "06c94732a98f"
+ },
+ "F1/pick": {
+  "voice": "F1",
+  "sec": 1.57,
+  "textHash": "edb4793c8878"
+ },
+ "M1/ctl1": {
+  "voice": "M1",
+  "sec": 7.06,
+  "textHash": "514bf79c818a"
+ },
+ "M1/ctl2": {
+  "voice": "M1",
+  "sec": 3.7,
+  "textHash": "026326b51ead"
+ },
+ "M1/g1d": {
+  "voice": "M1",
+  "sec": 5.8,
+  "textHash": "907e4c45df31"
+ },
+ "M1/grip2": {
+  "voice": "M1",
+  "sec": 3.1,
+  "textHash": "b4320fbe692c"
+ },
+ "M1/g1c": {
+  "voice": "M1",
+  "sec": 5.3,
+  "textHash": "536546abadd8"
+ },
+ "M1/g2a": {
+  "voice": "M1",
+  "sec": 4.7,
+  "textHash": "e6601f63074c"
+ },
+ "M1/g2d": {
+  "voice": "M1",
+  "sec": 5.3,
+  "textHash": "38bfd975b5e5"
+ },
+ "M1/g2e": {
+  "voice": "M1",
+  "sec": 5.5,
+  "textHash": "f9bea776711c"
+ },
+ "M1/g3c": {
+  "voice": "M1",
+  "sec": 6.4,
+  "textHash": "74b871e42082"
+ },
+ "M1/g3b": {
+  "voice": "M1",
+  "sec": 3.1,
+  "textHash": "f1bf6a8f842c"
+ },
+ "M1/g4pre": {
+  "voice": "M1",
+  "sec": 6.15,
+  "textHash": "7397c8924f46"
+ },
+ "M1/g4d": {
+  "voice": "M1",
+  "sec": 9.2,
+  "textHash": "1fa5075da482"
+ },
+ "M1/g4a2": {
+  "voice": "M1",
+  "sec": 3.1,
+  "textHash": "99fa37848c1c"
+ },
+ "M1/g4b": {
+  "voice": "M1",
+  "sec": 5.2,
+  "textHash": "fc78d771fbb1"
+ },
+ "M1/g4c": {
+  "voice": "M1",
+  "sec": 4.1,
+  "textHash": "8642fca5a930"
+ },
+ "M1/ex1": {
+  "voice": "M1",
+  "sec": 6.6,
+  "textHash": "e9cf6a9fdd2f"
+ },
+ "M1/ok1": {
+  "voice": "M1",
+  "sec": 1.08,
+  "textHash": "08b58a4039e5"
+ },
+ "M1/ok2": {
+  "voice": "M1",
+  "sec": 1.11,
+  "textHash": "824f766e8638"
+ },
+ "M1/ok3": {
+  "voice": "M1",
+  "sec": 1.3,
+  "textHash": "b4624e4fe107"
+ },
+ "M1/mclear": {
+  "voice": "M1",
+  "sec": 1.44,
+  "textHash": "b88734660577"
+ },
+ "M1/allclear": {
+  "voice": "M1",
+  "sec": 2.79,
+  "textHash": "c798bcfc6596"
+ },
+ "M1/gonext": {
+  "voice": "M1",
+  "sec": 3.75,
+  "textHash": "dd2c39660a1f"
+ },
+ "M1/intro1": {
+  "voice": "M1",
+  "sec": 3.27,
+  "textHash": "e873950fa07f"
+ },
+ "M1/intro4": {
+  "voice": "M1",
+  "sec": 4.5,
+  "textHash": "410206f43840"
+ },
+ "M1/intro2": {
+  "voice": "M1",
+  "sec": 2.66,
+  "textHash": "660d3ac4f39c"
+ },
+ "M1/intro5": {
+  "voice": "M1",
+  "sec": 4.5,
+  "textHash": "8de060123d6e"
+ },
+ "M1/intro3": {
+  "voice": "M1",
+  "sec": 2.52,
+  "textHash": "adfee7cb8c4b"
+ },
+ "M1/orient1": {
+  "voice": "M1",
+  "sec": 5.5,
+  "textHash": "cf8e9e03c8f4"
+ },
+ "M1/orient2": {
+  "voice": "M1",
+  "sec": 3.11,
+  "textHash": "c786bbe6d962"
+ },
+ "M1/g3open": {
+  "voice": "M1",
+  "sec": 5.58,
+  "textHash": "59d2a1fd020f"
+ },
+ "M1/pick": {
+  "voice": "M1",
+  "sec": 1.72,
+  "textHash": "9755f3eebbd7"
+ }
+}

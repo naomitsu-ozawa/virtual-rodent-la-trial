@@ -1,0 +1,1351 @@
+:root{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:rgb(var(--ui-t1));background:rgb(var(--ui-s0));font-synthesis:none;text-rendering:optimizeLegibility}
+*{box-sizing:border-box}
+html,body,#app{width:100%;min-width:320px;height:100%;margin:0}
+body{overflow:hidden;background:rgb(var(--ui-s0))}
+button,input{font:inherit}button{color:inherit}
+.app-shell{width:100%;height:100dvh;padding:14px;display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:12px}
+.topbar{min-height:62px;display:flex;align-items:center;justify-content:space-between;gap:18px}
+.eyebrow,.panel-kicker{margin:0 0 4px;font-size:10px;font-weight:800;letter-spacing:.14em;color:rgb(var(--ui-t5))}
+h1{margin:0;font-size:clamp(23px,3vw,34px);line-height:1;letter-spacing:-.035em}
+.subtitle{margin:7px 0 0;color:rgb(var(--ui-t5));font-size:13px}
+.topbar-actions{display:flex;align-items:center;gap:10px}
+.status,.primary-button,.secondary-button,.ready-badge{border-radius:999px;font-size:11px;font-weight:800;letter-spacing:.04em}
+.status{padding:8px 11px;border:1px solid rgb(var(--ui-b1))}.status-checking{background:rgb(var(--ui-s4));color:rgb(var(--ui-t3))}.status-ok{background:rgb(var(--ui-green-bg));color:rgb(var(--ui-green-tx));border-color:rgb(var(--ui-green-bd))}.status-warning{background:rgb(var(--ui-amber-bg));color:rgb(var(--ui-amber-tx));border-color:rgb(var(--ui-amber-bd))}.status-error{background:rgb(var(--ui-red-bg));color:rgb(var(--ui-red-tx));border-color:rgb(var(--ui-red-bd))}
+.primary-button,.secondary-button{border:1px solid rgb(var(--ui-b3));padding:10px 14px;cursor:pointer;min-height:44px}.primary-button{background:rgb(var(--ui-blue-bg2));color:rgb(var(--ui-blue-tx))}.secondary-button{background:rgb(var(--ui-s3));color:rgb(var(--ui-t2));border-color:rgb(var(--ui-b3))}.primary-button:disabled,.secondary-button:disabled{opacity:.55;cursor:wait}
+.visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}
+.workspace{min-height:0;display:grid;grid-template-columns:minmax(290px,360px) minmax(0,1fr);gap:12px}
+.sidebar{min-height:0;display:grid;grid-template-rows:minmax(0,1fr) auto;gap:12px}
+.panel,.viewport-card{border:1px solid rgb(var(--ui-b1));background:rgb(var(--ui-s1));border-radius:14px;overflow:hidden}
+.panel{min-height:0;padding:14px;display:flex;flex-direction:column}.compact-panel{min-height:auto}
+.panel-heading{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}.panel-heading h2{margin:0;font-size:15px}
+.empty-state{flex:1;min-height:130px;border:1px dashed rgb(var(--ui-b1));border-radius:10px;display:grid;place-content:center;gap:6px;text-align:center;padding:20px;color:rgb(var(--ui-t3))}.empty-state span,.hint{color:rgb(var(--ui-t5));font-size:12px}.is-hidden{display:none!important}
+.progress-wrap{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;margin-bottom:10px}.progress-track{height:5px;overflow:hidden;border-radius:99px;background:rgb(var(--ui-s4))}.progress-bar{width:0;height:100%;background:rgb(var(--ui-accent));transition:width 80ms linear}.progress-wrap span{font-size:11px;color:rgb(var(--ui-t5))}
+.series-list{min-height:0;overflow:auto;display:grid;gap:8px}.series-card{width:100%;border:1px solid rgb(var(--ui-b1));border-radius:10px;background:rgb(var(--ui-s2));padding:11px;text-align:left;cursor:pointer}.series-card.is-selected{border-color:rgb(var(--ui-blue-bd));box-shadow:inset 0 0 0 1px rgb(var(--ui-blue-bd))}.series-card-header{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}.series-card-header>div{min-width:0;display:grid;gap:6px}.series-card-header strong{font-size:13px;overflow:hidden;text-overflow:ellipsis}.modality-badge{width:fit-content;padding:3px 6px;border-radius:5px;background:rgb(var(--ui-blue-bg));color:rgb(var(--ui-blue-tx2));font-size:10px;font-weight:800}.memory-estimate{flex:none;color:rgb(var(--ui-link))}
+.series-meta-grid{margin:10px 0 0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px 10px}.series-meta-grid dt{font-size:9px;color:rgb(var(--ui-t5));text-transform:uppercase;letter-spacing:.06em}.series-meta-grid dd{margin:2px 0 0;font-size:11px;color:rgb(var(--ui-t3));word-break:break-word}.series-note{margin:9px 0 0;font-size:10px;line-height:1.35;color:rgb(var(--ui-t5));word-break:break-word}
+.range-row{display:grid;grid-template-columns:1fr auto;gap:5px 10px;align-items:center;margin-bottom:10px;font-size:11px;color:rgb(var(--ui-t3))}.range-row output{color:rgb(var(--ui-t2));font-variant-numeric:tabular-nums}.range-row input[type=range]{grid-column:1/-1;width:100%;min-height:44px}
+.tool-grid{display:flex;flex-wrap:wrap;gap:6px}.tool-chip{border:1px solid rgb(var(--ui-b1));border-radius:7px;padding:7px 8px;background:rgb(var(--ui-s3));color:rgb(var(--ui-t5));font-size:11px;min-height:44px}.hint{margin:9px 0 0}
+.viewer-grid{min-width:0;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) minmax(240px,31%);gap:12px}.viewport-card{position:relative;min-height:0;background:rgb(var(--ui-canvas-bg-2d))}.viewport-card-main{min-height:360px}.mpr-column{min-height:0;display:grid;grid-template-rows:repeat(3,minmax(0,1fr));gap:12px}.viewport-label{position:absolute;z-index:4;top:10px;left:10px;display:flex;align-items:center;gap:7px;pointer-events:none}.viewport-label strong{font-size:11px;letter-spacing:.07em;text-transform:uppercase}.viewport-label span{font-size:10px;color:rgb(var(--ui-t5))}
+.viewport{width:100%;height:100%;min-height:320px}.viewport canvas,.viewport-3d,.mpr-canvas{touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}.viewport canvas{display:block;width:100%;height:100%}
+.selected-series-overlay{position:absolute;z-index:4;left:14px;bottom:14px;max-width:min(480px,calc(100% - 28px));padding:10px 12px;border:1px solid rgba(118,141,151,.26);border-radius:10px;background:rgb(var(--ui-s1) / 0.84);backdrop-filter:blur(12px);display:grid;gap:4px;pointer-events:none}.selected-series-overlay strong{font-size:12px}.selected-series-overlay span{font-size:11px;color:rgb(var(--ui-t5))}.ready-badge{width:fit-content;margin-top:3px;padding:4px 7px;background:rgb(var(--ui-green-bg));color:rgb(var(--ui-green-tx))!important}.ready-badge-error{background:rgb(var(--ui-red-bg2))!important;color:rgb(var(--ui-red-tx2))!important}
+.mpr-canvas{display:block;width:100%;height:100%;object-fit:contain;background:rgb(var(--ui-canvas-bg-2d))}.slice-slider{position:absolute;z-index:5;left:12px;right:12px;bottom:8px;width:calc(100% - 24px);opacity:.82;min-height:44px}
+.error-panel{width:100%;height:100%;display:grid;place-content:center;gap:8px;text-align:center;padding:28px;color:rgb(var(--ui-red-tx))}footer{color:rgb(var(--ui-t5));font-size:11px}
+@media(max-width:900px){body{overflow:auto}.app-shell{height:auto;min-height:100dvh}.workspace,.viewer-grid{grid-template-columns:1fr}.sidebar{grid-template-rows:auto auto}.series-list{max-height:360px}.mpr-column{grid-template-columns:repeat(3,minmax(0,1fr));grid-template-rows:none}.mpr-canvas{min-height:180px}}
+@media(max-width:640px){.app-shell{padding:9px}.topbar{align-items:flex-start;flex-direction:column}.topbar-actions{width:100%;flex-wrap:wrap;gap:8px}.status{width:100%;text-align:center}.primary-button,.secondary-button{flex:1 1 calc(50% - 4px)}.subtitle{display:none}.viewport-card-main{min-height:56dvh}.mpr-column{grid-template-columns:1fr;grid-template-rows:repeat(3,240px);gap:10px}.mpr-card{min-height:240px}.selected-series-overlay{left:8px;right:8px;bottom:8px;max-width:none}footer{font-size:10px}}
+
+.segment-heading{margin-top:10px}
+.segment-controls{display:grid;gap:8px;margin-bottom:10px}
+.segment-card{border:1px solid rgb(var(--ui-b1));border-radius:10px;padding:9px;background:rgb(var(--ui-s2))}
+.segment-card-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:7px}
+.segment-card-head label{display:flex;align-items:center;gap:8px;font-size:12px}
+.segment-card-head input[type="checkbox"]{width:20px;height:20px}
+.segment-head-right{display:flex;align-items:center;gap:8px}
+.segment-collapse{min-width:36px;min-height:36px;border:1px solid rgb(var(--ui-b1));border-radius:8px;background:rgb(var(--ui-s3));color:rgb(var(--ui-t2));font-size:14px;line-height:1;padding:0;transition:transform .15s}
+.segment-card.is-collapsed>:not(.segment-card-head){display:none}
+.segment-card.is-collapsed .segment-card-head{margin-bottom:0}
+.segment-card.is-collapsed .segment-collapse{transform:rotate(-90deg)}
+.segment-color{width:44px;height:32px;padding:0;border:1px solid rgb(var(--ui-b2));border-radius:7px;background:transparent}
+.segment-range{display:grid;grid-template-columns:58px 1fr auto;gap:7px;align-items:center;font-size:10px;color:rgb(var(--ui-t4))}
+.segment-range input[type="range"]{grid-column:1/-1;width:100%;min-height:34px}
+.segment-note{font-size:10px;color:rgb(var(--ui-amber-tx));margin:-2px 0 2px}
+.segment-range output{font-variant-numeric:tabular-nums;color:rgb(var(--ui-t2))}
+.segment-status{font-size:11px;line-height:1.4;color:rgb(var(--ui-blue-tx2));background:rgb(var(--ui-blue-bg));border-radius:6px;padding:6px 8px;font-variant-numeric:tabular-nums}
+.segment-status.is-error{color:rgb(var(--ui-red-tx));background:rgb(var(--ui-red-bg))}
+.segment-status.is-done{color:rgb(var(--ui-green-tx));background:rgb(var(--ui-green-bg))}
+.filter-grid{margin-top:4px}
+@media(max-width:640px){
+ .segment-card{padding:10px}
+ .segment-card-head label{font-size:13px}
+ .segment-range{grid-template-columns:64px 1fr auto;font-size:11px}
+ .segment-color{width:48px;height:38px}
+}
+
+.surface-smooth-card{border:1px solid rgb(var(--ui-b1));border-radius:10px;padding:10px;background:rgb(var(--ui-s2));margin:8px 0 10px}
+.surface-smooth-toggle{display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:6px}
+.surface-smooth-toggle input{width:20px;height:20px}
+
+
+.filter-control-list{display:grid;gap:8px;margin-top:6px}
+.filter-control-card{border:1px solid rgb(var(--ui-b1));border-radius:10px;padding:9px;background:rgb(var(--ui-s2))}
+.filter-control-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:7px}
+.filter-control-head strong{font-size:12px}
+.filter-apply{min-width:72px}
+.filter-reset{width:100%;justify-content:center}
+@media(max-width:640px){
+ .filter-control-card{padding:10px}
+ .filter-control-head strong{font-size:13px}
+}
+
+.filter-auto{display:inline-flex;align-items:center;justify-content:center;min-width:58px;opacity:.75;pointer-events:none}
+
+.filter-enable-label{display:flex;align-items:center;gap:12px;min-height:44px;width:100%;cursor:pointer}
+.filter-enable-label input[type=checkbox]{width:22px;height:22px;accent-color:#0a84ff;flex:none}
+.filter-enable-label strong{font-size:16px}
+.filter-enable-label:has(input:disabled){opacity:.55;cursor:default}
+
+/* Mobile: leave side gutters so page scrolling is easy beside the 3D viewport. */
+@media(max-width:640px){
+  .viewport-card-main{
+    width:calc(100% - 52px);
+    margin-inline:auto;
+    min-height:56dvh;
+  }
+  .viewport-3d,
+  .viewport-3d canvas{
+    touch-action:none;
+  }
+}
+
+/* Mobile: keep 3D and MPR viewports narrow enough to leave scroll gutters. */
+@media(max-width:640px){
+  .viewport-card-main,
+  .mpr-card{
+    width:calc(100% - 52px);
+    margin-inline:auto;
+  }
+  .mpr-column{
+    width:100%;
+  }
+}
+
+/* Mobile: 3D viewport interaction takes priority over page scrolling.
+   Use the side gutters for page scroll. */
+@media(max-width:640px){
+  .viewport-card-main .viewport-3d,
+  .viewport-card-main .viewport-3d canvas{
+    touch-action:none !important;
+    overscroll-behavior:contain;
+  }
+}
+
+
+/* Tablet landscape and desktop: use a dedicated inner scroll container. */
+@media(min-width:901px){
+  .workspace{
+    min-height:0;
+    overflow:hidden;
+  }
+  .sidebar{
+    min-height:0;
+    overflow:hidden;
+    display:block;
+  }
+  .sidebar-scroll{
+    height:100%;
+    min-height:0;
+    overflow-y:auto;
+    overflow-x:hidden;
+    -webkit-overflow-scrolling:touch;
+    overscroll-behavior-y:contain;
+    touch-action:pan-y;
+    padding-right:4px;
+  }
+  .sidebar-scroll>.panel{
+    margin-bottom:12px;
+  }
+  .sidebar-scroll>.panel:last-child{
+    margin-bottom:0;
+  }
+  .series-list{
+    max-height:32vh;
+  }
+  .sidebar-scroll input[type="range"]{
+    touch-action:pan-y;
+  }
+}
+
+.segment-export-stl{width:100%;min-height:36px;margin-top:8px;border:1px solid rgb(var(--ui-b3));border-radius:8px;background:rgb(var(--ui-s3));color:rgb(var(--ui-t2));font-size:11px;font-weight:800;cursor:pointer}
+.segment-export-stl:disabled{opacity:.45;cursor:default}
+
+.volume-analysis-panel{position:absolute;z-index:6;top:10px;right:10px;display:grid;justify-items:end;gap:8px;max-width:min(260px,70%)}
+.volume-analysis-panel .tool-chip{min-height:36px;border:1px solid rgb(var(--ui-b3));border-radius:8px;background:rgb(var(--ui-s3));color:rgb(var(--ui-t2));padding:7px 10px;font-size:11px;font-weight:800}
+.volume-analysis-panel .tool-chip.is-active{border-color:rgb(var(--ui-blue-bd));background:rgb(var(--ui-blue-bg));color:rgb(var(--ui-blue-tx))}
+.volume-analysis-result{display:grid;gap:3px;min-width:160px;padding:9px 10px;border:1px solid rgb(var(--ui-b2));border-radius:9px;background:rgb(var(--ui-s0) / 0.9);font-size:11px;color:rgb(var(--ui-t2))}
+.volume-analysis-result strong{font-size:12px}
+.volume-analysis-result span{font-variant-numeric:tabular-nums}
+
+.filter-select{min-height:34px;border:1px solid rgb(var(--ui-b3));border-radius:8px;background:rgb(var(--ui-s1));color:rgb(var(--ui-t2));padding:5px 8px;font-size:11px}
+.filter-select:disabled{opacity:.45}
+
+.filter-reorder-controls{display:inline-flex;align-items:center;gap:4px;margin-left:auto}.filter-order-button{width:24px;height:24px;border:1px solid rgb(var(--ui-b3));border-radius:6px;background:rgb(var(--ui-s1));color:rgb(var(--ui-t2));line-height:1;cursor:pointer}.filter-order-button:disabled{opacity:.28;cursor:default}.filter-drag-handle{padding:2px 4px;cursor:grab;user-select:none;touch-action:none;opacity:.75}.filter-control-card.is-dragging{opacity:.5}
+
+.filter-add-row{display:flex;gap:8px;align-items:center;margin:10px 0}.filter-add-row .filter-select{flex:1}.filter-internal-toggle{display:none}.filter-remove-button{width:24px;height:24px;border:1px solid rgb(var(--ui-red-bd));border-radius:6px;background:rgb(var(--ui-red-bg0));color:rgb(var(--ui-red-tx));line-height:1;cursor:pointer}.filter-remove-button:hover{background:rgb(var(--ui-red-bg0))}
+
+.segment-add-row{display:flex;gap:8px;align-items:end;margin:10px 0}.segment-preset-label{display:grid;gap:4px;flex:1;font-size:11px;color:rgb(var(--ui-t4))}.segment-remove-button{width:100%;margin-top:6px;border:1px solid rgb(var(--ui-red-bd));border-radius:7px;background:rgb(var(--ui-red-bg0));color:rgb(var(--ui-red-tx));padding:7px 8px;cursor:pointer}.segment-remove-button:disabled{opacity:.4;cursor:default}
+
+
+.processing-overlay{
+  position:fixed;
+  inset:0;
+  z-index:1000;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:12px;
+  background:rgba(5,8,10,.54);
+  backdrop-filter:blur(2px);
+  -webkit-backdrop-filter:blur(2px);
+  color:rgb(var(--ui-t1));
+  pointer-events:none;
+}
+.processing-overlay.is-hidden{display:none}
+.processing-overlay strong{
+  padding:7px 11px;
+  border-radius:8px;
+  background:rgb(var(--ui-s0) / 0.88);
+  border:1px solid rgb(var(--ui-b2));
+  font-size:13px;
+  letter-spacing:.01em;
+}
+.processing-spinner{
+  width:44px;
+  height:44px;
+  border:4px solid rgba(255,255,255,.22);
+  border-top-color:#fff;
+  border-radius:50%;
+  animation:vrl-processing-spin .8s linear infinite;
+}
+@keyframes vrl-processing-spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){
+  .processing-spinner{animation-duration:1.6s}
+}
+
+
+.three-busy{
+  position:absolute;
+  inset:0;
+  z-index:8;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:10px;
+  pointer-events:none;
+  background:rgba(5,8,10,.28);
+  color:rgb(var(--ui-t1));
+}
+.three-busy.is-hidden{display:none}
+.three-busy strong{
+  padding:6px 10px;
+  border-radius:8px;
+  background:rgb(var(--ui-s0) / 0.86);
+  border:1px solid rgb(var(--ui-b2));
+  font-size:13px;
+}
+.three-busy-spinner{
+  width:42px;
+  height:42px;
+  border:4px solid rgba(255,255,255,.22);
+  border-top-color:#fff;
+  border-radius:50%;
+  animation:vrl-processing-spin .8s linear infinite;
+}
+
+.viewport-card-main{position:relative}
+
+.ct-range-mode{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 9px;font-size:11px;color:rgb(var(--ui-t3))}
+.ct-range-buttons{display:inline-flex;border:1px solid rgb(var(--ui-b2));border-radius:8px;overflow:hidden}
+.range-mode-button{min-width:52px;min-height:34px;border:0;border-right:1px solid rgb(var(--ui-b2));background:rgb(var(--ui-s1));color:rgb(var(--ui-t4));padding:5px 9px;font-size:11px;font-weight:700}
+.range-mode-button:last-child{border-right:0}.range-mode-button.is-active{background:rgb(var(--ui-blue-bg));color:rgb(var(--ui-blue-tx))}.range-mode-button:disabled{opacity:.42}
+.filter-3d-commit{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;margin:8px 0 10px}
+.filter-rebuild-3d{justify-content:center;color:rgb(var(--ui-t2));border-color:rgb(var(--ui-b3))}.filter-rebuild-3d:not(:disabled){background:rgb(var(--ui-blue-bg));border-color:rgb(var(--ui-blue-bd));color:rgb(var(--ui-blue-tx))}
+.filter-3d-state{font-size:10px;padding:5px 7px;border-radius:7px;border:1px solid rgb(var(--ui-b2));color:rgb(var(--ui-t4));white-space:nowrap}
+.filter-3d-state.is-stale{background:rgb(var(--ui-amber-bg));border-color:rgb(var(--ui-amber-bd));color:rgb(var(--ui-amber-tx))}.filter-3d-state.is-updating{background:rgb(var(--ui-blue-bg));border-color:rgb(var(--ui-blue-bd2));color:rgb(var(--ui-blue-tx2))}.filter-3d-state.is-current{background:rgb(var(--ui-green-bg));border-color:rgb(var(--ui-green-bd));color:rgb(var(--ui-green-tx))}
+.view-slot{min-width:0;min-height:0;position:relative}
+.view-slot-main{min-height:360px}.view-slot-main>.viewport-card{width:100%;height:100%;min-height:360px}
+.view-slot-sub{min-height:0}.view-slot-sub>.viewport-card{width:100%;height:100%;min-height:0}
+.view-slot-sub .viewport,.view-slot-sub .mpr-canvas{min-height:0}
+.view-toolbar{pointer-events:auto;right:10px;width:auto}.view-toolbar>strong,.view-toolbar>span:not(.view-drag-handle){pointer-events:none}
+.view-drag-handle{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border:1px solid rgb(var(--ui-b2));border-radius:7px;background:rgb(var(--ui-s1) / 0.88);color:rgb(var(--ui-t3));cursor:grab;touch-action:none;user-select:none;font-size:14px;line-height:1}
+.view-drag-handle:active{cursor:grabbing}.view-main-button{min-height:30px;border:1px solid rgb(var(--ui-b2));border-radius:7px;background:rgb(var(--ui-s1) / 0.88);color:rgb(var(--ui-t2));padding:4px 7px;font-size:10px;font-weight:700}
+.view-slot-main .view-main-button{display:none}.view-card.is-view-dragging{outline:2px solid rgb(var(--ui-blue-bd));outline-offset:-2px;opacity:.82}.view-card.is-view-drop-target{outline:2px dashed #9bd7ee;outline-offset:-4px}
+@media(max-width:900px){.view-slot-main{min-height:420px}.view-slot-main>.viewport-card{min-height:420px}.view-slot-sub{min-height:180px}}
+@media(max-width:640px){.view-slot-main{width:calc(100% - 52px);margin-inline:auto;min-height:56dvh}.view-slot-main>.viewport-card{min-height:56dvh}.view-slot-sub{width:calc(100% - 52px);margin-inline:auto;min-height:240px}.view-main-button{font-size:9px;padding:3px 6px}}
+
+.view-toolbar{right:auto;width:max-content;max-width:calc(100% - 20px)}
+
+.three-busy-cancel{
+  pointer-events:auto;
+  min-width:148px;
+  min-height:46px;
+  padding:10px 16px;
+  border:1px solid rgb(var(--ui-red-bd2));
+  border-radius:10px;
+  background:rgb(var(--ui-red-bg2) / 0.94);
+  color:rgb(var(--ui-red-tx2));
+  font-size:13px;
+  font-weight:800;
+  cursor:pointer;
+  touch-action:manipulation;
+  box-shadow:0 6px 20px rgba(0,0,0,.28);
+}
+.three-busy-cancel:active{transform:translateY(1px)}
+.three-busy-cancel:disabled{opacity:.58;cursor:default}
+.filter-rebuild-3d.is-cancel{
+  background:rgb(var(--ui-red-bg2))!important;
+  border-color:rgb(var(--ui-red-bd2))!important;
+  color:rgb(var(--ui-red-tx2))!important;
+}
+
+.volume-analysis-panel{max-width:min(390px,88%)}
+.volume-analysis-result{min-width:290px;max-width:390px;gap:8px}
+.analysis-summary{font-size:11px;color:rgb(var(--ui-t2));min-height:16px}
+.analysis-actions{display:flex;gap:6px}
+.analysis-actions button,.analysis-region-button,.analysis-editor-actions button{min-height:32px;border:1px solid rgb(var(--ui-b3));border-radius:7px;background:rgb(var(--ui-s2));color:rgb(var(--ui-t2));padding:5px 8px;font-size:10px;font-weight:750;cursor:pointer}
+.analysis-actions button:disabled,.analysis-region-button:disabled,.analysis-editor-actions button:disabled{opacity:.4;cursor:default}
+.analysis-editor-actions{display:flex;flex-wrap:wrap;gap:5px;align-items:center;padding-top:2px;border-top:1px solid rgb(var(--ui-b1))}
+.analysis-editor-actions button.is-active{border-color:rgb(var(--ui-blue-bd));background:rgb(var(--ui-blue-bg));color:rgb(var(--ui-blue-tx))}
+.analysis-cut-confirm{display:grid;grid-template-columns:1fr 1fr;gap:5px;flex:1 1 100%;width:100%}
+.analysis-cut-confirm button:first-child{border-color:rgb(var(--ui-blue-bd));background:rgb(var(--ui-blue-bg));color:rgb(var(--ui-blue-tx))}
+.analysis-cut-width{display:grid;grid-template-columns:auto auto;gap:2px 6px;align-items:center;min-width:150px;padding:3px 0;color:rgb(var(--ui-t3));font-size:9px}
+.analysis-cut-width input{grid-column:1 / -1;width:150px}
+.analysis-cut-width output{font-variant-numeric:tabular-nums;text-align:right;color:rgb(var(--ui-t1))}
+.analysis-region-list{display:grid;gap:6px;max-height:240px;overflow:auto;overscroll-behavior:contain}
+.analysis-region-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;gap:6px;align-items:center;padding:7px;border:1px solid rgb(var(--ui-b1));border-radius:8px;background:rgb(var(--ui-s1) / 0.88)}
+.analysis-region-row.is-focused{border-color:rgb(var(--ui-blue-bd));background:rgb(var(--ui-blue-bg) / 0.92);box-shadow:0 0 0 1px rgba(105,184,216,.18) inset}
+.analysis-region-select{width:18px;height:18px}
+.analysis-region-info{display:grid;gap:2px;min-width:0}
+.analysis-region-info strong{font-size:11px;color:rgb(var(--ui-t1))}
+.analysis-region-info span{font-size:9px;color:rgb(var(--ui-t4));font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.analysis-region-delete{border-color:rgb(var(--ui-red-bd));color:rgb(var(--ui-red-tx))}
+@media(max-width:640px){.volume-analysis-panel{max-width:calc(100% - 20px)}.volume-analysis-result{min-width:min(310px,calc(100vw - 80px));max-width:calc(100vw - 80px)}.analysis-region-row{grid-template-columns:auto minmax(0,1fr) auto}.analysis-region-delete{grid-column:3}.analysis-region-button{padding:5px 6px}}
+
+.app-version-badge{
+  position:fixed;
+  right:10px;
+  bottom:8px;
+  z-index:1200;
+  padding:5px 8px;
+  border:1px solid rgba(110,130,140,.55);
+  border-radius:7px;
+  background:rgb(var(--ui-s0) / 0.82);
+  color:rgb(var(--ui-t3));
+  font-size:10px;
+  font-weight:700;
+  line-height:1;
+  font-variant-numeric:tabular-nums;
+  pointer-events:none;
+  user-select:none;
+  backdrop-filter:blur(4px);
+  -webkit-backdrop-filter:blur(4px);
+}
+@media(max-width:640px){
+  .app-version-badge{right:6px;bottom:6px;font-size:9px;padding:4px 6px}
+}
+
+.analysis-region-row{
+  grid-template-columns:auto auto minmax(0,1fr) auto auto;
+}
+.analysis-region-swatch{
+  width:14px;
+  height:14px;
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,.42);
+  box-shadow:0 0 0 1px rgba(0,0,0,.28) inset,0 0 8px rgba(255,255,255,.08);
+  flex:none;
+}
+@media(max-width:640px){
+  .analysis-region-row{grid-template-columns:auto auto minmax(0,1fr) auto}
+}
+
+/* Keep 3D rotation available under the volume-analysis overlay.
+   Only actual controls consume pointer input. */
+.volume-analysis-panel,
+.volume-analysis-result,
+.analysis-summary,
+.analysis-region-list,
+.analysis-region-row,
+.analysis-region-info,
+.analysis-region-swatch{
+  pointer-events:none;
+}
+.volume-analysis-panel button,
+.volume-analysis-panel input,
+.volume-analysis-panel select,
+.volume-analysis-panel label,
+.volume-analysis-panel summary,
+.three-edit-panel,
+.three-edit-panel-head{
+  pointer-events:auto;
+  touch-action:manipulation;
+}
+
+.three-overlay-controls{display:flex;flex-wrap:wrap;gap:4px;justify-content:flex-end;max-width:260px}.three-overlay-controls .tool-chip{min-height:28px;padding:4px 7px;font-size:10px}
+
+.three-edit-overlay{position:absolute;inset:0;width:100%;height:100%;z-index:7;pointer-events:none}
+.section-view-actions{display:flex;flex-wrap:wrap;gap:4px}.section-view-actions button{border:1px solid rgb(var(--ui-b3));border-radius:7px;background:rgb(var(--ui-s1));color:rgb(var(--ui-t2));padding:5px 7px;font-size:10px;font-weight:800;cursor:pointer}
+
+.three-edit-panel{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:6px 8px;border:1px solid rgba(93,141,255,.24);border-radius:8px;background:rgb(var(--ui-s0) / 0.78);backdrop-filter:blur(6px)}.three-edit-panel>strong{font-size:11px;white-space:nowrap}.three-edit-panel .analysis-editor-actions{display:flex;align-items:center;gap:4px;flex-wrap:wrap}.three-edit-panel button{min-height:28px}.three-edit-panel .analysis-cut-width{display:grid;grid-template-columns:1fr auto;gap:3px 8px;flex:1 1 100%;width:100%;min-width:0;font-size:10px}.three-edit-panel .analysis-cut-width input{grid-column:1/-1;width:100%;min-width:0;min-height:32px;touch-action:none}
+
+.three-edit-panel{display:grid;grid-template-columns:1fr;gap:6px}
+.three-edit-panel-head{display:flex;align-items:center;gap:8px;min-width:0}
+.three-edit-panel-head>strong{font-size:11px;white-space:nowrap}
+.three-edit-status{font-size:10px;line-height:1.25;color:rgb(var(--ui-t2));overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.three-edit-help{font-size:10px;line-height:1.35;color:rgb(var(--ui-t4))}
+.three-edit-target{display:flex;align-items:center;gap:4px;font-size:10px}
+.three-edit-target select{min-height:28px;border:1px solid rgb(var(--ui-b3));border-radius:7px;background:rgb(var(--ui-s1));color:rgb(var(--ui-t2));padding:4px 6px}
+.viewport.is-editing-3d{cursor:crosshair}
+.three-edit-panel button.is-active{outline:2px solid rgba(0,229,255,.45);outline-offset:1px}
+
+#viewport-3d.is-editing-3d,#viewport-3d.is-editing-3d canvas{cursor:crosshair!important}
+
+/* 3D edit controls stay out of the viewport until explicitly opened. */
+.three-edit-panel{max-width:min(390px,88%);padding:0;overflow:hidden}
+.three-edit-panel-head{padding:6px 8px;cursor:pointer;list-style:none;user-select:none;touch-action:manipulation}
+.three-edit-panel-head::-webkit-details-marker{display:none}
+.three-edit-panel-head::after{content:'▾';margin-left:auto;color:rgb(var(--ui-t4));font-size:10px;transition:transform .12s ease}
+.three-edit-panel[open] .three-edit-panel-head::after{transform:rotate(180deg)}
+.three-edit-panel:not([open]) .three-edit-status{max-width:170px}
+.three-edit-panel[open] .analysis-editor-actions{padding:6px 8px 2px}
+.three-edit-panel[open] .three-edit-help{padding:0 8px 7px}
+@media(max-width:640px){
+ .three-edit-panel{max-width:min(310px,calc(100vw - 80px))}
+ .three-edit-panel:not([open]) .three-edit-status{max-width:130px}
+}
+
+
+/* iPad workspace layout. Scoped by runtime class so desktop/Mac UI is unchanged. */
+html.vrl-ipad-ui,
+html.vrl-ipad-ui body,
+html.vrl-ipad-ui #app{height:100%;overflow:hidden}
+html.vrl-ipad-ui .app-shell{
+  height:100dvh;min-height:0;padding:8px;gap:8px;
+  grid-template-rows:auto auto minmax(0,1fr) auto;
+}
+html.vrl-ipad-ui .topbar{min-height:48px;gap:10px}
+html.vrl-ipad-ui .topbar .eyebrow,
+html.vrl-ipad-ui .topbar .subtitle{display:none}
+html.vrl-ipad-ui .topbar h1{font-size:20px;white-space:nowrap}
+html.vrl-ipad-ui .topbar-actions{gap:6px;flex-wrap:nowrap;min-width:0}
+html.vrl-ipad-ui .topbar-actions .primary-button,
+html.vrl-ipad-ui .topbar-actions .secondary-button,
+html.vrl-ipad-ui .topbar-actions .status{min-height:40px;padding:7px 10px;font-size:10px;white-space:nowrap}
+html.vrl-ipad-ui .topbar-actions .status{max-width:240px;overflow:hidden;text-overflow:ellipsis}
+
+.ipad-workspace-toolbar{display:none}
+html.vrl-ipad-ui .ipad-workspace-toolbar{
+  display:flex;align-items:center;gap:8px;min-height:46px;padding:5px 7px;
+  border:1px solid rgb(var(--ui-b1));border-radius:12px;background:rgb(var(--ui-s1));
+}
+html.vrl-ipad-ui .ipad-toolbar-button,
+html.vrl-ipad-ui .ipad-view-modes button,
+html.vrl-ipad-ui .ipad-mpr-tabs button,
+html.vrl-ipad-ui .ipad-drawer-head button,
+html.vrl-ipad-ui .ipad-drawer-tabs button{
+  min-height:40px;border:1px solid rgb(var(--ui-b2));border-radius:9px;background:rgb(var(--ui-s3));color:rgb(var(--ui-t2));
+  padding:7px 11px;font-size:12px;font-weight:800;touch-action:manipulation;
+}
+html.vrl-ipad-ui .ipad-view-modes,
+html.vrl-ipad-ui .ipad-mpr-tabs{display:flex;align-items:center;gap:5px}
+html.vrl-ipad-ui .ipad-mpr-tabs{margin-left:auto}
+html.vrl-ipad-ui .ipad-view-modes button.is-active,
+html.vrl-ipad-ui .ipad-mpr-tabs button.is-active,
+html.vrl-ipad-ui .ipad-drawer-tabs button.is-active{
+  background:rgb(var(--ui-blue-bg));border-color:rgb(var(--ui-blue-bd));color:rgb(var(--ui-blue-tx));
+}
+
+html.vrl-ipad-ui .workspace{display:block;min-height:0;overflow:hidden}
+html.vrl-ipad-ui .viewer-grid{height:100%;min-height:0;display:grid;gap:8px}
+html.vrl-ipad-ui .view-slot-main,
+html.vrl-ipad-ui .view-slot-main>.viewport-card{width:100%;height:100%;min-height:0;margin:0}
+html.vrl-ipad-ui .viewport-3d{min-height:0;height:100%}
+html.vrl-ipad-ui .view-drag-handle,
+html.vrl-ipad-ui .view-main-button{display:none!important}
+
+html.vrl-ipad-ui .mpr-column{height:100%;min-height:0;display:block}
+html.vrl-ipad-ui .mpr-column .view-slot-sub{display:none;width:100%;height:100%;min-height:0;margin:0}
+html.vrl-ipad-ui .mpr-column .view-slot-sub.is-ipad-active{display:block}
+html.vrl-ipad-ui .mpr-column .viewport-card{width:100%;height:100%;min-height:0}
+html.vrl-ipad-ui .mpr-canvas{width:100%;height:100%;min-height:0}
+
+html.vrl-ipad-ui .ipad-mode-3d .viewer-grid{grid-template-columns:1fr}
+html.vrl-ipad-ui .ipad-mode-3d #sub-view-slots{display:none}
+html.vrl-ipad-ui .ipad-mode-3d #main-view-slot{display:block}
+html.vrl-ipad-ui .ipad-mode-2d .viewer-grid{grid-template-columns:1fr}
+html.vrl-ipad-ui .ipad-mode-2d #main-view-slot{display:none}
+html.vrl-ipad-ui .ipad-mode-2d #sub-view-slots{display:block}
+html.vrl-ipad-ui .ipad-mode-split .viewer-grid{grid-template-columns:minmax(0,1.55fr) var(--ws-split-2d-w,minmax(290px,.85fr))}
+html.vrl-ipad-ui .ipad-mode-split #main-view-slot,
+html.vrl-ipad-ui .ipad-mode-split #sub-view-slots{display:block}
+
+html.vrl-ipad-ui .sidebar{
+  position:fixed;z-index:1300;top:0;bottom:0;left:0;width:min(430px,84vw);
+  display:grid!important;grid-template-rows:auto minmax(0,1fr);gap:0;
+  transform:translateX(-105%);transition:transform .18s ease;
+  border-right:1px solid rgb(var(--ui-b2));background:rgb(var(--ui-s1));box-shadow:12px 0 36px rgba(0,0,0,.42);
+  overflow:hidden;
+}
+html.vrl-ipad-ui.ipad-sidebar-open .sidebar{transform:translateX(0)}
+html.vrl-ipad-ui .ipad-sidebar-backdrop{
+  display:none;position:fixed;z-index:1290;inset:0;border:0;background:rgba(0,0,0,.42);padding:0;
+}
+html.vrl-ipad-ui.ipad-sidebar-open .ipad-sidebar-backdrop{display:block}
+html.vrl-ipad-ui .ipad-drawer-head{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;
+  border-bottom:1px solid rgb(var(--ui-b1));background:rgb(var(--ui-s1));
+}
+html.vrl-ipad-ui .ipad-drawer-head strong{font-size:16px}
+html.vrl-ipad-ui .sidebar-scroll{
+  height:100%;min-height:0;overflow-y:auto;overflow-x:hidden;padding:10px;
+  -webkit-overflow-scrolling:touch;overscroll-behavior:contain;touch-action:pan-y;
+}
+html.vrl-ipad-ui .ipad-drawer-tabs{
+  position:sticky;top:-10px;z-index:3;display:grid;grid-template-columns:repeat(3,1fr);gap:6px;
+  padding:10px 0;background:rgb(var(--ui-s1));
+}
+html.vrl-ipad-ui .is-ipad-drawer-hidden{display:none!important}
+html.vrl-ipad-ui .sidebar-scroll>.panel{margin:0 0 10px}
+html.vrl-ipad-ui .ipad-edit-drawer-panel{padding:10px}
+html.vrl-ipad-ui .ipad-edit-drawer-panel .three-edit-panel{
+  width:100%;max-width:none;border:0;background:transparent;backdrop-filter:none;
+}
+html.vrl-ipad-ui .ipad-edit-drawer-panel .three-edit-panel-head{display:none}
+html.vrl-ipad-ui .ipad-edit-drawer-panel .analysis-editor-actions{padding:0;gap:8px}
+html.vrl-ipad-ui .ipad-edit-drawer-panel .analysis-editor-actions button,
+html.vrl-ipad-ui .ipad-edit-drawer-panel .three-edit-target select{min-height:44px;font-size:12px}
+html.vrl-ipad-ui .ipad-edit-drawer-panel .analysis-cut-width{font-size:11px}
+html.vrl-ipad-ui .ipad-edit-drawer-panel .analysis-cut-width input{min-height:44px}
+
+html.vrl-ipad-ui #ipad-gpu-quality-control{
+  width:100%;justify-content:space-between;margin:6px 0 10px;min-height:44px!important;
+  border:1px solid rgb(var(--ui-b2))!important;background:rgb(var(--ui-s2))!important;color:rgb(var(--ui-t2))!important;
+}
+html.vrl-ipad-ui #ipad-gpu-quality-control select{
+  min-height:34px;border:1px solid rgb(var(--ui-b3));border-radius:7px;background:rgb(var(--ui-s1));color:rgb(var(--ui-t1));padding:4px 8px;
+}
+html.vrl-ipad-ui .mpr-opacity-settings{min-width:0!important;width:100%!important;margin-top:10px}
+
+html.vrl-ipad-ui .volume-analysis-panel{
+  top:8px;right:8px;max-width:min(340px,58%);gap:6px;
+}
+html.vrl-ipad-ui .volume-analysis-panel>.tool-chip{min-height:40px}
+html.vrl-ipad-ui .three-overlay-controls{max-width:300px}
+html.vrl-ipad-ui .three-overlay-controls .tool-chip{min-height:36px;padding:6px 9px}
+
+html.vrl-ipad-ui #section-view-result{
+  position:fixed;z-index:1500;left:12px;right:12px;bottom:12px;
+  width:auto;max-width:none;min-width:0;max-height:46dvh;overflow:auto;
+  padding:14px 16px 16px;border-radius:15px;background:rgb(var(--ui-s0) / 0.97);
+  box-shadow:0 -12px 38px rgba(0,0,0,.4);pointer-events:auto;
+  -webkit-overflow-scrolling:touch;
+}
+html.vrl-ipad-ui #section-view-result .section-view-actions{gap:8px}
+html.vrl-ipad-ui #section-view-result .section-view-actions button{min-height:42px;padding:8px 12px;font-size:12px}
+html.vrl-ipad-ui #section-view-result input[type=range]{min-height:44px}
+html.vrl-ipad-ui #section-view-result .section-cap-settings{grid-template-columns:repeat(2,minmax(0,1fr));column-gap:18px!important}
+html.vrl-ipad-ui #section-view-result .section-cap-settings label{min-height:40px}
+
+html.vrl-ipad-ui .selected-series-overlay{max-width:min(420px,56%);padding:8px 10px}
+html.vrl-ipad-ui footer{min-height:18px;display:flex;justify-content:space-between;gap:10px}
+
+@media (orientation:portrait){
+ html.vrl-ipad-ui .ipad-mode-split .viewer-grid{grid-template-columns:1fr;grid-template-rows:minmax(0,1.2fr) var(--ws-split-2d-h,minmax(260px,.8fr))}
+ html.vrl-ipad-ui .ipad-mode-split #main-view-slot,
+ html.vrl-ipad-ui .ipad-mode-split #sub-view-slots{min-height:0}
+ html.vrl-ipad-ui .topbar-actions #gpu-status{display:none}
+ html.vrl-ipad-ui .ipad-workspace-toolbar{flex-wrap:wrap}
+ html.vrl-ipad-ui .ipad-mpr-tabs{margin-left:0}
+}
+
+
+/* keep iPad settings visible at all times.
+   Landscape = left settings rail. Portrait = bottom settings panel. */
+html.vrl-ipad-ui.ipad-settings-persistent .workspace{
+  display:grid;
+  grid-template-columns:minmax(270px,300px) minmax(0,1fr);
+  gap:8px;
+  min-height:0;
+  overflow:hidden;
+}
+html.vrl-ipad-ui.ipad-settings-persistent .sidebar{
+  position:static;
+  z-index:auto;
+  top:auto;bottom:auto;left:auto;
+  width:auto;min-width:0;height:100%;
+  transform:none!important;
+  transition:none;
+  border:1px solid rgb(var(--ui-b1));
+  border-radius:12px;
+  box-shadow:none;
+  background:rgb(var(--ui-s1));
+  overflow:hidden;
+}
+html.vrl-ipad-ui.ipad-settings-persistent .ipad-sidebar-backdrop{display:none!important}
+html.vrl-ipad-ui.ipad-settings-persistent .ipad-drawer-head{
+  display:flex;
+  min-height:42px;
+  padding:9px 12px;
+  border-bottom:1px solid rgb(var(--ui-b1));
+}
+html.vrl-ipad-ui.ipad-settings-persistent .ipad-drawer-head button{display:none!important}
+html.vrl-ipad-ui.ipad-settings-persistent .sidebar-scroll{
+  height:calc(100% - 42px);
+  min-height:0;
+  overflow-y:auto;
+  overflow-x:hidden;
+  padding:8px;
+}
+html.vrl-ipad-ui.ipad-settings-persistent .ipad-drawer-tabs{
+  top:-8px;
+  padding:8px 0;
+}
+html.vrl-ipad-ui.ipad-settings-persistent .ipad-drawer-tabs button{
+  min-height:38px;
+  padding:6px 8px;
+  font-size:11px;
+}
+html.vrl-ipad-ui.ipad-settings-persistent .viewer-grid{
+  height:100%;
+  min-height:0;
+}
+html.vrl-ipad-ui.ipad-settings-persistent .ipad-workspace-toolbar{
+  padding-left:8px;
+}
+html.vrl-ipad-ui.ipad-settings-persistent .ipad-toolbar-button{display:none!important}
+html.vrl-ipad-ui.ipad-settings-persistent .ipad-mpr-tabs{margin-left:auto}
+
+html.vrl-ipad-ui.ipad-settings-persistent .sidebar .panel{
+  padding:10px;
+  border-radius:10px;
+}
+html.vrl-ipad-ui.ipad-settings-persistent .sidebar .panel-heading{margin-bottom:7px}
+html.vrl-ipad-ui.ipad-settings-persistent .sidebar .range-row{margin-bottom:7px}
+html.vrl-ipad-ui.ipad-settings-persistent .sidebar .range-row input[type=range],
+html.vrl-ipad-ui.ipad-settings-persistent .sidebar .segment-range input[type=range]{
+  min-height:38px;
+}
+html.vrl-ipad-ui.ipad-settings-persistent .ipad-edit-drawer-panel .analysis-editor-actions{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:6px;
+}
+html.vrl-ipad-ui.ipad-settings-persistent .ipad-edit-drawer-panel .analysis-editor-actions>button,
+html.vrl-ipad-ui.ipad-settings-persistent .ipad-edit-drawer-panel .three-edit-target,
+html.vrl-ipad-ui.ipad-settings-persistent .ipad-edit-drawer-panel .analysis-cut-width,
+html.vrl-ipad-ui.ipad-settings-persistent .ipad-edit-drawer-panel .analysis-cut-confirm{
+  min-width:0;
+}
+html.vrl-ipad-ui.ipad-settings-persistent .ipad-edit-drawer-panel .three-edit-target,
+html.vrl-ipad-ui.ipad-settings-persistent .ipad-edit-drawer-panel .analysis-cut-width,
+html.vrl-ipad-ui.ipad-settings-persistent .ipad-edit-drawer-panel .analysis-cut-confirm{
+  grid-column:1 / -1;
+}
+html.vrl-ipad-ui.ipad-settings-persistent .ipad-edit-drawer-panel .analysis-cut-confirm{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:6px;
+}
+
+@media (orientation:portrait){
+ html.vrl-ipad-ui.ipad-settings-persistent .workspace{
+   grid-template-columns:1fr;
+   grid-template-rows:minmax(0,1fr) var(--ws-bottom-h,minmax(250px,34dvh));
+ }
+ html.vrl-ipad-ui.ipad-settings-persistent .viewer-grid{grid-row:1}
+ html.vrl-ipad-ui.ipad-settings-persistent .sidebar{
+   grid-row:2;
+   width:100%;
+   height:100%;
+ }
+ html.vrl-ipad-ui.ipad-settings-persistent .ipad-drawer-head{
+   min-height:38px;
+   padding:7px 10px;
+ }
+ html.vrl-ipad-ui.ipad-settings-persistent .sidebar-scroll{
+   height:calc(100% - 38px);
+   padding:6px 8px 8px;
+ }
+ html.vrl-ipad-ui.ipad-settings-persistent .ipad-drawer-tabs{
+   top:-6px;
+   grid-template-columns:repeat(3,minmax(0,1fr));
+   padding:6px 0;
+ }
+ html.vrl-ipad-ui.ipad-settings-persistent .sidebar .panel{padding:8px}
+ html.vrl-ipad-ui.ipad-settings-persistent .series-list{max-height:20dvh}
+}
+
+
+/* iPad overlap audit.
+   Large analysis controls live in the persistent settings column, not over the 3D viewport. */
+html.vrl-ipad-ui .ipad-analysis-settings{
+  display:grid;
+  gap:8px;
+  margin:8px 0 10px;
+}
+html.vrl-ipad-ui .ipad-analysis-settings:empty{display:none}
+html.vrl-ipad-ui #section-view-result,
+html.vrl-ipad-ui #volume-analysis-result{
+  position:static!important;
+  inset:auto!important;
+  left:auto!important;
+  right:auto!important;
+  bottom:auto!important;
+  top:auto!important;
+  width:100%!important;
+  min-width:0!important;
+  max-width:none!important;
+  max-height:none!important;
+  overflow:visible!important;
+  margin:0!important;
+  padding:10px!important;
+  border-radius:10px!important;
+  box-shadow:none!important;
+  background:rgb(var(--ui-s2))!important;
+  pointer-events:auto!important;
+}
+html.vrl-ipad-ui #section-view-result .section-view-actions{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:6px;
+}
+html.vrl-ipad-ui #section-view-result .section-view-actions button{
+  min-height:40px;
+  padding:7px 8px;
+  font-size:11px;
+}
+html.vrl-ipad-ui #section-view-result .section-position-control{
+  display:grid;
+  grid-template-columns:1fr auto;
+  gap:4px 8px;
+  align-items:center;
+}
+html.vrl-ipad-ui #section-view-result .section-position-control input{
+  grid-column:1/-1;
+  width:100%;
+  min-height:40px;
+}
+html.vrl-ipad-ui #section-view-result .section-cap-settings{
+  grid-template-columns:1fr!important;
+  gap:6px!important;
+}
+html.vrl-ipad-ui #section-view-result .section-cap-settings label{
+  min-height:38px;
+}
+html.vrl-ipad-ui #volume-analysis-result .analysis-actions{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:6px;
+}
+html.vrl-ipad-ui #volume-analysis-result .analysis-actions button{
+  min-height:40px;
+}
+html.vrl-ipad-ui #volume-analysis-result .analysis-region-list{
+  max-height:240px;
+  overflow:auto;
+  pointer-events:auto;
+}
+html.vrl-ipad-ui #volume-analysis-result .analysis-region-row,
+html.vrl-ipad-ui #volume-analysis-result .analysis-summary,
+html.vrl-ipad-ui #volume-analysis-result .analysis-region-info{
+  pointer-events:auto;
+}
+
+/* Keep only compact, non-modal controls over the 3D viewport. */
+html.vrl-ipad-ui .volume-analysis-panel{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:flex-start;
+  justify-content:flex-end;
+  gap:6px;
+  max-width:min(560px,72%);
+}
+html.vrl-ipad-ui .volume-analysis-panel>.tool-chip{
+  min-height:38px;
+}
+html.vrl-ipad-ui .three-overlay-controls{
+  flex:0 1 auto;
+  max-width:100%;
+}
+html.vrl-ipad-ui .three-overlay-controls .tool-chip{
+  min-height:38px;
+}
+
+/* Version marker stays visible without covering 3D navigation buttons. */
+html.vrl-ipad-ui .app-version-badge{
+  position:static!important;
+  right:auto!important;
+  bottom:auto!important;
+  margin-left:auto;
+  flex:none;
+}
+html.vrl-ipad-ui footer{
+  align-items:center;
+}
+
+/* Leave the lower-right 3D navigation area unobstructed. */
+html.vrl-ipad-ui .selected-series-overlay{
+  right:auto;
+  max-width:min(420px,48%);
+}
+@media (orientation:portrait){
+ html.vrl-ipad-ui .volume-analysis-panel{max-width:min(460px,88%)}
+ html.vrl-ipad-ui #section-view-result .section-view-actions{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+/* GPU volume shows unfiltered CT while filters are active (see updateVolumeFilterBadge) */
+.three-filter-badge{position:absolute;left:10px;bottom:10px;z-index:6;max-width:calc(100% - 20px);padding:5px 9px;border-radius:6px;background:rgb(var(--ui-amber-bg2) / 0.92);color:rgb(var(--ui-on-amber));font-size:12px;font-weight:600;line-height:1.35;pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,.35)}
+/* slice sliders for MPR planes shown in the 3D view (syncMpr3DSliceSliders) */
+.mpr3d-slice-controls{display:grid;gap:6px;min-width:230px;padding:7px 9px;border:1px solid rgb(var(--ui-b2));border-radius:9px;background:rgb(var(--ui-s0) / 0.88)}
+.mpr3d-slice-controls.is-hidden,.mpr3d-slice-row.is-hidden{display:none}
+.mpr3d-slice-row{display:grid;grid-template-columns:62px 1fr 74px;gap:8px;align-items:center;font-size:12px}
+.mpr3d-slice-row input{width:100%}
+.mpr3d-slice-row output{text-align:right;font-variant-numeric:tabular-nums;opacity:.85}
+
+/* full GPU status text (the top chip is truncated) */
+.gpu-status-bar{margin-top:6px;padding:4px 10px;border:1px solid rgb(var(--ui-green-bd));border-radius:7px;background:rgb(var(--ui-green-bg0));color:rgb(var(--ui-green-tx));font:11px/1.45 ui-monospace,Menlo,monospace;white-space:normal;overflow-wrap:anywhere}
+.gpu-status-bar:empty{display:none}
+.gpu-status-bar.is-warning{border-color:rgb(var(--ui-amber-bd));background:rgb(var(--ui-amber-bg0));color:rgb(var(--ui-amber-tx))}
+/* the bar above the footer replaces the top chip */
+#gpu-status{display:none!important}
+
+/* settings dialog; tabs so more pages can be added later */
+.settings-dialog{width:min(460px,calc(100vw - 32px));border:1px solid rgb(var(--ui-b2));border-radius:12px;background:rgb(var(--ui-s2));color:rgb(var(--ui-t2));padding:14px 16px}
+.settings-dialog::backdrop{background:rgba(0,0,0,.55)}
+.settings-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.settings-head button{min-width:40px}
+.settings-tabs{display:flex;gap:6px;border-bottom:1px solid rgb(var(--ui-b1));margin-bottom:10px}
+.settings-tab{background:none;border:0;border-bottom:2px solid transparent;color:rgb(var(--ui-t4));padding:8px 12px;font:inherit;cursor:pointer}
+.settings-tab.is-active{color:rgb(var(--ui-t1));border-bottom-color:rgb(var(--ui-blue-bd))}
+.settings-row{display:flex;justify-content:space-between;align-items:center;gap:12px;min-height:44px}
+.settings-row select{min-height:34px;border:1px solid rgb(var(--ui-b3));border-radius:7px;background:rgb(var(--ui-s1));color:rgb(var(--ui-t1));padding:4px 8px}
+.settings-check{justify-content:flex-start}
+.settings-check input{width:20px;height:20px}
+.settings-foot{margin-top:10px}
+/* the message line (timings, results) was 11px grey and easy to
+   miss; show it as a second status bar, same size as the GPU bar */
+.gpu-status-bar{font-size:12px}
+footer{display:flex!important;gap:10px;margin-top:6px!important;align-items:center!important}
+footer>a{flex:none}
+html:not(.vrl-ipad-ui) footer{padding-right:250px}
+footer #footer{flex:1;min-width:0;padding:5px 10px;border:1px solid rgb(var(--ui-b2));border-radius:7px;background:rgb(var(--ui-s2));color:rgb(var(--ui-t2));font:12px/1.5 ui-monospace,Menlo,monospace;white-space:normal;overflow-wrap:anywhere}
+footer #footer:empty{display:none}
+/* filter cards overflowed the narrow side panel (title wrapped,
+   type select and sliders cut off). Title on its own row, controls below,
+   everything shrinks to the panel width. */
+.filter-control-list,.filter-control-card{min-width:0;max-width:100%;box-sizing:border-box}
+.filter-control-card{overflow:hidden}
+.filter-control-head{flex-wrap:wrap;row-gap:6px}
+.filter-control-head .filter-enable-label{flex:1 1 100%;min-width:0}
+.filter-control-head strong{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.filter-control-head .filter-reorder-controls{flex:none;display:inline-flex;gap:4px;align-items:center}
+.filter-control-head .filter-select{flex:1 1 0;min-width:0;max-width:100%}
+.filter-control-card .segment-range{min-width:0}
+.filter-control-card .segment-range input[type=range]{width:100%;min-width:0;box-sizing:border-box}
+
+/* settings > cache */
+.settings-cache-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:8px 0}
+.settings-cache-list{display:grid;gap:6px;max-height:40vh;overflow:auto}
+.settings-cache-row{display:flex;justify-content:space-between;align-items:center;gap:8px;border:1px solid rgb(var(--ui-b1));border-radius:8px;padding:6px 8px}
+.settings-cache-text{min-width:0;font-size:12px;overflow-wrap:anywhere}
+.settings-cache-text small{color:rgb(var(--ui-t4))}
+.gpu-status-bar{height:calc(1.45em * 2 + 10px);overflow-y:auto;box-sizing:border-box}
+footer #footer{height:calc(1.5em * 2 + 10px);overflow-y:auto;box-sizing:border-box}
+footer #footer:empty{display:block}
+
+/* one progress modal for every long operation (progress-modal.js); the older
+   indicators (full-screen overlay, 3D-view overlay, side-panel bar) are no longer shown */
+#processing-overlay,#three-busy,#scan-progress{display:none!important}
+.job-modal{position:fixed;inset:0;z-index:20000;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(5,8,10,.55);backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px);color:rgb(var(--ui-t1));pointer-events:auto;touch-action:none}
+.job-modal.is-hidden{display:none}
+.job-card{width:min(92vw,420px);display:grid;gap:10px;padding:18px 20px;border-radius:14px;background:rgb(var(--ui-s2) / 0.97);border:1px solid rgb(var(--ui-b2));box-shadow:0 10px 34px rgba(0,0,0,.45);font:14px system-ui,-apple-system,sans-serif}
+.job-head{display:flex;align-items:center;gap:12px}
+.job-title{font-size:15px;line-height:1.35}
+.job-spinner{flex:none;width:22px;height:22px;border:3px solid rgba(255,255,255,.2);border-top-color:#fff;border-radius:50%;animation:vrl-processing-spin .8s linear infinite}
+.job-detail{color:rgb(var(--ui-t3));font-size:13px;line-height:1.4;word-break:break-word}
+.job-track{height:8px;border-radius:4px;background:rgb(var(--ui-s4));overflow:hidden;position:relative}
+.job-bar{height:100%;width:0;background:rgb(var(--ui-accent));transition:width .2s}
+.job-track.is-indeterminate .job-bar{position:absolute;width:30%;animation:vrl-job-slide 1.2s ease-in-out infinite}
+@keyframes vrl-job-slide{from{left:-30%}to{left:100%}}
+.job-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:40px}
+.job-time{color:rgb(var(--ui-t4));font-size:12px;font-variant-numeric:tabular-nums}
+.job-button{min-width:96px;min-height:40px;padding:8px 14px;border:1px solid rgb(var(--ui-red-bd2));border-radius:9px;background:rgb(var(--ui-red-bg2) / 0.94);color:rgb(var(--ui-red-tx2));font-size:13px;font-weight:700;cursor:pointer;touch-action:manipulation}
+.job-button.is-close{border-color:rgb(var(--ui-b3));background:rgb(var(--ui-s4));color:rgb(var(--ui-t1))}
+.job-button:disabled{opacity:.58;cursor:default}
+.job-button.is-hidden,.job-help.is-hidden,.job-detail.is-hidden{display:none}
+.job-help{color:rgb(var(--ui-t4));font-size:12px}
+@media (prefers-reduced-motion:reduce){.job-spinner{animation-duration:1.6s}.job-track.is-indeterminate .job-bar{animation:none;width:100%;opacity:.45}}
+
+/* the range in use when the card priority trims a segment's range */
+.segment-effective{margin:-2px 0 6px;font-size:11px;line-height:1.35;color:var(--muted,rgb(var(--ui-t3)))}
+.segment-effective.is-hidden{display:none}
+.segment-exclusive-row select{width:100%}
+.segment-material-row select{grid-column:2/-1;width:100%;min-width:0} /* material preset of a segment */
+
+/* drag the segment cards (⋮⋮) to set their priority */
+.segment-drag-handle{cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;padding:2px 6px;margin-right:4px;color:var(--muted,rgb(var(--ui-t3)));font-size:14px;line-height:1}
+.segment-drag-handle:active{cursor:grabbing}
+.segment-card.is-dragging{opacity:.75;outline:2px solid var(--accent,#3d8bfd);outline-offset:2px}
+/* the value next to a slider can be typed in (range-entry.js) */
+label:has(input[type=range]) output{cursor:text;border-bottom:1px dotted rgb(var(--ui-t3) / .45)}
+label:has(input[type=range]) output:hover{border-bottom-color:rgba(0,229,255,.8)}
+.range-entry-field{width:7.5em;max-width:100%;justify-self:end;font:inherit;font-variant-numeric:tabular-nums;color:rgb(var(--ui-t1));background:rgb(var(--ui-s0));border:1px solid #00b8d4;border-radius:5px;padding:2px 5px;text-align:right}
+
+/* The 3D card keeps a dark background in every theme (tinted like the theme) and re-declares the standard dark UI tokens
+   (themes.css), so the buttons, labels and cards on the 3D view read on it. */
+.view-card-3d{background:rgb(var(--ui-canvas-bg-3d))}
+/* 451: colour themes. Tokens (themes.css) are space-separated RGB triplets: rgb(var(--ui-s1)) / rgb(var(--ui-s1) / .88).
+   The UI of the view cards and the canvas backgrounds follow the theme; the image itself (grey levels, window / level,
+   segment colours, volume transfer function) never reads a token. */
+.theme-quick{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:800;color:rgb(var(--ui-t3))}
+.theme-quick select{min-height:44px;border:1px solid rgb(var(--ui-b3));border-radius:999px;background:rgb(var(--ui-s3));color:rgb(var(--ui-t2));padding:0 10px;font-size:11px;font-weight:800}
+html.vrl-ipad-ui .theme-quick select{min-height:40px;padding:7px 8px;font-size:10px;max-width:150px}
+@media(max-width:640px){.theme-quick{flex:1 1 calc(50% - 4px)}.theme-quick select{width:100%}}
+.theme-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:0;padding:0;border:0}
+.theme-option{display:grid;gap:6px;padding:8px;border:1px solid rgb(var(--ui-b2));border-radius:10px;background:rgb(var(--ui-s2));color:rgb(var(--ui-t2));text-align:left;cursor:pointer;font-size:12px;font-weight:700;min-height:44px}
+.theme-option[aria-checked="true"]{border-color:rgb(var(--ui-blue-bd));box-shadow:inset 0 0 0 1px rgb(var(--ui-blue-bd))}
+.theme-option .theme-swatch{display:flex;height:26px;border-radius:6px;overflow:hidden;border:1px solid rgba(128,128,128,.45)}
+.theme-option .theme-swatch i{flex:1}
+.theme-option small{font-size:10px;font-weight:600;color:rgb(var(--ui-t4))}
+
+/* Linked crosshair: the lines live on their own canvas above the slice canvas (the slice pixels never change), the
+   readout is a small label over the card. Fixed colours with a dark halo (drawn in crosshair-ui.js): visible in every theme. */
+.mpr-crosshair-canvas{position:absolute;inset:0;width:100%;height:100%;z-index:3;pointer-events:none}
+.view-card-mpr .view-toolbar{flex-wrap:wrap}
+.crosshair-toggle,.comment-toggle{min-height:30px;border:1px solid rgb(var(--ui-b2));border-radius:7px;background:rgb(var(--ui-s1) / 0.88);color:rgb(var(--ui-t2));padding:4px 8px;font-size:10px;font-weight:700;pointer-events:auto;touch-action:manipulation}
+.crosshair-toggle.is-active{border-color:rgb(var(--ui-blue-bd));background:rgb(var(--ui-blue-bg));color:rgb(var(--ui-blue-tx))}
+.crosshair-toggle:disabled,.comment-toggle:disabled{opacity:.45}
+.crosshair-readout{position:absolute;z-index:4;left:10px;bottom:58px;max-width:calc(100% - 20px);padding:4px 8px;border:1px solid rgba(255,255,255,.2);border-radius:7px;background:rgba(0,0,0,.78);color:#fff;font-size:11px;line-height:1.45;font-variant-numeric:tabular-nums;pointer-events:none;display:grid;gap:0}
+.crosshair-readout[hidden]{display:none}
+.crosshair-readout b{color:#fff;font-weight:800}
+html.vrl-ipad-ui .crosshair-toggle,html.vrl-ipad-ui .comment-toggle{min-height:38px;padding:6px 11px;font-size:12px}
+html.vrl-ipad-ui .crosshair-readout{font-size:12px}
+/* Position comments (stage 2): theme tokens only, touch-sized buttons */
+.comment-panel{margin-top:10px;border:1px solid rgb(var(--ui-b2));border-radius:8px;padding:6px 8px;background:rgb(var(--ui-s1) / 0.5)}
+.comment-panel>summary{cursor:pointer;font-size:12px;font-weight:700;color:rgb(var(--ui-t1));min-height:28px;display:flex;align-items:center}
+.comment-hint,.comment-note,.comment-meta,.comment-empty{margin:4px 0;font-size:11px;color:rgb(var(--ui-t2))}
+.comment-input{width:100%;box-sizing:border-box;margin:4px 0;font:inherit;font-size:13px;padding:6px;border:1px solid rgb(var(--ui-b2));border-radius:6px;background:rgb(var(--ui-s1));color:rgb(var(--ui-t1));resize:vertical}
+.comment-list{list-style:none;margin:6px 0 0;padding:0;display:grid;gap:6px}
+.comment-item{border:1px solid rgb(var(--ui-b2));border-radius:7px;padding:6px 8px}
+.comment-text{margin:0;font-size:13px;color:rgb(var(--ui-t1));white-space:pre-wrap;overflow-wrap:anywhere}
+.comment-undo{margin:4px 0;font-size:12px;color:rgb(var(--ui-t1));display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.comment-undo[hidden]{display:none}
+.comment-color{width:26px;height:26px;padding:0;border-radius:50%;border:2px solid rgb(var(--ui-t1));box-shadow:0 0 0 1px rgba(0,0,0,.45);cursor:pointer;align-self:center}
+.comment-color-palette{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px}
+.comment-color-opt{width:28px;height:28px;padding:0;border-radius:50%;border:2px solid transparent;box-shadow:0 0 0 1px rgba(0,0,0,.45);cursor:pointer}
+.comment-color-opt.is-current{border-color:rgb(var(--ui-t1))}
+.vrl-ipad-ui .comment-color{width:36px;height:36px}
+.vrl-ipad-ui .comment-color-opt{width:40px;height:40px}
+.comment-actions{display:flex;gap:14px;margin-top:6px;flex-wrap:wrap}
+.comment-panel .tool-chip{min-height:34px;touch-action:manipulation}
+.comment-panel .tool-chip:disabled{opacity:.45}
+.comment-item .comment-edit-input{margin:4px 0}
+html.vrl-ipad-ui .comment-item .comment-edit-input{font-size:16px}
+html.vrl-ipad-ui .comment-panel .tool-chip{min-height:40px}
+
+/* Comment popover opened from the toolbar button of an MPR card: sits inside the card above the slider, theme tokens only */
+.comment-toggle[aria-expanded="true"]{border-color:rgb(var(--ui-blue-bd));background:rgb(var(--ui-blue-bg));color:rgb(var(--ui-blue-tx))}
+.comment-popover{position:absolute;z-index:6;left:10px;right:10px;bottom:62px;max-width:420px;display:grid;gap:6px;padding:8px;border:1px solid rgb(var(--ui-b2));border-radius:9px;background:rgb(var(--ui-s1));color:rgb(var(--ui-t1));box-shadow:0 4px 18px rgba(0,0,0,.35);pointer-events:auto}
+.comment-popover[hidden]{display:none}
+.comment-popover .comment-pop-pos{margin:0;font-size:11px;color:rgb(var(--ui-t2));font-variant-numeric:tabular-nums}
+.comment-popover .comment-input{margin:0}
+.comment-popover .comment-pop-actions{display:flex;gap:10px;flex-wrap:wrap}
+.comment-popover .tool-chip{min-height:34px;touch-action:manipulation}
+html.vrl-ipad-ui .comment-popover .tool-chip{min-height:40px}
+html.vrl-ipad-ui .comment-popover .comment-input{font-size:16px}
+
+/* Comment markers (drawn on the overlay canvas in comment-ui.js) + the tap bubble and list number: theme tokens, dark outline on the canvas */
+.comment-show{display:flex;align-items:center;gap:8px;margin:6px 0;font-size:12px;color:rgb(var(--ui-t1));min-height:32px}
+.comment-show input{width:18px;height:18px;margin:0}
+.comment-no{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;margin-right:6px;border-radius:10px;background:rgb(var(--ui-blue-bg));color:rgb(var(--ui-blue-tx));border:1px solid rgb(var(--ui-blue-bd));font-size:11px;font-weight:800;vertical-align:middle}
+.comment-item.is-highlight{border-color:rgb(var(--ui-blue-bd));background:rgb(var(--ui-blue-bg))}
+.comment-bubble{position:absolute;z-index:5;display:flex;gap:6px;align-items:flex-start;padding:6px 9px;border:1px solid rgb(var(--ui-b2));border-radius:9px;background:rgb(var(--ui-s1));color:rgb(var(--ui-t1));box-shadow:0 3px 14px rgba(0,0,0,.35);font-size:12px;line-height:1.4;pointer-events:none}
+.comment-bubble[hidden]{display:none}
+.comment-bubble-no{flex:none;min-width:18px;height:18px;border-radius:9px;background:rgb(var(--ui-blue-bg));color:rgb(var(--ui-blue-tx));border:1px solid rgb(var(--ui-blue-bd));box-sizing:border-box;text-align:center;font-size:11px;line-height:18px}
+.comment-bubble-text{white-space:pre-wrap;overflow-wrap:anywhere;max-height:6.5em;overflow:hidden}
+
+/* position comments on the 3D view (comment-3d.js): a layer of numbered dots over the viewport, never catching the pointer */
+.comment-layer-3d{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:6}
+/* the same look as the VR points (vr-point-markers.js; tests/unit/comment-3d-hidden.test.js keeps these colours equal to its constants).
+   The element IS the dot, so its centre is the point's position; the number is a small chip beside it. exposed = solid dot + white rim;
+   hidden behind tissue (.is-behind, the VR rule) = a smaller dot in the VR "hidden" colour, no rim. */
+:root{--vr-point-fill:#0b6f8c;--vr-point-dot:#4dd8ff;--vr-point-rim:#fff}
+.comment-marker-3d{position:absolute;left:0;top:0;width:9px;height:9px;box-sizing:border-box;border-radius:50%;background:var(--vr-point-fill);border:1.5px solid var(--vr-point-rim);box-shadow:0 0 0 1px rgba(0,0,0,.55);will-change:transform}
+.comment-marker-3d[hidden]{display:none}
+.comment-marker-3d.is-behind{width:6px;height:6px;background:var(--vr-point-dot);border:0}
+.comment-lines-3d{position:absolute;left:0;top:0;pointer-events:none;overflow:visible}
+.comment-lines-3d line{stroke:var(--vr-point-dot);stroke-opacity:.6;stroke-width:1.2}
+/* the dots are about 0.65 x the old size (VR's small markers); the tap area is the JS reach (16 / 24 px), not the drawn size. On the active section: x1.4 (centre unchanged) */
+.comment-marker-3d.is-on-section{width:13px;height:13px}
+.comment-marker-3d.is-behind.is-on-section{width:8px;height:8px}
+.vrl-ipad-ui .comment-marker-3d.is-on-section{width:16px;height:16px}
+.vrl-ipad-ui .comment-marker-3d.is-behind.is-on-section{width:10px;height:10px}
+.comment-marker-3d-no{position:absolute;left:100%;bottom:100%;margin:0 0 -1px 2px;min-width:11px;padding:0 2px;box-sizing:border-box;border-radius:6px;background:var(--vr-point-dot);color:var(--vr-point-ink,#04202a);font:800 8px/10px sans-serif;text-align:center;box-shadow:0 0 0 1px rgba(0,0,0,.55);pointer-events:none;white-space:nowrap}
+.comment-marker-3d.is-behind .comment-marker-3d-no{font-size:8px;line-height:9px;min-width:10px;padding:0 2px;margin:0 0 -1px 1px}
+.vrl-ipad-ui .comment-marker-3d{width:12px;height:12px}
+.vrl-ipad-ui .comment-marker-3d.is-behind{width:7px;height:7px}
+.vrl-ipad-ui .comment-marker-3d-no{font-size:10px;line-height:12px;min-width:13px;border-radius:7px}
+.vrl-ipad-ui .comment-marker-3d.is-behind .comment-marker-3d-no{font-size:9px;line-height:11px;min-width:11px}
+.comment-bubble-3d{pointer-events:none}
+
+/* point menu (long press / right-click on a point), distances (line + label in 3D, list in the panel), the start of a distance */
+.point-menu{position:fixed;z-index:60;display:grid;gap:6px;min-width:190px;max-width:calc(100vw - 12px);padding:8px;border:1px solid rgb(var(--ui-b2));border-radius:10px;background:rgb(var(--ui-s1));color:rgb(var(--ui-t1));box-shadow:0 6px 22px rgba(0,0,0,.4);touch-action:manipulation}
+.point-menu[hidden]{display:none}
+.point-menu-head{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700}
+.point-menu-row{display:flex;gap:6px;flex-wrap:wrap}
+.point-menu-btn{min-height:36px;min-width:56px}
+html.vrl-ipad-ui .point-menu-btn{min-height:44px;min-width:64px;font-size:15px}
+.point-menu-palette{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.measure-pill{position:fixed;z-index:59;left:50%;bottom:16px;transform:translateX(-50%);display:flex;align-items:center;gap:10px;max-width:calc(100vw - 24px);padding:7px 10px;border:1px solid #ffd23d;border-radius:999px;background:rgb(var(--ui-s1));color:rgb(var(--ui-t1));box-shadow:0 4px 18px rgba(0,0,0,.4);font-size:13px}
+.measure-pill[hidden]{display:none}
+.measure-pill .tool-chip{min-height:30px}
+.measure-title{margin:10px 0 4px;font-size:12px}
+.measure-title[hidden],.measure-list[hidden]{display:none}
+.measure-list{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.measure-item{display:flex;align-items:center;gap:4px;border:1px solid rgb(var(--ui-b2));border-radius:7px;padding:5px 8px}
+.measure-item .comment-no{margin-right:0}
+.measure-note{font-size:11px;color:rgb(var(--ui-amber-tx));margin-right:6px}
+.measure-item .measure-value{margin-left:8px;flex:1;font-variant-numeric:tabular-nums}
+/* `.comment-lines-3d line` (the section cue lines, cyan) is more specific than a bare class, so the measure line / leader repeat the container: the same yellow as the label and VR (VR_MEASURE_COLOR) in every state, hidden or not (the hidden part is the gradient's stop-opacity over the same colour) */
+.comment-lines-3d .measure-line-3d{stroke:#ffd23d;stroke-width:2;stroke-opacity:.95;stroke-dasharray:6 4;filter:drop-shadow(0 0 1.5px rgba(0,0,0,.9))}
+.measure-label-3d,.measure-hint-3d{position:absolute;left:0;top:0;padding:1px 6px;border-radius:999px;border:1px solid #ffd23d;background:rgba(17,23,27,.88);color:#fff;font:700 10px/13px sans-serif;white-space:nowrap;pointer-events:none;font-variant-numeric:tabular-nums;will-change:transform}
+.measure-label-3d[hidden],.measure-hint-3d[hidden]{display:none}
+/* the labels can be dragged (the view finds them itself, they take no pointer events: a point under the press wins) */
+.measure-label-3d{-webkit-user-select:none;user-select:none}
+.measure-label-3d.is-dragging{cursor:grabbing}
+.measure-label-3d.is-lit,.measure-label-3d.is-dragging{background:#ffe27a;color:#111;border-color:#fff;box-shadow:0 0 0 2px rgba(255,255,255,.9),0 0 10px 2px rgba(255,210,61,.85)}
+.vrl-ipad-ui .measure-label-3d,.vrl-ipad-ui .measure-hint-3d{font-size:12px;line-height:15px}
+.comment-lines-3d .measure-leader-3d{stroke:#ffd23d;stroke-width:1;stroke-opacity:.8}
+/* behind the volume's surface (the points' rule, see comment-3d.js depthCue) = faint, like an x-ray, so a label does not float in front of tissue it lies behind; a lit / dragged label stays fully visible to be used */
+.measure-label-3d,.measure-leader-3d{transition:opacity .15s}
+.measure-label-3d.is-behind,.measure-leader-3d.is-behind{opacity:.3}
+.measure-label-3d.is-behind.is-lit,.measure-label-3d.is-behind.is-dragging,.measure-leader-3d.is-behind.is-lit{opacity:1}
+@media (prefers-reduced-motion:reduce){.measure-label-3d,.measure-leader-3d{transition:none}}
+/* analysis result labels on the 3D view (analysis-label.js): a chip with the result's colour, number, segments and volume, movable by a drag; a moved one has a leader line to its anchor (SVG layer) */
+.analysis-label-3d{position:absolute;left:0;top:0;display:inline-flex;align-items:center;gap:5px;padding:1px 7px 1px 5px;border-radius:999px;border:1px solid rgba(255,255,255,.42);background:rgba(17,23,27,.88);color:#fff;font:700 10px/13px sans-serif;white-space:nowrap;pointer-events:none;font-variant-numeric:tabular-nums;will-change:transform;-webkit-user-select:none;user-select:none}
+.analysis-label-3d[hidden]{display:none}
+.analysis-label-3d>i{width:8px;height:8px;border-radius:999px;flex:none;border:1px solid rgba(255,255,255,.42)}
+.analysis-label-3d>span{font-weight:600;opacity:.85}
+.analysis-label-3d.is-dragging{cursor:grabbing}
+.analysis-label-3d.is-lit,.analysis-label-3d.is-dragging{background:#ffe27a;color:#111;border-color:#fff!important;box-shadow:0 0 0 2px rgba(255,255,255,.9),0 0 10px 2px rgba(255,210,61,.85)}
+.analysis-label-3d.is-lit>span,.analysis-label-3d.is-dragging>span{color:#111;opacity:1}
+.vrl-ipad-ui .analysis-label-3d{font-size:12px;line-height:15px}
+.comment-lines-3d .analysis-leader-3d{stroke-width:1.2;stroke-opacity:.85}
+.comment-lines-3d .analysis-leader-3d.is-lit{stroke:#ffe27a!important;stroke-opacity:1;stroke-width:2}
+.comment-lines-3d .analysis-anchor-3d{stroke:#fff;stroke-width:1;stroke-opacity:.9}
+.analysis-label-3d,.analysis-leader-3d{transition:opacity .15s}
+.analysis-label-3d.is-behind,.analysis-leader-3d.is-behind{opacity:.3}
+.analysis-label-3d.is-behind.is-lit,.analysis-label-3d.is-behind.is-dragging,.analysis-leader-3d.is-behind.is-lit{opacity:1}
+@media (prefers-reduced-motion:reduce){.analysis-label-3d,.analysis-leader-3d{transition:none}}
+.analysis-label-actions{display:flex;flex-wrap:wrap;gap:6px}
+.analysis-label-actions button{min-height:32px;border:1px solid rgb(var(--ui-b3));border-radius:7px;background:rgb(var(--ui-s2));color:rgb(var(--ui-t2));padding:5px 8px;font-size:10px;font-weight:750;cursor:pointer;pointer-events:auto}
+.analysis-label-hint{font-size:10px;line-height:1.35;color:rgb(var(--ui-t4))}
+.comment-marker-3d.is-measure-start{box-shadow:0 0 0 3px #ffd23d,0 0 0 4px rgba(0,0,0,.6);animation:vrl-measure-pulse 1.2s ease-in-out infinite}
+@keyframes vrl-measure-pulse{0%,100%{box-shadow:0 0 0 2px #ffd23d,0 0 0 3px rgba(0,0,0,.6)}50%{box-shadow:0 0 0 7px rgba(255,210,61,.7),0 0 0 8px rgba(0,0,0,.5)}}
+@media (prefers-reduced-motion:reduce){.comment-marker-3d.is-measure-start{animation:none}}
+
+/* slice-spacing warning (non-blocking; wraps on narrow / iPad layouts) */
+.spacing-warn{display:block;padding:5px 7px;border:1px solid rgb(var(--ui-amber-bd));border-radius:7px;background:rgb(var(--ui-amber-bg));color:rgb(var(--ui-amber-tx))!important;font-size:11px;line-height:1.35;overflow-wrap:anywhere;white-space:normal}
+.size-warn{display:block;padding:5px 7px;border:1px solid rgb(var(--ui-amber-bd));border-radius:7px;background:rgb(var(--ui-amber-bg));color:rgb(var(--ui-amber-tx))!important;font-size:11px;line-height:1.35;overflow-wrap:anywhere;white-space:normal}
+.spacing-warn{pointer-events:auto}.spacing-warn summary{cursor:pointer;list-style-position:inside}.spacing-info{background:rgb(var(--ui-s2));border-color:rgb(var(--ui-b2));color:rgb(var(--ui-t3))!important}.spacing-mark{color:rgb(var(--ui-amber-tx));font-weight:700}
+.sample-choices{display:grid;gap:10px;margin-top:12px}
+.sample-choice{min-height:44px;font-size:15px;touch-action:manipulation}
+.settings-row[hidden],.settings-panel .hint[hidden]{display:none}
+/* GPU info tab, debug mode only (the tab button and panel are `hidden` unless debug is on) */
+.settings-tab[hidden]{display:none}
+.gpu-report{width:100%;box-sizing:border-box;margin-top:6px;font:11px/1.4 ui-monospace,Menlo,monospace;resize:vertical}
+.gpu-status-bar.is-debug-link{cursor:pointer}
+/* per-segment HU histogram (histogram-ui.js) */
+.seg-hist-result{min-width:min(340px,calc(100vw - 80px));gap:6px}
+.seg-hist-bar{display:flex;align-items:center;gap:6px}.seg-hist-bar strong{flex:1;font-size:12px}
+.seg-hist-mini{min-height:24px;padding:2px 8px;border:1px solid rgb(var(--ui-b3));border-radius:6px;background:rgb(var(--ui-s3));color:rgb(var(--ui-t2));font-size:10px}
+.seg-hist-mini.is-active{border-color:rgb(var(--ui-blue-bd));background:rgb(var(--ui-blue-bg));color:rgb(var(--ui-blue-tx))}
+.seg-hist-mini:disabled{opacity:.45}
+.hu-mode-toggle{display:inline-flex;gap:2px;pointer-events:auto}.hu-mode-toggle .seg-hist-mini{pointer-events:auto;touch-action:manipulation}
+/* the overlay is pointer-events:none (3D rotation passes through, see "Keep 3D rotation available" above): the chart (line drag) and the table (horizontal scroll) must take input */
+.seg-hist-range{display:flex;align-items:center;flex-wrap:wrap;gap:4px;font-size:10px;color:rgb(var(--ui-t3));pointer-events:auto}.seg-hist-num{width:56px;min-height:24px;padding:2px 4px;border:1px solid rgb(var(--ui-b3));border-radius:6px;background:rgb(var(--ui-s3));color:rgb(var(--ui-t2));font-size:10px;font-variant-numeric:tabular-nums;pointer-events:auto}
+.seg-hist-canvas{display:block;width:100%;pointer-events:auto;touch-action:none;color:rgb(var(--ui-t2))}
+.seg-hist-progress{display:flex;align-items:center;gap:6px;font-size:10px;color:rgb(var(--ui-t3))}.seg-hist-progress progress{width:90px;height:8px}.seg-hist-status{flex:1;overflow-wrap:anywhere}
+.seg-hist-tablewrap{overflow-x:auto;pointer-events:auto}
+.seg-hist-table{border-collapse:collapse;font-size:10px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.seg-hist-table th,.seg-hist-table td{padding:2px 6px;text-align:right;border-bottom:1px solid rgb(var(--ui-b2))}
+.seg-hist-table th:first-child,.seg-hist-table td:first-child{text-align:left}
+.seg-hist-swatch{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+.lp-canvas{display:block;width:100%;pointer-events:auto;touch-action:none;color:rgb(var(--ui-t2))}.lp-plot{cursor:crosshair}
+.seg-hist-hint{font-size:10px;line-height:1.35;color:rgb(var(--ui-t4))}
+
+/* analysis dock (analysis-dock.js). One container for the HU histogram and HU line-profile cards.
+   3D only: floats over the 3D card (bottom-left) or is pinned under it; 2D only / split: takes its own grid track under (or beside) the slices. */
+.ipad-analysis-tools{display:none}
+html.vrl-ipad-ui .ipad-analysis-tools{display:flex;align-items:center;gap:5px;margin-left:8px}
+html.vrl-ipad-ui .ipad-analysis-tools button{
+  min-height:40px;border:1px solid rgb(var(--ui-b2));border-radius:9px;background:rgb(var(--ui-s3));color:rgb(var(--ui-t2));
+  padding:7px 11px;font-size:12px;font-weight:800;touch-action:manipulation;
+}
+html.vrl-ipad-ui .ipad-analysis-tools button.is-active{background:rgb(var(--ui-blue-bg));border-color:rgb(var(--ui-blue-bd));color:rgb(var(--ui-blue-tx))}
+html.vrl-ipad-ui .ipad-analysis-tools button:disabled{opacity:.45}
+
+.analysis-dock{
+  position:relative;display:flex;flex-direction:column;min-width:0;min-height:0;box-sizing:border-box;overflow:hidden;
+  border:1px solid rgb(var(--ui-b2));border-radius:12px;background:rgb(var(--ui-s1));color:rgb(var(--ui-t2));
+  pointer-events:auto;touch-action:manipulation;
+}
+.analysis-dock.is-hidden{display:none!important}
+.analysis-dock-head{display:flex;align-items:center;gap:6px;flex:none;box-sizing:border-box;min-height:34px;padding:4px 8px;border-bottom:1px solid rgb(var(--ui-b1))}
+.analysis-dock-head strong{flex:1;font-size:12px}
+.analysis-dock-body{flex:1;min-height:0;display:flex;flex-wrap:wrap;align-items:flex-start;align-content:flex-start;gap:8px;padding:8px;overflow:auto;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y}
+.analysis-dock.is-collapsed .analysis-dock-body{display:none}
+.analysis-dock.is-collapsed .analysis-dock-head{border-bottom:0}
+html .analysis-dock *{pointer-events:auto}
+.analysis-dock .analysis-dock-body>.volume-analysis-result{flex:1 1 340px;min-width:0;max-width:none;width:auto;box-sizing:border-box;background:rgb(var(--ui-s0) / 0.6)}
+.analysis-dock-grip{position:absolute;z-index:3;touch-action:none;background:transparent}
+.analysis-dock-grip::after{content:"";position:absolute;background:rgb(var(--ui-b3));border-radius:2px;opacity:.7}
+.analysis-dock:hover .analysis-dock-grip::after,.analysis-dock.is-resizing .analysis-dock-grip::after{opacity:1;background:rgb(var(--ui-blue-bd))}
+.analysis-dock[data-place="below"] .analysis-dock-grip,
+.analysis-dock[data-place="under2d"] .analysis-dock-grip,
+.analysis-dock[data-place="full"] .analysis-dock-grip{left:0;right:0;top:0;height:8px;cursor:ns-resize}
+.analysis-dock[data-place="below"] .analysis-dock-grip::after,
+.analysis-dock[data-place="under2d"] .analysis-dock-grip::after,
+.analysis-dock[data-place="full"] .analysis-dock-grip::after{left:50%;top:2px;width:40px;height:3px;margin-left:-20px}
+.analysis-dock[data-place="side"] .analysis-dock-grip{top:0;bottom:0;left:0;width:8px;cursor:ew-resize}
+.analysis-dock[data-place="side"] .analysis-dock-grip::after{top:50%;left:2px;height:40px;width:3px;margin-top:-20px}
+.analysis-dock[data-place="side"]{padding-left:4px}
+.analysis-dock[data-place="overlay"] .analysis-dock-grip{top:0;right:0;width:20px;height:20px;cursor:nesw-resize}
+.analysis-dock[data-place="overlay"] .analysis-dock-grip::after{top:4px;right:4px;width:10px;height:10px;background:transparent;border-top:3px solid rgb(var(--ui-b3));border-right:3px solid rgb(var(--ui-b3));border-radius:0}
+.analysis-dock.is-collapsed .analysis-dock-grip{display:none}
+.analysis-dock[data-place="overlay"]{position:absolute;z-index:8;left:10px;bottom:10px;min-width:170px;max-width:calc(100% - 20px);background:rgb(var(--ui-s0) / 0.94);box-shadow:0 6px 24px rgba(0,0,0,.35)}
+.analysis-dock[data-place="overlay"] .analysis-dock-head{padding-right:26px}
+.analysis-dock.is-collapsed[data-place="side"] .analysis-dock-head>:not([data-dock-act="collapse"]){display:none}
+.analysis-dock.is-collapsed[data-place="side"] .analysis-dock-head{padding:4px}
+
+html.vrl-ipad-ui .ipad-mode-2d .viewer-grid[data-dock="2d-below"]{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) var(--dock-h,240px)}
+html.vrl-ipad-ui .ipad-mode-2d .viewer-grid[data-dock="2d-below"] #sub-view-slots{grid-column:1;grid-row:1}
+html.vrl-ipad-ui .ipad-mode-2d .viewer-grid[data-dock="2d-below"]>.analysis-dock{grid-column:1;grid-row:2}
+html.vrl-ipad-ui .ipad-mode-2d .viewer-grid[data-dock="2d-side"]{grid-template-columns:minmax(0,1fr) var(--dock-w,380px);grid-template-rows:minmax(0,1fr)}
+html.vrl-ipad-ui .ipad-mode-2d .viewer-grid[data-dock="2d-side"] #sub-view-slots{grid-column:1;grid-row:1}
+html.vrl-ipad-ui .ipad-mode-2d .viewer-grid[data-dock="2d-side"]>.analysis-dock{grid-column:2;grid-row:1}
+html.vrl-ipad-ui .ipad-mode-3d .viewer-grid[data-dock="3d-below"]{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) var(--dock-h,240px)}
+html.vrl-ipad-ui .ipad-mode-3d .viewer-grid[data-dock="3d-below"] #main-view-slot{grid-column:1;grid-row:1}
+html.vrl-ipad-ui .ipad-mode-3d .viewer-grid[data-dock="3d-below"]>.analysis-dock{grid-column:1;grid-row:2}
+html.vrl-ipad-ui .ipad-mode-split .viewer-grid[data-dock^="split-"]{grid-template-rows:minmax(0,1fr) var(--dock-h,240px)}
+html.vrl-ipad-ui .ipad-mode-split .viewer-grid[data-dock^="split-"] #sub-view-slots{grid-column:2;grid-row:1}
+html.vrl-ipad-ui .ipad-mode-split .viewer-grid[data-dock="split-under2d"] #main-view-slot{grid-column:1;grid-row:1 / span 2}
+html.vrl-ipad-ui .ipad-mode-split .viewer-grid[data-dock="split-under2d"]>.analysis-dock{grid-column:2;grid-row:2}
+html.vrl-ipad-ui .ipad-mode-split .viewer-grid[data-dock="split-full"] #main-view-slot{grid-column:1;grid-row:1}
+html.vrl-ipad-ui .ipad-mode-split .viewer-grid[data-dock="split-full"]>.analysis-dock{grid-column:1 / -1;grid-row:2}
+@media (orientation:portrait){
+ html.vrl-ipad-ui .ipad-mode-split .viewer-grid[data-dock^="split-"]{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1.2fr) var(--ws-split-2d-h,minmax(220px,.8fr)) var(--dock-h,240px)}
+ html.vrl-ipad-ui .ipad-mode-split .viewer-grid[data-dock^="split-"] #main-view-slot{grid-column:1;grid-row:1}
+ html.vrl-ipad-ui .ipad-mode-split .viewer-grid[data-dock^="split-"] #sub-view-slots{grid-column:1;grid-row:2}
+ html.vrl-ipad-ui .ipad-mode-split .viewer-grid[data-dock^="split-"]>.analysis-dock{grid-column:1;grid-row:3}
+}
+.lp-live{font-size:10px;font-weight:700;color:rgb(var(--ui-blue-tx));padding:1px 6px;border-radius:9px;background:rgb(var(--ui-blue-bg));border:1px solid rgb(var(--ui-blue-bd));opacity:.9;animation:lp-live-pulse 1s ease-in-out infinite}.lp-live[hidden]{display:none}
+@keyframes lp-live-pulse{50%{opacity:.55}}
+.lp-plot[data-live="1"]{outline:1px dashed rgb(var(--ui-blue-bd));outline-offset:-1px}
+.lp-3d-toggle{pointer-events:auto;touch-action:manipulation}
+.hu-line-3d-armed canvas{cursor:crosshair}
+@media (prefers-reduced-motion:reduce){.lp-live{animation:none}}
+
+/* crop export panel */
+.crop-panel{min-width:250px;gap:7px}
+.crop-head{display:flex;justify-content:space-between;align-items:center}
+.crop-x{border:0;background:transparent;color:inherit;font-size:16px;line-height:1;cursor:pointer;padding:2px 6px}
+.crop-row{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.crop-row select{min-width:96px}
+.crop-group{display:grid;gap:3px}
+.crop-cap{font-size:10px;opacity:.75}
+.crop-slider{display:grid;grid-template-columns:14px 1fr 34px;align-items:center;gap:6px}
+.crop-slider input{width:100%;min-width:0}
+.crop-slider input[type=number]{width:70px}
+.crop-detail summary{font-size:11px;opacity:.75;cursor:pointer}
+.crop-angle{font-size:11px;font-variant-numeric:tabular-nums}
+.crop-mode[data-state=copy]::before,.crop-mode[data-state=resample]::before{content:'';display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;background:rgb(var(--ui-green-tx))}
+.crop-mode[data-state=resample]::before{background:rgb(var(--ui-amber-bg2))}
+.crop-hint{font-size:10px;opacity:.7;margin:0}
+.crop-hint.is-warn{color:rgb(var(--ui-amber-tx));opacity:1}
+.crop-slider output{text-align:right;font-variant-numeric:tabular-nums}
+.crop-mode,.crop-status{margin:0;font-size:10px;opacity:.85;word-break:break-word}
+.crop-actions{display:flex;gap:8px;justify-content:flex-end}
+.crop-panel progress{width:100%}
+
+html.vrl-ipad-ui #volume-analysis-toggle,
+html.vrl-ipad-ui #section-view-toggle,
+html.vrl-ipad-ui #seg-hist-toggle,
+html.vrl-ipad-ui #line-profile-toggle,
+html.vrl-ipad-ui #crop-export-toggle{display:none!important}
+html.vrl-ipad-ui .topbar-sep{width:1px;align-self:stretch;margin:6px 4px;background:rgb(var(--ui-b2))}
+/* view bar */
+html.vrl-ipad-ui .ipad-workspace-toolbar{flex-wrap:wrap;row-gap:6px}
+html.vrl-ipad-ui .ipad-workspace-toolbar .ipad-mpr-tabs,
+html.vrl-ipad-ui.ipad-settings-persistent .ipad-mpr-tabs{margin-left:0}
+html.vrl-ipad-ui .ws-cap{font-size:10px;font-weight:800;color:rgb(var(--ui-t3));white-space:nowrap;margin-right:2px}
+html.vrl-ipad-ui .ws-sep{width:1px;align-self:stretch;margin:4px 2px;background:rgb(var(--ui-b2))}
+html.vrl-ipad-ui .ipad-workspace-toolbar .three-overlay-controls{display:flex;align-items:center;gap:5px;max-width:none;flex:0 0 auto}
+html.vrl-ipad-ui .ipad-workspace-toolbar .three-overlay-controls .tool-chip{
+  min-height:40px;min-width:40px;border:1px solid rgb(var(--ui-b2));border-radius:9px;background:rgb(var(--ui-s3));color:rgb(var(--ui-t2));
+  padding:7px 11px;font-size:12px;font-weight:800;touch-action:manipulation;cursor:pointer;
+}
+html.vrl-ipad-ui .ipad-workspace-toolbar .three-overlay-controls .tool-chip.is-active{background:rgb(var(--ui-blue-bg));border-color:rgb(var(--ui-blue-bd));color:rgb(var(--ui-blue-tx))}
+html.vrl-ipad-ui .ipad-workspace-toolbar .three-overlay-controls .tool-chip:disabled{opacity:.45}
+html.vrl-ipad-ui .three-view-controls{top:8px!important;right:8px!important;bottom:auto!important;max-width:calc(100% - 16px);gap:6px!important;padding:0!important;border:0!important;border-radius:0!important;background:none!important;backdrop-filter:none!important;pointer-events:none!important;z-index:13}
+html.vrl-ipad-ui .three-view-controls button{pointer-events:auto;touch-action:manipulation;min-width:40px!important;height:40px!important;padding:0 8px!important;border-radius:9px!important;font-size:14px!important;font-weight:800!important}
+html.vrl-ipad-ui .three-view-controls .three-help-button{position:static!important;width:40px!important;border-radius:50%!important;font-size:16px!important}
+html.vrl-ipad-ui .three-help-panel{top:56px!important;right:8px!important;bottom:auto!important;max-height:min(360px,calc(100% - 66px))!important}
+html.vrl-ipad-ui .volume-analysis-panel{top:56px}
+html.vrl-ipad-ui #volume-cache-clear{display:none!important}
+html.vrl-ipad-ui .ipad-mode-2d .ws-3d-only{display:none!important}
+html.vrl-ipad-ui .ipad-mode-3d .ws-2d-only{display:none!important}
+@media (max-width:1366px){
+  html.vrl-ipad-ui .ipad-workspace-toolbar{gap:6px}
+  html.vrl-ipad-ui .ipad-workspace-toolbar .ws-cap[data-i18n="wsScreen"]{display:none}
+  html.vrl-ipad-ui .ipad-workspace-toolbar .ipad-view-modes button,
+  html.vrl-ipad-ui .ipad-workspace-toolbar .ipad-mpr-tabs button,
+  html.vrl-ipad-ui .ipad-workspace-toolbar .three-overlay-controls .tool-chip{padding-left:6px;padding-right:6px;min-width:40px}
+}
+/* tool rail + panel */
+@media (orientation:landscape){html.vrl-ipad-ui.ipad-settings-persistent .workspace{grid-template-columns:var(--ws-left-w,minmax(350px,390px)) minmax(0,1fr)}}
+html.vrl-ipad-ui .sidebar{grid-template-columns:80px minmax(0,1fr)!important;grid-template-rows:auto minmax(0,1fr)!important}
+html.vrl-ipad-ui .sidebar>.ws-tool-rail{
+  position:static;grid-column:1;grid-row:1 / -1;display:flex!important;flex-direction:column;gap:6px;
+  padding:8px 6px;border-right:1px solid rgb(var(--ui-b1));background:rgb(var(--ui-s1));overflow-y:auto;min-height:0;
+}
+html.vrl-ipad-ui .sidebar>.ws-tool-rail button{min-height:42px;padding:8px 2px;font-size:11px;line-height:1.25;white-space:normal;word-break:keep-all}
+html.vrl-ipad-ui .sidebar>.ipad-settings-head{grid-column:2;grid-row:1}
+html.vrl-ipad-ui .sidebar>.sidebar-scroll,
+html.vrl-ipad-ui.ipad-settings-persistent .sidebar>.sidebar-scroll{grid-column:2;grid-row:2;height:auto}
+html.vrl-ipad-ui .ws-tool-buttons{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px}
+html.vrl-ipad-ui .ws-tool-buttons button{
+  min-height:40px;border:1px solid rgb(var(--ui-b2));border-radius:9px;background:rgb(var(--ui-s3));color:rgb(var(--ui-t2));
+  padding:7px 11px;font-size:12px;font-weight:800;touch-action:manipulation;
+}
+html.vrl-ipad-ui .ws-tool-buttons button.is-active{background:rgb(var(--ui-blue-bg));border-color:rgb(var(--ui-blue-bd));color:rgb(var(--ui-blue-tx))}
+html.vrl-ipad-ui .ws-tool-buttons button:disabled{opacity:.45}
+html.vrl-ipad-ui .ws-result-host{display:grid;gap:8px}
+html.vrl-ipad-ui .ws-result-host:empty{display:none}
+html.vrl-ipad-ui .ws-result-host>.volume-analysis-result{position:static;width:auto;min-width:0;max-width:none;box-sizing:border-box;pointer-events:auto}
+html.vrl-ipad-ui .ws-result-host *{pointer-events:auto}
+html.vrl-ipad-ui .ws-result-host .seg-hist-bar{flex-wrap:wrap}
+html.vrl-ipad-ui .ws-result-host .seg-hist-bar>strong{flex:1 0 100%}
+html:not(.vrl-ipad-ui) #result-place-row{display:none}
+@media (orientation:portrait){
+ html.vrl-ipad-ui .sidebar{grid-template-columns:minmax(0,1fr)!important;grid-template-rows:auto auto minmax(0,1fr)!important}
+ html.vrl-ipad-ui .topbar-actions{flex-wrap:wrap;justify-content:flex-end;row-gap:6px}
+ html.vrl-ipad-ui .sidebar>.ws-tool-rail{grid-column:1;grid-row:1;flex-direction:row;overflow-x:auto;overflow-y:hidden;border-right:0;border-bottom:1px solid rgb(var(--ui-b1))}
+ html.vrl-ipad-ui .sidebar>.ws-tool-rail button{flex:0 0 auto;padding:6px 10px}
+ html.vrl-ipad-ui .sidebar>.ipad-settings-head{grid-column:1;grid-row:2}
+ html.vrl-ipad-ui .sidebar>.sidebar-scroll,
+ html.vrl-ipad-ui.ipad-settings-persistent .sidebar>.sidebar-scroll{grid-column:1;grid-row:3}
+}
+/* resizable panes (pane-resize.js) - a thin handle on each border; drag = resize, double-click = default */
+html.vrl-ipad-ui .workspace,html.vrl-ipad-ui .viewer-grid{position:relative}
+.pane-resizer{position:absolute;z-index:20;touch-action:none;background:transparent}
+.pane-resizer[data-axis="x"]{cursor:col-resize}.pane-resizer[data-axis="y"]{cursor:row-resize}
+.pane-resizer::after{content:"";position:absolute;inset:0;margin:auto;border-radius:2px;background:rgb(var(--ui-t3) / 0);transition:background .15s}
+.pane-resizer[data-axis="x"]::after{width:3px}.pane-resizer[data-axis="y"]::after{height:3px}
+.pane-resizer:hover::after,.pane-resizer.is-dragging::after{background:rgb(var(--ui-t3) / .55)}
+.pane-resizer[hidden]{display:none}
+html.pane-resizing,html.pane-resizing *{user-select:none!important}
+/* rail icons - icon over the name (landscape), icon beside the name (portrait top row) */
+html.vrl-ipad-ui .ws-tool-rail button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px}
+html.vrl-ipad-ui .ws-tool-rail .ws-rail-icon{width:22px;height:22px;flex:0 0 auto}
+html.vrl-ipad-ui .ws-tool-rail .ws-rail-label{display:block}
+@media (orientation:portrait){html.vrl-ipad-ui .sidebar>.ws-tool-rail button{flex-direction:row;gap:5px}html.vrl-ipad-ui .ws-tool-rail .ws-rail-icon{width:18px;height:18px}}
+/* open / save at the top of the データ panel (workspace-ui.js) */
+html.vrl-ipad-ui .ws-file-actions{display:grid;gap:10px;padding:2px 0 12px;margin-bottom:10px;border-bottom:1px solid rgb(var(--ui-b1))}
+html.vrl-ipad-ui .ws-file-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+html.vrl-ipad-ui .ws-file-row>.ws-cap{grid-column:1 / -1}
+html.vrl-ipad-ui .ws-file-row>button{min-height:40px;padding:7px 8px;font-size:12px;white-space:normal;line-height:1.25;width:100%}
+/* 設定 panel (theme / language / all settings) and VR / AR at the top of 表示; the top bar keeps only the title */
+html.vrl-ipad-ui .ws-pref-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid rgb(var(--ui-b1))}
+html.vrl-ipad-ui .ws-pref-row>.ws-cap{font-size:12px;white-space:normal}
+html.vrl-ipad-ui .ws-pref-row .theme-quick,html.vrl-ipad-ui .ws-pref-row .theme-quick select,html.vrl-ipad-ui .ws-pref-row>button{width:100%;min-height:40px}
+@media (orientation:landscape){html.vrl-ipad-ui .sidebar>.ws-tool-rail>[data-ipad-drawer-tab="prefs"]{margin-top:auto}}
+html.vrl-ipad-ui .topbar{min-height:0}
+html.vrl-ipad-ui .ws-sample-picker{display:grid;grid-template-rows:0fr;visibility:hidden;transition:grid-template-rows .22s ease,visibility 0s linear .22s}
+html.vrl-ipad-ui .ws-sample-picker.is-open{grid-template-rows:1fr;visibility:visible;transition:grid-template-rows .22s ease,visibility 0s}
+html.vrl-ipad-ui .ws-sample-inner{min-height:0;overflow:hidden;display:grid;gap:6px}
+html.vrl-ipad-ui .ws-sample-picker .sample-choices{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;margin:0;padding:2px 0 4px}
+html.vrl-ipad-ui .ws-sample-picker .sample-choice{min-height:48px;font-size:12px;line-height:1.3;white-space:normal;border-radius:10px;opacity:0;transform:translateY(-4px);transition:opacity .2s ease,transform .2s ease}
+html.vrl-ipad-ui .ws-sample-picker.is-open .sample-choice{opacity:1;transform:none}
+html.vrl-ipad-ui #sample-demo-button[aria-expanded="true"]{box-shadow:inset 0 0 0 2px rgb(var(--ui-blue-bd))}
+html.vrl-ipad-ui .ws-empty-sample{margin-top:10px;justify-self:center}
+html.vrl-ipad-ui .ws-settings-embed{display:grid;gap:4px;padding-top:10px}
+html.vrl-ipad-ui .ws-settings-embed .settings-tabs{flex-wrap:wrap;gap:2px}
+html.vrl-ipad-ui .ws-settings-embed .settings-tab{padding:7px 9px;font-size:12px}
+html.vrl-ipad-ui .ws-settings-embed .settings-row:not(.settings-check){display:grid;grid-template-columns:minmax(0,1fr);align-items:stretch;gap:4px;min-height:0;padding:4px 0}
+html.vrl-ipad-ui .ws-settings-embed .settings-row:not(.settings-check)>span{font-size:12px;color:rgb(var(--ui-t2));overflow-wrap:anywhere}
+html.vrl-ipad-ui .ws-settings-embed .settings-check{justify-content:flex-start;gap:8px;min-height:36px}
+html.vrl-ipad-ui .ws-settings-embed .settings-check>span{overflow-wrap:anywhere;font-size:13px}
+html.vrl-ipad-ui .ws-settings-embed select{width:100%;max-width:100%;min-width:0}
+html.vrl-ipad-ui .ws-settings-embed .settings-cache-head{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+html.vrl-ipad-ui .ws-settings-embed .settings-cache-list,html.vrl-ipad-ui .ws-settings-embed .gpu-report{max-width:100%;min-width:0;box-sizing:border-box}
+.ws-ask{display:grid;gap:8px;margin:0 0 10px;padding:10px 12px;border:1px solid rgb(var(--ui-amber-bd));border-radius:10px;background:rgb(var(--ui-amber-bg));color:rgb(var(--ui-amber-tx));animation:ws-ask-in .2s ease}
+.ws-ask.is-leaving{opacity:0;transform:translateY(-4px);transition:opacity .18s,transform .18s}
+.ws-ask-text{margin:0;font-size:12px;line-height:1.45;white-space:pre-line}
+.ws-ask-actions{display:flex;justify-content:flex-end;gap:6px}
+.ws-ask-actions button{min-height:36px}
+@keyframes ws-ask-in{from{opacity:0;transform:translateY(-4px)}}
+.is-armed{background:rgb(var(--ui-red-bg))!important;color:rgb(var(--ui-red-tx))!important;border-color:rgb(var(--ui-red-bd))!important}
+.ws-note{margin-left:8px;font-size:11px;color:rgb(var(--ui-t3));transition:opacity .25s}.ws-note.is-leaving{opacity:0}
+@media (prefers-reduced-motion:reduce){html.vrl-ipad-ui .ws-sample-picker,html.vrl-ipad-ui .ws-sample-picker .sample-choice,.ws-ask{transition:none!important;animation:none!important}}
+
+/* 3D再構築 on the 3D view itself while the scene is stale */
+.three-rebuild-chip{position:absolute;right:10px;bottom:10px;z-index:7;min-height:36px;padding:6px 14px;border-radius:18px;border:1px solid rgb(var(--ui-amber-bg2));background:rgb(var(--ui-amber-bg2) / 0.95);color:rgb(var(--ui-on-amber));font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.35)}
+.three-rebuild-chip[hidden]{display:none}
+
+/* 体験会モード - level choice in the データ panel (event-mode-ui.js); present only while the setting is on */
+.event-level-panel{display:grid;gap:10px;padding:2px 0 12px;margin-bottom:10px;border-bottom:1px solid rgb(var(--ui-b1))}
+.event-level-title{font-size:15px;color:rgb(var(--ui-t1))}
+.event-level-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,200px),1fr));gap:10px}
+.event-level-card{display:grid;gap:7px;align-content:start;width:100%;min-height:96px;padding:12px 14px;border-radius:14px;border:2px solid rgb(var(--ui-b2));background:rgb(var(--ui-s2));color:rgb(var(--ui-t2));text-align:left;font:inherit;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+.event-level-card:hover{border-color:rgb(var(--ui-blue-bd2))}
+.event-level-card:focus-visible{outline:3px solid rgb(var(--ui-accent));outline-offset:2px}
+.event-level-card.is-selected{border-color:rgb(var(--ui-blue-bd));background:rgb(var(--ui-blue-bg));color:rgb(var(--ui-blue-tx))}
+.event-level-card:disabled{cursor:progress;opacity:.7}
+.event-level-card.is-selected:disabled{opacity:1}
+.event-level-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.event-level-badge{padding:2px 10px;border-radius:99px;border:1px solid rgb(var(--ui-blue-bd));background:rgb(var(--ui-blue-bg));color:rgb(var(--ui-blue-tx));font-weight:700;font-size:15px}
+.event-level-name{font-size:18px;font-weight:700}
+.event-level-mark{display:none;margin-left:auto;padding:2px 10px;border-radius:99px;border:1px solid rgb(var(--ui-blue-bd));font-size:13px;font-weight:700}
+.event-level-mark::before{content:'\2713  '}
+.event-level-card.is-selected .event-level-mark{display:inline-block}
+.event-level-mission{font-size:15px;line-height:1.5}
+.event-level-hints{display:flex;flex-wrap:wrap;gap:6px}
+.event-level-hint{padding:3px 8px;border-radius:8px;background:rgb(var(--ui-s4));color:rgb(var(--ui-t3));font-size:12px;line-height:1.4}
+.event-reset-btn{justify-self:start;min-height:44px;padding:8px 18px;border-radius:12px;border:2px solid rgb(var(--ui-b2));background:rgb(var(--ui-s2));color:rgb(var(--ui-t2));font:inherit;font-weight:700;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+.event-reset-btn:hover:not(:disabled){border-color:rgb(var(--ui-blue-bd2))}
+.event-reset-btn:focus-visible{outline:3px solid rgb(var(--ui-accent));outline-offset:2px}
+.event-reset-btn.is-armed{border-color:rgb(var(--ui-amber-bg2));background:rgb(var(--ui-amber-bg2));color:rgb(var(--ui-on-amber))}
+.event-reset-btn:disabled{cursor:default;opacity:.55}
+.event-level-after{margin:0}
+
+/* 設定 > デバッグ > テスト機能 (debug-switches-ui.js): collapsed by default, below the debug-mode switch */
+.debug-switches{margin-top:12px;border-top:1px solid rgb(var(--ui-b3));padding-top:8px}
+.debug-switches-title{cursor:pointer;min-height:44px;display:flex;align-items:center;font-weight:600}
+.debug-switches .settings-check>span{overflow-wrap:anywhere}
+.debug-switch-note{margin:0 0 6px 28px}
+.debug-switch-group{margin:10px 0 0;font-weight:600}
+.debug-switch-when{white-space:nowrap}
+.debug-switch-reload{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:8px 0}
+.debug-switch-reload[hidden]{display:none}
+.debug-switches>#dbg-reset{margin-top:8px}
+
+/* チュートリアル panel (tutorial-ui.js); present only while 設定 > 外観 > チュートリアル is on */
+.tut-panel{display:grid;gap:10px;padding:2px 0 12px;margin-bottom:10px;border-bottom:1px solid rgb(var(--ui-b1))}
+.tut-title{font-size:15px;color:rgb(var(--ui-t1))}
+.tut-card{display:grid;gap:8px;padding:12px 14px;border-radius:14px;border:2px solid rgb(var(--ui-b3));background:rgb(var(--ui-s2));color:rgb(var(--ui-t1))}
+.tut-card[hidden],.tut-all[hidden]{display:none}
+.tut-count{font-size:12px;color:rgb(var(--ui-t2))}
+.tut-text{margin:0;font-size:17px;line-height:1.5}
+.tut-sub{margin:0;font-size:13px;color:rgb(var(--ui-t2))}
+html[lang="en"] .tut-sub{display:none}
+.tut-next-note{margin:0;font-size:13px;font-weight:600;color:rgb(var(--ui-t1))}
+.tut-nav,.tut-tools{display:flex;flex-wrap:wrap;gap:8px}
+.tut-panel button{min-height:44px;padding:6px 14px;border-radius:10px;border:1px solid rgb(var(--ui-b3));background:rgb(var(--ui-s1));color:rgb(var(--ui-t1));font:inherit;cursor:pointer;touch-action:manipulation}
+.tut-panel button:disabled{opacity:.45;cursor:default}
+.tut-next{border-width:2px}
+.tut-reset.is-armed{border-color:rgb(var(--ui-t1));font-weight:700}
+/* 「チュートリアルを始める」 (top bar, VR devices only), the introduction's subtitle bar and the pulsing outline on what to press next (the pink = the event slides' accent, as on the VR board) */
+.tut-cta{min-height:40px;padding:6px 16px;white-space:nowrap;flex:0 0 auto;border-radius:999px;border:2px solid #e8508f;background:#e8508f;color:#fff;font:inherit;font-weight:700;cursor:pointer;touch-action:manipulation}
+.tut-cta:hover{filter:brightness(1.08)}
+.tut-voice-credit{margin-top:14px;font-size:12px;line-height:1.5;opacity:.85;overflow-wrap:anywhere}
+.tut-voice-credit>div:first-child{font-weight:700}
+.tut-guide{position:fixed;left:50%;top:84px;transform:translateX(-50%);z-index:60;display:flex;align-items:center;gap:12px;max-width:min(92vw,760px);padding:12px 14px 12px 18px;border-radius:14px;background:rgb(var(--ui-s1));color:rgb(var(--ui-t1));font-size:18px;font-weight:700;line-height:1.45;box-shadow:0 6px 24px rgba(0,0,0,.35);border:3px solid #e8508f}
+.tut-guide[hidden]{display:none!important}
+.tut-guide-text{flex:1 1 auto}
+.tut-hl{outline:4px solid #e8508f;outline-offset:3px;animation:tut-hl-pulse 1.2s ease-in-out infinite}
+@keyframes tut-hl-pulse{0%,100%{box-shadow:0 0 0 0 rgba(232,80,143,.55)}50%{box-shadow:0 0 0 12px rgba(232,80,143,0)}}
+@media (prefers-reduced-motion:reduce){.tut-hl{animation:none}}
+/* Quest などで、トリガーを押したまま手が動いてもボタンが文字選択にならないよう、UI 全体の文字選択を止める。入力欄だけ選択・編集を許す。 */
+body{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+input,textarea,select,[contenteditable],[contenteditable] *{-webkit-user-select:text;user-select:text}
+.tut-voice-credit,.tut-voice-credit *{-webkit-user-select:text;user-select:text} /* the voice credit (with its URL) can be selected and copied */
+button,a,img,svg{-webkit-user-drag:none}
