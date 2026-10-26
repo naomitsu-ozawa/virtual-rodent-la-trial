@@ -1,14 +1,14 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { set3DBusy } from './three-status.js?v=20261026-build671';
-import { useWorkspaceUi, updateRenderModeControl, clearResidentMprJobs, prepareResidentGpuVolume, activateMedicalVolume, setThreeVolumeOverlay } from './data-load.js?v=20261026-build671';
-import { appVersionBadge, planes, ipadGpuQualityControl, ipadGpuQuality, footer } from './ui-shell.js?v=20261026-build671';
-import { sceneState, volume, currentLanguage, ipadGpuTargetSide, setIpadGpuTargetSide, sourceVolume, threeRenderMode, setResidentMprReadbackDisabled, setThreeRenderMode } from './state.js?v=20261026-build671';
-import { updateMprCanvasPhysicalAspect, schedulePlaneRender } from './mpr-render.js?v=20261026-build671';
-import { request3DRender } from './scene3d.js?v=20261026-build671';
-import { applyLanguage } from './i18n.js?v=20261026-build671';
-import { isIPhoneRuntime, isTabletRuntime, isVrHeadsetRuntime, fmt } from './utils.js?v=20261026-build671';
-import { settings } from './app-settings.js?v=20261026-build671';
+import { set3DBusy } from './three-status.js?v=20261026-build673';
+import { useWorkspaceUi, updateRenderModeControl, clearResidentMprJobs, prepareResidentGpuVolume, activateMedicalVolume, setThreeVolumeOverlay } from './data-load.js?v=20261026-build673';
+import { appVersionBadge, planes, ipadGpuQualityControl, ipadGpuQuality, footer } from './ui-shell.js?v=20261026-build673';
+import { sceneState, volume, currentLanguage, ipadGpuTargetSide, setIpadGpuTargetSide, sourceVolume, threeRenderMode, setResidentMprReadbackDisabled, setThreeRenderMode } from './state.js?v=20261026-build673';
+import { updateMprCanvasPhysicalAspect, schedulePlaneRender } from './mpr-render.js?v=20261026-build673';
+import { request3DRender } from './scene3d.js?v=20261026-build673';
+import { applyLanguage } from './i18n.js?v=20261026-build673';
+import { isIPhoneRuntime, isTabletRuntime, isVrHeadsetRuntime, fmt } from './utils.js?v=20261026-build673';
+import { settings } from './app-settings.js?v=20261026-build673';
 export function initIPadWorkspaceUi(){
  if(!useWorkspaceUi())return;
  const shell=document.querySelector('.app-shell'),workspace=document.querySelector('.workspace'),sidebar=document.querySelector('.sidebar'),sidebarScroll=document.querySelector('.sidebar-scroll'),viewer=document.querySelector('#viewer-grid'),topbar=document.querySelector('.topbar');
@@ -145,7 +145,10 @@ export function initIPadWorkspaceUi(){
  const viewerSig=()=>{const r=viewer.getBoundingClientRect();return[r.left,r.top,r.width,r.height].map(Math.round).join()};
  let sigNow=null;
  const refreshLayoutIfMoved=()=>requestAnimationFrame(()=>{if(viewerSig()!==sigNow)refreshLayout()});
+ const EVENT_TABS=['data','prefs'];
+ const eventOn=()=>{try{return settings.get('eventMode')===true}catch{return false}};
  const setDrawerTab=tab=>{
+  if(eventOn()&&!EVENT_TABS.includes(tab))tab='data';
   if(tab==='prefs')document.dispatchEvent(new Event('vrl-settings-sync')); // the embedded settings show the stored values
   drawerTab=tab;
   drawerTabs.querySelectorAll('[data-ipad-drawer-tab]').forEach(b=>b.classList.toggle('is-active',b.dataset.ipadDrawerTab===tab));
@@ -178,12 +181,18 @@ export function initIPadWorkspaceUi(){
   setMprPlane(mprPlane,true);
  };
  drawerTabs.querySelectorAll('[data-ipad-drawer-tab]').forEach(b=>b.addEventListener('click',()=>setDrawerTab(b.dataset.ipadDrawerTab)));
+ const applyEventMenu=()=>{
+  const on=eventOn();
+  drawerTabs.querySelectorAll('[data-ipad-drawer-tab]').forEach(x=>{const hide=on&&!EVENT_TABS.includes(x.dataset.ipadDrawerTab);x.hidden=hide;x.style.display=hide?'none':''});
+  if(on&&!EVENT_TABS.includes(drawerTab))setDrawerTab('data');
+ };
+ window.addEventListener('vrl-settings',e=>{if(e.detail?.key==='eventMode')applyEventMenu()});
  toolbar.querySelectorAll('[data-ipad-view-mode]').forEach(b=>b.addEventListener('click',()=>setViewMode(b.dataset.ipadViewMode)));
  toolbar.querySelectorAll('[data-ipad-mpr]').forEach(b=>b.addEventListener('click',()=>setMprPlane(b.dataset.ipadMpr)));
  document.addEventListener('vrl-plane-selected',e=>{const p=e.detail?.plane;if(e.detail?.source!=='workspace'&&p&&p!==mprPlane)setMprPlane(p,true)});
  window.addEventListener('orientationchange',refreshLayout,{passive:true});
  window.addEventListener('resize',()=>{if(useWorkspaceUi())refreshLayout()},{passive:true});
- setDrawerTab('data');setMprPlane('axial',true);setViewMode(isVrHeadsetRuntime()?'2d':'3d');applyLanguage(currentLanguage);
+ setDrawerTab('data');applyEventMenu();setMprPlane('axial',true);setViewMode(isVrHeadsetRuntime()?'2d':'3d');applyLanguage(currentLanguage);
 }
 export function initIPadGpuQualityControl(){
  if(!ipadGpuQualityControl||!ipadGpuQuality)return;

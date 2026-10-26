@@ -14,14 +14,14 @@
 // A cleared ステップ waits for 次へ: the page says ステップクリア + 「次のステップに進みましょう。「次へ」を押してください」 (spoken too); the last one ends with the closing line. Nothing is remembered between sessions:
 // a session always starts at the entry guidance and ステップ1.
 // menuTarget() names the かんたんメニュー widget to light (vr-view.js draws the pointer there). Redraws: at most 2 a second, and none 20 s after the board last changed (marks still).
-import { getTutorialEngine, resetTutorialAll, continueTutorial, restartTutorial } from './tutorial-ui.js?v=20261026-build671';
-import { createTutorialAudio, createStepReplay, createChime, speechFor, isFeedbackId, stepVoiceIds } from './tutorial-audio.js?v=20261026-build671';
-import { createOrient, ORIENT_PHASES } from './tutorial-orient.js?v=20261026-build671';
-import { resetPress, resetArmed } from './event-mode.js?v=20261026-build671';
-import { tr } from './i18n.js?v=20261026-build671';
-import { TUTORIAL_MISSIONS, TUT_SAMPLE, TUT_ORIENT, TUT_FEEDBACK, TUT_MENU_OPEN, fillTissue } from './tutorial-data.js?v=20261026-build671';
-import { GUIDE_SLIDES, guideSlide, slideItem, itemRect, loc, createSlideImages, SLIDE_W, SLIDE_H } from './tutorial-slides.js?v=20261026-build671';
-import { drawPointer, drawKnobHint, drawStepFrame, drawDoneMark, animPhase, animKey, GOLD } from './tutorial-marks.js?v=20261026-build671';
+import { getTutorialEngine, resetTutorialAll, restartTutorial } from './tutorial-ui.js?v=20261026-build673';
+import { createTutorialAudio, createStepReplay, createChime, speechFor, isFeedbackId, stepVoiceIds } from './tutorial-audio.js?v=20261026-build673';
+import { createOrient, ORIENT_PHASES } from './tutorial-orient.js?v=20261026-build673';
+import { resetPress, resetArmed } from './event-mode.js?v=20261026-build673';
+import { tr } from './i18n.js?v=20261026-build673';
+import { TUTORIAL_MISSIONS, TUT_SAMPLE, TUT_ORIENT, TUT_FEEDBACK, TUT_MENU_OPEN, fillTissue } from './tutorial-data.js?v=20261026-build673';
+import { GUIDE_SLIDES, guideSlide, slideItem, itemRect, loc, createSlideImages, SLIDE_W, SLIDE_H } from './tutorial-slides.js?v=20261026-build673';
+import { drawPointer, drawKnobHint, drawStepFrame, drawDoneMark, animPhase, animKey, GOLD } from './tutorial-marks.js?v=20261026-build673';
 
 export const FLASH_MS = 1100;
 export function tutorialModeOn(api = globalThis.__vrlSettings) {
@@ -192,7 +192,7 @@ export function createTutorialVr({ engine, audio, chime, getImage, getLook = nul
   if (doEntry) { try { restartTutorial(eng, { start: false }); } catch { /* */ } }
   else if (auto) { try { restartTutorial(eng); } catch { /* */ } } // a later session of this page: no guidance, but still from ステップ1
   // the board opens on a step, never on an empty list: no step under way = the next one not done starts (ステップ1 = the controls slide on a first visit)
-  else if (!eng.getState().mission) { try { continueTutorial(eng); } catch { /* */ } }
+  else if (!eng.getState().mission) { try { const id = eng.nextMissionId(); if (id) eng.start(id); } catch { /* */ } } // entry:false only (tests / self-check; the page itself always passes 'auto' = restartTutorial above).: continueTutorial is gone
   const getVoice = () => { try { return globalThis.__vrlSettings?.get?.('tutorialVoice') || 'F1'; } catch { return 'F1'; } };
   const voice = audio || createTutorialAudio({ getVoice }), ding = chime || createChime({ getVoice });
   let view = 'auto', rev = 1, armedUntil = 0, flashUntil = 0, flash = null, spoken = '', changedAt = now(), voiceDone = true;

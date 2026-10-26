@@ -1318,29 +1318,7 @@ html.vrl-ipad-ui .ws-settings-embed .settings-cache-list,html.vrl-ipad-ui .ws-se
 .debug-switch-reload[hidden]{display:none}
 .debug-switches>#dbg-reset{margin-top:8px}
 
-/* チュートリアル panel (tutorial-ui.js); present only while 設定 > 外観 > チュートリアル is on */
-.tut-panel{display:grid;gap:10px;padding:2px 0 12px;margin-bottom:10px;border-bottom:1px solid rgb(var(--ui-b1))}
-.tut-title{font-size:15px;color:rgb(var(--ui-t1))}
-.tut-list{display:grid;gap:6px}
-.tut-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px;min-height:44px;padding:6px 10px;border-radius:12px;border:2px solid rgb(var(--ui-b2));background:rgb(var(--ui-s2));color:rgb(var(--ui-t2))}
-.tut-row.is-current{border-color:rgb(var(--ui-b3))}
-.tut-row[data-tut-status="locked"],.tut-row[data-tut-status="unavailable"]{opacity:.6}
-.tut-mark{width:1.4em;text-align:center;color:rgb(var(--ui-t1));font-weight:700}
-.tut-name{flex:1 1 auto;min-width:0}
-.tut-stepno{font-weight:700;margin-right:.6em}.tut-stepno-n{margin-left:.2em}
-.tut-opt,.tut-reason{font-size:12px;color:rgb(var(--ui-t3,var(--ui-t2)))}
-.tut-card{display:grid;gap:8px;padding:12px 14px;border-radius:14px;border:2px solid rgb(var(--ui-b3));background:rgb(var(--ui-s2));color:rgb(var(--ui-t1))}
-.tut-card[hidden],.tut-all[hidden]{display:none}
-.tut-count{font-size:12px;color:rgb(var(--ui-t2))}
-.tut-text{margin:0;font-size:17px;line-height:1.5}
-.tut-sub{margin:0;font-size:13px;color:rgb(var(--ui-t2))}
-html[lang="en"] .tut-sub{display:none}
-.tut-next-note{margin:0;font-size:13px;font-weight:600;color:rgb(var(--ui-t1))}
-.tut-nav,.tut-tools{display:flex;flex-wrap:wrap;gap:8px}
-.tut-panel button{min-height:44px;padding:6px 14px;border-radius:10px;border:1px solid rgb(var(--ui-b3));background:rgb(var(--ui-s1));color:rgb(var(--ui-t1));font:inherit;cursor:pointer;touch-action:manipulation}
-.tut-panel button:disabled{opacity:.45;cursor:default}
-.tut-next,.tut-start{border-width:2px}
-.tut-reset.is-armed{border-color:rgb(var(--ui-t1));font-weight:700}
+/* the 2D チュートリアル panel is gone (the left pane shows only the 体験会 cards); the styles below are the topbar button, the introduction bar and the lit outline */
 /* 「チュートリアルを始める」 (top bar, VR devices only), the introduction's subtitle bar and the pulsing outline on what to press next (the pink = the event slides' accent, as on the VR board) */
 .tut-cta{min-height:40px;padding:6px 16px;white-space:nowrap;flex:0 0 auto;border-radius:999px;border:2px solid #e8508f;background:#e8508f;color:#fff;font:inherit;font-weight:700;cursor:pointer;touch-action:manipulation}
 .tut-cta:hover{filter:brightness(1.08)}
