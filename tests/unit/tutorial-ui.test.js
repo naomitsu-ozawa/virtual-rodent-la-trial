@@ -217,7 +217,8 @@ describe('page introduction', () => {
       f.doc.dispatchEvent(Object.assign(new Event('vrl-tut-signal'), { detail: { kind: 'vr-start' } }));
       expect(it.active).toBe(false); expect(f.bar()).toBeNull(); expect(f.byId['vr-view-button'].cls.has('tut-hl')).toBe(false);
       it.start(); expect(it.phase).toBe('pressVr'); // started again with Lv0 already open: straight to the VR button
-      f.bar().children[1].onclick(); expect(it.active).toBe(false); // 閉じる
+      expect(f.bar().hidden).toBe(true); expect(f.bar().children.length).toBe(1); // never shown, no 閉じる button
+      it.stop(); expect(it.active).toBe(false);
     } finally { vi.useRealTimers(); }
   });
   it('VR / AR guidance waits for the volume: chosen but not ready = wait text, nothing lit, nothing said; ready = the VR button, said once', () => {

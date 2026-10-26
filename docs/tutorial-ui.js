@@ -11,12 +11,12 @@
 // The instance is kept on globalThis.__vrlTutorialEngine, so it stays single even when the module is loaded under two ?v= URLs.
 // Signals: the first getTutorialEngine() also wires document/window 'vrl-tut-signal' ({detail:{kind,count?}}) to engine.onSignal (once; a signal seen on both is counted once).
 // A module that wires signals itself must set globalThis.__vrlTutSignalWired=true BEFORE the first getTutorialEngine() call.
-import { settings } from './app-settings.js?v=20261025-build669';
-import { tr, I18N } from './i18n.js?v=20261025-build669';
-import { TUTORIAL_MISSIONS, TUT_SAMPLE, TUT_INTRO, TUT_VOICE_PICK, fillTissue } from './tutorial-data.js?v=20261025-build669';
-import { createTutorialAudio } from './tutorial-audio.js?v=20261025-build669';
-import { createTutorialEngine } from './tutorial-engine.js?v=20261025-build669';
-import { resetPress, resetArmed, RESET_ARM_MS, EVENT_LEVELS } from './event-mode.js?v=20261025-build669';
+import { settings } from './app-settings.js?v=20261026-build670';
+import { tr, I18N } from './i18n.js?v=20261026-build670';
+import { TUTORIAL_MISSIONS, TUT_SAMPLE, TUT_INTRO, TUT_VOICE_PICK, fillTissue } from './tutorial-data.js?v=20261026-build670';
+import { createTutorialAudio } from './tutorial-audio.js?v=20261026-build670';
+import { createTutorialEngine } from './tutorial-engine.js?v=20261026-build670';
+import { resetPress, resetArmed, RESET_ARM_MS, EVENT_LEVELS } from './event-mode.js?v=20261026-build670';
 
 // the switch (設定 > 外観 > チュートリアル) off = the engine ignores every signal (nothing advances, nothing is saved); on again = as before
 // true while the tutorial UI is live (the switch is on AND the device supports VR): the Lv0 card of 体験会 acts as the tutorial only then (event-mode-ui.js)
@@ -175,8 +175,9 @@ export function createTutorialIntro({doc=globalThis.document,audio=null,getOpenS
  function mount(){
   bar=doc.createElement('div');bar.id='tut-guide';bar.className='tut-guide';bar.setAttribute('role','status');
   const t=doc.createElement('span');t.className='tut-guide-text';
-  const x=doc.createElement('button');x.type='button';x.className='tut-guide-close';x.dataset.i18n='tutGuideClose';x.textContent=tr('tutGuideClose');x.onclick=()=>stop();
-  bar.append(t,x);doc.body.append(bar);
+  // the bar is never shown (beginners followed it and pressed 閉じる, which ended the guidance). It stays in the DOM, hidden, as the carrier of the phase / text; the lit buttons and the voice are the guidance.
+  bar.hidden=true;
+  bar.append(t);doc.body.append(bar);
  }
  function run(m){if(!bar)mount();mode=m;spoken.clear();gate.reset();clearTimeout(voiceTimer);phase=null;setPhase(want());clearInterval(timer);timer=setInterval(paint,tickMs)}
  function stop(){phase=null;clearInterval(timer);clearTimeout(voiceTimer);timer=0;for(const e of lit)e.classList.remove('tut-hl');lit=new Set();bar?.remove();bar=null}
