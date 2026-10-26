@@ -1,9 +1,9 @@
 import { settings } from './app-settings.js?v=20261026-build673';
-import { tr, I18N } from './i18n.js?v=20261026-build673';
-import { TUTORIAL_MISSIONS, TUT_SAMPLE, TUT_INTRO, TUT_VOICE_PICK, fillTissue } from './tutorial-data.js?v=20261026-build673';
+import { tr } from './i18n.js?v=20261026-build673';
+import { TUTORIAL_MISSIONS, TUT_SAMPLE, TUT_INTRO, TUT_VOICE_PICK } from './tutorial-data.js?v=20261026-build673';
 import { createTutorialAudio } from './tutorial-audio.js?v=20261026-build673';
 import { createTutorialEngine } from './tutorial-engine.js?v=20261026-build673';
-import { resetPress, resetArmed, RESET_ARM_MS, EVENT_LEVELS } from './event-mode.js?v=20261026-build673';
+import { EVENT_LEVELS } from './event-mode.js?v=20261026-build673';
 
 // the switch (設定 > 外観 > チュートリアル) off = the engine ignores every signal (nothing advances, nothing is saved); on again = as before
 // true while the tutorial UI is live (the switch is on AND the device supports VR): the Lv0 card of 体験会 acts as the tutorial only then (event-mode-ui.js)
@@ -29,15 +29,6 @@ export async function detectVrSupport(nav=globalThis.navigator){
  try{const xr=nav?.xr;if(!xr||typeof xr.isSessionSupported!=='function')return false;return (await xr.isSessionSupported('immersive-vr'))===true}catch{return false}
 }
 export function _resetTutorialEngineForTest(){uiActive=false;delete globalThis.__vrlTutorialEngine;delete globalThis.__vrlTutSignalWired}
-
-// pure: what the panel shows (unit-tested)
-export function panelModel(eng){
- const missions=eng.listMissions().map(m=>({id:m.id,stepNo:m.stepNo,titleKey:m.title,status:m.status,reasonKey:m.reason,optional:m.optional,current:m.current,mark:m.status==='done'?'tutDone':null,canStart:m.status==='available'||m.status==='done'}));
- const info=eng.pageInfo(),st=eng.currentStep(),snap=eng.getState();
- const step=info&&st?{n:info.n,N:info.N,textKey:st.text,hasPrev:info.hasPrev,hasNext:info.hasNext,isLast:info.isLast,finished:info.finished,missionId:snap.mission}:null;
- const allDone=missions.filter(m=>m.status!=='unavailable'&&!m.optional).every(m=>m.status==='done');
- return{missions,step,allDone};
-}
 
 // 最初から (the same in 2D and VR): the progress (the engine's, in memory) always goes; the marks / distances / HU line (resetUserState) go only while a tutorial practice dataset is open,
 // never the visitor's own data. openSample = globalThis.__vrlOpenSample (app.js setOpenSample), read at call time.
@@ -163,66 +154,19 @@ export function createTutorialIntro({doc=globalThis.document,audio=null,getOpenS
  doc?.addEventListener?.('vrl-tut-signal',e=>{const k=e.detail?.kind;if(phase&&(k==='vr-start'||k==='ar-start'))stop()}); // a session started: the guidance of this page is over (the VR board takes over / Lv1-Lv3 do not get the tutorial)
  return{start:()=>run('lv0'),startLevels:()=>run('levels'),stop,get phase(){return phase},get mode(){return mode},get active(){return!!phase},gate};
 }
-export function initTutorialUi({resetUserState}={}){
+export function initTutorialUi(){
  const box=document.getElementById('set-tutorial-mode'),voice=document.getElementById('set-tutorial-voice');
  if(box){box.checked=settings.get('tutorialMode')===true;box.onchange=()=>settings.set('tutorialMode',box.checked)}
  if(voice){voice.value=settings.get('tutorialVoice');voice.onchange=()=>settings.set('tutorialVoice',voice.value)}
  const rows=['tutorial-row-mode','tutorial-row-note','tutorial-row-voice'].map(i=>document.getElementById(i)).filter(Boolean);
- let panel=null,unsub=null,armedUntil=0,armTimer=0,vr=false;
+ let vr=false;
  const showRows=on=>{for(const r of rows){r.hidden=!on;if(r.style)r.style.display=on?'':'none'}};
  const el=(tag,cls,key)=>{const e=document.createElement(tag);if(cls)e.className=cls;if(key){e.dataset.i18n=key;e.textContent=tr(key)}return e};
  const btn=(cls,key,fn)=>{const b=el('button',cls,key);b.type='button';b.onclick=fn;return b};
- const pressReset=()=>{
-  const r=resetPress(armedUntil,performance.now());armedUntil=r.armedUntil;clearTimeout(armTimer);
-  if(!r.fire){armTimer=setTimeout(()=>{armedUntil=0;render()},RESET_ARM_MS+80);render();return}
-  resetTutorialAll({resetUserState});
-  render();
- };
- function render(){
-  if(!panel)return;const eng=getTutorialEngine(),model=panelModel(eng);
-  const card=panel.querySelector('.tut-card'),s=model.step;card.hidden=!s;
-  if(s){
-   card.replaceChildren();
-   const head=el('div','tut-card-head'),count=el('span','tut-count');count.textContent=s.n+'/'+s.N;count.dataset.tutCount='1';
-   head.append(count);card.append(head);
-   if(s.finished){card.append(el('p','tut-text',model.allDone?'tutAllDone':'tutMissionDone'));card.append(el('p','tut-next-note',model.allDone?'tutIntroLv123':'tutFbGoNext'))} // a cleared ステップ waits for 次へ (it opens the next ステップ)
-   else{
-    // a caption with {tissue} (the menu pages) says the real first tissue of the open data (globalThis.__vrlTissueName, set by app.js); never the placeholder. Such a line has no data-i18n (a language switch would put the placeholder back)
-    const tissue=lang=>{try{return globalThis.__vrlTissueName?.(lang)||''}catch{return ''}};
-    const line=(text,fb,lang)=>fillTissue(text,tissue(lang),fb);
-    if(String(tr(s.textKey)).includes('{tissue}')){const p=el('p','tut-text');p.textContent=line(tr(s.textKey),tr('tutTissueFallback'));card.append(p)}
-    else card.append(el('p','tut-text',s.textKey));
-    // (the English line names the tissue in English)
-    const sub=el('p','tut-sub');sub.textContent=line(I18N.en?.[s.textKey]||'',I18N.en?.tutTissueFallback,'en');sub.lang='en';card.append(sub);
-   }
-   const nav=el('div','tut-nav');
-   const prev=btn('tut-prev','tutPrev',()=>getTutorialEngine().prev());prev.disabled=!s.hasPrev;
-   const next=btn('tut-next',s.isLast&&!s.finished?'tutFinish':'tutNext',()=>getTutorialEngine().next());next.disabled=!s.hasNext;
-   nav.append(prev,next,btn('tut-skip-mission','tutSkipMission',()=>getTutorialEngine().skipMission()));card.append(nav);
-  }
-  if(model.allDone&&!s)panel.querySelector('.tut-all').hidden=false;else panel.querySelector('.tut-all').hidden=true;
-  const rb=panel.querySelector('.tut-reset'),armed=resetArmed(armedUntil,performance.now()),key=armed?'tutResetAgain':'tutReset';
-  rb.classList.toggle('is-armed',armed);rb.dataset.i18n=key;rb.textContent=tr(key);
- }
- function mount(){
-  panel=el('section','tut-panel');panel.id='tutorial-panel';panel.setAttribute('aria-labelledby','tut-title');
-  const title=el('strong','tut-title','tutTitle');title.id='tut-title';
-  const all=el('p','tut-all','tutAllDone');all.hidden=true;
-  const tools=el('div','tut-tools');
-  const skipAll=btn('tut-skip-all','tutSkipAll',()=>getTutorialEngine().skipAll());
-  const rb=btn('tut-reset','tutReset',pressReset);
-  tools.append(skipAll,rb);
-  panel.append(title,el('div','tut-card'),all,tools);
-  const host=document.querySelector('[data-ipad-drawer-section="data"]')||document.querySelector('.sidebar-scroll > .panel');
-  if(host)host.prepend(panel);else document.body.append(panel);
-  unsub=getTutorialEngine().subscribe(render);render();
- }
  const sync=()=>{
   const on=vr&&settings.get('tutorialMode')===true;uiActive=on;if(box)box.checked=settings.get('tutorialMode')===true;if(voice)voice.value=settings.get('tutorialVoice');
-  if(on&&!panel)mount();else if(!on&&panel){unsub?.();unsub=null;panel.remove();panel=null;armedUntil=0;clearTimeout(armTimer)}
  };
  window.addEventListener('vrl-settings',e=>{if(e.detail?.key==='tutorialMode'||e.detail?.key==='tutorialVoice')sync()});
- document.addEventListener('vrl-event-sample-open',()=>render());
  // 「チュートリアルを始める」 in the top bar, just before 「VRで見る」 (always in view, whichever panel is open; VR devices only): switches the tutorial on, continues it (the next step not done) and starts the introduction
  const intro=createTutorialIntro({audio:createTutorialAudio({getVoice:()=>settings.get('tutorialVoice')})});
  // the last ステップ (leave VR / AR) cleared = the tutorial is over: back on the page the bar guides to Lv1-Lv3 and then to VR / AR (it ends when that session starts). The signal arrives with the closing
