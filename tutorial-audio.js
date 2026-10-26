@@ -2,7 +2,7 @@
 // (the subtitles / texts carry the tutorial alone).: two voices, docs/tutorial/audio/<F1|M1>/<id>.m4a (F1 女性 = default, M1 男性); settings tutorialVoice 'off' = silent (subtitles only), anything else = F1.
 export const AUDIO_BASE = './tutorial/audio/';
 export const DEFAULT_VOICE = 'F1';
-const AUDIO_QUERY = '?v=20261025-build669'; // same cache-busting form as the other assets (tools/bump-build.mjs rewrites it); the .m4a file name / id is unchanged
+const AUDIO_QUERY = '?v=20261026-build671'; // same cache-busting form as the other assets (tools/bump-build.mjs rewrites it); the .m4a file name / id is unchanged
 export const VOICES = Object.freeze(['F1', 'M1']);
 export const voiceOf = v => (v === 'off' ? 'off' : VOICES.includes(v) ? v : DEFAULT_VOICE);
 export const audioSrc = (voice, id, base = AUDIO_BASE) => { const v = voiceOf(voice); return !id || v === 'off' ? null : `${base}${v}/${id}.m4a${AUDIO_QUERY}`; };
