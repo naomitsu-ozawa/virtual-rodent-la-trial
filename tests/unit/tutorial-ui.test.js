@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { sanitizeTutorialSettings, SETTINGS_DEFAULTS } from '../../docs/app-settings.js';
-import { tutorialSignalsOn, tutorialUiActive, continueTutorial, getTutorialEngine, resetTutorialAll, isPracticeSample, panelModel, detectVrSupport, _resetTutorialEngineForTest, introPhase, introTargets, introTextKey, createTutorialIntro, sampleReady, restartTutorial, forgetLegacyProgress, preparePanelShown } from '../../docs/tutorial-ui.js';
+import { tutorialSignalsOn, tutorialUiActive, getTutorialEngine, resetTutorialAll, isPracticeSample, panelModel, detectVrSupport, _resetTutorialEngineForTest, introPhase, introTargets, introTextKey, createTutorialIntro, sampleReady, restartTutorial, forgetLegacyProgress, preparePanelShown } from '../../docs/tutorial-ui.js';
 import { createTutorialEngine } from '../../docs/tutorial-engine.js';
 import { TUTORIAL_MISSIONS } from '../../docs/tutorial-data.js';
 import { EVENT_LEVELS } from '../../docs/event-mode.js';
@@ -100,7 +100,7 @@ describe('the tutorial has no analysis part', () => {
   });
 });
 
-describe('Lv0 card: starts the tutorial from ステップ1 every time; continueTutorial stays for the board without the entry guidance', () => {
+describe('Lv0 card: starts the tutorial from ステップ1 every time; nothing is resumed', () => {
   const eng = () => createTutorialEngine({ arAvailable: false });
   it('restartTutorial (what the card calls): mid-mission, finished or everything skipped, it always ends on ステップ1, page 1, nothing done', () => {
     const e = eng(); e.start('controls'); e.next(); e.next(); e.start('grip'); e.next();
@@ -108,19 +108,14 @@ describe('Lv0 card: starts the tutorial from ステップ1 every time; continueT
     e.skipAll(); expect(restartTutorial(e)).toEqual({ action: 'start', id: 'controls' }); expect(e.getState()).toMatchObject({ mission: 'controls', step: 0, skipAll: false, done: {} });
     expect(e.isUnlocked('grip')).toBe(false);
   });
-  it('nothing done: starts ステップ1; a mission under way keeps going (not restarted); after finishing it the next one starts', () => {
-    const e = eng();
-    expect(continueTutorial(e)).toEqual({ action: 'start', id: 'controls' }); expect(e.getState()).toMatchObject({ mission: 'controls', step: 0 });
-    e.next(); e.next(); expect(e.getState().finished).toBe(true); // ステップ1 has two pages
-    expect(continueTutorial(e)).toEqual({ action: 'start', id: 'grip' });
-    e.next(); expect(e.getState().step).toBe(1);
-    expect(continueTutorial(e)).toEqual({ action: 'resume', id: 'grip' }); expect(e.getState()).toMatchObject({ mission: 'grip', step: 1 }); // untouched
-  });
-  it('after a reload (no mission open) the next not-done step starts; everything done: nothing starts', () => {
-    const e2 = eng(); e2.skipMission('controls'); e2.skipMission('grip'); // nothing open (as after a reload)
-    expect(continueTutorial(e2)).toEqual({ action: 'start', id: 'section' });
-    const all = eng(); all.skipAll();
-    expect(continueTutorial(all)).toEqual({ action: 'none', id: null }); expect(all.getState().mission).toBeNull();
+  it('no resume and no jump: continueTutorial does not exist; the 2D panel has no list of steps and no per-step start buttons', async () => {
+    const ui = await import('../../docs/tutorial-ui.js');
+    expect(ui.continueTutorial).toBeUndefined();
+    const { readFileSync } = await import('node:fs');
+    const src = readFileSync(new URL('../../docs/tutorial-ui.js', import.meta.url), 'utf8').split('\n').filter(l => !l.startsWith('//')).join('\n');
+    expect(src).not.toMatch(/tut-list|tut-row|data-tut-start|dataset\.tutStart|dataset\.tutMission|startMission|continueTutorial/);
+    const vr = readFileSync(new URL('../../docs/tutorial-vr.js', import.meta.url), 'utf8');
+    expect(vr).not.toMatch(/continueTutorial\(/);
   });
   it('wiring: only Lv0 and only while the tutorial UI is live; the switch is never turned on by the card', async () => {
     const { readFileSync } = await import('node:fs');
