@@ -1,20 +1,22 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { segmentState, segmentNeedsGlobalMask, sourceMprMemoryView, sourceMemoryUsable, getProcessedSegmentMask, segmentEditState, segmentSourcesOf, segmentSourceSignature, segmentHasManualEditsUpstream, segmentEditGen, segmentKeyOf, segmentAddsVoxels } from './segments.js?v=20261026-build674';
-import { activeId, filterRebuildRevision, current3DVolume, volume, currentLanguage } from './state.js?v=20261026-build674';
-import { sourceFilterRuntime, sourceFilterSignature, sourceFilterStages, sourceFilterHalo, readSourceRegion, runSourceFilterWorker, fitSourceTile, getCachedSourceSlice } from './source-filters.js?v=20261026-build674';
-import { gpuOpenRuns, gpuCounts, gpuStepTimes, gpuRunInfo, addGpuStepTime, ensureGpuFilterDevice, gpuValidationScope, setGpuComputeBackend, runGpuSourceFilters, gpuFilterRuntime, gpuStagesSupported, beginGpuBufferRetention, endGpuBufferRetention } from './gpu-compute.js?v=20261026-build674';
-import { isNativeDicomTransferSyntax } from './dicom.js?v=20261026-build674';
-import { extractSourceThresholdRuns } from './medical-volume.js?v=20261026-build674';
-import { valuesToSegmentBits } from './mask-ops.js?v=20261026-build674';
-import { state } from './ui-shell.js?v=20261026-build674';
+import { segmentState, segmentNeedsGlobalMask, sourceMprMemoryView, sourceMemoryUsable, getProcessedSegmentMask, segmentEditState, segmentSourcesOf, segmentSourceSignature, segmentHasManualEditsUpstream, segmentEditGen, segmentKeyOf, segmentAddsVoxels } from './segments.js?v=20261026-build675';
+import { activeId, filterRebuildRevision, current3DVolume, volume, currentLanguage } from './state.js?v=20261026-build675';
+import { sourceFilterRuntime, sourceFilterSignature, sourceFilterStages, sourceFilterHalo, readSourceRegion, runSourceFilterWorker, fitSourceTile, getCachedSourceSlice } from './source-filters.js?v=20261026-build675';
+import { gpuOpenRuns, gpuCounts, gpuStepTimes, gpuRunInfo, addGpuStepTime, ensureGpuFilterDevice, gpuValidationScope, setGpuComputeBackend, runGpuSourceFilters, gpuFilterRuntime, gpuStagesSupported, beginGpuBufferRetention, endGpuBufferRetention } from './gpu-compute.js?v=20261026-build675';
+import { isNativeDicomTransferSyntax } from './dicom.js?v=20261026-build675';
+import { extractSourceThresholdRuns } from './medical-volume.js?v=20261026-build675';
+import { valuesToSegmentBits } from './mask-ops.js?v=20261026-build675';
+import { state } from './ui-shell.js?v=20261026-build675';
 import dicomParser from 'https://esm.sh/dicom-parser@1.8.21';
-import { analysisRunsVoxelCount, unionRunArrays, maskToAnalysisRuns, postprocessSourceRuns, thinSuppressSourceRuns, intersectRunArrays, subtractRunArrays } from './run-length.js?v=20261026-build674';
-import { frameYield } from './utils.js?v=20261026-build674';
-import { BODY_MIN_HU } from './thin-suppress.js?v=20261026-build674';
-import { setProcessingBusy } from './busy.js?v=20261026-build674';
-import { reportBusyProgress } from './progress-modal.js?v=20261026-build674';
-import { segmentRunsCacheKey, segmentRunsCacheInfo, loadCachedSegmentRuns, storeCachedSegmentRuns } from './run-cache.js?v=20261026-build674';
+import { analysisRunsVoxelCount, unionRunArrays, maskToAnalysisRuns, postprocessSourceRuns, thinSuppressSourceRuns, intersectRunArrays, subtractRunArrays } from './run-length.js?v=20261026-build675';
+import { frameYield } from './utils.js?v=20261026-build675';
+import { BODY_MIN_HU } from './thin-suppress.js?v=20261026-build675';
+import { setProcessingBusy } from './busy.js?v=20261026-build675';
+import { reportBusyProgress } from './progress-modal.js?v=20261026-build675';
+import { segmentRunsCacheKey, segmentRunsCacheInfo, loadCachedSegmentRuns, storeCachedSegmentRuns } from './run-cache.js?v=20261026-build675';
+import { loadStatAdd } from './load-stats.js?v=20261026-build675';
+import { hashHex } from './vr-prep-cache.js?v=20261026-build675'; // a content hash for the key (the upstream manual edits) //: cache hits of a load, for the VR switch report
 export async function processSourceRegionMasks(series,target,stages,key,revision,segments){
  const halo=sourceFilterHalo(stages),x0=Math.max(0,target.x-halo),y0=Math.max(0,target.y-halo),z0=Math.max(0,target.z-halo),x1=Math.min(series.columns,target.x+target.width+halo),y1=Math.min(series.rows,target.y+target.height+halo),z1=Math.min(series.slices.length,target.z+target.depth+halo);
  const box={x:x0,y:y0,z:z0,width:x1-x0,height:y1-y0,depth:z1-z0},data=await readSourceRegion(series,box,revision,true);
@@ -337,11 +339,16 @@ export async function ensureSegmentBaseRuns(key,v=current3DVolume||volume,onProg
    // the final voxels of the voxel takers above are subtracted (Ref = what they finally hold, as drawn)
    const seg=segmentState[key],sources=segmentSourcesOf(key),needExclude=sources.length>0&&v.sourceBacked&&!sourceMemoryUsable(v);
    // the device cache cannot hold a result that depends on manual edits (they are not part of its key)
-   const cacheable=!segmentHasManualEditsUpstream(key),extra=sources.length?{sources:segmentSourceSignature(key,false)}:null;
-   const cacheKeyPromise=cacheable&&v.sourceBacked&&v.series?segmentRunsCacheKey(v.series,sourceFilterSignature(sourceFilterStages()),seg,extra).catch(()=>null):null;
+   // the manual edits of the segments above (a practice project's exclusion masks, or the user's) are part of the key as a hash of their runs: such a result is cached too and a
+   // different edit gives another key (before, any segment below an edited one was recomputed on every open)
+   const manualUp=segmentHasManualEditsUpstream(key),filterSig=sourceFilterSignature(sourceFilterStages());
+   const cacheKeyPromise=v.sourceBacked&&v.series?(async()=>{const eh=manualUp?await upstreamEditsHash(key):'';
+    const extra=sources.length||eh?{...(sources.length?{sources:segmentSourceSignature(key,false)}:{}),...(eh?{edits:eh}:{})}:null;
+    return segmentRunsCacheKey(v.series,filterSig,seg,extra)})().catch(()=>null):null;
 
    let runs=null;postprocessStats.delete(key);airGpuFailure.delete(key);segmentTimings.set(key,[]);gpuStepTimes.clear();gpuCounts.clear();for(const k of Object.keys(gpuRunInfo))delete gpuRunInfo[k];let tt=performance.now();
-   if(cacheKeyPromise){const k=await cacheKeyPromise;tt=timeStep(key,ja?'キー':'key',tt);if(k)try{runs=await loadCachedSegmentRuns(k,v.slices);if(runs)report(v.slices,v.slices,'thin')}catch{runs=null}tt=timeStep(key,ja?'キャッシュ読込':'cache read',tt)}
+   if(cacheKeyPromise){const k=await cacheKeyPromise;tt=timeStep(key,ja?'キー':'key',tt);if(k)try{runs=await loadCachedSegmentRuns(k,v.slices);if(runs)report(v.slices,v.slices,'thin')}catch{runs=null}loadStatAdd(runs?'runsHit':'runsMiss');tt=timeStep(key,ja?'キャッシュ読込':'cache read',tt)}
+   if(!cacheKeyPromise)loadStatAdd('runsUncached'); // manual edits upstream / not source-backed: the device cache cannot hold it
    if(!runs){
     // settings changed meanwhile: stop instead of finishing a stale pass
     const alive=()=>segmentBaseSignature(key,v)===sig;
@@ -427,4 +434,9 @@ export async function decodeSourceSegmentMasks(meta,segments){
   state.block=null;delete state.used;delete state.min;delete state.max;
  }
  return states;
+}
+// the keep / exclude runs of every segment above `key` (its sources, recursively): a hash of their content, '' when there is none
+async function upstreamEditsHash(key){
+ const seen=new Set(),list=[],visit=k=>{for(const u of segmentSourcesOf(k)){if(seen.has(u))continue;seen.add(u);const st=segmentEditState[u];list.push([u,st?.keepRuns||null,st?.excludeRuns||null]);visit(u)}};
+ visit(key);return list.some(x=>x[1]||x[2])?hashHex(list):'';
 }

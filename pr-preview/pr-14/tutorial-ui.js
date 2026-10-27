@@ -1,9 +1,9 @@
-import { settings } from './app-settings.js?v=20261026-build674';
-import { tr } from './i18n.js?v=20261026-build674';
-import { TUTORIAL_MISSIONS, TUT_SAMPLE, TUT_INTRO, TUT_VOICE_PICK } from './tutorial-data.js?v=20261026-build674';
-import { createTutorialAudio } from './tutorial-audio.js?v=20261026-build674';
-import { createTutorialEngine } from './tutorial-engine.js?v=20261026-build674';
-import { EVENT_LEVELS } from './event-mode.js?v=20261026-build674';
+import { settings } from './app-settings.js?v=20261026-build675';
+import { tr } from './i18n.js?v=20261026-build675';
+import { TUTORIAL_MISSIONS, TUT_SAMPLE, TUT_INTRO, TUT_VOICE_PICK } from './tutorial-data.js?v=20261026-build675';
+import { createTutorialAudio } from './tutorial-audio.js?v=20261026-build675';
+import { createTutorialEngine } from './tutorial-engine.js?v=20261026-build675';
+import { EVENT_LEVELS } from './event-mode.js?v=20261026-build675';
 
 // the switch (設定 > 外観 > チュートリアル) off = the engine ignores every signal (nothing advances, nothing is saved); on again = as before
 // true while the tutorial UI is live (the switch is on AND the device supports VR): the Lv0 card of 体験会 acts as the tutorial only then (event-mode-ui.js)

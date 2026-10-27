@@ -5,12 +5,12 @@
 // labels, crop, crosshair, HU line, the 3D object) is reset by the series switch itself (app.js resetVolume, data-load.js resetDatasetState, selectSeries).
 // resetUserState() is also the first half of the VR 「最初の状態に戻す」 button (data-load.js restoreProjectAnnotations puts the project's own points back).
 // With event mode off nothing here runs (freshForEventSelection returns false), so the normal flow keeps its behaviour (comments kept per dataset, ...).
-import { setComments, resetCommentsSaved, setMarkersShown } from './comments.js?v=20261026-build674';
-import { resetMeasurements } from './measurements.js?v=20261026-build674';
-import { setHuMode, HU_MODE_FILTERED } from './effective-hu.js?v=20261026-build674';
-import { resetHistogramView } from './histogram-ui.js?v=20261026-build674';
-import { clearHuLine } from './hu-line-model.js?v=20261026-build674';
-import { eventModeOn } from './event-mode.js?v=20261026-build674';
+import { setComments, resetCommentsSaved, setMarkersShown } from './comments.js?v=20261026-build675';
+import { resetMeasurements } from './measurements.js?v=20261026-build675';
+import { setHuMode, HU_MODE_FILTERED } from './effective-hu.js?v=20261026-build675';
+import { resetHistogramView } from './histogram-ui.js?v=20261026-build675';
+import { clearHuLine } from './hu-line-model.js?v=20261026-build675';
+import { eventModeOn } from './event-mode.js?v=20261026-build675';
 
 // 'vrl-event-fresh': modules that keep a piece of state of their own listen to it (the 3D view's camera distance in app.js, the VR module's
 // per-segment modes / point mode / screenshots), so that this file needs no import of them
