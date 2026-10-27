@@ -73,10 +73,12 @@ export async function volumeCache(){
  if(volumeCacheState.cache&&eventModeOnForCache())void requestPersistentCache(); // 体験会モード asks to keep the stored data (4 levels of cache)
  return volumeCacheState.cache;
 }
-// 体験会モード keeps ALL FOUR practice levels at once: their filtered 3D volumes (Lv0 / Lv2 / Lv3: 3 x 268 MB) and their finished VR data (each: the 512 body 268 MB + the 256 copy + bricks ~306 MB,
-// and the classification, distance field, combined texture, mask, index ~150-250 MB). 3.5 GB is the estimate with some margin; the budget of that mode is that much (but at most 85 % of what the
-// browser says it can store), so the LRU does not push a level out and bring back the slow load. The normal-mode default is unchanged; a limit set by hand in settings > cache wins in both.
-export const EVENT_CACHE_NEED_BYTES=3.5*2**30;
+// 体験会モード keeps ALL FOUR practice levels at once, so the LRU does not push a level out and bring back the slow load. What one level occupies (the same in every build): the browser's filtered 3D volume
+// (Lv0 / Lv2 / Lv3 are filtered: 3 x 268 MiB; the 512 grid of the cross-sections comes from it, it is not stored a second time) and the finished VR data of the 256 level (the 256 copy and the bricks of both grids ~38 MiB;
+// the classification, distance field, combined texture, mask and index at most ~250 MiB). That is ~1.9 GiB for four levels; EVENT_CACHE_NEED_BYTES adds 30 % of margin (~2.5 GiB): below it the 詳細 tab warns "short of 4 levels".
+// EVENT_CACHE_BUDGET_BYTES (3.5 GiB) is the CAP of the cache in that mode (at most 85 % of what the browser says it can store; unchanged). The normal-mode default is unchanged; a limit set by hand in settings > cache wins in both.
+export const EVENT_CACHE_BUDGET_BYTES=3.5*2**30;
+export const EVENT_CACHE_NEED_BYTES=Math.ceil((3*268+4*(38+250))*2**20*1.3);
 const eventModeOnForCache=()=>{try{return globalThis.__vrlSettings?.get?.('eventMode')===true}catch{return false}};
 export async function volumeCacheBudgetInfo(){
  const fixed=+globalThis.__vrlSettings?.get?.('cacheLimit');
@@ -85,7 +87,7 @@ export async function volumeCacheBudgetInfo(){
  try{persisted=await navigator.storage?.persisted?.()}catch{/* none */}
  const base=quota?Math.max(256*2**20,Math.min(cap,quota*.3)):cap;
  let budget=fixed>0?fixed*2**30:base;
- if(!(fixed>0)&&event)budget=Math.max(base,Math.min(EVENT_CACHE_NEED_BYTES,quota?quota*.85:EVENT_CACHE_NEED_BYTES));
+ if(!(fixed>0)&&event)budget=Math.max(base,Math.min(EVENT_CACHE_BUDGET_BYTES,quota?quota*.85:EVENT_CACHE_BUDGET_BYTES));
  return{budget,base,need:event?EVENT_CACHE_NEED_BYTES:0,quota,usage,persisted,event,enough:!event||budget>=EVENT_CACHE_NEED_BYTES};
 }
 export async function volumeCacheBudget(){

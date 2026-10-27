@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { CHUNK, VR_CACHE_FORMAT, canonicalBytes, hashHex, packEntry, sliceOf, storeEntry, loadEntry, pruneSiblings } from '../../docs/vr-prep-cache.js';
+import { CHUNK, VR_CACHE_FORMAT, canonicalBytes, hashHex, packEntry, sliceOf, storeEntry, loadEntry, pruneSiblings, isStandardOpen } from '../../docs/vr-prep-cache.js';
 
 // the finished VR data on the device. The module is pure apart from the cache object it is given: an in-memory one with the same API as gpu-volume-cache.js stands in.
 function memCache({ failBegin = false, failWriteAt = -1, dropSlice = null } = {}, state = {}) {
@@ -124,24 +124,54 @@ describe('explainMiss (the reason a VR data entry is built again)', () => {
 describe('the event-mode budget (all four practice levels stay in the device cache)', () => {
   const g = readFileSync(new URL('../../docs/gpu-volume-data.js', import.meta.url), 'utf8');
   const take = (from, to) => g.slice(g.indexOf(from), g.indexOf(to));
-  const body = take('export const EVENT_CACHE_NEED_BYTES', 'export async function volumeCacheBudget()') .replace(/export /g, '');
+  const body = take('export const EVENT_CACHE_BUDGET_BYTES', 'export async function volumeCacheBudget()') .replace(/export /g, '');
   const run = async ({ event, quota, fixed = 0, tablet = false }) => {
     const fn = new Function('isTabletRuntime', 'navigator', 'globalThis', body + '\nreturn volumeCacheBudgetInfo();');
     return fn(() => tablet, { storage: { estimate: async () => ({ quota, usage: 5 }), persisted: async () => false } }, { __vrlSettings: { get: k => k === 'eventMode' ? event : k === 'cacheLimit' ? fixed : undefined } });
   };
   const GB = 2 ** 30;
-  it('normal mode keeps its defaults (tablet 1.5 GB cap, 30 % of the quota); the event mode raises it to the 3.5 GB the four levels need when the browser allows it', async () => {
+  it('normal mode keeps its defaults (tablet 1.5 GB cap, 30 % of the quota); the event mode raises it to the 3.5 GB cap when the browser allows it; the warning threshold is the real need of four levels (about 2.5 GB), not the cap', async () => {
     expect((await run({ event: false, quota: 50 * GB, tablet: true })).budget).toBe(1.5 * GB);
     expect((await run({ event: false, quota: 2 * GB, tablet: true })).budget).toBe(0.6 * GB);
-    const e = await run({ event: true, quota: 50 * GB, tablet: true }); expect(e.budget).toBe(3.5 * GB); expect(e.need).toBe(3.5 * GB); expect(e.enough).toBe(true);
+    const e = await run({ event: true, quota: 50 * GB, tablet: true }); expect(e.budget).toBe(3.5 * GB); expect(e.need).toBeGreaterThan(2.4 * GB); expect(e.need).toBeLessThan(2.6 * GB); expect(e.enough).toBe(true);
   });
   it('a browser that can store less is told: the budget is 85 % of the quota and enough is false (the 詳細 tab warns); a limit set by hand wins', async () => {
-    const e = await run({ event: true, quota: 3 * GB, tablet: true }); expect(e.budget).toBeCloseTo(2.55 * GB, -3); expect(e.enough).toBe(false);
+    const e = await run({ event: true, quota: 2.5 * GB, tablet: true }); expect(e.budget).toBeCloseTo(2.125 * GB, -3); expect(e.enough).toBe(false);
+    const ok = await run({ event: true, quota: 3.2 * GB, tablet: true }); expect(ok.budget).toBeCloseTo(2.72 * GB, -3); expect(ok.enough).toBe(true); // 85 % of 3.2 GB is above the need: no warning (it was a warning under the old 3.5 GB threshold)
     expect((await run({ event: true, quota: 50 * GB, fixed: 1 })).budget).toBe(1 * GB);
-    expect((await run({ event: true, quota: 0, tablet: true })).budget).toBe(3.5 * GB); // unknown quota: the need itself
+    expect((await run({ event: true, quota: 0, tablet: true })).budget).toBe(3.5 * GB); // unknown quota: the cap
   });
   it('persistent storage is asked once in event mode (the data is then not evicted under pressure), and the settings list calls the entries VR用データ', () => {
     expect(g).toContain('if(volumeCacheState.cache&&eventModeOnForCache())void requestPersistentCache()');
     expect(g).toContain('navigator.storage?.persisted?.())||(await navigator.storage?.persist?.())');
+  });
+});
+
+describe('isStandardOpen (the finished VR data of a practice level in its standard state, whatever the route)', () => {
+  const mark = { id: 'sample1', sig: 'S1' };
+  it('event mode, the level the page recorded, the same state signature', () => {
+    expect(isStandardOpen({ event: true, id: 'sample1', mark, sig: 'S1' })).toBe(true);
+  });
+  it('not outside the event mode, not for another level, not when the state changed since the opening, not without a record or a signature', () => {
+    expect(isStandardOpen({ event: false, id: 'sample1', mark, sig: 'S1' })).toBe(false);
+    expect(isStandardOpen({ event: true, id: 'sample2', mark, sig: 'S1' })).toBe(false);
+    expect(isStandardOpen({ event: true, id: 'sample1', mark, sig: 'S1-changed' })).toBe(false);
+    expect(isStandardOpen({ event: true, id: 'sample1', mark: null, sig: 'S1' })).toBe(false);
+    expect(isStandardOpen({ event: true, id: 'sample1', mark, sig: '' })).toBe(false);
+    expect(isStandardOpen({ event: true, id: null, mark, sig: 'S1' })).toBe(false); // the visitor's own data: no practice level open
+  });
+});
+
+describe('saving never holds a frame up', () => {
+  it('a 300 MB entry is written in 1 MiB slices, and the main thread never works longer than the budget (+ one slice) before it pauses; the progress is reported per slice', async () => {
+    let clock = 0, work = 0, maxRun = 0, biggest = 0, pauses = 0; const progress = [];
+    const cache = { async begin() { return { write: async (i, b) => { biggest = Math.max(biggest, b.byteLength); clock += 1; work += 1; maxRun = Math.max(maxRun, work); }, commit: async () => {}, abort: async () => {} }; } };
+    const big = new Uint8Array(300 * CHUNK), packed = packEntry({}, [['big', big]]);
+    const ok = await storeEntry(cache, 'k', {}, packed, { now: () => clock, pause: async ms => { pauses++; work = 0; clock += ms; }, budgetMs: 3, idleMs: 14, onProgress: (n, total) => progress.push([n, total]) });
+    expect(ok).toBe(true);
+    expect(biggest).toBeLessThanOrEqual(CHUNK); // no put is bigger than 1 MiB (a 300 MB put in one go would stall the thread)
+    expect(maxRun).toBeLessThanOrEqual(3 + 1); // at most the budget plus the slice that crossed it, then a pause
+    expect(pauses).toBeGreaterThan(70);
+    expect(progress.length).toBe(packed.slices); expect(progress.at(-1)).toEqual([packed.slices, packed.slices]);
   });
 });

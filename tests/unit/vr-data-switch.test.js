@@ -25,6 +25,15 @@ function makeEnv(hooks = {}, current = () => true) {
 const steps = log => log.filter(l => !l.startsWith('stage'));
 
 describe('runDataSwap: the order of a switch', () => {
+  it('the switch waits for releaseCpu (the running saves of the finished VR data finish first): nothing of the new data is opened before it resolves', async () => {
+    let finish; const gate = new Promise(r => { finish = r; });
+    const { env, log } = makeEnv({ releaseCpu: () => gate.then(() => { log.push('saves finished'); }) });
+    const run = runDataSwap(env, 'sample2', 1);
+    await new Promise(r => setTimeout(r, 20));
+    expect(log.some(l => l.startsWith('load2d'))).toBe(false); expect(log).not.toContain('saves finished');
+    finish(); expect(await run).toEqual({ status: 'done' });
+    expect(log.indexOf('saves finished')).toBeLessThan(log.indexOf('load2d:sample2'));
+  });
   it('hide, free the old GPU data, free the old CPU data, THEN open the new data; prepare, compile, upload coarse, bind, upload fine', async () => {
     const { env, log } = makeEnv();
     const r = await runDataSwap(env, 'sample2', 1);
@@ -258,7 +267,7 @@ describe('vr-view.js: the data of the session can be replaced (static wiring)', 
   it('runs the sequencer with the steps in the order that frees the old data first (the order itself is runDataSwap)', () => {
     expect(src).toContain('r=await runDataSwap(env,setId,gen)');
     expect(src).toContain('unbindData();loadBoard.mesh.visible=true;ownNote(\'unbind\',t)');
-    expect(src).toContain('releaseSessionData();ownNote(\'release\',t)'); expect(src).toContain('releaseCpu:()=>{releaseVrForSwap();pfSwap=activeSwapPf=startVrPrefetch(setId)}');
+    expect(src).toContain('releaseSessionData();ownNote(\'release\',t)'); expect(src).toContain('releaseVrForSwap();pfSwap=activeSwapPf=startVrPrefetch(setId)}'); expect(src.indexOf('releaseCpu:async()=>{await flushVrStores(')).toBeGreaterThan(0); // the running saves finish before the data is released
     // the page opens the data by the practice-data route of the level cards (the 2D side frees its own old data there)
     expect(src).toContain("new CustomEvent('vrl-event-sample',{detail})");
     expect(src).toContain("await withTimeout(detail.done,LOAD_TIMEOUT_MS,'opening the data')");
