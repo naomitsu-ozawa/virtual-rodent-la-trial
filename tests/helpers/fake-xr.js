@@ -49,7 +49,7 @@ export function fakeXrInit(opts = {}) {
     const gl = st.gl; st.t += 1000 / 72;
     const cbs = [...st.cbs.values()]; st.cbs.clear();
     st.times.push(performance.now()); if (st.times.length > 200000) st.times.shift();
-    const ph = st.t / 1000 * 2 * Math.PI * 1.5, head = [0.002 * Math.sin(ph), 1.6 + 0.002 * Math.cos(ph * 0.7), 0.003 * Math.sin(ph * 1.3)], yaw = 0.005 * Math.sin(ph);
+    const ph = st.t / 1000 * 2 * Math.PI * 1.5, head = [0.002 * Math.sin(ph), 1.6 + 0.002 * Math.cos(ph * 0.7), 0.003 * Math.sin(ph * 1.3)], yaw = 0.005 * Math.sin(ph) + (st.headYaw || 0); // st.headYaw: the test turns the head (radians about the vertical axis)
     const view = (eye, dx) => ({ eye, projectionMatrix: proj, transform: tf(mat4([head[0] + dx, head[1], head[2]], yaw)), recommendedViewportScale: null, requestViewportScale() {} });
     const pose = { transform: tf(mat4(head, yaw)), views: [view('left', -0.032), view('right', 0.032)], emulatedPosition: false };
     const frame = { session: st.session, getViewerPose: () => pose, getPose: () => null, getJointPose: () => null, fillPoses: () => false, fillJointRadii: () => false, trackedAnchors: new Set(), detectedPlanes: undefined };

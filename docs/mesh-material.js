@@ -6,7 +6,7 @@
 // each segment's material preset (lighting.js MATERIALS) is a uniform shared by every mesh of that segment (one per segment key), so
 // changing the preset (setSegmentMeshMaterial) updates the meshes in place, no rebuild; meshes without a segment key use the standard material.
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.webgpu.js';
-import { meshColorNode, patchStandardFragment, boxRadius, materialVec } from './lighting.js?v=20261026-build674';
+import { meshColorNode, patchStandardFragment, boxRadius, materialVec } from './lighting.js?v=20261026-build675';
 
 const TSL = THREE.TSL; // the TSL namespace of the webgpu build (three/tsl itself imports a bare specifier the app has no import map for)
 let backend = 'WEBGPU';

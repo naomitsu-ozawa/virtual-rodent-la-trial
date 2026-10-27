@@ -1,10 +1,11 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.webgpu.js';
 import dicomParser from 'https://esm.sh/dicom-parser@1.8.21';
-import { canvasBackground3dUnit } from './canvas-theme.js?v=20261026-build674';
-import { lightOffsetExpr, lightingWGSL, MATERIALS, materialKey } from './lighting.js?v=20261026-build674';
-import { EDIT_MASK_MAX_BYTES, editMaskInfoWord, editMaskLayout, editMaskPlanes, fillEditMaskWords, sameU32 } from './edit-mask-texture.js?v=20261026-build674';
-import { frameOrTimer } from './utils.js?v=20261026-build674'; // rAF or a timer (the window rAF stands still during a WebXR session)
-import { gpuRunsForTexture } from './gpu-runs.js?v=20261026-build674'; // the run-mapping functions moved to their own module (the VR preparation worker is made from them)
+import { canvasBackground3dUnit } from './canvas-theme.js?v=20261026-build675';
+import { lightOffsetExpr, lightingWGSL, MATERIALS, materialKey } from './lighting.js?v=20261026-build675';
+import { EDIT_MASK_MAX_BYTES, editMaskInfoWord, editMaskLayout, editMaskPlanes, fillEditMaskWords, sameU32 } from './edit-mask-texture.js?v=20261026-build675';
+import { loadStats } from './load-stats.js?v=20261026-build675'; // what the load did, for the VR switch report
+import { frameOrTimer } from './utils.js?v=20261026-build675'; // rAF or a timer (the window rAF stands still during a WebXR session)
+import { gpuRunsForTexture } from './gpu-runs.js?v=20261026-build675'; // the run-mapping functions moved to their own module (the VR preparation worker is made from them)
 export { gpuRunsForTexture };
 
 const UNCOMPRESSED_TS=new Set(['1.2.840.10008.1.2','1.2.840.10008.1.2.1','1.2.840.10008.1.2.2']);
@@ -918,6 +919,7 @@ export class MedicalVolumeRenderer{
    try{cache=await v.textureCache({planSignature:plan.reduced?planSignature+'-avg':planSignature,reduced:!!plan.reduced,slices:plan.reduced?td:s.slices.length,bytesPerSlice:plan.reduced?reducedRowStride*th:s.columns*2*s.rows})}catch{cache=null}
   }
   this.lastCacheHit=!!cache?.hit;
+  (loadStats.ensures||(loadStats.ensures=[])).push({filtered:!!dataSignature,cache:!!cache,hit:!!cache?.hit,t:performance.now()}); // every upload of the 3D volume: filtered (the device cache applies), a cache handle was given, it was a hit
   let preview=null,previewSourceZ=null,previewX=null,previewY=null;
   const previewMax=Math.max(0,Math.floor(previewSide||0));
   if(previewMax>0&&!plan.reduced){

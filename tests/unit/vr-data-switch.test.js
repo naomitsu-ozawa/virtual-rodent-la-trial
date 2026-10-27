@@ -284,6 +284,29 @@ describe('vr-view.js: the data of the session can be replaced (static wiring)', 
     expect(mv).not.toMatch(/await new Promise\(\s*requestAnimationFrame\s*\)/); expect(mv.match(/await frameOrTimer\(/g)?.length).toBe(2);
     for (const f of ['app.js', 'data-load.js', 'medical-volume.js', 'mpr-render.js', 'analysis-ops.js', 'utils.js']) { const t = readFileSync(new URL('../../docs/' + f, import.meta.url), 'utf8'); expect(t, f).not.toMatch(/await\s+new Promise\([^)]*requestAnimationFrame/); }
   });
+  it('the front of the session: marked at the first placement and at 正面に戻す, used for the loading board, the model and the boards of a switch', () => {
+    expect(src).toContain('headLeft.set(headFwd.z,0,-headFwd.x);if(frontLock&&frontRef.set){headFwd.copy(frontRef.fwd);headLeft.copy(frontRef.left)}');
+    expect(src).toContain('const markFront=()=>'); expect(src).toContain('const withFront=fn=>');
+    expect(src).toContain('const placeAllFront=()=>withFront(()=>{bringVolumeFront();placeMenuNow();placeHelpNow();if(hist.isOpen)placeHistNow();placeHuNow()});');
+    expect(src).toContain('if(swapPlace){swapPlace=false;placeAllFront()}else{markFront();bringVolumeFront()}');
+    expect(src).toContain('resetForNewData();swapPlace=true;');
+    expect(src).toContain('const placeLoadNow=()=>withFront(()=>{readHead();');
+    expect(src).toContain('if(ev&&poseAt)withFront(placeEvNow)');
+    expect(src.match(/markFront\(\);bringVolumeFront\(\)/g).length).toBeGreaterThanOrEqual(4); // the first placement + the three 正面に戻す paths
+  });
+  it('the finished VR data is cached on the device: read before it is computed, stored in the background, listed as VR用データ, cancelled with the data', () => {
+    const rd = f => readFileSync(new URL('../../docs/' + f, import.meta.url), 'utf8');
+    for (const t of ['async function vrCacheContext(', 'loadEntry(vc.cache,vc.keyV', 'loadEntry(vc.cache,keyD', "cinfo.volume='hit'", "cinfo.derived='hit'", 'scheduleVrCacheStore(vc,Pn,keyD,cinfo,cgen)', 'const cancelled=()=>prepareGen!==gen', 'writeBrickOccupancy(vd.bricks,occFull)', "kind:'vr-volume'", "kind:'vr-derived'", 'pruneSiblings(vc.cache,info,t.key)', 'vc.cache.prune(budget,{keep:t.key})']) expect(src, t).toContain(t);
+    expect(src).toContain('prepInfo:{worker:prep.stats.worker>0&&prep.stats.local===0,jobs:prep.stats,cache:cinfo}');
+    // the 512 grid is read from the page's own volume every time (not cached): vd.data comes from buildVolumeData before the cache entries are applied
+    expect(src.indexOf('const vd=await buildVolumeData(')).toBeLessThan(src.indexOf('const tcr=performance.now(),V=readV'));
+    expect(rd('settings-ui.js')).toContain("String(i.kind||'').startsWith('vr-')?tr('cacheVr')"); expect(rd('i18n.js').match(/cacheVr:'/g).length).toBe(2);
+    // the 2D side reports what it did (cache hits, ms) into the switch report
+    for (const f of ['app.js', 'data-load.js', 'segment-runs.js', 'medical-volume.js']) expect(rd(f), f).toContain('load-stats.js');
+    expect(src).toContain('load2d:ls,vrCache:prepInfo?.cache||null');
+    // segment runs: the manual edits of the segments above are in the key (a hash), so those results are cached too
+    expect(rd('segment-runs.js')).toContain('const eh=manualUp?await upstreamEditsHash(key):\'\''); expect(rd('segment-runs.js')).not.toContain('const cacheable=');
+  });
   it('converts again when the page changed the data while it was converted (a bundled project finishing late), a bounded number of times', () => {
     const prep = src.slice(src.indexOf('prepare:async()=>{for(let again=0;;again++){'), src.indexOf('compile:async Pn=>{const st=getSet(Pn)'));
     expect(prep).toContain('const Pn=await env.prepareOnce()');
@@ -340,7 +363,7 @@ describe('vr-view.js: the data of the session can be replaced (static wiring)', 
     expect(src).toContain('globalThis.__vrlOpenSample===TUT_SAMPLE?lv0HolderScale(realLongMm(),baseScale):startHolderScale(realLongMm(),baseScale)');
     const rs = src.slice(src.indexOf('const resetForNewData=()=>{'), src.indexOf('const refreshEvBoard'));
     for (const s of ['resetEventViewSettings(settings);saveSettings(settings)', 'for(const k of Object.keys(segMode))delete segMode[k]', 'vrWindow.c=+wc.value||0', 'ui.tab=10']) expect(rs, s).toContain(s);
-    expect(src).toContain('resetForNewData();\n     {const t=performance.now();install(Pn,assets,false);ownNote(\'install\',t)}');
+    expect(src).toContain('resetForNewData();swapPlace=true;\n     {const t=performance.now();install(Pn,assets,false);ownNote(\'install\',t)}');
   });
   it('the data / level buttons: arm, then switch; none while a switch runs; the same data does nothing; the menus have the row / the tab', () => {
     const sp = src.slice(src.indexOf('const swapPress=setId=>{'), src.indexOf('const swapPress=setId=>{') + 420);
@@ -363,14 +386,14 @@ describe('vr-view.js: the data of the session can be replaced (static wiring)', 
     expect(src).toContain("frameGaps.begin('switch '+setId);frameGaps.observe();");
     // what the device log must tell: whether the browser compiles in parallel and whether the worker ran (a worker that could not start falls back to this thread silently otherwise)
     expect(src).toContain('parallelCompile:pcomp'); expect(src).toContain('worker:prepInfo?prepInfo.worker:null');
-    expect(src).toContain('prepInfo:{worker:prep.stats.worker>0&&prep.stats.local===0,jobs:prep.stats}');
+    expect(src).toContain('prepInfo:{worker:prep.stats.worker>0&&prep.stats.local===0,jobs:prep.stats,cache:cinfo}');
   });
   it('the prepared data is built in the worker and the slices are read with a yield every few ms inside a session', () => {
     const p = src.slice(src.indexOf('export async function prepareVrData('), src.indexOf('// classification bytes for the 3D position-comment markers'));
     for (const s of ['createVolumePrep()', 'prep.volume({', 'prep.cls({', 'noBricks:true,sliceMs', 'finally{prep.dispose();if(activePrep===prep)activePrep=null}']) expect(p, s).toContain(s);
     expect(p).not.toContain('buildDistanceBytes(');
     // the processing mask and the analysis index are made in the worker too (they were 0.2-0.6 s of main thread each): the page only collects the runs
-    expect(p).toContain('editDescs:ed?ed.descs:[]'); expect(p).toContain('regionItems:ed?regionItemsOf():[]');
+    expect(p).toContain('editDescs:ed?ed.descs:[]'); expect(p).toContain('const regionItems=ed?regionItemsOf():[]'); expect(p).toContain('regionItems,order,state');
     expect(p).not.toContain('buildEditMask('); expect(p).not.toContain('buildRegionIndex(');
     expect(src).toContain('function buildEditMask(dims){const e=editDescsOf();return e?buildEditMaskOf(e.descs,e.sourceDims,dims):{activeMask:0,data:null}}'); // the 3D markers' hidden test keeps the synchronous call
     expect(src).toContain('const yieldMain=()=>globalThis.scheduler?.yield?globalThis.scheduler.yield():new Promise(r=>setTimeout(r,0));');

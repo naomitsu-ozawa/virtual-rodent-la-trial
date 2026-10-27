@@ -518,7 +518,7 @@ describe('最初の状態に戻す: wiring', () => {
   });
   it('app.js: a practice dataset is opened fresh in event mode only, before anything else; the VR reset restores from the open dataset\'s project', () => {
     const src = read('app.js');
-    expect(src).toContain('const startSample=async setId=>{if(freshForEventSelection())pendingProject.value=null;sampleProjectNow.value=null;setOpenSample(setId);busy(true);resetVolume();');
+    expect(src).toContain('const startSample=async setId=>{resetLoadStats();const tStart=performance.now();if(freshForEventSelection())pendingProject.value=null;sampleProjectNow.value=null;setOpenSample(setId);busy(true);resetVolume();');
     expect(src).toContain("document.addEventListener('vrl-event-project-reset',e=>{if(eventModeOn()&&e.detail)e.detail.done=restoreProjectAnnotations(sampleProjectNow.value)});");
     expect(src).toContain("document.addEventListener(EVENT_FRESH_EVENT,()=>{distance=5.2;camera.position.z=distance;request3DRender()})");
   });
