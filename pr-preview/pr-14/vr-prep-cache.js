@@ -112,6 +112,12 @@ export function protectedKeys(all, event = eventModeNow()) {
 export function isStandardOpen({ event = eventModeNow(), id, mark = globalThis.__vrlStandardOpen, sig }) {
   return !!(event && typeof id === 'string' && id && mark && mark.id === id && sig && mark.sig === sig);
 }
+// A slice of the browser's filtered 3D volume as the page stored it (rg8-packed u16; a reduced volume's rows are padded to `stride` bytes) -> the VR body (tw * 2 bytes per row, no padding), slice z. Pure.
+export function copyPackedSlice(src, dst, z, tw, th, stride) {
+  const row = tw * 2, base = z * row * th;
+  if (stride === row) { dst.set(src.subarray(0, row * th), base); return; }
+  for (let y = 0; y < th; y++) dst.set(src.subarray(y * stride, y * stride + row), base + y * row);
+}
 // the other entries of the same kind, dataset and filter that are not `keep` (an older state of the same data): removed (the cache keeps the latest), except the protected ones
 export async function pruneSiblings(cache, info, keep) {
   const same = d => JSON.stringify(d ?? null);
