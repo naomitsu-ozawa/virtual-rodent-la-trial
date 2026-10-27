@@ -630,7 +630,7 @@ describe('hidden segments in VR (event mode): prepared, listed, shown from the s
     expect(src).toContain('if(g?.active&&!g.enabled)segMode[k]=2');
   });
   it('the processing masks of hidden segments are computed before the VR data is keyed and built; the page\'s own hidden-point judgement keeps the page\'s meaning', () => {
-    expect(src).toContain('export async function prepareVrData(onProgress=()=>{},{sliceMs=0}={}){\n await ensureHiddenSegmentRuns();\n const key=vrDataKey();');
+    expect(src).toContain('export async function prepareVrData(onProgress=()=>{},{sliceMs=0,prefetch=null,fresh=false}={}){\n await ensureHiddenSegmentRuns();\n const key=vrDataKey();');
     expect(src).toContain('!(eventModeOn()&&SEGMENT_PRESET_ORDER.some(k=>segmentState[k]?.active&&!segmentState[k].enabled))');
   });
   it('gpuVolumeEditDescriptors keeps its default (shown = active and enabled) for every other caller', () => {

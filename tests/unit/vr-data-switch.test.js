@@ -258,7 +258,7 @@ describe('vr-view.js: the data of the session can be replaced (static wiring)', 
   it('runs the sequencer with the steps in the order that frees the old data first (the order itself is runDataSwap)', () => {
     expect(src).toContain('r=await runDataSwap(env,setId,gen)');
     expect(src).toContain('unbindData();loadBoard.mesh.visible=true;ownNote(\'unbind\',t)');
-    expect(src).toContain('releaseSessionData();ownNote(\'release\',t)'); expect(src).toContain('releaseCpu:()=>releaseVrForSwap()');
+    expect(src).toContain('releaseSessionData();ownNote(\'release\',t)'); expect(src).toContain('releaseCpu:()=>{releaseVrForSwap();pfSwap=activeSwapPf=startVrPrefetch(setId)}');
     // the page opens the data by the practice-data route of the level cards (the 2D side frees its own old data there)
     expect(src).toContain("new CustomEvent('vrl-event-sample',{detail})");
     expect(src).toContain("await withTimeout(detail.done,LOAD_TIMEOUT_MS,'opening the data')");
@@ -296,10 +296,10 @@ describe('vr-view.js: the data of the session can be replaced (static wiring)', 
   });
   it('the finished VR data is cached on the device: read before it is computed, stored in the background, listed as VR用データ, cancelled with the data', () => {
     const rd = f => readFileSync(new URL('../../docs/' + f, import.meta.url), 'utf8');
-    for (const t of ['async function vrCacheContext(', 'loadEntry(vc.cache,vc.keyV', 'loadEntry(vc.cache,keyD', "cinfo.volume='hit'", "cinfo.derived='hit'", 'scheduleVrCacheStore(vc,Pn,keyD,cinfo,cgen)', 'const cancelled=()=>prepareGen!==gen', 'writeBrickOccupancy(vd.bricks,occFull)', "kind:'vr-volume'", "kind:'vr-derived'", 'pruneSiblings(vc.cache,info,t.key)', 'vc.cache.prune(budget,{keep:t.key})']) expect(src, t).toContain(t);
+    for (const t of ['async function vrCacheContext(', 'loadEntry(vc.cache,key,{isCancelled', "cinfo.volume='hit'", "cinfo.derived='hit'", 'scheduleVrCacheStore(vc,Pn,keyD,hashD,cinfo,cgen,aliasId,fresh)', 'const cancelled=()=>prepareGen!==gen', 'writeBrickOccupancy(vd.bricks,occFull)', "kind:'vr-volume'", "kind:'vr-derived'", 'pruneSiblings(vc.cache,info,t.key)', 'vc.cache.prune(budget,{keep:t.key})', "['data',keepBody?vd.data:null]", 'startVrPrefetch(id)', 'pf.keyV===vc.keyV', 'pf.keyD===keyD', "document.dispatchEvent(new CustomEvent('vrl-sample-key'", 'explainMiss(vc.cache']) expect(src, t).toContain(t);
     expect(src).toContain('prepInfo:{worker:prep.stats.worker>0&&prep.stats.local===0,jobs:prep.stats,cache:cinfo}');
-    // the 512 grid is read from the page's own volume every time (not cached): vd.data comes from buildVolumeData before the cache entries are applied
-    expect(src.indexOf('const vd=await buildVolumeData(')).toBeLessThan(src.indexOf('const tcr=performance.now(),V=readV'));
+    // the 512 body is part of the volume entry: a hit does not read the page's 3D volume back (buildVolumeData only runs on a miss); the entries a switch read ahead are used only when the page's own keys agree
+    expect(src).toContain("source:'cache'"); expect(src.indexOf('V&&vrVolumeEntryOk(V,meta.dims)')).toBeLessThan(src.indexOf('vd=await buildVolumeData('));
     expect(rd('settings-ui.js')).toContain("String(i.kind||'').startsWith('vr-')?tr('cacheVr')"); expect(rd('i18n.js').match(/cacheVr:'/g).length).toBe(2);
     // the 2D side reports what it did (cache hits, ms) into the switch report
     for (const f of ['app.js', 'data-load.js', 'segment-runs.js', 'medical-volume.js']) expect(rd(f), f).toContain('load-stats.js');
@@ -398,5 +398,15 @@ describe('vr-view.js: the data of the session can be replaced (static wiring)', 
     expect(src).toContain('function buildEditMask(dims){const e=editDescsOf();return e?buildEditMaskOf(e.descs,e.sourceDims,dims):{activeMask:0,data:null}}'); // the 3D markers' hidden test keeps the synchronous call
     expect(src).toContain('const yieldMain=()=>globalThis.scheduler?.yield?globalThis.scheduler.yield():new Promise(r=>setTimeout(r,0));');
     expect(src).toContain('sliceMs>0?performance.now()-sliceAt>=sliceMs||z===td-1:(z&15)===15||z===td-1');
+  });
+  it('the cross-sections always use the full grid: an entry without a 512 body gets it from the page\'s 3D volume, the page is loaded on every switch, and a stalled cache read falls back to computing', () => {
+    for (const t of ['let body=V.arrays.data||null;', 'if(!body){', 'const bd=await buildVolumeData(maxTexture3D()', 'vd={data:body,dims:meta.dims,']) expect(src, t).toContain(t);
+    expect(src).toContain('material.uniforms.sliceVol.value=fullReady&&full.v?full.v:t.v');
+    expect(src).toContain("document.dispatchEvent(new CustomEvent('vrl-event-sample',{detail}))"); expect(src).not.toMatch(/deferLoad|releasePageFor|loadDeferredPage|vrSnap/);
+    expect(src).toContain("withTimeout(prefetch.ready,CACHE_READ_TIMEOUT_MS,'read ahead')"); expect(src).toContain("if(activeSwapPf)activeSwapPf.cancelled=true;emit('session-end')");
+  });
+
+  it('a data switch writes the STANDARD alias (protected in the event mode), old builds are cleaned, the sibling prune covers both entries', () => {
+    for (const t of ['async function vrAliasStore(cache,pk,id,keyV,keyD,fresh=false){', 'standard:!!fresh,keyV,keyD,build:APP_BUILD,prep:VR_PREP_VERSION', 'if(was&&!fresh)return true;', 'void removeOldBuilds(vc.cache,{build:APP_BUILD,prep:VR_PREP_VERSION})', 'await pruneSiblings(vc.cache,info,t.key);await vc.cache.prune', '{sliceMs:4,prefetch:pfSwap,fresh:true}', 'parts:t.parts,build:APP_BUILD,prep:VR_PREP_VERSION']) expect(src, t).toContain(t);
   });
 });

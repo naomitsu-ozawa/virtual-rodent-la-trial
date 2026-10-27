@@ -92,3 +92,56 @@ describe('storeEntry / loadEntry', () => {
     expect([...cache.entries.keys()].sort()).toEqual(['new', 'otherData', 'otherFilter', 'volume']);
   });
 });
+
+// ---- why an entry is missing, the event-mode budget
+import { explainMiss, noteStore, storeStatus, clearStoreStatus, partsOf, keyOfParts } from '../../docs/vr-prep-cache.js';
+import { readFileSync } from 'node:fs';
+
+describe('explainMiss (the reason a VR data entry is built again)', () => {
+  const ds = { seriesId: 'a' }, entry = (key, kind, parts, dataset = ds) => ({ key, complete: true, lastUsed: 1, info: { kind, dataset, parts } });
+  const cache = list => ({ list: async () => list });
+  it('never saved: first; saved before with other parts: changed + WHICH parts; the status of this page session wins when there is one', async () => {
+    clearStoreStatus();
+    const parts = await partsOf({ state: 1, edit: 'a', region: 'r' }), other = await partsOf({ state: 2, edit: 'a', region: 'r2' });
+    expect(await explainMiss(cache([]), { kind: 'vr-derived', key: 'k', dataset: ds, parts })).toEqual({ code: 'first' });
+    expect(await explainMiss(cache([entry('old', 'vr-derived', other), entry('x', 'vr-volume', other), entry('y', 'vr-derived', other, { seriesId: 'b' })]), { kind: 'vr-derived', key: 'k', dataset: ds, parts })).toEqual({ code: 'changed', changed: ['state', 'region'] });
+    noteStore('k', { state: 'saving', written: 3, total: 10 }); expect(await explainMiss(cache([]), { kind: 'vr-derived', key: 'k', dataset: ds, parts })).toMatchObject({ code: 'saving', written: 3, total: 10 });
+    noteStore('k', { state: 'cancelled' }); expect((await explainMiss(cache([]), { kind: 'vr-derived', key: 'k', dataset: ds, parts })).code).toBe('interrupted');
+    noteStore('k', { state: 'failed', error: 'QuotaExceededError' }); expect(await explainMiss(cache([]), { kind: 'vr-derived', key: 'k', dataset: ds, parts })).toEqual({ code: 'failed', detail: 'QuotaExceededError' });
+    noteStore('k', { state: 'skipped', why: 'over budget' }); expect((await explainMiss(cache([]), { kind: 'vr-derived', key: 'k', dataset: ds, parts })).code).toBe('capacity');
+    noteStore('k', { state: 'done' }); expect((await explainMiss(cache([]), { kind: 'vr-derived', key: 'k', dataset: ds, parts })).code).toBe('evicted'); // saved earlier, gone now: the LRU / the storage
+    expect((await explainMiss(cache([]), { kind: 'vr-derived', key: 'k', dataset: ds, parts, readFailed: true })).code).toBe('damaged');
+    expect((await explainMiss(cache([]), { kind: 'vr-derived', key: 'unknown', dataset: ds, parts, readFailed: true })).code).toBe('damaged');
+    clearStoreStatus(); expect(storeStatus.map.size).toBe(0);
+  });
+  it('the parts are hashed one by one and the key follows every part (a part that did not change keeps its hash)', async () => {
+    const a = await partsOf({ x: [1, 2], y: 'q' }), b = await partsOf({ x: [1, 2], y: 'r' });
+    expect(a.x).toBe(b.x); expect(a.y).not.toBe(b.y);
+    expect(await keyOfParts('vr-derived', a)).not.toBe(await keyOfParts('vr-derived', b)); expect(await keyOfParts('vr-derived', a)).toBe(await keyOfParts('vr-derived', { ...a })); expect(await keyOfParts('vr-volume', a)).not.toBe(await keyOfParts('vr-derived', a));
+  });
+});
+
+describe('the event-mode budget (all four practice levels stay in the device cache)', () => {
+  const g = readFileSync(new URL('../../docs/gpu-volume-data.js', import.meta.url), 'utf8');
+  const take = (from, to) => g.slice(g.indexOf(from), g.indexOf(to));
+  const body = take('export const EVENT_CACHE_NEED_BYTES', 'export async function volumeCacheBudget()') .replace(/export /g, '');
+  const run = async ({ event, quota, fixed = 0, tablet = false }) => {
+    const fn = new Function('isTabletRuntime', 'navigator', 'globalThis', body + '\nreturn volumeCacheBudgetInfo();');
+    return fn(() => tablet, { storage: { estimate: async () => ({ quota, usage: 5 }), persisted: async () => false } }, { __vrlSettings: { get: k => k === 'eventMode' ? event : k === 'cacheLimit' ? fixed : undefined } });
+  };
+  const GB = 2 ** 30;
+  it('normal mode keeps its defaults (tablet 1.5 GB cap, 30 % of the quota); the event mode raises it to the 3.5 GB the four levels need when the browser allows it', async () => {
+    expect((await run({ event: false, quota: 50 * GB, tablet: true })).budget).toBe(1.5 * GB);
+    expect((await run({ event: false, quota: 2 * GB, tablet: true })).budget).toBe(0.6 * GB);
+    const e = await run({ event: true, quota: 50 * GB, tablet: true }); expect(e.budget).toBe(3.5 * GB); expect(e.need).toBe(3.5 * GB); expect(e.enough).toBe(true);
+  });
+  it('a browser that can store less is told: the budget is 85 % of the quota and enough is false (the 詳細 tab warns); a limit set by hand wins', async () => {
+    const e = await run({ event: true, quota: 3 * GB, tablet: true }); expect(e.budget).toBeCloseTo(2.55 * GB, -3); expect(e.enough).toBe(false);
+    expect((await run({ event: true, quota: 50 * GB, fixed: 1 })).budget).toBe(1 * GB);
+    expect((await run({ event: true, quota: 0, tablet: true })).budget).toBe(3.5 * GB); // unknown quota: the need itself
+  });
+  it('persistent storage is asked once in event mode (the data is then not evicted under pressure), and the settings list calls the entries VR用データ', () => {
+    expect(g).toContain('if(volumeCacheState.cache&&eventModeOnForCache())void requestPersistentCache()');
+    expect(g).toContain('navigator.storage?.persisted?.())||(await navigator.storage?.persist?.())');
+  });
+});
