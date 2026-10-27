@@ -53,7 +53,7 @@ export function sliceOf(packed, i) {
 }
 
 // store: begin, paced writes, commit. isCancelled() is asked before every slice. -> true when the entry is complete
-export async function storeEntry(cache, key, info, packed, { isCancelled = () => false, now = () => performance.now(), pause = ms => new Promise(r => setTimeout(r, ms)), budgetMs = 3, idleMs = 14 } = {}) {
+export async function storeEntry(cache, key, info, packed, { isCancelled = () => false, onProgress = null, now = () => performance.now(), pause = ms => new Promise(r => setTimeout(r, ms)), budgetMs = 3, idleMs = 14 } = {}) {
   let writer = null;
   try {
     writer = await cache.begin(key, { slices: packed.slices, bytesPerSlice: Math.ceil(packed.bytes / packed.slices), info });
@@ -61,6 +61,7 @@ export async function storeEntry(cache, key, info, packed, { isCancelled = () =>
     for (let i = 0; i < packed.slices; i++) {
       if (isCancelled()) { await writer.abort(); return false; }
       await writer.write(i, sliceOf(packed, i));
+      if (onProgress) onProgress(i + 1, packed.slices);
       if (now() - t >= budgetMs) { await pause(idleMs); t = now(); }
     }
     if (isCancelled()) { await writer.abort(); return false; }
@@ -91,7 +92,7 @@ export async function loadEntry(cache, key, { concurrency = 3, isCancelled = () 
 }
 
 // in 体験会モード the four practice levels opened with their standard settings must stay on the device (a visitor must never wait for a rebuild). What is standard is what the LATEST standard alias of each level points at
-// (the alias is written only by a data switch, whose page state is the level's own fresh opening, and carries standard: true): its vr-volume and vr-derived entries, the alias itself, and the browser's filtered 3D volume of the
+// (an alias is standard when it was written for the level's own fresh opening with nothing changed afterwards: by a data switch, or by any route that isStandardOpen recognises; it carries standard: true): its vr-volume and vr-derived entries, the alias itself, and the browser's filtered 3D volume of the
 // same data and filter (the source of the 512 cross-sections). Everything else (other settings, other data, older aliases) is evicted first. Returns a Set of entry keys (empty outside 体験会モード).
 export const eventModeNow = () => { try { return globalThis.__vrlSettings?.get?.('eventMode') === true; } catch { return false; } };
 export function protectedKeys(all, event = eventModeNow()) {
@@ -105,6 +106,11 @@ export function protectedKeys(all, event = eventModeNow()) {
     if (v) for (const e of all) { const i = e.info || {}; if (e.complete && i.kind === 'volume' && same(i.dataset) === same(v.dataset) && i.filter === v.filter) out.add(e.key); }
   }
   return out;
+}
+// Is the finished VR data about to be made the STANDARD one of the practice level `id` (its built-in project, nothing changed by the visitor)? The page records the state signature of the level once it has finished
+// opening in 体験会モード (standard-open.js: mark = {id, sig}); the state now (sig) must be the same. Any route counts (the level chosen on the page and VR entered, a data switch in VR). Pure.
+export function isStandardOpen({ event = eventModeNow(), id, mark = globalThis.__vrlStandardOpen, sig }) {
+  return !!(event && typeof id === 'string' && id && mark && mark.id === id && sig && mark.sig === sig);
 }
 // the other entries of the same kind, dataset and filter that are not `keep` (an older state of the same data): removed (the cache keeps the latest), except the protected ones
 export async function pruneSiblings(cache, info, keep) {

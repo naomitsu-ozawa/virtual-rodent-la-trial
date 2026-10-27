@@ -14,6 +14,8 @@ export const SETTLE_TIMEOUT_MS = 60000;
 export const LOAD_TIMEOUT_MS = 180000;
 // the read of the entries a switch started beside the page's load: a device whose IndexedDB stalls must not hold the switch (it then computes the data as it did before the entries existed)
 export const CACHE_READ_TIMEOUT_MS = 120000;
+// how long a switch waits for the saves of the finished VR data that are still running (they are then finished, not cut); after that they are cut as before
+export const VR_STORE_FLUSH_MS = 120000;
 // the promise, or a rejection after ms (the timer is always cleared)
 export function withTimeout(promise, ms, what = 'step') {
   let t = 0;
@@ -47,7 +49,7 @@ export async function runDataSwap(env, setId, gen) {
   const cur = () => env.isCurrent(gen);
   let P = null, assets = null;
   try {
-    env.stage('release'); env.hide(); env.releaseGpu(); env.releaseCpu();
+    env.stage('release'); env.hide(); env.releaseGpu(); await env.releaseCpu(); // releaseCpu first lets a save of the finished VR data that is still running finish (a save cut by the switch is never resumed)
     if (!cur()) return { status: 'cancelled' };
     env.stage('load', setId); await env.load2d(setId); if (!cur()) return { status: 'cancelled' };
     env.stage('settle'); await env.settle(); if (!cur()) return { status: 'cancelled' };

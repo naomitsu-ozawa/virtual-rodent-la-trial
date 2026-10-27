@@ -73,7 +73,8 @@ import { installAnalysisDock } from './analysis-dock.js?v=20261027-build677';
 import { installPaneResize } from './pane-resize.js?v=20261027-build677';
 import { askInline, armConfirm } from './inline-ask.js?v=20261027-build677';
 import { freshForEventSelection, resetUserState, EVENT_FRESH_EVENT } from './event-fresh.js?v=20261027-build677';
-import { eventModeOn } from './event-mode.js?v=20261027-build677'; // 体験会モード: every practice dataset opens fresh from its project file
+import { eventModeOn } from './event-mode.js?v=20261027-build677';
+import { watchStandardOpen } from './standard-open.js?v=20261027-build677'; // records the standard state of a practice level once it has opened (event mode) // 体験会モード: every practice dataset opens fresh from its project file
 import { deselectAllAnalysisRegions, deselectRegionsInLasso, analysisRegionAtVoxel, analyzeEditRegionAtPointer, analyzeVolumeAtPointer, analyzeVolumeAtVoxel, applyCutStroke, applyEditKeepSelected, applyEditRemoveSelected, clearAllSegmentEdits, clearThreeEditOverlay, exportFocusedAnalysisRegionStl, exportSegmentStl, mergeSelectedAnalysisRegions, redoSegmentEdit, resetFocusedSegmentEdit, returnToNavigate, scheduleAnalysisRunPrewarm, selectRegionsInLasso, syncVolumeAnalysisOverlay, undoSegmentEdit } from './analysis-ops.js?v=20261027-build677';
 import { makeDeferredEnd } from './deferred-end.js?v=20261027-build677';
 async function ensureLatestDeployedBuild(){
@@ -387,6 +388,7 @@ const sampleProjectNow={value:null};
 const openSample={id:null};
 // the tutorial's captions name the first tissue of the open data (its row in the VR menu): tutorial-ui.js (2D card) reads it from here
 globalThis.__vrlTissueName=lang=>{const k=SEGMENT_PRESET_ORDER.find(k=>segmentState[k]?.active&&segmentState[k]?.enabled);return k?(lang==='en'?I18N.en?.[k]||tr(k):tr(k)):''}; // lang 'en' = the English name (the 2D card's English line)
+watchStandardOpen();
 function setOpenSample(id){openSample.id=id;globalThis.__vrlOpenSample=id;globalThis.__vrlVolumeReady=false;try{document.dispatchEvent(new CustomEvent('vrl-event-sample-open',{detail:{id}}))}catch{}}
 // the bundled project file's bytes (one fetch site for both users): loadSampleProject applies it, the VR data cache hashes it (the key of a practice level that needs no 2D load)
 async function sampleProjectBytes(setId){

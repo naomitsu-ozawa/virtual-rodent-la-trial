@@ -4,7 +4,8 @@ import { volumeTexturePlan, reduceSliceArea, packedRgSlice, packCtSlice, gpuRuns
 import { ensureSegmentBaseRuns } from './segment-runs.js?v=20261027-build677';
 import { gpuVolumeTarget, gpuVolumeEditDescriptors, volumeCache, volumeCacheBudget, volumeCacheBudgetInfo } from './gpu-volume-data.js?v=20261027-build677';
 import { pruneOtherFilterSettings } from './gpu-volume-cache.js?v=20261027-build677';
-import { packEntry, storeEntry, loadEntry, pruneSiblings, removeOldBuilds, storeStatus, noteStore, partsOf, keyOfParts, explainMiss } from './vr-prep-cache.js?v=20261027-build677'; // the finished VR data is kept on the device (vr-prep-cache.js)
+import { packEntry, storeEntry, loadEntry, pruneSiblings, removeOldBuilds, storeStatus, noteStore, partsOf, keyOfParts, explainMiss, isStandardOpen } from './vr-prep-cache.js?v=20261027-build677';
+import { vrStateSignature } from './vr-data-key.js?v=20261027-build677'; // the state of the page now, to tell whether a practice level is still in its standard state //: the finished VR data is kept on the device (vr-prep-cache.js)
 import { SEGMENT_PRESET_ORDER, gpuSegmentOrder, segmentHasProcessedMask, segmentState, segmentEditState, segmentSourceSignature } from './segments.js?v=20261027-build677';
 import { sceneState, analysisRegions, activeSeries } from './state.js?v=20261027-build677';
 import { datasetFingerprint } from './project-file.js?v=20261027-build677';
@@ -18,7 +19,7 @@ import { getComments, onCommentsChange, commentMatchesSeries, removeComment, res
 import { POINT_PALETTE, pointColor, normalizeColor } from './point-colors.js?v=20261027-build677';
 import { combineClassificationDistance, fourthChannelBytes } from './distance-field.js?v=20261027-build677';
 import { BRICK as PREP_BRICK, computeBricksOf, halveData, buildEditMaskOf, createVolumePrep } from './vr-volume-prep.js?v=20261027-build677'; // the heavy pure steps of the preparation (bricks, the 256 copy, classification, distance field) run in a worker
-import { createSwapGuard, runDataSwap, createUploadQueue, createSettleGate, createFrameGapMonitor, swapPlan, SWAP_STAGES, SETTLE_TIMEOUT_MS, LOAD_TIMEOUT_MS, CACHE_READ_TIMEOUT_MS, withTimeout } from './vr-data-switch.js?v=20261027-build677'; // switching the data inside a running session
+import { createSwapGuard, runDataSwap, createUploadQueue, createSettleGate, createFrameGapMonitor, swapPlan, SWAP_STAGES, SETTLE_TIMEOUT_MS, LOAD_TIMEOUT_MS, CACHE_READ_TIMEOUT_MS, VR_STORE_FLUSH_MS, withTimeout } from './vr-data-switch.js?v=20261027-build677'; // switching the data inside a running session
 import { classifiedAt, marchClassificationHitInfo } from './vr-pick.js?v=20261027-build677';
 import { createSkipState, skipGrid } from './vr-skip-occupancy.js?v=20261027-build677'; // the creep-skip occupancy bits of the combined texture (VR max-zoom cost)
 import { createComboRebuild } from './vr-combo-rebuild.js?v=20261027-build677'; // the combined texture rebuilt off the frame when the shown segments change
@@ -1275,21 +1276,20 @@ function vrCacheText(ja){
 async function refreshVrCapacity(cache){
  try{const info=await volumeCacheBudgetInfo(),c=cache||await volumeCache(),usedByCache=c?await c.usage():0;vrCacheState.cap={...info,usedByCache};vrCacheNotify?.()}catch{/* none */}
 }
-// the stores run one after the other in the background (D first: it is what costs the most to make; then V), the IndexedDB writes in a worker (the page only copies 1 MiB slices over): they stop when the data
+// the stores run one after the other in the background (D first: it is what costs the most to make; then V), the IndexedDB writes on the page, in 1 MiB slices with a short pause after a few ms of work: they stop when the data
 // is released (prepareGen moved): the arrays are not held for a next data and a half-written entry is removed. The status of every store is kept (storeStatus) for the 詳細 tab.
 const vrStoreChain={p:Promise.resolve()};let vrStoreSlowMs=0; // vrStoreSlowMs: a test pauses between slices to make a store long
 function scheduleVrCacheStore(vc,P,keyD,hashD,cinfo,gen,aliasId,fresh){
  const cancelled=()=>prepareGen!==gen,stats=(globalThis.__vrPrepCache||={writes:[]});
  const tasks=[];
- const keepBody=!P.half; // the body of the entry: the one grid of a data without a 256 copy; beside a 256 copy the 512 body is optional (the page can supply it)
+ const keepBody=!P.half; // the body of the entry: the one grid of a data without a 256 copy; beside a 256 copy no 512 body is stored (the cross-sections' 512 grid comes from the page's own cached 3D volume)
  if(cinfo.derived==='miss'&&keyD)tasks.push({kind:'vr-derived',key:keyD,parts:hashD,meta:{dims:(P.half||P.vd).dims,edit:{hasData:!!P.edit.data,active:P.edit.active|0,maskOnly:P.edit.maskOnly|0},cls:P.cls?{C:P.cls.C,chan:P.cls.chan}:null,dist:P.dist?{C:P.dist.C,chan:P.dist.chan}:null,
   region:{colors:P.region.colors,segs:P.region.segs,list:P.region.list},combo:P.combo?{mask:P.combo.mask,dims:P.combo.dims}:null},arrays:[['editData',P.edit.data],['clsData',P.cls?.data],['distData',P.dist?.data],['regionData',P.region.data],['regionIds',P.region.ids],['combo',P.combo?.data],['cls4',P.cls4],['occFull',P.occFull],['occHalf',P.occHalf]]});
  if(cinfo.volume==='miss'){const vd=P.vd,h=P.half;tasks.push({kind:'vr-volume',key:vc.keyV,parts:vc.hashes,meta:{dims:vd.dims,brickDims:vd.brickDims,half:h?{dims:h.dims,brickDims:h.brickDims}:null},arrays:[['data',keepBody?vd.data:null],['bricks',vd.bricks],['halfData',h?.data],['halfBricks',h?.bricks]]})}
  for(const t of tasks)noteStore(t.key,{kind:t.kind,state:'saving',written:0,total:1,bytes:0});
  const run=async()=>{
   void removeOldBuilds(vc.cache,{build:APP_BUILD,prep:VR_PREP_VERSION}); // what an earlier build / preparation version stored can never be read again
-  try{
-   for(const t of tasks){
+  for(const t of tasks){
     if(cancelled()){noteStore(t.key,{state:'cancelled'});continue}
     const t0=performance.now();let ok=false,bytes=0;
     try{
@@ -1298,13 +1298,12 @@ function scheduleVrCacheStore(vc,P,keyD,hashD,cinfo,gen,aliasId,fresh){
      noteStore(t.key,{state:'saving',written:0,total:packed.slices,bytes});
      if(bytes>budget){noteStore(t.key,{state:'skipped',why:'over budget'});stats.writes.push({kind:t.kind,bytes,skipped:'over budget'});continue}
      let lastN=0;const onProgress=(w,total)=>{noteStore(t.key,{written:w,total});const now=performance.now();if(now-lastN>700){lastN=now;vrCacheNotify?.()}};
-     ok=await storeEntry(vc.cache,t.key,info,packed,{isCancelled:cancelled,pause:ms=>new Promise(r=>setTimeout(r,ms+vrStoreSlowMs))});
+     ok=await storeEntry(vc.cache,t.key,info,packed,{isCancelled:cancelled,onProgress,pause:ms=>new Promise(r=>setTimeout(r,ms+vrStoreSlowMs))});
      if(ok){await pruneOtherFilterSettings(vc.cache,{kind:t.kind,dataset:vc.dataset,plan:t.kind==='vr-volume'?vc.planSig:null,filter:vc.filter},t.key);await pruneSiblings(vc.cache,info,t.key);await vc.cache.prune(budget,{keep:t.key});noteStore(t.key,{state:'done'})}
      else noteStore(t.key,{state:cancelled()?'cancelled':'failed',error:cancelled()?undefined:'incomplete'});
     }catch(e){noteStore(t.key,{state:'failed',error:String((e&&e.message)||e).slice(0,60)});console.warn('VR data cache: store failed',e)}
     stats.writes.push({kind:t.kind,bytes,ok,ms:Math.round(performance.now()-t0)});vrCacheNotify?.();
    }
-  }finally{/* none */}
   // both entries of this data are on the device (read or just stored): the alias of the practice level points at them, so the next switch can read them before the page has loaded anything
   const have=k=>k&&(storeStatus.map.get(k)?.state==='done'||(k===keyD?cinfo.derived==='hit':cinfo.volume==='hit'));
   if(aliasId&&!cancelled()&&have(vc.keyV)&&have(keyD))await scheduleAlias(vc,aliasId,keyD,fresh);
@@ -1312,11 +1311,21 @@ function scheduleVrCacheStore(vc,P,keyD,hashD,cinfo,gen,aliasId,fresh){
  };
  vrStoreChain.p=vrStoreChain.p.then(()=>run()).catch(()=>{});
 }
+// a data switch releases the data the saves are made from, and a save that is cut is never resumed (the level would then be built again the next time it is opened): so the switch first waits for the
+// saves that are queued or running (the loading board says so). They keep their pacing (a few ms of work, then a pause: no frame is held up; the switch just waits a little longer). A device whose writes stall is not
+// held for ever: after maxMs the saves are cut as before.
+async function flushVrStores(onWait=()=>{},maxMs=VR_STORE_FLUSH_MS){
+ const pending=[...storeStatus.map.values()].some(s=>s.state==='saving');if(!pending)return false;
+ try{onWait();await withTimeout(vrStoreChain.p,maxMs,'save')}catch(e){console.warn('VR data cache: the saves did not finish before the switch',e)}
+ return true;
+}
 async function scheduleAlias(vc,id,keyD,fresh=false){try{const pk=await vrPracticeKey(id);if(pk&&await vrAliasStore(vc.cache,pk,id,vc.keyV,keyD,fresh)&&fresh){ // a new standard alias: the entries the older one protected are no longer protected and go
    await pruneSiblings(vc.cache,{kind:'vr-volume',dataset:vc.dataset,filter:vc.filter},vc.keyV);await pruneSiblings(vc.cache,{kind:'vr-derived',dataset:vc.dataset,filter:vc.filter},keyD)}}catch(e){console.warn('VR data cache: alias failed',e)}}
-export async function prepareVrData(onProgress=()=>{},{sliceMs=0,prefetch=null,fresh=false}={}){
+export async function prepareVrData(onProgress=()=>{},{sliceMs=0,prefetch=null,fresh:freshOpen=false}={}){
  await ensureHiddenSegmentRuns();
  const key=vrDataKey();if(!key)throw new Error('VR: open a DICOM series first');
+ // fresh = the page state is the level's own fresh opening (a data switch says so; any other route is recognised by the state signature the page recorded when the level finished opening)
+ let fresh=freshOpen;if(!fresh){try{fresh=isStandardOpen({id:globalThis.__vrlOpenSample,sig:vrStateSignature()})}catch{fresh=false}}
  if(prepared?.key===key)return prepared;
  if(preparing?.key===key)return preparing.promise;
  const promise=(async()=>{
@@ -1506,7 +1515,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    hist:'HU分布',histTitle:'HU分布',histAuto:'自動',histApprox:'概算',histBusy:'計算中',histX:'HU値',histY:'ボクセル数',histYLog:'ボクセル数（対数）',histNone:'セグメント外',histEmpty:'データがありません',histLin:'線形',histLog:'対数',
    stHeld:'断面：動かしています',stFixed:'断面：固定中',stNone:'グリップでつかむ・両手で拡大縮小',preparing:'VRボリューム準備中… ',uploading:'画像をGPUへ転送中…（数秒止まって見えることがあります）',compiling:'描画の準備中…（もう少しで表示されます）',failed:'VR準備に失敗: ',shotDone:'スクリーンショットを撮りました（終了後にページで保存）',filtered:' フィルター適用',
    dataOwn:'ご自身のデータを開いているため、ここでは切り替えられません（練習データの時だけ使えます）',dataT:'データ',dataHead:'練習データを切り替える',dataHelp:'押してから、もう一度押すと切り替わります（今の断面・ポイント・ラベルは消えます。VRは続いたままです）',dataAgain:'もう一度',dataHint:'もう一度押すと切り替え（今の断面・ポイントは消えます）：',dataNone:'データを切り替えている間は選べません',
-   sw:{title:'データを読み込み中',failed:'読み込みに失敗しました',retry:'メニューの「データ」からもう一度選んでください',note:'経過 {s} 秒（VRは続いています。そのままお待ちください）',
+   sw:{saving:'VR用データを保存中',title:'データを読み込み中',failed:'読み込みに失敗しました',retry:'メニューの「データ」からもう一度選んでください',note:'経過 {s} 秒（VRは続いています。そのままお待ちください）',
     stages:{release:'前のデータを手放し中',load:'データを読み込み中',settle:'読み込みの仕上げ中',prepare:'VR用に変換中',compile:'描画の準備中',upload:'GPUへ転送中',bind:'表示します',refine:'高精細版を転送中（表示は続きます）',done:'完了'},
     phases:{copy:'3D画面から写す',read:'データ読み込み',cache:'保存済みのVR用データを読込',half:'256³を作成',mask:'加工マスク',cls:'判定用データ・距離場',dist:'距離場'}}}
   :{ptT:'Position comments (VR points)',laserL:'Laser look',laserV:['Line','Beam thin','Beam wide'],hrT:'Hand laser',hrV:['Standard','Pointing'],ptMode:'Record on',ptModeV:['Section','Surface'],ptHelpSurf:['Short trigger press: records on the first tissue surface the laser meets; laser on a point selects it','Surface = edge of a shown segment (opacity ignored; a face cut by a section counts)','The place is the one at the moment of the press; holding 0.5 s or more records nothing','No recording for 0.3 s after the thumbstick is moved (that hand only)','Saved as “VR point N” (shown in the 2D page list, where the text can be edited)'],ptDone:'Recorded: ',ptHelp:['Short trigger press: laser on the selected section records where it shows tissue (not on air); laser on a point selects it; press and move 2 cm drags the section','The place is the one at the moment of the press; holding 0.5 s or more records nothing','No recording for 0.3 s after the thumbstick is moved (that hand only)','Saved as “VR point N” (shown in the 2D page list, where the text can be edited)'],ptDel:'Delete this point',ptUndo:'Undo',ptSel:'Selected point: ',ptNoSel:'Point the laser at a point and pull the trigger to select',ptDeleted:'Point deleted (Undo brings it back)',ptRestored:'Point restored',ptList:'Position comments',ptNone:'None yet',realSize:'Real size (×1)',realSizeNo:'No real size (over 30 cm)',title:'Virtual Rodent Lab',tabs:['View','Section','Slice','Quality','Details','Analysis','Points','HU line','Data'],anT:'Analysis results (volume)',anNone:'No analysis results (made with the volume analysis on the page; the visible ones come into VR)',anTotal:'Total',anPage:'Page',lbSize:'Label size',lbSizeV:['Small','Medium','Large'],lbReset:'Label put back',lbMoveHelp:['Point at a pinned label and hold the trigger while moving it to place it elsewhere','Without moving: a short press unpins it, holding 0.5 s puts it back (the place is saved)'],lbHide:'Label occlusion',lbHideV:['Hide behind','Fade'],win:'The CT image shown on the sections (the app values are not changed)',winHelp:'Sliders step 10 HU; −/＋ move 10 HU',airL:'Transparent at or below',airHelp:'Slice is transparent at or below this value (−500: air, −50: fat too)',wcL:'Window centre',wwL:'Window width',pApp:'App values',pFull:'Full range',pBone:'Bone',pSoft:'Soft tissue',follow:'Follow',fixed:'Fixed',menuPos:'Menu position',menuKey:'A/X: short = quick ring, hold = open / close the menu',menuGrab:'Point at the menu, help, HU or HU line board, grip: move it (becomes Fixed)',helpT:'Controls',helpModes:['Hidden','Follow','Fixed'],helpBasic:['Grip: grab and turn / move the volume','Grip with both hands: scale','Trigger (short): record / select a point (hold on a point: move, delete, colour, distance)','A / X: short = quick ring, hold = menu','B / Y: show a section (long press: add)','Stick click: short = slice clear, hold = hide frames','Point at the menu, grip: move it'],helpSec:['Anywhere in a frame: trigger selects, hold and move to slide / rotate','Thumbstick up / down: scroll the selected plane','Hold on a point: ring with move / delete / colour / distance','B / Y: show / hide sections (long press: add)','Trigger (short): records a point on a section or tissue; on a point selects it','Stick click: short = slice clear, hold = hide frames','A / X: short = quick ring, hold = menu'],helpMenu:'Trigger: menu buttons and sliders',close:'Close',badge:'X: quick / hold: menu',wheelEdit:'Set quick ring items',wheelT:'Quick ring items',wheelHelp:'1 = top, clockwise. Pick a slot, then an item',wheelEmpty:'Empty',wheelPrev:'◀ Prev',wheelNext:'Next ▶',wheelClear:'Clear',wheelReset:'Defaults',back:'Back',wheelNoMode:'No section / surface mode item (the mode cannot be switched)',ptMove:'Move',ptDelete:'Delete',ptComment:'Comment',modeNow:'Record on: ',modeHint:' (switch in the A/X ring)',undoDone:'Undone',undoFail:'Could not undo',undoNone:'Nothing to undo',ptMoved:'Point moved (Undo brings it back)',ptMoveHint:'Moving: trigger where it goes (A/X cancels)',ptDist:'Distance',ptDistHint:'Pick the end point',ptDistStart:'Start set: ',ptDistDone:'Distance added (Undo removes it)',ptDistExists:'This pair already has a distance',ptDistCancel:'Distance measurement cancelled',ptDistSame:'Pick a point other than the start',ptDistRefused:'No more distances can be added',ptDistOther:'Cannot measure to a point of another series',
@@ -1517,7 +1526,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    hist:'HU histogram',histTitle:'HU histogram',histAuto:'Auto',histApprox:'approx.',histBusy:'Calculating',histX:'HU',histY:'Voxels',histYLog:'Voxels (log)',histNone:'Unlabeled',histEmpty:'No data',histLin:'Linear',histLog:'Log',
    stHeld:'Section: being moved',stFixed:'Section: fixed',stNone:'Grip to grab, both hands to scale',preparing:'Preparing VR volume… ',uploading:'Uploading the image to the GPU… (the view may pause for a few seconds)',compiling:'Preparing the renderer… (almost there)',failed:'VR failed: ',shotDone:'Screenshot taken (save it on the page after exit)',filtered:' filtered',
    dataOwn:'Your own data is open, so it cannot be switched here (practice data only)',dataT:'Data',dataHead:'Switch the practice data',dataHelp:'Press, then press again to switch (the sections, points and labels now in view are dropped; VR keeps running)',dataAgain:'Again',dataHint:'Press again to switch (sections and points in view are dropped): ',dataNone:'Not available while the data is being switched',
-   sw:{title:'Loading the data',failed:'Loading failed',retry:'Pick the data again from Data in the menu',note:'{s} s elapsed (VR keeps running; please wait)',
+   sw:{saving:'Saving the VR data',title:'Loading the data',failed:'Loading failed',retry:'Pick the data again from Data in the menu',note:'{s} s elapsed (VR keeps running; please wait)',
     stages:{release:'Releasing the previous data',load:'Loading the data',settle:'Finishing the load',prepare:'Converting for VR',compile:'Preparing the renderer',upload:'Sending to the GPU',bind:'Showing it',refine:'Sending the fine version (the view continues)',done:'Done'},
     phases:{copy:'Copy from the 3D view',read:'Reading data',cache:'Reading the saved VR data',half:'Building 256³',mask:'Processing mask',cls:'Classification, distance field',dist:'Distance field'}}};
  // the menu board starts closed (only the volume and the help board at launch); A/X long press or the ring's メニュー opens it as before.
@@ -3623,7 +3632,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
      menu.refresh()},
     hide:()=>{const t=performance.now();unbindData();loadBoard.mesh.visible=true;ownNote('unbind',t)},
     releaseGpu:()=>{const t=performance.now();releaseSessionData();ownNote('release',t)},
-    releaseCpu:()=>{releaseVrForSwap();pfSwap=activeSwapPf=startVrPrefetch(setId)}, // the old data is gone: the finished VR data of the new level (if the device has it) is read beside the page's load
+    releaseCpu:async()=>{await flushVrStores(()=>{if(loadInfo&&!loadInfo.error){loadInfo.text=L.sw.saving;loadBoard.refresh()}});releaseVrForSwap();pfSwap=activeSwapPf=startVrPrefetch(setId)}, // the old data is gone: the finished VR data of the new level (if the device has it) is read beside the page's load
     load2d:async id=>{
      const lv=levelForSample(id);if(lv)chooseEventLevel(lv.id);
      if(tutLive&&!tutEnded&&id!==TUT_SAMPLE){tutEnded=true;try{tutVr?.dispose()}catch(e){console.warn('[tutorial] dispose',e)}tutVr=null;helpShow='list';help.refresh()} // the live tutorial belongs to its practice data
