@@ -22,6 +22,15 @@ export function withTimeout(promise, ms, what = 'step') {
   return Promise.race([Promise.resolve(promise), new Promise((_, rej) => { t = setTimeout(() => rej(new Error(what + ' timed out (' + Math.round(ms / 1000) + ' s)')), ms); })]).finally(() => clearTimeout(t));
 }
 
+// must a background save of the finished VR data wait before its next write? hold: the session is loading (its start, a data switch: the 512 upload, the first seconds of the picture); flushing: a data
+// switch itself waits for the saves (the volume is hidden, the loading board shown): never wait then; otherwise wait while the last few frames (fast) are long (over 1.3 x the target) AND clearly longer than this
+// device's usual (slow, 1.5 x): a device that is always slow does not make the saves wait for ever. Pure.
+export function saveShouldWait({ hold = false, flushing = false, live = false, fast = 0, slow = 0, target = 1000 / 72 } = {}) {
+  if (flushing) return false;
+  if (hold) return true;
+  return !!live && fast > target * 1.3 && fast > slow * 1.5;
+}
+
 // the steps the loading board counts through (bind is instant, done ends it)
 export const SWAP_STAGES = ['release', 'load', 'settle', 'prepare', 'compile', 'upload', 'refine'];
 

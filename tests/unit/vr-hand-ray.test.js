@@ -362,10 +362,10 @@ describe('the sources: where the setting lives, the VR / 2D labels, the hooks in
     expect(i18n).toContain("handRayStandard:'標準',handRayPoint:'指差し'"); expect(i18n).toContain("handRayStandard:'Standard',handRayPoint:'Pointing'");
   });
   it('not a debug switch', () => { expect(dbg).not.toMatch(/handRay|hand-ray/); });
-  it('vr-view.js: a hand whose laser is off hits nothing and draws nothing; the 標準 / 指差し / controller line path is the old one (0.6 m, α 0.35, 4 mm dot)', () => {
+  it('vr-view.js: a hand whose laser is off hits nothing and draws nothing; the 標準 / 指差し / controller line path is the old one (0.6 m, α 0.6, 4 mm dot)', () => {
     expect(src).toContain('const rOff=!handIn.rayOn(c),bd=rOff?noHits:histAxis===c?histAxisBd:boardHits(c)');
     expect(src).toContain('if(!board&&!rh&&!rOff){'); expect(src).toContain("const res=rOff||rh&&!board&&wheelOwner!==c&&pw?.c!==c?{kind:'none',ref:null}:resolveTriggerTarget(");
-    expect(src).toContain('if(dist!=null){ray.scale.z=dist;ray.material.opacity=1;setRay(c);raycaster.ray.at(dist,dot.position);'); expect(src).toContain('else{ray.scale.z=0.6;ray.material.opacity=0.35}');
+    expect(src).toContain('if(dist!=null){ray.scale.z=dist;ray.material.opacity=1;setRay(c);raycaster.ray.at(dist,dot.position);'); expect(src).toContain('else{ray.scale.z=0.6;ray.material.opacity=0.6}');
     expect(src).toContain('ray.visible=!rOff;if(rOff)dot.visible=false;'); expect(src).toContain('const dotGeo=new THREE.SphereGeometry(0.004,12,8);');
     expect(hv).toContain('c.userData.dot?.scale.setScalar(pinchDotScale(hs.pd,hs.pinch.pressed)*(1+2.5*hs.flashAmp*k));'); // hands only (frame() skips controllers), no colour / line change
   });

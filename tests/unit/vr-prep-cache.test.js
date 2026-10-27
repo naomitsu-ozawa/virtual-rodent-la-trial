@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { CHUNK, VR_CACHE_FORMAT, canonicalBytes, hashHex, packEntry, sliceOf, storeEntry, loadEntry, pruneSiblings, isStandardOpen } from '../../docs/vr-prep-cache.js';
+import { CHUNK, VR_CACHE_FORMAT, canonicalBytes, hashHex, packEntry, sliceOf, storeEntry, loadEntry, pruneSiblings, isStandardOpen, copyPackedSlice } from '../../docs/vr-prep-cache.js';
 
 // the finished VR data on the device. The module is pure apart from the cache object it is given: an in-memory one with the same API as gpu-volume-cache.js stands in.
 function memCache({ failBegin = false, failWriteAt = -1, dropSlice = null } = {}, state = {}) {
@@ -173,5 +173,19 @@ describe('saving never holds a frame up', () => {
     expect(maxRun).toBeLessThanOrEqual(3 + 1); // at most the budget plus the slice that crossed it, then a pause
     expect(pauses).toBeGreaterThan(70);
     expect(progress.length).toBe(packed.slices); expect(progress.at(-1)).toEqual([packed.slices, packed.slices]);
+  });
+});
+
+describe('copyPackedSlice (the 512 grid read from the cached 3D volume of the browser)', () => {
+  it('a slice stored without padding is copied as it is; a reduced volume\'s padded rows (256-byte stride) lose the padding; slices land one after the other', () => {
+    const tw = 5, th = 3, row = tw * 2, dst = new Uint8Array(row * th * 2);
+    const plain = Uint8Array.from({ length: row * th }, (_, i) => i + 1);
+    copyPackedSlice(plain, dst, 0, tw, th, row);
+    expect([...dst.subarray(0, row * th)]).toEqual([...plain]);
+    const stride = 256, padded = new Uint8Array(stride * th).fill(99);
+    for (let y = 0; y < th; y++) for (let x = 0; x < row; x++) padded[y * stride + x] = 100 + y * row + x;
+    copyPackedSlice(padded, dst, 1, tw, th, stride);
+    expect([...dst.subarray(row * th)]).toEqual(Array.from({ length: row * th }, (_, i) => 100 + i)); // no 99 (padding) anywhere
+    expect([...dst.subarray(0, row * th)]).toEqual([...plain]); // slice 0 is untouched
   });
 });

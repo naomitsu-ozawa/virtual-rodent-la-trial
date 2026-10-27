@@ -4,8 +4,8 @@ import { readFileSync } from 'node:fs';
 import * as THREE from 'three';
 const src = readFileSync(new URL('../../docs/vr-view.js', import.meta.url), 'utf8');
 const grab = re => { const m = re.exec(src); if (!m) throw new Error('not found: ' + re); return m[0]; };
-const defaultsLine = grab(/const DEFAULTS=\{cap:1,[^\n]*\};/), looksLine = grab(/const LASER_LOOKS=[^\n]*\n/), laserFn = grab(/const makeLaser=\(\)=>\{[\s\S]*?return r\};/);
-const make = () => new Function('THREE', 'DEFAULT_WHEEL', 'LABEL_HIDE_DEFAULT', `${defaultsLine}\n${looksLine}\n${laserFn}\nreturn {DEFAULTS,laserLookOf,LASER_LOOKS,makeLaser};`)(THREE, [1, 2, 3], 1);
+const defaultsLine = grab(/const DEFAULTS=\{cap:1,[^\n]*\};/), looksLine = grab(/const LASER_COLOR=[^\n]*\nconst LASER_LOOKS=[^\n]*\n/), laserFn = grab(/const makeLaser=\(\)=>\{[\s\S]*?return r\};/);
+const make = () => new Function('THREE', 'DEFAULT_WHEEL', 'LABEL_HIDE_DEFAULT', `${defaultsLine}\n${looksLine}\n${laserFn}\nreturn {DEFAULTS,laserLookOf,LASER_LOOKS,LASER_COLOR,makeLaser};`)(THREE, [1, 2, 3], 1);
 
 describe('laser style setting', () => {
   const { DEFAULTS, laserLookOf } = make();
@@ -40,6 +40,7 @@ describe('laser object per style', () => {
   it('colour / opacity / depthTest / renderOrder written on the ray reach the line too; neither is hit by a raycast', () => {
     const r = makeLaser(), l = line(r);
     r.material.color.setHex(0xff7a3d); expect(l.material.color.getHex()).toBe(0xff7a3d);
+    expect(make().LASER_COLOR).toBe(0x00ff99); const f = make().makeLaser(); expect(f.material.color.getHex()).toBe(0x88ccff); expect(line(f).material.color.getHex()).toBe(0x88ccff);
     r.material.opacity = 0.35; expect(l.material.opacity).toBe(0.35); expect(r.material.uniforms.opacity.value).toBe(0.35);
     r.material.depthTest = false; expect(l.material.depthTest).toBe(false); expect(r.material.depthTest).toBe(false);
     r.renderOrder = 8; expect(l.renderOrder).toBe(8);
@@ -56,5 +57,28 @@ describe('表示 tab rows with the laser row (static)', () => {
     for (let i = 1; i < rows.length; i++) expect(rows[i]).toBeGreaterThanOrEqual(rows[i - 1] + 72);
     expect(yb).toBeGreaterThanOrEqual(rows[5] + 72); expect(yb + 72).toBeLessThanOrEqual(MENU_H);
     expect(src).toContain("label(X,yb-66,L.menuKey,"); expect(src).toContain("label(X,yb-32,L.menuGrab"); // the controller-only help lines sit between the laser row (ends yb-88) and the home row
+  });
+});
+
+describe('laser thickness does not depend on beam length or hit / no hit', () => {
+  it('width taper is a function of the distance from the hand (reaches the tip width at 1 m), not of the beam length', () => {
+    expect(laserFn).toContain('mix(1.,taper,min(t*L,1.))');
+    const w = (t, L, taper = 0.3) => 1 - (1 - taper) * Math.min(t * L, 1);
+    expect(w(0.5 / 0.6, 0.6)).toBeCloseTo(w(0.5 / 3, 3), 9); // 0.5 m from the hand, short vs long beam
+    expect(w(1, 0.6)).toBeCloseTo(0.58, 9); expect(w(1, 3)).toBeCloseTo(0.3, 9);
+  });
+  it('the lighter no-hit opacity (0.6) keeps the visible edge: alpha at the old visible edge equals that of a full-opacity beam', () => {
+    expect(laserFn).toContain('float p=max(2.-log(max(opacity,0.05))/log(0.22),0.3)');
+    const p = o => Math.max(2 - Math.log(Math.max(o, 0.05)) / Math.log(0.22), 0.3), a = (e, o) => Math.pow(e, p(o)) * o;
+    expect(p(1)).toBeCloseTo(2, 9); expect(a(0.22, 0.6)).toBeCloseTo(a(0.22, 1), 9);
+    expect(a(0.5, 0.6)).toBeLessThan(a(0.5, 1)); // still fainter overall
+  });
+  it('no-hit is 0.6 m long at 0.6 opacity (was 0.35)', () => { expect(src).toContain('else{ray.scale.z=0.6;ray.material.opacity=0.6}'); });
+});
+
+describe('laser colour: spring green for the LEFT hand only (right keeps its orange hand colour)', () => {
+  it('left beam and hit dot take LASER_COLOR, the right hand the orange hand colour; hand colours stay for the other uses', () => {
+    expect(src).toContain("const hc=c.userData.source?.handedness==='left'?LASER_COLOR:handColor(c),dot=c.userData.dot;ray.material.color.setHex(hc);dot.material.color.setHex(hc);");
+    expect(src).toContain('HAND_COLORS={right:0xff7a3d,left:0x7c6cff}');
   });
 });

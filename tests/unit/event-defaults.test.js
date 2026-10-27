@@ -96,7 +96,7 @@ describe('slice transparent toggle on the thumbstick click', () => {
     expect(fn).not.toMatch(/settings\.sliceOpacity\s*=/);
   });
   it('the volume is drawn at 0 while on, at the setting otherwise; the slider (simple and full menu) and the resets turn it off', () => {
-    expect(src).toContain('u.sliceOpacity.value=section.on&&!bench.noSection&&!ui.sliceClear?settings.sliceOpacity:0;');
+    expect(src).toContain('u.sliceOpacity.value=section.on&&!bench.noSection&&!ui.sliceClear&&sliceReady()?settings.sliceOpacity:0;');
     expect(src.match(/set:v=>\{ui\.sliceClear=false;settings\.sliceOpacity=/g)?.length).toBe(2);
     expect(src).toContain('ui.sliceClear=false;sliceToast.until=0;sliceToast.mesh.visible=false;resetEventViewSettings(settings);');
     expect(src).toContain('const ui={sliceClear:false,'); // a new session starts with it off

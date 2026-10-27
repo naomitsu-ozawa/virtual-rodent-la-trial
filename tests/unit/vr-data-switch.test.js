@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { createSwapGuard, runDataSwap, createUploadQueue, createSettleGate, createFrameGapMonitor, swapPlan, SWAP_STAGES, SETTLE_TIMEOUT_MS, LOAD_TIMEOUT_MS, withTimeout } from '../../docs/vr-data-switch.js';
+import { createSwapGuard, runDataSwap, createUploadQueue, createSettleGate, createFrameGapMonitor, swapPlan, SWAP_STAGES, SETTLE_TIMEOUT_MS, LOAD_TIMEOUT_MS, withTimeout, saveShouldWait } from '../../docs/vr-data-switch.js';
 import { frameOrTimer } from '../../docs/utils.js';
 import { levelSwitchItems, simpleMenuLayout, SIMPLE_MENU, EVENT_LEVELS } from '../../docs/event-mode.js';
 
@@ -335,7 +335,7 @@ describe('vr-view.js: the data of the session can be replaced (static wiring)', 
   });
   it('the textures of the new data are allocated without data and filled in slices; the frame loop runs the queue, never an await', () => {
     expect(src).toContain('tex.source.dataReady=false;tex.needsUpdate=true;renderer.initTexture(tex)');
-    expect(src).toContain('createUploadQueue({adaptive:true,copy:');
+    expect(src).toContain('createUploadQueue({adaptive:true,bytesPerTick:512<<10,copy:');
     expect(src).toContain('renderer.copyTextureToTexture(j.src,j.tex,slabBox,slabAt)');
     expect(loop).toContain('uploadQueue.tick();');
     expect(loop.match(/uploadQueue\.tick\(\)/g)).toHaveLength(1);
@@ -345,7 +345,7 @@ describe('vr-view.js: the data of the session can be replaced (static wiring)', 
     expect(src).toContain("slicedTexture(key('combo'),pc.data,grid.dims,4,");
     expect(src).toContain("slicedTexture('fine',vdN.data,vdN.dims,2,");
     expect(src).toContain('const wantHalf=!!P.half&&(i===1||!fullReady)');
-    expect(src).toContain('material.uniforms.sliceVol.value=fullReady&&full.v?full.v:t.v');
+    expect(src).toContain('material.uniforms.sliceVol.value=fullReady&&full.v?full.v:dummyEdit'); // the 256 grid is never the source of the cross-sections
   });
   it('shader defines are NOT made unconditional: one program set per (analysis results present), compiled before it is shown; the variants of four stored segments too', () => {
     expect(src).toContain("const k=Pn.region?.data?'R':'-'");
@@ -409,13 +409,46 @@ describe('vr-view.js: the data of the session can be replaced (static wiring)', 
     expect(src).toContain('sliceMs>0?performance.now()-sliceAt>=sliceMs||z===td-1:(z&15)===15||z===td-1');
   });
   it('the cross-sections always use the full grid: an entry without a 512 body gets it from the page\'s 3D volume, the page is loaded on every switch, and a stalled cache read falls back to computing', () => {
-    for (const t of ['let body=V.arrays.data||null;', 'if(!body){', 'const bd=await buildVolumeData(maxTexture3D()', 'vd={data:body,dims:meta.dims,']) expect(src, t).toContain(t);
-    expect(src).toContain('material.uniforms.sliceVol.value=fullReady&&full.v?full.v:t.v');
+    for (const t of ['let body=V.arrays.data||null,loadBody=null;', 'if(!body){', 'const bd=await buildVolumeData(maxTexture3D()', 'vd={data:body,dims:meta.dims,']) expect(src, t).toContain(t);
+    expect(src).toContain('material.uniforms.sliceVol.value=fullReady&&full.v?full.v:dummyEdit'); // the 256 grid is never the source of the cross-sections
     expect(src).toContain("document.dispatchEvent(new CustomEvent('vrl-event-sample',{detail}))"); expect(src).not.toMatch(/deferLoad|releasePageFor|loadDeferredPage|vrSnap/);
     expect(src).toContain("withTimeout(prefetch.ready,CACHE_READ_TIMEOUT_MS,'read ahead')"); expect(src).toContain("if(activeSwapPf)activeSwapPf.cancelled=true;emit('session-end')");
   });
 
+  it('the saves wait for the session (hold: start, a switch, the first seconds of the picture) and for long frames; the flush of a switch is not held; the 512 upload starts small', () => {
+    expect(src).toContain('const vrSaveGate={hold:false,flushing:false,');
+    expect(src).toContain('const calm=async()=>{const t0=performance.now();while(!cancelled()){'); expect(src).toContain('(!g.hold&&performance.now()-t0>1000)'); // frame waits are capped
+    expect(src).toContain("pause:async ms=>{await new Promise(r=>setTimeout(r,ms+vrStoreSlowMs));await calm()}"); // after every slice's work
+    expect(src).toContain('await calm();\n    if(cancelled()){noteStore(t.key,{state:\'cancelled\'});continue}'); // before every entry
+    expect(src).toContain('vrSaveGate.flushing=true;'); expect(src).toContain('vrHold(true);const gen=swapGuard.next()'); expect(src).toContain('vrHold(false,3000)'); expect(src).toContain('vrHold(false,4000)');
+    expect(src).toContain('createUploadQueue({adaptive:true,bytesPerTick:512<<10,copy:');
+  });
+  it('the cross-sections are never drawn from the 256 grid: no slice and no section control until the 512 grid is in the GPU', () => {
+    expect(src).not.toContain('sliceVol.value=fullReady&&full.v?full.v:t.v'); expect(src).not.toMatch(/sliceVol\.value=[^;]*:t\.v/);
+    expect(src).toContain('const sliceReady=()=>!!full&&fullReady&&!!full.v;');
+    expect(src).toContain('section.on&&!bench.noSection&&!ui.sliceClear&&sliceReady()?settings.sliceOpacity:0'); // no slice is drawn while it is false
+    expect(src).toContain('sliceDrawState({on:section.on&&!bench.noSection&&sliceReady(),'); // not even the segments' region (it samples the same volume)
+    expect(src).toContain('if(on&&!sweepOn&&!sliceReady()){sliceWait();return}'); // B / Y, the menus and the ring: setSection
+    expect(src).toContain("if(!sweepOn&&!sliceReady()){sliceWait();return null}"); // a new section: addPlane
+    expect(src).toContain("case'section-add':return planes.length<MAX_PLANES&&sliceReady();"); expect(src).toContain("case'section-toggle':return sliceReady()||section.on;");
+    expect(src).toContain("fullReady=true;useData(settings.data|0);menu.refresh()"); // available again at once, without a press
+  });
+
   it('a data switch writes the STANDARD alias (protected in the event mode), old builds are cleaned, the sibling prune covers both entries', () => {
-    for (const t of ['async function vrAliasStore(cache,pk,id,keyV,keyD,fresh=false){', 'standard:!!fresh,keyV,keyD,build:APP_BUILD,prep:VR_PREP_VERSION', 'if(was&&!fresh)return true;', 'void removeOldBuilds(vc.cache,{build:APP_BUILD,prep:VR_PREP_VERSION})', 'await pruneSiblings(vc.cache,info,t.key);await vc.cache.prune', '{sliceMs:4,prefetch:pfSwap,fresh:true}', 'parts:t.parts,build:APP_BUILD,prep:VR_PREP_VERSION']) expect(src, t).toContain(t);
+    for (const t of ['async function vrAliasStore(cache,pk,id,keyV,keyD,fresh=false){', 'standard:!!fresh,keyV,keyD,build:APP_BUILD,prep:VR_PREP_VERSION', 'if(was&&!fresh)return true;', 'void removeOldBuilds(vc.cache,{build:APP_BUILD,prep:VR_PREP_VERSION})', 'await pruneSiblings(vc.cache,info,t.key);await vc.cache.prune', '{sliceMs:4,deferBody:true,prefetch:pfSwap,fresh:true}', 'parts:t.parts,build:APP_BUILD,prep:VR_PREP_VERSION']) expect(src, t).toContain(t);
+  });
+});
+
+describe('saveShouldWait', () => {
+  it('waits while the session loads, never while a switch itself waits for the saves', () => {
+    expect(saveShouldWait({ hold: true })).toBe(true);
+    expect(saveShouldWait({ hold: true, flushing: true, live: true, fast: 200, slow: 14 })).toBe(false);
+  });
+  it('waits when the last frames are long and clearly longer than usual; a device that is always slow, or frames on time, do not make it wait', () => {
+    const T = 1000 / 72;
+    expect(saveShouldWait({ live: true, fast: 25, slow: 14, target: T })).toBe(true);
+    expect(saveShouldWait({ live: true, fast: 14, slow: 13.9, target: T })).toBe(false); // on time
+    expect(saveShouldWait({ live: true, fast: 40, slow: 38, target: T })).toBe(false); // always slow (e.g. a software GPU): waiting would not help
+    expect(saveShouldWait({ live: false, fast: 400, slow: 14, target: T })).toBe(false); // no session: only the slice pacing
   });
 });
