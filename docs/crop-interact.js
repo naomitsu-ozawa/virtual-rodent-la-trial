@@ -4,7 +4,7 @@
 // DATA ACCURACY: a drag must never leave a tiny accidental tilt (it would silently turn the byte-copy export into a resampled one), so
 // the in-view angle snaps to whole steps: 1 degree for a plain drag, 15 degrees (with 0 / 90 / 180 / 270 within 3 degrees) with Shift.
 // An orientation at an axis permutation becomes the EXACT integer matrix (within 3 degrees for 15 degree steps, float dust for 1 degree steps).
-import { axisRotation, matMul, orthonormalize, snapToPermutation } from './crop-geometry.js?v=20261027-build679';
+import { axisRotation, matMul, orthonormalize, snapToPermutation } from './crop-geometry.js?v=20261027-build680';
 
 export const ROTATE_BAND_PX = 26;        // width of the rotate band outside a corner (screen px)
 export const SNAP_STEP_DEG = 15;

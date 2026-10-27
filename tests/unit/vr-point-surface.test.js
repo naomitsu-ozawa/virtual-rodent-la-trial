@@ -128,6 +128,14 @@ describe('point cursor (a small dot only: no ring, no glow; both modes)', () => 
   it('is lime, different from the point markers and the halo', () => {
     for (const c of [VR_MARKER_COLOR, VR_MARKER_FILL, VR_HALO_SELECTED]) expect(SURFACE_CURSOR_COLOR).not.toBe(c);
   });
+  it('takes the colour given to set() (the pointing hand\'s laser colour); without one it is lime again', () => {
+    const scene = new THREE.Scene(), cur = createSurfaceCursor(THREE, scene), p = { x: 0, y: 0, z: 0 }, hd = { x: 0, y: 0, z: -1 };
+    expect(cur.core.material.color.getHex()).toBe(SURFACE_CURSOR_COLOR);
+    cur.set(p, hd, 0.1, 0x00ff99); expect(cur.core.material.color.getHex()).toBe(0x00ff99); // left hand
+    cur.set(p, hd, 0.1, 0xff7a3d); expect(cur.core.material.color.getHex()).toBe(0xff7a3d); // right hand
+    cur.set(p, hd, 0.1); expect(cur.core.material.color.getHex()).toBe(SURFACE_CURSOR_COLOR);
+    cur.dispose();
+  });
   it('dot = about one voxel wide but never below the minimum angular size; no ring size any more', () => {
     expect(surfaceCursorSizes(0.5, 0.01).core).toBeCloseTo(0.005, 9); // 1 voxel wide = 0.5 voxel radius
     expect(surfaceCursorSizes(2, 0.0001).core).toBeCloseTo(2 * SURFACE_CURSOR_MIN_CORE_RAD, 9); // tiny voxel: the minimum on-screen size wins
