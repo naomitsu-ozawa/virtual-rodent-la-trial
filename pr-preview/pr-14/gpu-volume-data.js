@@ -1,19 +1,19 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { beginSharedMpr3DPreview } from './mpr3d-overlay.js?v=20261026-build675';
-import { gpuStepTimes, gpuFilterRuntime, gpuCounts } from './gpu-compute.js?v=20261026-build675';
-import { gpuVolumeRefresh, updateVolumeFilterBadge, set3DBusy } from './three-status.js?v=20261026-build675';
-import { sourceVolume, volume, sceneState, currentLanguage, threeRenderMode, ipadGpuTargetSide } from './state.js?v=20261026-build675';
-import { SEGMENT_PRESET_ORDER, gpuSegmentOrder, segmentEditState, segmentState, segmentHasProcessedMask, segmentAddsVoxels } from './segments.js?v=20261026-build675';
-import { request3DRender } from './scene3d.js?v=20261026-build675';
-import { footer, volumeCacheClearBtn } from './ui-shell.js?v=20261026-build675';
-import { subtractRunArrays, intersectRunArrays } from './run-length.js?v=20261026-build675';
-import { tr } from './i18n.js?v=20261026-build675';
-import { fmt, isTabletRuntime, isIPhoneRuntime } from './utils.js?v=20261026-build675';
-import { setPlaneCacheProvider } from './plane-cache.js?v=20261026-build675';
-import { openVolumeCache, cacheKey, textureCacheHandle, pruneOtherFilterSettings } from './gpu-volume-cache.js?v=20261026-build675';
-import { datasetFingerprint } from './project-file.js?v=20261026-build675';
-import { getFilteredSourceAxialBlock, currentFilterSignature, volumeBlockDepth, volumeBlockBudget } from './source-filters.js?v=20261026-build675';
+import { beginSharedMpr3DPreview } from './mpr3d-overlay.js?v=20261027-build677';
+import { gpuStepTimes, gpuFilterRuntime, gpuCounts } from './gpu-compute.js?v=20261027-build677';
+import { gpuVolumeRefresh, updateVolumeFilterBadge, set3DBusy } from './three-status.js?v=20261027-build677';
+import { sourceVolume, volume, sceneState, currentLanguage, threeRenderMode, ipadGpuTargetSide } from './state.js?v=20261027-build677';
+import { SEGMENT_PRESET_ORDER, gpuSegmentOrder, segmentEditState, segmentState, segmentHasProcessedMask, segmentAddsVoxels } from './segments.js?v=20261027-build677';
+import { request3DRender } from './scene3d.js?v=20261027-build677';
+import { footer, volumeCacheClearBtn } from './ui-shell.js?v=20261027-build677';
+import { subtractRunArrays, intersectRunArrays } from './run-length.js?v=20261027-build677';
+import { tr } from './i18n.js?v=20261027-build677';
+import { fmt, isTabletRuntime, isIPhoneRuntime } from './utils.js?v=20261027-build677';
+import { setPlaneCacheProvider } from './plane-cache.js?v=20261027-build677';
+import { openVolumeCache, cacheKey, textureCacheHandle, pruneOtherFilterSettings } from './gpu-volume-cache.js?v=20261027-build677';
+import { datasetFingerprint } from './project-file.js?v=20261027-build677';
+import { getFilteredSourceAxialBlock, currentFilterSignature, volumeBlockDepth, volumeBlockBudget } from './source-filters.js?v=20261027-build677';
 export const gpuVolumeApplied={seriesId:null,signature:''};
 export function gpuVolumeDataSignature(){
  const id=(sourceVolume||volume)?.series?.id??null,applied=gpuVolumeApplied.seriesId===id?gpuVolumeApplied.signature:'';
@@ -66,24 +66,44 @@ export function filteredPackedSliceProvider(series,plan,preview=null){
   return block.packed.subarray(i*block.sliceBytes,(i+1)*block.sliceBytes);
  };
 }
-export const volumeCacheState={cache:null,failed:false,persistAsked:false};
+export const volumeCacheState={cache:null,failed:false,persistAsked:false,persisted:null};
 export async function volumeCache(){
  if(volumeCacheState.cache||volumeCacheState.failed)return volumeCacheState.cache;
  try{volumeCacheState.cache=await openVolumeCache()}catch(e){volumeCacheState.failed=true;console.warn('GPU volume cache unavailable.',e)}
+ if(volumeCacheState.cache&&eventModeOnForCache())void requestPersistentCache(); // 体験会モード asks to keep the stored data (4 levels of cache)
  return volumeCacheState.cache;
 }
+// 体験会モード keeps ALL FOUR practice levels at once: their filtered 3D volumes (Lv0 / Lv2 / Lv3: 3 x 268 MB) and their finished VR data (each: the 512 body 268 MB + the 256 copy + bricks ~306 MB,
+// and the classification, distance field, combined texture, mask, index ~150-250 MB). 3.5 GB is the estimate with some margin; the budget of that mode is that much (but at most 85 % of what the
+// browser says it can store), so the LRU does not push a level out and bring back the slow load. The normal-mode default is unchanged; a limit set by hand in settings > cache wins in both.
+export const EVENT_CACHE_NEED_BYTES=3.5*2**30;
+const eventModeOnForCache=()=>{try{return globalThis.__vrlSettings?.get?.('eventMode')===true}catch{return false}};
+export async function volumeCacheBudgetInfo(){
+ const fixed=+globalThis.__vrlSettings?.get?.('cacheLimit');
+ const cap=(isTabletRuntime()?1.5:4)*2**30,event=eventModeOnForCache();let quota=0,usage=0,persisted=null;
+ try{const e=await navigator.storage?.estimate?.();quota=e?.quota||0;usage=e?.usage||0}catch{/* none */}
+ try{persisted=await navigator.storage?.persisted?.()}catch{/* none */}
+ const base=quota?Math.max(256*2**20,Math.min(cap,quota*.3)):cap;
+ let budget=fixed>0?fixed*2**30:base;
+ if(!(fixed>0)&&event)budget=Math.max(base,Math.min(EVENT_CACHE_NEED_BYTES,quota?quota*.85:EVENT_CACHE_NEED_BYTES));
+ return{budget,base,need:event?EVENT_CACHE_NEED_BYTES:0,quota,usage,persisted,event,enough:!event||budget>=EVENT_CACHE_NEED_BYTES};
+}
 export async function volumeCacheBudget(){
- // settings > cache: a fixed limit, or auto (below)
- const fixed=+globalThis.__vrlSettings?.get?.('cacheLimit');if(fixed>0)return fixed*2**30;
- const cap=(isTabletRuntime()?1.5:4)*2**30;
- try{const q=(await navigator.storage?.estimate?.())?.quota||0;return Math.max(256*2**20,Math.min(cap,q?q*.3:cap))}catch{return 512*2**20}
+ try{return(await volumeCacheBudgetInfo()).budget}catch{return 512*2**20}
+}
+// asks the browser to keep the stored data (not evict it under storage pressure); once; the answer is kept for the 詳細 tab
+export async function requestPersistentCache(){
+ if(volumeCacheState.persistAsked)return volumeCacheState.persisted??null;
+ volumeCacheState.persistAsked=true;
+ try{volumeCacheState.persisted=(await navigator.storage?.persisted?.())||(await navigator.storage?.persist?.())||false}catch{volumeCacheState.persisted=null}
+ return volumeCacheState.persisted;
 }
 export function gpuVolumeCacheFor(series,signature){
  return async info=>{
   const cache=await volumeCache();if(!cache)return null;
   const size=info.slices*info.bytesPerSlice,budget=await volumeCacheBudget();
   if(size>budget)return null;
-  if(!volumeCacheState.persistAsked){volumeCacheState.persistAsked=true;try{await navigator.storage?.persist?.()}catch{}}
+  void requestPersistentCache();
   const key=await cacheKey({dataset:datasetFingerprint(series),filter:signature,plan:info.planSignature,reduced:info.reduced});
   const dataset=datasetFingerprint(series);
   await pruneOtherFilterSettings(cache,{kind:'volume',dataset,plan:info.planSignature,filter:signature},key);

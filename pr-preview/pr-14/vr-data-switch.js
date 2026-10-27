@@ -12,6 +12,8 @@
 // as it is), and the page's own opening of the data (then the switch FAILS with a message; the same level can be tried again)
 export const SETTLE_TIMEOUT_MS = 60000;
 export const LOAD_TIMEOUT_MS = 180000;
+// the read of the entries a switch started beside the page's load: a device whose IndexedDB stalls must not hold the switch (it then computes the data as it did before the entries existed)
+export const CACHE_READ_TIMEOUT_MS = 120000;
 // the promise, or a rejection after ms (the timer is always cleared)
 export function withTimeout(promise, ms, what = 'step') {
   let t = 0;

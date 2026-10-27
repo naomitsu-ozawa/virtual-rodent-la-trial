@@ -8,7 +8,8 @@
 //   vr-derived  what the segments / processing masks / analysis results decide: the processing mask, the classification bytes, the distance field, the combined texture, the fourth
 //               channel, the analysis index, the occupancy. Key: the vr-volume key + a hash of every input of that step (segment ranges and slots, the runs of the masks and of the shown
 //               analysis results, the shown-segment mask), so any change the user made gives another key and the step is computed again (and stored under the new key).
-// The 512 grid itself (vd.data) is NOT stored: the page reads it from its own (already cached) 3D volume and it is as large as everything else together.
+// The 512 grid itself (vd.data) is not part of the 256 level's finished data (it is as large as everything else together): the page reads it from its own (already cached) 3D volume.
+// A data that has no 256 copy (it is 256 or less already) stores its one grid.
 //
 // A stored entry is a manifest (JSON) in slice 0 and the arrays cut into CHUNK-byte slices after it. Writing is paced (a few ms of work, then a pause) and can be cancelled between
 // two slices (the data was released): a half-written entry is removed. Reading is a few slices at a time. Every failure (no space, a damaged entry) means "not cached".
@@ -69,7 +70,7 @@ export async function storeEntry(cache, key, info, packed, { isCancelled = () =>
 }
 
 // load: lookup, then the manifest, then the chunks (concurrency at a time) straight into freshly allocated arrays. -> {meta, arrays: {name: typedArray}} | null
-export async function loadEntry(cache, key, { concurrency = 3, isCancelled = () => false } = {}) {
+export async function loadEntry(cache, key, { concurrency = 3, isCancelled = () => false, onProgress = null } = {}) {
   try {
     const hit = await cache.lookup(key); if (!hit) return null;
     const mb = await cache.read(key, 0); if (!mb) { await cache.remove(key); return null; }
@@ -81,17 +82,72 @@ export async function loadEntry(cache, key, { concurrency = 3, isCancelled = () 
       const a = new T(d.length), u8 = new Uint8Array(a.buffer); arrays[d.name] = a;
       for (let c = 0; c < d.chunks; c++) jobs.push({ i: idx++, u8, off: c * CHUNK, len: Math.min(d.bytes, (c + 1) * CHUNK) - c * CHUNK });
     }
-    let next = 0, bad = false;
-    const lane = async () => { while (next < jobs.length && !bad) { if (isCancelled()) { bad = true; return; } const j = jobs[next++], b = await cache.read(key, j.i); if (!b || b.byteLength !== j.len) { bad = true; return; } j.u8.set(b instanceof Uint8Array ? b : new Uint8Array(b), j.off); } };
+    let next = 0, bad = false, got = 0;
+    const lane = async () => { while (next < jobs.length && !bad) { if (isCancelled()) { bad = true; return; } const j = jobs[next++], b = await cache.read(key, j.i); if (!b || b.byteLength !== j.len) { bad = true; return; } j.u8.set(b instanceof Uint8Array ? b : new Uint8Array(b), j.off); if (onProgress) onProgress(++got, jobs.length); } };
     await Promise.all(Array.from({ length: Math.max(1, concurrency) }, lane));
     if (bad) { if (!isCancelled()) { try { await cache.remove(key); } catch { /* none */ } } return null; }
     return { meta: mf.meta, arrays };
   } catch (e) { console.warn('VR data cache: read failed', e); try { await cache.remove(key); } catch { /* none */ } return null; }
 }
 
-// the other entries of the same kind, dataset and filter that are not `keep` (an older state of the same data): removed (the cache keeps the latest)
+// in 体験会モード the four practice levels opened with their standard settings must stay on the device (a visitor must never wait for a rebuild). What is standard is what the LATEST standard alias of each level points at
+// (the alias is written only by a data switch, whose page state is the level's own fresh opening, and carries standard: true): its vr-volume and vr-derived entries, the alias itself, and the browser's filtered 3D volume of the
+// same data and filter (the source of the 512 cross-sections). Everything else (other settings, other data, older aliases) is evicted first. Returns a Set of entry keys (empty outside 体験会モード).
+export const eventModeNow = () => { try { return globalThis.__vrlSettings?.get?.('eventMode') === true; } catch { return false; } };
+export function protectedKeys(all, event = eventModeNow()) {
+  const out = new Set(); if (!event) return out;
+  const same = d => JSON.stringify(d ?? null), latest = new Map();
+  for (const e of all) { const i = e.info || {}; if (!e.complete || i.kind !== 'vr-alias' || !i.standard) continue; const id = i.dataset?.id, cur = latest.get(id); if (!cur || (e.created || 0) > (cur.created || 0)) latest.set(id, e); }
+  const byKey = new Map(all.map(e => [e.key, e]));
+  for (const a of latest.values()) {
+    out.add(a.key); for (const k of [a.info.keyV, a.info.keyD]) if (k) out.add(k);
+    const v = byKey.get(a.info.keyV)?.info;
+    if (v) for (const e of all) { const i = e.info || {}; if (e.complete && i.kind === 'volume' && same(i.dataset) === same(v.dataset) && i.filter === v.filter) out.add(e.key); }
+  }
+  return out;
+}
+// the other entries of the same kind, dataset and filter that are not `keep` (an older state of the same data): removed (the cache keeps the latest), except the protected ones
 export async function pruneSiblings(cache, info, keep) {
   const same = d => JSON.stringify(d ?? null);
-  try { for (const e of await cache.list()) { const i = e.info || {}; if (e.key !== keep && i.kind === info.kind && same(i.dataset) === same(info.dataset) && i.filter === info.filter) await cache.remove(e.key); } }
+  try { const all = await cache.list(), prot = protectedKeys(all); for (const e of all) { const i = e.info || {}; if (e.key !== keep && !prot.has(e.key) && i.kind === info.kind && same(i.dataset) === same(info.dataset) && i.filter === info.filter) await cache.remove(e.key); } }
   catch (e) { console.warn('VR data cache: prune failed', e); }
+}
+// entries of the VR data cache made by another build / another preparation version can never be read again (the keys include both): removed (an entry without the tags is from before)
+export async function removeOldBuilds(cache, { build, prep }) {
+  try { for (const e of await cache.list()) { const i = e.info || {}; if (['vr-volume', 'vr-derived', 'vr-alias'].includes(i.kind) && (i.build !== build || i.prep !== prep)) await cache.remove(e.key); } }
+  catch (e) { console.warn('VR data cache: old entries not removed', e); }
+}
+
+// What happened to the stores of this page session, by entry key: why an entry may be missing when it is asked for (an interrupted / failed / evicted store, or never saved).
+// state: 'saving' (written / total slices) | 'done' | 'cancelled' (the data was released first) | 'failed' | 'skipped' (over the budget). Plain data; the 詳細 tab reads it.
+export const storeStatus = { map: new Map(), last: null, seq: 0 };
+export function noteStore(key, patch) {
+  const e = { ...(storeStatus.map.get(key) || { key }), ...patch, at: Date.now() }; storeStatus.map.set(key, e); storeStatus.last = key; storeStatus.seq++;
+  if (storeStatus.map.size > 40) storeStatus.map.delete(storeStatus.map.keys().next().value);
+  return e;
+}
+export const clearStoreStatus = () => { storeStatus.map.clear(); storeStatus.last = null; storeStatus.seq++; };
+
+// the key of an entry from its parts: every part is hashed on its own and kept in the entry's info, so a miss can say WHICH part changed
+export async function partsOf(parts) { const out = {}; for (const [k, v] of Object.entries(parts)) out[k] = (await hashHex(v)).slice(0, 12); return out; }
+export const keyOfParts = (kind, hashes, extra = '') => hashHex({ kind, format: VR_CACHE_FORMAT, parts: hashes, extra });
+
+// why is there no entry `key`? -> {code, changed?: [part names], detail?}
+//   first (never saved: nothing stored for this data yet), changed (an entry of the same data exists with other parts: `changed` names them), interrupted, failed, capacity, evicted (it was
+//   saved earlier in this page session and is gone: the LRU / the storage budget took it), saving (the store is still running), damaged (an entry that could not be read), off
+export async function explainMiss(cache, { kind, key, dataset, parts, readFailed = false }) {
+  const st = storeStatus.map.get(key);
+  if (st) {
+    if (st.state === 'saving') return { code: 'saving', written: st.written, total: st.total };
+    if (st.state === 'cancelled') return { code: 'interrupted' };
+    if (st.state === 'failed') return { code: 'failed', detail: st.error };
+    if (st.state === 'skipped') return { code: 'capacity', detail: st.why };
+    if (st.state === 'done') return { code: readFailed ? 'damaged' : 'evicted' };
+  }
+  if (readFailed) return { code: 'damaged' };
+  try {
+    const same = x => JSON.stringify(x ?? null), sib = (await cache.list()).filter(e => e.complete && e.info?.kind === kind && same(e.info.dataset) === same(dataset) && e.key !== key).sort((a, b) => b.lastUsed - a.lastUsed)[0];
+    if (sib) { const o = sib.info.parts || {}, changed = Object.keys(parts).filter(k => o[k] !== parts[k]); return { code: 'changed', changed }; }
+  } catch { /* none */ }
+  return { code: 'first' };
 }
