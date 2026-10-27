@@ -13,10 +13,10 @@
 // (GPU occlusion, update({occlusion:true}), vr-depth.js): the sphere, its rim, the chip (number) and the perpendicular are drawn with a real depth test (clipped at the tissue outline) plus a faint
 // ghost child (depthFunc GreaterDepth, GHOST_ALPHA), and the CPU "hidden" look (small dot) is not used. A hovered / selected / moved point (and its chip) stays fully on top, so it can be operated.
 // With occlusion off (「薄くする」, or no usable GPU depth) nothing changes: no depth test, the CPU hidden look.
-import { getComments, getMarkersShown, commentMatchesSeries, commentTarget } from './comments.js?v=20261027-build679';
-import { voxelToLocal, sectionRelation, pickPoint } from './vr-point.js?v=20261027-build679';
-import { pointColor, colorToInt, darkFill, inkOn } from './point-colors.js?v=20261027-build679';
-import { GHOST_ALPHA, occludedPass } from './vr-depth.js?v=20261027-build679';
+import { getComments, getMarkersShown, commentMatchesSeries, commentTarget } from './comments.js?v=20261027-build680';
+import { voxelToLocal, sectionRelation, pickPoint } from './vr-point.js?v=20261027-build680';
+import { pointColor, colorToInt, darkFill, inkOn } from './point-colors.js?v=20261027-build680';
+import { GHOST_ALPHA, occludedPass } from './vr-depth.js?v=20261027-build680';
 export const VR_MARKER_COLOR=0x4dd8ff,VR_MARKER_FILL=0x0b6f8c,VR_RIM_COLOR=0xffffff,VR_HALO_HOVER=0xffffff,VR_HALO_SELECTED=0xffd23d;
 export const PICK_MIN_M=0.004,MARKER_SCALE=0.4; // MARKER_SCALE: the drawn radius as a factor of the base radius, the same in every state
 const RADIUS_UNITS=0.045,MIN_RADIUS_M=0.003; // radius in volume units (the longest side is 3.3) and the least radius in metres
@@ -124,7 +124,7 @@ export function createVrPointMarkers(THREE,scene,deps={getComments,getMarkersSho
 }
 
 // ---- point cursor ----
-// Where a trigger press would record: a small lime dot (about one voxel, centred EXACTLY on the voxel that will be recorded). No ring, no
+// Where a trigger press would record: a small dot (lime by default; the caller passes the pointing hand's laser colour to set(), so each hand's cursor has its own colour) (about one voxel, centred EXACTLY on the voxel that will be recorded). No ring, no
 // glow. Used by 表面 mode (on the tissue surface) and by 断面 mode (the voxel projected onto the selected section) alike, so both look the
 // same. Clearly different from the point markers (cyan sphere with a white rim / yellow halo) and from the laser tip (a small dot in the
 // hand colour). Drawn without a depth test, like the markers.
@@ -142,9 +142,9 @@ export function createSurfaceCursor(THREE,scene){
  const d=new THREE.Vector3();
  return{
   group,core,
-  // centre: the centre of the voxel that will be recorded (world); head: the head's world position; voxelM: the voxel's world size. null = hidden
-  set(centre,head,voxelM=0){
-   group.visible=!!centre;if(!centre)return;
+  // centre: the centre of the voxel that will be recorded (world); head: the head's world position; voxelM: the voxel's world size; color: optional hex (the hand's laser colour; omitted = SURFACE_CURSOR_COLOR). null = hidden
+  set(centre,head,voxelM=0,color=SURFACE_CURSOR_COLOR){
+   group.visible=!!centre;if(!centre)return;core.material.color.setHex(color);
    group.position.set(centre.x,centre.y,centre.z);
    const dist=head?d.set(head.x-centre.x,head.y-centre.y,head.z-centre.z).length():1;
    core.scale.setScalar(surfaceCursorSizes(dist,voxelM).core);
