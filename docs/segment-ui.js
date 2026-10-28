@@ -1,17 +1,17 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { mark3DStale } from './three-state.js?v=20261028-build682';
-import { $, footer, threeLabel, ctRangeAuto, ctRangeFull, wc, ww, sigmoidCenter, wcVal, wwVal, sigmoidCenterValue, segmentControls, segmentAddSelect, segmentAddButton } from './ui-shell.js?v=20261028-build682';
-import { sceneState, setAnalysisRegions, setAnalysisFocusedRegionId, setNextAnalysisRegionId, setNextAnalysisColorIndex, volume, segmentRenderTimer, incSourceRenderRevision, threeRenderMode, ctRangeMode, ctRangeProfile, setCtRangeMode, sourceVolume } from './state.js?v=20261028-build682';
-import { dispose } from './surface-mesh.js?v=20261028-build682';
-import { request3DRender } from './scene3d.js?v=20261028-build682';
-import { renderAnalysisResults } from './analysis-results.js?v=20261028-build682';
-import { segmentEditState, segmentEditGen, SEGMENT_PRESET_ORDER, segmentState, segmentExclusive, commitExclusiveRanges, gpuSegmentSignature } from './segments.js?v=20261028-build682';
-import { canEnableSegment } from './segment-slots.js?v=20261028-build682';
-import { tr } from './i18n.js?v=20261028-build682';
-import { niceCtStep, formatCtValue } from './utils.js?v=20261028-build682';
-import { syncGpuVolumeEdits } from './gpu-volume-data.js?v=20261028-build682';
-import { renderAll } from './mpr-render.js?v=20261028-build682';
+import { mark3DStale } from './three-state.js?v=20261028-build683';
+import { $, footer, threeLabel, ctRangeAuto, ctRangeFull, wc, ww, sigmoidCenter, wcVal, wwVal, sigmoidCenterValue, segmentControls, segmentAddSelect, segmentAddButton } from './ui-shell.js?v=20261028-build683';
+import { sceneState, setAnalysisRegions, setAnalysisFocusedRegionId, setNextAnalysisRegionId, setNextAnalysisColorIndex, volume, segmentRenderTimer, incSourceRenderRevision, threeRenderMode, ctRangeMode, ctRangeProfile, setCtRangeMode, sourceVolume } from './state.js?v=20261028-build683';
+import { dispose } from './surface-mesh.js?v=20261028-build683';
+import { request3DRender } from './scene3d.js?v=20261028-build683';
+import { renderAnalysisResults } from './analysis-results.js?v=20261028-build683';
+import { segmentEditState, segmentEditGen, SEGMENT_PRESET_ORDER, segmentState, segmentExclusive, commitExclusiveRanges, gpuSegmentSignature } from './segments.js?v=20261028-build683';
+import { canEnableSegment } from './segment-slots.js?v=20261028-build683';
+import { tr } from './i18n.js?v=20261028-build683';
+import { niceCtStep, formatCtValue } from './utils.js?v=20261028-build683';
+import { syncGpuVolumeEdits } from './gpu-volume-data.js?v=20261028-build683';
+import { renderAll } from './mpr-render.js?v=20261028-build683';
 export function installSegmentReorder(onCommit){
  let drag=null;
  const cards=()=>[...segmentControls.querySelectorAll('[data-segment]')];

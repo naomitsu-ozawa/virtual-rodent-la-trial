@@ -2,7 +2,7 @@
 // The controller ray hit -> a voxel position of the shared model (hu-line-model.js), the update rate of the live panel, the panel's layout,
 // the plot geometry and the texts. The stateful part (three.js objects, the gesture, the sampling calls) is vr-hu-line.js.
 // also the VR self-check's HU線 scenario (below; the self-check runner has no DOM and no three.js either).
-import { registerVrSelfCheck } from './vr-self-check.js?v=20261028-build682';
+import { registerVrSelfCheck } from './vr-self-check.js?v=20261028-build683';
 
 // VR self-check scenario: the frame rate while a line is stretched, then the time of the full read after the release.
 // env.huLine (vr-view.js) = { beginDrag() -> '' | reason, moveTo(u), release(), reading(), cancel() }: a synthetic laser (no controller) drags a line

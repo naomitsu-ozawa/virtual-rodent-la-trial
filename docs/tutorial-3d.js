@@ -75,6 +75,7 @@ export function buildControllerModel(THREE) {
   addF(new THREE.CylinderGeometry(0.0062, 0.0062, 0.004, 12), mat(0x8fa0b0), [0.014, 0.0215, -0.007]); // B / Y
   addF(new THREE.BoxGeometry(0.013, 0.026, 0.01), mat(0x2b343d), [0, -0.016, -0.0195], [0.15, 0, 0]);  // trigger
   addF(new THREE.BoxGeometry(0.005, 0.045, 0.02), mat(0x56677a), [-0.0185, -0.048, 0.0]);          // grip button
+  F.visible = false; // the body is not drawn (only the ring + arrows annotate the real controller); it stays in the graph so nothing about the ring / arrow placement changes
   // the blinking ring (moved onto the named button) and its arrows
   const ringMat = mat(PINK); ringMat.transparent = true; ringMat.depthTest = false; ringMat.depthWrite = false;
   const ring = new THREE.Mesh(new THREE.TorusGeometry(0.0145, 0.0021, 8, 28), ringMat); ring.renderOrder = 998; disposers.push(() => ring.geometry.dispose());
@@ -82,7 +83,7 @@ export function buildControllerModel(THREE) {
   const arrows = [arrowMesh(THREE), arrowMesh(THREE)]; for (const a of arrows) { root.add(a); a.visible = false; }
   ring.visible = false;
   root.userData.dispose = () => { for (const d of disposers) { try { d(); } catch { /* */ } } for (const a of arrows) a.userData.dispose(); };
-  return { group: root, ring, arrows, ringMat };
+  return { group: root, body: F, ring, arrows, ringMat };
 }
 // the axis the ring around a button faces (ray space)
 const RING_AXIS = Object.freeze({ trigger: [0, 0.3, 1], grip: [1, 0, 0], default: [0, 1, 0] });

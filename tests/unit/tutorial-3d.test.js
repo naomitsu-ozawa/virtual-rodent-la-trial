@@ -26,6 +26,15 @@ describe('the controller model', () => {
     const m = buildControllerModel(THREE); expect(m.group.children.length).toBeGreaterThan(3); let meshes = 0; m.group.traverse(o => { if (o.isMesh) meshes++; }); expect(meshes).toBeGreaterThan(8);
     expect(() => m.group.userData.dispose()).not.toThrow();
   });
+  it('the 3D body is hidden; the ring and arrows (the annotation) stay visible and in the same place', () => {
+    const m = buildControllerModel(THREE); expect(m.body.visible).toBe(false);
+    let bodyMeshes = 0; m.body.traverse(o => { if (o.isMesh) bodyMeshes++; }); expect(bodyMeshes).toBe(8);
+    expect(m.ring.parent).toBe(m.group); expect(m.arrows.every(a => a.parent === m.group)).toBe(true); // not under the hidden body
+    poseHint(THREE, m, { btn: 'face' }, 0); expect(m.ring.visible).toBe(true); expect(m.arrows[0].visible).toBe(true);
+    expect([m.ring.position.x, m.ring.position.y, m.ring.position.z]).toEqual(BUTTON_SPOTS.face.p);
+    const c = new THREE.Group(); c.userData.source = { handedness: 'right' }; const hints = createControllerHints(THREE, { controllers: [c] }); hints.update(0, { btn: 'face' });
+    const visibleMeshes = []; c.traverseVisible(o => { if (o.isMesh) visibleMeshes.push(o); }); expect(visibleMeshes.length).toBe(3); expect(visibleMeshes.some(o => o.geometry.type === 'TorusGeometry')).toBe(true); /* ring + the arrow's cone and shaft only */ hints.dispose();
+  });
   it('the blinking ring sits on the named button and pulses; the arrow points at it from the outside and bobs; unknown spec hides both', () => {
     const m = buildControllerModel(THREE);
     for (const btn of ['trigger', 'grip', 'face', 'stick']) {

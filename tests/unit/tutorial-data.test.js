@@ -146,8 +146,8 @@ describe('ステップ wording', () => {
   });
   it('the narration: one file per voice (F1, M1) + manifest entry per audio id (steps, feedback, page intro, VR entry guidance, menu closed, voice choice), nothing stale', () => {
     const ids = new Set([...steps, ...Object.values(TUT_FEEDBACK).flat(), ...Object.values(TUT_INTRO), ...Object.values(TUT_ORIENT), TUT_MENU_OPEN, TUT_VOICE_PICK, ...steps.filter(s => s.then).map(s => s.then)].map(e => e.audio));
-    // the data-switch page's voice (dat1 / dat2) is made later by the TTS rebuild (tools/tts/SETUP.md): until then it has no file and no manifest entry (a missing file is skipped at play time). Empty this list when the files are added.
-    const PENDING_AUDIO = new Set(['dat1', 'dat2']); for (const id of PENDING_AUDIO) expect(ids.has(id), id).toBe(true);
+    // ids whose voice files are not made yet (no file, no manifest entry; a missing file is skipped at play time). Empty now: dat1 / dat2 (data-switch page) are made.
+    const PENDING_AUDIO = new Set(); for (const id of PENDING_AUDIO) expect(ids.has(id), id).toBe(true);
     const shipped = new Set([...ids].filter(id => !PENDING_AUDIO.has(id)));
     for (const v of TUT_VOICES) {
       const files = readdirSync(new URL(`../../docs/tutorial/audio/${v}/`, import.meta.url)).filter(f => f.endsWith('.m4a')).map(f => f.slice(0, -4));
