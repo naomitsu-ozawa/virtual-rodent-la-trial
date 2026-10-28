@@ -1,9 +1,9 @@
-import { settings } from './app-settings.js?v=20261028-build681';
-import { tr } from './i18n.js?v=20261028-build681';
-import { TUTORIAL_MISSIONS, TUT_SAMPLE, TUT_INTRO, TUT_VOICE_PICK } from './tutorial-data.js?v=20261028-build681';
-import { createTutorialAudio } from './tutorial-audio.js?v=20261028-build681';
-import { createTutorialEngine } from './tutorial-engine.js?v=20261028-build681';
-import { EVENT_LEVELS } from './event-mode.js?v=20261028-build681';
+import { settings } from './app-settings.js?v=20261028-build682';
+import { tr } from './i18n.js?v=20261028-build682';
+import { TUTORIAL_MISSIONS, TUT_SAMPLE, TUT_INTRO, TUT_VOICE_PICK } from './tutorial-data.js?v=20261028-build682';
+import { createTutorialAudio } from './tutorial-audio.js?v=20261028-build682';
+import { createTutorialEngine } from './tutorial-engine.js?v=20261028-build682';
+import { EVENT_LEVELS } from './event-mode.js?v=20261028-build682';
 
 // the switch (設定 > 外観 > チュートリアル) off = the engine ignores every signal (nothing advances, nothing is saved); on again = as before
 // true while the tutorial UI is live (the switch is on AND the device supports VR): the Lv0 card of 体験会 acts as the tutorial only then (event-mode-ui.js)
@@ -12,6 +12,8 @@ export const tutorialUiActive=()=>uiActive;
 // signals count only while the switch is on AND the tutorial's practice data (TUT_SAMPLE = the Lv0 data) is the open one: on any other practice data (Lv1-Lv3) or the
 // visitor's own data nothing advances (the tutorial never takes over another dataset)
 export const tutorialSignalsOn=()=>{try{return globalThis.__vrlSettings?.get?.('tutorialMode')===true&&globalThis.__vrlOpenSample===TUT_SAMPLE}catch{return false}}; // = settings (app-settings.js sets globalThis.__vrlSettings; the same switch tutorialModeOn() reads)
+// the end of the session counts in the way-out ステップ (exit) whatever data is open: the visitor may have switched the data on purpose (switch still on)
+export const tutorialExitSignalOn=(eng,d)=>{try{return globalThis.__vrlSettings?.get?.('tutorialMode')===true&&!!d&&d.kind==='session-end'&&eng.getState().mission==='exit'}catch{return false}};
 export function getTutorialEngine(opts){
  const g=globalThis;
  if(g.__vrlTutorialEngine)return g.__vrlTutorialEngine;
@@ -19,7 +21,7 @@ export function getTutorialEngine(opts){
  if(!g.__vrlTutSignalWired&&typeof document!=='undefined'){
   g.__vrlTutSignalWired=true;
   const seen=new WeakSet();
-  const on=e=>{if(seen.has(e))return;seen.add(e);if(!tutorialSignalsOn())return;const d=e.detail;if(d&&typeof d.kind==='string')eng.onSignal({kind:d.kind,count:d.count})};
+  const on=e=>{if(seen.has(e))return;seen.add(e);const d=e.detail;if(!tutorialSignalsOn()&&!tutorialExitSignalOn(eng,d))return;if(d&&typeof d.kind==='string')eng.onSignal({kind:d.kind,count:d.count})};
   document.addEventListener('vrl-tut-signal',on);g.addEventListener?.('vrl-tut-signal',on);
  }
  return eng; // no AR step any more (nothing depends on AR support)
