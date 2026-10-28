@@ -5,10 +5,10 @@
 // from the CPU kernel's by ~1e-5 voxel (not bit for bit): the method is part of the mesh cache route (smoothMethod), and a
 // failure turns the GPU path off for the session (which changes the route, so a mixed build is not stored).
 // ?smoothgpu=off keeps the smoothing on the CPU.
-import { ensureGpuFilterDevice, gpuFilterPipeline, gpuFilterRuntime, gpuDispatch1D } from './gpu-compute.js?v=20261028-build683';
-import { SMOOTH_KERNEL_KINDS, smoothKernelBindings } from './gpu-shaders.js?v=20261028-build683';
-import { buildSmoothTopology, smoothIterationPlan, smoothParamsWords, smoothGpuBytes } from './smooth-gpu-plan.js?v=20261028-build683';
-import { setSmoothGpuBackend, SMOOTH_CANCELLED } from './smooth-workers.js?v=20261028-build683';
+import { ensureGpuFilterDevice, gpuFilterPipeline, gpuFilterRuntime, gpuDispatch1D } from './gpu-compute.js?v=20261028-build684';
+import { SMOOTH_KERNEL_KINDS, smoothKernelBindings } from './gpu-shaders.js?v=20261028-build684';
+import { buildSmoothTopology, smoothIterationPlan, smoothParamsWords, smoothGpuBytes } from './smooth-gpu-plan.js?v=20261028-build684';
+import { setSmoothGpuBackend, SMOOTH_CANCELLED } from './smooth-workers.js?v=20261028-build684';
 
 // chunks: smoothed on the GPU; skipped: too large for the device limits (smoothed by the workers); lastError: why the GPU
 // path was turned off
