@@ -139,8 +139,8 @@ describe('collateral: what lies inside the volume stays visible (source checks)'
     expect(has(src, 'new THREE.MeshBasicMaterial({map:tex,transparent:true,toneMapped:false}));let widgets=[]')).toBe(true); // the boards: a board BEHIND the volume must stay covered by it
     expect(has(src, "{const top=!!rh||res.kind==='point'||res.kind==='mlabel'||res.kind==='section'||!!bd.hu;ray.renderOrder=dot.renderOrder=bd.hu?11:top?8:0;")).toBe(true); // the laser ends on a point / label / frame inside the volume: drawn on top
   });
-  it('the cursors, rings and the scale tag already have no depth test (the point markers do, only with the GPU occlusion: see vr-point-markers.test.js)', () => {
-    for (const f of ['vr-ring', 'vr-real-scale']) {
+  it('the cursors and rings already have no depth test (the scale tag is depth tested only with the GPU occlusion: see vr-real-scale-occlusion.test.js; the point markers do, only with the GPU occlusion: see vr-point-markers.test.js)', () => {
+    for (const f of ['vr-ring']) {
       const t = readFileSync(new URL('../../docs/' + f + '.js', import.meta.url), 'utf8');
       expect(t.includes('depthTest:false') || t.includes('depthTest: false'), f).toBe(true);
       expect(t.includes('depthTest:true') || t.includes('depthTest: true'), f).toBe(false);

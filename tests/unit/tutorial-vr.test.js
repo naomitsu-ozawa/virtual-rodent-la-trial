@@ -30,7 +30,7 @@ const recCtx = () => { const calls = []; const rec = n => (...a) => calls.push([
 describe('tutorial-vr page model', () => {
   it('idle engine -> list page: ステップ1 startable, the rest locked; the guide, skip-all and start-over below', () => {
     const p = buildPage({ engine: eng() });
-    expect(p.kind).toBe('list'); expect(p.missions.map(m => m.status)).toEqual(['available', 'locked', 'locked', 'locked', 'locked', 'locked']);
+    expect(p.kind).toBe('list'); expect(p.missions.map(m => m.status)).toEqual(['available', 'locked', 'locked', 'locked', 'locked', 'locked', 'locked']);
     expect(p.buttons.map(b => b.id)).toEqual(['guides', 'skipAll', 'reset']);
   });
   it('ステップ1 is the controls slide as it is (its picture, nothing framed), with a lit, pointed 次へ', () => {
@@ -370,9 +370,9 @@ describe('ステップ numbering in the board', () => {
   it('stepNoLabel: ステップ3 / Step 3', () => {
     expect(stepNoLabel(3, k => ({ tutStepWord: 'ステップ' })[k])).toBe('ステップ3'); expect(stepNoLabel(3, k => ({ tutStepWord: 'Step' })[k])).toBe('Step 3');
   });
-  it('the list says ステップN before each name (fixed 1..6); a step page title carries it, the page counter is only n/N', () => {
+  it('the list says ステップN before each name (fixed 1..7); a step page title carries it, the page counter is only n/N', () => {
     const p = buildPage({ engine: eng() });
-    expect(p.missions.map(m => m.label.match(/^ステップ(\d)/)?.[1])).toEqual(['1', '2', '3', '4', '5', '6']);
+    expect(p.missions.map(m => m.label.match(/^ステップ(\d)/)?.[1])).toEqual(['1', '2', '3', '4', '5', '6', '7']);
     const e = eng(); e.skipMission('controls'); e.skipMission('grip'); e.start('section'); const q = buildPage({ engine: e });
     expect(q.title).toBe('ステップ3 断面を出して動かす'); expect(q.counter).toBe('1/' + SEC.steps.length); expect(q.counter).not.toMatch(/ステップ/);
     e.skipMission(); const d = buildPage({ engine: e });
@@ -489,9 +489,11 @@ describe('a cleared ステップ waits for 次へ', () => {
   it('the last ステップ is the way out: after ステップ5 the next-step prompt, then the exit page (the red button of the left menu); the session ending clears it: allclear, no closing line of its own', () => {
     const e = eng(); for (const id of ['controls', 'grip', 'section', 'menu']) e.skipMission(id); const { vr, a } = mkVr({ engine: e }); e.setEnv({ cond: { 'no-section': () => false } }); e.start('slice'); a.play.mockClear(); // a section is up
     for (const k of ['slice-opacity', 'slice-toggle', 'frame-hide']) e.onSignal({ kind: k });
-    expect(a.play).toHaveBeenLastCalledWith(['mclear', 'gonext']); expect(vr.page().kind).toBe('missionDone'); expect(vr.page().buttons[0].id).toBe('start:exit');
+    expect(a.play).toHaveBeenLastCalledWith(['mclear', 'gonext']); expect(vr.page().kind).toBe('missionDone'); expect(vr.page().buttons[0].id).toBe('start:data');
+    vr.act('start:data'); expect(e.currentStep().id).toBe('data1'); expect(vr.menuTarget()).toBe('levels'); expect(vr.stepBoard()).toBe('menu'); e.next(); expect(e.currentStep().id).toBe('data2'); e.next();
+    expect(vr.page().buttons[0].id).toBe('start:exit'); // the data-switch guide is next to last; the way out is last
     vr.act('start:exit'); a.play.mockClear();
-    expect(e.currentStep().id).toBe('exit1'); const pg = vr.page(); expect(pg).toMatchObject({ kind: 'step', slide: 'g3', item: 3, title: 'ステップ6 おわり：VR・ARを終える' }); expect(pg.caption).toBe(I18N.ja.tutExitS1);
+    expect(e.currentStep().id).toBe('exit1'); const pg = vr.page(); expect(pg).toMatchObject({ kind: 'step', slide: 'g3', item: 3, title: 'ステップ7 おわり：VR・ARを終える' }); expect(pg.caption).toBe(I18N.ja.tutExitS1);
     expect(vr.menuTarget()).toBe('exit'); expect(vr.stepBoard()).toBe('menu'); expect(vr.controllerHint()).toEqual({ btn: 'trigger' }); expect(I18N.ja.tutExitS1).toMatch(/左のメニュー.*右下.*赤い.*VRを終了.*ARを終了/); expect(wrapText(I18N.ja.tutExitS1, 23, 784 - 28).length).toBeLessThanOrEqual(3);
     e.onSignal({ kind: 'session-end' }); // the session closes (vr-view.js emits it): the way out is done
     expect(a.play).toHaveBeenLastCalledWith(['allclear']); expect(e.getState()).toMatchObject({ mission: 'exit', finished: true }); expect(e.listMissions().every(m => m.done)).toBe(true);
@@ -572,6 +574,10 @@ describe('captions, 3D hints and the conditional section page', () => {
     vr.act('start:slice'); expect(e.currentStep().id).toBe('slice0'); expect(vr.controllerHint()).toEqual({ btn: 'face' }); expect(vr.page().caption).toBe(I18N.ja.tutSliceS0); expect(vr.page().counter).toBe('1/4');
     on = true; vr.act('start:slice'); expect(e.currentStep().id).toBe('slice1'); expect(vr.page().counter).toBe('1/3'); expect(vr.page().item).toBe(1); expect(vr.page().done).toEqual([]);
     on = false; vr.act('start:slice'); e.onSignal({ kind: 'section-add' }); expect(e.currentStep().id).toBe('slice1'); expect(vr.page().done).toEqual([]); // slice0 has no row to tick
+  });
+  it('menuTargetRect levels: one rect around the Lv0-Lv3 buttons of the データ row, from below (the data-switch page only shows where)', () => {
+    const w = [{ id: 'level:lv0', x: 270, y: 1004, w: 100, h: 72 }, { id: 'level:lv1', x: 380, y: 1004, w: 100, h: 72 }, { id: 'home', x: 40, y: 1086, w: 90, h: 72 }];
+    expect(menuTargetRect(w, 'levels')).toEqual({ rect: { x: 270, y: 1004, w: 210, h: 72 }, from: 'bottom' }); expect(menuTargetRect([{ id: 'home', x: 1, y: 1, w: 1, h: 1 }], 'levels')).toBeNull();
   });
   it('menuTargetRect: the rect of the button / knob in the menu\'s px, from above (buttons) / below (the slider), the key of the tissue row', () => {
     const w = [{ type: 'button', id: 'seg:bone:show', x: 440, y: 180, w: 250, h: 72, on: true }, { type: 'button', id: 'seg:bone:hide', x: 710, y: 180, w: 250, h: 72, on: false },

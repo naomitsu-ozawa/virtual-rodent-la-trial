@@ -8,9 +8,9 @@ import { SAMPLE_SETS } from '../../docs/sample-sets.js';
 
 const steps = TUTORIAL_MISSIONS.flatMap(m => m.steps);
 describe('tutorial data', () => {
-  it('five steps in the slides\' order + the way out (ステップ6); g4 is not a step; no AR, no approach / walking, no analysis step', () => {
-    expect(TUTORIAL_MISSIONS.map(m => m.id)).toEqual(['controls', 'grip', 'section', 'menu', 'slice', 'exit']);
-    expect(TUTORIAL_MISSIONS.map(m => m.slide)).toEqual(['controls', 'g1', 'g2', 'g3', 'g3b', 'g3']); // the way out is row 3 of g3 (下のボタン ... VRを終了)
+  it('five steps in the slides\' order + the way out (ステップ7); g4 is not a step; no AR, no approach / walking, no analysis step', () => {
+    expect(TUTORIAL_MISSIONS.map(m => m.id)).toEqual(['controls', 'grip', 'section', 'menu', 'slice', 'data', 'exit']);
+    expect(TUTORIAL_MISSIONS.map(m => m.slide)).toEqual(['controls', 'g1', 'g2', 'g3', 'g3b', 'g3', 'g3']); // the data switch explains the g3 menu; the way out is row 3 of g3 (下のボタン ... VRを終了)
     expect(missionById('grip').title).toBe('tutGripTitle');
     expect(missionById('x')).toBeNull();
     for (const old of ['m1', 'm5', 'm6', 'm7']) expect(missionById(old)).toBeNull();
@@ -18,11 +18,18 @@ describe('tutorial data', () => {
     expect(steps.map(s => s.done?.signal).filter(Boolean)).not.toEqual(expect.arrayContaining(['move']));
     for (const k of ['move', 'ar-start', 'point-record', 'measure-done', 'undo', 'trigger-label', 'label-show']) expect(TUT_SIGNALS, k).not.toContain(k);
   });
+  it('the data-switch step sits between the slice step and the way out: two 次へ pages that only explain (nothing is switched), the exit step is the last', () => {
+    expect(TUTORIAL_MISSIONS.map(m => m.id).slice(-3)).toEqual(['slice', 'data', 'exit']); expect(TUTORIAL_MISSIONS.at(-1).id).toBe('exit');
+    const d = missionById('data'); expect(d.steps.map(s => s.id)).toEqual(['data1', 'data2']);
+    for (const s of d.steps) { expect(s.done).toBeNull(); expect(s.next).toBe(true); expect(s.board).toBe('menu'); expect(s.menu).toBe('levels'); expect(s.audio).toMatch(/^dat[12]$/); }
+    expect(I18N.ja.tutDataS1).toMatch(/データ.*Lv0.*Lv3/); expect(I18N.ja.tutDataS2).toMatch(/もう一度/); expect(I18N.en.tutDataS1).toMatch(/Data.*Lv0 to Lv3/);
+    for (const l of ['ja', 'en']) expect(I18N[l].tutDataTitle).toBeTruthy();
+  });
   it('ステップ1 is the controls slide, two pages finished with 次へ (no signal); every other page waits for one signal', () => {
     const c = missionById('controls');
     expect(c.steps.map(s => s.id)).toEqual(['controls1', 'controls2']);
     for (const s of c.steps) { expect(s.done).toBeNull(); expect(s.next).toBe(true); }
-    for (const s of steps.filter(s => !/^controls/.test(s.id))) { expect(s.done.count, s.id).toBe(1); expect(s.next, s.id).toBeFalsy(); }
+    for (const s of steps.filter(s => !/^(controls|data)/.test(s.id))) { expect(s.done.count, s.id).toBe(1); expect(s.next, s.id).toBeFalsy(); }
   });
   it('step-by-step: every page names the controller button it uses (ctl), the menu pages the board (board: menu), ステップ5\'s section page is conditional', () => {
     const ctl = id => missionById(id).steps.map(s => s.ctl?.btn + (s.ctl?.motion ? ':' + s.ctl.motion : ''));
@@ -139,12 +146,15 @@ describe('ステップ wording', () => {
   });
   it('the narration: one file per voice (F1, M1) + manifest entry per audio id (steps, feedback, page intro, VR entry guidance, menu closed, voice choice), nothing stale', () => {
     const ids = new Set([...steps, ...Object.values(TUT_FEEDBACK).flat(), ...Object.values(TUT_INTRO), ...Object.values(TUT_ORIENT), TUT_MENU_OPEN, TUT_VOICE_PICK, ...steps.filter(s => s.then).map(s => s.then)].map(e => e.audio));
+    // ids whose voice files are not made yet (no file, no manifest entry; a missing file is skipped at play time). Empty now: dat1 / dat2 (data-switch page) are made.
+    const PENDING_AUDIO = new Set(); for (const id of PENDING_AUDIO) expect(ids.has(id), id).toBe(true);
+    const shipped = new Set([...ids].filter(id => !PENDING_AUDIO.has(id)));
     for (const v of TUT_VOICES) {
       const files = readdirSync(new URL(`../../docs/tutorial/audio/${v}/`, import.meta.url)).filter(f => f.endsWith('.m4a')).map(f => f.slice(0, -4));
-      expect(new Set(files), v).toEqual(ids);
+      expect(new Set(files), v).toEqual(shipped);
     }
     const man = JSON.parse(readFileSync(new URL('../../docs/tutorial/manifest.json', import.meta.url), 'utf8'));
-    expect(new Set(Object.keys(man))).toEqual(new Set(TUT_VOICES.flatMap(v => [...ids].map(id => v + '/' + id))));
+    expect(new Set(Object.keys(man))).toEqual(new Set(TUT_VOICES.flatMap(v => [...shipped].map(id => v + '/' + id))));
     for (const [k, v] of Object.entries(man)) { expect(v.voice).toBe(k.split('/')[0]); expect(v.sec, k).toBeGreaterThan(0.5); expect(v.sec, k).toBeLessThan(12); } // the step-by-step lines are longer (up to about 12 s: the slider line)
     for (const k of ['ok1', 'ok2', 'ok3', 'mclear', 'intro1', 'intro2', 'pick'].flatMap(id => TUT_VOICES.map(v => v + '/' + id))) expect(man[k].sec, k).toBeLessThan(6); // the short feedback / intro lines stay short
   });

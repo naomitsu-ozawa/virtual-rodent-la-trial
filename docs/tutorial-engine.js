@@ -5,6 +5,7 @@
 //   next() / prev()   manual paging; next() on the last page finishes the mission (every step has a manual way on); next() on a finished mission starts the next one (nothing starts by itself)
 //   skipMission(id?)  mark a mission done without doing it (default: the current one); skipAll() all of them (experienced users)
 //   refresh()         pass over the current page when its `when` condition no longer holds (no praise); the VR board calls it every frame
+//   dataSwitched() the data was really switched during the 'data' ステップ: it is done, 'exit' starts, going back (prev / earlier ステップs) is shut (snapshot.backLocked); false elsewhere
 //   reset()           forget the (in-memory) progress and go idle
 //   subscribe(fn)     fn(snapshot) after every change; returns the unsubscribe function
 //   feedback: snapshot.feedback is 'stepClear' | 'missionClear' | 'allClear' | null, only in the snapshot of the transition that earned it (signal clear of a non-final step -> stepClear,
@@ -15,7 +16,7 @@
 //   currentStep(), listMissions(), isUnlocked(id), nextMissionId(), setEnv({arAvailable})
 // Unlock: M(n) is open once every earlier mission that exists on this device is done (or skipped); skipAll opens everything. A mission that does not exist
 // here (requiresAr without AR) is neither startable nor in the way of the next one. listMissions() rows carry stepNo = index + 1 (the ステップN of the lists; fixed, also while the step is unavailable).
-import { TUTORIAL_MISSIONS, TUT_FEEDBACK } from './tutorial-data.js?v=20261027-build680';
+import { TUTORIAL_MISSIONS, TUT_FEEDBACK } from './tutorial-data.js?v=20261028-build685';
 // NOTHING is saved or loaded. The progress lives in memory only (this page): every page load / every 「チュートリアルを始める」 starts from ステップ1; a value an older build left in
 // localStorage (vrl.tutorial.v1) is never read (tutorial-ui.js removes it once).
 const emptyProgress=()=>({v:1,done:{},skipAll:false,last:null});
@@ -23,6 +24,7 @@ export function createTutorialEngine({missions=TUTORIAL_MISSIONS,arAvailable=tru
  const env={arAvailable,cond:{}}; // cond: {name: () => bool} for the pages that carry `when`; a name without a function counts as true (the page shows)
  let prog=emptyProgress();
  let mission=null,step=0,count=0,finished=false,pageSet=[]; // pageSet: the pages (indices) that applied when the mission was entered: n / N are counted over it and stay fixed
+ let lockIdx=-1; // after the visitor switched the data in the 'data' step the ステップs before 'exit' are shut (their data is gone): index of the first open mission, -1 = nothing shut
  let fb=null,fbItem=null,fbSeq=0,stepClears=0; // spoken feedback of the last transition (set by signal clears / finishing, delivered with the next snapshot only)
  const subs=new Set();
  const byId=id=>missions.find(m=>m.id===id)||null;
@@ -34,7 +36,7 @@ export function createTutorialEngine({missions=TUTORIAL_MISSIONS,arAvailable=tru
   for(let j=0;j<i;j++)if(available(missions[j])&&!missions[j].optional&&!isDone(missions[j].id))return false;
   return true;
  }
- function snapshot(){return{mission:mission?mission.id:null,step,count,finished,skipAll:prog.skipAll,feedback:fb,feedbackItem:fbItem,feedbackSeq:fbSeq,done:{...(prog.skipAll?Object.fromEntries(missions.map(m=>[m.id,true])):prog.done)}}}
+ function snapshot(){return{mission:mission?mission.id:null,step,count,finished,backLocked:lockIdx>=0,skipAll:prog.skipAll,feedback:fb,feedbackItem:fbItem,feedbackSeq:fbSeq,done:{...(prog.skipAll?Object.fromEntries(missions.map(m=>[m.id,true])):prog.done)}}}
  function emit(){const s=snapshot();fb=null;fbItem=null;for(const f of [...subs]){try{f(s)}catch{}}}
  function say(kind){fb=kind;fbSeq++;fbItem=kind==='stepClear'?TUT_FEEDBACK.stepClear[stepClears++%TUT_FEEDBACK.stepClear.length]:TUT_FEEDBACK[kind]}
  const allRequiredDone=()=>missions.every(m=>!available(m)||m.optional||isDone(m.id));
@@ -46,6 +48,7 @@ export function createTutorialEngine({missions=TUTORIAL_MISSIONS,arAvailable=tru
  const firstApplying=(m,from)=>{let i=from;while(i<m.steps.length-1&&!applies(m,i))i++;return i};
  function start(id){
   const m=byId(id);if(!m||!isUnlocked(id))return false;
+  if(lockIdx>=0&&missions.indexOf(m)<lockIdx)return false; // shut (dataSwitched)
   mission=m;step=firstApplying(m,0);count=0;finished=false;prog.last=id;pageSet=m.steps.map((_,i)=>i).filter(i=>applies(m,i)||i===step);emit();return true;
  }
  // the page on screen has a condition that no longer holds (e.g. the section frame it asks for is up now): pass over it, no praise. The UI calls this every frame (cheap).
@@ -68,7 +71,7 @@ export function createTutorialEngine({missions=TUTORIAL_MISSIONS,arAvailable=tru
   return true;
  }
  const prevIndex=()=>{if(!mission)return -1;for(let i=step-1;i>=0;i--)if(applies(mission,i))return i;return -1};
- function prev(){if(!mission)return false;if(finished)finished=false;else{const i=prevIndex();if(i<0)return false;step=i}count=0;emit();return true}
+ function prev(){if(!mission||lockIdx>=0)return false;if(finished)finished=false;else{const i=prevIndex();if(i<0)return false;step=i}count=0;emit();return true}
  function skipMission(id=mission?.id){
   const m=byId(id);if(!m)return false;
   prog.done[m.id]=true;prog.last=m.id;
@@ -76,7 +79,7 @@ export function createTutorialEngine({missions=TUTORIAL_MISSIONS,arAvailable=tru
   emit();return true;
  }
  function skipAll(){prog.skipAll=true;for(const m of missions)prog.done[m.id]=true;if(mission){finished=true;count=0;step=mission.steps.length-1}emit();return true}
- function reset(){prog=emptyProgress();mission=null;step=0;count=0;finished=false;emit();return true}
+ function reset(){lockIdx=-1;prog=emptyProgress();mission=null;step=0;count=0;finished=false;emit();return true}
  function setEnv(e={}){if('arAvailable'in e)env.arAvailable=!!e.arAvailable;if(e.cond&&typeof e.cond==='object')env.cond={...env.cond,...e.cond};if(mission&&!available(mission)){mission=null;step=0;count=0;finished=false}emit()}
  function nextMissionId(){ // the first startable mission that is not done yet (null when there is none)
   for(const m of missions)if(isUnlocked(m.id)&&!isDone(m.id)&&!m.optional)return m.id;
@@ -94,7 +97,7 @@ export function createTutorialEngine({missions=TUTORIAL_MISSIONS,arAvailable=tru
   // n / N: over the pages that applied when the mission was entered (a page skipped at the start is not counted; N never changes while the mission runs)
   const set=pageSet.includes(step)?pageSet:[...pageSet,step].sort((a,b)=>a-b);
   const N=set.length,n=set.filter(i=>i<=step).length;
-  return{n,N,hasPrev:finished||prevIndex()>=0,hasNext:finished?!!nextMissionId():true,isLast:step===mission.steps.length-1,finished};
+  return{n,N,hasPrev:lockIdx<0&&(finished||prevIndex()>=0),hasNext:finished?!!nextMissionId():true,isLast:step===mission.steps.length-1,finished};
  }
  function subscribe(fn){subs.add(fn);return()=>subs.delete(fn)}
  // 次へ after a mission was cleared (finished) opens the next ステップ (nothing starts by itself); mid-mission it pages as before. Returns true when something moved.
@@ -102,6 +105,15 @@ export function createTutorialEngine({missions=TUTORIAL_MISSIONS,arAvailable=tru
   if(mission&&finished){const id=nextMissionId();return id?start(id):false}
   if(!mission||finished)return false;advance(false);return true;
  }
- return{start,onSignal,next,prev,refresh,skipMission,skipAll,reset,setEnv,subscribe,getState:snapshot,pageInfo,currentStep,listMissions,isUnlocked,nextMissionId,isDone,
+ // the visitor really switched the data (Lv0 -> Lv1..3) while the 'data' ステップ was up: that ステップ is done, the next one (the way out) starts, and going back is shut (prev / the earlier ステップs):
+ // their data is not on screen any more, a ステップ that waits for a grab / a section of the practice data would never finish. Returns true when it moved; false in any other ステップ (nothing changes).
+ function dataSwitched(){
+  if(!mission||mission.id!=='data')return false;
+  const i=missions.findIndex(m=>m.id==='exit');if(i<0||!available(missions[i]))return false;
+  const was=prog.done.data;prog.done.data=true;lockIdx=i;count=0;finished=false;
+  if(start(missions[i].id))return true;
+  lockIdx=-1;if(was===undefined)delete prog.done.data;else prog.done.data=was;return false;
+ }
+ return{start,onSignal,next,prev,dataSwitched,refresh,skipMission,skipAll,reset,setEnv,subscribe,getState:snapshot,pageInfo,currentStep,listMissions,isUnlocked,nextMissionId,isDone,
   get lastMission(){return prog.last}};
 }

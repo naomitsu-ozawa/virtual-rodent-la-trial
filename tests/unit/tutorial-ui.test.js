@@ -239,7 +239,7 @@ describe('nothing is remembered', () => {
     Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: { getItem: k => { calls.push(['get', k]); return JSON.stringify({ v: 1, done: { controls: true, grip: true }, skipAll: true, last: 'grip' }); }, setItem: k => calls.push(['set', k]), removeItem: k => calls.push(['remove', k]) } });
     try {
       const e = createTutorialEngine({ arAvailable: false });
-      expect(e.listMissions().map(m => m.status)).toEqual(['available', 'locked', 'locked', 'locked', 'locked', 'locked']); // the stale value is ignored
+      expect(e.listMissions().map(m => m.status)).toEqual(['available', 'locked', 'locked', 'locked', 'locked', 'locked', 'locked']); // the stale value is ignored
       e.skipMission('controls'); e.start('grip');
       expect(restartTutorial(e)).toEqual({ action: 'start', id: 'controls' });
       expect(e.getState()).toMatchObject({ mission: 'controls', step: 0, finished: false, done: {} });
@@ -339,7 +339,7 @@ describe('after the last ステップ: Lv1-Lv3 on the page', () => {
   });
   it('wiring (static): the last ステップ cleared (allClear) starts the Lv guidance, only while the tutorial UI is live; the VR board does not create the Lv wording; a VR session of Lv1-Lv3 has no tutorial (the live tutorial runs on sample4 only)', async () => {
     const { readFileSync } = await import('node:fs'); const ui = readFileSync(new URL('../../docs/tutorial-ui.js', import.meta.url), 'utf8'), vv = readFileSync(new URL('../../docs/vr-view.js', import.meta.url), 'utf8'), app = readFileSync(new URL('../../docs/app.js', import.meta.url), 'utf8');
-    expect(ui).toContain("getTutorialEngine().subscribe(snap=>{if(snap.feedback==='allClear'&&uiActive)intro.startLevels()});");
+    expect(ui).toContain("getTutorialEngine().subscribe(snap=>{if(snap.feedback==='allClear'&&uiActive&&!snap.backLocked)intro.startLevels()});");
     expect(vv).toContain("const tutLive=tutorialModeOn()&&globalThis.__vrlOpenSample===TUT_SAMPLE;"); // sample1-3: no tutorial board, no entry guidance, no steps
     expect(vv).toContain("emit('session-end');cleanup()"); // the way out's signal
     expect(app).toContain("globalThis.__vrlXrChecked=true"); expect(app).toMatch(/Promise\.all\(\[xrShow\('immersive-vr',vrViewBtn\),xrShow\('immersive-ar',arViewBtn\)\]\)/);

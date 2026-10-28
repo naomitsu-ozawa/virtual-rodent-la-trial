@@ -13,11 +13,11 @@ const open = () => openVolumeCache({ indexedDB: idb, now: () => clock });
 async function put(c, key, info, bytes = 100) { const w = await c.begin(key, { slices: 1, bytesPerSlice: bytes, info }); await w.write(0, new Uint8Array(bytes)); await w.commit(); clock += 10; }
 const ds = n => ({ seriesUid: 'S' + n, columns: 512, rows: 512, slices: 300 });
 // one practice level with its standard entries (3D volume only for a filtered level)
-async function level(c, n, { filter = 'f' + n, bytes = 100, build = 'B1', filtered = true } = {}) {
-  const base = { dataset: ds(n), filter, build, prep: 3 };
+async function level(c, n, { filter = 'f' + n, bytes = 100, build = 'B1', prep = 3, filtered = true } = {}) {
+  const base = { dataset: ds(n), filter, build, prep };
   if (filtered) await put(c, `vol${n}`, { kind: 'volume', dataset: ds(n), filter, plan: '512x512x300' }, bytes);
   await put(c, `V${n}`, { kind: 'vr-volume', plan: 'vr-512', ...base }, bytes); await put(c, `D${n}`, { kind: 'vr-derived', plan: 'vr-512', ...base }, bytes);
-  await put(c, `A${n}`, { kind: 'vr-alias', dataset: { id: 'sample' + n }, filter: '', plan: 'alias', standard: true, keyV: `V${n}`, keyD: `D${n}`, build, prep: 3 }, 1);
+  await put(c, `A${n}`, { kind: 'vr-alias', dataset: { id: 'sample' + n }, filter: '', plan: 'alias', standard: true, keyV: `V${n}`, keyD: `D${n}`, build, prep }, 1);
 }
 const keys = async c => (await c.list()).map(e => e.key).sort();
 
@@ -65,10 +65,11 @@ describe('eviction in 体験会モード', () => {
   });
 });
 
-describe('older builds', () => {
-  it('entries of another build / preparation version (and untagged ones) are removed, the current ones and the browser\'s 3D volumes stay', async () => {
-    const c = await open(); await level(c, 1, { build: 'B1' }); await level(c, 2, { build: 'B0' }); await put(c, 'untagged', { kind: 'vr-derived', dataset: ds(3), filter: 'x' });
-    await removeOldBuilds(c, { build: 'B1', prep: 3 });
-    expect(await keys(c)).toEqual(['A1', 'D1', 'V1', 'vol1', 'vol2']);
+describe('older preparation versions', () => {
+  it('entries of another preparation version (and untagged ones) are removed; another BUILD of the same version, the current ones and the browser\'s 3D volumes stay', async () => {
+    const c = await open(); await level(c, 1, { build: 'B1' }); await level(c, 2, { build: 'B0' }); await level(c, 4, { build: 'B1', prep: 2 });
+    await put(c, 'untagged', { kind: 'vr-derived', dataset: ds(3), filter: 'x' });
+    await removeOldBuilds(c, { prep: 3 });
+    expect(await keys(c)).toEqual(['A1', 'A2', 'D1', 'D2', 'V1', 'V2', 'vol1', 'vol2', 'vol4']);
   });
 });

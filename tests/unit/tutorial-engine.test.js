@@ -285,7 +285,7 @@ describe('tutorial engine: the real steps', () => {
   const real = () => createTutorialEngine();
   it('ステップ1..5 in the deck order, only the first open; ステップ1 has two pages finished with 次へ, not with a signal', () => {
     const e = real();
-    expect(e.listMissions().map(m => [m.id, m.stepNo, m.status])).toEqual([['controls', 1, 'available'], ['grip', 2, 'locked'], ['section', 3, 'locked'], ['menu', 4, 'locked'], ['slice', 5, 'locked'], ['exit', 6, 'locked']]);
+    expect(e.listMissions().map(m => [m.id, m.stepNo, m.status])).toEqual([['controls', 1, 'available'], ['grip', 2, 'locked'], ['section', 3, 'locked'], ['menu', 4, 'locked'], ['slice', 5, 'locked'], ['data', 6, 'locked'], ['exit', 7, 'locked']]);
     const fb = []; e.subscribe(x => fb.push(x.feedback));
     e.start('controls');
     for (const k of ['grab', 'scale', 'vr-start']) expect(sig(e, k)).toBe(false);
@@ -298,9 +298,10 @@ describe('tutorial engine: the real steps', () => {
   it('each step waits for its own signal, in order; the last one (the way out: the session ends) gives allClear', () => {
     const e = real(); e.skipMission('controls'); const fb = []; e.subscribe(x => fb.push(x.feedback));
     e.setEnv({ cond: { 'no-section': () => false } }); // a section is up: the section page of ステップ5 is not there
-    const order = { grip: ['grab', 'grab-move', 'scale'], section: ['section-add', 'section-drag', 'section-scroll'], menu: ['seg-hide', 'seg-show'], slice: ['slice-opacity', 'slice-toggle', 'frame-hide'], exit: ['session-end'] };
+    const order = { grip: ['grab', 'grab-move', 'scale'], section: ['section-add', 'section-drag', 'section-scroll'], menu: ['seg-hide', 'seg-show'], slice: ['slice-opacity', 'slice-toggle', 'frame-hide'], data: [], exit: ['session-end'] };
     for (const [id, kinds] of Object.entries(order)) {
       expect(e.start(id)).toBe(true);
+      if (id === 'data') { e.next(); e.next(); expect(e.getState().finished).toBe(true); continue; } // the data-switch step: two 次へ pages, no signal
       expect(sig(e, kinds.at(-1) === kinds[0] ? 'nope' : kinds.at(-1))).toBe(false); // a later step's signal does not skip ahead
       for (const k of kinds) expect(sig(e, k), `${id}:${k}`).toBe(true);
       expect(e.getState().finished).toBe(true);

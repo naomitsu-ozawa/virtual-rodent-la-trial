@@ -124,9 +124,9 @@ export async function pruneSiblings(cache, info, keep) {
   try { const all = await cache.list(), prot = protectedKeys(all); for (const e of all) { const i = e.info || {}; if (e.key !== keep && !prot.has(e.key) && i.kind === info.kind && same(i.dataset) === same(info.dataset) && i.filter === info.filter) await cache.remove(e.key); } }
   catch (e) { console.warn('VR data cache: prune failed', e); }
 }
-// entries of the VR data cache made by another build / another preparation version can never be read again (the keys include both): removed (an entry without the tags is from before)
-export async function removeOldBuilds(cache, { build, prep }) {
-  try { for (const e of await cache.list()) { const i = e.info || {}; if (['vr-volume', 'vr-derived', 'vr-alias'].includes(i.kind) && (i.build !== build || i.prep !== prep)) await cache.remove(e.key); } }
+// entries of the VR data cache made by another preparation version can never be read again (the keys include it): removed (an entry without the tag is from before). The build number is NOT compared (no build number in the keys): a new build keeps its entries; only a change of VR_PREP_VERSION invalidates them.
+export async function removeOldBuilds(cache, { prep }) {
+  try { for (const e of await cache.list()) { const i = e.info || {}; if (['vr-volume', 'vr-derived', 'vr-alias'].includes(i.kind) && i.prep !== prep) await cache.remove(e.key); } }
   catch (e) { console.warn('VR data cache: old entries not removed', e); }
 }
 

@@ -1,8 +1,8 @@
 {
  "F1/ctl1": {
   "voice": "F1",
-  "sec": 7.62,
-  "textHash": "116143a356ee"
+  "sec": 7.64,
+  "textHash": "60140dbc3665"
  },
  "F1/ctl2": {
   "voice": "F1",
@@ -73,6 +73,16 @@
   "voice": "F1",
   "sec": 4.4,
   "textHash": "45cd6f3c4480"
+ },
+ "F1/dat1": {
+  "voice": "F1",
+  "sec": 9.49,
+  "textHash": "8651518ea5ab"
+ },
+ "F1/dat2": {
+  "voice": "F1",
+  "sec": 9.59,
+  "textHash": "68da96eed476"
  },
  "F1/ex1": {
   "voice": "F1",
@@ -156,8 +166,8 @@
  },
  "M1/ctl1": {
   "voice": "M1",
-  "sec": 7.06,
-  "textHash": "514bf79c818a"
+  "sec": 6.97,
+  "textHash": "58b4bb1ce923"
  },
  "M1/ctl2": {
   "voice": "M1",
@@ -228,6 +238,16 @@
   "voice": "M1",
   "sec": 4.1,
   "textHash": "8642fca5a930"
+ },
+ "M1/dat1": {
+  "voice": "M1",
+  "sec": 8.71,
+  "textHash": "8a755ff586e2"
+ },
+ "M1/dat2": {
+  "voice": "M1",
+  "sec": 8.75,
+  "textHash": "ef75be0ca475"
  },
  "M1/ex1": {
   "voice": "M1",

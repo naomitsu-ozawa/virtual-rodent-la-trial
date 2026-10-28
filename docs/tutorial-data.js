@@ -19,7 +19,7 @@ export const TUT_SIGNALS=Object.freeze(['grab', 'grab-move', 'scale', 'section-a
 export const TUTORIAL_MISSIONS=deepFreeze([
  { id:'controls', sample:TUT_SAMPLE, title:'tutCtlTitle', slide:'controls',
   steps:[
-   { id:'controls1', text:'tutCtlS1', audio:'ctl1', audioText:'みぎてのこうせんはオレンジ、ひだりては、むらさきです。ひとさしゆびのトリガーで、こうせんのさきを押します。', ctl:{btn:'trigger'}, done:null, next:true, timeoutHint:30000 },
+   { id:'controls1', text:'tutCtlS1', audio:'ctl1', audioText:'みぎてのこうせんはオレンジ、ひだりては、みどりです。ひとさしゆびのトリガーで、こうせんのさきを押します。', ctl:{btn:'trigger'}, done:null, next:true, timeoutHint:30000 },
    { id:'controls2', text:'tutCtlS2', audio:'ctl2', audioText:'こうせんを、つぎへ、に向けて、トリガーを引いてください。', ctl:{btn:'trigger'}, done:null, next:true, timeoutHint:25000 }
   ] },
  { id:'grip', sample:TUT_SAMPLE, title:'tutGripTitle', slide:'g1',
@@ -46,6 +46,13 @@ export const TUTORIAL_MISSIONS=deepFreeze([
      then:{ id:'g4a2', audio:'g4a2', audioText:'ひだりで、すけて、みぎで、はっきりします。' }, done:{ signal:'slice-opacity', count:1 }, timeoutHint:35000 },
    { id:'slice2', text:'tutSliceS2', item:2, ctl:{btn:'stick',motion:'press'}, audio:'g4b', audioText:'どちらのてでも、スティックをみじかく押しこみます。スライスがとうめいになります。', done:{ signal:'slice-toggle', count:1 }, timeoutHint:25000 },
    { id:'slice3', text:'tutSliceS3', item:3, ctl:{btn:'stick',motion:'hold'}, audio:'g4c', audioText:'スティックを押しこんだままにすると、だんめんのわくがかくれます。', done:{ signal:'frame-hide', count:1 }, timeoutHint:25000 }
+  ] },
+ // the data switch inside VR / AR (the pages explain it; both finish with 次へ). If the visitor really switches here (the data leaves the tutorial's Lv0),: this ステップ is done and 'exit' starts at once (engine.dataSwitched), going back is shut. Its voice files (dat1 / dat2) are in
+ // docs/tutorial/audio/F1 and M1 (tutorial-audio.js skips a missing file, so a page without one is silent and only the captions carry it).
+ { id:'data', sample:TUT_SAMPLE, title:'tutDataTitle', slide:'g3',
+  steps:[
+   { id:'data1', text:'tutDataS1', ctl:{btn:'trigger'}, board:'menu', menu:'levels', audio:'dat1', audioText:'ひだりのメニューの、したのデータのぎょうに、レベルゼロからレベルさんの、ボタンがあります。ブイアールのまま、べつのデータに切りかえられます。', done:null, next:true, timeoutHint:30000 },
+   { id:'data2', text:'tutDataS2', ctl:{btn:'trigger'}, board:'menu', menu:'levels', audio:'dat2', audioText:'ボタンにこうせんを向けて、トリガーを引くと、もういちど、と出ます。もういちど引くと、切りかわります。だんめんやポイントは、消えます。', done:null, next:true, timeoutHint:30000 }
   ] },
  // the way out. The menu's red 「VRを終了」 / 「ARを終了」 button (bottom right of the left menu; its row is row 3 of the g3 slide: 下のボタン): the page is done when the session ends
  // (signal 'session-end', sent by vr-view.js as the session closes); the page (tutorial-ui.js) then guides to Lv1-Lv3 on the browser screen.
