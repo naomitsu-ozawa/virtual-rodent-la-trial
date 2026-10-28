@@ -132,6 +132,15 @@ export function createScaleTag(THREE) {
   tex.colorSpace = THREE.SRGBColorSpace;
   const mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.09, 0.09 * H / W), new THREE.MeshBasicMaterial({ map: tex, transparent: true, toneMapped: false, depthTest: false }));
   mesh.renderOrder = 5; mesh.visible = false;
+  // depth occlusion (same scheme as the pinned labels): while on, the tag is depth tested (hidden behind the volume, which writes depth) and a ghost child
+  // (GreaterDepth, faint) shows it where it is hidden; off = drawn on top without a depth test, as before
+  const ghost = new THREE.Mesh(mesh.geometry, Object.assign(mesh.material.clone(), { depthFunc: THREE.GreaterDepth, depthTest: true, depthWrite: false }));
+  ghost.renderOrder = mesh.renderOrder; ghost.frustumCulled = false; ghost.visible = false; mesh.add(ghost);
+  const setOcclusion = (occ, ghostAlpha) => {
+    occ = !!occ;
+    mesh.material.depthTest = occ; mesh.material.depthWrite = false; ghost.visible = occ;
+    if (occ) ghost.material.opacity = mesh.material.opacity * ghostAlpha;
+  };
   let text = '';
   const setText = t => {
     if (t === text) return;
@@ -155,5 +164,5 @@ export function createScaleTag(THREE) {
     mesh.position.copy(low); mesh.position.y -= 0.035;
     mesh.lookAt(head);
   };
-  return { mesh, setText, place, get text() { return text; }, dispose() { tex.dispose(); mesh.geometry.dispose(); mesh.material.dispose(); } };
+  return { mesh, ghost, setText, setOcclusion, place, get text() { return text; }, dispose() { tex.dispose(); mesh.geometry.dispose(); mesh.material.dispose(); ghost.material.dispose(); } };
 }

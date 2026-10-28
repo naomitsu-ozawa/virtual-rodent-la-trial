@@ -1,9 +1,9 @@
-import { settings } from './app-settings.js?v=20261027-build680';
-import { tr } from './i18n.js?v=20261027-build680';
-import { TUTORIAL_MISSIONS, TUT_SAMPLE, TUT_INTRO, TUT_VOICE_PICK } from './tutorial-data.js?v=20261027-build680';
-import { createTutorialAudio } from './tutorial-audio.js?v=20261027-build680';
-import { createTutorialEngine } from './tutorial-engine.js?v=20261027-build680';
-import { EVENT_LEVELS } from './event-mode.js?v=20261027-build680';
+import { settings } from './app-settings.js?v=20261028-build685';
+import { tr } from './i18n.js?v=20261028-build685';
+import { TUTORIAL_MISSIONS, TUT_SAMPLE, TUT_INTRO, TUT_VOICE_PICK } from './tutorial-data.js?v=20261028-build685';
+import { createTutorialAudio } from './tutorial-audio.js?v=20261028-build685';
+import { createTutorialEngine } from './tutorial-engine.js?v=20261028-build685';
+import { EVENT_LEVELS } from './event-mode.js?v=20261028-build685';
 
 // the switch (設定 > 外観 > チュートリアル) off = the engine ignores every signal (nothing advances, nothing is saved); on again = as before
 // true while the tutorial UI is live (the switch is on AND the device supports VR): the Lv0 card of 体験会 acts as the tutorial only then (event-mode-ui.js)
@@ -12,6 +12,8 @@ export const tutorialUiActive=()=>uiActive;
 // signals count only while the switch is on AND the tutorial's practice data (TUT_SAMPLE = the Lv0 data) is the open one: on any other practice data (Lv1-Lv3) or the
 // visitor's own data nothing advances (the tutorial never takes over another dataset)
 export const tutorialSignalsOn=()=>{try{return globalThis.__vrlSettings?.get?.('tutorialMode')===true&&globalThis.__vrlOpenSample===TUT_SAMPLE}catch{return false}}; // = settings (app-settings.js sets globalThis.__vrlSettings; the same switch tutorialModeOn() reads)
+// the end of the session counts in the way-out ステップ (exit) whatever data is open: the visitor may have switched the data on purpose (switch still on)
+export const tutorialExitSignalOn=(eng,d)=>{try{return globalThis.__vrlSettings?.get?.('tutorialMode')===true&&!!d&&d.kind==='session-end'&&eng.getState().mission==='exit'}catch{return false}};
 export function getTutorialEngine(opts){
  const g=globalThis;
  if(g.__vrlTutorialEngine)return g.__vrlTutorialEngine;
@@ -19,7 +21,7 @@ export function getTutorialEngine(opts){
  if(!g.__vrlTutSignalWired&&typeof document!=='undefined'){
   g.__vrlTutSignalWired=true;
   const seen=new WeakSet();
-  const on=e=>{if(seen.has(e))return;seen.add(e);if(!tutorialSignalsOn())return;const d=e.detail;if(d&&typeof d.kind==='string')eng.onSignal({kind:d.kind,count:d.count})};
+  const on=e=>{if(seen.has(e))return;seen.add(e);const d=e.detail;if(!tutorialSignalsOn()&&!tutorialExitSignalOn(eng,d))return;if(d&&typeof d.kind==='string')eng.onSignal({kind:d.kind,count:d.count})};
   document.addEventListener('vrl-tut-signal',on);g.addEventListener?.('vrl-tut-signal',on);
  }
  return eng; // no AR step any more (nothing depends on AR support)
@@ -170,8 +172,8 @@ export function initTutorialUi(){
  // 「チュートリアルを始める」 in the top bar, just before 「VRで見る」 (always in view, whichever panel is open; VR devices only): switches the tutorial on, continues it (the next step not done) and starts the introduction
  const intro=createTutorialIntro({audio:createTutorialAudio({getVoice:()=>settings.get('tutorialVoice')})});
  // the last ステップ (leave VR / AR) cleared = the tutorial is over: back on the page the bar guides to Lv1-Lv3 and then to VR / AR (it ends when that session starts). The signal arrives with the closing
- // 「すべてクリアです」, from the VR board (session-end) or from the 2D card (完了).
- getTutorialEngine().subscribe(snap=>{if(snap.feedback==='allClear'&&uiActive)intro.startLevels()});
+ // 「すべてクリアです」.: not after the data was switched inside VR (backLocked): the visitor already chose Lv1-Lv3, and the VR-button guidance right after leaving VR was wrong. From the VR board (session-end) or from the 2D card (完了).
+ getTutorialEngine().subscribe(snap=>{if(snap.feedback==='allClear'&&uiActive&&!snap.backLocked)intro.startLevels()});
  const mountCta=()=>{
   if(document.getElementById('tutorial-start-button'))return;
   const b=el('button','tut-cta','tutCta');b.id='tutorial-start-button';b.type='button';

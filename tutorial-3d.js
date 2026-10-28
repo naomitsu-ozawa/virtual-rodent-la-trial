@@ -3,20 +3,25 @@
 //     and an arrow moves toward it (trigger / grip / the upper face button B or Y / the stick: tilt, short press, press and hold). It is drawn over the hand, hidden otherwise;
 //  2. the direction arrow at the edge of the view that points to the board of the step (the left menu) while that board is out of view;
 //  3. the arrow that moves over the button / the slider knob of the menu (a mesh in front of the board: no canvas redraw).
-// Right-hand model; the left hand is its mirror (scale.x = -1). Coordinates are metres in the controller's ray space (origin at the ray's start, -z = ahead).
+// Right-hand model; the left hand is its mirror (scale.x = -1). The annotations (ring + arrows) are children of the controller's GRIP space (renderer.xr.getControllerGrip), whose frame is the one the
+// real controller model (@webxr-input-profiles/assets meta-quest-touch-plus, right.glb; left.glb is its exact x mirror) is authored in: metres, +x = the right hand's right (the palm / grip button side is -x),
+// the handle runs along z with the head (buttons, stick, trigger) towards -z, the thumb side is +y and the trigger side is -y. BUTTON_SPOTS are measured from that glb (see the comment there).
 export const PINK = 0xE8508F, GOLD = 0xffd27a;
 // The model is drawn in its own frame F (handle hanging down along -y, ahead = -z), then tilted by TILT about x and moved to the ray's start: the handle goes down and back from the ray, the
-// way a held controller sits. BUTTON_SPOTS are in the ray space (what the arrows and the ring use): p = the button, from = the side an arrow comes from (a unit-ish vector from the button outwards).
+// way a held controller sits (that hidden body F keeps its own ray-space numbers: nothing is drawn from it). BUTTON_SPOTS are in the GRIP space (what the arrows and the ring use): p = the button, from = the side an arrow comes from (a unit-ish vector from the button outwards).
 export const TILT = -0.6, ORIGIN = [0, 0.012, 0.03];
 const toAim = (p) => { const c = Math.cos(TILT), s = Math.sin(TILT); return [p[0] + ORIGIN[0], p[1] * c - p[2] * s + ORIGIN[1], p[1] * s + p[2] * c + ORIGIN[2]]; };
 const dirAim = (v) => { const c = Math.cos(TILT), s = Math.sin(TILT); return [v[0], v[1] * c - v[2] * s, v[1] * s + v[2] * c]; };
-const spot = (p, from) => Object.freeze({ p: Object.freeze(toAim(p).map(x => +x.toFixed(5))), from: Object.freeze(dirAim(from).map(x => +x.toFixed(5))) });
+const spot = (pMm, from) => Object.freeze({ p: Object.freeze(pMm.map(x => +(x / 1000).toFixed(5))), from: Object.freeze(from) }); // p in mm (as read from the glb) -> metres
+// Measured on the right controller of meta-quest-touch-plus (glb vertices, grip space, mm): the face buttons (A, B) and the stick sit on one sloped face whose outward normal is n = (0, 0.8, -0.6)
+// (the button press travel of the glb is (0, -0.83, +0.55)); the ring is on the top of each button / the stick cap. The trigger's finger surface faces (0, -0.8, -0.6) and the grip button (squeeze) faces -x.
+// The stick is on the outer (+x) side of the right controller, A / B and the grip button are on the inner (-x) side. The arrows of the face buttons lean a little away from the stick (-x).
 export const BUTTON_SPOTS = Object.freeze({
-  trigger: spot([0.0, -0.016, -0.021], [0, -0.3, -1]),   // front of the handle (the index finger)
-  grip: spot([-0.0185, -0.048, 0.0], [-1, 0, 0.1]),      // the inner side of the handle (the middle finger)
-  face: spot([0.014, 0.0225, -0.007], [0.35, 1, 0]),     // B (right) / Y (left): the upper of the two face buttons
-  facelow: spot([0.016, 0.0225, 0.012], [0.35, 1, 0]),   // A (right) / X (left): the lower one (a long press opens the menu)
-  stick: spot([0.0, 0.031, 0.014], [0, 1, 0]),           // the thumbstick on the top
+  trigger: spot([-9.5, -31.5, -23.2], [0, -0.8, -0.6]),  // the finger surface of the trigger (the index finger comes from below / ahead)
+  grip: spot([-11.5, -1.5, 15.5], [-1, 0, 0]),           // the outer face of the grip button (the middle finger), on the palm side
+  face: spot([-12.5, 3.3, -28.9], [-0.3, 0.8, -0.6]),    // B (right) / Y (left): the upper (front) of the two face buttons
+  facelow: spot([-1.9, 11.0, -18.8], [-0.3, 0.8, -0.6]), // A (right) / X (left): the lower (back) one (a long press opens the menu)
+  stick: spot([9.0, 3.5, -36.0], [0, 0.8, -0.6]),        // the top of the thumbstick cap
 });
 // the arrows of a hint {btn, motion?}: [{from: [x,y,z] unit vector, gap (m), bob (m), still}]. 'updown' = two arrows along the stick's tilt axis, 'press' = from above, 'hold' = from the button's side, held (no bob).
 // The tables are built once (a frame must not allocate): the same frozen array comes back for the same spec.
@@ -27,8 +32,8 @@ export function hintArrows(spec) {
   if (!spec || !BUTTON_SPOTS[spec.btn]) return NONE;
   const key = spec.btn + '|' + (spec.motion || ''); let t = arrowTable.get(key); if (t) return t;
   const f = BUTTON_SPOTS[spec.btn].from, mk = (from, gap, bob, still) => Object.freeze({ from: unit(from), gap, bob, still });
-  if (spec.btn === 'stick' && spec.motion === 'updown') t = [mk([0, 0.25, -1], 0.03, 0.014, false), mk([0, 0.25, 1], 0.03, 0.014, false)];
-  else if (spec.motion === 'hold') t = [mk(spec.btn === 'stick' ? [0, 1, 0] : f, 0.026, 0, true)];
+  if (spec.btn === 'stick' && spec.motion === 'updown') t = [mk([0, -0.4, -0.95], 0.03, 0.014, false), mk([0, 0.8, 0.65], 0.03, 0.014, false)]; // along the stick's tilt axis (in the sloped face: (0, 0.6, 0.8)) from ahead (-z) and from behind, lifted off the face
+  else if (spec.motion === 'hold') t = [mk(f, 0.026, 0, true)];
   else t = [mk(f, 0.03, 0.012, false)];
   t = Object.freeze(t); arrowTable.set(key, t); return t;
 }
@@ -75,6 +80,7 @@ export function buildControllerModel(THREE) {
   addF(new THREE.CylinderGeometry(0.0062, 0.0062, 0.004, 12), mat(0x8fa0b0), [0.014, 0.0215, -0.007]); // B / Y
   addF(new THREE.BoxGeometry(0.013, 0.026, 0.01), mat(0x2b343d), [0, -0.016, -0.0195], [0.15, 0, 0]);  // trigger
   addF(new THREE.BoxGeometry(0.005, 0.045, 0.02), mat(0x56677a), [-0.0185, -0.048, 0.0]);          // grip button
+  F.visible = false; // the body is not drawn (only the ring + arrows annotate the real controller); it stays in the graph so nothing about the ring / arrow placement changes
   // the blinking ring (moved onto the named button) and its arrows
   const ringMat = mat(PINK); ringMat.transparent = true; ringMat.depthTest = false; ringMat.depthWrite = false;
   const ring = new THREE.Mesh(new THREE.TorusGeometry(0.0145, 0.0021, 8, 28), ringMat); ring.renderOrder = 998; disposers.push(() => ring.geometry.dispose());
@@ -82,10 +88,10 @@ export function buildControllerModel(THREE) {
   const arrows = [arrowMesh(THREE), arrowMesh(THREE)]; for (const a of arrows) { root.add(a); a.visible = false; }
   ring.visible = false;
   root.userData.dispose = () => { for (const d of disposers) { try { d(); } catch { /* */ } } for (const a of arrows) a.userData.dispose(); };
-  return { group: root, ring, arrows, ringMat };
+  return { group: root, body: F, ring, arrows, ringMat };
 }
-// the axis the ring around a button faces (ray space)
-const RING_AXIS = Object.freeze({ trigger: [0, 0.3, 1], grip: [1, 0, 0], default: [0, 1, 0] });
+// the axis the ring around a button faces (grip space)
+const RING_AXIS = Object.freeze({ trigger: [0, -0.8, -0.6], grip: [1, 0, 0], default: [0, 0.8, -0.6] });
 // poses ring + arrows for spec at time tMs (pure of the scene: only this model's parts move)
 export function poseHint(THREE, model, spec, tMs) {
   const arrows = hintArrows(spec);
@@ -103,24 +109,27 @@ export function poseHint(THREE, model, spec, tMs) {
   });
   return true;
 }
-// one hint model per controller (children of the controller objects). isHand(c): hand tracking (no controller buttons: nothing is shown). update(tMs, spec|null) every frame.
-export function createControllerHints(THREE, { controllers = [], isHand = () => false } = {}) {
-  const hints = new Map();
-  function of(c) { let h = hints.get(c); if (!h) { h = buildControllerModel(THREE); h.group.visible = false; c.add(h.group); hints.set(c, h); } return h; }
+// one hint model per controller, a child of that controller's GRIP space (grips[i] = renderer.xr.getControllerGrip(i), in the scene; controllers[i] = the ray space of the same input, which carries the
+// handedness). Without a grip pose (grip.visible false: three sets it from the pose) or without a grip nothing is shown. isHand(src): hand tracking (no controller buttons: nothing is shown).
+// update(tMs, spec|null) every frame.
+export function createControllerHints(THREE, { controllers = [], grips = [], isHand = () => false } = {}) {
+  const hints = new Map(); // grip -> model
+  function of(g) { let h = hints.get(g); if (!h) { h = buildControllerModel(THREE); h.group.visible = false; g.add(h.group); hints.set(g, h); } return h; }
   return {
     update(tMs, spec) {
-      for (const c of controllers) {
-        const hd = c.userData?.source?.handedness, want = !!spec && hintArrows(spec).length > 0 && c.visible !== false && !isHand(c.userData?.source) && (!spec.hand || spec.hand === hd); // spec.hand 'left' | 'right': that hand only (none: both)
-        const h = hints.get(c);
+      for (let i = 0; i < controllers.length; i++) {
+        const c = controllers[i], g = grips[i], src = c.userData?.source, hd = src?.handedness;
+        const want = !!g && !!spec && hintArrows(spec).length > 0 && g.visible !== false && !isHand(src) && (!spec.hand || spec.hand === hd); // spec.hand 'left' | 'right': that hand only (none: both)
+        const h = g ? hints.get(g) : null;
         if (!want) { if (h) h.group.visible = false; continue; }
-        const m = of(c); m.group.visible = true;
+        const m = of(g); m.group.visible = true;
         m.group.scale.x = hd === 'left' ? -1 : 1;
         poseHint(THREE, m, spec, tMs);
       }
     },
     get count() { return hints.size; },
     groups: () => [...hints.values()].map(h => h.group), // (hidden in the VR screenshots)
-    dispose() { for (const [c, h] of hints) { try { c.remove(h.group); h.group.userData.dispose(); } catch { /* */ } } hints.clear(); },
+    dispose() { for (const [g, h] of hints) { try { g.remove(h.group); h.group.userData.dispose(); } catch { /* */ } } hints.clear(); },
   };
 }
 

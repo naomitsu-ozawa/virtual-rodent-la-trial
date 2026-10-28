@@ -14,14 +14,14 @@
 // A cleared ステップ waits for 次へ: the page says ステップクリア + 「次のステップに進みましょう。「次へ」を押してください」 (spoken too); the last one ends with the closing line. Nothing is remembered between sessions:
 // a session always starts at the entry guidance and ステップ1.
 // menuTarget() names the かんたんメニュー widget to light (vr-view.js draws the pointer there). Redraws: at most 2 a second, and none 20 s after the board last changed (marks still).
-import { getTutorialEngine, resetTutorialAll, restartTutorial } from './tutorial-ui.js?v=20261027-build680';
-import { createTutorialAudio, createStepReplay, createChime, speechFor, isFeedbackId, stepVoiceIds } from './tutorial-audio.js?v=20261027-build680';
-import { createOrient, ORIENT_PHASES } from './tutorial-orient.js?v=20261027-build680';
-import { resetPress, resetArmed } from './event-mode.js?v=20261027-build680';
-import { tr } from './i18n.js?v=20261027-build680';
-import { TUTORIAL_MISSIONS, TUT_SAMPLE, TUT_ORIENT, TUT_FEEDBACK, TUT_MENU_OPEN, fillTissue } from './tutorial-data.js?v=20261027-build680';
-import { GUIDE_SLIDES, guideSlide, slideItem, itemRect, loc, createSlideImages, SLIDE_W, SLIDE_H } from './tutorial-slides.js?v=20261027-build680';
-import { drawPointer, drawKnobHint, drawStepFrame, drawDoneMark, animPhase, animKey, GOLD } from './tutorial-marks.js?v=20261027-build680';
+import { getTutorialEngine, resetTutorialAll, restartTutorial } from './tutorial-ui.js?v=20261028-build685';
+import { createTutorialAudio, createStepReplay, createChime, speechFor, isFeedbackId, stepVoiceIds } from './tutorial-audio.js?v=20261028-build685';
+import { createOrient, ORIENT_PHASES } from './tutorial-orient.js?v=20261028-build685';
+import { resetPress, resetArmed } from './event-mode.js?v=20261028-build685';
+import { tr } from './i18n.js?v=20261028-build685';
+import { TUTORIAL_MISSIONS, TUT_SAMPLE, TUT_ORIENT, TUT_FEEDBACK, TUT_MENU_OPEN, fillTissue } from './tutorial-data.js?v=20261028-build685';
+import { GUIDE_SLIDES, guideSlide, slideItem, itemRect, loc, createSlideImages, SLIDE_W, SLIDE_H } from './tutorial-slides.js?v=20261028-build685';
+import { drawPointer, drawKnobHint, drawStepFrame, drawDoneMark, animPhase, animKey, GOLD } from './tutorial-marks.js?v=20261028-build685';
 
 export const FLASH_MS = 1100;
 export function tutorialModeOn(api = globalThis.__vrlSettings) {
@@ -68,7 +68,8 @@ export function buildPage({ engine, view = 'auto', lang = 'ja', resetArmed: arme
   const resetBtn = BTN('reset', armed ? t('tutResetAgain') : t('tutReset'), { warn: armed, size: 24 });
   const skipAllBtn = BTN('skipAll', t('tutSkipAll'), { size: 24 });
   const nameOf = m => `${stepNoLabel(m.stepNo, t)} ${t(m.title)}`, titleOf = id => { const m = list.find(x => x.id === id); return m ? nameOf(m) : ''; };
-  if (view === 'list' || !snap.mission) {
+  const locked = !!snap.backLocked; // the data was switched: the way back (前へ / ステップ一覧 / 最初から) is shut
+  if ((view === 'list' && !locked) || !snap.mission) {
     return { kind: 'list', title: t('tutTitle'), counter: '', missions: list.map(m => ({ id: m.id, label: nameOf(m), status: m.status, done: m.done, current: m.current })),
       buttons: [BTN('guides', t('tutGuides'), { size: 26 }), skipAllBtn, resetBtn] };
   }
@@ -76,14 +77,14 @@ export function buildPage({ engine, view = 'auto', lang = 'ja', resetArmed: arme
   if (snap.finished) {
     const next = engine.nextMissionId();
     if (!next && engine.listMissions().every(m => m.status === 'unavailable' || m.done || m.optional)) {
-      return { kind: 'allDone', title, mark: t('tutDone'), headline: t('tutAllDone'), note: t('tutIntroLv123'), counter: '', buttons: [BTN('list', t('tutStepList')), BTN('prev', t('tutPrev')), resetBtn] };
+      return { kind: 'allDone', title, mark: t('tutDone'), headline: t('tutAllDone'), note: t('tutIntroLv123'), counter: '', buttons: [BTN('list', t('tutStepList'), { disabled: locked }), BTN('prev', t('tutPrev'), { disabled: locked }), locked ? { ...resetBtn, disabled: true } : resetBtn] };
     }
     return { kind: 'missionDone', title, mark: t('tutDone'), headline: t('tutMissionDone'), note: t(TUT_FEEDBACK.missionClear.then.text), counter: pi ? `${pi.N}/${pi.N}` : '',
       buttons: [...(next ? [BTN('start:' + next, `${t('tutNext')}: ${titleOf(next)}`, { on: true, point: true })] : []), BTN('list', t('tutStepList')), BTN('prev', t('tutPrev'))] };
   }
   const step = engine.currentStep();
   // one row: a page finished by 次へ (step.next) has it lit with the pointer; on a page with a signal 次へ only steps over the page (plain button)
-  const listBtn = BTN('list', t('tutStepList'), { size: 26 });
+  const listBtn = BTN('list', t('tutStepList'), { size: 26, disabled: locked });
   const nextBtn = BTN('next', step.next ? t('tutNext') : pi.isLast ? t('tutFinish') : t('tutNext'), { on: !!step.next, point: !!step.next });
   const slide = data?.slide || null, item = step.item || null;
   const caption = menuClosed && step.board === 'menu' ? t(TUT_MENU_OPEN.text) : captionOf(step, t, tissue); // the menu is closed: how to open it (A / X long press)
@@ -184,6 +185,8 @@ export function getEngine(opts = {}) { return getTutorialEngine(opts); }
 // getSectionOn() = a section frame is up (the page of ステップ5 that asks for one is skipped then); getTissue() is not needed: setTissue(name) tells the first tissue's name (the captions of the menu pages).
 let entryShownOnce = false;
 export const _resetEntryForTest = () => { entryShownOnce = false; };
+// the session-end signal counts in the way-out ステップ whatever data is open (the visitor switched the data on purpose; the signal of any other kind still needs the practice data)
+export const exitSignalAllowed = (engine, sig) => { try { return !!sig && sig.kind === 'session-end' && engine.getState().mission === 'exit'; } catch { return false; } };
 export function createTutorialVr({ engine, audio, chime, getImage, getLook = null, entry = 'auto', getSectionOn = null, getMenuOpen = null, onMissionStart = null, getInput = () => 'ctrl', lang = 'ja', doc = globalThis.document, now = () => performance.now(), onChange = () => {}, resetUserState = null } = {}) {
   const eng = engine || getEngine();
   // nothing is remembered: a session starts from the beginning. With the entry guidance the engine is idle until it is over; then ステップ1 (the next one not done = the first, after the reset) begins.
@@ -208,7 +211,7 @@ export function createTutorialVr({ engine, audio, chime, getImage, getLook = nul
   const bump = () => { rev++; changedAt = now(); onChange(); };
   // the slide pictures: loaded on first use; one arriving redraws the board (bump)
   const pics = getImage ? null : createSlideImages({ onLoad: () => bump() }), image = getImage || (id => pics.get(id));
-  const guides = createSlideViewer({ lang, onChange: bump, onClose: () => { view = 'list'; bump(); }, getImage });
+  const guides = createSlideViewer({ lang, onChange: bump, onClose: () => { view = eng.getState().backLocked ? 'auto' : 'list'; bump(); }, getImage });
   // onMissionStart(id): a ステップ was just entered (first page): the board of vr-view.js puts the volume back within reach for ステップ2
   let prevSnap = eng.getState();
   const unsub = eng.subscribe(snap => {
@@ -225,7 +228,8 @@ export function createTutorialVr({ engine, audio, chime, getImage, getLook = nul
   });
   const modeOff = () => { try { const a = globalThis.__vrlSettings; return !!a?.get && a.get('tutorialMode') !== true; } catch { return false; } }; // the switch is off: signals move nothing (no api = a test / no settings: not off)
   const otherData = () => { const o = globalThis.__vrlOpenSample; return o != null && o !== TUT_SAMPLE; }; // another dataset is open: signals move nothing
-  const onSignal = e => { try { if (!modeOff() && !otherData()) eng.onSignal(e.detail); } catch { /* */ } };
+  // except the end of the session in the way-out ステップ (exitSignalAllowed): the visitor may have switched the data on purpose
+  const onSignal = e => { try { if (!modeOff() && (!otherData() || exitSignalAllowed(eng, e.detail))) eng.onSignal(e.detail); } catch { /* */ } };
   // the page side (tutorial-ui.js getTutorialEngine) wires the signals once and sets __vrlTutSignalWired; only when nobody wired yet does this board wire itself (never twice: double counting)
   const ownWire = !globalThis.__vrlTutSignalWired; if (ownWire) { try { globalThis.__vrlTutSignalWired = true; } catch { /* */ } doc?.addEventListener?.('vrl-tut-signal', onSignal); }
   // with getLook the guidance begins once both boards are in place (the session may still be preparing the volume: the boards are not up yet); the page shows its first phase meanwhile
@@ -236,6 +240,7 @@ export function createTutorialVr({ engine, audio, chime, getImage, getLook = nul
     if (entryPending) return false;
     if (orient.active) return id === 'next' ? orient.next(now()) : false; // the entry guidance: only 次へ
     if (view === 'guides') return guides.act(id);
+    if (eng.getState().backLocked && (id.startsWith('start:') || id === 'list' || id === 'reset' || id === 'prev')) return false; // the data was switched: no way back
     if (id.startsWith('start:')) { view = 'auto'; eng.start(id.slice(6)); bump(); return true; }
     switch (id) {
       case 'prev': return eng.prev();
@@ -355,6 +360,7 @@ export function layoutLevelSlide(slide, { W = 820, getImage = noImage } = {}) {
 export function menuTargetRect(widgets, target) {
   if (!target || !Array.isArray(widgets)) return null;
   if (target === 'exit') { const b = widgets.find(x => x.id === 'exit'); return b ? { rect: { x: b.x, y: b.y, w: b.w, h: b.h }, from: 'top' } : null; } // the red 「VRを終了」 / 「ARを終了」 button
+  if (target === 'levels') { const bs = widgets.filter(x => typeof x.id === 'string' && x.id.startsWith('level:')); if (!bs.length) return null; const x0 = Math.min(...bs.map(b => b.x)), y0 = Math.min(...bs.map(b => b.y)), x1 = Math.max(...bs.map(b => b.x + b.w)), y1 = Math.max(...bs.map(b => b.y + b.h)); return { rect: { x: x0, y: y0, w: x1 - x0, h: y1 - y0 }, from: 'bottom' }; } // the Lv0-Lv3 buttons of the データ row (the data-switch page: only shows where)
   if (target === 'slider') { const s = widgets.find(x => x.type === 'slider'); if (!s) return null; const kx = s.x + s.w * (+s.value || 0), cy = s.y + s.h / 2; return { rect: { x: kx - 26, y: cy - 26, w: 52, h: 52 }, from: 'bottom' }; }
   const want = target === 'seg-hide' ? 'hide' : target === 'seg-show' ? 'show' : null; if (!want) return null;
   const b = widgets.find(x => typeof x.id === 'string' && x.id.startsWith('seg:') && x.id.endsWith(':' + want) && !x.on); if (!b) return null;

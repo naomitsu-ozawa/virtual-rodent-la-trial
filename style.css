@@ -862,6 +862,10 @@ footer #footer:empty{display:block}
 .job-button:disabled{opacity:.58;cursor:default}
 .job-button.is-hidden,.job-help.is-hidden,.job-detail.is-hidden{display:none}
 .job-help{color:rgb(var(--ui-t4));font-size:12px}
+/* the pre-build modal (event-prepare-ui.js): the same card as above, one layer higher, its lines keep their breaks */
+.job-modal.event-prepare-modal{z-index:20001}
+.event-prepare-modal .job-detail{white-space:pre-line}
+.job-modal.event-prepare-modal.is-finished .job-spinner{display:none}
 @media (prefers-reduced-motion:reduce){.job-spinner{animation-duration:1.6s}.job-track.is-indeterminate .job-bar{animation:none;width:100%;opacity:.45}}
 
 /* the range in use when the card priority trims a segment's range */
