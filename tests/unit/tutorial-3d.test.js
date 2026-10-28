@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs';
 // the 3D controller with the button blinking + an arrow, the direction arrow at the edge of the view, the arrow over the menu's button
 describe('hints: which arrows for which button', () => {
   it('every button a page names has a spot on the model; trigger / grip / face come from outside, the stick has the tilt, press and hold forms', () => {
-    for (const s of TUTORIAL_MISSIONS.flatMap(m => m.steps)) { expect(BUTTON_SPOTS[s.ctl.btn], s.id).toBeTruthy(); expect(hintArrows(s.ctl).length, s.id).toBeGreaterThan(0); }
+    for (const s of TUTORIAL_MISSIONS.flatMap(m => m.steps).filter(s => !s.free)) { expect(BUTTON_SPOTS[s.ctl.btn], s.id).toBeTruthy(); expect(hintArrows(s.ctl).length, s.id).toBeGreaterThan(0); }
     expect(hintArrows({ btn: 'trigger' })).toHaveLength(1); expect(hintArrows({ btn: 'grip' })).toHaveLength(1); expect(hintArrows({ btn: 'face' })).toHaveLength(1);
     const ud = hintArrows({ btn: 'stick', motion: 'updown' }); expect(ud).toHaveLength(2); expect(ud[0].from[2]).toBeLessThan(0); expect(ud[1].from[2]).toBeGreaterThan(0); // from ahead and from behind: the tilt
     expect(hintArrows({ btn: 'stick', motion: 'press' })[0]).toMatchObject({ still: false }); expect(hintArrows({ btn: 'stick', motion: 'hold' })[0]).toMatchObject({ still: true, bob: 0 }); // press bobs, hold stays down

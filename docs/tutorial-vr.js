@@ -14,14 +14,14 @@
 // A cleared ステップ waits for 次へ: the page says ステップクリア + 「次のステップに進みましょう。「次へ」を押してください」 (spoken too); the last one ends with the closing line. Nothing is remembered between sessions:
 // a session always starts at the entry guidance and ステップ1.
 // menuTarget() names the かんたんメニュー widget to light (vr-view.js draws the pointer there). Redraws: at most 2 a second, and none 20 s after the board last changed (marks still).
-import { getTutorialEngine, resetTutorialAll, restartTutorial } from './tutorial-ui.js?v=20261028-build685';
-import { createTutorialAudio, createStepReplay, createChime, speechFor, isFeedbackId, stepVoiceIds } from './tutorial-audio.js?v=20261028-build685';
-import { createOrient, ORIENT_PHASES } from './tutorial-orient.js?v=20261028-build685';
-import { resetPress, resetArmed } from './event-mode.js?v=20261028-build685';
-import { tr } from './i18n.js?v=20261028-build685';
-import { TUTORIAL_MISSIONS, TUT_SAMPLE, TUT_ORIENT, TUT_FEEDBACK, TUT_MENU_OPEN, fillTissue } from './tutorial-data.js?v=20261028-build685';
-import { GUIDE_SLIDES, guideSlide, slideItem, itemRect, loc, createSlideImages, SLIDE_W, SLIDE_H } from './tutorial-slides.js?v=20261028-build685';
-import { drawPointer, drawKnobHint, drawStepFrame, drawDoneMark, animPhase, animKey, GOLD } from './tutorial-marks.js?v=20261028-build685';
+import { getTutorialEngine, resetTutorialAll, restartTutorial } from './tutorial-ui.js?v=20261028-build686';
+import { createTutorialAudio, createStepReplay, createChime, speechFor, isFeedbackId, stepVoiceIds } from './tutorial-audio.js?v=20261028-build686';
+import { createOrient, ORIENT_PHASES } from './tutorial-orient.js?v=20261028-build686';
+import { resetPress, resetArmed } from './event-mode.js?v=20261028-build686';
+import { tr } from './i18n.js?v=20261028-build686';
+import { TUTORIAL_MISSIONS, TUT_SAMPLE, TUT_ORIENT, TUT_FEEDBACK, TUT_MENU_OPEN, fillTissue } from './tutorial-data.js?v=20261028-build686';
+import { GUIDE_SLIDES, guideSlide, slideItem, itemRect, loc, createSlideImages, SLIDE_W, SLIDE_H } from './tutorial-slides.js?v=20261028-build686';
+import { drawPointer, drawKnobHint, drawStepFrame, drawDoneMark, animPhase, animKey, GOLD } from './tutorial-marks.js?v=20261028-build686';
 
 export const FLASH_MS = 1100;
 export function tutorialModeOn(api = globalThis.__vrlSettings) {
@@ -271,7 +271,8 @@ export function createTutorialVr({ engine, audio, chime, getImage, getLook = nul
     // the first tissue's name of the open data (the captions of the menu pages say it); a change redraws the board
     setTissue(name) { const n = String(name || ''); if (n !== tissue) { tissue = n; bump(); } }, get tissue() { return tissue; },
     // 3D guides (tutorial-3d.js): the controller button of the page now ({btn, motion?} | null) and the board it works on ('menu' | null); null during the entry guidance / the cleared page / the lists
-    controllerHint: () => { const st = eng.getState(); if (orient.active || entryPending || view !== 'auto' || !st.mission || st.finished) return null; return menuClosedNow() ? TUT_MENU_OPEN.ctl : (eng.currentStep()?.ctl || null); },
+    controllerHint: () => { const st = eng.getState(); if (orient.active || entryPending || view !== 'auto' || !st.mission || st.finished) return null; if (eng.currentStep()?.free) return null; return menuClosedNow() ? TUT_MENU_OPEN.ctl : (eng.currentStep()?.ctl || null); }, // a free page (exit) has no controller annotation at all
+    stepFree: () => { const st = eng.getState(); return !!st.mission && !st.finished && !!eng.currentStep()?.free; },
     stepBoard: () => { const st = eng.getState(); if (orient.active || entryPending || view !== 'auto' || !st.mission || st.finished) return null; return eng.currentStep()?.board || null; },
     entryBoard: () => (orient.active ? TUT_ORIENT[orient.phase].board : null), get entryPending() { return entryPending; }, entryPhase: () => orient.phase, get entryDone() { return orient.done; },
     widgets: (opts = {}) => {
