@@ -15,7 +15,7 @@
 //   currentStep(), listMissions(), isUnlocked(id), nextMissionId(), setEnv({arAvailable})
 // Unlock: M(n) is open once every earlier mission that exists on this device is done (or skipped); skipAll opens everything. A mission that does not exist
 // here (requiresAr without AR) is neither startable nor in the way of the next one. listMissions() rows carry stepNo = index + 1 (the ステップN of the lists; fixed, also while the step is unavailable).
-import { TUTORIAL_MISSIONS, TUT_FEEDBACK } from './tutorial-data.js?v=20261026-build673';
+import { TUTORIAL_MISSIONS, TUT_FEEDBACK } from './tutorial-data.js?v=20261027-build680';
 // NOTHING is saved or loaded. The progress lives in memory only (this page): every page load / every 「チュートリアルを始める」 starts from ステップ1; a value an older build left in
 // localStorage (vrl.tutorial.v1) is never read (tutorial-ui.js removes it once).
 const emptyProgress=()=>({v:1,done:{},skipAll:false,last:null});

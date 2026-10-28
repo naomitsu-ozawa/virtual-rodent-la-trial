@@ -29,7 +29,7 @@ function loadSampleDemoFromSource() {
 function depsTemplate(fetched = [], indexFiles = ['a.dcm'], hasCache = false) {
   const cache = { match: async () => null, put: async () => {} };
   return {
-    loadPhase: () => {}, progLabel: {}, bar: { style: {} }, footer: {}, progress: () => {}, tr: k => k, fmt: n => String(n),
+    loadStat: () => {}, loadStatTime: () => {}, loadPhase: () => {}, progLabel: {}, bar: { style: {} }, footer: {}, progress: () => {}, tr: k => k, fmt: n => String(n),
     DEFAULT_SAMPLE: 'sample1', SAMPLE_CACHE: 'cache', withTimeout: p => Promise.resolve(p),
     sampleIndexUrl, sampleSliceUrl, sampleCacheKey,
     location: new URL(SITE + 'index.html'),

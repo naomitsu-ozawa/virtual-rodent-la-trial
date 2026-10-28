@@ -141,7 +141,7 @@ describe('slice fill (slice tab row + shader guards, static)', () => {
     expect(v).not.toMatch(/URLSearchParams[^;]*ctShadeBright|get\('ctShadeBright'\)/);
   });
   it('ctShadeContrast: 50..200 % in 10 % steps, default 170 %, a menu preference like ctShadeBright (not an event view value, no URL parameter); clamped before the shader', () => {
-    expect(v).toContain('ctShade:1,ctShadeBright:1.8,ctShadeContrast:1.7,laserStyle:1}');
+    expect(v).toContain('ctShade:1,ctShadeBright:1.8,ctShadeContrast:1.7,laserStyle:2}');
     expect(v).toContain('const CT_CONTRAST_MIN=0.5,CT_CONTRAST_MAX=2,CT_CONTRAST_STEP=0.1,ctContrastOf=v=>{v=+v;return Number.isFinite(v)?Math.min(CT_CONTRAST_MAX,Math.max(CT_CONTRAST_MIN,Math.round(v*10)/10)):DEFAULTS.ctShadeContrast};');
     expect(v).toContain('ctShadeContrast:{value:1.7}'); expect(v).toContain('u.ctShadeContrast.value=ctContrastOf(settings.ctShadeContrast);');
     expect(v).toContain("const EVENT_VIEW_KEYS=['cut','cap','sliceAir','sliceTint','sliceOpacity','labelSize'];");
@@ -183,9 +183,9 @@ describe('slice fill (slice tab row + shader guards, static)', () => {
     expect(SLICE_SEG_ALPHA).toBe(0.95); expect(v).toContain('#define SEG_ALPHA 0.95 ');
   });
   it('host: the slice state comes from sliceDrawState, fed with ui.sliceClear (so the thumbstick click and the double pinch, which only toggle it, draw the same as 0 %)', () => {
-    expect(v).toContain('sliceDrawState({on:section.on&&!bench.noSection,clear:ui.sliceClear,opacity:settings.sliceOpacity,tint:settings.sliceTint,ctShade:settings.ctShade})');
+    expect(v).toContain('sliceDrawState({on:section.on&&!bench.noSection&&sliceReady(),clear:ui.sliceClear,opacity:settings.sliceOpacity,tint:settings.sliceTint,ctShade:settings.ctShade})');
     expect(v).toContain('u.sliceSegOnly.value=d.segOnly;u.sliceOpacity.value=d.opacity');
-    const i0 = v.indexOf('u.sliceOpacity.value=section.on&&!bench.noSection&&!ui.sliceClear?settings.sliceOpacity:0;'), i1 = v.indexOf('const d=sliceDrawState(');
+    const i0 = v.indexOf('u.sliceOpacity.value=section.on&&!bench.noSection&&!ui.sliceClear&&sliceReady()?settings.sliceOpacity:0;'), i1 = v.indexOf('const d=sliceDrawState(');
     expect(i0).toBeGreaterThan(0); expect(i1).toBeGreaterThan(i0); // the original assignment stays; sliceDrawState overrides it right after (a cleared slice no longer ends as nothing)
     expect(v.match(/ui\.sliceClear=/g).length).toBeGreaterThan(2); // toggled by toggleSliceClear (stick / pinch), reset by the slider and the reset
     expect(v).toContain('const toggleSliceClear=c=>{ui.sliceClear=!ui.sliceClear;');

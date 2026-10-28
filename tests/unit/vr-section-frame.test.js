@@ -44,7 +44,7 @@ describe('the section limit is 10', () => {
     expect(has(src, 'const MAX_PLANES=MAX_SECTION_PLANES')).toBe(true);
     expect(has(src, 'u.planeCount.value=n;u.planeCut.value=cutBits;')).toBe(true);
     expect(has(src, 'u.cutPlanes.value[n].set(tmpN.x,tmpN.y,tmpN.z,tmpN.dot(tmpP));if(pl.cut&&settings.cut)cutBits|=1<<n;n++;')).toBe(true);
-    expect(has(src, "case'section-add':return planes.length<MAX_PLANES;")).toBe(true);
+    expect(has(src, "case'section-add':return planes.length<MAX_PLANES&&sliceReady();")).toBe(true);
     expect(has(src, "case'section-add':if(planes.length<MAX_PLANES)addPlane(c);break;")).toBe(true);
     expect(has(src, 'if(planes.length>=MAX_PLANES){pulse(c,0.15,30);ui.flash=L.maxPlanes;')).toBe(true);
     expect(src).toContain("maxPlanes:'断面は10枚までです'"); expect(src).toContain("maxPlanes:'Up to 10 planes'");

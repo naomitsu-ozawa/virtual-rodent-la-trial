@@ -130,10 +130,13 @@ describe('vr-view.js uses the occupancy (static)', () => {
  });
  it('the brick texture is RGBA32F with four floats per brick, filled once in prepareVrData for both grids', () => {
   expect(src).toContain('b.format=THREE.RGBAFormat;b.type=THREE.FloatType;');
-  expect(src).toContain('mm=new Float32Array(bx*by*bz*4)');
-  expect(src).toContain('const b=((k*by+j)*bx+i)*4,a=(lo-bias)*slope+intercept');
+  // the bricks are computed by vr-volume-prep.js computeBricksOf (also in the worker); the occupancy is computed in the worker too and written here, once, for both grids
+  const prep = readFileSync(new URL('../../docs/vr-volume-prep.js', import.meta.url), 'utf8');
+  expect(prep).toContain('mm = new Float32Array(bx * by * bz * 4)');
+  expect(prep).toContain('const b = ((k * by + j) * bx + i) * 4, a = (lo - bias) * slope + intercept');
   expect(src).toContain("from './vr-brick-occupancy.js?v=");
-  expect(src).toContain('for(const g of [vd,half])if(g?.bricks)writeBrickOccupancy(g.bricks,brickOccupancy(edit,g.brickDims));');
+  expect(prep).toContain('const occFull = brickOccupancy(edit, m.brickDimsFull), occHalf = m.brickDimsHalf ? brickOccupancy(edit, m.brickDimsHalf) : null;');
+  expect(src).toContain('writeBrickOccupancy(vd.bricks,cj.occFull);if(half)writeBrickOccupancy(half.bricks,cj.occHalf);');
   expect(src).not.toContain('b.format=THREE.RGFormat;b.type=THREE.FloatType;');
  });
  it('the membership test of the march is unchanged (the mask alone decides a mask-only segment)', () => {

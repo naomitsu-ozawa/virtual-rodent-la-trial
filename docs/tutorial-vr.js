@@ -14,14 +14,14 @@
 // A cleared ステップ waits for 次へ: the page says ステップクリア + 「次のステップに進みましょう。「次へ」を押してください」 (spoken too); the last one ends with the closing line. Nothing is remembered between sessions:
 // a session always starts at the entry guidance and ステップ1.
 // menuTarget() names the かんたんメニュー widget to light (vr-view.js draws the pointer there). Redraws: at most 2 a second, and none 20 s after the board last changed (marks still).
-import { getTutorialEngine, resetTutorialAll, restartTutorial } from './tutorial-ui.js?v=20261026-build673';
-import { createTutorialAudio, createStepReplay, createChime, speechFor, isFeedbackId, stepVoiceIds } from './tutorial-audio.js?v=20261026-build673';
-import { createOrient, ORIENT_PHASES } from './tutorial-orient.js?v=20261026-build673';
-import { resetPress, resetArmed } from './event-mode.js?v=20261026-build673';
-import { tr } from './i18n.js?v=20261026-build673';
-import { TUTORIAL_MISSIONS, TUT_SAMPLE, TUT_ORIENT, TUT_FEEDBACK, TUT_MENU_OPEN, fillTissue } from './tutorial-data.js?v=20261026-build673';
-import { GUIDE_SLIDES, guideSlide, slideItem, itemRect, loc, createSlideImages, SLIDE_W, SLIDE_H } from './tutorial-slides.js?v=20261026-build673';
-import { drawPointer, drawKnobHint, drawStepFrame, drawDoneMark, animPhase, animKey, GOLD } from './tutorial-marks.js?v=20261026-build673';
+import { getTutorialEngine, resetTutorialAll, restartTutorial } from './tutorial-ui.js?v=20261027-build680';
+import { createTutorialAudio, createStepReplay, createChime, speechFor, isFeedbackId, stepVoiceIds } from './tutorial-audio.js?v=20261027-build680';
+import { createOrient, ORIENT_PHASES } from './tutorial-orient.js?v=20261027-build680';
+import { resetPress, resetArmed } from './event-mode.js?v=20261027-build680';
+import { tr } from './i18n.js?v=20261027-build680';
+import { TUTORIAL_MISSIONS, TUT_SAMPLE, TUT_ORIENT, TUT_FEEDBACK, TUT_MENU_OPEN, fillTissue } from './tutorial-data.js?v=20261027-build680';
+import { GUIDE_SLIDES, guideSlide, slideItem, itemRect, loc, createSlideImages, SLIDE_W, SLIDE_H } from './tutorial-slides.js?v=20261027-build680';
+import { drawPointer, drawKnobHint, drawStepFrame, drawDoneMark, animPhase, animKey, GOLD } from './tutorial-marks.js?v=20261027-build680';
 
 export const FLASH_MS = 1100;
 export function tutorialModeOn(api = globalThis.__vrlSettings) {

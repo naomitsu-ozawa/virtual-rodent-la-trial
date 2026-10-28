@@ -7,6 +7,7 @@
 //
 // IndexedDB layout: 'entries' {key, bytes, slices, bytesPerSlice, info,
 // complete, created, lastUsed}; 'slices' keyed [key, index] -> Uint8Array.
+import { protectedKeys } from './vr-prep-cache.js?v=20261027-build680';
 const DB_NAME='vrl-gpu-volume-cache',DB_VERSION=1,FORMAT=1;
 
 export async function cacheKey(parts){
@@ -59,9 +60,9 @@ export async function openVolumeCache({indexedDB=globalThis.indexedDB,now=()=>Da
   async prune(budgetBytes,{keep=null,staleMs=10*60*1000}={}){
    const all=await entries(),t=now();
    for(const e of all)if(!e.complete&&e.key!==keep&&t-e.created>staleMs)await remove(e.key);
-   const live=(await entries()).filter(e=>e.complete).sort((a,b)=>a.lastUsed-b.lastUsed);
+   const live=(await entries()).filter(e=>e.complete).sort((a,b)=>a.lastUsed-b.lastUsed),prot=protectedKeys(live); // the practice levels' standard entries (体験会モード) are never evicted: when only they are left over the budget, the cache stays over it (no error)
    let total=live.reduce((a,e)=>a+e.bytes,0);
-   for(const e of live){if(total<=budgetBytes)break;if(e.key===keep)continue;await remove(e.key);total-=e.bytes}
+   for(const e of live){if(total<=budgetBytes)break;if(e.key===keep||prot.has(e.key))continue;await remove(e.key);total-=e.bytes}
    return total;
   },
   async clear(){const tx=db.transaction(['entries','slices'],'readwrite');tx.objectStore('entries').clear();tx.objectStore('slices').clear();await done(tx)},
@@ -102,5 +103,5 @@ const datasetId=d=>typeof d==='string'?d:JSON.stringify(d??null);
 export async function pruneOtherFilterSettings(cache,{kind,dataset,plan=null,filter},keep){
  if(globalThis.__vrlSettings?.get?.('cacheAutoPrune')===false)return;
  const id=datasetId(dataset);
- try{for(const e of await cache.list()){const i=e.info||{};if(e.key!==keep&&i.kind===kind&&datasetId(i.dataset)===id&&(plan==null||i.plan===plan)&&i.filter!=null&&i.filter!==filter)await cache.remove(e.key)}}catch(e){console.warn('Cache auto-prune failed.',e)}
+ try{const all=await cache.list(),prot=protectedKeys(all);for(const e of all){const i=e.info||{};if(e.key!==keep&&!prot.has(e.key)&&i.kind===kind&&datasetId(i.dataset)===id&&(plan==null||i.plan===plan)&&i.filter!=null&&i.filter!==filter)await cache.remove(e.key)}}catch(e){console.warn('Cache auto-prune failed.',e)}
 }

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 const src = readFileSync(new URL('../../docs/vr-view.js', import.meta.url), 'utf8');
 const grab = re => { const m = re.exec(src); if (!m) throw new Error('not found: ' + re); return m[0]; };
-const versionLine = grab(/const DEFAULTS_VERSION=3,DEFAULTS_VERSION_KEYS=\[[^\]]*\],DEFAULTS_VERSION_STEPS=[^\n]*\]\];/);
+const versionLine = grab(/const DEFAULTS_VERSION=4,DEFAULTS_VERSION_KEYS=\[[^\]]*\],DEFAULTS_VERSION_STEPS=[^\n]*\]\];/);
 const defaultsLine = grab(/const DEFAULTS=\{cap:1,[^\n]*\};/);
 const loadFn = grab(/function loadSettings\(\)\{[^\n]*\}/), saveFn = grab(/function saveSettings\(v\)\{[^\n]*\}/);
 const migrateFn = grab(/function migrateStartValues\(v\)\{[^\n]*\}/);
@@ -40,12 +40,12 @@ describe('VR view settings: a device with the earlier start values gets the new 
     const { migrateStartValues, DEFAULTS } = make();
     const v = { cap: 0, sliceAir: -500, sliceTint: 0.5, menuMode: 0, cut: 1, sliceOpacity: 0.7, help: 1, quality: 3, data: 2, foveation: 0, vres: 2, wheel: ['x'], labelSize: 2 };
     expect(migrateStartValues(v)).toBe(true);
-    expect(v).toMatchObject({ sliceAir: -600, sliceTint: 0.45, menuMode: 1, cut: 2, sliceOpacity: 0.6, help: 2, ctShadeBright: 1.8, ctShadeContrast: 1.7, dv: 3 });
+    expect(v).toMatchObject({ sliceAir: -600, sliceTint: 0.45, menuMode: 1, cut: 2, sliceOpacity: 0.6, help: 2, ctShadeBright: 1.8, ctShadeContrast: 1.7, dv: 4 });
     expect(v).toMatchObject({ cap: 0, quality: 3, data: 2, foveation: 0, vres: 2, wheel: ['x'], labelSize: 2 });
   });
   it('once only: after it, the visitor / venue choices are kept', () => {
     const { migrateStartValues, DEFAULTS } = make();
-    const v = { ...DEFAULTS, dv: 3, sliceOpacity: 0.3, help: 0, cut: 0, ctShadeBright: 1.2, ctShadeContrast: 0.9 };
+    const v = { ...DEFAULTS, dv: 4, sliceOpacity: 0.3, help: 0, cut: 0, ctShadeBright: 1.2, ctShadeContrast: 0.9 };
     expect(migrateStartValues(v)).toBe(false);
     expect(v).toMatchObject({ sliceOpacity: 0.3, help: 0, cut: 0, ctShadeBright: 1.2, ctShadeContrast: 0.9 });
   });
@@ -53,12 +53,29 @@ describe('VR view settings: a device with the earlier start values gets the new 
     const { migrateStartValues } = make();
     const v = { ...OLD, dv: 2, sliceAir: -250, sliceOpacity: 0.3, help: 0, cut: 1, ctShadeBright: 1.3, ctShadeContrast: 1 };
     expect(migrateStartValues(v)).toBe(true);
-    expect(v).toMatchObject({ ctShadeBright: 1.8, ctShadeContrast: 1.7, dv: 3, sliceAir: -250, sliceOpacity: 0.3, help: 0, cut: 1, menuMode: 0, sliceTint: 0.5, quality: 3 });
+    expect(v).toMatchObject({ ctShadeBright: 1.8, ctShadeContrast: 1.7, dv: 4, sliceAir: -250, sliceOpacity: 0.3, help: 0, cut: 1, menuMode: 0, sliceTint: 0.5, quality: 3 });
     expect(migrateStartValues(v)).toBe(false);
   });
   it('the start values: 濃淡の明るさ 180 %, 濃淡のコントラスト 170 %', () => {
     const { DEFAULTS } = make();
     expect(DEFAULTS.ctShadeBright).toBe(1.8); expect(DEFAULTS.ctShadeContrast).toBe(1.7);
+  });
+  it('a saved laserStyle 1 becomes 2 (帯・太) once; a later choice of 1 stays; other keys stay', () => {
+    const { migrateStartValues, DEFAULTS } = make();
+    const v = { ...DEFAULTS, dv: 3, laserStyle: 1, sliceOpacity: 0.3, help: 0 };
+    expect(migrateStartValues(v)).toBe(true);
+    expect(v).toMatchObject({ laserStyle: 2, dv: 4, sliceOpacity: 0.3, help: 0 });
+    v.laserStyle = 1; // the visitor picks 帯・細 in the menu
+    expect(migrateStartValues(v)).toBe(false); expect(v.laserStyle).toBe(1);
+  });
+  it('through the real loadSettings, a stored laserStyle 1 is reset once and saved; the choice made afterwards survives later loads', () => {
+    const store = {};
+    const run = () => new Function('localStorage', 'DEFAULT_WHEEL', 'LABEL_HIDE_DEFAULT', 'normalizeWheelItems', 'migrateWheelSectionFlip', `const SETTINGS_KEY='vrl-vr-settings-5',OLD_KEYS=['vrl-vr-settings-4','vrl-vr-settings-3'];\n${versionLine}\n${defaultsLine}\n${migrateFn}\n${saveFn}\n${loadFn}\nreturn loadSettings();`)(
+      { getItem: k => store[k] ?? null, setItem: (k, v) => { store[k] = v; } }, [1, 2, 3], 1, w => w, v => ({ wheel: v.wheel, wheelMig: v.wheelMig || 0, changed: false }));
+    store['vrl-vr-settings-5'] = JSON.stringify({ ...OLD, dv: 3, laserStyle: 1 });
+    expect(run().laserStyle).toBe(2); expect(JSON.parse(store['vrl-vr-settings-5'])).toMatchObject({ laserStyle: 2, dv: 4 });
+    store['vrl-vr-settings-5'] = JSON.stringify({ ...JSON.parse(store['vrl-vr-settings-5']), laserStyle: 1 }); // chosen in the menu afterwards
+    expect(run().laserStyle).toBe(1); expect(run().laserStyle).toBe(1);
   });
   it('DEFAULTS carries no dv (it would mask the stored one)', () => expect(defaultsLine).not.toMatch(/\bdv:/));
   it('the real loadSettings: an old stored object (no dv) is migrated and saved; the venue keys stay; a second load changes nothing; the user\'s later choice is kept', () => {
@@ -67,10 +84,10 @@ describe('VR view settings: a device with the earlier start values gets the new 
       { getItem: k => store[k] ?? null, setItem: (k, v) => { store[k] = v; } }, [1, 2, 3], 1, w => w, v => ({ wheel: v.wheel, wheelMig: v.wheelMig || 0, changed: false }));
     store['vrl-vr-settings-5'] = JSON.stringify(OLD);
     const v = run();
-    expect(v).toMatchObject({ sliceAir: -600, sliceTint: 0.45, menuMode: 1, cut: 2, sliceOpacity: 0.6, help: 2, dv: 3, quality: 3, data: 2, foveation: 0, vres: 2, labelSize: 2 });
-    expect(JSON.parse(store['vrl-vr-settings-5'])).toMatchObject({ sliceAir: -600, sliceOpacity: 0.6, dv: 3, quality: 3 }); // saved
+    expect(v).toMatchObject({ sliceAir: -600, sliceTint: 0.45, menuMode: 1, cut: 2, sliceOpacity: 0.6, help: 2, dv: 4, quality: 3, data: 2, foveation: 0, vres: 2, labelSize: 2 });
+    expect(JSON.parse(store['vrl-vr-settings-5'])).toMatchObject({ sliceAir: -600, sliceOpacity: 0.6, dv: 4, quality: 3 }); // saved
     const saved = store['vrl-vr-settings-5'];
-    expect(run()).toMatchObject({ sliceAir: -600, dv: 3 }); expect(store['vrl-vr-settings-5']).toBe(saved);
+    expect(run()).toMatchObject({ sliceAir: -600, dv: 4 }); expect(store['vrl-vr-settings-5']).toBe(saved);
     store['vrl-vr-settings-5'] = JSON.stringify({ ...JSON.parse(saved), sliceOpacity: 0.3, cut: 1 });
     expect(run()).toMatchObject({ sliceOpacity: 0.3, cut: 1, sliceAir: -600 });
   });
@@ -78,7 +95,7 @@ describe('VR view settings: a device with the earlier start values gets the new 
     const store = {};
     const v = new Function('localStorage', 'DEFAULT_WHEEL', 'LABEL_HIDE_DEFAULT', 'normalizeWheelItems', 'migrateWheelSectionFlip', `const SETTINGS_KEY='vrl-vr-settings-5',OLD_KEYS=['vrl-vr-settings-4','vrl-vr-settings-3'];\n${versionLine}\n${defaultsLine}\n${migrateFn}\n${saveFn}\n${loadFn}\nreturn loadSettings();`)(
       { getItem: k => store[k] ?? null, setItem: (k, x) => { store[k] = x; } }, [1], 1, w => w, v2 => ({ wheel: v2.wheel, wheelMig: 0, changed: false }));
-    expect(v).toMatchObject({ sliceAir: -600, sliceOpacity: 0.6, sliceTint: 0.45, help: 2, menuMode: 1, cut: 2, dv: 3 });
+    expect(v).toMatchObject({ sliceAir: -600, sliceOpacity: 0.6, sliceTint: 0.45, help: 2, menuMode: 1, cut: 2, dv: 4 });
   });
 });
 
@@ -96,7 +113,7 @@ describe('slice transparent toggle on the thumbstick click', () => {
     expect(fn).not.toMatch(/settings\.sliceOpacity\s*=/);
   });
   it('the volume is drawn at 0 while on, at the setting otherwise; the slider (simple and full menu) and the resets turn it off', () => {
-    expect(src).toContain('u.sliceOpacity.value=section.on&&!bench.noSection&&!ui.sliceClear?settings.sliceOpacity:0;');
+    expect(src).toContain('u.sliceOpacity.value=section.on&&!bench.noSection&&!ui.sliceClear&&sliceReady()?settings.sliceOpacity:0;');
     expect(src.match(/set:v=>\{ui\.sliceClear=false;settings\.sliceOpacity=/g)?.length).toBe(2);
     expect(src).toContain('ui.sliceClear=false;sliceToast.until=0;sliceToast.mesh.visible=false;resetEventViewSettings(settings);');
     expect(src).toContain('const ui={sliceClear:false,'); // a new session starts with it off
