@@ -32,8 +32,8 @@ describe('the controller model', () => {
     expect(m.ring.parent).toBe(m.group); expect(m.arrows.every(a => a.parent === m.group)).toBe(true); // not under the hidden body
     poseHint(THREE, m, { btn: 'face' }, 0); expect(m.ring.visible).toBe(true); expect(m.arrows[0].visible).toBe(true);
     expect([m.ring.position.x, m.ring.position.y, m.ring.position.z]).toEqual(BUTTON_SPOTS.face.p);
-    const c = new THREE.Group(); c.userData.source = { handedness: 'right' }; const hints = createControllerHints(THREE, { controllers: [c] }); hints.update(0, { btn: 'face' });
-    const visibleMeshes = []; c.traverseVisible(o => { if (o.isMesh) visibleMeshes.push(o); }); expect(visibleMeshes.length).toBe(3); expect(visibleMeshes.some(o => o.geometry.type === 'TorusGeometry')).toBe(true); /* ring + the arrow's cone and shaft only */ hints.dispose();
+    const c = new THREE.Group(), g = new THREE.Group(); c.userData.source = { handedness: 'right' }; const hints = createControllerHints(THREE, { controllers: [c], grips: [g] }); hints.update(0, { btn: 'face' });
+    const visibleMeshes = []; g.traverseVisible(o => { if (o.isMesh) visibleMeshes.push(o); }); expect(visibleMeshes.length).toBe(3); expect(visibleMeshes.some(o => o.geometry.type === 'TorusGeometry')).toBe(true); /* ring + the arrow's cone and shaft only */ hints.dispose();
   });
   it('the blinking ring sits on the named button and pulses; the arrow points at it from the outside and bobs; unknown spec hides both', () => {
     const m = buildControllerModel(THREE);
@@ -51,25 +51,32 @@ describe('the controller model', () => {
     expect(poseHint(THREE, m, null, 0)).toBe(false); expect(m.ring.visible).toBe(false); expect(m.arrows.some(a => a.visible)).toBe(false);
   });
   it('the left hand is the mirror of the right hand (the face button / grip are on the other side)', () => {
-    expect(BUTTON_SPOTS.face.p[0]).toBeGreaterThan(0); expect(BUTTON_SPOTS.grip.p[0]).toBeLessThan(0);
-    const scene = new THREE.Scene(), c = [new THREE.Group(), new THREE.Group()]; c[0].userData.source = { handedness: 'right' }; c[1].userData.source = { handedness: 'left' }; c.forEach(x => scene.add(x));
-    const hints = createControllerHints(THREE, { controllers: c }); hints.update(0, { btn: 'face' });
-    const wx = (ctl) => { const g = ctl.children[0]; ctl.updateMatrixWorld(true); return new THREE.Vector3(...BUTTON_SPOTS.face.p).applyMatrix4(g.matrixWorld).x; };
-    expect(wx(c[0])).toBeGreaterThan(0); expect(wx(c[1])).toBeLessThan(0); hints.dispose();
+    // grip space of the right controller (meta-quest-touch-plus right.glb): the stick is on the outer (+x) side, A / B and the grip button on the inner (-x) side
+    expect(BUTTON_SPOTS.face.p[0]).toBeLessThan(0); expect(BUTTON_SPOTS.grip.p[0]).toBeLessThan(0); expect(BUTTON_SPOTS.stick.p[0]).toBeGreaterThan(0);
+    const scene = new THREE.Scene(), c = [new THREE.Group(), new THREE.Group()], gr = [new THREE.Group(), new THREE.Group()]; c[0].userData.source = { handedness: 'right' }; c[1].userData.source = { handedness: 'left' }; c.forEach(x => scene.add(x)); gr.forEach(x => scene.add(x));
+    const hints = createControllerHints(THREE, { controllers: c, grips: gr }); hints.update(0, { btn: 'face' });
+    const wx = (grip, btn = 'face') => { const g = grip.children[0]; grip.updateMatrixWorld(true); return new THREE.Vector3(...BUTTON_SPOTS[btn].p).applyMatrix4(g.matrixWorld).x; };
+    expect(wx(gr[0])).toBeLessThan(0); expect(wx(gr[1])).toBeGreaterThan(0); expect(wx(gr[0], 'stick')).toBeGreaterThan(0); expect(wx(gr[1], 'stick')).toBeLessThan(0); hints.dispose();
   });
 });
 describe('createControllerHints: both controllers, hidden without a spec, nothing on a tracked hand', () => {
-  const mk = (hand = false) => { const scene = new THREE.Scene(), c = [new THREE.Group(), new THREE.Group()]; c.forEach((x, i) => { x.userData.source = { handedness: i ? 'left' : 'right' }; scene.add(x); });
-    return { c, hints: createControllerHints(THREE, { controllers: c, isHand: src => hand && src.handedness === 'left' }) }; };
+  const mk = (hand = false) => { const scene = new THREE.Scene(), c = [new THREE.Group(), new THREE.Group()], g = [new THREE.Group(), new THREE.Group()]; c.forEach((x, i) => { x.userData.source = { handedness: i ? 'left' : 'right' }; scene.add(x); scene.add(g[i]); });
+    return { c, g, hints: createControllerHints(THREE, { controllers: c, grips: g, isHand: src => hand && src.handedness === 'left' }) }; };
   it('shown on both controllers while a spec is given, hidden with none; built on first use', () => {
-    const { c, hints } = mk(); expect(hints.count).toBe(0); hints.update(0, null); expect(hints.count).toBe(0);
-    hints.update(0, { btn: 'trigger' }); expect(hints.count).toBe(2); expect(c.every(x => x.children[0].visible)).toBe(true);
-    hints.update(100, null); expect(c.every(x => !x.children[0].visible)).toBe(true); hints.update(200, { btn: 'grip' }); expect(c.every(x => x.children[0].visible)).toBe(true);
-    hints.dispose(); expect(c.every(x => x.children.length === 0)).toBe(true);
+    const { c, g, hints } = mk(); expect(hints.count).toBe(0); hints.update(0, null); expect(hints.count).toBe(0);
+    hints.update(0, { btn: 'trigger' }); expect(hints.count).toBe(2); expect(g.every(x => x.children[0].visible)).toBe(true);
+    expect(c.every(x => x.children.length === 0)).toBe(true); // the hints hang on the grip spaces, never on the ray controllers
+    hints.update(100, null); expect(g.every(x => !x.children[0].visible)).toBe(true); hints.update(200, { btn: 'grip' }); expect(g.every(x => x.children[0].visible)).toBe(true);
+    hints.dispose(); expect(g.every(x => x.children.length === 0)).toBe(true);
   });
   it('a hand-tracked controller shows nothing (no buttons); a disconnected one (visible false) neither', () => {
-    const { c, hints } = mk(true); hints.update(0, { btn: 'trigger' }); expect(c[0].children[0].visible).toBe(true); expect(c[1].children.length === 0 || !c[1].children[0].visible).toBe(true);
-    c[0].visible = false; hints.update(10, { btn: 'trigger' }); expect(c[0].children[0].visible).toBe(false);
+    const { g, hints } = mk(true); hints.update(0, { btn: 'trigger' }); expect(g[0].children[0].visible).toBe(true); expect(g[1].children.length === 0 || !g[1].children[0].visible).toBe(true);
+    g[0].visible = false; hints.update(10, { btn: 'trigger' }); expect(g[0].children[0].visible).toBe(false); // no grip pose (three sets grip.visible from the pose): hidden
+  });
+  it('without a grip pose nothing is shown and nothing falls back to the ray controller; the hint returns when the pose does', () => {
+    const { c, g, hints } = mk(); g.forEach(x => { x.visible = false; }); hints.update(0, { btn: 'trigger' }); expect(hints.count).toBe(0); expect(g.every(x => x.children.length === 0)).toBe(true); expect(c.every(x => x.children.length === 0)).toBe(true);
+    g[0].visible = true; hints.update(10, { btn: 'trigger' }); expect(g[0].children[0].visible).toBe(true); expect(g[1].children.length).toBe(0); expect(hints.count).toBe(1);
+    const noGrip = createControllerHints(THREE, { controllers: c }); noGrip.update(0, { btn: 'trigger' }); expect(noGrip.count).toBe(0); expect(c.every(x => x.children.length === 0)).toBe(true);
   });
 });
 describe('the direction arrow at the edge of the view', () => {
@@ -116,16 +123,16 @@ describe('review fixes', () => {
     expect(tori).toEqual([m.ring]);
   });
   it('facelow = A / X (the lower face button): another spot than B / Y, on the same side, used for the held press that opens the menu', () => {
-    expect(BUTTON_SPOTS.facelow).toBeTruthy(); expect(BUTTON_SPOTS.facelow.p).not.toEqual(BUTTON_SPOTS.face.p); expect(BUTTON_SPOTS.facelow.p[0]).toBeGreaterThan(0);
+    expect(BUTTON_SPOTS.facelow).toBeTruthy(); expect(BUTTON_SPOTS.facelow.p).not.toEqual(BUTTON_SPOTS.face.p); expect(BUTTON_SPOTS.facelow.p[0]).toBeLessThan(0); expect(BUTTON_SPOTS.facelow.p[0]).toBeGreaterThan(BUTTON_SPOTS.face.p[0]); expect(BUTTON_SPOTS.facelow.p[2]).toBeGreaterThan(BUTTON_SPOTS.face.p[2]); // same (inner, -x) side; A is behind (+z) and higher than B
     const h = hintArrows({ btn: 'facelow', motion: 'hold' }); expect(h).toHaveLength(1); expect(h[0].still).toBe(true); expect(h[0].bob).toBe(0);
     const m = buildControllerModel(THREE); poseHint(THREE, m, { btn: 'facelow', motion: 'hold' }, 0); expect(m.ring.visible).toBe(true); expect([m.ring.position.x, m.ring.position.y, m.ring.position.z]).toEqual(BUTTON_SPOTS.facelow.p);
   });
   it('a hint can be limited to one hand (spec.hand); without it both hands show it', () => {
-    const scene = new THREE.Scene(), c = [new THREE.Group(), new THREE.Group()]; c[0].userData.source = { handedness: 'right' }; c[1].userData.source = { handedness: 'left' }; c.forEach(x => scene.add(x));
-    const hints = createControllerHints(THREE, { controllers: c });
-    hints.update(0, { btn: 'trigger', hand: 'right' }); expect(c[0].children[0].visible).toBe(true); expect(c[1].children.length === 0 || !c[1].children[0].visible).toBe(true);
-    hints.update(10, { btn: 'trigger', hand: 'left' }); expect(c[0].children[0].visible).toBe(false); expect(c[1].children[0].visible).toBe(true);
-    hints.update(20, { btn: 'trigger' }); expect(c.every(x => x.children[0].visible)).toBe(true); hints.dispose();
+    const scene = new THREE.Scene(), c = [new THREE.Group(), new THREE.Group()], g = [new THREE.Group(), new THREE.Group()]; c[0].userData.source = { handedness: 'right' }; c[1].userData.source = { handedness: 'left' }; c.forEach(x => scene.add(x)); g.forEach(x => scene.add(x));
+    const hints = createControllerHints(THREE, { controllers: c, grips: g });
+    hints.update(0, { btn: 'trigger', hand: 'right' }); expect(g[0].children[0].visible).toBe(true); expect(g[1].children.length === 0 || !g[1].children[0].visible).toBe(true);
+    hints.update(10, { btn: 'trigger', hand: 'left' }); expect(g[0].children[0].visible).toBe(false); expect(g[1].children[0].visible).toBe(true);
+    hints.update(20, { btn: 'trigger' }); expect(g.every(x => x.children[0].visible)).toBe(true); hints.dispose();
   });
   it('nothing is allocated per frame: the arrow tables are shared, poseHint / the edge arrow / the menu arrow create no vectors, quaternions or arrays after the first frame', () => {
     expect(hintArrows({ btn: 'stick', motion: 'updown' })).toBe(hintArrows({ btn: 'stick', motion: 'updown' })); expect(hintArrows({ btn: 'grip' })).toBe(hintArrows({ btn: 'grip' })); expect(Object.isFrozen(hintArrows({ btn: 'grip' }))).toBe(true);
