@@ -9,8 +9,8 @@
 // that another clipping section has cut away. A section whose intersection is outside the volume is skipped, never clamped.
 // Voxel rule: voxel i covers the fraction [i/n, (i+1)/n) of the box along its axis, so the index is floor(fraction * n); a point
 // outside [0,1) on any axis (the far face itself included) is NOT recorded: it is never moved into the volume.
-import { createComment, addComment, getComments, removeComment, restoreComment, updateCommentPosition, updateCommentColor, commentMatchesSeries } from './comments.js?v=20261028-build686';
-import { marchClassificationHitInfo } from './vr-pick.js?v=20261028-build686';
+import { createComment, addComment, getComments, removeComment, restoreComment, updateCommentPosition, updateCommentColor, commentMatchesSeries } from './comments.js?v=20261028-build687';
+import { marchClassificationHitInfo } from './vr-pick.js?v=20261028-build687';
 const T_MIN=1e-6,EDGE_EPS=1e-4;
 
 // t of the ray o + t*q on the plane, or null (parallel, or behind the origin)
@@ -243,6 +243,18 @@ export function resolveTriggerTarget(c={}){
  if(best)return{kind:best.kind,ref:best.ref};
  if(c.glass&&hitT(c.glass)!==null)return{kind:'section',ref:c.glass}; // the empty inside of a section frame: last, after everything that was a hit before
  return c.canDrag?{kind:'empty',ref:null}:{kind:'none',ref:null};
+}
+
+export const volumeGripAllowed=({rayOn=true,hit=null}={})=>!!rayOn&&!!hit;
+// trigger: the section this press may drag, from the target resolved at the press. {pl,rec} or null.
+//  - kind 'section' (frame band / number tag / the empty inside of a frame = the white glow): that section
+//  - kind 'record' on the selected section's plane in section mode (recordOk): the selected section, with the higher threshold (rec)
+//  - anything else (empty space, tissue, a point ...): none
+export function pressDragSection(res,{recordOk=false,selected=null}={}){
+ if(!res)return null;
+ if(res.kind==='section'&&res.ref&&res.ref.pl)return{pl:res.ref.pl,rec:false};
+ if(res.kind==='record'&&recordOk&&selected)return{pl:selected,rec:true};
+ return null;
 }
 
 // ---- press classification ----
