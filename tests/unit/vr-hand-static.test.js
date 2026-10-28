@@ -70,7 +70,7 @@ describe('vr-view.js: hand tracking is optional and every hand branch is guarded
     expect(g).toContain("else if(ev==='end')ungrab(c);");
     expect(bodyAfter(hv, 'frame(now){')).toContain('if(tick(c,hs,now)&&(c.visible||hs.grab.active||hs.pinch.pressed)){grabStep(c,hs,now);carryStep(c,hs,now);pinchStep(c,hs,now)}'); // after the isHand(s) continue
     expect(bodyAfter(hv, 'frame(now){').indexOf('grabStep(')).toBeGreaterThan(bodyAfter(hv, 'frame(now){').indexOf('if(!isHand(s)){ctrl=true;continue}'));
-    expect(src).toContain('grab:(c,t)=>{if(t){gripStartNear(c,t);return true}if(c.userData.wristOn)return false;gripStart(c);return true}'); // no target near: the laser path, unchanged
+    expect(src).toContain('grab:(c,t)=>{if(t){gripStartNear(c,t);return true}if(c.userData.wristOn)return false;return gripStart(c)!==false}'); // no target near: the laser path, unchanged
     expect(src).toContain('ungrab:c=>{if(c.userData.drag?.fist){endDrag(c);return}gripEnd(c)}');
     expect(src).toContain('busy:c=>!!(c.userData.drag||c.userData.lblDrag||histAxis===c||dragging?.c===c||huLine.isDragging())');
     expect(src).toContain('c.userData.wristOn=!!bd.wrist;');

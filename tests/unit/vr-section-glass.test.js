@@ -84,7 +84,7 @@ describe('wiring in vr-view.js (not runnable here)', () => {
     expect(en.length).toBeLessThanOrEqual(76);
   });
   it('the press path is the band\'s: a section hit selects and drags that section (works with the slice toggled transparent: nothing here reads the slice opacity)', () => {
-    expect(src).toContain("if(res.kind==='section'&&res.ref.pl)pr.dragPl=res.ref.pl;");
+    expect(src).toContain("const pd=pressDragSection(res,{recordOk:!surfaceActive()&&!labelMode(),selected:section.selected});"); // a 'section' result (band / tag / the inside of a frame) is taken through pressDragSection
     const a = src.indexOf('const glassHit=(c,list)=>{'), b = src.indexOf('// number tag (the handle square)', a);
     expect(src.slice(a, b)).not.toMatch(/sliceOpacity|sliceClear/);
   });

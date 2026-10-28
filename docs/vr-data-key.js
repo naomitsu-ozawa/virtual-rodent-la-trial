@@ -2,10 +2,10 @@
 // filter, every segment's settings, the manual edits (their revision), the shown analysis results. Not the identity of the run arrays (they are built on demand: the VR preparation adds the runs of the hidden
 // segments, which must not look like a change by the visitor). The page records it when a practice level has finished opening (standard-open.js); the VR preparation compares it (vr-prep-cache.js isStandardOpen).
 // This module is loaded with the page (vr-view.js is loaded lazily, when VR is entered, after the level has been opened).
-import { gpuVolumeTarget } from './gpu-volume-data.js?v=20261028-build686';
-import { SEGMENT_PRESET_ORDER, gpuSegmentOrder, segmentState, segmentEditState, segmentSourceSignature } from './segments.js?v=20261028-build686';
-import { analysisRegions } from './state.js?v=20261028-build686';
-import { eventModeOn } from './event-mode.js?v=20261028-build686';
+import { gpuVolumeTarget } from './gpu-volume-data.js?v=20261028-build687';
+import { SEGMENT_PRESET_ORDER, gpuSegmentOrder, segmentState, segmentEditState, segmentSourceSignature } from './segments.js?v=20261028-build687';
+import { analysisRegions } from './state.js?v=20261028-build687';
+import { eventModeOn } from './event-mode.js?v=20261028-build687';
 
 const segAvail = g => !!g?.active && (!!g.enabled || eventModeOn()); // the same rule as vr-view.js: in 体験会モード a segment the page keeps hidden counts as available
 export function vrStateSignature() {

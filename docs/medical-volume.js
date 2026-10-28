@@ -1,11 +1,11 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.webgpu.js';
 import dicomParser from 'https://esm.sh/dicom-parser@1.8.21';
-import { canvasBackground3dUnit } from './canvas-theme.js?v=20261028-build686';
-import { lightOffsetExpr, lightingWGSL, MATERIALS, materialKey } from './lighting.js?v=20261028-build686';
-import { EDIT_MASK_MAX_BYTES, editMaskInfoWord, editMaskLayout, editMaskPlanes, fillEditMaskWords, sameU32 } from './edit-mask-texture.js?v=20261028-build686';
-import { loadStats } from './load-stats.js?v=20261028-build686'; // what the load did, for the VR switch report
-import { frameOrTimer } from './utils.js?v=20261028-build686'; // rAF or a timer (the window rAF stands still during a WebXR session)
-import { gpuRunsForTexture } from './gpu-runs.js?v=20261028-build686'; // the run-mapping functions moved to their own module (the VR preparation worker is made from them)
+import { canvasBackground3dUnit } from './canvas-theme.js?v=20261028-build687';
+import { lightOffsetExpr, lightingWGSL, MATERIALS, materialKey } from './lighting.js?v=20261028-build687';
+import { EDIT_MASK_MAX_BYTES, editMaskInfoWord, editMaskLayout, editMaskPlanes, fillEditMaskWords, sameU32 } from './edit-mask-texture.js?v=20261028-build687';
+import { loadStats } from './load-stats.js?v=20261028-build687'; // what the load did, for the VR switch report
+import { frameOrTimer } from './utils.js?v=20261028-build687'; // rAF or a timer (the window rAF stands still during a WebXR session)
+import { gpuRunsForTexture } from './gpu-runs.js?v=20261028-build687'; // the run-mapping functions moved to their own module (the VR preparation worker is made from them)
 export { gpuRunsForTexture };
 
 const UNCOMPRESSED_TS=new Set(['1.2.840.10008.1.2','1.2.840.10008.1.2.1','1.2.840.10008.1.2.2']);
