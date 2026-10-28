@@ -1,16 +1,17 @@
 // Settings dialog. Tabs: 描画 (rendering) and デバッグ (debug);
 // add a tab button + panel in ui-shell.js to extend it.
-import { settings } from './app-settings.js?v=20261026-build673';
-import { request3DRender } from './scene3d.js?v=20261026-build673';
-import { updateGpuStatus } from './gpu-compute.js?v=20261026-build673';
-import { volumeCache, updateVolumeCacheControl, volumeCacheBudget } from './gpu-volume-data.js?v=20261026-build673';
-import { tr } from './i18n.js?v=20261026-build673';
-import { askInline, armConfirm, noteInline } from './inline-ask.js?v=20261026-build673';
-import { fmt } from './utils.js?v=20261026-build673';
-import { gpuPreferenceSupported, gpuEffectivePreference, gpuHybridModeSupported, gpuEffectiveHybridMode } from './gpu-preference.js?v=20261026-build673';
-import { initDebugSwitches } from './debug-switches-ui.js?v=20261026-build673';
-import { initGpuDiagnosticsUi } from './gpu-diagnostics-ui.js?v=20261026-build673';
-import { collectGpuDiagnostics } from './gpu-diagnostics-collect.js?v=20261026-build673';
+import { settings } from './app-settings.js?v=20261027-build680';
+import { request3DRender } from './scene3d.js?v=20261027-build680';
+import { updateGpuStatus } from './gpu-compute.js?v=20261027-build680';
+import { volumeCache, updateVolumeCacheControl, volumeCacheBudget } from './gpu-volume-data.js?v=20261027-build680';
+import { tr } from './i18n.js?v=20261027-build680';
+import { askInline, armConfirm, noteInline } from './inline-ask.js?v=20261027-build680';
+import { setupEventPrepareButton } from './event-prepare-ui.js?v=20261027-build680'; // 「体験会用データを準備」
+import { fmt } from './utils.js?v=20261027-build680';
+import { gpuPreferenceSupported, gpuEffectivePreference, gpuHybridModeSupported, gpuEffectiveHybridMode } from './gpu-preference.js?v=20261027-build680';
+import { initDebugSwitches } from './debug-switches-ui.js?v=20261027-build680';
+import { initGpuDiagnosticsUi } from './gpu-diagnostics-ui.js?v=20261027-build680';
+import { collectGpuDiagnostics } from './gpu-diagnostics-collect.js?v=20261027-build680';
 export function initSettingsDialog(){
  const dlg=document.getElementById('settings-dialog'),open=document.getElementById('settings-open');if(!dlg||!open)return;
  // in the workspace UI the dialog's content lives in the 設定 panel (workspace-ui.js sets data-embedded): the same
@@ -48,6 +49,7 @@ export function initSettingsDialog(){
  initGpuDiagnosticsUi({collect:collectGpuDiagnostics});
  const limitSel=document.getElementById('set-cache-limit'),limitChange=limitSel?.onchange;if(limitSel)limitSel.onchange=async()=>{limitChange?.();await pruneToLimit(true)};
  const pruneBtn=document.getElementById('set-cache-prune');if(pruneBtn)pruneBtn.onclick=()=>pruneToLimit(false);
+ setupEventPrepareButton();
  armConfirm(document.getElementById('set-cache-clear'),async()=>{const c=await volumeCache();if(c)await c.clear();void updateVolumeCacheControl();void renderCacheList()});
  function sync(){
   const v=settings.all(),put=(id,val)=>{const el=document.getElementById(id);if(!el)return;if(el.type==='checkbox')el.checked=!!val;else el.value=String(val)};
@@ -65,7 +67,7 @@ async function renderCacheList(){
  for(const e of all){
   const i=e.info||{},row=document.createElement('div');row.className='settings-cache-row';
   const text=document.createElement('div');text.className='settings-cache-text';
-  const kind=i.kind==='segment-runs'?tr('cacheRuns'):i.kind==='filtered-plane'?tr('cachePlane'):tr('cacheVolume');
+  const kind=String(i.kind||'').startsWith('vr-')?tr('cacheVr'):i.kind==='segment-runs'?tr('cacheRuns'):i.kind==='filtered-plane'?tr('cachePlane'):tr('cacheVolume');
   const filter=i.filter?String(i.filter).slice(0,60):'';
   text.textContent=kind+(i.description?' · '+i.description:'')+(i.plan?' · '+i.plan:'')+' · '+fmt(e.bytes||0)+' · '+new Date(e.lastUsed).toLocaleString();
   if(filter){const f=document.createElement('small');f.textContent=filter;text.append(document.createElement('br'),f)}

@@ -1,4 +1,4 @@
-import { currentLanguage } from './state.js?v=20261026-build673';
+import { currentLanguage } from './state.js?v=20261027-build680';
 
 export const SHOW_DELAY=400,ESCAPE_MS=10000,CANCEL_GRACE=3000;
 

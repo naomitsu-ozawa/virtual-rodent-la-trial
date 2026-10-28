@@ -1,8 +1,12 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.webgpu.js';
 import dicomParser from 'https://esm.sh/dicom-parser@1.8.21';
-import { canvasBackground3dUnit } from './canvas-theme.js?v=20261026-build673';
-import { lightOffsetExpr, lightingWGSL, MATERIALS, materialKey } from './lighting.js?v=20261026-build673';
-import { EDIT_MASK_MAX_BYTES, editMaskInfoWord, editMaskLayout, editMaskPlanes, fillEditMaskWords, sameU32 } from './edit-mask-texture.js?v=20261026-build673';
+import { canvasBackground3dUnit } from './canvas-theme.js?v=20261027-build680';
+import { lightOffsetExpr, lightingWGSL, MATERIALS, materialKey } from './lighting.js?v=20261027-build680';
+import { EDIT_MASK_MAX_BYTES, editMaskInfoWord, editMaskLayout, editMaskPlanes, fillEditMaskWords, sameU32 } from './edit-mask-texture.js?v=20261027-build680';
+import { loadStats } from './load-stats.js?v=20261027-build680'; // what the load did, for the VR switch report
+import { frameOrTimer } from './utils.js?v=20261027-build680'; // rAF or a timer (the window rAF stands still during a WebXR session)
+import { gpuRunsForTexture } from './gpu-runs.js?v=20261027-build680'; // the run-mapping functions moved to their own module (the VR preparation worker is made from them)
+export { gpuRunsForTexture };
 
 const UNCOMPRESSED_TS=new Set(['1.2.840.10008.1.2','1.2.840.10008.1.2.1','1.2.840.10008.1.2.2']);
 const safeWgsl=source=>source.replace(/\bmeta\b/g,'vrlMeta').replace(/\bactive\b/g,'vrlActive').replace(/\btarget\b/g,'vrlTarget');
@@ -806,48 +810,6 @@ export function volumeTexturePlan(v,maxTextureBytes=0,maxTextureDim=Infinity,tar
 }
 
 
-function gpuRunRowMapToSlice(rows,w){
- const rec=[];
- for(const y of [...rows.keys()].sort((a,b)=>a-b)){
-  const raw=rows.get(y);if(!raw?.length)continue;
-  raw.sort((a,b)=>a[0]-b[0]);let x0=raw[0][0],x1=raw[0][1];
-  for(let i=1;i<raw.length;i++){
-   const a=raw[i][0],b=raw[i][1];
-   if(a<=x1+1)x1=Math.max(x1,b);else{rec.push(y,Math.max(0,x0),Math.min(w-1,x1));x0=a;x1=b}
-  }
-  rec.push(y,Math.max(0,x0),Math.min(w-1,x1));
- }
- return new Uint32Array(rec);
-}
-function gpuLowerBound(map,value){
- let lo=0,hi=map.length;
- while(lo<hi){const mid=(lo+hi)>>1;if(map[mid]<value)lo=mid+1;else hi=mid}
- return lo;
-}
-function gpuUpperBound(map,value){
- let lo=0,hi=map.length;
- while(lo<hi){const mid=(lo+hi)>>1;if(map[mid]<=value)lo=mid+1;else hi=mid}
- return lo;
-}
-function gpuDilateRuns(runs,w,h,d,radius=1){
- if(radius<=0)return runs;
- const rowsByZ=Array.from({length:d},()=>new Map());
- for(let z=0;z<d;z++){
-  const rec=runs?.[z];if(!rec?.length)continue;
-  for(let i=0;i<rec.length;i+=3){
-   const y=rec[i],x0=Math.max(0,rec[i+1]-radius),x1=Math.min(w-1,rec[i+2]+radius);
-   for(let dz=-radius;dz<=radius;dz++){
-    const zz=z+dz;if(zz<0||zz>=d)continue;
-    const rows=rowsByZ[zz];
-    for(let dy=-radius;dy<=radius;dy++){
-     const yy=y+dy;if(yy<0||yy>=h)continue;
-     const arr=rows.get(yy)||[];arr.push([x0,x1]);rows.set(yy,arr);
-    }
-   }
-  }
- }
- return rowsByZ.map(rows=>gpuRunRowMapToSlice(rows,w));
-}
 // area-average a packed rg8 (little-endian u16) slice into tw x th; xs/ys are
 // source span boundaries per target column/row
 export function reduceSliceArea(packed,sw,xs,ys,tw,th,rowStride,out,rowSum=new Float64Array(tw),rowCnt=new Uint32Array(tw)){
@@ -861,35 +823,6 @@ export function reduceSliceArea(packed,sw,xs,ys,tw,th,rowStride,out,rowSum=new F
   for(let x=0;x<tw;x++){const v=rowCnt[x]?Math.round(rowSum[x]/rowCnt[x]):0;out[dst+x*2]=v&255;out[dst+x*2+1]=v>>8}
  }
  return out;
-}
-export function gpuRunsForTexture(runs,sourceDims,textureDims,{dilate=0}={}){
- const [sw,sh,sd]=sourceDims,[tw,th,td]=textureDims;
- if(!runs)return null;
- // same grid, no dilation: the runs pass through as given. Every consumer (the row searches of volumeShader and the edit
- // mask texture, which must agree with them) assumes each row's intervals sorted by x0 and disjoint, as the run builders emit them.
- if(sw===tw&&sh===th&&sd===td)return dilate?gpuDilateRuns(runs,tw,th,td,dilate):runs;
- const xMap=new Uint32Array(tw),yMap=new Uint32Array(th),zMap=new Uint32Array(td);
- for(let x=0;x<tw;x++)xMap[x]=tw<=1?0:Math.round(x*(sw-1)/(tw-1));
- for(let y=0;y<th;y++)yMap[y]=th<=1?0:Math.round(y*(sh-1)/(th-1));
- for(let z=0;z<td;z++)zMap[z]=td<=1?0:Math.round(z*(sd-1)/(td-1));
- const out=new Array(td);
- for(let tz=0;tz<td;tz++){
-  const rec=runs[zMap[tz]],srcRows=new Map(),dstRows=new Map();
-  if(rec?.length){
-   for(let i=0;i<rec.length;i+=3){const y=rec[i],arr=srcRows.get(y)||[];arr.push([rec[i+1],rec[i+2]]);srcRows.set(y,arr)}
-   for(let ty=0;ty<th;ty++){
-    const intervals=srcRows.get(yMap[ty]);if(!intervals?.length)continue;
-    const dst=[];
-    for(const [sx0,sx1] of intervals){
-     const tx0=gpuLowerBound(xMap,sx0),tx1=gpuUpperBound(xMap,sx1)-1;
-     if(tx0<=tx1&&tx0<tw&&tx1>=0)dst.push([Math.max(0,tx0),Math.min(tw-1,tx1)]);
-    }
-    if(dst.length)dstRows.set(ty,dst);
-   }
-  }
-  out[tz]=gpuRunRowMapToSlice(dstRows,tw);
- }
- return dilate?gpuDilateRuns(out,tw,th,td,dilate):out;
 }
 // per-brick occupancy of the mask-only segments, for the brick classification of volumeShader
 // (brickClass): one nibble per 8^3 brick of the TEXTURE grid (runs = gpuRunsForTexture output), bit s set when the brick
@@ -986,6 +919,7 @@ export class MedicalVolumeRenderer{
    try{cache=await v.textureCache({planSignature:plan.reduced?planSignature+'-avg':planSignature,reduced:!!plan.reduced,slices:plan.reduced?td:s.slices.length,bytesPerSlice:plan.reduced?reducedRowStride*th:s.columns*2*s.rows})}catch{cache=null}
   }
   this.lastCacheHit=!!cache?.hit;
+  (loadStats.ensures||(loadStats.ensures=[])).push({filtered:!!dataSignature,cache:!!cache,hit:!!cache?.hit,t:performance.now()}); // every upload of the 3D volume: filtered (the device cache applies), a cache handle was given, it was a hit
   let preview=null,previewSourceZ=null,previewX=null,previewY=null;
   const previewMax=Math.max(0,Math.floor(previewSide||0));
   if(previewMax>0&&!plan.reduced){
@@ -1029,7 +963,7 @@ export class MedicalVolumeRenderer{
       if(cache)await cache.write(tz,reducedSlice.slice());
      }
      superseded();this.device.queue.writeTexture({texture,origin:{x:0,y:0,z:tz}},upload,{bytesPerRow:rowStride,rowsPerImage:th},{width:tw,height:th,depthOrArrayLayers:1});
-     if((tz&63)===63||tz===td-1){this.onProgress(tz+1,td);try{await this.device.queue.onSubmittedWorkDone()}catch{}await new Promise(requestAnimationFrame)}
+     if((tz&63)===63||tz===td-1){this.onProgress(tz+1,td);try{await this.device.queue.onSubmittedWorkDone()}catch{}await frameOrTimer(32)}
     }
    }else{
     for(let z=0;z<s.slices.length;z++){
@@ -1047,7 +981,7 @@ export class MedicalVolumeRenderer{
        }
       }
      }
-     if((z&31)===31||z===s.slices.length-1){this.onProgress(z+1,s.slices.length);try{await this.device.queue.onSubmittedWorkDone()}catch{}await new Promise(requestAnimationFrame)}
+     if((z&31)===31||z===s.slices.length-1){this.onProgress(z+1,s.slices.length);try{await this.device.queue.onSubmittedWorkDone()}catch{}await frameOrTimer(32)}
     }
    }
    const validation=await this.device.popErrorScope?.();popped=true;superseded();if(validation)throw new Error(validation.message);
@@ -1412,7 +1346,8 @@ export class MedicalVolumeRenderer{
  async readPackedTexture(onProgress=()=>{}){
   if(!this.texture)return null;
   const [w,h,d]=this.textureDims,plane=w*h;if(plane%2)return null;
-  const device=this.device,sliceBytes=plane*2,chunk=Math.max(1,Math.min(d,Math.floor(Math.min(32*1024*1024,device.limits.maxStorageBufferBindingSize||32*1024*1024)/sliceBytes)));
+  // 8 MB per read-back (was 32): the copy of one chunk into the result runs on the main thread, which a VR session (a data switch reads the volume back while frames run) cannot give 10 ms in one piece
+  const device=this.device,sliceBytes=plane*2,chunk=Math.max(1,Math.min(d,Math.floor(Math.min(8*1024*1024,device.limits.maxStorageBufferBindingSize||8*1024*1024)/sliceBytes)));
   this.packPipeline||=device.createComputePipeline({label:'VRL texture pack',layout:'auto',compute:{module:device.createShaderModule({label:'VRL texture pack',code:`
 @group(0) @binding(0) var tex:texture_3d<f32>;
 @group(0) @binding(1) var<storage,read_write> outWords:array<u32>;

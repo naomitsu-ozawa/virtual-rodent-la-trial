@@ -3,9 +3,9 @@
 // nothing here touches the page: no attribute on the status bar, no listener on it, and `collect` (the only code that may read
 // the GPU: one requestAdapter pass when the app never asked, one throwaway WebGL context) is never called.
 // `collect` is injected (gpu-diagnostics-collect.js in the app), so this module imports no GPU / DOM code and tests can load it.
-import { settings } from './app-settings.js?v=20261026-build673';
-import { tr } from './i18n.js?v=20261026-build673';
-import { gpuDiagnosticsVisible, buildGpuReport, gpuBrowserDisabled } from './gpu-diagnostics.js?v=20261026-build673';
+import { settings } from './app-settings.js?v=20261027-build680';
+import { tr } from './i18n.js?v=20261027-build680';
+import { gpuDiagnosticsVisible, buildGpuReport, gpuBrowserDisabled } from './gpu-diagnostics.js?v=20261027-build680';
 export function initGpuDiagnosticsUi({ collect, doc = globalThis.document, isDebug = () => !!settings.debugOn(), events = globalThis } = {}) {
   const dlg = doc?.getElementById?.('settings-dialog'); if (!dlg || typeof collect !== 'function') return null;
   const $ = id => doc.getElementById(id);
