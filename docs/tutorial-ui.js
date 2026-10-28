@@ -1,9 +1,9 @@
-import { settings } from './app-settings.js?v=20261028-build684';
-import { tr } from './i18n.js?v=20261028-build684';
-import { TUTORIAL_MISSIONS, TUT_SAMPLE, TUT_INTRO, TUT_VOICE_PICK } from './tutorial-data.js?v=20261028-build684';
-import { createTutorialAudio } from './tutorial-audio.js?v=20261028-build684';
-import { createTutorialEngine } from './tutorial-engine.js?v=20261028-build684';
-import { EVENT_LEVELS } from './event-mode.js?v=20261028-build684';
+import { settings } from './app-settings.js?v=20261028-build685';
+import { tr } from './i18n.js?v=20261028-build685';
+import { TUTORIAL_MISSIONS, TUT_SAMPLE, TUT_INTRO, TUT_VOICE_PICK } from './tutorial-data.js?v=20261028-build685';
+import { createTutorialAudio } from './tutorial-audio.js?v=20261028-build685';
+import { createTutorialEngine } from './tutorial-engine.js?v=20261028-build685';
+import { EVENT_LEVELS } from './event-mode.js?v=20261028-build685';
 
 // the switch (設定 > 外観 > チュートリアル) off = the engine ignores every signal (nothing advances, nothing is saved); on again = as before
 // true while the tutorial UI is live (the switch is on AND the device supports VR): the Lv0 card of 体験会 acts as the tutorial only then (event-mode-ui.js)
@@ -172,8 +172,8 @@ export function initTutorialUi(){
  // 「チュートリアルを始める」 in the top bar, just before 「VRで見る」 (always in view, whichever panel is open; VR devices only): switches the tutorial on, continues it (the next step not done) and starts the introduction
  const intro=createTutorialIntro({audio:createTutorialAudio({getVoice:()=>settings.get('tutorialVoice')})});
  // the last ステップ (leave VR / AR) cleared = the tutorial is over: back on the page the bar guides to Lv1-Lv3 and then to VR / AR (it ends when that session starts). The signal arrives with the closing
- // 「すべてクリアです」, from the VR board (session-end) or from the 2D card (完了).
- getTutorialEngine().subscribe(snap=>{if(snap.feedback==='allClear'&&uiActive)intro.startLevels()});
+ // 「すべてクリアです」.: not after the data was switched inside VR (backLocked): the visitor already chose Lv1-Lv3, and the VR-button guidance right after leaving VR was wrong. From the VR board (session-end) or from the 2D card (完了).
+ getTutorialEngine().subscribe(snap=>{if(snap.feedback==='allClear'&&uiActive&&!snap.backLocked)intro.startLevels()});
  const mountCta=()=>{
   if(document.getElementById('tutorial-start-button'))return;
   const b=el('button','tut-cta','tutCta');b.id='tutorial-start-button';b.type='button';

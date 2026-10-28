@@ -6,8 +6,8 @@
 // chunks go to the GPU first (smooth-gpu.js registers itself here with setSmoothGpuBackend); the pool is then only the
 // fallback for the kernel; the workers still prepare the chunks for it (snap, weld) and are started for that.
 // A chunk's preparation and normals (smooth-prepare.js) run in the worker with its kernel: the main thread only cuts the core.
-import { constrainedSmoothPositions } from './constrained-smooth.js?v=20261028-build684';
-import { snapToLattice, weldTrianglePositions, vertexNormals, prepareSmoothChunk } from './smooth-prepare.js?v=20261028-build684';
+import { constrainedSmoothPositions } from './constrained-smooth.js?v=20261028-build685';
+import { snapToLattice, weldTrianglePositions, vertexNormals, prepareSmoothChunk } from './smooth-prepare.js?v=20261028-build685';
 
 // one job, in a worker or on the main thread: either a chunk's faces (prepared here: snap, weld, pinned flags) or welded
 // positions; then the kernel (iterations > 0) and the vertex normals (normals). null: no triangle. (exported: tests)

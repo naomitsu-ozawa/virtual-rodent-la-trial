@@ -92,9 +92,26 @@ describe('vr-view.js wiring (static)', () => {
   const v = src('vr-view.js');
   it('swapData: in the data ステップ the tutorial stays (dataSwitched), later switches keep it, any other ステップ ends it as before', () => {
     const at = v.indexOf("if(tutLive&&!tutEnded&&id!==TUT_SAMPLE){"); expect(at).toBeGreaterThan(0);
-    const part = v.slice(at, at + 900);
-    expect(part).toMatch(/st\.mission==='data'\?eng\.dataSwitched\(\):!!st\.backLocked/);
+    const part = v.slice(at, at + 1500);
+    expect(part).toMatch(/if\(st\.mission==='data'\)\{tutSwitchPending=true;stay=true\}else stay=!!st\.backLocked/);
+    expect(part).not.toMatch(/eng\.dataSwitched\(\)/); // load2d runs BEFORE the new data is shown: it only notes the switch
     expect(part).toMatch(/else\{tutEnded=true;try\{tutVr\?\.dispose\(\)\}/);
+  });
+  it('the way-out ステップ starts only when the swap is done (the new data shown); a failed / cancelled swap ends the tutorial instead', () => {
+    const at = v.indexOf('if(tutSwitchPending){'); expect(at).toBeGreaterThan(0);
+    const run = v.indexOf('r=await runDataSwap(env,setId,gen)'); expect(run).toBeGreaterThan(0); expect(at).toBeGreaterThan(run);
+    const part = v.slice(at, at + 700);
+    expect(part).toMatch(/r\.status==='done'&&running&&!tutEnded\)\{try\{tutVr\?\.engine\?\.dataSwitched\(\)/);
+    expect(part).toMatch(/else if\(tutLive&&!tutEnded&&running\)\{tutEnded=true;try\{tutVr\?\.dispose\(\)/);
+    expect(v.match(/\.dataSwitched\(\)/g).length).toBe(1);
+  });
+  it('after the data switch + leaving VR (allClear with backLocked) the page does not start the Lv guidance (no 「VRボタンを押しましょう」)', () => {
+    const e = toData(mk()); e.dataSwitched();
+    const seen = []; e.subscribe(s => seen.push(s)); e.onSignal({ kind: 'session-end' });
+    const clear = seen.find(s => s.feedback === 'allClear'); expect(clear).toBeTruthy(); expect(clear.backLocked).toBe(true);
+    const f = mk(); f.start('exit'); const seen2 = []; f.subscribe(s => seen2.push(s)); f.onSignal({ kind: 'session-end' });
+    const c2 = seen2.find(s => s.feedback === 'allClear'); if (c2) expect(c2.backLocked).toBe(false);
+    expect(src('tutorial-ui.js')).toContain("snap.feedback==='allClear'&&uiActive&&!snap.backLocked");
   });
 });
 
