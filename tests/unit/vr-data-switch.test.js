@@ -381,9 +381,14 @@ describe('vr-view.js: the data of the session can be replaced (static wiring)', 
     expect(sp).toContain('if(r.fire){ui.swapArm=null;void swapData(setId)}');
     expect(src).toContain('if(!running||ui.swapBusy)return false;');
     expect(src).toContain("acts['level:'+l.id]=()=>swapPress(l.sample)");
-    expect(src).toContain('levels:eventModeOn()&&practiceOpen()?{items:levelSwitchItems(tr,globalThis.__vrlOpenSample');
+    expect(src).toContain('levels:(eventModeOn()||(tutLive&&!tutEnded))&&practiceOpen()?{items:levelSwitchItems(tr,globalThis.__vrlOpenSample');
     expect(src).toContain('}else if(ui.tab===11){');
     expect(src).toContain("tabs:['表示','断面','スライス','画質','詳細','解析','位置','HU線','データ']");
+  });
+  it('the データ row of the かんたん menu is also there during the live tutorial (event mode off), and only for practice data; event mode keeps showing it', () => {
+    expect(src).toContain('(eventModeOn()||(tutLive&&!tutEnded))&&practiceOpen()');
+    expect(src).not.toContain('levels:eventModeOn()&&practiceOpen()'); // the old, event-mode-only condition is gone
+    expect(src).toContain('const evMenu=eventModeOn()||tutLive;'); // the かんたん menu (where the row is drawn) is already the live tutorial's menu
   });
   it('the session end cancels a running switch, empties the queue, and disposes what the switch made (the program sets too)', () => {
     const c = src.slice(src.indexOf(' const cleanup=()=>{'), src.indexOf(" session.addEventListener('end',()=>{emit('session-end')"));

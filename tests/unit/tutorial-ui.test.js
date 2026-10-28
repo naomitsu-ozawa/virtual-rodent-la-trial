@@ -239,7 +239,7 @@ describe('nothing is remembered', () => {
     Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: { getItem: k => { calls.push(['get', k]); return JSON.stringify({ v: 1, done: { controls: true, grip: true }, skipAll: true, last: 'grip' }); }, setItem: k => calls.push(['set', k]), removeItem: k => calls.push(['remove', k]) } });
     try {
       const e = createTutorialEngine({ arAvailable: false });
-      expect(e.listMissions().map(m => m.status)).toEqual(['available', 'locked', 'locked', 'locked', 'locked', 'locked']); // the stale value is ignored
+      expect(e.listMissions().map(m => m.status)).toEqual(['available', 'locked', 'locked', 'locked', 'locked', 'locked', 'locked']); // the stale value is ignored
       e.skipMission('controls'); e.start('grip');
       expect(restartTutorial(e)).toEqual({ action: 'start', id: 'controls' });
       expect(e.getState()).toMatchObject({ mission: 'controls', step: 0, finished: false, done: {} });

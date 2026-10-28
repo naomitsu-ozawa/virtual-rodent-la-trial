@@ -47,6 +47,13 @@ export const TUTORIAL_MISSIONS=deepFreeze([
    { id:'slice2', text:'tutSliceS2', item:2, ctl:{btn:'stick',motion:'press'}, audio:'g4b', audioText:'どちらのてでも、スティックをみじかく押しこみます。スライスがとうめいになります。', done:{ signal:'slice-toggle', count:1 }, timeoutHint:25000 },
    { id:'slice3', text:'tutSliceS3', item:3, ctl:{btn:'stick',motion:'hold'}, audio:'g4c', audioText:'スティックを押しこんだままにすると、だんめんのわくがかくれます。', done:{ signal:'frame-hide', count:1 }, timeoutHint:25000 }
   ] },
+ // the data switch inside VR / AR (explanation only: nothing is switched here; a real switch would leave the tutorial's Lv0 data). Both pages finish with 次へ. Its voice files (dat1 / dat2) come
+ // from the TTS rebuild (tools/tts/SETUP.md); until they exist a page is silent (tutorial-audio.js skips a missing file) and only the captions carry it.
+ { id:'data', sample:TUT_SAMPLE, title:'tutDataTitle', slide:'g3',
+  steps:[
+   { id:'data1', text:'tutDataS1', ctl:{btn:'trigger'}, board:'menu', menu:'levels', audio:'dat1', audioText:'ひだりのメニューの、したのデータのぎょうに、レベルゼロからレベルさんの、ボタンがあります。ブイアールのまま、べつのデータに切りかえられます。', done:null, next:true, timeoutHint:30000 },
+   { id:'data2', text:'tutDataS2', ctl:{btn:'trigger'}, board:'menu', menu:'levels', audio:'dat2', audioText:'ボタンにこうせんを向けて、トリガーを引くと、もういちど、と出ます。もういちど引くと、切りかわります。だんめんやポイントは、消えます。', done:null, next:true, timeoutHint:30000 }
+  ] },
  // the way out. The menu's red 「VRを終了」 / 「ARを終了」 button (bottom right of the left menu; its row is row 3 of the g3 slide: 下のボタン): the page is done when the session ends
  // (signal 'session-end', sent by vr-view.js as the session closes); the page (tutorial-ui.js) then guides to Lv1-Lv3 on the browser screen.
  { id:'exit', sample:TUT_SAMPLE, title:'tutExitTitle', slide:'g3',
