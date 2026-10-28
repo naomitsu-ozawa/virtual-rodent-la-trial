@@ -4,8 +4,8 @@
 // cache" button as segment-runs (run-cache.js). Values stay Float32 (no
 // quantizing). Browser storage can be evicted; this is only a cache.
 // Kept free of DOM-bound imports (the volume cache is passed in) for unit tests.
-import { cacheKey, pruneOtherFilterSettings } from './gpu-volume-cache.js?v=20261028-build684';
-import { datasetFingerprint } from './project-file.js?v=20261028-build684';
+import { cacheKey, pruneOtherFilterSettings } from './gpu-volume-cache.js?v=20261028-build685';
+import { datasetFingerprint } from './project-file.js?v=20261028-build685';
 
 export const PLANE_FORMAT = 1;
 export const MAX_PLANES_PER_FILTER = 6;

@@ -3,7 +3,7 @@
 // spacing apart (the last sample is exactly b), and every sample reads the raw HU by trilinear interpolation. The reading goes slice by
 // slice (z ascending, at most two slices held at once), so a source-backed study is never copied: the caller supplies getSlice(z) ->
 // Float32Array | Int16Array (or a promise of one).
-import { createHist, binValues, histStats } from './histogram.js?v=20261028-build684';
+import { createHist, binValues, histStats } from './histogram.js?v=20261028-build685';
 
 export const PROFILE_MAX_SAMPLES = 4096;
 const spacingOf = sp => [0, 1, 2].map(n => { const x = +(sp?.[n]); return Number.isFinite(x) && x > 0 ? x : 1; });
