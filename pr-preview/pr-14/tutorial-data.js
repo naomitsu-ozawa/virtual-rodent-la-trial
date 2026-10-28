@@ -45,7 +45,7 @@ export const TUTORIAL_MISSIONS=deepFreeze([
    { id:'slice1', text:'tutSliceS1', item:1, ctl:{btn:'trigger'}, menu:'slider', board:'menu', audio:'g4d', audioText:'ひだりのメニューの、スライスのぎょうに、まるいつまみがあります。どちらのてでも、こうせんを向け、トリガーを引いたまま、さゆうに動かします。',
      then:{ id:'g4a2', audio:'g4a2', audioText:'ひだりで、すけて、みぎで、はっきりします。' }, done:{ signal:'slice-opacity', count:1 }, timeoutHint:35000 },
    { id:'slice2', text:'tutSliceS2', item:2, ctl:{btn:'stick',motion:'press'}, audio:'g4b', audioText:'どちらのてでも、スティックをみじかく押しこみます。スライスがとうめいになります。', done:{ signal:'slice-toggle', count:1 }, timeoutHint:25000 },
-   { id:'slice3', text:'tutSliceS3', item:3, ctl:{btn:'stick',motion:'hold'}, audio:'g4c', audioText:'スティックを押しこんだままにすると、だんめんのわくがかくれます。', done:{ signal:'frame-hide', count:1 }, timeoutHint:25000 }
+   { id:'slice3', text:'tutSliceS3', item:3, ctl:{btn:'stick',motion:'hold'}, audio:'g4c', audioText:'スティックをながく押しこむと、だんめんのわくがかくれます。もういちどながく押すと、もとにもどります。', done:{ signal:'frame-hide', count:1 }, timeoutHint:25000 }
   ] },
  // the data switch inside VR / AR (the pages explain it; both finish with 次へ). If the visitor really switches here (the data leaves the tutorial's Lv0),: this ステップ is done and 'exit' starts at once (engine.dataSwitched), going back is shut. Its voice files (dat1 / dat2) are in
  // docs/tutorial/audio/F1 and M1 (tutorial-audio.js skips a missing file, so a page without one is silent and only the captions carry it).
