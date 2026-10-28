@@ -1,12 +1,12 @@
 // the 設定 > キャッシュ button 「体験会用データを準備」: the page side of event-prepare.js. It opens each practice level on the page (the same route as choosing it: startSample), waits until the page is quiet,
 // has the VR module build and save the finished VR data of that level (vr-view.js prepareStandardLevel: the same keys as VR entry / a data switch, saved completely, marked standard), and shows the progress per level.
 // Nothing here is a worker; the saves are the paced, 1 MiB-sliced writes of the VR data cache (no frame is held up). The VR module is handed in (app.js owns its one loader).
-import { prepareEventLevels } from './event-prepare.js?v=20261028-build681';
-import { EVENT_LEVELS, eventModeOn } from './event-mode.js?v=20261028-build681';
-import { createSettleGate } from './vr-data-switch.js?v=20261028-build681';
-import { vrStateSignature } from './vr-data-key.js?v=20261028-build681';
-import { volumeCacheBudgetInfo } from './gpu-volume-data.js?v=20261028-build681';
-import { tr } from './i18n.js?v=20261028-build681';
+import { prepareEventLevels } from './event-prepare.js?v=20261028-build682';
+import { EVENT_LEVELS, eventModeOn } from './event-mode.js?v=20261028-build682';
+import { createSettleGate } from './vr-data-switch.js?v=20261028-build682';
+import { vrStateSignature } from './vr-data-key.js?v=20261028-build682';
+import { volumeCacheBudgetInfo } from './gpu-volume-data.js?v=20261028-build682';
+import { tr } from './i18n.js?v=20261028-build682';
 
 const SETTLE_MS = 10 * 60 * 1000;
 const isPractice = id => typeof id === 'string' && /^sample\d+$/.test(id);

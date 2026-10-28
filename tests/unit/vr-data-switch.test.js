@@ -439,8 +439,8 @@ describe('vr-view.js: the data of the session can be replaced (static wiring)', 
     expect(src).toContain("fullReady=true;useData(settings.data|0);menu.refresh()"); // available again at once, without a press
   });
 
-  it('a data switch writes the STANDARD alias (protected in the event mode), old builds are cleaned, the sibling prune covers both entries', () => {
-    for (const t of ['async function vrAliasStore(cache,pk,id,keyV,keyD,fresh=false){', 'standard:!!fresh,keyV,keyD,build:APP_BUILD,prep:VR_PREP_VERSION', 'if(was&&!fresh)return true;', 'void removeOldBuilds(vc.cache,{build:APP_BUILD,prep:VR_PREP_VERSION})', 'await pruneSiblings(vc.cache,info,t.key);await vc.cache.prune', '{sliceMs:4,deferBody:true,prefetch:pfSwap,fresh:true}', 'parts:t.parts,build:APP_BUILD,prep:VR_PREP_VERSION']) expect(src, t).toContain(t);
+  it('a data switch writes the STANDARD alias (protected in the event mode), old preparation versions are cleaned (not builds), the sibling prune covers both entries', () => {
+    for (const t of ['async function vrAliasStore(cache,pk,id,keyV,keyD,fresh=false){', 'standard:!!fresh,keyV,keyD,build:APP_BUILD,prep:VR_PREP_VERSION', 'if(was&&!fresh)return true;', 'void removeOldBuilds(vc.cache,{prep:VR_PREP_VERSION})', 'await pruneSiblings(vc.cache,info,t.key);await vc.cache.prune', '{sliceMs:4,deferBody:true,prefetch:pfSwap,fresh:true}', 'parts:t.parts,build:APP_BUILD,prep:VR_PREP_VERSION']) expect(src, t).toContain(t);
   });
 });
 

@@ -19,7 +19,7 @@ export const TUT_SIGNALS=Object.freeze(['grab', 'grab-move', 'scale', 'section-a
 export const TUTORIAL_MISSIONS=deepFreeze([
  { id:'controls', sample:TUT_SAMPLE, title:'tutCtlTitle', slide:'controls',
   steps:[
-   { id:'controls1', text:'tutCtlS1', audio:'ctl1', audioText:'みぎてのこうせんはオレンジ、ひだりては、むらさきです。ひとさしゆびのトリガーで、こうせんのさきを押します。', ctl:{btn:'trigger'}, done:null, next:true, timeoutHint:30000 },
+   { id:'controls1', text:'tutCtlS1', audio:'ctl1', audioText:'みぎてのこうせんはオレンジ、ひだりては、みどりです。ひとさしゆびのトリガーで、こうせんのさきを押します。', ctl:{btn:'trigger'}, done:null, next:true, timeoutHint:30000 },
    { id:'controls2', text:'tutCtlS2', audio:'ctl2', audioText:'こうせんを、つぎへ、に向けて、トリガーを引いてください。', ctl:{btn:'trigger'}, done:null, next:true, timeoutHint:25000 }
   ] },
  { id:'grip', sample:TUT_SAMPLE, title:'tutGripTitle', slide:'g1',
@@ -47,7 +47,7 @@ export const TUTORIAL_MISSIONS=deepFreeze([
    { id:'slice2', text:'tutSliceS2', item:2, ctl:{btn:'stick',motion:'press'}, audio:'g4b', audioText:'どちらのてでも、スティックをみじかく押しこみます。スライスがとうめいになります。', done:{ signal:'slice-toggle', count:1 }, timeoutHint:25000 },
    { id:'slice3', text:'tutSliceS3', item:3, ctl:{btn:'stick',motion:'hold'}, audio:'g4c', audioText:'スティックを押しこんだままにすると、だんめんのわくがかくれます。', done:{ signal:'frame-hide', count:1 }, timeoutHint:25000 }
   ] },
- // the data switch inside VR / AR (explanation only: nothing is switched here; a real switch would leave the tutorial's Lv0 data). Both pages finish with 次へ. Its voice files (dat1 / dat2) come
+ // the data switch inside VR / AR (the pages explain it; both finish with 次へ). If the visitor really switches here (the data leaves the tutorial's Lv0),: this ステップ is done and 'exit' starts at once (engine.dataSwitched), going back is shut. Its voice files (dat1 / dat2) come
  // from the TTS rebuild (tools/tts/SETUP.md); until they exist a page is silent (tutorial-audio.js skips a missing file) and only the captions carry it.
  { id:'data', sample:TUT_SAMPLE, title:'tutDataTitle', slide:'g3',
   steps:[
