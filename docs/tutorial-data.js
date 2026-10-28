@@ -56,9 +56,11 @@ export const TUTORIAL_MISSIONS=deepFreeze([
   ] },
  // the way out. The menu's red 「VRを終了」 / 「ARを終了」 button (bottom right of the left menu; its row is row 3 of the g3 slide: 下のボタン): the page is done when the session ends
  // (signal 'session-end', sent by vr-view.js as the session closes); the page (tutorial-ui.js) then guides to Lv1-Lv3 on the browser screen.
+ // this page is FREE (free:true): no controller ring / arrow (no ctl), no slide row frame (no item), no edge arrow towards the menu, and the tutorial no longer ends when the data is switched here;
+ // the only light is the arrow over the red button (menu:'exit'). The visitor may do anything; the page still ends with the session and going back stays shut after a data switch (backLocked). Voice ex2 is not made yet (ex1 said the old line).
  { id:'exit', sample:TUT_SAMPLE, title:'tutExitTitle', slide:'g3',
   steps:[
-   { id:'exit1', text:'tutExitS1', item:3, ctl:{btn:'trigger'}, menu:'exit', board:'menu', audio:'ex1', audioText:'ひだりのメニューの、みぎしたにある、あかいボタンに、こうせんを向けて、トリガーを引くと、おわります。', done:{ signal:'session-end', count:1 }, timeoutHint:35000 }
+   { id:'exit1', text:'tutExitS1', menu:'exit', board:'menu', free:true, audio:'ex2', audioText:'このボタンで、しゅうりょうできます。このあんないで、チュートリアルはしゅうりょうです。こころゆくまで、おたのしみください。', done:{ signal:'session-end', count:1 }, timeoutHint:35000 }
   ] }
 ]);
 function deepFreeze(o){if(o&&typeof o==='object'&&!Object.isFrozen(o)){Object.freeze(o);for(const v of Object.values(o))deepFreeze(v)}return o}

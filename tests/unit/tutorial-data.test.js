@@ -35,7 +35,8 @@ describe('tutorial data', () => {
     const ctl = id => missionById(id).steps.map(s => s.ctl?.btn + (s.ctl?.motion ? ':' + s.ctl.motion : ''));
     expect(ctl('controls')).toEqual(['trigger', 'trigger']); expect(ctl('grip')).toEqual(['grip', 'grip', 'grip']); expect(ctl('section')).toEqual(['face', 'trigger', 'stick:updown']);
     expect(ctl('menu')).toEqual(['trigger', 'trigger']); expect(ctl('slice')).toEqual(['face', 'trigger', 'stick:press', 'stick:hold']);
-    for (const s of steps) { expect(['trigger', 'grip', 'face', 'stick'], s.id).toContain(s.ctl.btn); if (s.ctl.motion) expect(['updown', 'press', 'hold'], s.id).toContain(s.ctl.motion); }
+    expect(steps.filter(s => s.free).map(s => s.id)).toEqual(['exit1']); for (const s of steps.filter(s => s.free)) { expect(s.ctl, s.id).toBeUndefined(); expect(s.item, s.id).toBeUndefined(); expect(s.menu).toBe('exit'); expect(s.done).toEqual({ signal: 'session-end', count: 1 }); } // the way-out page is free: no controller annotation, no row frame
+    for (const s of steps.filter(s => !s.free)) { expect(['trigger', 'grip', 'face', 'stick'], s.id).toContain(s.ctl.btn); if (s.ctl.motion) expect(['updown', 'press', 'hold'], s.id).toContain(s.ctl.motion); }
     expect(missionById('menu').steps.map(s => s.board)).toEqual(['menu', 'menu']); expect(missionById('slice').steps.map(s => s.board)).toEqual([undefined, 'menu', undefined, undefined]);
     expect(missionById('slice').steps.map(s => s.when)).toEqual(['no-section', undefined, undefined, undefined]);
     expect(missionById('slice').steps[1].then).toMatchObject({ audio: 'g4a2' });
@@ -146,7 +147,7 @@ describe('ステップ wording', () => {
   });
   it('the narration: one file per voice (F1, M1) + manifest entry per audio id (steps, feedback, page intro, VR entry guidance, menu closed, voice choice), nothing stale', () => {
     const ids = new Set([...steps, ...Object.values(TUT_FEEDBACK).flat(), ...Object.values(TUT_INTRO), ...Object.values(TUT_ORIENT), TUT_MENU_OPEN, TUT_VOICE_PICK, ...steps.filter(s => s.then).map(s => s.then)].map(e => e.audio));
-    // ids whose voice files are not made yet (no file, no manifest entry; a missing file is skipped at play time). Empty now: dat1 / dat2 (data-switch page) are made.
+    // ids whose voice files are not made yet (no file, no manifest entry; a missing file is skipped at play time). Empty now: ex2 (the free exit page's new line) is made.
     const PENDING_AUDIO = new Set(); for (const id of PENDING_AUDIO) expect(ids.has(id), id).toBe(true);
     const shipped = new Set([...ids].filter(id => !PENDING_AUDIO.has(id)));
     for (const v of TUT_VOICES) {

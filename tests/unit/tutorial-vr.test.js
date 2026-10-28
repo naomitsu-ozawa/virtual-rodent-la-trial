@@ -493,8 +493,9 @@ describe('a cleared ステップ waits for 次へ', () => {
     vr.act('start:data'); expect(e.currentStep().id).toBe('data1'); expect(vr.menuTarget()).toBe('levels'); expect(vr.stepBoard()).toBe('menu'); e.next(); expect(e.currentStep().id).toBe('data2'); e.next();
     expect(vr.page().buttons[0].id).toBe('start:exit'); // the data-switch guide is next to last; the way out is last
     vr.act('start:exit'); a.play.mockClear();
-    expect(e.currentStep().id).toBe('exit1'); const pg = vr.page(); expect(pg).toMatchObject({ kind: 'step', slide: 'g3', item: 3, title: 'ステップ7 おわり：VR・ARを終える' }); expect(pg.caption).toBe(I18N.ja.tutExitS1);
-    expect(vr.menuTarget()).toBe('exit'); expect(vr.stepBoard()).toBe('menu'); expect(vr.controllerHint()).toEqual({ btn: 'trigger' }); expect(I18N.ja.tutExitS1).toMatch(/左のメニュー.*右下.*赤い.*VRを終了.*ARを終了/); expect(wrapText(I18N.ja.tutExitS1, 23, 784 - 28).length).toBeLessThanOrEqual(3);
+    expect(e.currentStep().id).toBe('exit1'); const pg = vr.page(); expect(pg).toMatchObject({ kind: 'step', slide: 'g3', item: null, title: 'ステップ7 おわり：VR・ARを終える' }); expect(pg.caption).toBe(I18N.ja.tutExitS1);
+    expect(vr.menuTarget()).toBe('exit'); expect(vr.stepBoard()).toBe('menu'); expect(vr.controllerHint()).toBeNull(); expect(vr.stepFree()).toBe(true); expect(e.currentStep().ctl).toBeUndefined(); expect(pg.done).toEqual([]); expect(I18N.ja.tutExitS1).toBe('このボタンで終了できます。この案内でチュートリアルは終了です。心ゆくまでお楽しみください。'); expect(I18N.en.tutExitS1).toMatch(/exit with this button.*end of the tutorial/); // free page: no controller annotation, no row frame, only the arrow over the exit button (menu / board)
+    expect(vr.page().buttons.map(b => b.point).filter(Boolean)).toEqual([]); expect(wrapText(I18N.ja.tutExitS1, 23, 784 - 28).length).toBeLessThanOrEqual(3);
     e.onSignal({ kind: 'session-end' }); // the session closes (vr-view.js emits it): the way out is done
     expect(a.play).toHaveBeenLastCalledWith(['allclear']); expect(e.getState()).toMatchObject({ mission: 'exit', finished: true }); expect(e.listMissions().every(m => m.done)).toBe(true);
     const done = vr.page(); expect(done).toMatchObject({ kind: 'allDone', note: I18N.ja.tutIntroLv123 }); expect(done.buttons.map(b => b.id)).not.toContain('next'); expect(done.buttons.some(b => b.id.startsWith('start:'))).toBe(false);
