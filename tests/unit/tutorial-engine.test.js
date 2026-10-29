@@ -298,7 +298,7 @@ describe('tutorial engine: the real steps', () => {
   it('each step waits for its own signal, in order; the last one (the way out: the session ends) gives allClear', () => {
     const e = real(); e.skipMission('controls'); const fb = []; e.subscribe(x => fb.push(x.feedback));
     e.setEnv({ cond: { 'no-section': () => false } }); // a section is up: the section page of ステップ5 is not there
-    const order = { grip: ['grab', 'grab-move', 'scale'], section: ['section-add', 'section-drag', 'section-scroll'], menu: ['seg-hide', 'seg-show'], slice: ['slice-opacity', 'slice-toggle', 'frame-hide'], data: [], exit: ['session-end'] };
+    const order = { grip: ['grab', 'grab-move', 'scale'], section: ['section-add', 'section-drag', 'section-scroll'], menu: ['seg-hide', 'seg-show'], slice: ['slice-opacity', 'slice-toggle', 'frame-hide', 'frame-show'], data: [], exit: ['session-end'] };
     for (const [id, kinds] of Object.entries(order)) {
       expect(e.start(id)).toBe(true);
       if (id === 'data') { e.next(); e.next(); expect(e.getState().finished).toBe(true); continue; } // the data-switch step: two 次へ pages, no signal
@@ -312,15 +312,15 @@ describe('tutorial engine: the real steps', () => {
   it('ステップ5: the section page is there only while no section frame is up (cond no-section); N is fixed when the mission is entered', () => {
     let section = false; const e = real(); for (const id of ['controls', 'grip', 'section', 'menu']) e.skipMission(id);
     e.setEnv({ cond: { 'no-section': () => !section } });
-    e.start('slice'); expect(e.currentStep().id).toBe('slice0'); expect(e.pageInfo()).toMatchObject({ n: 1, N: 4, hasPrev: false });
+    e.start('slice'); expect(e.currentStep().id).toBe('slice0'); expect(e.pageInfo()).toMatchObject({ n: 1, N: 5, hasPrev: false });
     expect(sig(e, 'slice-opacity')).toBe(false); // the slider needs the section first
     section = true; expect(sig(e, 'section-add')).toBe(true); // the page's own signal
-    expect(e.currentStep().id).toBe('slice1'); expect(e.pageInfo()).toMatchObject({ n: 2, N: 4 }); // 1/4 -> 2/4: N does not shrink to 3 once the section is up
+    expect(e.currentStep().id).toBe('slice1'); expect(e.pageInfo()).toMatchObject({ n: 2, N: 5 }); // 1/5 -> 2/5: N does not shrink to 4 once the section is up
     expect(e.prev()).toBe(false); // slice0 does not apply any more
-    e.start('slice'); // a section is up already: starts at the slider page, N = 3 from the start
-    expect(e.currentStep().id).toBe('slice1'); expect(e.pageInfo()).toMatchObject({ n: 1, N: 3 });
-    e.next(); expect(e.pageInfo()).toMatchObject({ n: 2, N: 3 }); e.next(); expect(e.pageInfo()).toMatchObject({ n: 3, N: 3, isLast: true });
-    section = false; e.start('slice'); expect(e.currentStep().id).toBe('slice0'); expect(e.pageInfo()).toMatchObject({ n: 1, N: 4 }); e.next(); expect(e.currentStep().id).toBe('slice1'); expect(e.pageInfo()).toMatchObject({ n: 2, N: 4, hasPrev: true });
+    e.start('slice'); // a section is up already: starts at the slider page, N = 4 from the start
+    expect(e.currentStep().id).toBe('slice1'); expect(e.pageInfo()).toMatchObject({ n: 1, N: 4 });
+    e.next(); expect(e.pageInfo()).toMatchObject({ n: 2, N: 4 }); e.next(); expect(e.pageInfo()).toMatchObject({ n: 3, N: 4, isLast: false }); e.next(); expect(e.pageInfo()).toMatchObject({ n: 4, N: 4, isLast: true });
+    section = false; e.start('slice'); expect(e.currentStep().id).toBe('slice0'); expect(e.pageInfo()).toMatchObject({ n: 1, N: 5 }); e.next(); expect(e.currentStep().id).toBe('slice1'); expect(e.pageInfo()).toMatchObject({ n: 2, N: 5, hasPrev: true });
     expect(e.prev()).toBe(true); expect(e.currentStep().id).toBe('slice0');
     // an unknown condition name / no cond at all = the page shows
     const e2 = createTutorialEngine(); e2.skipAll(); e2.start('slice'); expect(e2.currentStep().id).toBe('slice0');
@@ -329,7 +329,7 @@ describe('tutorial engine: the real steps', () => {
     let section = false; const e = real(); for (const id of ['controls', 'grip', 'section', 'menu']) e.skipMission(id);
     e.setEnv({ cond: { 'no-section': () => !section } }); const fb = []; e.subscribe(x => fb.push(x.feedback));
     e.start('slice'); expect(e.refresh()).toBe(false); expect(e.currentStep().id).toBe('slice0'); // the condition still holds
-    section = true; expect(e.refresh()).toBe(true); expect(e.currentStep().id).toBe('slice1'); expect(e.pageInfo()).toMatchObject({ n: 2, N: 4 }); expect(fb.every(x => x === null)).toBe(true);
+    section = true; expect(e.refresh()).toBe(true); expect(e.currentStep().id).toBe('slice1'); expect(e.pageInfo()).toMatchObject({ n: 2, N: 5 }); expect(fb.every(x => x === null)).toBe(true);
     expect(e.refresh()).toBe(false); // nothing more to pass over
     const idle = real(); expect(idle.refresh()).toBe(false); // idle / finished: harmless
   });

@@ -34,11 +34,15 @@ describe('tutorial data', () => {
   it('step-by-step: every page names the controller button it uses (ctl), the menu pages the board (board: menu), ステップ5\'s section page is conditional', () => {
     const ctl = id => missionById(id).steps.map(s => s.ctl?.btn + (s.ctl?.motion ? ':' + s.ctl.motion : ''));
     expect(ctl('controls')).toEqual(['trigger', 'trigger']); expect(ctl('grip')).toEqual(['grip', 'grip', 'grip']); expect(ctl('section')).toEqual(['face', 'trigger', 'stick:updown']);
-    expect(ctl('menu')).toEqual(['trigger', 'trigger']); expect(ctl('slice')).toEqual(['face', 'trigger', 'stick:press', 'stick:hold']);
+    expect(ctl('menu')).toEqual(['trigger', 'trigger']); expect(ctl('slice')).toEqual(['face', 'trigger', 'stick:press', 'stick:hold', 'stick:hold']);
     expect(steps.filter(s => s.free).map(s => s.id)).toEqual(['exit1']); for (const s of steps.filter(s => s.free)) { expect(s.ctl, s.id).toBeUndefined(); expect(s.item, s.id).toBeUndefined(); expect(s.menu).toBe('exit'); expect(s.done).toEqual({ signal: 'session-end', count: 1 }); } // the way-out page is free: no controller annotation, no row frame
     for (const s of steps.filter(s => !s.free)) { expect(['trigger', 'grip', 'face', 'stick'], s.id).toContain(s.ctl.btn); if (s.ctl.motion) expect(['updown', 'press', 'hold'], s.id).toContain(s.ctl.motion); }
-    expect(missionById('menu').steps.map(s => s.board)).toEqual(['menu', 'menu']); expect(missionById('slice').steps.map(s => s.board)).toEqual([undefined, 'menu', undefined, undefined]);
-    expect(missionById('slice').steps.map(s => s.when)).toEqual(['no-section', undefined, undefined, undefined]);
+    expect(missionById('menu').steps.map(s => s.board)).toEqual(['menu', 'menu']); expect(missionById('slice').steps.map(s => s.board)).toEqual([undefined, 'menu', undefined, undefined, undefined]);
+    expect(missionById('slice').steps.map(s => s.when)).toEqual(['no-section', undefined, undefined, 'frames-shown', undefined]);
+    expect(missionById('slice').steps.map(s => s.id).slice(3)).toEqual(['slice3', 'slice4']); expect(missionById('slice').steps.map(s => s.done?.signal).slice(3)).toEqual(['frame-hide', 'frame-show']); // hide, then restore
+    expect(missionById('slice').steps.slice(3).map(s => [s.text, s.audio, s.item])).toEqual([['tutSliceS3', 'g4c', 3], ['tutSliceS4', 'g4c2', 3]]);
+    expect(I18N.ja.tutSliceS3).toBe('スティックを長く押し込む（断面の枠が隠れる）'); expect(I18N.ja.tutSliceS4).toBe('もう一度スティックを長く押し込む（枠が戻る）');
+    expect(I18N.en.tutSliceS3).toBe('Click and hold the stick (the section frame hides)'); expect(I18N.en.tutSliceS4).toBe('Click and hold the stick again (the frame comes back)');
     expect(missionById('slice').steps[1].then).toMatchObject({ audio: 'g4a2' });
     // the captions say where / which hand / which button
     expect(I18N.ja.tutMenuS1).toContain('左のメニュー'); expect(I18N.ja.tutMenuS1).toContain('{tissue}'); expect(I18N.ja.tutSliceS1).toMatch(/左のメニュー.*スライス.*つまみ/); expect(I18N.ja.tutSecS1).toMatch(/右手の B.*左手の Y/);
@@ -47,11 +51,11 @@ describe('tutorial data', () => {
   });
   it('each page frames a numbered row of its own slide (item: the slide is shown as a picture; menu1 and menu2 are both row 1 of g3)', () => {
     const items = id => missionById(id).steps.map(s => s.item);
-    expect(items('grip')).toEqual([1, 2, 3]); expect(items('section')).toEqual([1, 2, 3]); expect(items('menu')).toEqual([1, 1]); expect(items('slice')).toEqual([undefined, 1, 2, 3]); // the section page of ステップ5 frames no row
+    expect(items('grip')).toEqual([1, 2, 3]); expect(items('section')).toEqual([1, 2, 3]); expect(items('menu')).toEqual([1, 1]); expect(items('slice')).toEqual([undefined, 1, 2, 3, 3]); // the section page of ステップ5 frames no row
     for (const s of missionById('controls').steps) expect(s.item).toBeUndefined(); // ステップ1: the controls slide, nothing framed
     for (const m of TUTORIAL_MISSIONS) for (const s of m.steps) if (s.item) expect(slideItem(m.slide, s.item), s.id).toBeTruthy();
     // g1 / g2 / g3b: one page per numbered row of the slide, in its order
-    for (const id of ['grip', 'section', 'slice']) { const m = missionById(id); expect(m.steps.map(s => s.item).filter(Boolean), id).toEqual(guideSlide(m.slide).items.map(r => r.n)); }
+    for (const id of ['grip', 'section', 'slice']) { const m = missionById(id); expect([...new Set(m.steps.map(s => s.item).filter(Boolean))], id).toEqual(guideSlide(m.slide).items.map(r => r.n)); } // slice3 / slice4 (hide, restore the frames) share row 3
     const menu = missionById('menu');
     expect(menu.steps.map(s => s.done.signal)).toEqual(['seg-hide', 'seg-show']);
     expect(menu.steps.map(s => s.menu)).toEqual(['seg-hide', 'seg-show']);
@@ -83,7 +87,7 @@ describe('tutorial data', () => {
     const used = [...new Set(steps.filter(s => s.done).map(s => s.done.signal))].sort();
     expect([...TUT_SIGNALS].sort()).toEqual(used);
     for (const k of TUT_SIGNALS) expect(SIGNAL_KINDS, k).toContain(k);
-    expect(TUT_SIGNALS).toHaveLength(12); expect(TUT_SIGNALS).toContain('session-end');
+    expect(TUT_SIGNALS).toHaveLength(13); expect(TUT_SIGNALS).toContain('session-end');
   });
   it('steps are well formed (audio script, timeout)', () => {
     for (const s of steps) {

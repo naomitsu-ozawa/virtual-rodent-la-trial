@@ -15,7 +15,7 @@
 //   text = the caption under the slide on the board and on the 2D card (the 「{tissue}」 of a menu page = the first tissue of the open data, filled in by tutorial-vr.js).
 // Every mission practises on sample4 (骨梁 = the 体験会 Lv0 data). Analysis is not part of the tutorial.
 export const TUT_SAMPLE = 'sample4';
-export const TUT_SIGNALS=Object.freeze(['grab', 'grab-move', 'scale', 'section-add', 'section-drag', 'section-scroll', 'seg-hide', 'seg-show', 'slice-opacity', 'slice-toggle', 'frame-hide', 'session-end']);
+export const TUT_SIGNALS=Object.freeze(['grab', 'grab-move', 'scale', 'section-add', 'section-drag', 'section-scroll', 'seg-hide', 'seg-show', 'slice-opacity', 'slice-toggle', 'frame-hide', 'frame-show', 'session-end']);
 export const TUTORIAL_MISSIONS=deepFreeze([
  { id:'controls', sample:TUT_SAMPLE, title:'tutCtlTitle', slide:'controls',
   steps:[
@@ -45,7 +45,8 @@ export const TUTORIAL_MISSIONS=deepFreeze([
    { id:'slice1', text:'tutSliceS1', item:1, ctl:{btn:'trigger'}, menu:'slider', board:'menu', audio:'g4d', audioText:'ひだりのメニューの、スライスのぎょうに、まるいつまみがあります。どちらのてでも、こうせんを向け、トリガーを引いたまま、さゆうに動かします。',
      then:{ id:'g4a2', audio:'g4a2', audioText:'ひだりで、すけて、みぎで、はっきりします。' }, done:{ signal:'slice-opacity', count:1 }, timeoutHint:35000 },
    { id:'slice2', text:'tutSliceS2', item:2, ctl:{btn:'stick',motion:'press'}, audio:'g4b', audioText:'どちらのてでも、スティックをみじかく押しこみます。スライスがとうめいになります。', done:{ signal:'slice-toggle', count:1 }, timeoutHint:25000 },
-   { id:'slice3', text:'tutSliceS3', item:3, ctl:{btn:'stick',motion:'hold'}, audio:'g4c', audioText:'スティックをながく押しこむと、だんめんのわくがかくれます。もういちどながく押すと、もとにもどります。', done:{ signal:'frame-hide', count:1 }, timeoutHint:25000 }
+   { id:'slice3', text:'tutSliceS3', item:3, ctl:{btn:'stick',motion:'hold'}, when:'frames-shown', audio:'g4c', audioText:'スティックをながく押しこむと、だんめんのわくがかくれます。', done:{ signal:'frame-hide', count:1 }, timeoutHint:25000 },
+   { id:'slice4', text:'tutSliceS4', item:3, ctl:{btn:'stick',motion:'hold'}, audio:'g4c2', audioText:'もういちど、ながく押しこむと、わくがもどります。', done:{ signal:'frame-show', count:1 }, timeoutHint:25000 }
   ] },
  // the data switch inside VR / AR (the pages explain it; both finish with 次へ). If the visitor really switches here (the data leaves the tutorial's Lv0),: this ステップ is done and 'exit' starts at once (engine.dataSwitched), going back is shut. Its voice files (dat1 / dat2) are in
  // docs/tutorial/audio/F1 and M1 (tutorial-audio.js skips a missing file, so a page without one is silent and only the captions carry it).

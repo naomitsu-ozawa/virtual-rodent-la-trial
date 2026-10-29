@@ -170,19 +170,18 @@ describe('thumbstick click: short press vs hold (FRAME_HIDE_MS)', () => {
     expect(src).toContain("else if(ev==='long')toggleFramesHidden(c);");
     expect(src).not.toContain('if(!tc&&c.userData.hideFrames){c.userData.hideFrames=false;pulse(c,0.2,25)}');
     const fn = grab(/const toggleFramesHidden=c=>\{[^\n]*\};/);
-    expect(fn).toContain('if(framesHidden()){for(const x of controllers)x.userData.hideFrames=false;pulse(c,0.2,25)}');
-    expect(fn).toContain("else{c.userData.hideFrames=true;pulse(c,0.3,25)}emit('frame-hide')}");
-    expect(fn).not.toMatch(/else\{[^}]*emit\('frame-hide'\)[^}]*\}\};/); // the signal is outside the hide branch: it fires on either direction (hide or show)
+    expect(fn).toContain("if(framesHidden()){for(const x of controllers)x.userData.hideFrames=false;pulse(c,0.2,25);emit('frame-show')}");
+    expect(fn).toContain("else{c.userData.hideFrames=true;pulse(c,0.3,25);emit('frame-hide')}}");
   });
-  it("behaviour: 'frame-hide' is emitted on the hide AND on the show (the tutorial step passes even if the frames were already hidden); the state alternates", () => {
+  it("behaviour: 'frame-hide' is emitted only when hiding, 'frame-show' only when showing; the state alternates", () => {
     const fn = grab(/const toggleFramesHidden=c=>\{[^\n]*\};/).replace(/\/\/.*$/, '');
     const controllers = [{ userData: {} }, { userData: {} }], emitted = [];
     const framesHidden = () => controllers.some(x => x.userData.hideFrames);
     const make = new Function('controllers', 'framesHidden', 'pulse', 'emit', fn + '; return toggleFramesHidden;');
     const toggle = make(controllers, framesHidden, () => {}, k => emitted.push(k));
     toggle(controllers[0]); expect(framesHidden()).toBe(true); expect(emitted).toEqual(['frame-hide']);
-    toggle(controllers[1]); expect(framesHidden()).toBe(false); expect(emitted).toEqual(['frame-hide', 'frame-hide']);
-    controllers[1].userData.hideFrames = true; toggle(controllers[0]); expect(framesHidden()).toBe(false); expect(emitted).toHaveLength(3); // hidden by the other controller: this hold shows them (and still fires the signal)
+    toggle(controllers[1]); expect(framesHidden()).toBe(false); expect(emitted).toEqual(['frame-hide', 'frame-show']);
+    controllers[1].userData.hideFrames = true; toggle(controllers[0]); expect(framesHidden()).toBe(false); expect(emitted).toEqual(['frame-hide', 'frame-show', 'frame-show']); // hidden by the other controller: this hold shows them
   });
   it('frames hidden: outline, tag, hover fill, glow and arrow are not drawn; no tag / band / glass for the laser; no empty-space drag; no section is dragged by a press; the clipping is untouched', () => {
     expect(src).toContain('pl.glow.visible=gc!==undefined&&!fHide;pl.glass.visible=glassBy.has(pl)&&!fHide;pl.frameLine.visible=!fHide;pl.handle.visible=!fHide;');

@@ -2,7 +2,7 @@
 // Nobody listening = nothing happens. Never throws; no document (unit tests, workers) = no-op. The tutorial engine (tutorial-engine.js) listens.
 export const SIGNAL_KINDS = Object.freeze([
   'vr-start', 'grab', 'grab-move', 'scale', 'home', 'menu-open', 'seg-toggle', 'seg-hide', 'seg-show', 'menu-close', 'section-add', 'section-drag', 'section-scroll',
-  'section-toggle', 'slice-opacity', 'slice-toggle', 'slice-clear', 'frame-hide', 'point-record', 'undo', 'measure-done', 'ar-start', 'session-end', 'trigger-label', 'label-show',
+  'section-toggle', 'slice-opacity', 'slice-toggle', 'slice-clear', 'frame-hide', 'frame-show', 'point-record', 'undo', 'measure-done', 'ar-start', 'session-end', 'trigger-label', 'label-show',
 ]);
 // kinds that can fire in bursts: at most one per MIN_GAP_MS
 const MIN_GAP_MS = { 'label-show': 400, 'section-drag': 400, 'section-scroll': 400, 'slice-opacity': 400, 'point-record': 0 };
