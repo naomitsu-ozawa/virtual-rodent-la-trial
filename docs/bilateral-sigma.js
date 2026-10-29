@@ -1,5 +1,5 @@
 // Kept for the names; the generalised code is in filter-units.js.
-import { FILTER_UNITS, filterLegacyRange, legacyFilterValueHU, resolveFilterParams, sourceFilterSignature } from './filter-units.js?v=20261028-build688';
+import { FILTER_UNITS, filterLegacyRange, legacyFilterValueHU, resolveFilterParams, sourceFilterSignature } from './filter-units.js?v=20261029-build689';
 
 export { sourceFilterSignature };
 export const BILATERAL_SIGMA_HU_DEFAULT = FILTER_UNITS.bilateral.params.sigmaHU.def;

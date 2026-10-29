@@ -71,8 +71,13 @@
  },
  "F1/g4c": {
   "voice": "F1",
-  "sec": 6.98,
-  "textHash": "427742dd5a89"
+  "sec": 4.01,
+  "textHash": "be3ea02786ca"
+ },
+ "F1/g4c2": {
+  "voice": "F1",
+  "sec": 3.94,
+  "textHash": "52c92f43e696"
  },
  "F1/dat1": {
   "voice": "F1",
@@ -236,8 +241,13 @@
  },
  "M1/g4c": {
   "voice": "M1",
-  "sec": 6.66,
-  "textHash": "31959674c6ad"
+  "sec": 3.8,
+  "textHash": "2548f13bfc57"
+ },
+ "M1/g4c2": {
+  "voice": "M1",
+  "sec": 3.38,
+  "textHash": "8fdcb39279cf"
  },
  "M1/dat1": {
   "voice": "M1",

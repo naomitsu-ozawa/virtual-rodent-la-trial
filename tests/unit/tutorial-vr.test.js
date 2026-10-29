@@ -488,7 +488,7 @@ describe('a cleared ステップ waits for 次へ', () => {
   });
   it('the last ステップ is the way out: after ステップ5 the next-step prompt, then the exit page (the red button of the left menu); the session ending clears it: allclear, no closing line of its own', () => {
     const e = eng(); for (const id of ['controls', 'grip', 'section', 'menu']) e.skipMission(id); const { vr, a } = mkVr({ engine: e }); e.setEnv({ cond: { 'no-section': () => false } }); e.start('slice'); a.play.mockClear(); // a section is up
-    for (const k of ['slice-opacity', 'slice-toggle', 'frame-hide']) e.onSignal({ kind: k });
+    for (const k of ['slice-opacity', 'slice-toggle', 'frame-hide', 'frame-show']) e.onSignal({ kind: k });
     expect(a.play).toHaveBeenLastCalledWith(['mclear', 'gonext']); expect(vr.page().kind).toBe('missionDone'); expect(vr.page().buttons[0].id).toBe('start:data');
     vr.act('start:data'); expect(e.currentStep().id).toBe('data1'); expect(vr.menuTarget()).toBe('levels'); expect(vr.stepBoard()).toBe('menu'); e.next(); expect(e.currentStep().id).toBe('data2'); e.next();
     expect(vr.page().buttons[0].id).toBe('start:exit'); // the data-switch guide is next to last; the way out is last
@@ -572,9 +572,17 @@ describe('captions, 3D hints and the conditional section page', () => {
   it('ステップ5 starts at the section page only when no section frame is up (getSectionOn); with one it starts at the slider', () => {
     let on = false; const e = eng(); for (const id of ['controls', 'grip', 'section', 'menu']) e.skipMission(id);
     const { vr } = mkVr({ engine: e, getSectionOn: () => on });
-    vr.act('start:slice'); expect(e.currentStep().id).toBe('slice0'); expect(vr.controllerHint()).toEqual({ btn: 'face' }); expect(vr.page().caption).toBe(I18N.ja.tutSliceS0); expect(vr.page().counter).toBe('1/4');
-    on = true; vr.act('start:slice'); expect(e.currentStep().id).toBe('slice1'); expect(vr.page().counter).toBe('1/3'); expect(vr.page().item).toBe(1); expect(vr.page().done).toEqual([]);
+    vr.act('start:slice'); expect(e.currentStep().id).toBe('slice0'); expect(vr.controllerHint()).toEqual({ btn: 'face' }); expect(vr.page().caption).toBe(I18N.ja.tutSliceS0); expect(vr.page().counter).toBe('1/5');
+    on = true; vr.act('start:slice'); expect(e.currentStep().id).toBe('slice1'); expect(vr.page().counter).toBe('1/4'); expect(vr.page().item).toBe(1); expect(vr.page().done).toEqual([]);
     on = false; vr.act('start:slice'); e.onSignal({ kind: 'section-add' }); expect(e.currentStep().id).toBe('slice1'); expect(vr.page().done).toEqual([]); // slice0 has no row to tick
+  });
+  it("the hide page (slice3) counts as done at once when the frames are hidden already (getFramesHidden); the restore page (slice4) waits for 'frame-show' only", () => {
+    let hidden = true; const e = eng(); for (const id of ['controls', 'grip', 'section', 'menu']) e.skipMission(id);
+    const { vr } = mkVr({ engine: e, getSectionOn: () => true, getFramesHidden: () => hidden }); vr.act('start:slice');
+    e.onSignal({ kind: 'slice-opacity' }); e.onSignal({ kind: 'slice-toggle' }); expect(e.currentStep().id).toBe('slice4'); // hidden already: slice3 is passed over
+    expect(e.onSignal({ kind: 'frame-hide' })).toBe(false); expect(e.currentStep().id).toBe('slice4'); e.onSignal({ kind: 'frame-show' }); expect(e.getState().finished).toBe(true);
+    hidden = false; vr.act('start:slice'); e.onSignal({ kind: 'slice-opacity' }); e.onSignal({ kind: 'slice-toggle' }); expect(e.currentStep().id).toBe('slice3'); // shown: the hide page is there
+    expect(e.onSignal({ kind: 'frame-show' })).toBe(false); e.onSignal({ kind: 'frame-hide' }); expect(e.currentStep().id).toBe('slice4');
   });
   it('menuTargetRect levels: one rect around the Lv0-Lv3 buttons of the データ row, from below (the data-switch page only shows where)', () => {
     const w = [{ id: 'level:lv0', x: 270, y: 1004, w: 100, h: 72 }, { id: 'level:lv1', x: 380, y: 1004, w: 100, h: 72 }, { id: 'home', x: 40, y: 1086, w: 90, h: 72 }];
@@ -599,9 +607,9 @@ describe('a hidden section frame shown again does not hang ステップ3 / 5', (
   it('slice0 / section1 wait for section-add; the page is also passed over by itself when the section is up (engine refresh each frame)', () => {
     let on = false; const e = eng(); for (const id of ['controls', 'grip', 'section', 'menu']) e.skipMission(id);
     const { vr, a, setT } = mkVr({ engine: e, getSectionOn: () => on });
-    vr.act('start:slice'); expect(e.currentStep().id).toBe('slice0'); expect(vr.page().counter).toBe('1/4');
+    vr.act('start:slice'); expect(e.currentStep().id).toBe('slice0'); expect(vr.page().counter).toBe('1/5');
     on = true; a.play.mockClear(); setT(2000); vr.update(); // the section appeared by another way (or its frame was shown again without a signal)
-    expect(e.currentStep().id).toBe('slice1'); expect(vr.page().counter).toBe('2/4'); expect(a.play).toHaveBeenLastCalledWith(['g4d', 'g4a2']); // the next page's voice, N fixed
+    expect(e.currentStep().id).toBe('slice1'); expect(vr.page().counter).toBe('2/5'); expect(a.play).toHaveBeenLastCalledWith(['g4d', 'g4a2']); // the next page's voice, N fixed
     on = false; vr.act('start:slice'); expect(e.currentStep().id).toBe('slice0'); on = true; e.onSignal({ kind: 'section-add' }); expect(e.currentStep().id).toBe('slice1'); // the signal route (setSection(true) now emits it)
   });
 });
