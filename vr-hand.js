@@ -556,14 +556,14 @@ export const parsePointTune=t=>pick(jsonOf(t),{indexOn:[0,1.5],indexOff:[0,1.5],
 // ---- texts (hands only; the controller texts stay in vr-view.js) ----
 export function handTexts(ja){
  return ja?{
-  helpBasic:['ピンチ（短く）：点を記録／選択（点で長く：移動・削除・色・距離）','グー：ボリューム・板・メニューを掴む／両手でグー：拡大縮小','何もない所で右手ピンチ：断面の表示／非表示（長押し：追加）','何もない所で左手ピンチ長押し：断面の枠を隠す','断面の上で2回ピンチ：断面を透明／元に戻す','左手首の甲を顔へ：手首メニュー（「メニュー」で開閉）'],
-  helpSec:['枠の細い線・番号札：ピンチで選択／つまんだまま動かして移動・回転','ピンチ（短く）：断面や組織に点を記録／点に当てて選択、点で長く：リング','手首メニューの「断面＋／－」：選んだ断面を法線方向へ送る（押し続ける）','何もない所で右手ピンチ：表示／非表示（長押し：追加）','何もない所で左手長押し：枠を隠す／断面の上で2回ピンチ：透明／戻す','グー：枠・ボリュームを掴む／両手グー：拡大縮小'],
+  helpBasic:['ピンチ（短く）：点を記録／選択（点で長く：移動・削除・色・距離）','グー：ボリューム・板・メニューを掴む／両手でグー：拡大縮小','何もない所で右手ピンチ：断面の表示／非表示（長押し：追加）','何もない所で左手ピンチ長押し：断面の枠を隠す／戻す','断面の上で2回ピンチ：断面を透明／元に戻す','左手首の甲を顔へ：手首メニュー（「メニュー」で開閉）'],
+  helpSec:['枠の細い線・番号札：ピンチで選択／つまんだまま動かして移動・回転','ピンチ（短く）：断面や組織に点を記録／点に当てて選択、点で長く：リング','手首メニューの「断面＋／－」：選んだ断面を法線方向へ送る（押し続ける）','何もない所で右手ピンチ：表示／非表示（長押し：追加）','何もない所で左手長押し：枠を隠す／戻す／断面の上で2回ピンチ：透明／戻す','グー：枠・ボリュームを掴む／両手グー：拡大縮小'],
   helpMenu:'ピンチ：メニューのボタン・スライダー／グー：メニュー板に手を重ねて移動',
   helpMenuSimple:'ピンチ：メニューのボタン・スライダー／グー：メニュー板に手を重ねて移動',
   wrist:on=>[['よく使う','（リング）'],['メニュー','開く／閉じる'],['断面',on?'非表示にする':'表示する'],['断面を','追加'],['取り消し',''],['断面','－'],['断面','＋']],
  }:{
   helpBasic:['Pinch (short): record / select a point (hold on a point: move, delete, colour, distance)','Fist on / near the volume, a board or the menu: grab it. Two fists: scale','Right pinch in empty space: sections show / hide (hold: add a section)','Left pinch held in empty space: hide the section frames','Two quick pinches on a section: slice transparent / back','Back of the left wrist to your eyes: wrist menu (“Menu” opens / closes the menu)'],
-  helpSec:['Thin frame line / number tag: pinch selects, pinch and move to slide / rotate','Pinch (short): record a point on a section or tissue; on a point selects it; hold on a point: ring','Wrist menu “Section + / -”: slides the selected section along its normal (hold)','Right pinch in empty space: show / hide sections (hold: add)','Left pinch held in empty space: hide frames; 2 quick pinches on a section: slice clear / back','Fist on a section frame or the volume: grab, move / turn; two fists: scale'],
+  helpSec:['Thin frame line / number tag: pinch selects, pinch and move to slide / rotate','Pinch (short): record a point on a section or tissue; on a point selects it; hold on a point: ring','Wrist menu “Section + / -”: slides the selected section along its normal (hold)','Right pinch in empty space: show / hide sections (hold: add)','Left pinch held in empty space: hide / show frames; 2 quick pinches on a section: slice clear / back','Fist on a section frame or the volume: grab, move / turn; two fists: scale'],
   helpMenu:'Pinch: menu buttons and sliders; fist on the menu board: move it',
   helpMenuSimple:'Pinch: menu buttons and sliders; fist on the menu board: move it',
   wrist:on=>[['Quick','ring'],['Menu','open / close'],['Sections',on?'hide':'show'],['Add','section'],['Undo',''],['Section','-'],['Section','+']],
