@@ -102,11 +102,21 @@ describe('surface / section cursor takes the pointing hand\'s laser colour', () 
 describe('section frame glow: white when pointed at, the holding hand\'s laser colour when held', () => {
   const block = grab(/if\(section\.on\)\{const glowBy=new Map\(\);[^\n]*\n[^\n]*\n[^\n]*\n/);
   it('the held pass (drag / press on a section) uses laserColorOf, the point pass uses white and never overrides a held frame', () => {
-    expect(block).toContain('const pr=c.userData.press,pl=c.userData.drag?.pl||(pr?.res?.kind===\'section\'?pr.res.ref?.pl:null);if(pl&&!glowBy.has(pl))glowBy.set(pl,laserColorOf(c))');
+    expect(block).toContain('const pr=c.userData.press,pl=c.userData.drag?.pl||glowPl(pr?.res);if(pl&&!glowBy.has(pl))glowBy.set(pl,laserColorOf(c))');
     expect(block).toContain('const rr=c.userData.res,nr=handIn.reach(c)');
     expect(block).toContain('if(pl&&!glowBy.has(pl))glowBy.set(pl,0xffffff)');
     expect(block.indexOf('glowBy.set(pl,laserColorOf(c))')).toBeLessThan(block.indexOf('glowBy.set(pl,0xffffff)'));
     expect(block).not.toContain('handColor(');
+  });
+  it('a record on the selected section\'s plane glows like a section (both passes)', () => {
+    expect(src).toContain("const glowPl=r=>r?.kind==='section'?r.ref?.pl:(r?.kind==='record'&&r.ref?.plane?section.selected:null);");
+    expect(block).toContain('glowPl(pr?.res)');
+    expect(block).toContain('pl=glowPl(rr)||');
+    const glowPl = (r, selected) => r?.kind === 'section' ? r.ref?.pl : (r?.kind === 'record' && r.ref?.plane ? selected : null);
+    expect(glowPl({ kind: 'record', ref: { plane: true } }, 'P1')).toBe('P1');
+    expect(glowPl({ kind: 'record', ref: { plane: false } }, 'P1')).toBe(null);
+    expect(glowPl({ kind: 'section', ref: { pl: 'P2' } }, 'P1')).toBe('P2');
+    expect(glowPl({ kind: 'none', ref: null }, 'P1')).toBe(null);
   });
   it('behaviour: simulate the two passes', () => {
     const LASER = 0x00ff99, ORANGE = 0xff7a3d, WHITE = 0xffffff;

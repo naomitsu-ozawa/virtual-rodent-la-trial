@@ -70,7 +70,7 @@ describe('vr-view.js: hand tracking is optional and every hand branch is guarded
     expect(g).toContain("else if(ev==='end')ungrab(c);");
     expect(bodyAfter(hv, 'frame(now){')).toContain('if(tick(c,hs,now)&&(c.visible||hs.grab.active||hs.pinch.pressed)){grabStep(c,hs,now);carryStep(c,hs,now);pinchStep(c,hs,now)}'); // after the isHand(s) continue
     expect(bodyAfter(hv, 'frame(now){').indexOf('grabStep(')).toBeGreaterThan(bodyAfter(hv, 'frame(now){').indexOf('if(!isHand(s)){ctrl=true;continue}'));
-    expect(src).toContain('grab:(c,t)=>{if(t){gripStartNear(c,t);return true}if(c.userData.wristOn)return false;gripStart(c);return true}'); // no target near: the laser path, unchanged
+    expect(src).toContain('grab:(c,t)=>{if(t){gripStartNear(c,t);return true}if(c.userData.wristOn)return false;return gripStart(c)!==false}'); // no target near: the laser path, unchanged
     expect(src).toContain('ungrab:c=>{if(c.userData.drag?.fist){endDrag(c);return}gripEnd(c)}');
     expect(src).toContain('busy:c=>!!(c.userData.drag||c.userData.lblDrag||histAxis===c||dragging?.c===c||huLine.isDragging())');
     expect(src).toContain('c.userData.wristOn=!!bd.wrist;');
@@ -397,9 +397,15 @@ describe('empty-space pinch actions and the double pinch (hands only; the contro
   it('the hold / cancel rules: 5 cm, a target under the laser, a drag, a grab or the wrist menu drop it; the left hand hides the frames after FRAME_HIDE_MS and nothing else (no slice toggle from it)', () => {
     const f = bodyAfter(src, 'const empFrame=(c,now)=>{');
     expect(f).toContain('empQ.length()>EMPTY_PINCH.moveM'); expect(f).toContain('!isEmptyKind(rk)'); expect(f).toContain('c.userData.drag'); expect(f).toContain('handIn.grabbing(c)'); expect(f).toContain('handIn.wristShown');
-    expect(f).toContain('now-e.t0>=FRAME_HIDE_MS'); expect(f).toContain('c.userData.hideFrames=true');
+    expect(f).toContain('now-e.t0>=FRAME_HIDE_MS'); expect(f).toContain('toggleFramesHidden(c)'); expect(f).not.toContain('c.userData.hideFrames=true');
     for (const n of ['const empStart=(c,res,now)=>{', 'const empFrame=(c,now)=>{', 'const empStop=(c,cancel)=>{']) expect(bodyAfter(src, n).includes('toggleSliceClear'), n).toBe(false);
     expect(bodyAfter(src, 'const empStop=(c,cancel)=>{')).toContain('if(cancel)c.userData.vCancel=true'); // a dropped press fires no short action on release
+  });
+  it('the left hand\'s hold is the same toggle as the controller: releasing the pinch does not show the frames again; the ring at the ray tip uses the same tracker and the hand\'s laser colour', () => {
+    expect(bodyAfter(src, 'const empStop=(c,cancel)=>{')).not.toContain('hideFrames');
+    expect(src).toContain('const emL=!!c.userData.empOn&&!c.userData.emp.right&&!c.userData.emp.hid;');
+    expect(src).toContain('createHoldTracker({longMs:FRAME_HIDE_MS,showMs:HOLD_RING_SHOW_MS})).update(tc||emL,nowF)');
+    expect(src).toContain('hrg.show(hf,hc,tmpHr,'); // hc = laserColorOf(c)
   });
   it('the right hand\'s virtual press goes through the controller\'s B/Y code (same long-press threshold, the same functions); a cancelled one does not toggle', () => {
     expect(src).toContain('const b=!!bt?.[5]?.pressed||!!c.userData.vB,nowB=performance.now();');

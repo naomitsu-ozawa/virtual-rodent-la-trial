@@ -125,8 +125,8 @@ describe('slice transparent toggle on the thumbstick click', () => {
     expect(src).toContain('sliceToast.dispose();');
   });
   it('the 操作方法 board lists it (basic and with a section; ja and en), 7 lines fit the board at the new pitch', () => {
-    expect(src.match(/'スティック押し：短く＝スライス透明\/\/長押し＝枠を隠す'/g)?.length ?? src.split("'スティック押し：短く＝スライス透明／長押し＝枠を隠す'").length - 1).toBe(2);
-    expect(src.split("'Stick click: short = slice clear, hold = hide frames'").length - 1).toBe(2);
+    expect(src.match(/'スティック押し：短く＝スライス透明\/\/長押し＝枠を隠す／戻す'/g)?.length ?? src.split("'スティック押し：短く＝スライス透明／長押し＝枠を隠す／戻す'").length - 1).toBe(2);
+    expect(src.split("'Stick click: short = slice clear, hold = hide / show frames'").length - 1).toBe(2);
     expect(src).toContain('const HELP_LINE_PITCH=66;');
     expect(140 + 6 * 66 + 15).toBeLessThanOrEqual(560); // the last line's centre + half the 30 px text, inside the 560 px board (no mission)
   });
@@ -136,35 +136,53 @@ describe('slice transparent toggle on the thumbstick click', () => {
   });
 });
 
-// short press = the slice toggle, hold = the section frames are hidden for as long as it is held (the same button). createButtonPress is the A/X press classifier (vr-ring.js).
+// short press = the slice toggle, hold = the section frames are TOGGLED (hold once: hidden and they stay hidden; hold again: shown). createButtonPress is the A/X press classifier (vr-ring.js).
 const press = await import('../../docs/vr-ring.js');
 describe('thumbstick click: short press vs hold (FRAME_HIDE_MS)', () => {
   const MS = +/const FRAME_HIDE_MS=(\d+)/.exec(src)[1];
-  // runs a press through the same classifier and the same release rule as the controller loop; frames: the hide state per frame
-  const run = (downMs, step = 11) => {
+  // runs a series of presses (ms held, then released) through the same classifier and the same toggle rule as the controller loop; hide: the state per frame
+  const run = (downs, step = 11) => {
     const bp = press.createButtonPress({ longMs: MS }), events = [], hide = []; let hideFrames = false, t = 1000;
-    const frame = pressed => { const ev = bp.update(pressed, t); if (ev === 'short') events.push('toggle'); else if (ev === 'long') { hideFrames = true; events.push('hide-on'); } if (!pressed && hideFrames) { hideFrames = false; events.push('hide-off'); } hide.push(hideFrames); t += step; };
-    for (let ms = 0; ms < downMs; ms += step) frame(true);
-    frame(false); frame(false);
+    const frame = pressed => { const ev = bp.update(pressed, t); if (ev === 'short') events.push('slice-toggle'); else if (ev === 'long') { hideFrames = !hideFrames; events.push(hideFrames ? 'hide-on' : 'hide-off'); } hide.push(hideFrames); t += step; };
+    for (const d of downs) { for (let ms = 0; ms < d; ms += step) frame(true); frame(false); frame(false); }
     return { events, hide };
   };
   it('the hold time is 0.3 s', () => expect(MS).toBe(300));
-  it('a short press (well under 0.3 s) toggles once, on release; the frames never hide', () => {
-    const r = run(120);
-    expect(r.events).toEqual(['toggle']); expect(r.hide.some(Boolean)).toBe(false);
+  it('a short press (well under 0.3 s) toggles the slice once, on release; the frames never hide', () => {
+    const r = run([120]);
+    expect(r.events).toEqual(['slice-toggle']); expect(r.hide.some(Boolean)).toBe(false);
   });
-  it('a hold hides the frames once it reaches 0.3 s, restores them on release, and fires NO toggle', () => {
-    const r = run(900);
-    expect(r.events).toEqual(['hide-on', 'hide-off']);
-    expect(r.hide.indexOf(true)).toBeGreaterThan(0); expect(r.hide.at(-1)).toBe(false);
+  it('a hold hides the frames once it reaches 0.3 s, they STAY hidden after the release, and it fires NO slice toggle', () => {
+    const r = run([900]);
+    expect(r.events).toEqual(['hide-on']);
+    expect(r.hide.indexOf(true)).toBeGreaterThan(0); expect(r.hide.at(-1)).toBe(true);
   });
-  it('the boundary: just under 0.3 s toggles, from 0.3 s on it is a hold', () => {
-    expect(run(250).events).toEqual(['toggle']);
-    expect(run(330).events).toEqual(['hide-on', 'hide-off']);
+  it('a second hold shows them again (on, off, on ...); a short press in between only toggles the slice and keeps the frames hidden', () => {
+    expect(run([900, 900]).events).toEqual(['hide-on', 'hide-off']);
+    expect(run([900, 120, 900, 900]).events).toEqual(['hide-on', 'slice-toggle', 'hide-off', 'hide-on']);
+    expect(run([900, 120]).hide.at(-1)).toBe(true);
   });
-  it('a tick of haptics on entering and on leaving, nothing else changes while held (wiring)', () => {
-    expect(src).toContain("else if(ev==='long'){c.userData.hideFrames=true;pulse(c,0.3,25)}");
-    expect(src).toContain('if(!tc&&c.userData.hideFrames){c.userData.hideFrames=false;pulse(c,0.2,25)}');
+  it('the boundary: just under 0.3 s toggles the slice, from 0.3 s on it is a hold', () => {
+    expect(run([250]).events).toEqual(['slice-toggle']);
+    expect(run([330]).events).toEqual(['hide-on']);
+  });
+  it('wiring: the hold calls toggleFramesHidden (no hold-to-hide, no release rule); the toggle clears every controller when any is hidden, else hides this one with the tutorial signal', () => {
+    expect(src).toContain("else if(ev==='long')toggleFramesHidden(c);");
+    expect(src).not.toContain('if(!tc&&c.userData.hideFrames){c.userData.hideFrames=false;pulse(c,0.2,25)}');
+    const fn = grab(/const toggleFramesHidden=c=>\{[^\n]*\};/);
+    expect(fn).toContain('if(framesHidden()){for(const x of controllers)x.userData.hideFrames=false;pulse(c,0.2,25)}');
+    expect(fn).toContain("else{c.userData.hideFrames=true;pulse(c,0.3,25)}emit('frame-hide')}");
+    expect(fn).not.toMatch(/else\{[^}]*emit\('frame-hide'\)[^}]*\}\};/); // the signal is outside the hide branch: it fires on either direction (hide or show)
+  });
+  it("behaviour: 'frame-hide' is emitted on the hide AND on the show (the tutorial step passes even if the frames were already hidden); the state alternates", () => {
+    const fn = grab(/const toggleFramesHidden=c=>\{[^\n]*\};/).replace(/\/\/.*$/, '');
+    const controllers = [{ userData: {} }, { userData: {} }], emitted = [];
+    const framesHidden = () => controllers.some(x => x.userData.hideFrames);
+    const make = new Function('controllers', 'framesHidden', 'pulse', 'emit', fn + '; return toggleFramesHidden;');
+    const toggle = make(controllers, framesHidden, () => {}, k => emitted.push(k));
+    toggle(controllers[0]); expect(framesHidden()).toBe(true); expect(emitted).toEqual(['frame-hide']);
+    toggle(controllers[1]); expect(framesHidden()).toBe(false); expect(emitted).toEqual(['frame-hide', 'frame-hide']);
+    controllers[1].userData.hideFrames = true; toggle(controllers[0]); expect(framesHidden()).toBe(false); expect(emitted).toHaveLength(3); // hidden by the other controller: this hold shows them (and still fires the signal)
   });
   it('frames hidden: outline, tag, hover fill, glow and arrow are not drawn; no tag / band / glass for the laser; no empty-space drag; no section is dragged by a press; the clipping is untouched', () => {
     expect(src).toContain('pl.glow.visible=gc!==undefined&&!fHide;pl.glass.visible=glassBy.has(pl)&&!fHide;pl.frameLine.visible=!fHide;pl.handle.visible=!fHide;');

@@ -28,7 +28,7 @@ describe('vr-view.js: sections are no longer grabbed (one-handed redesign, stage
     expect(grip).not.toMatch(/plane|Plane/);
   });
   it('the trigger uses the pure functions of vr-point.js', () => {
-    for (const w of ['resolveTriggerTarget(', 'createTriggerPress()', 'dragShouldStart(', 'sectionFollowStart(', 'sectionFollowStep(', 'snapPlaneCenterIntoBox(', 'chooseSectionForRay(', 'DRAG_RECORD', 'createHoverPulse(', 'only:idx']) expect(src.includes(w), w).toBe(true);
+    for (const w of ['resolveTriggerTarget(', 'createTriggerPress()', 'dragShouldStart(', 'sectionFollowStart(', 'sectionFollowStep(', 'snapPlaneCenterIntoBox(', 'DRAG_RECORD', 'createHoverPulse(', 'only:idx']) expect(src.includes(w), w).toBe(true);
   });
 });
 
@@ -83,7 +83,7 @@ describe('vr-view.js: review fixes (F1-F9)', () => {
 
 describe('vr-view.js: section drag restored, one cursor', () => {
   it('the section is not clamped while dragging and snaps back into the box on release', () => {
-    const a = src.indexOf('const updatePress='), b = src.indexOf('const sectionForEmpty=');
+    const a = src.indexOf('const updatePress='), b = src.indexOf(' // volume hit (');
     expect(src.slice(a, b)).not.toContain('clampPlaneCenter');
     const e = src.indexOf('const endDrag='), line = src.slice(e, src.indexOf('\n', e));
     expect(line).toContain('snapSection(dg.pl)');
@@ -92,9 +92,10 @@ describe('vr-view.js: section drag restored, one cursor', () => {
     const a = src.indexOf('const startDrag='), blk = src.slice(a, src.indexOf('const updatePress='));
     expect(blk).not.toContain('outside'); expect(blk).not.toContain('planeFoot'); expect(blk).toContain('sectionFollowStart(');
   });
-  it('a section-mode tap point drags only after the higher threshold; empty space moves the section the laser passes through', () => {
+  it('a section-mode tap point drags only after the higher threshold; empty space no longer moves a section', () => {
     expect(src).toContain('pr.dragRec?DRAG_RECORD:undefined');
-    expect(src).toContain('sectionForEmpty(c,');
+    expect(src).not.toContain('sectionForEmpty');
+    expect(src).toContain('pressDragSection(res,');
   });
   it('the square cursor is gone: placeSecCursor uses the dot of the surface cursor', () => {
     expect(src.includes('createSectionCursor')).toBe(false); expect(src.includes('secCursors')).toBe(false);

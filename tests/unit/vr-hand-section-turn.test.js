@@ -42,7 +42,7 @@ const grab = (start, end) => { const a = src.indexOf(start); expect(a, start).to
 const CODE = [
   grab(' const wristQ=c=>', '\n'),
   grab(' const startDrag=(c,pr,hp)=>{', '\n const updatePress='),
-  grab(' const updatePress=(c,now)=>{', '\n // the section an empty-space grab moves'),
+  grab(' const updatePress=(c,now)=>{', '\n // volume hit ('),
 ].join('\n');
 function world({ hand }) {
   const pl = { obj: new THREE.Object3D(), hand: 'right' }; pl.obj.position.set(0.02, -0.01, 0.03); pl.obj.quaternion.set(...(() => { const t = q([0.2, 1, 0.1], 25); return [t.x, t.y, t.z, t.w]; })());
