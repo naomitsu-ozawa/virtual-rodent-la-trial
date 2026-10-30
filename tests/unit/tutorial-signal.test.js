@@ -8,8 +8,8 @@ const src = Object.fromEntries(files.map(f => [f, readFileSync(new URL(f, DOCS),
 
 describe('tutorial signals', () => {
   it('has the agreed kinds (trigger-label / label-show stay as signals even though no tutorial step waits for them;: no \'move\' (no walking task), + the deck\'s operations)', () => {
-    expect(SIGNAL_KINDS.length).toBe(25);
-    expect(new Set(SIGNAL_KINDS).size).toBe(25);
+    expect(SIGNAL_KINDS.length).toBe(26);
+    expect(new Set(SIGNAL_KINDS).size).toBe(26);
     expect(SIGNAL_KINDS).not.toContain('move');
     for (const k of ['grab', 'grab-move', 'seg-hide', 'seg-show', 'section-scroll', 'slice-opacity', 'slice-toggle']) expect(SIGNAL_KINDS).toContain(k);
   });
