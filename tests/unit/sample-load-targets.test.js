@@ -46,8 +46,8 @@ function depsTemplate(fetched = [], indexFiles = ['a.dcm'], hasCache = false) {
 describe('practice-data fetch targets come from the SAMPLE_SETS table only', () => {
   const ids = Object.keys(SAMPLE_SETS);
 
-  it('the table is the four bundled sets, each below its own demo/ folder', () => {
-    expect(ids).toEqual(['sample1', 'sample2', 'sample3', 'sample4']);
+  it('the table is the five bundled sets, each below its own demo/ folder', () => {
+    expect(ids).toEqual(['sample1', 'sample2', 'sample3', 'sample4', 'sample5']);
     for (const id of ids) expect(SAMPLE_SETS[id].base).toBe(`demo/${id}/`);
   });
 
@@ -84,7 +84,7 @@ describe('practice-data fetch targets come from the SAMPLE_SETS table only', () 
     }
   });
 
-  const UNKNOWN = ['sample0', 'sample5', 'sample10', 'Sample1', ' sample1', 'sample1 ', '', '../sample1', 'sample1/..', 'sample1/', 'https://evil.example/', '//evil.example/', null, 0, 1, {}];
+  const UNKNOWN = ['sample0', 'sample6', 'sample10', 'Sample1', ' sample1', 'sample1 ', '', '../sample1', 'sample1/..', 'sample1/', 'https://evil.example/', '//evil.example/', null, 0, 1, {}];
   it.each(UNKNOWN.map(v => [JSON.stringify(v) ?? String(v), v]))('an unknown set id (%s) throws and fetches nothing', async (_label, id) => {
     const { run } = loadSampleDemoFromSource();
     const calls = [];

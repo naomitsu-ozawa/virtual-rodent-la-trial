@@ -9,6 +9,8 @@ export const EVENT_LEVELS=Object.freeze([
  {id:'lv2',lv:2,sample:'sample2',nameKey:'evLv2Name',missionKey:'evLv2Mission',hints:['section','move','toggle']},
  {id:'lv3',lv:3,sample:'sample1',nameKey:'evLv3Name',missionKey:'evLv3Mission',hints:['section','move','mark','distance']},
 ].map(l=>Object.freeze({...l,hints:Object.freeze(l.hints)})));
+// practice datasets that are NOT one of the levels (group 「その他」 in the chooser and under the level cards): no Lv number, no mission, not in the VR data-switch buttons, not prepared by 体験会用データを準備.
+export const EVENT_OTHER_SAMPLES=Object.freeze([{sample:'sample5',nameKey:'sampleMarmoset'}].map(o=>Object.freeze(o)));
 // The segments each practice dataset STARTS with shown (体験会: 骨梁 = 骨 / マウス頭部 = 骨 / マウス腹部 = 骨 + 軟部組織 / ラット腹部 = 骨 + 軟部組織). The state itself lives in the datasets' own
 // project files (docs/demo/sampleN/project.vrlab: a shown segment is active + enabled; the others stay in the list as active + not enabled, so they are loaded and prepared like the
 // rest and can be shown at any time, on the page and in VR), so a first load, every switch and the VR reset all start from it. tests/unit/event-mode.test.js checks the files against this table.

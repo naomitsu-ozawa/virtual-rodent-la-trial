@@ -19,7 +19,7 @@ describe('practice dataset paths and cache keys', () => {
   });
   it('appends sample3 (mouse head) with its own folder key and keeps the default', () => {
     const n = '01784_crop512_0001.dcm';
-    expect(Object.keys(SAMPLE_SETS)).toEqual(['sample1', 'sample2', 'sample3', 'sample4']);
+    expect(Object.keys(SAMPLE_SETS)).toEqual(['sample1', 'sample2', 'sample3', 'sample4', 'sample5']);
     expect(DEFAULT_SAMPLE).toBe('sample1');
     expect(sampleIndexUrl('sample3')).toBe('demo/sample3/index.json');
     expect(sampleSliceUrl('sample3', n)).toBe('demo/sample3/' + n);
