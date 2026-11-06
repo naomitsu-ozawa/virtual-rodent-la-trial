@@ -2,9 +2,9 @@
 // 「スライス画像を表示」 is off (segment colour x a brightness from the data value, through the page's own window wc / ww = the slice image's window; maths: cap-shade.js).
 // The controls only act while a section is open, the cap is on and the slice image is hidden, so they are disabled otherwise (明るさ / コントラスト also with 単色).
 // Like VR (vr-view.js ctShade / ctShadeBright / ctShadeContrast: device settings saved in localStorage, defaults CT濃淡 / 1.8 / 1.7) the three values are kept on this device and restored at start.
-import { sectionViewOpen, sectionViewPlane, sectionSliceImageVisible, sectionCapEnabled, sectionShadeMode, sectionShadeBright, sectionShadeContrast, setSectionShadeMode, setSectionShadeBright, setSectionShadeContrast } from './state.js?v=20261106-build691';
-import { sectionShadeModeControl, sectionShadeBrightControl, sectionShadeBrightValue, sectionShadeContrastControl, sectionShadeContrastValue } from './ui-shell.js?v=20261106-build691';
-import { brightOf, contrastOf } from './cap-shade.js?v=20261106-build691';
+import { sectionViewOpen, sectionViewPlane, sectionSliceImageVisible, sectionCapEnabled, sectionShadeMode, sectionShadeBright, sectionShadeContrast, setSectionShadeMode, setSectionShadeBright, setSectionShadeContrast } from './state.js?v=20261106-build692';
+import { sectionShadeModeControl, sectionShadeBrightControl, sectionShadeBrightValue, sectionShadeContrastControl, sectionShadeContrastValue } from './ui-shell.js?v=20261106-build692';
+import { brightOf, contrastOf } from './cap-shade.js?v=20261106-build692';
 
 const KEY = 'vrl-section-shade';
 
