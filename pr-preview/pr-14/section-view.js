@@ -1,9 +1,10 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { sectionViewPlane, volume, sectionViewReverse, sceneState, sectionViewOpen, sectionCapEnabled } from './state.js?v=20261106-build690';
-import { planes, sectionViewToggle, sectionViewResult, sectionPosition, sectionPositionValue, sectionReverse, sectionSliceImageControl, sectionCapEnabledControl, sectionCapOpacityControl, sectionCapHatchControl, sectionViewReadout } from './ui-shell.js?v=20261106-build690';
+import { sectionViewPlane, volume, sectionViewReverse, sceneState, sectionViewOpen, sectionCapEnabled } from './state.js?v=20261106-build691';
+import { planes, sectionViewToggle, sectionViewResult, sectionPosition, sectionPositionValue, sectionReverse, sectionSliceImageControl, sectionCapEnabledControl, sectionCapOpacityControl, sectionCapHatchControl, sectionViewReadout } from './ui-shell.js?v=20261106-build691';
+import { syncSectionShadeUi } from './section-shade.js?v=20261106-build691';
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.webgpu.js';
-import { tr } from './i18n.js?v=20261106-build690';
+import { tr } from './i18n.js?v=20261106-build691';
 export function sectionPlaneLabel(p){return p?p[0].toUpperCase()+p.slice(1):''}
 export function updateSectionViewUi(){
  if(!sectionViewToggle)return;
@@ -17,6 +18,7 @@ export function updateSectionViewUi(){
  if(sectionCapEnabledControl)sectionCapEnabledControl.disabled=!active;
  if(sectionCapOpacityControl)sectionCapOpacityControl.disabled=!active||!sectionCapEnabled;
  if(sectionCapHatchControl)sectionCapHatchControl.disabled=!active||!sectionCapEnabled;
+ syncSectionShadeUi(); // the cut-face shading sliders (only while the slice image is hidden)
  if(sectionViewReadout)sectionViewReadout.textContent=active?sectionPlaneLabel(sectionViewPlane)+' · '+(idx+1)+' / '+(max+1)+(sectionViewReverse?' · '+tr('sectionReverse'):''):tr('sliceAnalysisHint');
 }
 export function sectionLocalPoint(p=sectionViewPlane,idx=p?+planes[p].slider.value:0){

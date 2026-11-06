@@ -1,11 +1,12 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { volume, mpr3DWindowLutKey, mpr3DWindowLutTable, setMpr3DWindowLutKey, residentGpuUploadSeriesId, sceneState, threeRenderMode, mpr3DSurfaceOpacity, sectionViewOpen, sectionViewPlane, sectionAutoPlane, setSectionAutoPlane, sectionCapEnabled, sectionCapOpacity, sectionCapHatch, sectionSliceImageVisible } from './state.js?v=20261106-build690';
-import { wc, ww, planes, mpr3DSliceSliders, $, mprVolumeOpacity, mprSurfaceOpacity } from './ui-shell.js?v=20261106-build690';
-import { sourceFilterStages, getFilteredSourceAxialBlock, getCachedSourceSlice, sourceFilterSignature } from './source-filters.js?v=20261106-build690';
-import { residentGpuMprAvailable } from './mpr-orthogonal.js?v=20261106-build690';
-import { frameYield } from './utils.js?v=20261106-build690';
-import { request3DRender } from './scene3d.js?v=20261106-build690';
+import { volume, mpr3DWindowLutKey, mpr3DWindowLutTable, setMpr3DWindowLutKey, residentGpuUploadSeriesId, sceneState, threeRenderMode, mpr3DSurfaceOpacity, sectionViewOpen, sectionViewPlane, sectionAutoPlane, setSectionAutoPlane, sectionCapEnabled, sectionCapOpacity, sectionCapHatch, sectionSliceImageVisible, sectionShadeBright, sectionShadeContrast, sectionShadeMode } from './state.js?v=20261106-build691';
+import { shadeLumT, brightOf, contrastOf } from './cap-shade.js?v=20261106-build691'; // the cut face's shading when the slice image is hidden
+import { wc, ww, planes, mpr3DSliceSliders, $, mprVolumeOpacity, mprSurfaceOpacity } from './ui-shell.js?v=20261106-build691';
+import { sourceFilterStages, getFilteredSourceAxialBlock, getCachedSourceSlice, sourceFilterSignature } from './source-filters.js?v=20261106-build691';
+import { residentGpuMprAvailable } from './mpr-orthogonal.js?v=20261106-build691';
+import { frameYield } from './utils.js?v=20261106-build691';
+import { request3DRender } from './scene3d.js?v=20261106-build691';
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.webgpu.js';
 export const mpr3DVisibility={axes:true,axial:false,coronal:false,sagittal:false};
 export function restoreSectionAutoPlane(){
@@ -279,17 +280,22 @@ export function beginSharedMpr3DPreview(){
 
 function composeSectionCap(entry){
  const colors=entry.capColors;if(!colors)return;
- const {w,h,pixels:src,gray}=colors,canvas=entry.capCanvas;
+ const {w,h,pixels:src,gray,seg}=colors,canvas=entry.capCanvas;
  if(canvas.width!==w)canvas.width=w;if(canvas.height!==h)canvas.height=h;
  const ctx=canvas.getContext('2d');let image=entry.capImage;if(!image||image.width!==w||image.height!==h)image=entry.capImage=ctx.createImageData(w,h);
  const out=new Uint32Array(image.data.buffer),ca=sectionCapEnabled?Math.max(0,Math.min(1,sectionCapOpacity)):0,pa=sectionSliceImageVisible?Math.max(0,Math.min(1,mpr3DSurfaceOpacity)):0;
  const insideA=ca+(1-ca)*pa,ga=pa?Math.round(pa*255):0;
+ // with the slice image hidden and the fill CT濃淡 the cut face is the SEGMENT colour x a brightness from the data value, read through the page's window (gray = the value in the window, 0..255, as the slice image paints it;
+ // maths: cap-shade.js, the same as VR / AR and the GPU volume), instead of the flat colour. Only where the cap is drawn (c set) and shows a segment's colour (seg[i]); an analysis result's colour is not shaded
+ let lum=null;
+ if(!sectionSliceImageVisible&&sectionShadeMode===1&&ca&&seg){const b=brightOf(sectionShadeBright),k2=contrastOf(sectionShadeContrast);lum=new Float32Array(256);for(let k=0;k<256;k++)lum[k]=shadeLumT(k/255,b,k2)}
  for(let y=0,i=0;y<h;y++){
   const v=(y+.5)/h;
   for(let x=0;x<w;x++,i++){
    const g=gray[i],c=src[i];
    if(!c||!ca){out[i]=ga?((ga<<24)|(g<<16)|(g<<8)|g)>>>0:0;continue}
    let r=c&255,gg=(c>>8)&255,b=(c>>16)&255;
+   if(lum&&seg[i]){const l=lum[g];r*=l;gg*=l;b*=l}
    if(sectionCapHatch){const f=((x+.5)/w+v)*28,stripe=Math.abs(f-Math.floor(f)-.5);if(stripe<.14){r*=.26;gg*=.26;b*=.26}}
    const k=(1-ca)*pa*g;
    out[i]=((Math.round(insideA*255)<<24)|(Math.round((b*ca+k)/insideA)<<16)|(Math.round((gg*ca+k)/insideA)<<8)|Math.round((r*ca+k)/insideA))>>>0;
@@ -297,9 +303,9 @@ function composeSectionCap(entry){
  }
  ctx.putImageData(image,0,0);entry.capTexture.needsUpdate=true;
 }
-export function setSectionCapColors(p,idx,w,h,pixels,gray){
+export function setSectionCapColors(p,idx,w,h,pixels,gray,seg){
  const entry=sceneState?.mprPlaneEntries?.[p];if(!entry?.cap)return;
- entry.capColors={w,h,pixels,gray};entry.capIdx=idx;entry.capHas=true;composeSectionCap(entry);syncSectionCapPresentation();request3DRender();
+ entry.capColors={w,h,pixels,gray,seg};entry.capIdx=idx;entry.capHas=true;composeSectionCap(entry);syncSectionCapPresentation();request3DRender();
 }
 export function recomposeSectionCaps(){for(const entry of Object.values(sceneState?.mprPlaneEntries||{}))if(entry.cap)composeSectionCap(entry);syncSectionCapPresentation()}
 export function syncSectionCapPresentation(){
