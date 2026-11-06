@@ -1,15 +1,16 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { volume, incNextSegmentMaskVolumeId } from './state.js?v=20261106-build692';
-import { hexRgb } from './utils.js?v=20261106-build692';
-import { settings } from './app-settings.js?v=20261106-build692';
-import { buildThresholdMask, morphMask, fillMaskHoles, removeSmallMaskComponents } from './mask-ops.js?v=20261106-build692';
-import { thinSuppressActive, suppressThinMask } from './thin-suppress.js?v=20261106-build692';
-import { effectiveRanges } from './segment-exclusive.js?v=20261106-build692';
-import { maskFromAnalysisRuns } from './run-length.js?v=20261106-build692';
-import { sourceFilterStages } from './source-filters.js?v=20261106-build692';
-import { gpuSlotOrder, slotSignature } from './segment-slots.js?v=20261106-build692';
-import { segmentPresetDefaults } from './dataset-reset.js?v=20261106-build692';
+import { volume, incNextSegmentMaskVolumeId } from './state.js?v=20261106-build693';
+import { hexRgb } from './utils.js?v=20261106-build693';
+import { settings } from './app-settings.js?v=20261106-build693';
+import { buildThresholdMask, morphMask, fillMaskHoles, removeSmallMaskComponents } from './mask-ops.js?v=20261106-build693';
+import { thinSuppressActive, suppressThinMask } from './thin-suppress.js?v=20261106-build693';
+import { effectiveRanges } from './segment-exclusive.js?v=20261106-build693';
+import { maskFromAnalysisRuns } from './run-length.js?v=20261106-build693';
+import { sourceFilterStages } from './source-filters.js?v=20261106-build693';
+import { gpuSlotOrder, slotSignature } from './segment-slots.js?v=20261106-build693';
+import { segmentPresetDefaults } from './dataset-reset.js?v=20261106-build693';
+import { dataRangeOf, shadeRangeOf, moveShadeEnd } from './cap-shade.js?v=20261106-build693';
 // 'contrast' (造影領域) is the fifth preset; at most GPU_SEGMENT_SLOTS (4) are enabled at once (segment-slots.js)
 export const SEGMENT_PRESET_ORDER=['bone','soft','fat','lung','contrast'];
 export const segmentEditState=Object.fromEntries(SEGMENT_PRESET_ORDER.map(key=>[key,{baseRuns:null,baseSignature:'',keepRuns:null,excludeRuns:null,cutRuns:null,finalRuns:null,revision:0,undo:[],redo:[],surfaceGroup:null,rawCutSurface:false}]));
@@ -20,6 +21,17 @@ export const segmentState={
  lung:{active:false,enabled:false,color:'#6fb8d6',opacity:1,min:0,max:1,opening:0,closing:0,minComponent:0,holeFill:false,surfaceMm:0,thicknessMm:0,material:'standard',_maskCache:null,_maskCacheKey:''},
  contrast:{active:false,enabled:false,color:'#c026d3',opacity:1,min:0,max:1,opening:0,closing:0,minComponent:0,holeFill:false,surfaceMm:0,thicknessMm:0,material:'standard',_maskCache:null,_maskCacheKey:''}
 };
+// the cut-face shading range of each segment (cap-shade.js): only the ranges the user TOUCHED are stored here ({lower, upper}, data values); a segment without an entry follows its own min / max
+// (the sliders' values userMin / userMax, else min / max), cut to the data's actual min..max. Shared by VR / AR and the browser (one state, identical behaviour). Saved in the project file (data-load.js), cleared with a new dataset.
+export const segmentShadeRanges={};
+export const shadeDataRange=()=>dataRangeOf(volume?.min,volume?.max);
+// the range in use for a segment: {lower, upper, touched}
+export function segmentShadeRange(key,data=shadeDataRange()){const s=segmentState[key];return shadeRangeOf(segmentShadeRanges[key],s?.userMin??s?.min,s?.userMax??s?.max,data)}
+// the user moves one end of the segment's range: both ends are kept from now on (lower cannot pass upper)
+export function setSegmentShadeEnd(key,which,value,data=shadeDataRange()){if(!segmentState[key])return null;const r=moveShadeEnd(segmentShadeRange(key,data),which,value,data);segmentShadeRanges[key]=r;return segmentShadeRange(key,data)}
+// 「初期値に戻す」: back to following the segment
+export function resetSegmentShadeRange(key){delete segmentShadeRanges[key]}
+export function clearSegmentShadeRanges(){for(const k of Object.keys(segmentShadeRanges))delete segmentShadeRanges[k]}
 // the presets' own settings as defined above (dataset-reset.js): a segment the next dataset does not use goes back to them
 export const SEGMENT_PRESET_DEFAULTS=segmentPresetDefaults(segmentState);
 export function analysisRegionSegmentsShown(r){return !r?.segmentKeys?.length||r.segmentKeys.some(k=>segmentState[k]?.enabled)}
