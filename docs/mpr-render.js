@@ -1,18 +1,18 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { wc, ww, planes, footer, state, wcVal, wwVal } from './ui-shell.js?v=20261106-build692';
-import { activeMprSegments, mprSegmentAlpha, analysisRegionShown, segmentEditActive, segmentState, segmentHasProcessedMask, getProcessedSegmentMask, segmentEditState } from './segments.js?v=20261106-build692';
-import { volume, volumeAnalysisMode, analysisRegions, analysisFocusedRegionId, sectionViewPlane, memoryGpuPreviewActive, sourceVolume, setMemoryGpuPreviewActive, sceneState, incSourceMprWarmupToken, sourceMprWarmupPlane, setSourceMprWarmupPlane, residentGpuUploadSeriesId, sourceMprWarmupToken, setCrosshairSlice , sectionViewOpen, threeRenderMode} from './state.js?v=20261106-build692';
-import { analysisRunsContain, runsPlaneMask } from './run-length.js?v=20261106-build692';
-import { mpr3DVisibility, refreshMpr3DPlaneTexture, setSectionCapColors, updateMpr3DPlanePositions, syncMpr3DSliceSliders, mpr3DOrthoSliding, pushCachedMpr3DPlane, mpr3DPreviewCache, mpr3DPreviewSignature, paintMpr3DCacheSliceFast, ensureMpr3DPreviewCache } from './mpr3d-overlay.js?v=20261106-build692';
-import { updateSectionClipPlaneWorld, rebindWebGpuSectionClipGroup, updateSectionViewUi } from './section-view.js?v=20261106-build692';
-import { request3DRender } from './scene3d.js?v=20261106-build692';
-import { planeRenderRevision, sourceFilterStages, getFilteredMemoryPlaneValues, getFilteredSourcePlaneValues, getCachedSourceSlice, sourceFilterSignature, sourceFilterCacheGet, memoryFilterPreviewGet, currentFilterSignature } from './source-filters.js?v=20261106-build692';
-import { cachedSagittalDisplayPlane, cachedSourceMprPlane } from './volume-io.js?v=20261106-build692';
-import { sourceOrthogonalCacheGet, residentGpuMprAvailable, buildSourceOrthogonalPlane } from './mpr-orthogonal.js?v=20261106-build692';
-import { hexRgb, formatCtValue, frameYield } from './utils.js?v=20261106-build692';
+import { wc, ww, planes, footer, state, wcVal, wwVal } from './ui-shell.js?v=20261106-build693';
+import { SEGMENT_PRESET_ORDER, activeMprSegments, mprSegmentAlpha, analysisRegionShown, segmentEditActive, segmentState, segmentHasProcessedMask, getProcessedSegmentMask, segmentEditState } from './segments.js?v=20261106-build693';
+import { volume, volumeAnalysisMode, analysisRegions, analysisFocusedRegionId, sectionViewPlane, memoryGpuPreviewActive, sourceVolume, setMemoryGpuPreviewActive, sceneState, incSourceMprWarmupToken, sourceMprWarmupPlane, setSourceMprWarmupPlane, residentGpuUploadSeriesId, sourceMprWarmupToken, setCrosshairSlice , sectionViewOpen, threeRenderMode} from './state.js?v=20261106-build693';
+import { analysisRunsContain, runsPlaneMask } from './run-length.js?v=20261106-build693';
+import { mpr3DVisibility, refreshMpr3DPlaneTexture, setSectionCapColors, updateMpr3DPlanePositions, syncMpr3DSliceSliders, mpr3DOrthoSliding, pushCachedMpr3DPlane, mpr3DPreviewCache, mpr3DPreviewSignature, paintMpr3DCacheSliceFast, ensureMpr3DPreviewCache } from './mpr3d-overlay.js?v=20261106-build693';
+import { updateSectionClipPlaneWorld, rebindWebGpuSectionClipGroup, updateSectionViewUi } from './section-view.js?v=20261106-build693';
+import { request3DRender } from './scene3d.js?v=20261106-build693';
+import { planeRenderRevision, sourceFilterStages, getFilteredMemoryPlaneValues, getFilteredSourcePlaneValues, getCachedSourceSlice, sourceFilterSignature, sourceFilterCacheGet, memoryFilterPreviewGet, currentFilterSignature } from './source-filters.js?v=20261106-build693';
+import { cachedSagittalDisplayPlane, cachedSourceMprPlane } from './volume-io.js?v=20261106-build693';
+import { sourceOrthogonalCacheGet, residentGpuMprAvailable, buildSourceOrthogonalPlane } from './mpr-orthogonal.js?v=20261106-build693';
+import { hexRgb, formatCtValue, frameYield } from './utils.js?v=20261106-build693';
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.webgpu.js';
-import { latestOnlyRunner } from './latest-runner.js?v=20261106-build692';
+import { latestOnlyRunner } from './latest-runner.js?v=20261106-build693';
 export function analysisColorCss(color){return '#'+Number(color??0x00d8ff).toString(16).padStart(6,'0')}
 function resultPlaneLayers(p,idx,full){
  const out=[];if(!volume)return out;
@@ -25,20 +25,21 @@ function paintSectionCap(p,idx,dims,values){
  if(!volume||!sectionViewOpen||sectionViewPlane!==p||threeRenderMode==='volume')return false;
  const [w,h]=dims,n=w*h,C=volume.columns,R=volume.rows,S=volume.slices;
  if(values&&values.length<n)return false;
- let buf=sectionCapBuffers[p];if(!buf||buf.pixels.length!==n)buf=sectionCapBuffers[p]={pixels:new Uint32Array(n),gray:new Uint8Array(n),seg:new Uint8Array(n)};
- const out=buf.pixels,gray=buf.gray,seg=buf.seg,low=+wc.value-(+ww.value)/2,scale=255/Math.max(+ww.value,1);
+ let buf=sectionCapBuffers[p];if(!buf||buf.pixels.length!==n)buf=sectionCapBuffers[p]={pixels:new Uint32Array(n),gray:new Uint8Array(n),seg:new Uint8Array(n),val:new Float32Array(n)};
+ const out=buf.pixels,gray=buf.gray,seg=buf.seg,val=buf.val,low=+wc.value-(+ww.value)/2,scale=255/Math.max(+ww.value,1);
  const full=p==='axial'?w===C&&h===R:p==='coronal'?w===C&&h===S:w===R&&h===S;
  const segs=activeMprSegments();
  for(const item of segs){const runs=item.processedRuns||(segmentEditActive(item.key)&&item.edit.finalRuns)||null;item.planeMask=full&&runs?runsPlaneMask(runs,p,idx,C,R,S):null}
  const layers=resultPlaneLayers(p,idx,full),data=values?null:volume.data;
  for(let py=0,i=0;py<h;py++)for(let px=0;px<w;px++,i++){
   const ix=p==='sagittal'?idx:px,iy=p==='coronal'?idx:(p==='sagittal'?px:py),iz=p==='axial'?idx:S-1-py;
-  const v=values?values[i]:data[iz*R*C+iy*C+ix];let c=null,isSeg=0; // isSeg: the colour is a segment's own, not an analysis result's (cut-face shading, mpr3d-overlay.js)
+  const v=values?values[i]:data[iz*R*C+iy*C+ix];let c=null,isSeg=0; // isSeg: 0 = the colour is not a segment's own (an analysis result's, or none); else 1 + the index of the segment in SEGMENT_PRESET_ORDER
+  val[i]=v;
   gray[i]=Math.max(0,Math.min(255,Math.round((v-low)*scale)));
-  for(const item of segs){const {key,seg,edit,processedMask,processedRuns,rgb,planeMask}=item,inside=planeMask?planeMask[i]===1:processedRuns?analysisRunsContain(processedRuns,ix,iy,iz):(segmentEditActive(key)&&edit.finalRuns?analysisRunsContain(edit.finalRuns,ix,iy,iz):(processedMask?processedMask[iz*R*C+iy*C+ix]===1:(v>=seg.min&&v<=seg.max)));if(inside){const rr=layers.length&&resultRgbAt(layers,key,i,ix,iy,iz);c=rr||rgb;isSeg=rr?0:1}}
+  for(const item of segs){const {key,seg,edit,processedMask,processedRuns,rgb,planeMask}=item,inside=planeMask?planeMask[i]===1:processedRuns?analysisRunsContain(processedRuns,ix,iy,iz):(segmentEditActive(key)&&edit.finalRuns?analysisRunsContain(edit.finalRuns,ix,iy,iz):(processedMask?processedMask[iz*R*C+iy*C+ix]===1:(v>=seg.min&&v<=seg.max)));if(inside){const rr=layers.length&&resultRgbAt(layers,key,i,ix,iy,iz);c=rr||rgb;isSeg=rr?0:1+SEGMENT_PRESET_ORDER.indexOf(key)}}
   seg[i]=isSeg;out[i]=c?(0xff000000|(Math.round(c[2]*.78+56.1)<<16)|(Math.round(c[1]*.78+56.1)<<8)|Math.round(c[0]*.78+56.1))>>>0:0;
  }
- setSectionCapColors(p,idx,w,h,out,gray,seg);return true;
+ setSectionCapColors(p,idx,w,h,out,gray,seg,val);return true;
 }
 // the section face while sliding, without the 2D view (the GPU volume view does not repaint 2D while sliding either):
 // unfiltered values at hand (the memory volume, or the source's cached planes); otherwise the 2D path paints it

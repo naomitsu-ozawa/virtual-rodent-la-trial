@@ -223,13 +223,13 @@ describe('the image does not change with the theme; the backgrounds around it fo
     const mv = read('docs/medical-volume.js');
     expect(mv).toContain("from './canvas-theme.js");
     // the shader: a background uniform, no fixed colour any more
-    expect(mv).toMatch(/textureDims:vec4<f32>,\n background:vec4<f32>,\n segMat:array<vec4<f32>,4>,\n capShade:vec4<f32>\n\};\n@group\(0\) @binding\(0\) var<uniform> u:Uniforms;/); // segMat appended after it
+    expect(mv).toMatch(/textureDims:vec4<f32>,\n background:vec4<f32>,\n segMat:array<vec4<f32>,4>,\n capShade:vec4<f32>,\n capRange:array<vec4<f32>,2>\n\};\n@group\(0\) @binding\(0\) var<uniform> u:Uniforms;/); // segMat appended after it
     expect(mv).not.toMatch(/0\.035\s*,\s*0\.045\s*,\s*0\.05/);
     expect(mv.match(/return vec4<f32>\(u\.background\.rgb,1\.0\);/g).length).toBe(3);
     expect(mv).toContain('let bg=u.background.rgb;');
     // the uniform buffer holds the 23rd vec4 and is filled every frame; the canvas stays opaque
-    expect(mv).toContain('size:448,usage:GPUBufferUsage.UNIFORM');
-    expect(mv).toContain('this.frameData=new Float32Array(112);');
+    expect(mv).toContain('size:480,usage:GPUBufferUsage.UNIFORM');
+    expect(mv).toContain('this.frameData=new Float32Array(120);');
     expect(mv).toMatch(/const bg=canvasBackground3dUnit\(\);put\(22,bg\[0\],bg\[1\],bg\[2\],1\);/);
     expect(mv).toContain("alphaMode:'opaque'");
     expect(mv).toMatch(/clearValue:\{r:canvasBackground3dUnit\(\)\[0\],g:canvasBackground3dUnit\(\)\[1\],b:canvasBackground3dUnit\(\)\[2\],a:1\}/);

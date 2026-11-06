@@ -1,17 +1,17 @@
 // Settings dialog. Tabs: 描画 (rendering) and デバッグ (debug);
 // add a tab button + panel in ui-shell.js to extend it.
-import { settings } from './app-settings.js?v=20261106-build692';
-import { request3DRender } from './scene3d.js?v=20261106-build692';
-import { updateGpuStatus } from './gpu-compute.js?v=20261106-build692';
-import { volumeCache, updateVolumeCacheControl, volumeCacheBudget } from './gpu-volume-data.js?v=20261106-build692';
-import { tr } from './i18n.js?v=20261106-build692';
-import { askInline, armConfirm, noteInline } from './inline-ask.js?v=20261106-build692';
-import { setupEventPrepareButton } from './event-prepare-ui.js?v=20261106-build692'; // 「体験会用データを準備」
-import { fmt } from './utils.js?v=20261106-build692';
-import { gpuPreferenceSupported, gpuEffectivePreference, gpuHybridModeSupported, gpuEffectiveHybridMode } from './gpu-preference.js?v=20261106-build692';
-import { initDebugSwitches } from './debug-switches-ui.js?v=20261106-build692';
-import { initGpuDiagnosticsUi } from './gpu-diagnostics-ui.js?v=20261106-build692';
-import { collectGpuDiagnostics } from './gpu-diagnostics-collect.js?v=20261106-build692';
+import { settings } from './app-settings.js?v=20261106-build693';
+import { request3DRender } from './scene3d.js?v=20261106-build693';
+import { updateGpuStatus } from './gpu-compute.js?v=20261106-build693';
+import { volumeCache, updateVolumeCacheControl, volumeCacheBudget } from './gpu-volume-data.js?v=20261106-build693';
+import { tr } from './i18n.js?v=20261106-build693';
+import { askInline, armConfirm, noteInline } from './inline-ask.js?v=20261106-build693';
+import { setupEventPrepareButton } from './event-prepare-ui.js?v=20261106-build693'; // 「体験会用データを準備」
+import { fmt } from './utils.js?v=20261106-build693';
+import { gpuPreferenceSupported, gpuEffectivePreference, gpuHybridModeSupported, gpuEffectiveHybridMode } from './gpu-preference.js?v=20261106-build693';
+import { initDebugSwitches } from './debug-switches-ui.js?v=20261106-build693';
+import { initGpuDiagnosticsUi } from './gpu-diagnostics-ui.js?v=20261106-build693';
+import { collectGpuDiagnostics } from './gpu-diagnostics-collect.js?v=20261106-build693';
 export function initSettingsDialog(){
  const dlg=document.getElementById('settings-dialog'),open=document.getElementById('settings-open');if(!dlg||!open)return;
  // in the workspace UI the dialog's content lives in the 設定 panel (workspace-ui.js sets data-embedded): the same

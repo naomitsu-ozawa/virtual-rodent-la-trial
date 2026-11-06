@@ -83,7 +83,8 @@ describe('vr-view.js: review fixes (F1-F9)', () => {
 
 describe('vr-view.js: section drag restored, one cursor', () => {
   it('the section is not clamped while dragging and snaps back into the box on release', () => {
-    const a = src.indexOf('const updatePress='), b = src.indexOf(' // volume hit (');
+    const a = src.indexOf('const updatePress='), b = src.indexOf(' // volume hit (the pointer');
+    expect(a, 'updatePress marker').toBeGreaterThan(-1); expect(b, 'volume hit marker').toBeGreaterThan(a);
     expect(src.slice(a, b)).not.toContain('clampPlaneCenter');
     const e = src.indexOf('const endDrag='), line = src.slice(e, src.indexOf('\n', e));
     expect(line).toContain('snapSection(dg.pl)');
