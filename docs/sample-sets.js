@@ -1,13 +1,14 @@
 // Practice datasets hosted on this site (pure: no DOM, unit-tested).
 // sample1 (rat abdomen) keeps its original base path and Cache Storage key, so users who already
 // downloaded it do not download it again; later sets put their folder in the key.
-import { DEMO_FROM_SITE_ROOT } from './sample-config.js?v=20261029-build689';
+import { DEMO_FROM_SITE_ROOT } from './sample-config.js?v=20261106-build690';
 export const SAMPLE_CACHE='virtual-rodent-sample-v1';
 export const SAMPLE_SETS={
  sample1:{base:'demo/sample1/',keyPrefix:'/__vrl-sample/v1/'},
  sample2:{base:'demo/sample2/',keyPrefix:'/__vrl-sample/v1/sample2/'},
  sample3:{base:'demo/sample3/',keyPrefix:'/__vrl-sample/v1/sample3/'},
  sample4:{base:'demo/sample4/',keyPrefix:'/__vrl-sample/v1/sample4/'},
+ sample5:{base:'demo/sample5/',keyPrefix:'/__vrl-sample/v1/sample5/'},
 };
 export const DEFAULT_SAMPLE='sample1';
 export function sampleSet(id){return Object.hasOwn(SAMPLE_SETS,id)?SAMPLE_SETS[id]:null}
