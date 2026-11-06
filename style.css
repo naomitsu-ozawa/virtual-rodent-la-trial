@@ -1042,6 +1042,7 @@ html.vrl-ipad-ui .point-menu-btn{min-height:44px;min-width:64px;font-size:15px}
 .spacing-warn{pointer-events:auto}.spacing-warn summary{cursor:pointer;list-style-position:inside}.spacing-info{background:rgb(var(--ui-s2));border-color:rgb(var(--ui-b2));color:rgb(var(--ui-t3))!important}.spacing-mark{color:rgb(var(--ui-amber-tx));font-weight:700}
 .sample-choices{display:grid;gap:10px;margin-top:12px}
 .sample-choice{min-height:44px;font-size:15px;touch-action:manipulation}
+.sample-group-label{grid-column:1/-1;margin-top:4px;font-size:12px;font-weight:700;color:rgb(var(--ui-t3))} /* 「その他」 group of the practice-data chooser */
 .settings-row[hidden],.settings-panel .hint[hidden]{display:none}
 /* GPU info tab, debug mode only (the tab button and panel are `hidden` unless debug is on) */
 .settings-tab[hidden]{display:none}
@@ -1339,3 +1340,10 @@ body{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 input,textarea,select,[contenteditable],[contenteditable] *{-webkit-user-select:text;user-select:text}
 .tut-voice-credit,.tut-voice-credit *{-webkit-user-select:text;user-select:text} /* the voice credit (with its URL) can be selected and copied */
 button,a,img,svg{-webkit-user-drag:none}
+
+/* credit of a practice dataset that carries a license notice (sample5; sample-credit-ui.js) */
+.sample-credit{margin:8px 0 10px;padding:10px 12px;border-radius:10px;border:1px solid rgb(var(--ui-b1));font-size:12px;line-height:1.55;overflow-wrap:anywhere;-webkit-user-select:text;user-select:text}
+.sample-credit[hidden]{display:none}
+.sample-credit>div:first-child{font-weight:700}
+.sample-credit a{color:inherit;font-weight:700;text-decoration:underline}
+.event-other-title{font-size:13px;font-weight:700;color:rgb(var(--ui-t3));margin-top:2px}

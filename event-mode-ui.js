@@ -2,10 +2,10 @@
 // the levels). A level card asks app.js for its practice dataset ('vrl-event-sample' -> the practice-data chooser's own startSample,
 // so the bundled project.vrlab applies as usual); then the visitor presses 「VRで見る」/「ARで見る」. With the switch off (default)
 // nothing is added to the page.
-import { settings } from './app-settings.js?v=20261029-build689';
-import { tr } from './i18n.js?v=20261029-build689';
-import { tutorialUiActive, restartTutorial } from './tutorial-ui.js?v=20261029-build689';
-import { EVENT_LEVELS, EVENT_HINT_KEYS, levelForSample, chooseEventLevel, chosenEventLevel, resetPress, resetArmed, RESET_ARM_MS } from './event-mode.js?v=20261029-build689';
+import { settings } from './app-settings.js?v=20261106-build691';
+import { tr } from './i18n.js?v=20261106-build691';
+import { tutorialUiActive, restartTutorial } from './tutorial-ui.js?v=20261106-build691';
+import { EVENT_LEVELS, EVENT_OTHER_SAMPLES, EVENT_HINT_KEYS, levelForSample, chooseEventLevel, chosenEventLevel, resetPress, resetArmed, RESET_ARM_MS } from './event-mode.js?v=20261106-build691';
 export function initEventModeUi(){
  const box=document.getElementById('set-event-mode');
  if(box){box.checked=settings.get('eventMode')===true;box.onchange=()=>settings.set('eventMode',box.checked)}
@@ -13,6 +13,7 @@ export function initEventModeUi(){
  const el=(tag,cls,key)=>{const e=document.createElement(tag);if(cls)e.className=cls;if(key){e.dataset.i18n=key;e.textContent=tr(key)}return e};
  const mark=()=>{
   if(!panel)return;const cur=chosenEventLevel()?.id;panel.setAttribute('aria-busy',String(loading));
+  for(const c of panel.querySelectorAll('[data-event-other]'))c.disabled=loading;
   for(const c of panel.querySelectorAll('[data-event-level]')){const on=c.dataset.eventLevel===cur;c.classList.toggle('is-selected',on);c.setAttribute('aria-pressed',String(on));c.disabled=loading}
   if(resetBtn){ // 最初の状態に戻す: only with a practice dataset open; armed = the second press within RESET_ARM_MS fires (the VR button's confirm, event-mode.js resetPress)
    const armed=resetArmed(armedUntil,performance.now()),key=armed?'evResetAgain':'evReset';
@@ -47,8 +48,20 @@ export function initEventModeUi(){
    };
    list.append(card);
   }
+  // 「その他」 - datasets that are not levels: a plain button (no level is chosen, no mission), opened through the same route as a level card
+  const other=el('div','event-other');other.append(el('div','event-other-title','sampleGroupOther'));
+  for(const o of EVENT_OTHER_SAMPLES){
+   const b=el('button','secondary-button sample-choice event-other-btn',o.nameKey);b.type='button';b.dataset.eventOther=o.sample;
+   b.onclick=()=>{
+    if(loading)return;chooseEventLevel(null);
+    const ev=new CustomEvent('vrl-event-sample',{detail:{sampleSet:o.sample,done:null}});document.dispatchEvent(ev);
+    if(!ev.detail.done){mark();return}
+    loading=true;mark();Promise.resolve(ev.detail.done).catch(()=>{}).finally(()=>{loading=false;mark()});
+   };
+   other.append(b);
+  }
   resetBtn=el('button','event-reset-btn','evReset');resetBtn.type='button';resetBtn.id='event-reset-btn';resetBtn.onclick=pressReset;
-  p.append(title,list,resetBtn,el('p','hint event-level-after','evAfter'));
+  p.append(title,list,other,resetBtn,el('p','hint event-level-after','evAfter'));
   return p;
  };
  const mount=()=>{
