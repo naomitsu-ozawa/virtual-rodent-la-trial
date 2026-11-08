@@ -48,7 +48,7 @@ describe('the shared maths (docs/cap-shade.js)', () => {
       const a = shadeLumV(-50 + t * 400, -50, 350), b = shadeLumV(300 + t * 900, 300, 1200);
       expect(a).toBeCloseTo(b, 12); expect(a).toBeCloseTo(shadeLumT(t), 12);
     }
-    expect(/modality|isCt|percentile|autoShade|huLike|CT_SHADE_SPAN|1500/.test(pure)).toBe(false);
+    expect(/modality|isCt|huLike|CT_SHADE_SPAN|1500/.test(pure)).toBe(false); // the auto range is a percentile of the segment's own values (tests/unit/cap-shade-auto.test.js), still no data-type test
   });
   it('the darkest level is fixed at 0.35: t = 0 gives 0.35^(1/b) (contrast 1); brightness and contrast keep the formulas', () => {
     expect(shadeLumT(0, 1, 1)).toBeCloseTo(0.35, 12); expect(shadeLumT(0, 1.8, 1)).toBeCloseTo(Math.pow(0.35, 1 / 1.8), 12); expect(shadeLumT(1, 1.8, 1.7)).toBe(1);
@@ -72,7 +72,7 @@ describe('the range of a segment: initial value, follow / touch / reset', () => 
     expect(initialShadeRange(NaN, 20, CT)).toEqual({ lower: -1024, upper: 3071 });
     expect(dataRangeOf('a', 3)).toBe(null); expect(dataRangeOf(5, 1)).toEqual({ min: 1, max: 5 });
   });
-  it('an untouched range follows the segment min / max when they change; a touched one stays at the user values; 初期値に戻す follows again', () => {
+  it('without an auto value an untouched range follows the segment min / max when they change (the initial value); a touched (manual) one stays at the user values; resetting follows again', () => {
     let touched; // what segments.js keeps per segment
     const range = (a, b) => shadeRangeOf(touched, a, b, CT);
     expect(range(-50, 350)).toEqual({ lower: -50, upper: 350, touched: false });
@@ -83,8 +83,8 @@ describe('the range of a segment: initial value, follow / touch / reset', () => 
     touched = undefined; // reset
     expect(range(-50, 350)).toEqual({ lower: -50, upper: 350, touched: false });
   });
-  it('the real state (segments.js): touch, follow, stay and reset per segment; a segment moves with its userMin / userMax (the sliders)', () => {
-    const s = S.segmentState; S.clearSegmentShadeRanges();
+  it('the real state (segments.js): touch, follow, stay and reset per segment (no auto value yet); a segment moves with its userMin / userMax (the sliders)', () => {
+    const s = S.segmentState; S.clearSegmentShadeRanges(); S.clearSegmentShadeAuto();
     for (const k of ['bone', 'soft']) Object.assign(s[k], { min: 0, max: 1, userMin: undefined, userMax: undefined });
     s.soft.userMin = -50; s.soft.userMax = 350; s.bone.userMin = 698; s.bone.userMax = 61535;
     expect(S.segmentShadeRange('soft', CT)).toMatchObject({ lower: -50, upper: 350, touched: false });
@@ -102,7 +102,7 @@ describe('the range of a segment: initial value, follow / touch / reset', () => 
     expect(dataLoad).toContain('clearSegmentShadeRanges(); // another dataset');
   });
   it('the segment min / max the range starts from are the slider values (userMin / userMax, else min / max), as the project saves them', () => {
-    expect(segmentsSrc).toContain('shadeRangeOf(segmentShadeRanges[key],s?.userMin??s?.min,s?.userMax??s?.max,data)');
+    expect(segmentsSrc).toContain('shadeRangeOf(segmentShadeRanges[key],s?.userMin??s?.min,s?.userMax??s?.max,data,segmentShadeAuto[key])');
     expect(dataLoad).toContain('min:g.userMin??g.min,max:g.userMax??g.max');
   });
 });
@@ -238,21 +238,21 @@ describe('browser mesh view (mpr3d-overlay.js, mpr-render.js)', () => {
 });
 
 describe('browser panel (断面解析): the same set of controls, enabled like 明るさ / コントラスト', () => {
-  it('the panel has 単色 / CT濃淡 (default CT濃淡), 明るさ / コントラスト (180 / 170 %) and, below them, 濃淡の範囲: the segment buttons, 下限 / 上限 sliders with − / ＋, 初期値に戻す', () => {
+  it('the panel has 単色 / CT濃淡 (default CT濃淡), 明るさ / コントラスト (180 / 170 %) and, below them, 濃淡の範囲: the segment buttons, 下限 / 上限 sliders with − / ＋, 自動に戻す', () => {
     expect(shell).toContain('<select id="section-shade-mode"><option value="0" data-i18n="shadeSolid">単色</option><option value="1" data-i18n="shadeCt" selected>CT濃淡</option></select>');
     for (const [id, key, mn, mx, st, val] of [['section-shade-bright', 'shadeBright', 50, 200, 10, 180], ['section-shade-contrast', 'shadeContrast', 50, 200, 10, 170]])
       expect(shell).toContain(`<span data-i18n="${key}">`) && expect(shell).toContain(`<output id="${id}-value">${val}%</output><input id="${id}" type="range" min="${mn}" max="${mx}" step="${st}" value="${val}"`);
     expect(shell.indexOf('id="section-shade-contrast"')).toBeLessThan(shell.indexOf('data-i18n="shadeRange"'));
     expect(shell).toContain('<div id="section-shade-seg" role="group"');
     for (const k of ['lower', 'upper']) for (const id of [`section-shade-${k}"`, `section-shade-${k}-value"`, `section-shade-${k}-minus" type="button"`, `section-shade-${k}-plus" type="button"`]) expect(shell).toContain(`id="${id}`);
-    expect(shell).toContain('<button id="section-shade-reset" type="button" data-i18n="shadeReset">初期値に戻す</button>');
+    expect(shell).toContain('<button id="section-shade-reset" type="button" data-i18n="shadeReset">自動に戻す</button>');
     expect(shell).toContain("sectionShadeSegGroup=$('#section-shade-seg')"); expect(shell).toContain("sectionShadeResetButton=$('#section-shade-reset')");
   });
   it('texts in ja + en (VR menu and browser)', () => {
-    expect(i18n).toContain("shadeFill:'スライスの塗り',shadeSolid:'単色',shadeCt:'CT濃淡',shadeBright:'明るさ',shadeContrast:'コントラスト',shadeRange:'濃淡の範囲',shadeLower:'下限',shadeUpper:'上限',shadeReset:'初期値に戻す',");
-    expect(i18n).toContain("shadeFill:'Slice fill',shadeSolid:'Solid',shadeCt:'CT shading',shadeBright:'Brightness',shadeContrast:'Contrast',shadeRange:'Shading range',shadeLower:'Lower',shadeUpper:'Upper',shadeReset:'Reset to initial',");
+    expect(i18n).toContain("shadeFill:'スライスの塗り',shadeSolid:'単色',shadeCt:'CT濃淡',shadeBright:'明るさ',shadeContrast:'コントラスト',shadeRange:'濃淡の範囲',shadeLower:'下限',shadeUpper:'上限',shadeReset:'自動に戻す',");
+    expect(i18n).toContain("shadeFill:'Slice fill',shadeSolid:'Solid',shadeCt:'CT shading',shadeBright:'Brightness',shadeContrast:'Contrast',shadeRange:'Shading range',shadeLower:'Lower',shadeUpper:'Upper',shadeReset:'Back to auto',");
     expect(vr).toContain("ctSh:'スライスの塗り',ctShV:['単色','CT濃淡']"); expect(vr).toContain("ctSh:'Slice fill',ctShV:['Solid','CT shading']");
-    expect(vr).toContain("shRange:'濃淡の範囲',shT:'濃淡の範囲'"); expect(vr).toContain("shLower:'下限',shUpper:'上限',shReset:'初期値に戻す',shNone:"); expect(vr).toContain("shRange:'Shading range',shT:'Shading range'"); expect(vr).toContain("shLower:'Lower',shUpper:'Upper',shReset:'Reset to initial',shNone:");
+    expect(vr).toContain("shRange:'濃淡の範囲',shT:'濃淡の範囲'"); expect(vr).toContain("shLower:'下限',shUpper:'上限',shReset:'自動に戻す',shNone:"); expect(vr).toContain("shRange:'Shading range',shT:'Shading range'"); expect(vr).toContain("shLower:'Lower',shUpper:'Upper',shReset:'Back to auto',shNone:");
     expect(i18n).toContain("sectionShade:'断面の濃淡（スライス画像を隠したとき）'"); expect(i18n).toContain("sectionShade:'Cut-face shading (slice image hidden)'");
     expect(state).toContain('export let sectionShadeMode=1;'); expect(state).toContain('export let sectionShadeBright=SHADE_BRIGHT_DEFAULT;'); expect(state).toContain('export let sectionShadeContrast=SHADE_CONTRAST_DEFAULT;');
     expect(shell + i18n + state + sectionShade + app + mv + ov).not.toMatch(/shadeFloor|section-shade-floor|sectionShadeFloor|暗い側の明るさ|Dark-side/);
@@ -261,20 +261,20 @@ describe('browser panel (断面解析): the same set of controls, enabled like �
     expect(vr + i18n).not.toMatch(/(スライス画像|slice image)[^'"]{0,12}(ウィンドウ|window)[^'"]{0,30}(共通|同じ|shared|same)/i);
     expect(vr).not.toMatch(/'[^'\n]*(濃淡|shading)[^'\n]*(ウィンドウと共通|shares the window|follows the window)[^'\n]*'/i);
   });
-  it('the three values stay saved on this device like VR (localStorage, on release); the range sliders act on the chosen segment, − / ＋ use value-step.js, 初期値に戻す resets it; enabled only while the section is open, the cap is on and the slice image hidden, and with CT濃淡', () => {
+  it('the three values stay saved on this device like VR (localStorage, on release); the range sliders act on the chosen segment, − / ＋ use value-step.js, 初期値に戻す resets it (back to auto); enabled only while the section is open, the cap is on and the slice image hidden, and with CT濃淡', () => {
     expect(sectionShade).toContain("const KEY = 'vrl-section-shade';"); expect(sectionShade).toContain('JSON.stringify({ ctShade: sectionShadeMode, ctShadeBright: brightOf(sectionShadeBright), ctShadeContrast: contrastOf(sectionShadeContrast) })');
     expect(sectionShade).toContain('control.onchange = save;'); expect(sectionShade).toContain('setSectionShadeMode(+sectionShadeModeControl.value === 0 ? 0 : 1); save();'); expect(sectionShade).toContain('restore();');
     expect(sectionShade).toContain('sectionViewOpen && !!sectionViewPlane && sectionCapEnabled && !sectionSliceImageVisible'); expect(sectionShade).toContain('control.disabled = !enabled || sectionShadeMode !== 1');
     expect(sectionShade).toContain('on = enabled && sectionShadeMode === 1 && !!key && !!data'); expect(sectionShade).toContain('control.disabled = !on'); expect(sectionShade).toContain('sectionShadeResetButton.disabled = !on || !r?.touched');
     expect(sectionShade).toContain('segmentState[k].active && segmentState[k].enabled'); // the segments shown now
-    expect(sectionShade).toContain('control.step = String(step || 1)'); expect(sectionShade).toContain('control.min = String(data.min); control.max = String(data.max);');
+    expect(sectionShade).toContain('control.step = String(step || 1)'); expect(sectionShade).toContain('control.min = String(span.min); control.max = String(span.max);'); // the segment's span
     expect(sectionShade).toContain('moveEnd(which, shadeValueAt(shadePosOf(+control.value, d), d))'); expect(sectionShade).toContain('setSegmentShadeEnd(key, which, value); syncSectionShadeUi(); refresh();');
     expect(sectionShade).toContain('wireStepButton(minus, -1, step()); if (plus) wireStepButton(plus, 1, step());'); expect(sectionShade).toContain("stepClamp(which === 'lower' ? r.lower : r.upper, delta, d.min, d.max)");
     expect(sectionShade).toContain('resetSegmentShadeRange(key); syncSectionShadeUi(); refresh();');
     expect(app).toContain('initSectionShadeUi({refresh:()=>{recomposeSectionCaps();request3DRender()}});'); expect(app).toContain('setSectionSliceImageVisible(!!sectionSliceImageControl.checked);syncSectionShadeUi();'); expect(sectionView).toContain('syncSectionShadeUi();');
   });
-  it('nothing was added that decides by data type, estimates a range, or loads code dynamically', () => {
-    for (const s of [pure, sectionShade, readFileSync('docs/value-step.js', 'utf8')]) { expect(/\bimport\s*\(/.test(s)).toBe(false); expect(/percentile|autoShade|huLike|modality/i.test(s)).toBe(false); }
+  it('nothing was added that decides by data type or loads code dynamically', () => {
+    for (const s of [pure, sectionShade, readFileSync('docs/value-step.js', 'utf8')]) { expect(/\bimport\s*\(/.test(s)).toBe(false); expect(/huLike|modality|isCt/i.test(s)).toBe(false); }
   });
 });
 
@@ -297,14 +297,14 @@ describe('VR menu: the 濃淡の範囲 page (tab 12), opened from the スライ�
     expect(page).toContain('btn(X,MENU_H-100,260,L.back,false,()=>{ui.tab=2;menu.refresh()},{size:28});');
     expect(vr).toContain('TAB_IDS=[0,1,2,3,4,5,6,9,11]');
   });
-  it('the sliders run over the data\'s range in 200 steps (shadeValueAt / shadePosOf), show raw values, and − / ＋ stop at the data limits and at the other end', () => {
-    expect(page).toContain('value:shadePosOf(value,data),text:formatCtValue(value,step)'); expect(page).toContain('set:v=>{setSegmentShadeEnd(key,which,shadeValueAt(v,data),data)}');
+  it('the sliders run over the segment\'s span in 200 steps (shadeValueAt / shadePosOf), show raw values, and − / ＋ stop at the data limits and at the other end', () => {
+    expect(page).toContain('value:shadePosOf(value,span),text:formatCtValue(value,step)'); expect(page).toContain('set:v=>{setSegmentShadeEnd(key,which,shadeValueAt(v,span),data)}');
     expect(page).toContain("const q=segmentShadeRange(key,data);setSegmentShadeEnd(key,which,stepClamp(which==='lower'?q.lower:q.upper,d,data.min,data.max),data)");
-    expect(page).toContain('step=shadeRangeStep(data)');
+    expect(page).toContain('span=segmentShadeSpan(key,data),step=shadeRangeStep(span)');
     expect(segmentsSrc).toContain('moveShadeEnd(segmentShadeRange(key,data),which,value,data)');
   });
   it('VR and browser share one state and one maths (segments.js, cap-shade.js): no separate copy in vr-view.js', () => {
-    expect(vr).toContain("segmentShadeRange, setSegmentShadeEnd, resetSegmentShadeRange, shadeDataRange } from './segments.js"); expect(sectionShade).toContain("from './segments.js"); expect(ov).toContain("segmentShadeRange, shadeDataRange } from './segments.js");
+    expect(vr).toContain("segmentShadeRange, segmentShadeSpan, setSegmentShadeEnd, resetSegmentShadeRange, shadeDataRange, applyShadeAutoHistograms, onShadeAutoChange } from './segments.js"); expect(sectionShade).toContain("from './segments.js"); expect(ov).toContain("segmentShadeRange, shadeDataRange } from './segments.js");
     expect(vr).not.toMatch(/segmentShadeRanges\b/);
   });
 });

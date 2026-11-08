@@ -12,17 +12,18 @@
 //   same events as the slider itself (input while moving, change on release), so the segment code runs exactly as for a slider.
 // -: the VR board counts the VR data itself (vr-label-histogram.js) and reads only the display range and the scale from here; the VR
 //   consumer / texture pass of-566 (acquireHistogram, getHistogramView, ...) is gone.
-import { volume, current3DVolume, currentLanguage } from './state.js?v=20261106-build693';
-import { segmentState, SEGMENT_PRESET_ORDER, segmentNeedsVoxelMask, segmentEditGen, segmentSourceSignature } from './segments.js?v=20261106-build693';
-import { getFinalSegmentRuns } from './segment-runs.js?v=20261106-build693';
-import { sourceFilterStages, sourceFilterSignature } from './source-filters.js?v=20261106-build693';
-import { getHuMode, effectiveHuSignature, huModeToggle, segmentNeedsRuns } from './effective-hu.js?v=20261106-build693';
-import { readEffectiveSlice, rawHuVolume, filtersActive } from './effective-hu-source.js?v=20261106-build693';
-import { segmentRunsCacheKey } from './segment-cache-key.js?v=20261106-build693';
-import { setCtSliderRange, ctSliderFullBounds, segmentControl } from './segment-ui.js?v=20261106-build693';
-import { tr } from './i18n.js?v=20261106-build693';
-import { frameYield } from './utils.js?v=20261106-build693';
-import { createHist, binValues, binRuns, scaleHist, histInRange, rebinHist, histExtent, histStats, voxelsToMm3, huToX, xToHu, nearestLine, niceStep, windowFor, clampWindow, zoomWindow, normalizeRange } from './histogram.js?v=20261106-build693';
+import { volume, current3DVolume, currentLanguage } from './state.js?v=20261108-build694';
+import { segmentState, SEGMENT_PRESET_ORDER, segmentNeedsVoxelMask, segmentEditGen, segmentSourceSignature, setShadeAutoSource, shadeDataRange } from './segments.js?v=20261108-build694';
+import { getFinalSegmentRuns } from './segment-runs.js?v=20261108-build694';
+import { sourceFilterStages, sourceFilterSignature } from './source-filters.js?v=20261108-build694';
+import { getHuMode, effectiveHuSignature, huModeToggle, segmentNeedsRuns, HU_MODE_FILTERED } from './effective-hu.js?v=20261108-build694';
+import { readEffectiveSlice, rawHuVolume, filtersActive } from './effective-hu-source.js?v=20261108-build694';
+import { segmentRunsCacheKey } from './segment-cache-key.js?v=20261108-build694';
+import { setCtSliderRange, ctSliderFullBounds, segmentControl } from './segment-ui.js?v=20261108-build694';
+import { createShadeHist, binShadeValues, binShadeRuns, shadeHistCount } from './cap-shade.js?v=20261108-build694';
+import { tr } from './i18n.js?v=20261108-build694';
+import { frameYield } from './utils.js?v=20261108-build694';
+import { createHist, binValues, binRuns, scaleHist, histInRange, rebinHist, histExtent, histStats, voxelsToMm3, huToX, xToHu, nearestLine, niceStep, windowFor, clampWindow, zoomWindow, normalizeRange } from './histogram.js?v=20261108-build694';
 const MAX_RETRIES = 6, POLL_MS = 400, DRAFT_MIN_SLICES = 240, DRAFT_SLICES = 80, CACHE_MAX = 24, CHART_H = 150, GRAB_PX = 6, PAD = { l: 34, r: 8, t: 14, b: 20 };
 const RANGE_KEY = 'vrl-hist-range-v1';
 // the chart's display range ('auto' = robust to tails, 'full' = min..max, 'manual'): remembered per viewer, never required
@@ -141,6 +142,39 @@ function cancelJob(userAsked) {
   job.cancelled = true; st.job = null;
   if (userAsked) { st.stopSig = job.sig; st.message = tr('segHistCancelled'); }
   setProgress('', null); draw(true);
+}
+
+// ---- the per-segment histograms for the auto shading range of the cut face (cap-shade.js autoShadeRange; asked for by segments.js shadeAutoPage on a data open / threshold change) ----
+// computeSegmentHistograms(keys, stale) -> {key: Uint32Array(4096) | null}: the values of the voxels that belong to each segment, counted into 4096 bins over the DATA's own range (volume.min..max: cap-shade.js binShadeValues /
+// binShadeRuns; not this panel's fixed HU bins, so MRI values up to 65535 count right). The voxel rule is the panel's: a segment that is a plain range of the data = the values inside its min..max, else its FINAL runs (post-processing,
+// edits, voxel takers above). The values are read from the FILTERED planes (effective-hu.js: the raw ones while no filter is on) = the data the 3D shading shows, every slice. A pass of its own: no panel state, cache or progress
+// bar is touched, it works in time slices (sliceMs) and stops (null) as soon as stale() is true. null for a key = no voxel. A segment that is not ticked and would need its runs is left out (not computed).
+export async function computeSegmentHistograms(keys, stale) {
+  const v = volume, data = shadeDataRange();
+  if (!v || !data) return null;
+  const runKeys = keys.filter(k => segmentState[k]?.active && needsRuns(k, v)), plainKeys = keys.filter(k => segmentState[k] && !needsRuns(k, v));
+  const runs = {};
+  for (const k of runKeys) { runs[k] = await getFinalSegmentRuns(k, segmentVolume(v)); if (stale()) return null; }
+  const n = v.slices, w = v.columns, raw = rawHuVolume(), plain = plainKeys.map(() => createShadeHist()), hists = runKeys.map(() => createShadeHist());
+  let last = performance.now();
+  const budget = async () => { if (performance.now() - last > st.sliceMs) { await frameYield(); last = performance.now(); } return !stale(); };
+  for (let z = 0; z < n; z++) {
+    const values = await readEffectiveSlice(z, { mode: HU_MODE_FILTERED, volume: raw });
+    if (stale()) return null;
+    for (let i = 0; i < plainKeys.length; i++) {
+      const sg = segmentState[plainKeys[i]];
+      for (let a = 0; a < values.length; a += CHUNK) { binShadeValues(plain[i], values, data.min, data.max, a, Math.min(values.length, a + CHUNK), sg.min, sg.max); if (!(await budget())) return null; }
+    }
+    for (let i = 0; i < runKeys.length; i++) {
+      const r = runs[runKeys[i]]?.[z]; if (!r) continue;
+      for (let a = 0; a < r.length; a += RUN_CHUNK) { binShadeRuns(hists[i], values, r, w, data.min, data.max, a, a + RUN_CHUNK); if (!(await budget())) return null; }
+    }
+    if (!(await budget())) return null;
+  }
+  const out = {};
+  plainKeys.forEach((k, i) => { out[k] = shadeHistCount(plain[i]) ? plain[i] : null; });
+  runKeys.forEach((k, i) => { out[k] = shadeHistCount(hists[i]) ? hists[i] : null; });
+  return out;
 }
 
 // ---- results as drawn ----
@@ -394,6 +428,7 @@ export function resetHistogramView() {
   draw(true);
 }
 export function installSegmentHistogram() {
+  setShadeAutoSource(computeSegmentHistograms); // the auto shading range reads its per-segment values here (the panel itself is not needed)
   const btn = document.getElementById('seg-hist-toggle'), box = document.getElementById('seg-hist-result');
   if (!btn || !box) return;
   st.el = box;
