@@ -24,12 +24,26 @@ export function segmentVisibilityPlan(projectSegments,state,order=Object.keys(st
   const want=!!p.enabled,have=!!s.enabled;if(want&&!have)on.push(k);else if(!want&&have)off.push(k)}
  return{off,on};
 }
+// the datasets of the 体験会 page's cards, of the in-VR data switch (the full menu's データ tab) and of 体験会用データを準備: ONE list, built here from the two registers above
+// (the levels first, then the practice datasets that are not levels), so a dataset registered in EVENT_OTHER_SAMPLES later appears in all three by itself.
+// {kind:'level'|'other', id (a level's id; an 'other' one's sample id), sample, lv (null for an 'other' one), nameKey, missionKey (null for an 'other' one), hints}
+export function buildEventDatasets(levels=EVENT_LEVELS,others=EVENT_OTHER_SAMPLES){
+ return[
+  ...levels.map(l=>({kind:'level',id:l.id,sample:l.sample,lv:l.lv,nameKey:l.nameKey,missionKey:l.missionKey,hints:l.hints})),
+  ...others.map(o=>({kind:'other',id:o.sample,sample:o.sample,lv:null,nameKey:o.nameKey,missionKey:null,hints:[]})),
+ ].map(d=>Object.freeze(d));
+}
+export const EVENT_DATASETS=Object.freeze(buildEventDatasets());
+export const datasetForSample=(sample,list=EVENT_DATASETS)=>list.find(d=>d.sample===sample)||null;
+// 'Lv0 骨梁' for a level, the plain name for a dataset that is not a level; nameOf(key) is the i18n lookup
+export const datasetLabel=(d,nameOf)=>d.lv!=null?'Lv'+d.lv+' '+nameOf(d.nameKey):nameOf(d.nameKey);
 export const levelById=id=>EVENT_LEVELS.find(l=>l.id===id)||null;
 export const levelForSample=sample=>EVENT_LEVELS.find(l=>l.sample===sample)||null;
 // the buttons that switch the data INSIDE the VR session (the かんたん menu's row, the full menu's データ tab): one per level, 'Lv0 骨梁'; on = its data is open now,
 // armed = it was pressed once (the second press switches). nameOf(key) is the i18n lookup. Pure.
-export function levelSwitchItems(nameOf,openSample,armedId=null,levels=EVENT_LEVELS){
- return levels.map(l=>({id:l.id,sample:l.sample,label:'Lv'+l.lv+' '+nameOf(l.nameKey),on:l.sample===openSample,armed:armedId===l.id}));
+// the default list is every dataset of the cards (EVENT_DATASETS: the marmoset too; its label is its plain name); the かんたん menu's row passes EVENT_LEVELS (see vr-view.js)
+export function levelSwitchItems(nameOf,openSample,armedId=null,levels=EVENT_DATASETS){
+ return levels.map(l=>({id:l.id,sample:l.sample,label:datasetLabel(l,nameOf),on:l.sample===openSample,armed:armedId===l.id}));
 }
 let chosen=null;
 // id of a level, or null / unknown = none chosen

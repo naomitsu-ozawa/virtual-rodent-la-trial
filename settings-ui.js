@@ -1,26 +1,27 @@
 // Settings dialog. Tabs: 描画 (rendering) and デバッグ (debug);
 // add a tab button + panel in ui-shell.js to extend it.
-import { settings } from './app-settings.js?v=20261109-build696';
-import { request3DRender } from './scene3d.js?v=20261109-build696';
-import { updateGpuStatus } from './gpu-compute.js?v=20261109-build696';
-import { volumeCache, updateVolumeCacheControl, volumeCacheBudget } from './gpu-volume-data.js?v=20261109-build696';
-import { tr } from './i18n.js?v=20261109-build696';
-import { askInline, armConfirm, noteInline } from './inline-ask.js?v=20261109-build696';
-import { setupEventPrepareButton } from './event-prepare-ui.js?v=20261109-build696'; // 「体験会用データを準備」
-import { fmt } from './utils.js?v=20261109-build696';
-import { gpuPreferenceSupported, gpuEffectivePreference, gpuHybridModeSupported, gpuEffectiveHybridMode } from './gpu-preference.js?v=20261109-build696';
-import { initDebugSwitches } from './debug-switches-ui.js?v=20261109-build696';
-import { initGpuDiagnosticsUi } from './gpu-diagnostics-ui.js?v=20261109-build696';
-import { collectGpuDiagnostics } from './gpu-diagnostics-collect.js?v=20261109-build696';
+import { settings } from './app-settings.js?v=20261109-build699';
+import { request3DRender } from './scene3d.js?v=20261109-build699';
+import { updateGpuStatus } from './gpu-compute.js?v=20261109-build699';
+import { volumeCache, updateVolumeCacheControl, volumeCacheBudget } from './gpu-volume-data.js?v=20261109-build699';
+import { tr } from './i18n.js?v=20261109-build699';
+import { askInline, armConfirm, noteInline } from './inline-ask.js?v=20261109-build699';
+import { setupEventPrepareButton } from './event-prepare-ui.js?v=20261109-build699'; // 「体験会用データを準備」
+import { fmt } from './utils.js?v=20261109-build699';
+import { gpuPreferenceSupported, gpuEffectivePreference, gpuHybridModeSupported, gpuEffectiveHybridMode } from './gpu-preference.js?v=20261109-build699';
+import { initDebugSwitches } from './debug-switches-ui.js?v=20261109-build699';
+import { initGpuDiagnosticsUi } from './gpu-diagnostics-ui.js?v=20261109-build699';
+import { collectGpuDiagnostics } from './gpu-diagnostics-collect.js?v=20261109-build699';
 export function initSettingsDialog(){
  const dlg=document.getElementById('settings-dialog'),open=document.getElementById('settings-open');if(!dlg||!open)return;
- // in the workspace UI the dialog's content lives in the 設定 panel (workspace-ui.js sets data-embedded): the same
- // button then brings that panel to the front instead of opening a modal
- open.onclick=()=>{sync();if(dlg.dataset.embedded){document.dispatchEvent(new CustomEvent('vrl-ipad-settings-tab',{detail:{tab:'prefs'}}));return}dlg.showModal?dlg.showModal():dlg.setAttribute('open','')};
+ // settings are always a real modal (the workspace UI's rail 設定 entry, the classic top bar button and the code that calls #settings-open all end here).
+ // showModal makes everything behind inert; the page's own key handlers get no Escape while it is open (it closes only the dialog); closing removes both again.
+ open.onclick=()=>{sync();if(dlg.open)return;dlg.showModal?dlg.showModal():dlg.setAttribute('open','')};
+ window.addEventListener('keydown',e=>{if(dlg.open&&e.key==='Escape')e.stopPropagation()},true);
  document.addEventListener('vrl-settings-sync',()=>sync());
  document.getElementById('settings-close').onclick=()=>dlg.close?dlg.close():dlg.removeAttribute('open');
  dlg.addEventListener('click',e=>{if(e.target===dlg)dlg.close?.()});
- // in the workspace UI the tabs and panes are moved out of the dialog (embedded in the 設定 panel), so look them up in the document
+ // the tabs and panes are looked up in the document (they are inside the dialog's body)
  for(const tab of document.querySelectorAll('[data-settings-tab]'))tab.onclick=()=>{
   for(const t of document.querySelectorAll('[data-settings-tab]'))t.classList.toggle('is-active',t===tab);
   for(const p of document.querySelectorAll('[data-settings-panel]'))p.hidden=p.dataset.settingsPanel!==tab.dataset.settingsTab;

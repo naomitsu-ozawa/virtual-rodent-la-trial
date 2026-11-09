@@ -1,22 +1,24 @@
 // the 設定 > キャッシュ button 「体験会用データを準備」: the page side of event-prepare.js. It opens each practice level on the page (the same route as choosing it: startSample), waits until the page is quiet,
 // has the VR module build and save the finished VR data of that level (vr-view.js prepareStandardLevel: the same keys as VR entry / a data switch, saved completely, marked standard), and shows the progress per level.
 // Nothing here is a worker; the saves are the paced, 1 MiB-sliced writes of the VR data cache (no frame is held up). The VR module is handed in (app.js owns its one loader).
-import { prepareEventLevels } from './event-prepare.js?v=20261109-build696';
-import { EVENT_LEVELS, eventModeOn } from './event-mode.js?v=20261109-build696';
-import { createSettleGate } from './vr-data-switch.js?v=20261109-build696';
-import { vrStateSignature } from './vr-data-key.js?v=20261109-build696';
-import { volumeCacheBudgetInfo } from './gpu-volume-data.js?v=20261109-build696';
-import { tr } from './i18n.js?v=20261109-build696';
+import { prepareEventLevels } from './event-prepare.js?v=20261109-build699';
+import { EVENT_DATASETS, eventModeOn } from './event-mode.js?v=20261109-build699';
+import { createSettleGate } from './vr-data-switch.js?v=20261109-build699';
+import { vrStateSignature } from './vr-data-key.js?v=20261109-build699';
+import { volumeCacheBudgetInfo } from './gpu-volume-data.js?v=20261109-build699';
+import { tr } from './i18n.js?v=20261109-build699';
 
 const SETTLE_MS = 10 * 60 * 1000;
 const isPractice = id => typeof id === 'string' && /^sample\d+$/.test(id);
 
 // the page side: opens a level and waits until it is quiet (the volume ready, the bundled project applied, no job running, the state unchanged for a moment)
+// exported - the 体験会 page (event-launcher.js) waits for the same quiet page after a card press, before it prepares the VR data
+export async function settlePage(g = globalThis) {
+  const gate = createSettleGate({ timeoutMs: SETTLE_MS, volumeReady: () => g.__vrlVolumeReady === true, busy: () => { try { const b = g.__vrlBusyModal?.(); return !!(b && (b.active || b.visible)); } catch { return false; } }, key: () => { try { return vrStateSignature(); } catch { return ''; } } });
+  if (!await gate.wait()) throw new Error('the page did not settle');
+}
 function pageIo({ getVr, openLevel, onPhase = () => {}, g = globalThis }) {
-  const settle = async () => {
-    const gate = createSettleGate({ timeoutMs: SETTLE_MS, volumeReady: () => g.__vrlVolumeReady === true, busy: () => { try { const b = g.__vrlBusyModal?.(); return !!(b && (b.active || b.visible)); } catch { return false; } }, key: () => { try { return vrStateSignature(); } catch { return ''; } } });
-    if (!await gate.wait()) throw new Error('the page did not settle');
-  };
+  const settle = () => settlePage(g);
   const prev = isPractice(g.__vrlOpenSample) ? g.__vrlOpenSample : null; let last = null;
   return {
     isCached: async s => (await getVr()).standardLevelCached(s),
@@ -26,13 +28,17 @@ function pageIo({ getVr, openLevel, onPhase = () => {}, g = globalThis }) {
     restore: async () => { if (prev && last && prev !== last) { await openLevel(prev); await settle(); } },
   };
 }
-export const runEventPrepare = ({ getVr, openLevel, onStatus, onPhase }) => prepareEventLevels({ levels: EVENT_LEVELS.map(l => ({ id: l.id, lv: l.lv, sample: l.sample })), io: pageIo({ getVr, openLevel, onPhase }), onStatus });
+// every dataset of the cards (EVENT_DATASETS: the marmoset too, which has no Lv number: nameKey says how it is called)
+const targetsOf = extra => EVENT_DATASETS.map(d => ({ id: d.id, lv: d.lv, nameKey: d.nameKey, sample: d.sample, ...extra }));
+export const runEventPrepare = ({ getVr, openLevel, onStatus, onPhase }) => prepareEventLevels({ levels: targetsOf(), io: pageIo({ getVr, openLevel, onPhase }), onStatus });
 
 const STATE_KEY = { wait: 'cacheEventWait', building: 'cacheEventBuilding', saved: 'cacheEventSaved', cached: 'cacheEventCached', failed: 'cacheEventFailed' };
-export const statusLine = results => results.map(r => 'Lv' + r.lv + ' ' + tr(STATE_KEY[r.state])).join(' / ');
+// 'Lv0' for a level, the dataset's own name for one that is not a level
+export const targetTag = r => r.lv != null ? 'Lv' + r.lv : tr(r.nameKey);
+export const statusLine = results => results.map(r => targetTag(r) + ' ' + tr(STATE_KEY[r.state])).join(' / ');
 export function summaryText(out, short) {
   if (out.ok) return tr('cacheEventDone');
-  return tr('cacheEventPartial').replace('{levels}', out.failed.map(r => 'Lv' + r.lv).join(', ')) + (short ? ' ' + tr('cacheEventShort') : '');
+  return tr('cacheEventPartial').replace('{levels}', out.failed.map(targetTag).join(', ')) + (short ? ' ' + tr('cacheEventShort') : '');
 }
 
 // The modal shown from the button press until the end (the same card as the app's progress modal: .job-modal / .job-card, progress-modal.js). It is NOT a busy slot of that modal on purpose:
@@ -51,13 +57,13 @@ export function modalView(results, ph) {
     if (p && (p.phase === 'read' || p.phase === 'copy') && p.total > 0) extra = ' ' + p.done + ' / ' + p.total;
   } else if (finished === n) phase = 'reopen';
   const index = Math.min(n, cur ? results.indexOf(cur) + 1 : finished);
-  const line = (cur ? tr('cacheEventModalLevel').replace('{n}', index).replace('{total}', n) + ' · Lv' + cur.lv + ' ' : '') + tr(PHASE_KEY[phase]) + extra;
+  const line = (cur ? tr('cacheEventModalLevel').replace('{n}', index).replace('{total}', n) + ' · ' + targetTag(cur) + ' ' : '') + tr(PHASE_KEY[phase]) + extra;
   return { title: tr('cacheEventModalTitle'), detail: line + '\n' + statusLine(results) + '\n' + tr('cacheEventModalWait'), frac: Math.min(1, (finished + share) / n) };
 }
 export function createPrepareModal(doc = globalThis.document) {
   if (!doc?.body) return null;
-  const root = doc.createElement('div');
-  root.className = 'job-modal event-prepare-modal is-hidden'; root.id = 'event-prepare-modal'; root.setAttribute('role', 'dialog'); root.setAttribute('aria-modal', 'true'); root.setAttribute('aria-live', 'polite');
+  const root = doc.createElement('dialog'); // a <dialog> opened with showModal() so it sits in the top layer ABOVE the settings dialog (also a top-layer modal), whatever the stacking
+  root.className = 'job-modal event-prepare-modal is-hidden'; root.id = 'event-prepare-modal'; root.setAttribute('aria-live', 'polite');
   root.innerHTML = '<div class="job-card"><div class="job-head"><div class="job-spinner" aria-hidden="true"></div><strong class="job-title"></strong></div><div class="job-detail"></div><div class="job-track"><div class="job-bar"></div></div><div class="job-foot"><span class="job-time"></span><button type="button" class="job-button is-close is-hidden"></button></div></div>';
   doc.body.append(root);
   const q = c => root.querySelector(c), els = { title: q('.job-title'), detail: q('.job-detail'), track: q('.job-track'), bar: q('.job-bar'), time: q('.job-time'), button: q('.job-button') };
@@ -68,11 +74,14 @@ export function createPrepareModal(doc = globalThis.document) {
   root.addEventListener('wheel', e => e.preventDefault(), { passive: false });
   const block = e => { if (root.classList.contains('is-hidden') || root.contains(e.target)) return; e.preventDefault(); e.stopPropagation(); };
   for (const ev of ['keydown', 'keypress']) doc.defaultView?.addEventListener(ev, block, { capture: true });
-  els.button.onclick = () => { root.classList.add('is-hidden'); };
+  root.addEventListener('cancel', e => e.preventDefault()); // Esc must not close it while it runs (the close button does)
+  const openTop = () => { try { if (!root.open && root.showModal) root.showModal(); } catch { /* none: the fixed overlay still shows */ } };
+  const closeTop = () => { try { if (root.open) root.close(); } catch { /* none */ } };
+  els.button.onclick = () => { root.classList.add('is-hidden'); closeTop(); };
   const paint = v => { els.title.textContent = v.title; els.detail.textContent = v.detail; els.track.classList.remove('is-indeterminate'); els.bar.style.width = Math.round(v.frac * 100) + '%'; };
   return {
     root,
-    start(results) { finished = false; t0 = Date.now(); root.classList.remove('is-hidden', 'is-finished'); els.button.classList.add('is-hidden'); paint(modalView(results, null)); tick(); clearInterval(ticker); ticker = setInterval(tick, 500); },
+    start(results) { finished = false; t0 = Date.now(); root.classList.remove('is-hidden', 'is-finished'); openTop(); els.button.classList.add('is-hidden'); paint(modalView(results, null)); tick(); clearInterval(ticker); ticker = setInterval(tick, 500); },
     update(results, ph) { if (!finished) paint(modalView(results, ph)); },
     finish(title, detail) { finished = true; clearInterval(ticker); ticker = 0; root.classList.add('is-finished'); els.title.textContent = title; els.detail.textContent = detail; els.track.classList.remove('is-indeterminate'); els.bar.style.width = '100%'; els.time.textContent = secs(); els.button.textContent = tr('cacheEventModalClose'); els.button.classList.remove('is-hidden'); try { els.button.focus(); } catch { /* none */ } },
   };
@@ -93,7 +102,7 @@ export function setupEventPrepareButton(doc = globalThis.document) {
     let rs = null, ph = null, curSample;
     const detail = { done: null, onStatus: r => { const b = r.find(x => x.state === 'building')?.sample; if (b !== curSample) { curSample = b; ph = null; } rs = r; status.textContent = tr('cacheEventRunning') + '\n' + statusLine(r); modal?.update(r, ph); }, onPhase: p => { ph = p; if (rs) modal?.update(rs, ph); } };
     try {
-      modal?.start(EVENT_LEVELS.map(l => ({ id: l.id, lv: l.lv, sample: l.sample, state: 'wait' })));
+      modal?.start(targetsOf({ state: 'wait' }));
       const info = await volumeCacheBudgetInfo().catch(() => null);
       doc.dispatchEvent(new CustomEvent('vrl-event-prepare', { detail }));
       const out = detail.done ? await detail.done : null;

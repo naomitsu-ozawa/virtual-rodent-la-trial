@@ -1,14 +1,14 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { set3DBusy } from './three-status.js?v=20261109-build696';
-import { useWorkspaceUi, updateRenderModeControl, clearResidentMprJobs, prepareResidentGpuVolume, activateMedicalVolume, setThreeVolumeOverlay } from './data-load.js?v=20261109-build696';
-import { appVersionBadge, planes, ipadGpuQualityControl, ipadGpuQuality, footer } from './ui-shell.js?v=20261109-build696';
-import { sceneState, volume, currentLanguage, ipadGpuTargetSide, setIpadGpuTargetSide, sourceVolume, threeRenderMode, setResidentMprReadbackDisabled, setThreeRenderMode } from './state.js?v=20261109-build696';
-import { updateMprCanvasPhysicalAspect, schedulePlaneRender } from './mpr-render.js?v=20261109-build696';
-import { request3DRender } from './scene3d.js?v=20261109-build696';
-import { applyLanguage } from './i18n.js?v=20261109-build696';
-import { isIPhoneRuntime, isTabletRuntime, isVrHeadsetRuntime, fmt } from './utils.js?v=20261109-build696';
-import { settings } from './app-settings.js?v=20261109-build696';
+import { set3DBusy } from './three-status.js?v=20261109-build699';
+import { useWorkspaceUi, updateRenderModeControl, clearResidentMprJobs, prepareResidentGpuVolume, activateMedicalVolume, setThreeVolumeOverlay } from './data-load.js?v=20261109-build699';
+import { appVersionBadge, planes, ipadGpuQualityControl, ipadGpuQuality, footer } from './ui-shell.js?v=20261109-build699';
+import { sceneState, volume, currentLanguage, ipadGpuTargetSide, setIpadGpuTargetSide, sourceVolume, threeRenderMode, setResidentMprReadbackDisabled, setThreeRenderMode } from './state.js?v=20261109-build699';
+import { updateMprCanvasPhysicalAspect, schedulePlaneRender } from './mpr-render.js?v=20261109-build699';
+import { request3DRender } from './scene3d.js?v=20261109-build699';
+import { applyLanguage } from './i18n.js?v=20261109-build699';
+import { isIPhoneRuntime, isTabletRuntime, isVrHeadsetRuntime, fmt } from './utils.js?v=20261109-build699';
+import { settings } from './app-settings.js?v=20261109-build699';
 export function initIPadWorkspaceUi(){
  if(!useWorkspaceUi())return;
  const shell=document.querySelector('.app-shell'),workspace=document.querySelector('.workspace'),sidebar=document.querySelector('.sidebar'),sidebarScroll=document.querySelector('.sidebar-scroll'),viewer=document.querySelector('#viewer-grid'),topbar=document.querySelector('.topbar');
@@ -97,22 +97,17 @@ export function initIPadWorkspaceUi(){
  }
 
  const byId=id=>document.getElementById(id);
- // VR / AR buttons stay in the top bar (#vr-view-button / #ar-view-button in .topbar-actions): reachable whichever tool panel is open. Their `hidden`
- // (shown only where WebXR reports the session type as supported, app.js xrShow) is not touched here. Until this build they were moved into the 表示 panel.
- const prefsPanel=section('prefs');
- const prefRow=(key,text,el)=>{if(!el)return;const r=document.createElement('div');r.className='ws-pref-row';r.append(cap(key,text),el);prefsPanel.append(r)};
- prefRow('wsTheme','外観',document.querySelector('.theme-quick'));
- prefRow('wsLanguage','言語',byId('language-toggle'));
- const dlg=byId('settings-dialog'),openBtn=byId('settings-open');
- if(dlg){
-  const embed=document.createElement('div');embed.className='ws-settings-embed';
-  for(const el of [...dlg.children])if(!el.classList.contains('settings-head'))embed.append(el);
-  prefsPanel.append(embed);dlg.dataset.embedded='1';
+ const dlg=byId('settings-dialog'),openBtn=byId('settings-open'),dlgBody=dlg?.querySelector('.settings-body');
+ if(dlgBody){
+  const rows=document.createElement('div');rows.className='ws-pref-rows';
+  const prefRow=(key,text,el)=>{if(!el)return;const r=document.createElement('div');r.className='ws-pref-row';r.append(cap(key,text),el);rows.append(r)};
+  prefRow('wsTheme','外観',document.querySelector('.theme-quick'));
+  prefRow('wsLanguage','言語',byId('language-toggle'));
+  dlgBody.insertBefore(rows,dlgBody.querySelector('.settings-tabs'));
  }
- if(openBtn){openBtn.hidden=true;prefsPanel.append(openBtn)}
- sidebarScroll.appendChild(prefsPanel);
+ if(openBtn){openBtn.hidden=true;openBtn.style.display='none'}
 
- const TOOLS=[['data','ipadData','データ'],['display','toolDisplay','表示'],['segment','toolSegment','セグメント'],['filter','toolFilter','フィルター'],['edit','ipadEdit','3D編集'],['analysis','wsAnalysis','解析'],...(hasCrop?[['crop','cropTitle','切り出し']]:[]),['prefs','settingsTitle','設定']];
+ const TOOLS=[['data','ipadData','データ'],['display','toolDisplay','表示'],['segment','toolSegment','セグメント'],['filter','toolFilter','フィルター'],['edit','ipadEdit','3D編集'],['analysis','wsAnalysis','解析'],...(hasCrop?[['crop','cropTitle','切り出し']]:[])];
  const drawerTabs=document.createElement('nav');drawerTabs.className='ipad-drawer-tabs ws-tool-rail';drawerTabs.setAttribute('aria-label','Tools');
  const ICON={data:'<ellipse cx="12" cy="5.5" rx="7" ry="2.5"/><path d="M5 5.5v13c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5v-13"/><path d="M5 12c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5"/>',
   display:'<path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
@@ -123,6 +118,11 @@ export function initIPadWorkspaceUi(){
   crop:'<path d="M6.5 2.5v15h15"/><path d="M2.5 6.5h15v15"/>',
   prefs:'<circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/>'};
  drawerTabs.innerHTML=TOOLS.map(([k,key,t])=>'<button type="button" data-ipad-drawer-tab="'+k+'"><svg class="ws-rail-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'+(ICON[k]||'')+'</svg><span class="ws-rail-label" data-i18n="'+key+'">'+t+'</span></button>').join('');
+ // the 設定 entry is a button that opens the modal (not a tab: no panel, no tab switching); it is the only entry the rail keeps in event mode (style.css)
+ const settingsEntry=document.createElement('button');settingsEntry.type='button';settingsEntry.id='ws-settings-entry';settingsEntry.setAttribute('aria-haspopup','dialog');
+ settingsEntry.innerHTML='<svg class="ws-rail-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'+ICON.prefs+'</svg><span class="ws-rail-label" data-i18n="settingsTitle">設定</span>';
+ settingsEntry.onclick=()=>{if(openBtn)openBtn.click();else if(dlg&&!dlg.open)dlg.showModal?.()};
+ drawerTabs.append(settingsEntry);
  sidebar.insertBefore(drawerTabs,settingsHead);
 
  const footerBar=document.querySelector('.app-shell > footer');
@@ -145,11 +145,7 @@ export function initIPadWorkspaceUi(){
  const viewerSig=()=>{const r=viewer.getBoundingClientRect();return[r.left,r.top,r.width,r.height].map(Math.round).join()};
  let sigNow=null;
  const refreshLayoutIfMoved=()=>requestAnimationFrame(()=>{if(viewerSig()!==sigNow)refreshLayout()});
- const EVENT_TABS=['data','prefs'];
- const eventOn=()=>{try{return settings.get('eventMode')===true}catch{return false}};
  const setDrawerTab=tab=>{
-  if(eventOn()&&!EVENT_TABS.includes(tab))tab='data';
-  if(tab==='prefs')document.dispatchEvent(new Event('vrl-settings-sync')); // the embedded settings show the stored values
   drawerTab=tab;
   drawerTabs.querySelectorAll('[data-ipad-drawer-tab]').forEach(b=>b.classList.toggle('is-active',b.dataset.ipadDrawerTab===tab));
   const active=drawerTabs.querySelector('[data-ipad-drawer-tab="'+tab+'"] .ws-rail-label');if(headTitle&&active){headTitle.dataset.i18n=active.dataset.i18n;headTitle.textContent=active.textContent}
@@ -181,18 +177,12 @@ export function initIPadWorkspaceUi(){
   setMprPlane(mprPlane,true);
  };
  drawerTabs.querySelectorAll('[data-ipad-drawer-tab]').forEach(b=>b.addEventListener('click',()=>setDrawerTab(b.dataset.ipadDrawerTab)));
- const applyEventMenu=()=>{
-  const on=eventOn();
-  drawerTabs.querySelectorAll('[data-ipad-drawer-tab]').forEach(x=>{const hide=on&&!EVENT_TABS.includes(x.dataset.ipadDrawerTab);x.hidden=hide;x.style.display=hide?'none':''});
-  if(on&&!EVENT_TABS.includes(drawerTab))setDrawerTab('data');
- };
- window.addEventListener('vrl-settings',e=>{if(e.detail?.key==='eventMode')applyEventMenu()});
  toolbar.querySelectorAll('[data-ipad-view-mode]').forEach(b=>b.addEventListener('click',()=>setViewMode(b.dataset.ipadViewMode)));
  toolbar.querySelectorAll('[data-ipad-mpr]').forEach(b=>b.addEventListener('click',()=>setMprPlane(b.dataset.ipadMpr)));
  document.addEventListener('vrl-plane-selected',e=>{const p=e.detail?.plane;if(e.detail?.source!=='workspace'&&p&&p!==mprPlane)setMprPlane(p,true)});
  window.addEventListener('orientationchange',refreshLayout,{passive:true});
  window.addEventListener('resize',()=>{if(useWorkspaceUi())refreshLayout()},{passive:true});
- setDrawerTab('data');applyEventMenu();setMprPlane('axial',true);setViewMode(isVrHeadsetRuntime()?'2d':'3d');applyLanguage(currentLanguage);
+ setDrawerTab('data');setMprPlane('axial',true);setViewMode(isVrHeadsetRuntime()?'2d':'3d');applyLanguage(currentLanguage);
 }
 export function initIPadGpuQualityControl(){
  if(!ipadGpuQualityControl||!ipadGpuQuality)return;
