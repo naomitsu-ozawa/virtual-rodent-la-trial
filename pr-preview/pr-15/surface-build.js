@@ -1,29 +1,29 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { mark3DStale, mark3DCurrent } from './three-state.js?v=20261109-build703';
-import { set3DBusy } from './three-status.js?v=20261109-build703';
-import { sceneState, deferAutomatic3D, threeDCancelRequested, currentLanguage, analysisEditTool, threeRenderMode, current3DVolume, volume, incSourceRenderRevision, sourceRenderRevision, sectionViewOpen, sectionViewPlane } from './state.js?v=20261109-build703';
-import { request3DRender } from './scene3d.js?v=20261109-build703';
-import { threeLabel, footer, surfaceSmoothStrength } from './ui-shell.js?v=20261109-build703';
-import { surfaceSmoothingActive } from './settings.js?v=20261109-build703';
-import { frameYield, isDesktopRuntime } from './utils.js?v=20261109-build703';
-import { gpuFilterRuntime, setGpuComputeBackend, ensureGpuFilterDevice, runGpuSourceFilters, gpuStagesSupported } from './gpu-compute.js?v=20261109-build703';
-import { setProcessingBusy } from './busy.js?v=20261109-build703';
-import { SEGMENT_PRESET_ORDER, segmentEditState, segmentEditActive, segmentState, segmentHasProcessedMask } from './segments.js?v=20261109-build703';
-import { dispose, buildEditableRunsGroup, geometryFromSourcePositions } from './surface-mesh.js?v=20261109-build703';
-import { SmoothedSurfaceStream, smoothChunkHalo } from './smooth-chunks.js?v=20261109-build703';
-import { smoothMethod } from './smooth-workers.js?v=20261109-build703';
+import { mark3DStale, mark3DCurrent } from './three-state.js?v=20261109-build704';
+import { set3DBusy } from './three-status.js?v=20261109-build704';
+import { sceneState, deferAutomatic3D, threeDCancelRequested, currentLanguage, analysisEditTool, threeRenderMode, current3DVolume, volume, incSourceRenderRevision, sourceRenderRevision, sectionViewOpen, sectionViewPlane } from './state.js?v=20261109-build704';
+import { request3DRender } from './scene3d.js?v=20261109-build704';
+import { threeLabel, footer, surfaceSmoothStrength } from './ui-shell.js?v=20261109-build704';
+import { surfaceSmoothingActive } from './settings.js?v=20261109-build704';
+import { frameYield, isDesktopRuntime } from './utils.js?v=20261109-build704';
+import { gpuFilterRuntime, setGpuComputeBackend, ensureGpuFilterDevice, runGpuSourceFilters, gpuStagesSupported } from './gpu-compute.js?v=20261109-build704';
+import { setProcessingBusy } from './busy.js?v=20261109-build704';
+import { SEGMENT_PRESET_ORDER, segmentEditState, segmentEditActive, segmentState, segmentHasProcessedMask } from './segments.js?v=20261109-build704';
+import { dispose, buildEditableRunsGroup, geometryFromSourcePositions } from './surface-mesh.js?v=20261109-build704';
+import { SmoothedSurfaceStream, smoothChunkHalo } from './smooth-chunks.js?v=20261109-build704';
+import { smoothMethod } from './smooth-workers.js?v=20261109-build704';
 // the GPU path of the surface smoothing registers itself with smooth-workers.js
-import './smooth-gpu.js?v=20261109-build703';
-import { renderAll } from './mpr-render.js?v=20261109-build703';
-import { getFinalSegmentRuns, decodeSourceSegmentMasks } from './segment-runs.js?v=20261109-build703';
-import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.webgpu.js';
-import { createSurfaceMaterial } from './mesh-material.js?v=20261109-build703';
-import { updateSectionClipPlaneWorld } from './section-view.js?v=20261109-build703';
-import { makeVolume3DCoordinates, Float32FaceBuilder, appendSourceFacesFromCompactTile, makeSource3DCoordinates, appendSourceSliceFacesFast } from './mesh-geometry.js?v=20261109-build703';
-import { fitSourceTile, readMemoryRegion, sourceFilterStages, sourceFilterRuntime, sourceFilterHalo, readSourceRegion, runSourceFilterWorker } from './source-filters.js?v=20261109-build703';
-import { compactFaceFlags, valuesToFaceFlags } from './mask-ops.js?v=20261109-build703';
-import { meshCacheContext, runSurfaceCacheable, runSurfaceCacheKey, baseCacheKey, meshEntryInfo, loadCachedMeshes, storeBuiltMeshes, meshCacheStats } from './mesh-cache-apply.js?v=20261109-build703';
+import './smooth-gpu.js?v=20261109-build704';
+import { renderAll } from './mpr-render.js?v=20261109-build704';
+import { getFinalSegmentRuns, decodeSourceSegmentMasks } from './segment-runs.js?v=20261109-build704';
+import * as THREE from './vendor/three@0.186.0/build/three.webgpu.js';
+import { createSurfaceMaterial } from './mesh-material.js?v=20261109-build704';
+import { updateSectionClipPlaneWorld } from './section-view.js?v=20261109-build704';
+import { makeVolume3DCoordinates, Float32FaceBuilder, appendSourceFacesFromCompactTile, makeSource3DCoordinates, appendSourceSliceFacesFast } from './mesh-geometry.js?v=20261109-build704';
+import { fitSourceTile, readMemoryRegion, sourceFilterStages, sourceFilterRuntime, sourceFilterHalo, readSourceRegion, runSourceFilterWorker } from './source-filters.js?v=20261109-build704';
+import { compactFaceFlags, valuesToFaceFlags } from './mask-ops.js?v=20261109-build704';
+import { meshCacheContext, runSurfaceCacheable, runSurfaceCacheKey, baseCacheKey, meshEntryInfo, loadCachedMeshes, storeBuiltMeshes, meshCacheStats } from './mesh-cache-apply.js?v=20261109-build704';
 export function applySectionClippingMaterials(root=sceneState?.obj){
  if(!root||!sceneState)return;
  const active=sectionViewOpen&&!!sectionViewPlane&&sceneState.backend!=='WEBGPU';
@@ -47,7 +47,7 @@ export function syncSectionClipParent(){
 export const baseSurfaceChunkFloats={override:0};
 // slices and floats of faces per chunk of the base surface.: while smoothing, a desktop chunk is twice as long
 // (128 slices / 24M floats): every chunk is smoothed with halo slices on both sides, half as much again at 64 slices; the
-// iPad / iPhone keep 32 slices / 6M floats (memory)
+// iPad keeps 32 slices / 6M floats (memory)
 export function baseSurfaceChunking(){
  const touch=navigator.maxTouchPoints>0,long=!touch&&surfaceSmoothingActive();
  return{chunkDepth:touch?32:long?128:64,meshFloatLimit:baseSurfaceChunkFloats.override||(touch?6:long?24:12)*1024*1024};
@@ -171,6 +171,7 @@ export function segmentHasSurface(key){
  return found;
 }
 export function setSegmentSurfaceShown(key,on){
+ childSurfaceHooks.parentShown?.(key,on);
  const group=segmentEditState[key]?.surfaceGroup,live=inCurrentScene(group),regions=sceneState?.analysisMesh;
  if(live)group.visible=on;
  const inside=(o,root)=>{for(let p=o;root&&p;p=p.parent)if(p===root)return true;return false};
@@ -206,7 +207,14 @@ export async function refreshEditedSegmentSurface(key,v=current3DVolume||volume,
  if(group)sceneState.obj.add(group);if(old){if(old.parent)old.parent.remove(old);dispose(old)}
  request3DRender();renderAll();return true;
 }
+// the child segments' surfaces (child-segments-ui.js) are built after the preset surfaces of a 3D build and follow the parent's show / hide; registered there (no import cycle). Without child segments the hooks do nothing.
+export const childSurfaceHooks={restore:null,parentShown:null};
 export async function restoreEditedSegmentSurfaces(v=current3DVolume||volume){
+ const failed=await restorePresetSurfaces(v);
+ if(childSurfaceHooks.restore){try{await childSurfaceHooks.restore(v)}catch(e){if(String(e?.message||e)==='__SUPERSEDED__')throw e;console.error(e)}}
+ return failed;
+}
+async function restorePresetSurfaces(v){
  // one segment's failure does not leave the others unbuilt, and is reported (it was only logged by the rebuild)
  const failed=[],keys=SEGMENT_PRESET_ORDER.filter(key=>segmentUsesRunSurface(key,v));if(!keys.length)return failed;
  set3DBusy(true,currentLanguage==='ja'?'セグメント表面を構築中…':'Building segment surfaces…',false);

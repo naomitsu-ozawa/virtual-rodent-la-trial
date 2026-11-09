@@ -1,5 +1,5 @@
-import { clampVoxel, sameVoxel, withSliceIndex } from './crosshair.js?v=20261109-build703';
-import { SHADE_BRIGHT_DEFAULT, SHADE_CONTRAST_DEFAULT } from './cap-shade.js?v=20261109-build703';
+import { clampVoxel, sameVoxel, withSliceIndex } from './crosshair.js?v=20261109-build704';
+import { SHADE_BRIGHT_DEFAULT, SHADE_CONTRAST_DEFAULT } from './cap-shade.js?v=20261109-build704';
 // Shared mutable application state, moved out of app.js by
 // tools/state-codemod.mjs. Read these bindings directly (imports are live);
 // write them only through the setters (imported bindings are read-only).
@@ -14,6 +14,18 @@ export let sourceVolume=null;
 export function setSourceVolume(v){if(v!==sourceVolume)clearCrosshair('series');return sourceVolume=v}
 export let sceneState=null;
 export function setSceneState(v){return sceneState=v}
+// settled once start3D has tried to create the GPU volume renderer (sceneState.medicalVolume): it exists, or failed, or this runtime has none.
+// A series opened before that would not see the renderer: smallSeriesGpuVolume / prepareResidentGpuVolume return false and the series would stay without GPU residency.
+let resolveThree3DReady=()=>{};
+export const three3DReady=new Promise(r=>{resolveThree3DReady=r});
+export let three3DIsReady=false;
+export function markThree3DReady(){three3DIsReady=true;resolveThree3DReady()}
+// waits for the renderer, at most timeoutMs (then the caller goes on as before)
+export async function waitThree3DReady(timeoutMs=5000){
+ if(three3DIsReady)return true;
+ let timer=null;
+ try{return await Promise.race([three3DReady.then(()=>true),new Promise(r=>{timer=setTimeout(()=>r(false),timeoutMs)})])}finally{clearTimeout(timer)}
+}
 export let activeId=null;
 export function setActiveId(v){return activeId=v}
 export let activeSeries=null;
@@ -62,6 +74,12 @@ export function setAnalysisFilterSignature(v){return analysisFilterSignature=v}
 export let nextAnalysisRegionId=1;
 export function setNextAnalysisRegionId(v){return nextAnalysisRegionId=v}
 export function incNextAnalysisRegionId(prefix){return prefix?++nextAnalysisRegionId:nextAnalysisRegionId++}
+// CHILD SEGMENTS (segments added under a preset in the tree, child-segments.js): a list of their own, never mixed with the analysis regions above
+export let childSegments=[];
+export function setChildSegments(v){return childSegments=v}
+export let nextChildSegmentId=1;
+export function setNextChildSegmentId(v){return nextChildSegmentId=v}
+export function incNextChildSegmentId(prefix){return prefix?++nextChildSegmentId:nextChildSegmentId++}
 export let nextAnalysisColorIndex=0;
 export function setNextAnalysisColorIndex(v){return nextAnalysisColorIndex=v}
 export function incNextAnalysisColorIndex(prefix){return prefix?++nextAnalysisColorIndex:nextAnalysisColorIndex++}
@@ -112,10 +130,11 @@ export let cutControlPreviewRaf=0;
 export function setCutControlPreviewRaf(v){return cutControlPreviewRaf=v}
 export let smoothingRefreshTimer=null;
 export function setSmoothingRefreshTimer(v){return smoothingRefreshTimer=v}
-import { settings } from './app-settings.js?v=20261109-build703';
-// 3D volume in-plane size, remembered in the settings; full size
-// (0) is desktop-only, so an iPad falls back to 512
-export let ipadGpuTargetSide=(()=>{const v=+settings.get('gpuSide');const touch=typeof navigator!=='undefined'&&/Android|OculusBrowser|Quest/i.test(navigator.userAgent||''),ipad=typeof navigator!=='undefined'&&(/iPad/i.test(navigator.userAgent||'')||((navigator.maxTouchPoints||0)>1&&/Mac/i.test(navigator.platform||'')));return v===768?768:v===0&&!ipad&&!touch?0:512})(); // full size stays desktop-only; iPad, Android tablets and the Quest browser fall back to 512
+import { settings } from './app-settings.js?v=20261109-build704';
+// 3D volume in-plane size, remembered in the settings: 512 / 768 / 0 (full). Device parity: every device may choose every size;
+// the per-device memory cap is numeric (gpuVolumePlanOptions in gpu-volume-data.js).
+export const normalizeGpuSide=v=>v===768?768:v===0?0:512;
+export let ipadGpuTargetSide=normalizeGpuSide(+settings.get('gpuSide'));
 export function setIpadGpuTargetSide(v){return ipadGpuTargetSide=v}
 export let residentMprReadbackDisabled=false;
 export function setResidentMprReadbackDisabled(v){return residentMprReadbackDisabled=v}

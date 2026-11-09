@@ -8,7 +8,7 @@ export function gpuPlatformOs(nav = globalThis.navigator) {
   try {
     const ua = String(nav?.userAgent || ''), p = String(nav?.userAgentData?.platform || nav?.platform || '');
     const touch = Number(nav?.maxTouchPoints) > 1;
-    if (/iPhone|iPad|iPod/.test(ua) || (/Mac/.test(p + ua) && touch)) return 'ios';
+    if (/iPad/.test(ua) || (/Mac/.test(p + ua) && touch)) return 'ios';
     if (/Android/i.test(ua) || /^Android$/i.test(p)) return 'android';
     if (/CrOS/.test(ua)) return 'other';
     if (/^mac/i.test(p) || /Macintosh|Mac OS X/.test(ua)) return 'mac';

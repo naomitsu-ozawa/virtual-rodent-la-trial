@@ -3,13 +3,13 @@
 // The data value is read through the range of the segment (segments.js segmentShadeRange: auto = the 2nd..98th percentile of the values of the segment's voxels, manual = the user's), not through the slice image's window.
 // The controls only act while a section is open, the cap is on and the slice image is hidden, so they are disabled otherwise (明るさ / コントラスト also with 単色).
 // Like VR (vr-view.js ctShade / ctShadeBright / ctShadeContrast: device settings saved in localStorage, defaults CT濃淡 / 1.8 / 1.7) the three values are kept on this device and restored at start.
-import { sectionViewOpen, sectionViewPlane, sectionSliceImageVisible, sectionCapEnabled, sectionShadeMode, currentLanguage, sectionShadeBright, sectionShadeContrast, setSectionShadeMode, setSectionShadeBright, setSectionShadeContrast } from './state.js?v=20261109-build703';
-import { sectionShadeModeControl, sectionShadeBrightControl, sectionShadeBrightValue, sectionShadeContrastControl, sectionShadeContrastValue, sectionShadeSegGroup, sectionShadeLowerControl, sectionShadeLowerValue, sectionShadeLowerMinus, sectionShadeLowerPlus, sectionShadeUpperControl, sectionShadeUpperValue, sectionShadeUpperMinus, sectionShadeUpperPlus, sectionShadeResetButton } from './ui-shell.js?v=20261109-build703';
-import { brightOf, contrastOf, shadeRangeStep, shadeValueAt, shadePosOf } from './cap-shade.js?v=20261109-build703';
-import { SEGMENT_PRESET_ORDER, segmentState, segmentShadeRange, segmentShadeSpan, setSegmentShadeEnd, resetSegmentShadeRange, shadeDataRange, onShadeAutoChange } from './segments.js?v=20261109-build703';
-import { wireStepButton, stepClamp } from './value-step.js?v=20261109-build703';
-import { formatCtValue } from './utils.js?v=20261109-build703';
-import { tr } from './i18n.js?v=20261109-build703';
+import { childSegments, sectionViewOpen, sectionViewPlane, sectionSliceImageVisible, sectionCapEnabled, sectionShadeMode, currentLanguage, sectionShadeBright, sectionShadeContrast, setSectionShadeMode, setSectionShadeBright, setSectionShadeContrast } from './state.js?v=20261109-build704';
+import { sectionShadeModeControl, sectionShadeBrightControl, sectionShadeBrightValue, sectionShadeContrastControl, sectionShadeContrastValue, sectionShadeSegGroup, sectionShadeLowerControl, sectionShadeLowerValue, sectionShadeLowerMinus, sectionShadeLowerPlus, sectionShadeUpperControl, sectionShadeUpperValue, sectionShadeUpperMinus, sectionShadeUpperPlus, sectionShadeResetButton } from './ui-shell.js?v=20261109-build704';
+import { brightOf, contrastOf, shadeRangeStep, shadeValueAt, shadePosOf } from './cap-shade.js?v=20261109-build704';
+import { SEGMENT_PRESET_ORDER, allSegmentKeys, shownSegmentKeys, segmentById, segmentShadeRange, segmentShadeSpan, setSegmentShadeEnd, resetSegmentShadeRange, shadeDataRange, onShadeAutoChange, onChildSegLookChange } from './segments.js?v=20261109-build704';
+import { wireStepButton, stepClamp } from './value-step.js?v=20261109-build704';
+import { formatCtValue } from './utils.js?v=20261109-build704';
+import { tr } from './i18n.js?v=20261109-build704';
 
 const KEY = 'vrl-section-shade';
 
@@ -17,22 +17,23 @@ const KEY = 'vrl-section-shade';
 // ranges: every segment's range in use {key: {lower, upper}} (the GPU volume takes the slots' ranges from it, the mesh view the segment of each pixel)
 export function sectionShadeParams() {
   const data = shadeDataRange(), ranges = {};
-  for (const key of SEGMENT_PRESET_ORDER) { const r = segmentShadeRange(key, data); ranges[key] = { lower: r.lower, upper: r.upper }; }
+  for (const key of childSegments.length ? allSegmentKeys() : SEGMENT_PRESET_ORDER) { const r = segmentShadeRange(key, data); ranges[key] = { lower: r.lower, upper: r.upper }; }
   return { on: !sectionSliceImageVisible && sectionShadeMode === 1, bright: brightOf(sectionShadeBright), contrast: contrastOf(sectionShadeContrast), ranges };
 }
 
 // ---- the 濃淡の範囲 controls: the segments shown now (active and ticked), the one chosen, its two sliders over the segment's span (the values present in it + 5 %, else the data's full range; step = span / 200) ----
 let chosen = null; // the segment key chosen in the panel (UI only)
-export const shownShadeSegments = () => SEGMENT_PRESET_ORDER.filter(k => segmentState[k].active && segmentState[k].enabled);
+// the child segments are real segments: they stand in the chooser after the presets, by their name, while they are shown
+export const shownShadeSegments = () => shownSegmentKeys();
 export function chosenShadeSegment() { const shown = shownShadeSegments(); if (!shown.includes(chosen)) chosen = shown[0] ?? null; return chosen; }
 let lastSig = '';
 function syncRangeUi(enabled) {
   const key = chosenShadeSegment(), data = shadeDataRange(), shown = shownShadeSegments(), on = enabled && sectionShadeMode === 1 && !!key && !!data;
   if (sectionShadeSegGroup) {
-    const sig = shown.join() + '|' + tr('bone') + '|' + key;
+    const sig = shown.map(k => k + ':' + (segmentById(k)?.name ?? '')).join() + '|' + tr('bone') + '|' + key;
     if (sectionShadeSegGroup.dataset.sig !== sig) {
       sectionShadeSegGroup.dataset.sig = sig; sectionShadeSegGroup.textContent = '';
-      for (const k of shown) { const b = document.createElement('button'); b.type = 'button'; b.dataset.shadeSeg = k; b.textContent = tr(k); b.setAttribute('aria-pressed', k === key ? 'true' : 'false'); b.style.cssText = k === key ? 'font-weight:700;outline:2px solid currentColor' : ''; b.onclick = () => { chosen = k; syncSectionShadeUi(); }; sectionShadeSegGroup.append(b); }
+      for (const k of shown) { const b = document.createElement('button'); b.type = 'button'; b.dataset.shadeSeg = k; b.textContent = segmentById(k)?.name ?? tr(k); b.setAttribute('aria-pressed', k === key ? 'true' : 'false'); b.style.cssText = k === key ? 'font-weight:700;outline:2px solid currentColor' : ''; b.onclick = () => { chosen = k; syncSectionShadeUi(); }; sectionShadeSegGroup.append(b); }
     }
     for (const b of sectionShadeSegGroup.children) b.disabled = !enabled || sectionShadeMode !== 1;
   }
@@ -81,8 +82,10 @@ export function initSectionShadeUi({ refresh = () => {} } = {}) {
   if (sectionShadeResetButton) sectionShadeResetButton.onclick = () => { const key = chosenShadeSegment(); if (!key) return; resetSegmentShadeRange(key); syncSectionShadeUi(); refresh(); };
   // an auto range is ready (data opened, threshold changed): the panel follows and the cut face is repainted
   onShadeAutoChange(() => { syncSectionShadeUi(); refresh(); });
+  // a child segment's opacity / material / range changed (its row, VR, a project): the panel follows and the cut face is composed again
+  onChildSegLookChange(() => { syncSectionShadeUi(); refresh(); });
   // the segments change outside this panel (ticked, added, their own sliders, a project): the panel follows, the cut face is repainted by those paths themselves
-  setInterval(() => { const sig = currentLanguage + '|' + shownShadeSegments().join() + '|' + SEGMENT_PRESET_ORDER.map(k => { const r = segmentShadeRange(k); return r.lower + ',' + r.upper; }).join(';'); if (sig !== lastSig) { lastSig = sig; syncSectionShadeUi(); } }, 400);
+  setInterval(() => { const sig = currentLanguage + '|' + shownShadeSegments().join() + '|' + allSegmentKeys().map(k => { const r = segmentShadeRange(k); return r.lower + ',' + r.upper; }).join(';'); if (sig !== lastSig) { lastSig = sig; syncSectionShadeUi(); } }, 400);
   if (sectionShadeModeControl) sectionShadeModeControl.onchange = () => { setSectionShadeMode(+sectionShadeModeControl.value === 0 ? 0 : 1); save(); syncSectionShadeUi(); refresh(); };
   syncSectionShadeUi();
 }

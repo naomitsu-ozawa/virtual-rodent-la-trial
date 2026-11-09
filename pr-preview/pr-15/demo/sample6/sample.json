@@ -1,0 +1,36 @@
+{
+  "name": {
+    "ja": "ジカウイルス EMD-8116",
+    "en": "Zika virus EMD-8116"
+  },
+  "level": null,
+  "description": {
+    "ja": "ジカウイルス EMD-8116",
+    "en": "Zika virus EMD-8116"
+  },
+  "credit": {
+    "name": "EMDB EMD-8116 · Sirohi D, et al. The 3.8 Å resolution cryo-EM structure of Zika virus. Science (2016). DOI: 10.1126/science.aaf5316",
+    "url": "https://www.ebi.ac.uk/emdb/EMD-8116",
+    "dataUrl": "https://www.ebi.ac.uk/emdb/EMD-8116"
+  },
+  "license": {
+    "name": "CC0 1.0",
+    "url": "https://creativecommons.org/publicdomain/zero/1.0/"
+  },
+  "changes": {
+    "ja": "768³から512³へ線形補間。密度値は1000倍してint16保存、RescaleSlope=0.001。",
+    "en": "Linearly resampled from 768³ to 512³; density values multiplied by 1000 and stored as int16 (RescaleSlope=0.001)."
+  },
+  "note": {
+    "ja": "注意：表示される長さの単位 mm は実際には nm です（1 mm = 1 nm。体積の mm³ は nm³）。",
+    "en": "Note: lengths shown in mm are actually nm (1 mm = 1 nm; mm³ = nm³)."
+  },
+  "size": {
+    "dims": [
+      512,
+      512,
+      512
+    ],
+    "megabytes": 269.0
+  }
+}

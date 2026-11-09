@@ -1,5 +1,5 @@
-import { HIST_MIN, HIST_BINS } from './histogram.js?v=20261109-build703';
-import { accToHist, createAcc, textureU16 } from './histogram-texture.js?v=20261109-build703';
+import { HIST_MIN, HIST_BINS, HU_AXIS } from './histogram.js?v=20261109-build704';
+import { accToHist, createAcc, textureU16 } from './histogram-texture.js?v=20261109-build704';
 
 export const SLOTS = 4, REGION_COLORS = 14, LABELS = 1 + SLOTS + REGION_COLORS, UNLABELED = 0;
 export const UNLABELED_COLOR = '#8c969c';
@@ -19,6 +19,7 @@ export function labelAt(i, cls, C, picks, reg, regSegs) {
   for (let k = 0; k < picks.length; k += 2) {
     if (cls[i * C + picks[k + 1]] >= 128) {
       const s = picks[k];
+      if (reg && reg[i] === 200 + s) continue; // the voxel of a HIDDEN child segment of slot s (marker 200 + s in the result index stream): not counted as that segment
       if (reg) { const r = reg[i]; if (r > 0 && r <= 14 && (regSegs[r - 1] >> s) & 1) return 5 + r - 1; }
       return 1 + s;
     }
@@ -28,7 +29,7 @@ export function labelAt(i, cls, C, picks, reg, regSegs) {
 
 // ---- kernels: self-contained (no imports, no outer names), also stringified into the worker ----
 // u16 -> HU bin (histogram.js: round, minus HIST_MIN, clamped into the end bins)
-// histMax (optional; the board never passes it): equal bins over histMin..histMax instead of 1-HU bins from histMin (the auto shading range counts over the data's own range, cap-shade.js shadeBinOf: floor, the max in the last bin)
+// histMax (optional; the board passes it only for data that is not CT-like): equal bins over histMin..histMax instead of 1-HU bins from histMin (the auto shading range counts over the data's own range, cap-shade.js shadeBinOf: floor, the max in the last bin)
 export function binLut(cal, histMin, bins, histMax) {
   const slope = cal[0], intercept = cal[1], bias = cal[2], lut = new Uint16Array(65536), over = histMax != null, span = over ? histMax - histMin : 0;
   for (let u = 0; u < 65536; u++) {
@@ -92,6 +93,22 @@ export function countSliceRows(K, counts, s, ya, yb) {
   if (K.mode === 'cls') {
     const picks = K.picks, np = picks.length, cls = s.x, C = K.C, reg = s.r, a = ya * W, b = yb * W;
     if (!cls || !np) { for (let i = a; i < b; i++) counts[lut[u[i]]]++; return; }
+    if (K.hk && reg) { // a child segment is HIDDEN (K.hk): its voxels carry the marker 200 + slot in the result index stream and are not counted as that segment (its own loop: the one below is the loop without children)
+      for (let i = a; i < b; i++) {
+        let L = 0;
+        for (let k = 0; k < np; k += 2) {
+          if (cls[i * C + picks[k + 1]] >= 128) {
+            const sl = picks[k];
+            if (reg[i] === 200 + sl) continue;
+            L = 1 + sl;
+            const r = reg[i]; if (r > 0 && r <= 14 && (regSegs[r - 1] >> sl) & 1) L = 5 + r - 1;
+            break;
+          }
+        }
+        counts[L * bins + lut[u[i]]]++;
+      }
+      return;
+    }
     for (let i = a; i < b; i++) {
       let L = 0;
       for (let k = 0; k < np; k += 2) {
@@ -107,7 +124,7 @@ export function countSliceRows(K, counts, s, ya, yb) {
   }
   // HU path (vr-view.js segmentIndexAt, useCls 0)
   const rl = K.rl, order = K.order, no = order.length, em = K.ed ? K.em : 0, e0 = s.e0, e1 = s.e1, wz = s.wz, reg = s.r;
-  const ew = K.ed ? K.ed.ew : 0, emx = K.emx, emy = K.emy, rw = K.rg ? K.rg.rw : 0, rmx = K.rmx, rmy = K.rmy;
+  const ew = K.ed ? K.ed.ew : 0, emx = K.emx, emy = K.emy, rw = K.rg ? K.rg.rw : 0, rmx = K.rmx, rmy = K.rmy, hk = !!(K.hk && reg); // hk = a child segment is hidden (false without children: the loop is as before)
   for (let y = ya; y < yb; y++) {
     const row = y * W;
     for (let x = 0; x < W; x++) {
@@ -124,6 +141,7 @@ export function countSliceRows(K, counts, s, ya, yb) {
             const v1 = wz ? (1 - wy) * ((1 - wx) * e1[p00] + wx * e1[p01]) + wy * ((1 - wx) * e1[p10] + wx * e1[p11]) : 0;
             if ((1 - wz) * v0 + wz * v1 < 127.5) continue;
           }
+          if (hk && reg[rmy.i0[y] * rw + rmx.i0[x]] === 200 + sl) continue; // hidden child segment voxel (marker 200 + slot)
           L = 1 + sl;
           if (reg) { const r = reg[rmy.i0[y] * rw + rmx.i0[x]]; if (r > 0 && r <= 14 && (regSegs[r - 1] >> sl) & 1) L = 5 + r - 1; }
           break;
@@ -201,14 +219,14 @@ export function createLabelCountClient(makeWorker = blobWorker) {
 // the pass's spec and its slices, from the run input (see createVrLabelHistogram)
 export function passPlan(input) {
   const { grid, shownMask } = input, [W, H, D] = grid.dims, plane = W * H, u = textureU16(grid);
-  // input.binRange {min, max} (the auto shading range's pass): HIST_BINS equal bins over the data's own range; without it the 1-HU bins from HIST_MIN as before
+  // input.binRange {min, max} (the auto shading range's pass; the board's pass too when the data is not CT-like: histogram.js axisFor): HIST_BINS equal bins over the data's own range; without it the 1-HU bins from HIST_MIN as before
   const br = input.binRange, base = { W, H, labels: LABELS, bins: HIST_BINS, histMin: br ? br.min : HIST_MIN, histMax: br ? br.max : null, cal: Array.from(grid.calibration) };
   const region = input.region?.data ? input.region : null, regSegs = Int32Array.from(region?.segs || []);
   let spec, zParts;
   if (input.cls) {
     const cls = input.cls, picks = slotPicks(cls.chan, shownMask), C = cls.C;
     const hasReg = !!region && region.dims.join() === grid.dims.join();
-    spec = { ...base, mode: 'cls', C, picks, regSegs, hasReg };
+    spec = { ...base, mode: 'cls', C, picks, regSegs, hasReg, hk: !!region?.hk };
     zParts = (z, out) => { // [array, start, length] per part, in layout order
       if (!picks.length) return;
       out.push(cls.data, z * plane * C, plane * C);
@@ -217,7 +235,7 @@ export function passPlan(input) {
   } else {
     const hu = input.hu, order = Int32Array.from([0, 1, 2, 3].filter(s => (shownMask >> s) & 1)), edit = hu.edit?.data && hu.em ? hu.edit : null;
     const ed = edit ? { ew: edit.dims[0], eh: edit.dims[1], linear: !!edit.linear } : null, rg = region ? { rw: region.dims[0], rh: region.dims[1] } : null;
-    spec = { ...base, mode: 'hu', ranges: Float64Array.from(hu.ranges), shown: shownMask, maskOnly: hu.maskOnly | 0, em: hu.em | 0, order, regSegs, ed, rg };
+    spec = { ...base, mode: 'hu', ranges: Float64Array.from(hu.ranges), shown: shownMask, maskOnly: hu.maskOnly | 0, em: hu.em | 0, order, regSegs, ed, rg, hk: !!region?.hk };
     const ez = edit ? axisMap(D, edit.dims[2], !!edit.linear) : null, rz = region ? axisMap(D, region.dims[2], false) : null;
     const ep = ed ? ed.ew * ed.eh * 4 : 0, rp = rg ? rg.rw * rg.rh : 0;
     zParts = (z, out) => {
@@ -276,7 +294,7 @@ export function sameResult(a, b) {
 // run(input): input = { key, grid: {data, dims, calibration}, shownMask, volDims: [cols, rows, slices], region: {data, dims, segs} | null,
 //   cls: {data, C, chan} (classification path) | null, hu (HU path, cls null): { ranges: [min0, max0, .. min3, max3], maskOnly, em,
 //   edit: {data, dims, linear} | null } }
-// result: { key, shownMask, hists[LABELS], total, dims, reduced } (kept until the next pass replaces it)
+// result: { key, shownMask, hists[LABELS], total, axis, dims, reduced } (kept until the next pass replaces it; axis = histogram.js HU_AXIS, or {min, max} of input.binRange)
 // stats: the last pass's main-thread time: maxFrameMs (the most it worked in one frame: its plan, copies / chunks and the final binning, timed
 // one by one - waiting for the worker is not work), frames, ms (wall time); maxUnitMs (the longest unit), planMs, binMs
 const ROW_VOXELS = 8192; // main-thread fallback: voxels per chunk (whole rows)
@@ -327,7 +345,8 @@ export function createVrLabelHistogram({ yieldFn = () => new Promise(r => setTim
       const d = input.grid.dims, v = input.volDims || d, w = (v[0] * v[1] * v[2]) / (d[0] * d[1] * d[2]);
       const plan = timed(() => passPlan(input), 'planMs'), h = await count(j, plan, w);
       if (!h || j.cancelled) return false;
-      const next = { key: input.key, shownMask: input.shownMask, hists: h.hists, total: h.total, dims: d, reduced: d[0] !== v[0] || d[1] !== v[1] || d[2] !== v[2] };
+      const br = input.binRange, axis = br ? { min: br.min, max: br.max, hu: false } : HU_AXIS; // the axis the counts were made on (the HU path = 1-HU bins, else equal bins over binRange): the board's ticks / window / stats read it
+      const next = { key: input.key, shownMask: input.shownMask, hists: h.hists, total: h.total, axis, dims: d, reduced: d[0] !== v[0] || d[1] !== v[1] || d[2] !== v[2] };
       // the same pass again (self-check, histForce) giving the same result: nothing on the board changes, so no redraw / upload
       if (sameResult(result, next) && !hadError) quiet = true; else result = next;
       stats.ms = now() - t0;

@@ -1,16 +1,15 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { set3DBusy } from './three-status.js?v=20261109-build703';
-import { useWorkspaceUi, updateRenderModeControl, clearResidentMprJobs, prepareResidentGpuVolume, activateMedicalVolume, setThreeVolumeOverlay } from './data-load.js?v=20261109-build703';
-import { appVersionBadge, planes, ipadGpuQualityControl, ipadGpuQuality, footer } from './ui-shell.js?v=20261109-build703';
-import { sceneState, volume, currentLanguage, ipadGpuTargetSide, setIpadGpuTargetSide, sourceVolume, threeRenderMode, setResidentMprReadbackDisabled, setThreeRenderMode } from './state.js?v=20261109-build703';
-import { updateMprCanvasPhysicalAspect, schedulePlaneRender } from './mpr-render.js?v=20261109-build703';
-import { request3DRender } from './scene3d.js?v=20261109-build703';
-import { applyLanguage } from './i18n.js?v=20261109-build703';
-import { isIPhoneRuntime, isTabletRuntime, isVrHeadsetRuntime, fmt } from './utils.js?v=20261109-build703';
-import { settings } from './app-settings.js?v=20261109-build703';
+import { set3DBusy } from './three-status.js?v=20261109-build704';
+import { updateRenderModeControl, clearResidentMprJobs, prepareResidentGpuVolume, activateMedicalVolume, setThreeVolumeOverlay } from './data-load.js?v=20261109-build704';
+import { appVersionBadge, planes, ipadGpuQualityControl, ipadGpuQuality, footer } from './ui-shell.js?v=20261109-build704';
+import { sceneState, volume, currentLanguage, ipadGpuTargetSide, setIpadGpuTargetSide, normalizeGpuSide, sourceVolume, threeRenderMode, setResidentMprReadbackDisabled, setThreeRenderMode } from './state.js?v=20261109-build704';
+import { updateMprCanvasPhysicalAspect, schedulePlaneRender } from './mpr-render.js?v=20261109-build704';
+import { request3DRender } from './scene3d.js?v=20261109-build704';
+import { applyLanguage } from './i18n.js?v=20261109-build704';
+import { isVrHeadsetRuntime, fmt } from './utils.js?v=20261109-build704';
+import { settings } from './app-settings.js?v=20261109-build704';
 export function initIPadWorkspaceUi(){
- if(!useWorkspaceUi())return;
  const shell=document.querySelector('.app-shell'),workspace=document.querySelector('.workspace'),sidebar=document.querySelector('.sidebar'),sidebarScroll=document.querySelector('.sidebar-scroll'),viewer=document.querySelector('#viewer-grid'),topbar=document.querySelector('.topbar');
  if(!shell||!workspace||!sidebar||!sidebarScroll||!viewer||!topbar)return;
  document.documentElement.classList.add('vrl-ipad-ui','ipad-settings-persistent');
@@ -52,7 +51,7 @@ export function initIPadWorkspaceUi(){
    const row=(key,text,btns)=>{if(!btns.length)return;const r=document.createElement('div');r.className='ws-file-row';r.append(cap(key,text),...btns);box.append(r)};
    row('wsFileOpen','データ',open);
    dataPanel.prepend(box);
-   const choices=document.querySelector('#sample-dialog .sample-choices');
+   const choices=document.querySelector('#sample-choices-holder .sample-choices');
    if(choices&&box.firstElementChild){
     const picker=document.createElement('div');picker.id='ws-sample-picker';picker.className='ws-sample-picker';picker.inert=true;
     const inner=document.createElement('div');inner.className='ws-sample-inner';inner.append(cap('sampleChoose','練習データを選ぶ'),choices);
@@ -88,13 +87,6 @@ export function initIPadWorkspaceUi(){
  if(sectionResult)analysisSettings.appendChild(sectionResult);
  if(analysisResult)analysisSettings.appendChild(analysisResult);
  analysisPanel.append(aButtons,analysisSettings,aHost);sidebarScroll.appendChild(analysisPanel);
- const hasCrop=!!document.querySelector('#crop-export-toggle');
- if(hasCrop){
-  const cropPanel=section('crop');
-  const cButtons=document.createElement('div');cButtons.className='ws-tool-buttons';cButtons.dataset.toolButtons='crop';
-  const cHost=document.createElement('div');cHost.className='ws-result-host';cHost.dataset.resultHost='crop';
-  cropPanel.append(cButtons,cHost);sidebarScroll.appendChild(cropPanel);
- }
 
  const byId=id=>document.getElementById(id);
  const dlg=byId('settings-dialog'),openBtn=byId('settings-open'),dlgBody=dlg?.querySelector('.settings-body');
@@ -107,7 +99,7 @@ export function initIPadWorkspaceUi(){
  }
  if(openBtn){openBtn.hidden=true;openBtn.style.display='none'}
 
- const TOOLS=[['data','ipadData','データ'],['display','toolDisplay','表示'],['segment','toolSegment','セグメント'],['filter','toolFilter','フィルター'],['edit','ipadEdit','3D編集'],['analysis','wsAnalysis','解析'],...(hasCrop?[['crop','cropTitle','切り出し']]:[])];
+ const TOOLS=[['data','ipadData','データ'],['display','toolDisplay','表示'],['segment','toolSegment','セグメント'],['filter','toolFilter','フィルター'],['edit','ipadEdit','3D編集'],['analysis','wsAnalysis','解析']];
  const drawerTabs=document.createElement('nav');drawerTabs.className='ipad-drawer-tabs ws-tool-rail';drawerTabs.setAttribute('aria-label','Tools');
  const ICON={data:'<ellipse cx="12" cy="5.5" rx="7" ry="2.5"/><path d="M5 5.5v13c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5v-13"/><path d="M5 12c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5"/>',
   display:'<path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
@@ -115,7 +107,6 @@ export function initIPadWorkspaceUi(){
   filter:'<path d="M3 4.5h18l-7 8.5v6l-4 2v-8z"/>',
   edit:'<circle cx="6" cy="6.5" r="2.8"/><circle cx="6" cy="17.5" r="2.8"/><path d="M8.2 8.2 20 18.5M8.2 15.8 20 5.5"/>',
   analysis:'<path d="M3 20.5h18"/><path d="M6.5 20.5v-6M11.5 20.5V8M16.5 20.5v-9.5"/>',
-  crop:'<path d="M6.5 2.5v15h15"/><path d="M2.5 6.5h15v15"/>',
   prefs:'<circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/>'};
  drawerTabs.innerHTML=TOOLS.map(([k,key,t])=>'<button type="button" data-ipad-drawer-tab="'+k+'"><svg class="ws-rail-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'+(ICON[k]||'')+'</svg><span class="ws-rail-label" data-i18n="'+key+'">'+t+'</span></button>').join('');
  // the 設定 entry is a button that opens the modal (not a tab: no panel, no tab switching); it is the only entry the rail keeps in event mode (style.css)
@@ -181,17 +172,15 @@ export function initIPadWorkspaceUi(){
  toolbar.querySelectorAll('[data-ipad-mpr]').forEach(b=>b.addEventListener('click',()=>setMprPlane(b.dataset.ipadMpr)));
  document.addEventListener('vrl-plane-selected',e=>{const p=e.detail?.plane;if(e.detail?.source!=='workspace'&&p&&p!==mprPlane)setMprPlane(p,true)});
  window.addEventListener('orientationchange',refreshLayout,{passive:true});
- window.addEventListener('resize',()=>{if(useWorkspaceUi())refreshLayout()},{passive:true});
+ window.addEventListener('resize',refreshLayout,{passive:true});
  setDrawerTab('data');setMprPlane('axial',true);setViewMode(isVrHeadsetRuntime()?'2d':'3d');applyLanguage(currentLanguage);
 }
 export function initIPadGpuQualityControl(){
  if(!ipadGpuQualityControl||!ipadGpuQuality)return;
- if(isIPhoneRuntime()){ipadGpuQualityControl.classList.add('is-hidden');ipadGpuQualityControl.style.display='none';return}
- // full size only off iPad (memory); the label is the 3D volume resolution
- if(isTabletRuntime())ipadGpuQuality.querySelector('option[value="0"]')?.remove();
+ // device parity: the full-size option exists on every other device (tablets too); the label is the 3D volume resolution
   ipadGpuQualityControl.classList.remove('is-hidden');ipadGpuQualityControl.style.display='flex';ipadGpuQuality.value=String(ipadGpuTargetSide);
  ipadGpuQuality.onchange=async()=>{
-  const v=+ipadGpuQuality.value,next=v===768?768:v===0&&!isTabletRuntime()?0:512;if(next===ipadGpuTargetSide)return;
+  const next=normalizeGpuSide(+ipadGpuQuality.value);if(next===ipadGpuTargetSide)return;
   setIpadGpuTargetSide(next);settings.set('gpuSide',next);
   const mv=sceneState?.medicalVolume,target=sourceVolume||volume,wasVolume=threeRenderMode==='volume'&&!!mv?.active;
   if(!mv||!target?.sourceBacked){updateRenderModeControl(target);return}

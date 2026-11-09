@@ -1,10 +1,10 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { sourceVolume, volume, sceneState, residentMprEpoch, setResidentMprReadbackDisabled, residentMprReadbackDisabled, setSourceOrthogonalPlaneCacheBytes, sourceOrthogonalPlaneCacheBytes } from './state.js?v=20261109-build703';
-import { state } from './ui-shell.js?v=20261109-build703';
-import { sourceFilterStages } from './source-filters.js?v=20261109-build703';
-import { frameYield, isIPhoneRuntime, isTabletRuntime } from './utils.js?v=20261109-build703';
-import { readSourceRows, readSourceColumn } from './volume-io.js?v=20261109-build703';
+import { sourceVolume, volume, sceneState, residentMprEpoch, setResidentMprReadbackDisabled, residentMprReadbackDisabled, setSourceOrthogonalPlaneCacheBytes, sourceOrthogonalPlaneCacheBytes } from './state.js?v=20261109-build704';
+import { state } from './ui-shell.js?v=20261109-build704';
+import { sourceFilterStages } from './source-filters.js?v=20261109-build704';
+import { frameYield, isTabletRuntime } from './utils.js?v=20261109-build704';
+import { readSourceRows, readSourceColumn } from './volume-io.js?v=20261109-build704';
 export const residentMprJobs={axial:{running:false,current:null,pending:null},coronal:{running:false,current:null,pending:null},sagittal:{running:false,current:null,pending:null}};
 export function residentGpuMprAvailable(v=sourceVolume||volume){
  const mv=sceneState?.medicalVolume;return !!(!residentMprReadbackDisabled&&mv?.hasResident?.(v));
@@ -42,7 +42,7 @@ export function readResidentGpuMprPlane(p,idx,series,{maxSide=0}={}){
  });
 }
 export const sourceOrthogonalPlaneCache=new Map(),sourceOrthogonalPlanePending=new Map();
-export function sourceOrthogonalCacheLimit(){return isIPhoneRuntime()?64*1024*1024:isTabletRuntime()?256*1024*1024:512*1024*1024}
+export function sourceOrthogonalCacheLimit(){return isTabletRuntime()?256*1024*1024:512*1024*1024}
 export function sourceOrthogonalCacheGet(p,idx){
  const key=p+':'+idx,v=sourceOrthogonalPlaneCache.get(key);if(!v)return null;sourceOrthogonalPlaneCache.delete(key);sourceOrthogonalPlaneCache.set(key,v);return v;
 }

@@ -1,22 +1,25 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { segmentState, segmentNeedsGlobalMask, sourceMprMemoryView, sourceMemoryUsable, getProcessedSegmentMask, segmentEditState, segmentSourcesOf, segmentSourceSignature, segmentHasManualEditsUpstream, segmentEditGen, segmentKeyOf, segmentAddsVoxels } from './segments.js?v=20261109-build703';
-import { activeId, filterRebuildRevision, current3DVolume, volume, currentLanguage } from './state.js?v=20261109-build703';
-import { sourceFilterRuntime, sourceFilterSignature, sourceFilterStages, sourceFilterHalo, readSourceRegion, runSourceFilterWorker, fitSourceTile, getCachedSourceSlice } from './source-filters.js?v=20261109-build703';
-import { gpuOpenRuns, gpuCounts, gpuStepTimes, gpuRunInfo, addGpuStepTime, ensureGpuFilterDevice, gpuValidationScope, setGpuComputeBackend, runGpuSourceFilters, gpuFilterRuntime, gpuStagesSupported, beginGpuBufferRetention, endGpuBufferRetention } from './gpu-compute.js?v=20261109-build703';
-import { isNativeDicomTransferSyntax } from './dicom.js?v=20261109-build703';
-import { extractSourceThresholdRuns } from './medical-volume.js?v=20261109-build703';
-import { valuesToSegmentBits } from './mask-ops.js?v=20261109-build703';
-import { state } from './ui-shell.js?v=20261109-build703';
-import dicomParser from 'https://esm.sh/dicom-parser@1.8.21';
-import { analysisRunsVoxelCount, unionRunArrays, maskToAnalysisRuns, postprocessSourceRuns, thinSuppressSourceRuns, intersectRunArrays, subtractRunArrays } from './run-length.js?v=20261109-build703';
-import { frameYield } from './utils.js?v=20261109-build703';
-import { BODY_MIN_HU } from './thin-suppress.js?v=20261109-build703';
-import { setProcessingBusy } from './busy.js?v=20261109-build703';
-import { reportBusyProgress } from './progress-modal.js?v=20261109-build703';
-import { segmentRunsCacheKey, segmentRunsCacheInfo, loadCachedSegmentRuns, storeCachedSegmentRuns } from './run-cache.js?v=20261109-build703';
-import { loadStatAdd } from './load-stats.js?v=20261109-build703';
-import { hashHex } from './vr-prep-cache.js?v=20261109-build703'; // a content hash for the key (the upstream manual edits) //: cache hits of a load, for the VR switch report
+import { segmentState, segmentNeedsGlobalMask, sourceMprMemoryView, sourceMemoryUsable, getProcessedSegmentMask, segmentEditState, segmentSourcesOf, segmentSourceSignature, segmentHasManualEditsUpstream, segmentEditGen, segmentKeyOf, segmentAddsVoxels } from './segments.js?v=20261109-build704';
+import { activeId, filterRebuildRevision, current3DVolume, volume, currentLanguage } from './state.js?v=20261109-build704';
+import { sourceFilterRuntime, sourceFilterSignature, sourceFilterStages, sourceFilterHalo, readSourceRegion, runSourceFilterWorker, fitSourceTile, getCachedSourceSlice } from './source-filters.js?v=20261109-build704';
+import { gpuOpenRuns, gpuCounts, gpuStepTimes, gpuRunInfo, addGpuStepTime, ensureGpuFilterDevice, gpuValidationScope, setGpuComputeBackend, runGpuSourceFilters, gpuFilterRuntime, gpuStagesSupported, beginGpuBufferRetention, endGpuBufferRetention } from './gpu-compute.js?v=20261109-build704';
+import { isNativeDicomTransferSyntax } from './dicom.js?v=20261109-build704';
+import { extractSourceThresholdRuns } from './medical-volume.js?v=20261109-build704';
+import { valuesToSegmentBits } from './mask-ops.js?v=20261109-build704';
+import { state } from './ui-shell.js?v=20261109-build704';
+import dicomParser from './vendor/dicom-parser@1.8.21/index.js';
+import { storedLayout, readStored } from './stored-bits.js?v=20261109-build704';
+import { analysisRunsVoxelCount, unionRunArrays, maskToAnalysisRuns, postprocessSourceRuns, thinSuppressSourceRuns, intersectRunArrays, subtractRunArrays } from './run-length.js?v=20261109-build704';
+import { frameYield } from './utils.js?v=20261109-build704';
+import { BODY_MIN_HU } from './thin-suppress.js?v=20261109-build704';
+import { setProcessingBusy } from './busy.js?v=20261109-build704';
+import { reportBusyProgress } from './progress-modal.js?v=20261109-build704';
+import { segmentRunsCacheKey, segmentRunsCacheInfo, loadCachedSegmentRuns, storeCachedSegmentRuns } from './run-cache.js?v=20261109-build704';
+import { loadStatAdd } from './load-stats.js?v=20261109-build704';
+import { hashHex } from './vr-prep-cache.js?v=20261109-build704'; // a content hash for the key (the upstream manual edits) //: cache hits of a load, for the VR switch report
+import { isChildKey } from './segment-look.js?v=20261109-build704';
+import { childByKey } from './child-segments.js?v=20261109-build704';
 export async function processSourceRegionMasks(series,target,stages,key,revision,segments){
  const halo=sourceFilterHalo(stages),x0=Math.max(0,target.x-halo),y0=Math.max(0,target.y-halo),z0=Math.max(0,target.z-halo),x1=Math.min(series.columns,target.x+target.width+halo),y1=Math.min(series.rows,target.y+target.height+halo),z1=Math.min(series.slices.length,target.z+target.depth+halo);
  const box={x:x0,y:y0,z:z0,width:x1-x0,height:y1-y0,depth:z1-z0},data=await readSourceRegion(series,box,revision,true);
@@ -354,7 +357,7 @@ export async function ensureSegmentBaseRuns(key,v=current3DVolume||volume,onProg
     const alive=()=>segmentBaseSignature(key,v)===sig;
     let excludeRuns=null;
     if(needExclude){
-     for(const u of sources){const f=await getFinalSegmentRuns(u,v);if(!f)continue;excludeRuns=excludeRuns?unionRunArrays(excludeRuns,f,v.slices):f}
+     for(const u of sources){const f=isChildKey(u)?childByKey(u)?.runsBySlice:await getFinalSegmentRuns(u,v);if(!f)continue;excludeRuns=excludeRuns?unionRunArrays(excludeRuns,f,v.slices):f}
      if(!alive())throw new Error('__SUPERSEDED__');
     }
     runs=v.sourceBacked?await sourceRunsForSegment(v,key,seg,report,alive,excludeRuns):thresholdRunsFromMemory(v,seg,key);
@@ -414,7 +417,7 @@ export async function decodeSourceSegmentMasks(meta,segments){
   const all=new Uint8Array(await meta.file.arrayBuffer()),ds=dicomParser.parseDicom(all),el=ds.elements.x7fe00010;
   if(!el)throw new Error('Pixel Data missing');bytes=all;offset=el.dataOffset;
  }
- const little=meta.ts!=='1.2.840.10008.1.2.2',view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength),n=meta.rows*meta.columns,blockSize=16384;
+ const little=meta.ts!=='1.2.840.10008.1.2.2',view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength),n=meta.rows*meta.columns,blockSize=16384,L=storedLayout(meta);
  const states=new Map(segments.map(({key,seg})=>[key,{mask:new Uint8Array(n),blocks:[],block:new Uint32Array(blockSize),used:0,min:seg.min,max:seg.max}]));
  const pushIndex=(state,i)=>{
   if(state.used===state.block.length){state.blocks.push(state.block);state.block=new Uint32Array(blockSize);state.used=0}
@@ -422,8 +425,10 @@ export async function decodeSourceSegmentMasks(meta,segments){
  };
  for(let i=0;i<n;i++){
   let raw;
-  if(meta.bits===8){raw=bytes[offset+i];if(meta.signed&&raw>127)raw-=256}
-  else raw=meta.signed?view.getInt16(offset+i*2,little):view.getUint16(offset+i*2,little);
+  if(L.plain){ // the whole allocated word is the value (every ordinary 8 / 16-bit series): the plain DataView read
+   if(meta.bits===8){raw=bytes[offset+i];if(meta.signed&&raw>127)raw-=256}
+   else raw=meta.signed?view.getInt16(offset+i*2,little):view.getUint16(offset+i*2,little);
+  }else raw=readStored(bytes,view,offset+i*bpp,little,L); // BitsStored < allocated / HighBit shifted: mask, shift and sign-extend
   const value=Math.fround(raw*meta.slope+meta.intercept);
   for(const state of states.values()){
    if(value>=state.min&&value<=state.max){state.mask[i]=1;pushIndex(state,i)}

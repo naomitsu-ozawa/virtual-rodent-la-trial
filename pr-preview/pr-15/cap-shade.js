@@ -12,6 +12,8 @@
 // full width; until it is ready (and for a segment without voxels / with one value) the initial value is used: the segment's own min..max (what its sliders show) cut to the data's actual min..max (an open-ended segment, bone up to
 // 61535, ends at the data's top). Once the user moves one of the two range sliders of a segment both ends are kept (manual) until 「自動に戻す」. The manual ranges live in segments.js (segmentShadeRanges), saved in the project file; the auto values are not saved.
 
+import { HIST_BINS, binOf, binValue, binValues, binRuns, createHist } from './histogram.js?v=20261109-build704'; // build after 703: the ONE histogram implementation (equal bins over an axis {min, max}); the shade histogram below is histogram.js with the data's own range as the axis
+
 export const SHADE_BRIGHT_DEFAULT = 1.8, SHADE_CONTRAST_DEFAULT = 1.7, SHADE_FLOOR = 0.35; // the same defaults as VR (vr-view.js DEFAULTS ctShadeBright / ctShadeContrast)
 export const SHADE_BRIGHT_MIN = 0.5, SHADE_BRIGHT_MAX = 2, SHADE_CONTRAST_MIN = 0.5, SHADE_CONTRAST_MAX = 2; // 50..200 % in 10 % steps, as the VR sliders
 
@@ -70,39 +72,22 @@ export function moveShadeEnd(range, which, value, data) {
   return { lower: lo, upper: hi };
 }
 // ---- the auto range of a segment ----
-// From the segment's histogram: SHADE_HIST_BINS (4096) equal bins over the DATA's own range (data.min..data.max, so CT, MRI up to 65535 or anything else counts the same way; NOT the fixed HU bins of histogram.js), holding only the
+// From the segment's histogram: SHADE_HIST_BINS (4096) equal bins over the DATA's own range (data.min..data.max, so CT, MRI up to 65535 or anything else counts the same way; histogram.js with the data's own range as the axis, so one implementation counts both the board and this), holding only the
 // voxels that belong to the segment (a Uint32Array; made with binShadeValues / binShadeRuns here or by the VR label pass, vr-label-histogram.js binLut with histMax). Everything below is in data units; a bin's value is its centre.
 //   lower = the 2nd percentile, upper = the 98th percentile (nearest rank);: the long tails are cut with the interquartile range (IQR = p75 - p25): lower = max(p2, p25 - k*IQR), upper = min(p98, p75 + k*IQR), k = 2 (a wide
 //   distribution such as bone or MRI keeps p2 / p98; a narrow peak with a long tail, soft tissue, no longer stretches the range). When upper - lower is under 0.5 % of the data's full width it is widened symmetrically to 0.5 %; both are cut to the data's min..max.
 //   span = the values really present (lower edge of the first non-empty bin .. upper edge of the last one) plus 5 % of that width on each side, cut to the data: the range the lower / upper sliders run over (step span / 200).
 // null (= use the initial value, the full data range for the sliders) for a segment without voxels, with one distinct value (all in one bin), or without a histogram.
-export const SHADE_AUTO_LOW_P = 2, SHADE_AUTO_HIGH_P = 98, SHADE_AUTO_MIN_FRAC = 0.005, SHADE_SPAN_MARGIN = 0.05, SHADE_HIST_BINS = 4096, SHADE_AUTO_IQR_K = 2;
-export const createShadeHist = () => new Uint32Array(SHADE_HIST_BINS);
-// the bin of a data value (clamped; the data's max is in the last bin)
-export function shadeBinOf(v, min, max) {
-  const w = max - min;
-  if (!(w > 0)) return 0;
-  const b = Math.floor((v - min) / w * SHADE_HIST_BINS);
-  return b < 0 ? 0 : b >= SHADE_HIST_BINS ? SHADE_HIST_BINS - 1 : b;
-}
+export const SHADE_AUTO_LOW_P = 2, SHADE_AUTO_HIGH_P = 98, SHADE_AUTO_MIN_FRAC = 0.005, SHADE_SPAN_MARGIN = 0.05, SHADE_HIST_BINS = HIST_BINS, SHADE_AUTO_IQR_K = 2;
+export const createShadeHist = () => createHist();
+// the bin of a data value (clamped; the data's max is in the last bin): histogram.js binOf on the axis {min, max}
+export const shadeBinOf = (v, min, max) => binOf(v, { min, max });
 // the centre of a bin, in data units
-export const shadeBinValue = (b, min, max) => min + (b + 0.5) * ((max - min) / SHADE_HIST_BINS);
-// add values[start..end) to hist; with lo / hi only the values inside lo..hi (a segment's own range: its voxel test); NaN is skipped
-export function binShadeValues(hist, values, min, max, start = 0, end = values.length, lo = -Infinity, hi = Infinity) {
-  for (let i = start; i < end; i++) {
-    const v = values[i];
-    if (v !== v || v < lo || v > hi) continue;
-    hist[shadeBinOf(v, min, max)]++;
-  }
-  return hist;
-}
-// add the voxels of one slice that lie in `runs` (the analysis run format: triples y, x0, x1 with x1 inclusive; the triples from i0 up to i1) to hist
-export function binShadeRuns(hist, values, runs, w, min, max, i0 = 0, i1 = runs ? runs.length : 0) {
-  if (!runs) return hist;
-  const end = Math.min(i1, runs.length);
-  for (let i = i0; i + 2 < end; i += 3) { const base = runs[i] * w; binShadeValues(hist, values, min, max, base + runs[i + 1], base + runs[i + 2] + 1); }
-  return hist;
-}
+export const shadeBinValue = (b, min, max) => binValue(b, { min, max });
+// add values[start..end) to hist; with lo / hi only the values inside lo..hi (a segment's own range: its voxel test); NaN is skipped (histogram.js binValues)
+export const binShadeValues = (hist, values, min, max, start = 0, end = values.length, lo = -Infinity, hi = Infinity) => binValues(hist, values, start, end, { min, max }, lo, hi);
+// add the voxels of one slice that lie in `runs` (the analysis run format: triples y, x0, x1 with x1 inclusive; the triples from i0 up to i1) to hist (histogram.js binRuns)
+export const binShadeRuns = (hist, values, runs, w, min, max, i0 = 0, i1 = runs ? runs.length : 0) => binRuns(hist, values, runs, w, i0, i1, { min, max });
 export function shadeHistCount(hist) { let n = 0; for (let i = 0; i < hist.length; i++) n += hist[i]; return n; }
 export function autoShadeRange(hist, data) {
   if (!hist || !data || !(data.max > data.min)) return null;

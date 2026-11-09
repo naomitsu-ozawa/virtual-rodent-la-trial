@@ -51,26 +51,18 @@ export function realHolderScale(longMm) {
   return clampScale(realScaleOf(longMm), longMm);
 }
 
-// the scale when VR / AR starts (and on Home): 1x (real size). Oversize data -> fitted to 0.30 m (locked); unknown physical size
-// (no spacing) -> the old default fit (fallbackScale, 16.5 cm display), because there is no real size to show.
-export function startHolderScale(longMm, fallbackScale) {
-  const r = realHolderScale(longMm);
-  if (r) return r;
+export function startHolderScale(longMm, fallbackScale, mag = 1) {
+  const r = realHolderScale(longMm); // null: unknown physical size or oversize data -> the fit, whatever the magnification
+  if (r) return clampScale(r * (mag > 0 ? mag : 1), longMm);
   return clampScale(fallbackScale, longMm);
 }
-
-export const LV0_START_MAG = 4;
-export const lv0HolderScale = (longMm, fallbackScale) => {
-  const r = realHolderScale(longMm); // null: unknown physical size or oversize data -> same as every other start
-  return r ? clampScale(r * LV0_START_MAG, longMm) : clampScale(fallbackScale, longMm);
-};
-// while the tutorial runs the volume is put where the hands reach it (0.65 m ahead, at chest height, a quarter metre below the eyes).: its size is x4 real size (LV0_START_MAG; was 0.25 m = about x9.8).
+// while the tutorial runs the volume is put where the hands reach it (0.65 m ahead, at chest height, a quarter metre below the eyes).: its size is the tutorial data's start magnification (`mag`: its sample.json vrInitialScale, 4 for the Lv0 bone; was 0.25 m = about x9.8).
 // Only the tutorial uses TUT_VOLUME_*; unknown physical size: TUT_LONG_M (0.1 m longest side).
 export const TUT_VOLUME_FWD = 0.65, TUT_VOLUME_DOWN = 0.25;
 export const TUT_LONG_M = 0.1;
-export const tutorialHolderScale = longMm => (longMm > 0 ? lv0HolderScale(longMm, TUT_LONG_M / NORM_LONG) : clampScale(TUT_LONG_M / NORM_LONG, longMm));
+export const tutorialHolderScale = (longMm, mag = 1) => (longMm > 0 ? startHolderScale(longMm, TUT_LONG_M / NORM_LONG, mag) : clampScale(TUT_LONG_M / NORM_LONG, longMm));
 // the volume is "small" for the tutorial's grab steps when it is displayed at less than 95 % of the tutorial size (the visitor shrank it, or it was never enlarged)
-export const smallForTutorial = (holderScale, longMm) => holderScale < tutorialHolderScale(longMm) * 0.95;
+export const smallForTutorial = (holderScale, longMm, mag = 1) => holderScale < tutorialHolderScale(longMm, mag) * 0.95;
 
 // two-hand pinch: the new scale from the scale and hand distance at the grab (s0, d0) and the current distance d.
 // Always derived from the grab values (not accumulated), so pushing past a limit and coming back resumes exactly where the hands cross the limit.

@@ -2,7 +2,7 @@
 // Four levels, each one of the bundled practice datasets (docs/demo/sampleN, the same set ids as the practice-data chooser);
 // texts are i18n keys (i18n.js). The switch is settings.eventMode (app-settings.js, per device, default off); the chosen
 // level lives only in this page (a reload starts with none chosen) and follows whichever practice dataset was opened last.
-import { registry, sampleKey } from './sample-registry.js?v=20261109-build703';
+import { registry, sampleKey } from './sample-registry.js?v=20261109-build704';
 export const EVENT_HINT_KEYS={section:'evHintSection',move:'evHintMove',toggle:'evHintToggle',mark:'evHintMark',distance:'evHintDistance'};
 // the levels, the other datasets and each dataset's starting segments are no longer tables here: they come from the registry (sample-registry.js), built from the sample.json
 // of every docs/demo/sampleN folder. Order: Lv0..Lv3 by the level field, then the datasets without a level by folder number. Names / missions are i18n keys the registry adds (sampleKey).
@@ -110,8 +110,9 @@ export function simpleMenuLayout(o){
   label('results',X,y+30,t.results,{bold:true,size:28});
   const top=y+56,cap=Math.max(0,Math.floor((listEnd-24-30-top)/M.LIST_ROW)),shown=res.slice(0,cap);
   shown.forEach((r,i)=>{const ry=top+i*M.LIST_ROW;
-   w.push({type:'button',id:'result:'+i,x:X,y:ry,w:56,h:40,label:'',on:true,color:r.hex});
-   label('result:'+i+':name',X+76,ry+30,r.name,{size:28,bold:true,color:r.hex});label('result:'+i+':vol',X+520,ry+30,r.text,{size:28})});
+   const on=r.on!==false; // the chip is the result's show / hide switch (lit = shown)
+   w.push({type:'button',id:'result:'+i,x:X,y:ry,w:56,h:40,label:'',on,color:r.hex});
+   label('result:'+i+':name',X+76,ry+30,r.name,{size:28,bold:true,color:on?r.hex:'#6b7885'});label('result:'+i+':vol',X+520,ry+30,r.text,{size:28})});
   const more=res.length-shown.length;
   label('total',X,top+shown.length*M.LIST_ROW+26,t.total+' '+o.total+' · '+res.length+(more>0?'  (… +'+more+')':''),{size:24,color:'#9fb3c3'});
  }

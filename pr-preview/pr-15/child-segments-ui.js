@@ -1,0 +1,148 @@
+// The child segments in the page: the lifecycle (a project load installs them, another dataset drops them, the user deletes one), their SURFACES in the mesh view and the follow-up of every look change.
+// A child segment is drawn as a run surface of its own (surface-mesh.js buildEditableRunsGroup on its mask, its own colour / opacity / material), added to the scene beside the presets' surfaces; the parent preset is built WITHOUT the
+// child's voxels (segments.js: the child keys are among the parent's sources), so hiding a child (group.visible = false) leaves those voxels EMPTY instead of showing the parent's surface there.
+// Nothing here runs for data without child segments (every entry point returns at once when the list is empty).
+import { childSegments, analysisRegions, sceneState, threeRenderMode, current3DVolume, volume, sourceVolume, currentLanguage } from './state.js?v=20261109-build704';
+import { restoreChildSegments, clearChildSegments, removeChildSegment, childByKey, emitChildSegChange, addChildSegmentFromRegions, CHILD_SEG_MAX } from './child-segments.js?v=20261109-build704';
+import { getFinalSegmentRuns } from './segment-runs.js?v=20261109-build704';
+import { segmentExclusive, segmentById, childRenderEntries, gpuSegmentSignature, requestChildShadeAuto, onChildSegLookChange, setChildLook } from './segments.js?v=20261109-build704';
+import { childSegLookOf } from './segment-look.js?v=20261109-build704';
+import { buildEditableRunsGroup, dispose } from './surface-mesh.js?v=20261109-build704';
+import { setSegmentMeshMaterial } from './mesh-material.js?v=20261109-build704';
+import { childSurfaceHooks, inCurrentScene } from './surface-build.js?v=20261109-build704';
+import { request3DRender } from './scene3d.js?v=20261109-build704';
+import { makeSource3DCoordinates, makeVolume3DCoordinates } from './mesh-geometry.js?v=20261109-build704';
+import { footer } from './ui-shell.js?v=20261109-build704';
+import { tr } from './i18n.js?v=20261109-build704';
+
+const groups = new Map(); // child key -> { group, hash }
+const listeners = new Set();
+// fn() runs after the list of child segments changed (the tree rows redraw)
+export const onChildSegmentsChange = fn => { listeners.add(fn); return () => listeners.delete(fn); };
+const emit = () => { for (const fn of [...listeners]) { try { fn(); } catch (e) { console.warn('[child-segments]', e); } } emitChildSegChange('list'); };
+// 2D / cut-face / histogram follow through hooks of their own (registered by their modules: no import of the painters here)
+const repaint = { fn: null };
+export const setChildRepaint = fn => { repaint.fn = fn; };
+
+// a child's group is shown while the child is shown AND its parent is (segments.js segmentById.enabled)
+export const childShownNow = c => !!segmentById(c.key)?.enabled;
+function dropGroup(key) {
+  const e = groups.get(key); if (!e) return;
+  groups.delete(key); const g = e.group;
+  if (g) { if (g.parent) g.parent.remove(g); dispose(g); }
+}
+export function disposeChildSurfaces() { for (const k of [...groups.keys()]) dropGroup(k); request3DRender(); }
+const alive = c => childSegments.includes(c);
+let building = Promise.resolve();
+// build the missing surfaces (a child whose group is not in the current scene, or whose mask changed); sets the visibility of the others. Mesh view only: the GPU volume draws children from its own table.
+export function ensureChildSurfaces(v = current3DVolume || volume) {
+  if (!childSegments.length) { if (groups.size) disposeChildSurfaces(); return building; }
+  building = building.then(async () => {
+    if (!sceneState?.obj || !v || threeRenderMode === 'volume') return;
+    for (const key of [...groups.keys()]) if (!childByKey(key)) dropGroup(key);
+    for (const c of [...childSegments]) {
+      const have = groups.get(c.key);
+      if (have && have.hash === c.hash && (!have.group || inCurrentScene(have.group))) { if (have.group) have.group.visible = childShownNow(c); continue; }
+      dropGroup(c.key);
+      setSegmentMeshMaterial(c.key, childSegLookOf(c).material);
+      let group = null;
+      try { group = await buildEditableRunsGroup(v, c.runsBySlice, c.key, () => alive(c) && !!sceneState?.obj); }
+      catch (e) { if (String(e?.message || e) !== '__SUPERSEDED__') console.error(e); continue; }
+      if (!alive(c) || !sceneState?.obj) { if (group) dispose(group); continue; }
+      groups.set(c.key, { group, hash: c.hash });
+      if (group) { group.name = 'child_segment_' + c.key; group.visible = childShownNow(c); for (const m of group.children) m.userData.childKey = c.key; sceneState.obj.add(group); }
+      request3DRender();
+    }
+  }).catch(e => console.error(e));
+  return building;
+}
+childSurfaceHooks.restore = v => (childSegments.length || groups.size ? ensureChildSurfaces(v) : null);
+// the parent preset was shown / hidden: its children follow (a child shown with a hidden parent is not drawn)
+childSurfaceHooks.parentShown = (parentKey, on) => {
+  if (!groups.size) return;
+  for (const c of childSegments) { if (c.parentKey !== parentKey) continue; const e = groups.get(c.key); if (e?.group) e.group.visible = !!on && c.visible !== false; }
+  request3DRender();
+};
+
+// the meshes follow a look change in place (the material preset is a uniform per key, the opacity / colour are the material's own)
+function applyLookToMesh(c, changed) {
+  const e = groups.get(c.key);
+  if (changed.includes('material')) setSegmentMeshMaterial(c.key, childSegLookOf(c).material);
+  if (e?.group) {
+    const look = childSegLookOf(c);
+    if (changed.includes('visible')) e.group.visible = childShownNow(c);
+    e.group.traverse(o => {
+      if (!o.isMesh) return;
+      for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+        if (!m) continue;
+        if (changed.includes('opacity')) { m.opacity = look.opacity; const t = look.opacity < 0.999; if (m.transparent !== t) { m.transparent = t; m.needsUpdate = true; } m.depthWrite = look.opacity > 0.55; }
+        if (changed.includes('color')) m.color?.set?.(c.color);
+      }
+    });
+  }
+  request3DRender();
+}
+onChildSegLookChange((c, changed) => { applyLookToMesh(c, changed); repaint.fn?.(c, changed); });
+
+// the parents' voxels changed (a child came, went or changed its mask): they are rebuilt without / with it (the analysis results are not cleared)
+function invalidateParents(parents) { for (const k of parents) { try { segmentExclusive.invalidateParent?.(k); } catch (e) { console.warn(e); } } }
+// a project load: the list is replaced (srcs = makeChildSegment sources); the old surfaces go, the new ones are built with the 3D
+export function installChildSegments(srcs) {
+  const { old, made } = restoreChildSegments(srcs);
+  for (const c of old) dropGroup(c.key);
+  if (made.length) requestChildShadeAuto(made);
+  const parents = new Set([...old, ...made].map(c => c.parentKey));
+  if (parents.size) invalidateParents(parents);
+  emit();
+  if (made.length) void ensureChildSurfaces();
+  return made;
+}
+// the user deletes a child: its voxels go back to the parent
+export function deleteChildSegment(key) {
+  const c = removeChildSegment(key); if (!c) return false;
+  dropGroup(key); invalidateParents([c.parentKey]); emit(); request3DRender(); repaint.fn?.(c, ['removed']);
+  return true;
+}
+// another dataset: no child segments (their meshes are gone with the scene; the list and the ids restart)
+export function resetChildSegmentsForDataset() {
+  if (!childSegments.length && !groups.size) return;
+  for (const k of [...groups.keys()]) dropGroup(k);
+  clearChildSegments(); emit();
+}
+export { setChildLook };
+
+// the ONE way to make a child segment: the user presses 「子セグメントを追加」 on a parent's row. The mask = a COPY of the selected (ticked) analysis regions (several = their union); the regions stay as they are.
+export const regionsSelectedForChild = () => analysisRegions.filter(r => r.selected && r.runsBySlice && r.voxels > 0);
+// The child's mask is the selected regions' voxels that are the PARENT's (its final runs: its range, post-processing and edits, without its other children): what lies outside the parent is not taken. Refused (with a message in the footer) at CHILD_SEG_MAX children
+// and when none of the selected voxels is the parent's.
+export async function addChildSegmentFromSelectedRegions(parentKey) {
+  const v = current3DVolume || volume, regs = regionsSelectedForChild(); if (!v || !regs.length) return null;
+  if (childSegments.length >= CHILD_SEG_MAX) { footer.textContent = tr('childLimit'); return null; }
+  let parentRuns = null;
+  try { parentRuns = await getFinalSegmentRuns(parentKey, v); } catch (e) { if (String(e?.message || e) !== '__SUPERSEDED__') console.error(e); return null; }
+  if (!parentRuns) return null;
+  const c = addChildSegmentFromRegions(parentKey, regs, v.slices, parentRuns);
+  if (!c) { footer.textContent = tr('childNoVoxels'); return null; }
+  requestChildShadeAuto([c]); invalidateParents([parentKey]); emit(); void ensureChildSurfaces(); repaint.fn?.(c, ['added']);
+  return c;
+}
+// ---- the GPU volume (medical-volume.js setChildSegments): the render hand-off childRenderEntries() goes to the volume whenever anything of a child changed; called once per rendered frame (app.js, beside syncVolumeAnalysisOverlay) and does
+// nothing without child segments. The signature carries every look field, the mask hash, the parent's slot and the shown flags, so the volume rebuilds its index texture only when a mask changed. The cut face's shading range of a child comes
+// from section.shade.ranges[key] (section-shade.js sectionShadeParams: allSegmentKeys, the children included).
+let gpuSig = '';
+export function syncChildSegmentsToVolume() {
+  if (!childSegments.length && !gpuSig) return; // no child segment, none handed over: nothing to do (the usual data)
+  const mv = sceneState?.medicalVolume;
+  if (!mv || typeof mv.setChildSegments !== 'function') return;
+  if (!childSegments.length) { gpuSig = ''; try { mv.setChildSegments([], null, ''); } catch (e) { console.warn(e); } return; }
+  if (threeRenderMode !== 'volume' || !mv.active) return;
+  const v = sourceVolume || volume; if (!v) return;
+  const entries = childRenderEntries();
+  // the grid the index texture is made for (as syncVolumeAnalysisOverlay's signature): another dataset / texture size / a reset of the volume sends the entries again
+  const sig = (mv.seriesId || '') + '|' + (mv.textureDims || []).join('x') + '|' + (mv.dataGeneration | 0) + '|' + gpuSegmentSignature() + '|' + entries.map(e => [e.key, e.hash, e.color, e.opacity, e.material, e.shade ? e.shade.lower + ',' + e.shade.upper : '-', e.visible ? 1 : 0, e.parentSlot].join(':')).join(';');
+  if (sig === gpuSig) return;
+  gpuSig = sig;
+  mv.onChildError = msg => { footer.textContent = tr('childGpuMemory') + msg; };
+  try { mv.setChildSegments(entries, v, sig); } catch (e) { console.warn('GPU child segments failed.', e); mv.childError = String(e?.message || e); }
+  if (mv.childError) mv.onChildError(mv.childError);
+}

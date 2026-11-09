@@ -1,8 +1,8 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Self-contained: depends only on the imports below (no module state).
-import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.webgpu.js';
-import { analysisRunRows, forEachUncoveredRun } from './run-length.js?v=20261109-build703';
-import { weldTrianglePositions } from './smooth-prepare.js?v=20261109-build703';
+import * as THREE from './vendor/three@0.186.0/build/three.webgpu.js';
+import { analysisRunRows, forEachUncoveredRun } from './run-length.js?v=20261109-build704';
+import { weldTrianglePositions } from './smooth-prepare.js?v=20261109-build704';
 export function appendAnalysisRunBoundaryFaces(builder,records,prevRecords,nextRecords,coords,z,cutRecords=null,cutPrevRecords=null,cutNextRecords=null,pinnedKeys=null){
  const {xs,ys,zs}=coords,z0=zs[z],z1=zs[z+1],rows=analysisRunRows(records),prev=analysisRunRows(prevRecords),next=analysisRunRows(nextRecords),cut=analysisRunRows(cutRecords),cutPrev=analysisRunRows(cutPrevRecords),cutNext=analysisRunRows(cutNextRecords);
  const has=(map,x,y)=>{const a=map.get(y);if(!a)return false;for(let i=0;i<a.length;i+=2)if(x>=a[i]&&x<=a[i+1])return true;return false};
@@ -110,30 +110,4 @@ export function eachGeometryTriangleRange(geometry,start,count,callback){
 export function eachGeometryTriangle(geometry,callback){
  const pos=geometry?.getAttribute?.('position');if(!pos)return;
  eachGeometryTriangleRange(geometry,0,geometry.index?geometry.index.count:pos.count,callback);
-}
-export function groupTriangleCount(group){
- let count=0;group?.traverse?.(o=>{if(o.isMesh&&o.geometry){const pos=o.geometry.getAttribute('position');count+=o.geometry.index?Math.floor(o.geometry.index.count/3):Math.floor((pos?.count||0)/3)}});return count;
-}
-export function groupToBinaryStl(group,name='region',inverseScale=1){
- const triCount=groupTriangleCount(group);if(!triCount)return null;const buffer=new ArrayBuffer(84+triCount*50),view=new DataView(buffer),header=new TextEncoder().encode('Virtual Rodent Lab '+name);new Uint8Array(buffer,0,Math.min(80,header.length)).set(header.slice(0,80));view.setUint32(80,triCount,true);
- const ab=new THREE.Vector3(),ac=new THREE.Vector3(),n=new THREE.Vector3();let off=84;
- group.traverse(o=>{if(!o.isMesh||!o.geometry)return;eachGeometryTriangle(o.geometry,(aa,bb,cc)=>{const a=aa.clone().multiplyScalar(inverseScale),b=bb.clone().multiplyScalar(inverseScale),c=cc.clone().multiplyScalar(inverseScale);ab.subVectors(b,a);ac.subVectors(c,a);n.crossVectors(ab,ac).normalize();for(const v of [n,a,b,c]){view.setFloat32(off,v.x,true);view.setFloat32(off+4,v.y,true);view.setFloat32(off+8,v.z,true);off+=12}view.setUint16(off,0,true);off+=2})});
- return new Blob([buffer],{type:'model/stl'});
-}
-export function geometryToBinaryStl(geometry,name='segment'){
- const pos=geometry.getAttribute('position'),index=geometry.index;
- if(!pos||!index)throw new Error('Indexed geometry required for STL export');
- const triCount=Math.floor(index.count/3),buffer=new ArrayBuffer(84+triCount*50),view=new DataView(buffer);
- const header=new TextEncoder().encode('Virtual Rodent Lab '+name);new Uint8Array(buffer,0,Math.min(80,header.length)).set(header.slice(0,80));
- view.setUint32(80,triCount,true);
- const a=new THREE.Vector3(),b=new THREE.Vector3(),c=new THREE.Vector3(),ab=new THREE.Vector3(),ac=new THREE.Vector3(),n=new THREE.Vector3();
- let off=84;
- for(let t=0;t<triCount;t++){
-  const ia=index.getX(t*3),ib=index.getX(t*3+1),ic=index.getX(t*3+2);
-  a.fromBufferAttribute(pos,ia);b.fromBufferAttribute(pos,ib);c.fromBufferAttribute(pos,ic);
-  ab.subVectors(b,a);ac.subVectors(c,a);n.crossVectors(ab,ac).normalize();
-  for(const v of [n,a,b,c]){view.setFloat32(off,v.x,true);view.setFloat32(off+4,v.y,true);view.setFloat32(off+8,v.z,true);off+=12}
-  view.setUint16(off,0,true);off+=2;
- }
- return new Blob([buffer],{type:'model/stl'});
 }
