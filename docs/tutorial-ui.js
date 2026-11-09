@@ -1,9 +1,9 @@
-import { settings } from './app-settings.js?v=20261109-build696';
-import { tr } from './i18n.js?v=20261109-build696';
-import { TUTORIAL_MISSIONS, TUT_SAMPLE, TUT_INTRO, TUT_VOICE_PICK } from './tutorial-data.js?v=20261109-build696';
-import { createTutorialAudio } from './tutorial-audio.js?v=20261109-build696';
-import { createTutorialEngine } from './tutorial-engine.js?v=20261109-build696';
-import { EVENT_LEVELS } from './event-mode.js?v=20261109-build696';
+import { settings } from './app-settings.js?v=20261109-build697';
+import { tr } from './i18n.js?v=20261109-build697';
+import { TUTORIAL_MISSIONS, TUT_SAMPLE, TUT_INTRO, TUT_VOICE_PICK } from './tutorial-data.js?v=20261109-build697';
+import { createTutorialAudio } from './tutorial-audio.js?v=20261109-build697';
+import { createTutorialEngine } from './tutorial-engine.js?v=20261109-build697';
+import { EVENT_LEVELS } from './event-mode.js?v=20261109-build697';
 
 // the switch (設定 > 外観 > チュートリアル) off = the engine ignores every signal (nothing advances, nothing is saved); on again = as before
 // true while the tutorial UI is live (the switch is on AND the device supports VR): the Lv0 card of 体験会 acts as the tutorial only then (event-mode-ui.js)
@@ -177,7 +177,7 @@ export function initTutorialUi(){
  const mountCta=()=>{
   if(document.getElementById('tutorial-start-button'))return;
   const b=el('button','tut-cta','tutCta');b.id='tutorial-start-button';b.type='button';
-  const begin=()=>{if(settings.get('tutorialMode')!==true)settings.set('tutorialMode',true);sync();restartTutorial();intro.start()}; // every start is from ステップ1 (nothing is remembered)
+  const begin=()=>{if(settings.get('tutorialMode')!==true)settings.set('tutorialMode',true);sync();restartTutorial();intro.start();try{document.dispatchEvent(new CustomEvent('vrl-tutorial-begin'))}catch{}}; // every start is from ステップ1 (nothing is remembered);: the event page (event-launcher.js) listens and opens Lv0 (sample4) for the visitor
   b.onclick=()=>chooseVoice(begin); // the guide voice is chosen first (女性 / 男性); × closes without starting
   const at=document.getElementById('vr-view-button');
   if(at?.parentNode)at.parentNode.insertBefore(b,at);else document.querySelector('.topbar-actions')?.prepend(b);

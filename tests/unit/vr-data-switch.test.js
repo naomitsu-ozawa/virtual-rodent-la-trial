@@ -228,8 +228,9 @@ describe('swapPlan', () => {
 describe('the data / level buttons (event-mode.js)', () => {
   const name = k => k;
   it('one per level, the open data lit, the armed one marked; labels carry the level number', () => {
-    const items = levelSwitchItems(name, 'sample3', 'lv2');
+    const items = levelSwitchItems(name, 'sample3', 'lv2', EVENT_LEVELS);
     expect(items.map(i => i.id)).toEqual(EVENT_LEVELS.map(l => l.id));
+    expect(levelSwitchItems(name, 'sample3', 'lv2').map(i => i.id)).toEqual([...EVENT_LEVELS.map(l => l.id), 'sample5']);
     expect(items.find(i => i.sample === 'sample3')).toMatchObject({ on: true, armed: false });
     expect(items.find(i => i.id === 'lv2')).toMatchObject({ on: false, armed: true });
     expect(items[0].label).toBe('Lv0 evLv0Name');
@@ -239,7 +240,7 @@ describe('the data / level buttons (event-mode.js)', () => {
     const base = { segments: [], sectionOn: false, sliceOpacity: 0.6, trigger: { show: false }, results: Array.from({ length: 12 }, (_, i) => ({ hex: '#fff', name: 'r' + i, text: 'x' })), total: '1', text: new Proxy({}, { get: (_, k) => String(k) }) };
     const without = simpleMenuLayout(base);
     expect(without.some(w => w.id?.startsWith('level:'))).toBe(false);
-    const levels = { items: levelSwitchItems(name, 'sample1', 'lv1'), busy: false, hint: 'hint', text: { title: 'データ', again: 'もう一度' } };
+    const levels = { items: levelSwitchItems(name, 'sample1', 'lv1', EVENT_LEVELS), busy: false, hint: 'hint', text: { title: 'データ', again: 'もう一度' } };
     const w = simpleMenuLayout({ ...base, levels });
     const btns = w.filter(x => x.id?.startsWith('level:'));
     expect(btns.map(b => b.id)).toEqual(EVENT_LEVELS.map(l => 'level:' + l.id));
@@ -271,7 +272,7 @@ describe('vr-view.js: the data of the session can be replaced (static wiring)', 
     // the page opens the data by the practice-data route of the level cards (the 2D side frees its own old data there)
     expect(src).toContain("new CustomEvent('vrl-event-sample',{detail})");
     expect(src).toContain("await withTimeout(detail.done,LOAD_TIMEOUT_MS,'opening the data')");
-    expect(src).toContain('chooseEventLevel(lv.id)');
+    expect(src).toContain('chooseEventLevel(lv?lv.id:null)');
     // compile before bind (a program set the data needs and the session lacks is compiled with the volume hidden)
     expect(src).toContain('compile:async Pn=>{const st=getSet(Pn);await compileSet(Pn,st)}');
   });

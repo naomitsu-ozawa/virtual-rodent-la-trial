@@ -1,70 +1,38 @@
-// 体験会モード - the 設定 > 外観 switch and the level choice shown in the データ panel while it is on (event-mode.js holds
-// the levels). A level card asks app.js for its practice dataset ('vrl-event-sample' -> the practice-data chooser's own startSample,
-// so the bundled project.vrlab applies as usual); then the visitor presses 「VRで見る」/「ARで見る」. With the switch off (default)
-// nothing is added to the page.
-import { settings } from './app-settings.js?v=20261109-build696';
-import { tr } from './i18n.js?v=20261109-build696';
-import { tutorialUiActive, restartTutorial } from './tutorial-ui.js?v=20261109-build696';
-import { EVENT_LEVELS, EVENT_OTHER_SAMPLES, EVENT_HINT_KEYS, levelForSample, chooseEventLevel, chosenEventLevel, resetPress, resetArmed, RESET_ARM_MS } from './event-mode.js?v=20261109-build696';
+// 体験会モード - the 設定 > 外観 switch. With it on the page shows the event page (event-launcher.js: the bar with VR / AR / チュートリアル / status, and one card per practice dataset that
+// opens its data through the practice-data chooser's own startSample and goes on to prepare VR); the データ panel keeps 「最初の状態に戻す」. With the switch off (default) nothing is added to the page.
+import { settings } from './app-settings.js?v=20261109-build697';
+import { tr } from './i18n.js?v=20261109-build697';
+import { levelForSample, chooseEventLevel, resetPress, resetArmed, RESET_ARM_MS } from './event-mode.js?v=20261109-build697';
+import { createEventLauncher } from './event-launcher.js?v=20261109-build697';
 export function initEventModeUi(){
  const box=document.getElementById('set-event-mode');
  if(box){box.checked=settings.get('eventMode')===true;box.onchange=()=>settings.set('eventMode',box.checked)}
- let panel=null,loading=false,resetBtn=null,armedUntil=0,armTimer=0;
+ const launcher=createEventLauncher();
+ let panel=null,resetBtn=null,armedUntil=0,armTimer=0;
  const el=(tag,cls,key)=>{const e=document.createElement(tag);if(cls)e.className=cls;if(key){e.dataset.i18n=key;e.textContent=tr(key)}return e};
  const mark=()=>{
-  if(!panel)return;const cur=chosenEventLevel()?.id;panel.setAttribute('aria-busy',String(loading));
-  for(const c of panel.querySelectorAll('[data-event-other]'))c.disabled=loading;
-  for(const c of panel.querySelectorAll('[data-event-level]')){const on=c.dataset.eventLevel===cur;c.classList.toggle('is-selected',on);c.setAttribute('aria-pressed',String(on));c.disabled=loading}
-  if(resetBtn){ // 最初の状態に戻す: only with a practice dataset open; armed = the second press within RESET_ARM_MS fires (the VR button's confirm, event-mode.js resetPress)
-   const armed=resetArmed(armedUntil,performance.now()),key=armed?'evResetAgain':'evReset';
-   resetBtn.disabled=loading||!globalThis.__vrlOpenSample;resetBtn.classList.toggle('is-armed',armed);
-   if(resetBtn.dataset.i18n!==key){resetBtn.dataset.i18n=key}resetBtn.textContent=tr(key);
-  }
+  if(!resetBtn)return;
+  // 最初の状態に戻す: only with a practice dataset open; armed = the second press within RESET_ARM_MS fires (the VR button's confirm, event-mode.js resetPress)
+  const armed=resetArmed(armedUntil,performance.now()),key=armed?'evResetAgain':'evReset';
+  resetBtn.disabled=launcher.busy||!globalThis.__vrlOpenSample;resetBtn.classList.toggle('is-armed',armed);
+  if(resetBtn.dataset.i18n!==key){resetBtn.dataset.i18n=key}resetBtn.textContent=tr(key);
  };
  const pressReset=()=>{
-  if(loading||!globalThis.__vrlOpenSample)return;
+  if(launcher.busy||!globalThis.__vrlOpenSample)return;
   const r=resetPress(armedUntil,performance.now());armedUntil=r.armedUntil;clearTimeout(armTimer);
   if(!r.fire){armTimer=setTimeout(()=>{armedUntil=0;mark()},RESET_ARM_MS+80);mark();return}
   const ev=new CustomEvent('vrl-event-reset-request',{detail:{done:null}});document.dispatchEvent(ev);
-  if(!ev.detail.done){mark();return}
-  loading=true;mark();Promise.resolve(ev.detail.done).catch(()=>{}).finally(()=>{loading=false;mark()});
+  if(ev.detail.done)launcher.hold(ev.detail.done); // the cards and this button wait while the data is opened again
+  mark();
  };
  const build=()=>{
-  const p=el('section','event-level-panel');p.id='event-level-panel';p.setAttribute('aria-labelledby','event-level-title');
-  const title=el('strong','event-level-title','evTitle');title.id='event-level-title';
-  const list=el('div','event-level-list');
-  for(const lv of EVENT_LEVELS){
-   const card=el('button','event-level-card');card.type='button';card.dataset.eventLevel=lv.id;card.dataset.eventSample=lv.sample;card.setAttribute('aria-pressed','false');
-   const top=el('span','event-level-top'),badge=el('span','event-level-badge');badge.textContent='Lv'+lv.lv;
-   top.append(badge,el('span','event-level-name',lv.nameKey),el('span','event-level-mark','evSelected'));
-   const hints=el('span','event-level-hints');for(const h of lv.hints)hints.append(el('span','event-level-hint',EVENT_HINT_KEYS[h]));
-   card.append(top,el('span','event-level-mission',lv.missionKey),hints);
-   card.onclick=()=>{
-    if(loading)return;chooseEventLevel(lv.id);
-    if(lv.id==='lv0'&&tutorialUiActive()){try{restartTutorial()}catch(e){console.warn('Tutorial: Lv0 card',e)}}
-    const ev=new CustomEvent('vrl-event-sample',{detail:{sampleSet:lv.sample,done:null}});document.dispatchEvent(ev);
-    if(!ev.detail.done){mark();return}
-    loading=true;mark();Promise.resolve(ev.detail.done).catch(()=>{}).finally(()=>{loading=false;mark()});
-   };
-   list.append(card);
-  }
-  // 「その他」 - datasets that are not levels: a plain button (no level is chosen, no mission), opened through the same route as a level card
-  const other=el('div','event-other');other.append(el('div','event-other-title','sampleGroupOther'));
-  for(const o of EVENT_OTHER_SAMPLES){
-   const b=el('button','secondary-button sample-choice event-other-btn',o.nameKey);b.type='button';b.dataset.eventOther=o.sample;
-   b.onclick=()=>{
-    if(loading)return;chooseEventLevel(null);
-    const ev=new CustomEvent('vrl-event-sample',{detail:{sampleSet:o.sample,done:null}});document.dispatchEvent(ev);
-    if(!ev.detail.done){mark();return}
-    loading=true;mark();Promise.resolve(ev.detail.done).catch(()=>{}).finally(()=>{loading=false;mark()});
-   };
-   other.append(b);
-  }
+  const p=el('section','event-level-panel');p.id='event-level-panel';
   resetBtn=el('button','event-reset-btn','evReset');resetBtn.type='button';resetBtn.id='event-reset-btn';resetBtn.onclick=pressReset;
-  p.append(title,list,other,resetBtn,el('p','hint event-level-after','evAfter'));
+  p.append(resetBtn);
   return p;
  };
  const mount=()=>{
+  if(!launcher.enable())return; // the page's layout is there from startup (app.js builds it before this runs)
   panel=build();
   // at the top of the データ panel (workspace UI; the first sidebar panel in the classic UI), above the open / practice-data rows
   const host=document.querySelector('[data-ipad-drawer-section="data"]')||document.querySelector('.sidebar-scroll > .panel');
@@ -73,9 +41,10 @@ export function initEventModeUi(){
  };
  const sync=()=>{
   const on=settings.get('eventMode')===true;if(box)box.checked=on;
-  if(on&&!panel)mount();else if(!on&&panel){panel.remove();panel=null;resetBtn=null;armedUntil=0;clearTimeout(armTimer)}
+  if(on&&!panel)mount();else if(!on&&panel){panel.remove();panel=null;resetBtn=null;armedUntil=0;clearTimeout(armTimer);launcher.disable()}
  };
  document.addEventListener('vrl-event-sample-open',()=>{armedUntil=0;mark()}); // a practice dataset was (re)opened or other data replaced it: the button is disarmed and follows
+ document.addEventListener('vrl-event-launcher-state',mark); // a card press is loading / preparing: the button waits
  window.addEventListener('vrl-settings',e=>{if(e.detail?.key==='eventMode')sync()});
  // the practice-data chooser's own buttons move the choice too, so the VR mission always matches the data opened last
  document.addEventListener('click',e=>{const b=e.target?.closest?.('[data-sample-set]');if(!b)return;chooseEventLevel(levelForSample(b.dataset.sampleSet)?.id);mark()},true);

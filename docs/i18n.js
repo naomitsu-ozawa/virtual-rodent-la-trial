@@ -1,6 +1,6 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { currentLanguage, setCurrentLanguage } from './state.js?v=20261109-build696';
+import { currentLanguage, setCurrentLanguage } from './state.js?v=20261109-build697';
 export const I18N={
  ja:{
   subtitle:'マウス・実験動物画像のためのブラウザDICOM CTビューワー',
@@ -34,7 +34,7 @@ export const I18N={
   ipadSettings:'設定',ipadClose:'閉じる',ipadData:'データ',ipadDisplay:'表示・Seg',ipadEdit:'3D編集',ipadView3d:'3D',ipadView2d:'2D',ipadViewSplit:'分割',
   linuxGpuNote:'Linux: WebGPUを使えません。理由を見る',linuxGpuNoteText:'LinuxのChromeでは、起動オプション --enable-features=ForceEnableWebGpuInterop を付けないとWebGPUが使えない場合があります。Wayland環境のみ対応で、X11では使えません。',
   // 体験会モード (event-mode.js / event-mode-ui.js)
-  setEventMode:'体験会モード',setTutorial:'チュートリアル',setTutorialNote:'オンにすると「データ」パネルにステップ一覧と手順カードを表示します。進み具合はこの端末に保存されます。',setEventModeNote:'オンにすると「データ」パネルにレベル選択（Lv0〜Lv3）を表示します。レベルを押すとその練習データを読み込み、VR／ARではそのミッションを別パネルに表示します。',evTitle:'体験会：レベルを選ぶ',evSelected:'選択中',evLoading:'読み込み中…',evAfter:'読み込みが終わったら「VRで見る」または「ARで見る」を押してください（「表示」パネルの上）。',evMissionCap:'ミッション',
+  setEventMode:'体験会モード',setTutorial:'チュートリアル',setTutorialNote:'オンにすると「データ」パネルにステップ一覧と手順カードを表示します。進み具合はこの端末に保存されます。',setEventModeNote:'オンにすると「データ」パネルにレベル選択（Lv0〜Lv3）を表示します。レベルを押すとその練習データを読み込み、VR／ARではそのミッションを別パネルに表示します。',evTitle:'体験会：レベルを選ぶ',evSelected:'選択中',evStLoading:'読み込み中…',evStPreparing:'準備中…',evStReady:'準備完了',evLoading:'読み込み中…',evAfter:'読み込みが終わったら「VRで見る」または「ARで見る」を押してください（「表示」パネルの上）。',evMissionCap:'ミッション',
   // 設定 > デバッグ > テスト機能 (debug-flags.js / debug-switches-ui.js)
   dbgTitle:'テスト機能（上級者向け）',dbgGroupLight:'軽さのテスト',dbgApplyReload:'再読み込みで反映',
   dbgVrPrec:'VR描画を32ビット精度に戻す（画質確認用）',dbgVrPrecNote:'ふだんは16ビット精度で軽く描きます。見た目の違いを確かめたいときだけオンにします。',
@@ -78,7 +78,7 @@ export const I18N={
   ipadSettings:'Settings',ipadClose:'Close',ipadData:'Data',ipadDisplay:'Display / Seg',ipadEdit:'3D edit',ipadView3d:'3D',ipadView2d:'2D',ipadViewSplit:'Split',
   linuxGpuNote:'Linux: WebGPU is unavailable. Show why',linuxGpuNoteText:'On Linux, Chrome may need the launch option --enable-features=ForceEnableWebGpuInterop to enable WebGPU. It works on Wayland only, not on X11.',
   // event mode (event-mode.js / event-mode-ui.js)
-  setEventMode:'Event mode',setTutorial:'Tutorial',setTutorialNote:'Shows the step list and instruction cards in the Data panel. Progress is saved on this device.',setEventModeNote:'Shows a level choice (Lv0-Lv3) in the Data panel. A level loads its practice data; in VR / AR its mission is shown on a separate panel.',evTitle:'Event: choose a level',evSelected:'Selected',evLoading:'Loading…',evAfter:'When loading has finished, press "View in VR" or "View in AR" (top of the Display panel).',evMissionCap:'Mission',
+  setEventMode:'Event mode',setTutorial:'Tutorial',setTutorialNote:'Shows the step list and instruction cards in the Data panel. Progress is saved on this device.',setEventModeNote:'Shows a level choice (Lv0-Lv3) in the Data panel. A level loads its practice data; in VR / AR its mission is shown on a separate panel.',evTitle:'Event: choose a level',evSelected:'Selected',evStLoading:'Loading…',evStPreparing:'Preparing…',evStReady:'Ready',evLoading:'Loading…',evAfter:'When loading has finished, press "View in VR" or "View in AR" (top of the Display panel).',evMissionCap:'Mission',
   // Settings > Debug > test features (debug-flags.js / debug-switches-ui.js)
   dbgTitle:'Test features (advanced)',dbgGroupLight:'Lightness test',dbgApplyReload:'applies after a reload',
   dbgVrPrec:'Go back to 32-bit VR rendering (image check)',dbgVrPrecNote:'VR normally draws in lighter 16-bit precision. Turn this on only to compare the picture.',
