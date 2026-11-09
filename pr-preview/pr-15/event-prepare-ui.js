@@ -1,12 +1,12 @@
 // the 設定 > キャッシュ button 「体験会用データを準備」: the page side of event-prepare.js. It opens each practice level on the page (the same route as choosing it: startSample), waits until the page is quiet,
 // has the VR module build and save the finished VR data of that level (vr-view.js prepareStandardLevel: the same keys as VR entry / a data switch, saved completely, marked standard), and shows the progress per level.
 // Nothing here is a worker; the saves are the paced, 1 MiB-sliced writes of the VR data cache (no frame is held up). The VR module is handed in (app.js owns its one loader).
-import { prepareEventLevels } from './event-prepare.js?v=20261109-build698';
-import { EVENT_DATASETS, eventModeOn } from './event-mode.js?v=20261109-build698';
-import { createSettleGate } from './vr-data-switch.js?v=20261109-build698';
-import { vrStateSignature } from './vr-data-key.js?v=20261109-build698';
-import { volumeCacheBudgetInfo } from './gpu-volume-data.js?v=20261109-build698';
-import { tr } from './i18n.js?v=20261109-build698';
+import { prepareEventLevels } from './event-prepare.js?v=20261109-build699';
+import { EVENT_DATASETS, eventModeOn } from './event-mode.js?v=20261109-build699';
+import { createSettleGate } from './vr-data-switch.js?v=20261109-build699';
+import { vrStateSignature } from './vr-data-key.js?v=20261109-build699';
+import { volumeCacheBudgetInfo } from './gpu-volume-data.js?v=20261109-build699';
+import { tr } from './i18n.js?v=20261109-build699';
 
 const SETTLE_MS = 10 * 60 * 1000;
 const isPractice = id => typeof id === 'string' && /^sample\d+$/.test(id);
@@ -62,8 +62,8 @@ export function modalView(results, ph) {
 }
 export function createPrepareModal(doc = globalThis.document) {
   if (!doc?.body) return null;
-  const root = doc.createElement('div');
-  root.className = 'job-modal event-prepare-modal is-hidden'; root.id = 'event-prepare-modal'; root.setAttribute('role', 'dialog'); root.setAttribute('aria-modal', 'true'); root.setAttribute('aria-live', 'polite');
+  const root = doc.createElement('dialog'); // a <dialog> opened with showModal() so it sits in the top layer ABOVE the settings dialog (also a top-layer modal), whatever the stacking
+  root.className = 'job-modal event-prepare-modal is-hidden'; root.id = 'event-prepare-modal'; root.setAttribute('aria-live', 'polite');
   root.innerHTML = '<div class="job-card"><div class="job-head"><div class="job-spinner" aria-hidden="true"></div><strong class="job-title"></strong></div><div class="job-detail"></div><div class="job-track"><div class="job-bar"></div></div><div class="job-foot"><span class="job-time"></span><button type="button" class="job-button is-close is-hidden"></button></div></div>';
   doc.body.append(root);
   const q = c => root.querySelector(c), els = { title: q('.job-title'), detail: q('.job-detail'), track: q('.job-track'), bar: q('.job-bar'), time: q('.job-time'), button: q('.job-button') };
@@ -74,11 +74,14 @@ export function createPrepareModal(doc = globalThis.document) {
   root.addEventListener('wheel', e => e.preventDefault(), { passive: false });
   const block = e => { if (root.classList.contains('is-hidden') || root.contains(e.target)) return; e.preventDefault(); e.stopPropagation(); };
   for (const ev of ['keydown', 'keypress']) doc.defaultView?.addEventListener(ev, block, { capture: true });
-  els.button.onclick = () => { root.classList.add('is-hidden'); };
+  root.addEventListener('cancel', e => e.preventDefault()); // Esc must not close it while it runs (the close button does)
+  const openTop = () => { try { if (!root.open && root.showModal) root.showModal(); } catch { /* none: the fixed overlay still shows */ } };
+  const closeTop = () => { try { if (root.open) root.close(); } catch { /* none */ } };
+  els.button.onclick = () => { root.classList.add('is-hidden'); closeTop(); };
   const paint = v => { els.title.textContent = v.title; els.detail.textContent = v.detail; els.track.classList.remove('is-indeterminate'); els.bar.style.width = Math.round(v.frac * 100) + '%'; };
   return {
     root,
-    start(results) { finished = false; t0 = Date.now(); root.classList.remove('is-hidden', 'is-finished'); els.button.classList.add('is-hidden'); paint(modalView(results, null)); tick(); clearInterval(ticker); ticker = setInterval(tick, 500); },
+    start(results) { finished = false; t0 = Date.now(); root.classList.remove('is-hidden', 'is-finished'); openTop(); els.button.classList.add('is-hidden'); paint(modalView(results, null)); tick(); clearInterval(ticker); ticker = setInterval(tick, 500); },
     update(results, ph) { if (!finished) paint(modalView(results, ph)); },
     finish(title, detail) { finished = true; clearInterval(ticker); ticker = 0; root.classList.add('is-finished'); els.title.textContent = title; els.detail.textContent = detail; els.track.classList.remove('is-indeterminate'); els.bar.style.width = '100%'; els.time.textContent = secs(); els.button.textContent = tr('cacheEventModalClose'); els.button.classList.remove('is-hidden'); try { els.button.focus(); } catch { /* none */ } },
   };

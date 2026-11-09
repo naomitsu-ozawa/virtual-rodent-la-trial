@@ -864,6 +864,8 @@ footer #footer:empty{display:block}
 .job-help{color:rgb(var(--ui-t4));font-size:12px}
 /* the pre-build modal (event-prepare-ui.js): the same card as above, one layer higher, its lines keep their breaks */
 .job-modal.event-prepare-modal{z-index:20001}
+dialog.job-modal{width:auto;height:auto;max-width:none;max-height:none;margin:0;border:0;box-sizing:border-box;overflow:visible}
+dialog.job-modal::backdrop{background:transparent}
 .event-prepare-modal .job-detail{white-space:pre-line}
 .job-modal.event-prepare-modal.is-finished .job-spinner{display:none}
 @media (prefers-reduced-motion:reduce){.job-spinner{animation-duration:1.6s}.job-track.is-indeterminate .job-bar{animation:none;width:100%;opacity:.45}}
@@ -1248,11 +1250,11 @@ html.vrl-ipad-ui .ws-file-actions{display:grid;gap:10px;padding:2px 0 12px;margi
 html.vrl-ipad-ui .ws-file-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
 html.vrl-ipad-ui .ws-file-row>.ws-cap{grid-column:1 / -1}
 html.vrl-ipad-ui .ws-file-row>button{min-height:40px;padding:7px 8px;font-size:12px;white-space:normal;line-height:1.25;width:100%}
-/* 設定 panel (theme / language / all settings) and VR / AR at the top of 表示; the top bar keeps only the title */
+/* the rail's 設定 entry and VR / AR at the top of 表示; the top bar keeps only the title */
 html.vrl-ipad-ui .ws-pref-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid rgb(var(--ui-b1))}
 html.vrl-ipad-ui .ws-pref-row>.ws-cap{font-size:12px;white-space:normal}
 html.vrl-ipad-ui .ws-pref-row .theme-quick,html.vrl-ipad-ui .ws-pref-row .theme-quick select,html.vrl-ipad-ui .ws-pref-row>button{width:100%;min-height:40px}
-@media (orientation:landscape){html.vrl-ipad-ui .sidebar>.ws-tool-rail>[data-ipad-drawer-tab="prefs"]{margin-top:auto}}
+@media (orientation:landscape){html.vrl-ipad-ui .sidebar>.ws-tool-rail>#ws-settings-entry{margin-top:auto}}
 html.vrl-ipad-ui .topbar{min-height:0}
 html.vrl-ipad-ui .ws-sample-picker{display:grid;grid-template-rows:0fr;visibility:hidden;transition:grid-template-rows .22s ease,visibility 0s linear .22s}
 html.vrl-ipad-ui .ws-sample-picker.is-open{grid-template-rows:1fr;visibility:visible;transition:grid-template-rows .22s ease,visibility 0s}
@@ -1262,16 +1264,6 @@ html.vrl-ipad-ui .ws-sample-picker .sample-choice{min-height:48px;font-size:12px
 html.vrl-ipad-ui .ws-sample-picker.is-open .sample-choice{opacity:1;transform:none}
 html.vrl-ipad-ui #sample-demo-button[aria-expanded="true"]{box-shadow:inset 0 0 0 2px rgb(var(--ui-blue-bd))}
 html.vrl-ipad-ui .ws-empty-sample{margin-top:10px;justify-self:center}
-html.vrl-ipad-ui .ws-settings-embed{display:grid;gap:4px;padding-top:10px}
-html.vrl-ipad-ui .ws-settings-embed .settings-tabs{flex-wrap:wrap;gap:2px}
-html.vrl-ipad-ui .ws-settings-embed .settings-tab{padding:7px 9px;font-size:12px}
-html.vrl-ipad-ui .ws-settings-embed .settings-row:not(.settings-check){display:grid;grid-template-columns:minmax(0,1fr);align-items:stretch;gap:4px;min-height:0;padding:4px 0}
-html.vrl-ipad-ui .ws-settings-embed .settings-row:not(.settings-check)>span{font-size:12px;color:rgb(var(--ui-t2));overflow-wrap:anywhere}
-html.vrl-ipad-ui .ws-settings-embed .settings-check{justify-content:flex-start;gap:8px;min-height:36px}
-html.vrl-ipad-ui .ws-settings-embed .settings-check>span{overflow-wrap:anywhere;font-size:13px}
-html.vrl-ipad-ui .ws-settings-embed select{width:100%;max-width:100%;min-width:0}
-html.vrl-ipad-ui .ws-settings-embed .settings-cache-head{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
-html.vrl-ipad-ui .ws-settings-embed .settings-cache-list,html.vrl-ipad-ui .ws-settings-embed .gpu-report{max-width:100%;min-width:0;box-sizing:border-box}
 .ws-ask{display:grid;gap:8px;margin:0 0 10px;padding:10px 12px;border:1px solid rgb(var(--ui-amber-bd));border-radius:10px;background:rgb(var(--ui-amber-bg));color:rgb(var(--ui-amber-tx));animation:ws-ask-in .2s ease}
 .ws-ask.is-leaving{opacity:0;transform:translateY(-4px);transition:opacity .18s,transform .18s}
 .ws-ask-text{margin:0;font-size:12px;line-height:1.45;white-space:pre-line}
@@ -1363,3 +1355,31 @@ button,a,img,svg{-webkit-user-drag:none}
 .sample-credit[hidden]{display:none}
 .sample-credit>div:first-child{font-weight:700}
 .sample-credit a{color:inherit;font-weight:700;text-decoration:underline}
+
+#settings-dialog{width:min(90vw,1200px);max-width:calc(100vw - 16px);height:90vh;height:90dvh;max-height:calc(100vh - 16px);max-height:calc(100dvh - 16px);padding:0;box-sizing:border-box}
+#settings-dialog[open]{display:flex;flex-direction:column;overflow:hidden}
+#settings-dialog .settings-head{flex:0 0 auto;margin:0;padding:12px 20px;border-bottom:1px solid rgb(var(--ui-b1))}
+#settings-dialog .settings-head strong{font-size:20px}
+#settings-dialog .settings-head button{min-width:52px;min-height:52px;font-size:24px;line-height:1;touch-action:manipulation}
+#settings-dialog .settings-body{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;padding:0 20px 20px;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;touch-action:pan-y}
+#settings-dialog .settings-tabs{position:sticky;top:0;z-index:2;flex-wrap:wrap;margin-bottom:12px;background:rgb(var(--ui-s2))}
+#settings-dialog .settings-tab{min-height:48px;padding:10px 18px;font-size:16px;touch-action:manipulation}
+#settings-dialog .settings-row{min-height:52px}
+#settings-dialog .settings-row select{min-height:44px;font-size:16px}
+#settings-dialog .settings-check input{width:26px;height:26px}
+#settings-dialog .settings-panel button,#settings-dialog .settings-panel .secondary-button{min-height:44px;touch-action:manipulation}
+#settings-dialog .event-level-panel{padding-top:12px}
+#settings-dialog .ws-pref-rows{padding:8px 0 10px}
+#settings-dialog .ws-pref-row{max-width:720px}
+#settings-dialog .ws-pref-row>.ws-cap{font-size:16px}
+#settings-dialog .ws-pref-row .theme-quick select,#settings-dialog .ws-pref-row>button{min-height:48px;font-size:16px}
+/* event mode: the left rail keeps only the 設定 entry; there is no panel next to the cards (workspace UI; the classic UI hides the whole sidebar above) */
+html.vrl-event-layout.vrl-ipad-ui .sidebar>.ipad-settings-head,
+html.vrl-event-layout.vrl-ipad-ui .sidebar>.sidebar-scroll,
+html.vrl-event-layout.vrl-ipad-ui .pane-resizer,
+html.vrl-event-layout.vrl-ipad-ui .ws-tool-rail>[data-ipad-drawer-tab]{display:none!important}
+@media (orientation:landscape){html.vrl-event-layout.vrl-ipad-ui.ipad-settings-persistent .workspace{grid-template-columns:80px minmax(0,1fr)}}
+@media (orientation:portrait){
+ html.vrl-event-layout.vrl-ipad-ui.ipad-settings-persistent .workspace{grid-template-rows:minmax(0,1fr) auto}
+ html.vrl-event-layout.vrl-ipad-ui .sidebar{grid-template-rows:auto!important}
+}
