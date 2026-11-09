@@ -118,8 +118,8 @@ describe('the status text', () => {
     expect(eventStatus({ preparing: true, ready: true })).toBe('preparing');
   });
   it('the texts are the three new strings, in ja and en (and only these)', () => {
-    expect([I18N.ja[EVENT_STATUS_KEYS.loading], I18N.ja[EVENT_STATUS_KEYS.preparing], I18N.ja[EVENT_STATUS_KEYS.ready]]).toEqual(['読み込み中…', '準備中…', '準備完了']);
-    expect([I18N.en[EVENT_STATUS_KEYS.loading], I18N.en[EVENT_STATUS_KEYS.preparing], I18N.en[EVENT_STATUS_KEYS.ready]]).toEqual(['Loading…', 'Preparing…', 'Ready']);
+    expect([I18N.ja[EVENT_STATUS_KEYS.loading], I18N.ja[EVENT_STATUS_KEYS.preparing], I18N.ja[EVENT_STATUS_KEYS.ready]]).toEqual(['読み込み中…', '準備中…', '準備完了 —「VRで見る」か「ARで見る」を押してください']);
+    expect([I18N.en[EVENT_STATUS_KEYS.loading], I18N.en[EVENT_STATUS_KEYS.preparing], I18N.en[EVENT_STATUS_KEYS.ready]]).toEqual(['Loading…', 'Preparing…', 'Ready — press “View in VR” or “View in AR”']);
   });
 });
 
@@ -226,8 +226,10 @@ function fakeDom() {
     return !!m && camel(m[1]) in e.dataset && (m[2] === undefined || e.dataset[camel(m[1])] === m[2]);
   };
   const node = (tag, isComment = false) => {
-    const e = { tag, isComment, id: '', className: '', hidden: false, disabled: false, dataset: {}, children: [], parentNode: null, attrs: {}, _text: '', onclick: null, onerror: null,
+    const e = { tag, isComment, id: '', className: '', hidden: false, disabled: false, dataset: {}, children: [], parentNode: null, attrs: {}, _text: '', onclick: null, onerror: null, _ls: [],
       classList: { add: c => { if (!e.className.split(/\s+/).includes(c)) e.className = (e.className + ' ' + c).trim(); }, remove: c => { e.className = e.className.split(/\s+/).filter(x => x && x !== c).join(' '); }, toggle: (c, on) => (on ? e.classList.add(c) : e.classList.remove(c)), contains: c => e.className.split(/\s+/).includes(c) },
+      addEventListener: (t, f) => { if (t === 'click') e._ls.push(f); }, removeEventListener: (t, f) => { e._ls = e._ls.filter(x => x !== f); },
+      click: () => { e._ls.slice().forEach(f => f({})); e.onclick?.(); },
       setAttribute: (k, v) => { e.attrs[k] = String(v); }, getAttribute: k => e.attrs[k] ?? null,
       get textContent() { return e._text; }, set textContent(v) { e._text = String(v); },
       append: (...k) => k.forEach(c => { c.remove?.(); c.parentNode = e; e.children.push(c); }),
@@ -317,11 +319,67 @@ describe('the page layout (fake DOM)', () => {
     gate.release();
     await vi.waitFor(() => expect(t.launcher.phase).toBe('ready'), { timeout: 8000 });
     expect(calls).toEqual(['open:sample2', 'data', 'gpu:vr']);
-    expect(t.doc.getElementById('event-status').textContent).toBe('準備完了');
+    expect(t.doc.getElementById('event-status').textContent).toBe('準備完了 —「VRで見る」か「ARで見る」を押してください');
     expect(t.doc.getElementById('event-status').dataset.state).toBe('ready');
     expect(card.classList.contains('is-selected')).toBe(true); expect(card.attrs['aria-pressed']).toBe('true');
     expect(card.disabled).toBe(false);
   }, 15000);
+  it('the ready text names both buttons (ja / en)', () => {
+    expect(I18N.ja.evStReady).toBe('準備完了 —「VRで見る」か「ARで見る」を押してください');
+    expect(I18N.en.evStReady).toBe('Ready — press “View in VR” or “View in AR”');
+  });
+  const ready = async (t, calls, ready, lv = 'lv1') => {
+    t.launcher.enable(); t.doc.getElementById('event-cards').querySelector(`[data-event-level="${lv}"]`).onclick();
+    await vi.waitFor(() => expect(t.launcher.phase).toBe('ready'), { timeout: 8000 });
+  };
+  it('the top bar glows when ready; a press of either button stops it', async () => {
+    for (const which of ['vrB', 'arB']) {
+      const calls = [], rd = { v: false }, t = make({ getVr: async () => fakeVr(calls, { ready: rd }) }); page(t, calls); t.arB.hidden = false;
+      const bar = () => t.doc.getElementById('event-bar');
+      t.launcher.enable(); expect(bar().classList.contains('is-ready-glow')).toBe(false);
+      await ready(t, calls, rd);
+      expect(bar().classList.contains('is-ready-glow')).toBe(true);
+      t.launcher.refresh(); expect(bar().classList.contains('is-ready-glow')).toBe(true); // a refresh does not restart or stop it
+      t[which].click();
+      expect(bar().classList.contains('is-ready-glow')).toBe(false);
+      t.launcher.refresh(); expect(bar().classList.contains('is-ready-glow')).toBe(false); // still ready, but no glow again
+    }
+  }, 30000);
+  it('the glow stops on another card press and on a session start', async () => {
+    const calls = [], rd = { v: false }, t = make({ getVr: async () => fakeVr(calls, { ready: rd }) }), gate = page(t, calls, { hold: true });
+    const bar = () => t.doc.getElementById('event-bar');
+    t.launcher.enable(); t.doc.getElementById('event-cards').querySelector('[data-event-level="lv2"]').onclick(); gate.release();
+    await vi.waitFor(() => expect(t.launcher.phase).toBe('ready'), { timeout: 8000 });
+    expect(bar().classList.contains('is-ready-glow')).toBe(true);
+    t.doc.getElementById('event-cards').querySelector('[data-event-level="lv0"]').onclick();
+    expect(t.launcher.phase).toBe('loading'); expect(bar().classList.contains('is-ready-glow')).toBe(false);
+    gate.release();
+    await vi.waitFor(() => expect(t.launcher.phase).toBe('ready'), { timeout: 8000 });
+    expect(bar().classList.contains('is-ready-glow')).toBe(true); // a new preparation glows again
+    t.doc.dispatchEvent(new CustomEvent('vrl-tut-signal', { detail: { kind: 'vr-start' } }));
+    expect(bar().classList.contains('is-ready-glow')).toBe(false);
+  }, 30000);
+  it('the buttons in the card appear only in the ready card, press the top bar buttons, and the AR one follows the top bar AR button', async () => {
+    const calls = [], rd = { v: false }, t = make({ getVr: async () => fakeVr(calls, { ready: rd }) }), gate = page(t, calls, { hold: true });
+    const goOf = s => t.doc.getElementById('event-cards').querySelector(`[data-event-go="${s}"]`);
+    const visible = () => t.doc.getElementById('event-cards').querySelectorAll('[data-event-go]').filter(g => !g.hidden).map(g => g.dataset.eventGo);
+    t.launcher.enable();
+    expect(visible()).toEqual([]);
+    t.doc.getElementById('event-cards').querySelector('[data-event-level="lv2"]').onclick();
+    expect(visible()).toEqual([]); // loading
+    gate.release();
+    await vi.waitFor(() => expect(t.launcher.phase).toBe('ready'), { timeout: 8000 });
+    expect(visible()).toEqual(['sample2']);
+    const vrBtn = goOf('sample2').querySelector('[data-event-go-vr]'), arBtn = goOf('sample2').querySelector('[data-event-go-ar]');
+    expect(vrBtn.textContent).toBe('VRで見る'); expect(vrBtn.dataset.i18n).toBe('vrView'); expect(arBtn.dataset.i18n).toBe('arView');
+    expect(arBtn.hidden).toBe(true); // AR unavailable (top bar AR button hidden)
+    t.arB.hidden = false; t.launcher.refresh(); expect(arBtn.hidden).toBe(false);
+    let vrClicks = 0, arClicks = 0; t.vrB.addEventListener('click', () => vrClicks++); t.arB.addEventListener('click', () => arClicks++);
+    vrBtn.onclick(); expect(vrClicks).toBe(1); expect(arClicks).toBe(0);
+    arBtn.onclick(); expect(arClicks).toBe(1);
+    t.doc.getElementById('event-cards').querySelector('[data-event-level="lv0"]').onclick(); // another card: loading
+    expect(visible()).toEqual([]);
+  }, 30000);
   it('the status goes back to nothing when the prepared data is gone (a session used it) or another dataset is opened', async () => {
     const calls = [], ready = { v: false }, t = make({ getVr: async () => fakeVr(calls, { ready }) }); page(t, calls);
     t.launcher.enable(); t.doc.getElementById('event-cards').querySelector('[data-event-level="lv1"]').onclick();
