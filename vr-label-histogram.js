@@ -1,5 +1,5 @@
-import { HIST_MIN, HIST_BINS } from './histogram.js?v=20261106-build692';
-import { accToHist, createAcc, textureU16 } from './histogram-texture.js?v=20261106-build692';
+import { HIST_MIN, HIST_BINS } from './histogram.js?v=20261109-build696';
+import { accToHist, createAcc, textureU16 } from './histogram-texture.js?v=20261109-build696';
 
 export const SLOTS = 4, REGION_COLORS = 14, LABELS = 1 + SLOTS + REGION_COLORS, UNLABELED = 0;
 export const UNLABELED_COLOR = '#8c969c';
@@ -28,9 +28,14 @@ export function labelAt(i, cls, C, picks, reg, regSegs) {
 
 // ---- kernels: self-contained (no imports, no outer names), also stringified into the worker ----
 // u16 -> HU bin (histogram.js: round, minus HIST_MIN, clamped into the end bins)
-export function binLut(cal, histMin, bins) {
-  const slope = cal[0], intercept = cal[1], bias = cal[2], lut = new Uint16Array(65536);
-  for (let u = 0; u < 65536; u++) { const b = Math.round((u - bias) * slope + intercept) - histMin; lut[u] = b < 0 ? 0 : b >= bins ? bins - 1 : b; }
+// histMax (optional; the board never passes it): equal bins over histMin..histMax instead of 1-HU bins from histMin (the auto shading range counts over the data's own range, cap-shade.js shadeBinOf: floor, the max in the last bin)
+export function binLut(cal, histMin, bins, histMax) {
+  const slope = cal[0], intercept = cal[1], bias = cal[2], lut = new Uint16Array(65536), over = histMax != null, span = over ? histMax - histMin : 0;
+  for (let u = 0; u < 65536; u++) {
+    const v = (u - bias) * slope + intercept;
+    const b = over ? (span > 0 ? Math.floor((v - histMin) / span * bins) : 0) : Math.round(v) - histMin;
+    lut[u] = b < 0 ? 0 : b >= bins ? bins - 1 : b;
+  }
   return lut;
 }
 // u16 -> bit s set when shown slot s passes its HU test (the shader: maskOnly bit || min <= HU <= max)
@@ -57,7 +62,7 @@ export function axisMap(D, E, linear) {
 // message (u16 at 0, then the classification / region bytes, or the two edit layers and the region layer). luts false: the layout only
 export function prepareKernel(spec, luts = true) {
   const K = Object.assign({}, spec), plane = spec.W * spec.H;
-  if (luts) K.lut = binLut(spec.cal, spec.histMin, spec.bins);
+  if (luts) K.lut = binLut(spec.cal, spec.histMin, spec.bins, spec.histMax);
   let off = plane * 2;
   const part = n => { const o = off; off += n; return o; };
   if (spec.mode === 'cls') {
@@ -196,7 +201,8 @@ export function createLabelCountClient(makeWorker = blobWorker) {
 // the pass's spec and its slices, from the run input (see createVrLabelHistogram)
 export function passPlan(input) {
   const { grid, shownMask } = input, [W, H, D] = grid.dims, plane = W * H, u = textureU16(grid);
-  const base = { W, H, labels: LABELS, bins: HIST_BINS, histMin: HIST_MIN, cal: Array.from(grid.calibration) };
+  // input.binRange {min, max} (the auto shading range's pass): HIST_BINS equal bins over the data's own range; without it the 1-HU bins from HIST_MIN as before
+  const br = input.binRange, base = { W, H, labels: LABELS, bins: HIST_BINS, histMin: br ? br.min : HIST_MIN, histMax: br ? br.max : null, cal: Array.from(grid.calibration) };
   const region = input.region?.data ? input.region : null, regSegs = Int32Array.from(region?.segs || []);
   let spec, zParts;
   if (input.cls) {

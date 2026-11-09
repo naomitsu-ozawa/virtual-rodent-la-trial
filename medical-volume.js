@@ -1,12 +1,12 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.webgpu.js';
 import dicomParser from 'https://esm.sh/dicom-parser@1.8.21';
-import { canvasBackground3dUnit } from './canvas-theme.js?v=20261106-build692';
-import { lightOffsetExpr, lightingWGSL, MATERIALS, materialKey } from './lighting.js?v=20261106-build692';
-import { EDIT_MASK_MAX_BYTES, editMaskInfoWord, editMaskLayout, editMaskPlanes, fillEditMaskWords, sameU32 } from './edit-mask-texture.js?v=20261106-build692';
-import { loadStats } from './load-stats.js?v=20261106-build692'; // what the load did, for the VR switch report
-import { frameOrTimer } from './utils.js?v=20261106-build692'; // rAF or a timer (the window rAF stands still during a WebXR session)
-import { SHADE_BRIGHT_DEFAULT, SHADE_CONTRAST_DEFAULT, brightOf, contrastOf } from './cap-shade.js?v=20261106-build692'; // the cut face's shading when the slice image is hidden (same maths as the WGSL capShadeLum below)
-import { gpuRunsForTexture } from './gpu-runs.js?v=20261106-build692'; // the run-mapping functions moved to their own module (the VR preparation worker is made from them)
+import { canvasBackground3dUnit } from './canvas-theme.js?v=20261109-build696';
+import { lightOffsetExpr, lightingWGSL, MATERIALS, materialKey } from './lighting.js?v=20261109-build696';
+import { EDIT_MASK_MAX_BYTES, editMaskInfoWord, editMaskLayout, editMaskPlanes, fillEditMaskWords, sameU32 } from './edit-mask-texture.js?v=20261109-build696';
+import { loadStats } from './load-stats.js?v=20261109-build696'; // what the load did, for the VR switch report
+import { frameOrTimer } from './utils.js?v=20261109-build696'; // rAF or a timer (the window rAF stands still during a WebXR session)
+import { SHADE_BRIGHT_DEFAULT, SHADE_CONTRAST_DEFAULT, brightOf, contrastOf } from './cap-shade.js?v=20261109-build696'; // the cut face's shading when the slice image is hidden (same maths as the WGSL capShadeLum below;: per-segment range)
+import { gpuRunsForTexture } from './gpu-runs.js?v=20261109-build696'; // the run-mapping functions moved to their own module (the VR preparation worker is made from them)
 export { gpuRunsForTexture };
 
 const UNCOMPRESSED_TS=new Set(['1.2.840.10008.1.2','1.2.840.10008.1.2.1','1.2.840.10008.1.2.2']);
@@ -80,7 +80,8 @@ struct Uniforms{
  textureDims:vec4<f32>,
  background:vec4<f32>,
  segMat:array<vec4<f32>,4>,
- capShade:vec4<f32>
+ capShade:vec4<f32>,
+ capRange:array<vec4<f32>,2>
 };
 @group(0) @binding(0) var<uniform> u:Uniforms;
 @group(0) @binding(1) var volumeTex:texture_3d<f32>;
@@ -383,10 +384,12 @@ fn insideVoxelTc(tc0:vec3<f32>,dir:vec3<f32>,inward:vec3<f32>,seg:u32)->vec3<f32
  return tc0;
 }
 fn segmentIndexAt(tc0:vec3<f32>)->i32{return segmentIndexFor(huAt(tc0),tc0);}
-// the cut face with the slice image hidden (capShade.x = 1): the SEGMENT colour of the cap x a brightness from the data value at the cap point, read through the SAME window as the slice image (mprWindow = window centre / width):
-// t = the position in the window, l = mix(0.35,1,t)^(1/brightness), then the contrast about the middle of its range; capShade = (on, brightness, contrast, unused). The maths of docs/cap-shade.js shadeLumT, as vr-view.js ctLumHU
-fn capShadeLum(hv:f32)->f32{
- let sww=max(u.mprWindow.y,0.001);let t=clamp((hv-(u.mprWindow.x-sww*0.5))/sww,0.0,1.0);
+// the cut face with the slice image hidden (capShade.x = 1): the SEGMENT colour of the cap x a brightness from the data value at the cap point, read through THAT SEGMENT's own range (capRange: (lower, upper) of slots 0..3 as
+// (lo0,hi0,lo1,hi1),(lo2,hi2,lo3,hi3); the slice image's window is not used): t = the position in the range (a width <= 0 is the minimal width 0.001), l = mix(0.35,1,t)^(1/brightness), then the contrast about the middle of its range;
+// capShade = (on, brightness, contrast, unused). The maths of docs/cap-shade.js shadeLumV, as vr-view.js ctLumHU
+fn capShadeLum(hv:f32,slot:i32)->f32{
+ let cr=u.capRange[u32(slot)/2u];let odd=(u32(slot)&1u)==1u;let lo=select(cr.x,cr.z,odd);let hi=select(cr.y,cr.w,odd);
+ let t=clamp((hv-lo)/max(hi-lo,0.001),0.0,1.0);
  let g=1.0/max(u.capShade.y,0.1);let l=pow(mix(0.35,1.0,t),g);
  if(u.capShade.z==1.0){return l;}
  let p=0.5*(pow(0.35,g)+1.0);return clamp(p+(l-p)*u.capShade.z,0.05,1.0);
@@ -499,7 +502,7 @@ ${lightingWGSL()}
     let cp=u.camOrigin.xyz+dir*capT;let ctc=texCoord(cp);let capIndex=capSegmentIndex(ctc);
     if(capIndex>=0){
      var capColor=mix(u.segments[u32(capIndex)*2u+1u].rgb,vec3<f32>(1.0),0.22);
-     if(u.capShade.x>0.5){capColor*=capShadeLum(huAt(ctc));} // the segment colour only; an analysis result's colour just below replaces it, unshaded as before
+     if(u.capShade.x>0.5){capColor*=capShadeLum(huAt(ctc),capIndex);} // the segment colour only; an analysis result's colour just below replaces it, unshaded as before
      if(analysisOverlay[0]!=0u&&(analysisOverlay[analysisOverlay[0]]&(1u<<u32(capIndex)))!=0u){
       let ov=analysisOverlayAt(ctc);
       if(ov!=0u){capColor=mix(vec3<f32>(f32((ov>>16u)&255u),f32((ov>>8u)&255u),f32(ov&255u))/255.0,vec3<f32>(1.0),0.22);}
@@ -864,7 +867,7 @@ export class MedicalVolumeRenderer{
   this.host.style.position='relative';this.host.appendChild(this.canvas);
   this.context=this.canvas.getContext('webgpu');this.format=navigator.gpu.getPreferredCanvasFormat();
   this.context.configure({device:this.device,format:this.format,alphaMode:'opaque'});
-  this.uniformBuffer=this.device.createBuffer({size:448,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
+  this.uniformBuffer=this.device.createBuffer({size:480,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
   this.sampler=this.device.createSampler({magFilter:'linear',minFilter:'linear',addressModeU:'clamp-to-edge',addressModeV:'clamp-to-edge',addressModeW:'clamp-to-edge'});
   const module=this.device.createShaderModule({label:'VRL medical volume raycast',code:safeWgsl(volumeShader())});
   this.pipeline=this.device.createRenderPipeline({label:'VRL medical volume raycast',layout:'auto',vertex:{module,entryPoint:'vs'},fragment:{module,entryPoint:'fs',targets:[{format:this.format}]},primitive:{topology:'triangle-list'}});
@@ -877,7 +880,7 @@ export class MedicalVolumeRenderer{
   this.appliedCutRowsBuffer=null;this.appliedCutIntervalsBuffer=null;this.appliedCutSignature='';this.clearAppliedCutRuns();
   this.analysisOverlayBuffer=null;this.analysisOverlaySignature='';this.clearAnalysisRuns();
   this.texture=null;this.bindGroup=null;this.seriesId=null;this.bricksReady=false;this.previewVolume=null;this.previewPlaneBuffers={coronal:null,sagittal:null};this.active=false;this.interactive=false;this.interactionTier=0;this.halfExtents=[1,1,1];this.step=0.002;this.calibration={slope:1,intercept:0,signedBias:0};this.volume=null;this.textureDims=[1,1,1];this.reducedVolume=false;this.textureBytes=0;this.planSignature='';this.dataGeneration=0;this.ensureQueue=null;
-  this.frameData=new Float32Array(112);this.tmpInv=new THREE.Matrix4();this.tmpOrigin=new THREE.Vector3();this.tmpQuat=new THREE.Quaternion();this.tmpRight=new THREE.Vector3();this.tmpUp=new THREE.Vector3();this.tmpForward=new THREE.Vector3();
+  this.frameData=new Float32Array(120);this.tmpInv=new THREE.Matrix4();this.tmpOrigin=new THREE.Vector3();this.tmpQuat=new THREE.Quaternion();this.tmpRight=new THREE.Vector3();this.tmpUp=new THREE.Vector3();this.tmpForward=new THREE.Vector3();
  }
  support(v,{maxTextureBytes=0,targetInPlane=0}={}){
   const s=v?.series;if(!v?.sourceBacked||!s)return{ok:false,reason:'GPU volume currently targets source-backed DICOM'};
@@ -1480,7 +1483,10 @@ struct O{@builtin(position) p:vec4<f32>,@location(0) uv:vec2<f32>};
   // the material preset of each segment slot (lighting.js MATERIALS: ambient, spec, shininess), appended after background (segMat)
   for(let s=0;s<4;s++){const m=MATERIALS[materialKey(segmentState[segmentOrder[s]]?.material)];put(23+s,m.ambient,m.spec,m.shininess,0)}
   // the cut face's shading (slot 27): on while the slice image is hidden, the fill is CT濃淡 and the cap is drawn (section.shade, from app.js), brightness / contrast as VR / AR (cap-shade.js)
-  {const sh=section.shade||{};put(27,sh.on&&section.capEnabled?1:0,brightOf(sh.bright??SHADE_BRIGHT_DEFAULT),contrastOf(sh.contrast??SHADE_CONTRAST_DEFAULT),0)}
+  {const sh=section.shade||{};put(27,sh.on&&section.capEnabled?1:0,brightOf(sh.bright??SHADE_BRIGHT_DEFAULT),contrastOf(sh.contrast??SHADE_CONTRAST_DEFAULT),0)
+   // slots 28 / 29 = each segment slot's shading range (lower, upper) = section.shade.ranges[key] (sectionShadeParams, from segments.js segmentShadeRange); a slot without a segment: 0, 1
+   const rg=s=>{const r=sh.ranges?.[segmentOrder[s]];return r&&Number.isFinite(r.lower)&&Number.isFinite(r.upper)?[r.lower,r.upper]:[0,1]};
+   put(28,...rg(0),...rg(1));put(29,...rg(2),...rg(3))}
   this.device.queue.writeBuffer(this.uniformBuffer,0,data);
   const low=(this.renderW&&(this.renderW!==this.canvas.width||this.renderH!==this.canvas.height))?this.lowTarget(this.renderW,this.renderH):null;
   const encoder=this.device.createCommandEncoder({label:'VRL volume frame'}),canvasView=this.context.getCurrentTexture().createView(),view=low?low.view:canvasView,pass=encoder.beginRenderPass({colorAttachments:[{view,clearValue:{r:canvasBackground3dUnit()[0],g:canvasBackground3dUnit()[1],b:canvasBackground3dUnit()[2],a:1},loadOp:'clear',storeOp:'store'}]});

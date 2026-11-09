@@ -1,15 +1,16 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { volume, incNextSegmentMaskVolumeId } from './state.js?v=20261106-build692';
-import { hexRgb } from './utils.js?v=20261106-build692';
-import { settings } from './app-settings.js?v=20261106-build692';
-import { buildThresholdMask, morphMask, fillMaskHoles, removeSmallMaskComponents } from './mask-ops.js?v=20261106-build692';
-import { thinSuppressActive, suppressThinMask } from './thin-suppress.js?v=20261106-build692';
-import { effectiveRanges } from './segment-exclusive.js?v=20261106-build692';
-import { maskFromAnalysisRuns } from './run-length.js?v=20261106-build692';
-import { sourceFilterStages } from './source-filters.js?v=20261106-build692';
-import { gpuSlotOrder, slotSignature } from './segment-slots.js?v=20261106-build692';
-import { segmentPresetDefaults } from './dataset-reset.js?v=20261106-build692';
+import { volume, incNextSegmentMaskVolumeId } from './state.js?v=20261109-build696';
+import { hexRgb } from './utils.js?v=20261109-build696';
+import { settings } from './app-settings.js?v=20261109-build696';
+import { buildThresholdMask, morphMask, fillMaskHoles, removeSmallMaskComponents } from './mask-ops.js?v=20261109-build696';
+import { thinSuppressActive, suppressThinMask } from './thin-suppress.js?v=20261109-build696';
+import { effectiveRanges } from './segment-exclusive.js?v=20261109-build696';
+import { maskFromAnalysisRuns } from './run-length.js?v=20261109-build696';
+import { sourceFilterStages } from './source-filters.js?v=20261109-build696';
+import { gpuSlotOrder, slotSignature } from './segment-slots.js?v=20261109-build696';
+import { segmentPresetDefaults } from './dataset-reset.js?v=20261109-build696';
+import { dataRangeOf, shadeRangeOf, moveShadeEnd, autoShadeRange, shadeSpanOf, createShadeAutoScheduler } from './cap-shade.js?v=20261109-build696';
 // 'contrast' (造影領域) is the fifth preset; at most GPU_SEGMENT_SLOTS (4) are enabled at once (segment-slots.js)
 export const SEGMENT_PRESET_ORDER=['bone','soft','fat','lung','contrast'];
 export const segmentEditState=Object.fromEntries(SEGMENT_PRESET_ORDER.map(key=>[key,{baseRuns:null,baseSignature:'',keepRuns:null,excludeRuns:null,cutRuns:null,finalRuns:null,revision:0,undo:[],redo:[],surfaceGroup:null,rawCutSurface:false}]));
@@ -20,6 +21,44 @@ export const segmentState={
  lung:{active:false,enabled:false,color:'#6fb8d6',opacity:1,min:0,max:1,opening:0,closing:0,minComponent:0,holeFill:false,surfaceMm:0,thicknessMm:0,material:'standard',_maskCache:null,_maskCacheKey:''},
  contrast:{active:false,enabled:false,color:'#c026d3',opacity:1,min:0,max:1,opening:0,closing:0,minComponent:0,holeFill:false,surfaceMm:0,thicknessMm:0,material:'standard',_maskCache:null,_maskCacheKey:''}
 };
+// the cut-face shading range of each segment (cap-shade.js). AUTO unless the user set it: only the ranges the user set by hand (manual) are stored in segmentShadeRanges ({lower, upper}, data values; these are saved in the
+// project file, data-load.js). An auto segment follows segmentShadeAuto[key] = {lower, upper, span} (2nd..98th percentile of the values of the voxels that belong to the segment, and the span of the sliders; cap-shade.js autoShadeRange, from a 4096-bin histogram over the data's own range), set by
+// setSegmentShadeAuto when a computation is ready (the browser's: histogram-ui.js computeSegmentHistograms through shadeAutoPage below; VR's: vr-view.js) and never saved. Until it is ready (and for a segment without voxels / with one
+// value) the initial value is used: the segment's min / max (the sliders' userMin / userMax, else min / max) cut to the data's actual min..max. Shared by VR / AR and the browser (one state, identical behaviour).
+export const segmentShadeRanges={};
+export const segmentShadeAuto={};
+export const shadeDataRange=()=>dataRangeOf(volume?.min,volume?.max);
+// the range in use for a segment: {lower, upper, touched} (touched = set by the user: manual)
+export function segmentShadeRange(key,data=shadeDataRange()){const s=segmentState[key];return shadeRangeOf(segmentShadeRanges[key],s?.userMin??s?.min,s?.userMax??s?.max,data,segmentShadeAuto[key])}
+// the range the segment's lower / upper sliders run over: {min, max} (the values present in the segment + 5 %, else the data's full range)
+export function segmentShadeSpan(key,data=shadeDataRange()){return shadeSpanOf(segmentShadeAuto[key],data)}
+// the user moves one end of the segment's range: it is manual from now on, both ends are kept (lower cannot pass upper)
+export function setSegmentShadeEnd(key,which,value,data=shadeDataRange()){if(!segmentState[key])return null;const r=moveShadeEnd(segmentShadeRange(key,data),which,value,data);segmentShadeRanges[key]=r;return segmentShadeRange(key,data)}
+// 「自動に戻す」: the manual value is dropped, the segment follows the auto value again
+export function resetSegmentShadeRange(key){delete segmentShadeRanges[key]}
+export function clearSegmentShadeRanges(){for(const k of Object.keys(segmentShadeRanges))delete segmentShadeRanges[k]}
+// the auto value of a segment is ready (null: the segment has no usable values, the initial value is used); the listeners repaint
+const shadeAutoListeners=new Set();
+export const onShadeAutoChange=fn=>{shadeAutoListeners.add(fn);return()=>shadeAutoListeners.delete(fn)};
+const sameAuto=(a,b)=>a===b||(!!a&&!!b&&a.lower===b.lower&&a.upper===b.upper&&a.span.min===b.span.min&&a.span.max===b.span.max);
+export function setSegmentShadeAuto(key,auto){
+ if(!segmentState[key]||sameAuto(segmentShadeAuto[key],auto||undefined))return false;
+ if(auto)segmentShadeAuto[key]=auto;else delete segmentShadeAuto[key];
+ for(const fn of [...shadeAutoListeners]){try{fn(key)}catch(e){console.error(e)}}
+ return true;
+}
+// a computation's result {key: histogram | null} -> the auto values (the data's range at this moment cuts them)
+export function applyShadeAutoHistograms(results,data=shadeDataRange()){for(const [key,hist] of Object.entries(results||{}))setSegmentShadeAuto(key,autoShadeRange(hist,data))}
+export function clearSegmentShadeAuto(){const had=Object.keys(segmentShadeAuto);for(const k of had)delete segmentShadeAuto[k];if(had.length)for(const fn of [...shadeAutoListeners]){try{fn(null)}catch(e){console.error(e)}}}
+// the browser's computation: histogram-ui.js registers computeSegmentHistograms(keys, stale) -> {key: 4096-bin histogram over the data's range | null} (null = no voxels) when the app starts
+let shadeAutoSource=null;
+export const setShadeAutoSource=fn=>{shadeAutoSource=fn};
+export const shadeAutoPage=createShadeAutoScheduler({compute:(keys,stale)=>shadeAutoSource&&volume?shadeAutoSource(keys,stale):null,apply:applyShadeAutoHistograms});
+// the triggers (only these two): a dataset was opened (every segment), a segment's threshold min / max changed (its keys; applyExclusiveRanges below). Another dataset: the old values go.
+export const requestShadeAuto=(keys=SEGMENT_PRESET_ORDER)=>shadeAutoPage.request(keys);
+// while an XR session is on the browser's counting does not run (vr-view.js tells: true at the session start, false at its end); the requests made meanwhile are asked again when it ends
+export const setShadeAutoPageHeld=on=>shadeAutoPage.hold(on);
+export function resetShadeAutoForDataset(){shadeAutoPage.reset();clearSegmentShadeAuto()}
 // the presets' own settings as defined above (dataset-reset.js): a segment the next dataset does not use goes back to them
 export const SEGMENT_PRESET_DEFAULTS=segmentPresetDefaults(segmentState);
 export function analysisRegionSegmentsShown(r){return !r?.segmentKeys?.length||r.segmentKeys.some(k=>segmentState[k]?.enabled)}
@@ -65,6 +104,7 @@ export function applyExclusiveRanges(){
   const s=segmentState[key],e=r[key],before=(s.exclusive?.sources||[]).join();s.exclusive=e;
   if(s.min!==e.min||s.max!==e.max||before!==e.sources.join()){s.min=e.min;s.max=e.max;s._maskCache=null;changed.push(key);segmentExclusive.pending.add(key)}
  }
+ if(changed.length)requestShadeAuto(changed); // a segment's threshold changed (its voxels with it): its auto shading range is computed again (300 ms after the last change)
  return changed;
 }
 // recompute and invalidate every segment whose range in use or voxel sources changed (and the given ones, and the segments
