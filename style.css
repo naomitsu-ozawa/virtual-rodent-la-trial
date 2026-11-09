@@ -1297,6 +1297,14 @@ html.vrl-event-layout .app-shell{grid-template-rows:auto auto minmax(0,1fr) auto
 .event-bar [hidden]{display:none!important}
 .event-status{margin-left:auto;min-height:1.4em;font-size:22px;font-weight:700;color:rgb(var(--ui-t1))}
 .event-status[data-state="ready"]{color:rgb(var(--ui-green-tx))}
+/* after the preparation the top bar's VR / AR buttons pulse slowly (stops on a press / another card / a session); the ready card carries its own big VR / AR buttons */
+.event-bar.is-ready-glow #vr-view-button:not([hidden]),.event-bar.is-ready-glow #ar-view-button:not([hidden]){border-color:rgb(var(--ui-accent));box-shadow:0 0 0 3px rgb(var(--ui-accent)/.55);animation:event-ready-glow 2.4s ease-in-out infinite}
+@keyframes event-ready-glow{0%,100%{box-shadow:0 0 0 2px rgb(var(--ui-accent)/.35)}50%{box-shadow:0 0 0 7px rgb(var(--ui-accent)/.8),0 0 22px 4px rgb(var(--ui-accent)/.5)}}
+@media (prefers-reduced-motion:reduce){.event-bar.is-ready-glow #vr-view-button:not([hidden]),.event-bar.is-ready-glow #ar-view-button:not([hidden]){animation:none;box-shadow:0 0 0 5px rgb(var(--ui-accent)/.8)}}
+.event-card-go{display:flex;flex-wrap:wrap;gap:12px}
+.event-card-go[hidden],.event-card-go-btn[hidden]{display:none!important}
+.event-card-go-btn{flex:1 1 140px;min-height:64px;padding:10px 20px;border-radius:16px;border:3px solid rgb(var(--ui-accent));background:rgb(var(--ui-s2));color:rgb(var(--ui-t2));font:inherit;font-size:20px;font-weight:700;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+.event-card-go-btn:focus-visible{outline:4px solid rgb(var(--ui-accent));outline-offset:3px}
 .event-launcher{min-width:0;min-height:0;display:flex;flex-direction:column;overflow:hidden}
 html.vrl-ipad-ui .event-launcher{grid-column:2;grid-row:1}
 .event-cards{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr));gap:24px;align-content:start;padding:6px 6px 28px}
@@ -1315,6 +1323,8 @@ html.vrl-ipad-ui .event-launcher{grid-column:2;grid-row:1}
 .event-card-mission{font-size:18px;line-height:1.55}
 .event-card-license{margin:0 4px;font-size:15px;line-height:1.5;color:rgb(var(--ui-t3));overflow-wrap:anywhere;-webkit-user-select:text;user-select:text}
 .event-card-license a{color:inherit;font-weight:700;text-decoration:underline}
+.event-card-license summary{cursor:pointer;margin-top:2px}
+.event-card-license details>div{margin-top:4px}
 @media(max-width:900px){html.vrl-event-layout:not(.vrl-ipad-ui),html.vrl-event-layout:not(.vrl-ipad-ui) body{overflow:hidden}html.vrl-event-layout:not(.vrl-ipad-ui) .app-shell{height:100dvh;min-height:0}}
 html.vrl-event-layout:not(.vrl-ipad-ui) .sidebar{display:none}
 html.vrl-event-layout:not(.vrl-ipad-ui) .workspace{grid-template-columns:minmax(0,1fr)}
@@ -1383,3 +1393,5 @@ html.vrl-event-layout.vrl-ipad-ui .ws-tool-rail>[data-ipad-drawer-tab]{display:n
  html.vrl-event-layout.vrl-ipad-ui.ipad-settings-persistent .workspace{grid-template-rows:minmax(0,1fr) auto}
  html.vrl-event-layout.vrl-ipad-ui .sidebar{grid-template-rows:auto!important}
 }
+.analysis-region-name{display:flex;align-items:center;gap:8px;font-size:10px;color:rgb(var(--ui-t4))}
+.analysis-region-name input{flex:1;min-width:0;min-height:28px;border:1px solid rgb(var(--ui-b3));border-radius:7px;background:rgb(var(--ui-s2));color:rgb(var(--ui-t1));padding:4px 8px;font-size:11px}

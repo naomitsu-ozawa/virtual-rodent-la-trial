@@ -6,12 +6,13 @@
 //   - below it the cards (one per dataset of event-mode.js EVENT_DATASETS) in an area that scrolls by itself
 // A card press opens the dataset through the page's own route ('vrl-event-sample' -> startSample), waits until the page is quiet, then prepares the VR data (prepareVrData + prepareVrGpu 'vr', the work of the
 // prepare panel) so that 「VRで見る」 starts with one press. Nothing is opened or prepared by itself when the page loads. With the mode off none of this exists (the elements go back where they were).
-import { tr } from './i18n.js?v=20261109-build700';
-import { EVENT_DATASETS, chooseEventLevel } from './event-mode.js?v=20261109-build700';
-import { eventCards, eventStatus, EVENT_STATUS_KEYS, openAndPrepare, waitForStandardOpen, createInflight } from './event-launcher-core.js?v=20261109-build700';
-import { settlePage } from './event-prepare-ui.js?v=20261109-build700';
-import { tutorialUiActive, restartTutorial } from './tutorial-ui.js?v=20261109-build700';
-import { sampleSliceUrl } from './sample-sets.js?v=20261109-build700';
+import { tr } from './i18n.js?v=20261109-build702';
+import { EVENT_DATASETS, chooseEventLevel } from './event-mode.js?v=20261109-build702';
+import { eventCards, eventStatus, EVENT_STATUS_KEYS, openAndPrepare, waitForStandardOpen, createInflight } from './event-launcher-core.js?v=20261109-build702';
+import { settlePage } from './event-prepare-ui.js?v=20261109-build702';
+import { tutorialUiActive, restartTutorial } from './tutorial-ui.js?v=20261109-build702';
+import { sampleSliceUrl } from './sample-sets.js?v=20261109-build702';
+import { creditRows } from './sample-credit-ui.js?v=20261109-build702';
 
 const MOVED = ['tutorial-start-button', 'vr-view-button', 'ar-view-button'];
 const XR_CHECK_MS = 10000;
@@ -22,7 +23,7 @@ const askVrModule = doc => { const ev = new CustomEvent('vrl-vr-module', { detai
 
 export function createEventLauncher({ doc = globalThis.document, g = globalThis, getVr = () => askVrModule(doc) } = {}) {
   let on = false, bar = null, statusEl = null, launcher = null, cardsEl = null;
-  let phase = '', phaseSample = null, token = 0, vrMod = null;
+  let phase = '', phaseSample = null, token = 0, vrMod = null, glow = false, wasReady = false; // glow = the top bar's VR / AR buttons pulse after the preparation finished
   const moved = [], inflight = createInflight();
   let held = 0; // other work that keeps the cards waiting (the データ panel's 最初の状態に戻す reopening the data)
 
@@ -35,6 +36,9 @@ export function createEventLauncher({ doc = globalThis.document, g = globalThis,
   function render() {
     if (!on) return;
     const state = eventStatus({ loading: phase === 'loading', preparing: phase === 'preparing', ready: phase === 'ready' && vrStillReady() });
+    if (state === 'ready' && !wasReady) glow = true; else if (state !== 'ready') glow = false; // starts when the preparation completes; a press / another card / a session stops it
+    wasReady = state === 'ready';
+    bar?.classList.toggle('is-ready-glow', glow);
     if (statusEl) {
       statusEl.dataset.state = state;
       if (state) { statusEl.dataset.i18n = EVENT_STATUS_KEYS[state]; statusEl.textContent = tr(EVENT_STATUS_KEYS[state]); }
@@ -46,7 +50,15 @@ export function createEventLauncher({ doc = globalThis.document, g = globalThis,
       c.classList.toggle('is-selected', sel); c.setAttribute('aria-pressed', String(sel)); c.disabled = b;
     }
     cardsEl?.setAttribute('aria-busy', String(b));
+    // the big 「VRで見る」「ARで見る」 buttons live only in the ready card (the AR one only while the top bar's AR button is shown)
+    const arShown = !!doc.getElementById('ar-view-button') && !doc.getElementById('ar-view-button').hidden;
+    for (const go of cardsEl?.querySelectorAll('[data-event-go]') || []) {
+      const mine = state === 'ready' && go.dataset.eventGo === open;
+      go.hidden = !mine;
+      const ar = go.querySelector('[data-event-go-ar]'); if (ar) ar.hidden = !arShown;
+    }
   }
+  const stopGlow = () => { if (glow) { glow = false; render(); } };
   function setPhase(p) { phase = p; render(); announce(); }
   // another dataset was opened by some other route, or the prepared data is gone (a session used it): "ready" no longer holds
   function refresh() { if (phase === 'ready' && (g.__vrlOpenSample !== phaseSample || !vrStillReady())) phase = ''; render(); }
@@ -112,10 +124,19 @@ export function createEventLauncher({ doc = globalThis.document, g = globalThis,
       const d = EVENT_DATASETS.find(x => x.sample === c.sample);
       btn.onclick = () => { if (d) void press(d); };
       card.append(btn);
-      if (c.license) { // only a dataset that carries a license notice (the marmoset): the existing credit texts + the license link of sample-credits.js
-        const p = el('p', 'event-card-license'), a = doc.createElement('a');
-        a.href = c.license.url; a.textContent = c.license.name; a.target = '_blank'; a.rel = 'noopener noreferrer';
-        p.append(el('span', '', 'creditLicense'), a); card.append(p);
+      const go = el('div', 'event-card-go'); go.dataset.eventGo = c.sample; go.hidden = true; // pressing = pressing the top bar's own button
+      for (const [id, key, flag] of [['vr-view-button', 'vrView', 'eventGoVr'], ['ar-view-button', 'arView', 'eventGoAr']]) {
+        const gb = el('button', 'event-card-go-btn', key); gb.type = 'button'; gb.dataset[flag] = ''; gb.onclick = () => doc.getElementById(id)?.click(); go.append(gb);
+      }
+      card.append(go);
+      if (c.credit) { // only a dataset whose sample.json carries a credit: a short line (source name + license link) and 「詳細」 with the four lines (source, license, changes, terms)
+        const box = el('div', 'event-card-license'), line = doc.createElement('div'), a = doc.createElement('a');
+        a.href = c.credit.licenseUrl; a.textContent = c.credit.licenseName; a.target = '_blank'; a.rel = 'noopener noreferrer';
+        const nm = doc.createElement('span'); nm.textContent = c.credit.name + ' · ';
+        line.append(el('span', '', 'creditSource'), nm, el('span', '', 'creditLicense'), a);
+        const more = doc.createElement('details');
+        more.append(el('summary', '', 'tutPanelDetail'), ...creditRows(doc, c.credit));
+        box.append(line, more); card.append(box);
       }
       area.append(card);
     }
@@ -131,7 +152,7 @@ export function createEventLauncher({ doc = globalThis.document, g = globalThis,
     bar.append(statusEl); topbar.after(bar);
     for (const id of MOVED) { // the existing elements, moved (a comment keeps their place for disable)
       const e = doc.getElementById(id); if (!e) continue;
-      const ph = doc.createComment(id); e.replaceWith(ph); bar.insertBefore(e, statusEl); moved.push({ e, ph });
+      const ph = doc.createComment(id); e.replaceWith(ph); bar.insertBefore(e, statusEl); e.addEventListener('click', stopGlow); moved.push({ e, ph });
     }
     launcher = el('section', 'event-launcher'); launcher.id = 'event-launcher';
     cardsEl = buildCards(); launcher.append(cardsEl); workspace.append(launcher);
@@ -142,7 +163,8 @@ export function createEventLauncher({ doc = globalThis.document, g = globalThis,
   function disable() {
     if (!on) return;
     token++; on = false; g.__vrlEventLayout = false; phase = '';
-    for (const { e, ph } of moved.splice(0)) ph.replaceWith(e);
+    for (const { e, ph } of moved.splice(0)) { e.removeEventListener('click', stopGlow); ph.replaceWith(e); }
+    glow = wasReady = false;
     // the tutorial button is mounted after the page started: it came into the bar without a place of its own; it goes before 「VRで見る」 again
     const late = bar?.querySelector('#tutorial-start-button'), vr = doc.getElementById('vr-view-button');
     if (late && vr?.parentNode) vr.parentNode.insertBefore(late, vr);
@@ -156,7 +178,7 @@ export function createEventLauncher({ doc = globalThis.document, g = globalThis,
   // an XR session started (VR / AR pressed while the card flow was still running): the flow stops (the run token moves on), so nothing is prepared during the session
   doc?.addEventListener?.('vrl-tut-signal', e => {
     const k = e?.detail?.kind;
-    if (on && (k === 'vr-start' || k === 'ar-start')) { token++; if (phase === 'loading' || phase === 'preparing') setPhase(''); }
+    if (on && (k === 'vr-start' || k === 'ar-start')) { token++; glow = false; if (phase === 'loading' || phase === 'preparing') setPhase(''); }
     refresh();
   });
   doc?.addEventListener?.('vrl-tutorial-begin', onTutorialBegin);

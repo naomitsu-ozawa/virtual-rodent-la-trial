@@ -1,12 +1,14 @@
 // 体験会モード page (event-launcher.js): the pure parts - no DOM, no THREE, unit-tested (tests/unit/event-launcher.test.js).
-//  - eventCards: the card model, built from ONE list (event-mode.js EVENT_DATASETS) + the license notices (sample-credits.js)
+//  - eventCards: the card model, built from ONE list (event-mode.js EVENT_DATASETS) + the credit of each dataset (its sample.json, through sample-registry.js)
 //  - eventStatus / EVENT_STATUS_KEYS: the status text of the top bar (読み込み中… / 準備中… / 準備完了)
 //  - openAndPrepare: the order after a card press (open the data, wait until the page is quiet, wait for the standard-open record, prepare the VR data)
 //  - waitForStandardOpen: the bounded wait for the record standard-open.js sets (so the prepared entry is marked standard)
 //  - createInflight: a run that is already in flight is shared, never started twice
-import { EVENT_DATASETS } from './event-mode.js?v=20261109-build700';
-import { sampleCredit } from './sample-credits.js?v=20261109-build700';
+import { EVENT_DATASETS } from './event-mode.js?v=20261109-build702';
+import { sampleCredit } from './sample-registry.js?v=20261109-build702';
 
+// One card per dataset of the list. thumb = where the 16:9 picture would be (docs/demo/<sample>/thumb.webp; the page shows an empty frame when the file is not there).
+// credit = the credit of the dataset when its sample.json has one (credit / license / changes / terms), else null - the datasets without one show no license line.
 export function eventCards(datasets = EVENT_DATASETS, creditOf = sampleCredit) {
   return datasets.map(d => {
     const c = creditOf(d.sample);
@@ -14,7 +16,7 @@ export function eventCards(datasets = EVENT_DATASETS, creditOf = sampleCredit) {
       id: d.id, sample: d.sample, kind: d.kind, lv: d.lv, nameKey: d.nameKey, missionKey: d.missionKey,
       levelAttr: d.kind === 'level' ? d.id : null,
       thumbFile: 'thumb.webp',
-      license: c ? { name: c.licenseName, url: c.licenseUrl } : null,
+      credit: c,
     };
   });
 }

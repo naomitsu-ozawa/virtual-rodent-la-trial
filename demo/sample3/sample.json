@@ -1,0 +1,23 @@
+{
+  "name": {
+    "ja": "マウス頭部",
+    "en": "Mouse head"
+  },
+  "level": 1,
+  "description": {
+    "ja": "マウス頭部（約270MB）",
+    "en": "Mouse head (about 270 MB)"
+  },
+  "mission": {
+    "ja": "断面で頭の中を観察しよう → 軟部組織を表示して、肺の構造を確かめよう",
+    "en": "Look inside the head with a section → show the soft tissue and check the structure of the lungs"
+  },
+  "hints": [
+    "section",
+    "move",
+    "toggle"
+  ],
+  "initialSegments": [
+    "bone"
+  ]
+}
