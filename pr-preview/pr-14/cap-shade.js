@@ -72,11 +72,11 @@ export function moveShadeEnd(range, which, value, data) {
 // ---- the auto range of a segment ----
 // From the segment's histogram: SHADE_HIST_BINS (4096) equal bins over the DATA's own range (data.min..data.max, so CT, MRI up to 65535 or anything else counts the same way; NOT the fixed HU bins of histogram.js), holding only the
 // voxels that belong to the segment (a Uint32Array; made with binShadeValues / binShadeRuns here or by the VR label pass, vr-label-histogram.js binLut with histMax). Everything below is in data units; a bin's value is its centre.
-//   lower = the 2nd percentile, upper = the 98th percentile (nearest rank);: the long tails are cut with the interquartile range (IQR = p75 - p25): lower = max(p2, p25 - k*IQR), upper = min(p98, p75 + k*IQR), k = 1 (a wide
+//   lower = the 2nd percentile, upper = the 98th percentile (nearest rank);: the long tails are cut with the interquartile range (IQR = p75 - p25): lower = max(p2, p25 - k*IQR), upper = min(p98, p75 + k*IQR), k = 2 (a wide
 //   distribution such as bone or MRI keeps p2 / p98; a narrow peak with a long tail, soft tissue, no longer stretches the range). When upper - lower is under 0.5 % of the data's full width it is widened symmetrically to 0.5 %; both are cut to the data's min..max.
 //   span = the values really present (lower edge of the first non-empty bin .. upper edge of the last one) plus 5 % of that width on each side, cut to the data: the range the lower / upper sliders run over (step span / 200).
 // null (= use the initial value, the full data range for the sliders) for a segment without voxels, with one distinct value (all in one bin), or without a histogram.
-export const SHADE_AUTO_LOW_P = 2, SHADE_AUTO_HIGH_P = 98, SHADE_AUTO_MIN_FRAC = 0.005, SHADE_SPAN_MARGIN = 0.05, SHADE_HIST_BINS = 4096, SHADE_AUTO_IQR_K = 1;
+export const SHADE_AUTO_LOW_P = 2, SHADE_AUTO_HIGH_P = 98, SHADE_AUTO_MIN_FRAC = 0.005, SHADE_SPAN_MARGIN = 0.05, SHADE_HIST_BINS = 4096, SHADE_AUTO_IQR_K = 2;
 export const createShadeHist = () => new Uint32Array(SHADE_HIST_BINS);
 // the bin of a data value (clamped; the data's max is in the last bin)
 export function shadeBinOf(v, min, max) {
