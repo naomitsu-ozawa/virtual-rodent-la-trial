@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeAll } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { installDomStub, importApp } from '../helpers/dom-stub.js';
 import { EVENT_LEVELS, EVENT_OTHER_SAMPLES, EVENT_DATASETS, buildEventDatasets, datasetForSample, datasetLabel, levelSwitchItems } from '../../docs/event-mode.js';
-import { eventCards, eventStatus, EVENT_STATUS_KEYS, openAndPrepare, createInflight } from '../../docs/event-launcher-core.js';
+import { eventCards, eventStatus, EVENT_STATUS_KEYS, openAndPrepare, waitForStandardOpen, createInflight } from '../../docs/event-launcher-core.js';
 import { SAMPLE_CREDITS } from '../../docs/sample-credits.js';
 import { I18N } from '../../docs/i18n.js';
 
@@ -145,6 +145,43 @@ describe('after a card press: open, wait, prepare', () => {
   });
 });
 
+describe('the preparation waits for the standard-open record', () => {
+  const noSleep = () => { const log = []; return { log, sleep: async ms => { log.push(ms); } }; };
+  it('openAndPrepare: open -> settle -> standard -> prepare', async () => {
+    const log = [];
+    await openAndPrepare({ open: async () => { log.push('open'); }, settle: async () => { log.push('settle'); }, standard: async () => { log.push('standard'); }, prepare: async () => { log.push('prepare'); } });
+    expect(log).toEqual(['open', 'settle', 'standard', 'prepare']);
+  });
+  it('prepare does not start before the record is set: it is read again every pollMs until it is there', async () => {
+    let rec = null, polls = 0; const log = [], s = noSleep();
+    const sleep = async ms => { s.log.push(ms); if (++polls === 3) rec = { id: 'sample1', sig: 'x' }; };
+    await openAndPrepare({ open: async () => {}, settle: async () => {}, standard: () => waitForStandardOpen({ sample: 'sample1', read: () => rec, sleep, pollMs: 100 }).then(ok => log.push('standard:' + ok)), prepare: async () => { log.push('prepare'); } });
+    expect(log).toEqual(['standard:true', 'prepare']);
+    expect(s.log).toEqual([100, 100, 100]);
+  });
+  it('a record of another dataset (or none) does not count; the wait is bounded (timeoutMs / pollMs sleeps) and then the preparation goes on', async () => {
+    const s = noSleep();
+    expect(await waitForStandardOpen({ sample: 'sample1', read: () => ({ id: 'sample2' }), sleep: s.sleep, timeoutMs: 1000, pollMs: 100 })).toBe(false);
+    expect(s.log.length).toBe(10);
+    const s2 = noSleep();
+    expect(await waitForStandardOpen({ sample: 'sample1', read: () => null, sleep: s2.sleep })).toBe(false);
+    expect(s2.log.length).toBe(100); // default: 10 s in 100 ms steps
+  });
+  it('already set: no wait; not a practice dataset: no wait; a stale run stops waiting; a throwing read is "not set"', async () => {
+    const s = noSleep();
+    expect(await waitForStandardOpen({ sample: 'sample3', read: () => ({ id: 'sample3' }), sleep: s.sleep })).toBe(true);
+    expect(await waitForStandardOpen({ sample: 'other', read: () => null, sleep: s.sleep })).toBe(false);
+    expect(await waitForStandardOpen({ sample: 'sample1', read: () => null, sleep: s.sleep, stop: () => true })).toBe(false);
+    expect(await waitForStandardOpen({ sample: 'sample1', read: () => { throw new Error('x'); }, sleep: s.sleep, timeoutMs: 200, pollMs: 100 })).toBe(false);
+    expect(s.log).toEqual([100, 100]); // only the last (bounded) case slept
+  });
+  it('event-launcher.js passes the wait as the step between settle and prepare', () => {
+    const ui = SRC('event-launcher.js');
+    expect(ui).toContain("standard: () => waitForStandardOpen({ sample: d.sample, read: () => g.__vrlStandardOpen");
+    expect(ui.indexOf('settle: () => settlePage(g)')).toBeLessThan(ui.indexOf('standard: () => waitForStandardOpen'));
+  });
+});
+
 describe('no double preparation', () => {
   it('a run in flight is shared: the second caller gets the same promise and the work starts once', async () => {
     const f = createInflight(); let started = 0, release; const gate = new Promise(r => { release = r; });
@@ -262,9 +299,10 @@ describe('the page layout (fake DOM)', () => {
     expect(SRC('event-launcher.js')).not.toMatch(/setTimeout\(\(\) => void press|onload|DOMContentLoaded/);
   });
   // a fake page: 'vrl-event-sample' is answered like app.js does (detail.done = a promise of the open)
-  const page = (t, calls, { hold = false } = {}) => {
+  // record = false: the page has not recorded the standard open (standard-open.js) yet
+  const page = (t, calls, { hold = false, record = true } = {}) => {
     const gate = { release: null };
-    t.doc.addEventListener('vrl-event-sample', e => { calls.push('open:' + e.detail.sampleSet); t.g.__vrlOpenSample = e.detail.sampleSet; e.detail.done = hold ? new Promise(r => { gate.release = r; }) : Promise.resolve(); });
+    t.doc.addEventListener('vrl-event-sample', e => { calls.push('open:' + e.detail.sampleSet); t.g.__vrlOpenSample = e.detail.sampleSet; t.g.__vrlStandardOpen = record ? { id: e.detail.sampleSet, sig: 's' } : null; e.detail.done = hold ? new Promise(r => { gate.release = r; }) : Promise.resolve(); });
     return gate;
   };
   const fakeVr = (calls, { ready = { v: false }, failData = false } = {}) => ({ prepareVrData: async () => { calls.push('data'); if (failData) throw new Error('VR: open a DICOM series first'); return { key: 'k' }; }, prepareVrGpuOnce: async (P, mode) => { calls.push('gpu:' + mode); ready.v = true; }, vrReady: () => ready.v });
@@ -294,6 +332,17 @@ describe('the page layout (fake DOM)', () => {
     await vi.waitFor(() => expect(t.launcher.phase).toBe('ready'), { timeout: 8000 });
     t.g.__vrlOpenSample = 'sample4'; t.doc.dispatchEvent(new CustomEvent('vrl-event-sample-open', { detail: { id: 'sample4' } }));
     expect(t.launcher.phase).toBe('');
+  }, 20000);
+  it('the preparation does not start until the standard-open record of the opened dataset is set, then it starts', async () => {
+    const calls = [], t = make({ getVr: async () => fakeVr(calls) }); page(t, calls, { record: false });
+    t.launcher.enable();
+    t.doc.getElementById('event-cards').querySelector('[data-event-level="lv0"]').onclick();
+    await vi.waitFor(() => expect(t.launcher.phase).toBe('loading'), { timeout: 8000 });
+    await new Promise(r => setTimeout(r, 1800)); // the page is settled (settlePage), the record is not there: nothing is prepared
+    expect(calls).toEqual(['open:sample4']);
+    t.g.__vrlStandardOpen = { id: 'sample4', sig: 's' };
+    await vi.waitFor(() => expect(t.launcher.phase).toBe('ready'), { timeout: 8000 });
+    expect(calls).toEqual(['open:sample4', 'data', 'gpu:vr']);
   }, 20000);
   it('the VR module comes through the page: the launcher asks with the event vrl-vr-module (app.js answers with its loader)', async () => {
     const calls = [], dom = fakeDom(), g = { __vrlXrChecked: true, __vrlVolumeReady: true };

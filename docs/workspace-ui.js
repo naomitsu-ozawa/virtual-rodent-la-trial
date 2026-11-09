@@ -1,14 +1,14 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { set3DBusy } from './three-status.js?v=20261109-build697';
-import { useWorkspaceUi, updateRenderModeControl, clearResidentMprJobs, prepareResidentGpuVolume, activateMedicalVolume, setThreeVolumeOverlay } from './data-load.js?v=20261109-build697';
-import { appVersionBadge, planes, ipadGpuQualityControl, ipadGpuQuality, footer } from './ui-shell.js?v=20261109-build697';
-import { sceneState, volume, currentLanguage, ipadGpuTargetSide, setIpadGpuTargetSide, sourceVolume, threeRenderMode, setResidentMprReadbackDisabled, setThreeRenderMode } from './state.js?v=20261109-build697';
-import { updateMprCanvasPhysicalAspect, schedulePlaneRender } from './mpr-render.js?v=20261109-build697';
-import { request3DRender } from './scene3d.js?v=20261109-build697';
-import { applyLanguage } from './i18n.js?v=20261109-build697';
-import { isIPhoneRuntime, isTabletRuntime, isVrHeadsetRuntime, fmt } from './utils.js?v=20261109-build697';
-import { settings } from './app-settings.js?v=20261109-build697';
+import { set3DBusy } from './three-status.js?v=20261109-build698';
+import { useWorkspaceUi, updateRenderModeControl, clearResidentMprJobs, prepareResidentGpuVolume, activateMedicalVolume, setThreeVolumeOverlay } from './data-load.js?v=20261109-build698';
+import { appVersionBadge, planes, ipadGpuQualityControl, ipadGpuQuality, footer } from './ui-shell.js?v=20261109-build698';
+import { sceneState, volume, currentLanguage, ipadGpuTargetSide, setIpadGpuTargetSide, sourceVolume, threeRenderMode, setResidentMprReadbackDisabled, setThreeRenderMode } from './state.js?v=20261109-build698';
+import { updateMprCanvasPhysicalAspect, schedulePlaneRender } from './mpr-render.js?v=20261109-build698';
+import { request3DRender } from './scene3d.js?v=20261109-build698';
+import { applyLanguage } from './i18n.js?v=20261109-build698';
+import { isIPhoneRuntime, isTabletRuntime, isVrHeadsetRuntime, fmt } from './utils.js?v=20261109-build698';
+import { settings } from './app-settings.js?v=20261109-build698';
 export function initIPadWorkspaceUi(){
  if(!useWorkspaceUi())return;
  const shell=document.querySelector('.app-shell'),workspace=document.querySelector('.workspace'),sidebar=document.querySelector('.sidebar'),sidebarScroll=document.querySelector('.sidebar-scroll'),viewer=document.querySelector('#viewer-grid'),topbar=document.querySelector('.topbar');
@@ -145,10 +145,10 @@ export function initIPadWorkspaceUi(){
  const viewerSig=()=>{const r=viewer.getBoundingClientRect();return[r.left,r.top,r.width,r.height].map(Math.round).join()};
  let sigNow=null;
  const refreshLayoutIfMoved=()=>requestAnimationFrame(()=>{if(viewerSig()!==sigNow)refreshLayout()});
- const EVENT_TABS=['data','prefs'];
+ const EVENT_TABS=['prefs'];
  const eventOn=()=>{try{return settings.get('eventMode')===true}catch{return false}};
  const setDrawerTab=tab=>{
-  if(eventOn()&&!EVENT_TABS.includes(tab))tab='data';
+  if(eventOn()&&!EVENT_TABS.includes(tab))tab='prefs';
   if(tab==='prefs')document.dispatchEvent(new Event('vrl-settings-sync')); // the embedded settings show the stored values
   drawerTab=tab;
   drawerTabs.querySelectorAll('[data-ipad-drawer-tab]').forEach(b=>b.classList.toggle('is-active',b.dataset.ipadDrawerTab===tab));
@@ -184,7 +184,7 @@ export function initIPadWorkspaceUi(){
  const applyEventMenu=()=>{
   const on=eventOn();
   drawerTabs.querySelectorAll('[data-ipad-drawer-tab]').forEach(x=>{const hide=on&&!EVENT_TABS.includes(x.dataset.ipadDrawerTab);x.hidden=hide;x.style.display=hide?'none':''});
-  if(on&&!EVENT_TABS.includes(drawerTab))setDrawerTab('data');
+  if(on&&!EVENT_TABS.includes(drawerTab))setDrawerTab('prefs');
  };
  window.addEventListener('vrl-settings',e=>{if(e.detail?.key==='eventMode')applyEventMenu()});
  toolbar.querySelectorAll('[data-ipad-view-mode]').forEach(b=>b.addEventListener('click',()=>setViewMode(b.dataset.ipadViewMode)));
