@@ -13,8 +13,9 @@
 //   board = 'menu': the page works on the left menu: the board blinks, a direction arrow shows at the edge of the view while the menu is out of view, an arrow moves over the button (tutorial-3d.js);
 //   when = 'no-section': the page exists only while no section frame is up (engine cond 'no-section'); then = a second clip played right after audio (same shape as TUT_FEEDBACK then);
 //   text = the caption under the slide on the board and on the 2D card (the 「{tissue}」 of a menu page = the first tissue of the open data, filled in by tutorial-vr.js).
-// Every mission practises on sample4 (骨梁 = the 体験会 Lv0 data). Analysis is not part of the tutorial.
-export const TUT_SAMPLE = 'sample4';
+// Every mission practises on the Lv0 data (the dataset whose sample.json says level 0: 骨梁 today; read from the registry). Analysis is not part of the tutorial.
+import { registry } from './sample-registry.js?v=20261109-build702';
+export const TUT_SAMPLE = registry.levels.find(l => l.level === 0)?.id ?? '';
 export const TUT_SIGNALS=Object.freeze(['grab', 'grab-move', 'scale', 'section-add', 'section-drag', 'section-scroll', 'seg-hide', 'seg-show', 'slice-opacity', 'slice-toggle', 'frame-hide', 'frame-show', 'session-end']);
 export const TUTORIAL_MISSIONS=deepFreeze([
  { id:'controls', sample:TUT_SAMPLE, title:'tutCtlTitle', slide:'controls',

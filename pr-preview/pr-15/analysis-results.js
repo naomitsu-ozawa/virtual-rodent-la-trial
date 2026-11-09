@@ -1,16 +1,17 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { setAnalysisRegions, setAnalysisFocusedRegionId, setNextAnalysisRegionId, setNextAnalysisColorIndex, sceneState, analysisRegions, analysisFocusedRegionId, currentLanguage, volumeAnalysisBusy, volume, current3DVolume, activeSeries } from './state.js?v=20261109-build701';
-import { analysisSummary, analysisRegionList, analysisMergeButton, analysisClearButton, planes } from './ui-shell.js?v=20261109-build701';
-import { tr } from './i18n.js?v=20261109-build701';
-import { spacingWarningHtml } from './slice-spacing.js?v=20261109-build701';
-import { analysisRegionById, updateAnalysisEditorControls } from './edit-tools.js?v=20261109-build701';
-import { analysisColorCss, schedulePlaneRender } from './mpr-render.js?v=20261109-build701';
-import { analysisRegionShown, analysisRegionSegmentsShown } from './segments.js?v=20261109-build701';
-import { request3DRender } from './scene3d.js?v=20261109-build701';
-import { dispose } from './surface-mesh.js?v=20261109-build701';
-import { setRegionLabel, setRegionLabelOffset, hasOffset, clampVoxel, onAnalysisLabelsChange, surfaceAnchor, voxelFromLocal3d } from './analysis-label.js?v=20261109-build701';
-import { analysisRunsContain } from './run-length.js?v=20261109-build701';
+import { setAnalysisRegions, setAnalysisFocusedRegionId, setNextAnalysisRegionId, setNextAnalysisColorIndex, sceneState, analysisRegions, analysisFocusedRegionId, currentLanguage, volumeAnalysisBusy, volume, current3DVolume, activeSeries } from './state.js?v=20261109-build702';
+import { analysisSummary, analysisRegionList, analysisMergeButton, analysisClearButton, planes } from './ui-shell.js?v=20261109-build702';
+import { tr } from './i18n.js?v=20261109-build702';
+import { REGION_NAME_MAX, normalizeRegionName, regionDisplayName } from './region-name.js?v=20261109-build702';
+import { spacingWarningHtml } from './slice-spacing.js?v=20261109-build702';
+import { analysisRegionById, updateAnalysisEditorControls } from './edit-tools.js?v=20261109-build702';
+import { analysisColorCss, schedulePlaneRender } from './mpr-render.js?v=20261109-build702';
+import { analysisRegionShown, analysisRegionSegmentsShown } from './segments.js?v=20261109-build702';
+import { request3DRender } from './scene3d.js?v=20261109-build702';
+import { dispose } from './surface-mesh.js?v=20261109-build702';
+import { setRegionLabel, setRegionLabelOffset, hasOffset, clampVoxel, onAnalysisLabelsChange, surfaceAnchor, voxelFromLocal3d } from './analysis-label.js?v=20261109-build702';
+import { analysisRunsContain } from './run-length.js?v=20261109-build702';
 export function analysisRegionRepresentativeVoxel(region){
  if(!region?.runsBySlice)return null;
  const nonEmpty=[];for(let z=0;z<region.runsBySlice.length;z++)if(region.runsBySlice[z]?.length)nonEmpty.push(z);
@@ -62,7 +63,7 @@ export function toggleAnalysisLabel(region){
 // the buttons follow a change made elsewhere (VR pins / unpins; a drag only matters when the label becomes moved / unmoved)
 onAnalysisLabelsChange(e=>{if(!e?.labelOnly||e.moveToggled)renderAnalysisResults()});
 export function analysisRegionName(region){
- return region.merged?(tr('mergedRegion')+' '+region.id):(tr('analysisRegion')+' '+region.id);
+ return regionDisplayName(region,r=>r.merged?(tr('mergedRegion')+' '+r.id):(tr('analysisRegion')+' '+r.id));
 }
 export function renderAnalysisResults(statusText=null){
  if(!analysisSummary||!analysisRegionList)return;
@@ -83,7 +84,15 @@ export function renderAnalysisResults(statusText=null){
    const volumeValue=document.createElement('strong');volumeValue.textContent=focused.mm3.toFixed(2)+' mm³';volumeValue.style.cssText='font-size:18px;line-height:1;color:rgb(var(--ui-t1));font-variant-numeric:tabular-nums;white-space:nowrap';
    volumeRow.append(volumeLabel,volumeValue);
    const meta=document.createElement('div');meta.textContent=focused.segmentKeys.map(k=>tr(k)||k).join(' + ')+' · '+focused.voxels.toLocaleString()+' voxels';meta.style.cssText='font-size:10px;line-height:1.35;color:rgb(var(--ui-t4));overflow-wrap:anywhere';
-   card.append(title,volumeRow,meta);
+   card.append(title);
+   {const nameRow=document.createElement('label');nameRow.className='analysis-region-name';
+    const nameText=document.createElement('span');nameText.textContent=tr('regionNameLabel');
+    const inp=document.createElement('input');inp.type='text';inp.maxLength=REGION_NAME_MAX;inp.value=focused.name||'';inp.placeholder=tr('regionNameLabel');inp.autocomplete='off';
+    const commit=()=>{const nv=normalizeRegionName(inp.value);inp.value=nv;if(nv===(focused.name||''))return;if(nv)focused.name=nv;else delete focused.name;renderAnalysisResults()};
+    inp.addEventListener('keydown',e=>{e.stopPropagation();if(e.key==='Enter'){e.preventDefault();inp.blur()}});inp.addEventListener('keyup',e=>e.stopPropagation());
+    inp.addEventListener('blur',commit);
+    nameRow.append(nameText,inp);card.append(nameRow)}
+   card.append(volumeRow,meta);
    // spacing used for the volume, plus the slice-spacing warning whenever one applies
    const v=current3DVolume||volume,sp=v?.spacing;
    if(sp){const used=document.createElement('div');used.textContent=(currentLanguage==='ja'?'ボクセル間隔 (x, y, z): ':'Voxel spacing (x, y, z): ')+sp.map(n=>(+n).toFixed(4).replace(/0+$/,'').replace(/\.$/,'')).join(' × ')+' mm';used.className='analysis-spacing-used';used.style.cssText='font-size:10px;line-height:1.35;color:rgb(var(--ui-t4));overflow-wrap:anywhere';card.append(used)}

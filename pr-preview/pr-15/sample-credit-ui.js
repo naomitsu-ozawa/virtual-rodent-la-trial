@@ -1,20 +1,28 @@
-// the credit box of a practice dataset with a license notice (sample-credits.js): shown in the データ panel while that dataset is open
+// the credit box of a practice dataset with a license notice (its sample.json: credit / license / changes / terms, read through sample-registry.js): shown in the データ panel while that dataset is open
 // (a 'vrl-event-sample-open' with its id), hidden when other data replaces it. Source and license are real links. Nothing is loaded from anywhere.
-import { tr } from './i18n.js?v=20261109-build701';
-import { sampleCredit } from './sample-credits.js?v=20261109-build701';
+// creditRows is also what the card's 「詳細」 (event-launcher.js) shows: the same four lines, the same existing label texts.
+import { tr } from './i18n.js?v=20261109-build702';
+import { sampleCredit } from './sample-registry.js?v=20261109-build702';
+// the lines of a credit (c = sampleCredit(id)): source (+ the data link when it is another one), license (+ link), changes, terms and the note (when the dataset has them)
+export function creditRows(doc, c) {
+ const el=(tag,cls,key)=>{const e=doc.createElement(tag);if(cls)e.className=cls;if(key){e.dataset.i18n=key;e.textContent=tr(key)}return e};
+ const link=(url,text)=>{const a=doc.createElement('a');a.href=url;a.textContent=text;a.target='_blank';a.rel='noopener noreferrer';return a};
+ const txt=t=>{const e=doc.createElement('span');e.textContent=t;return e};
+ const line=(labelKey,...parts)=>{const d=doc.createElement('div');d.append(el('span','',labelKey),...parts);return d};
+ const source=[txt(c.name),txt(' ('),link(c.url,c.url),txt(')')];
+ if(c.dataUrl&&c.dataUrl!==c.url)source.push(txt(' '),link(c.dataUrl,c.dataUrl));
+ const rows=[line('creditSource',...source),line('creditLicense',link(c.licenseUrl,c.licenseName)),line('creditChanges',el('span','',c.changesKey))];
+ if(c.termsKey)rows.push(el('div','',c.termsKey)); // terms are optional (CC0 has none)
+ if(c.noteKey)rows.push(el('div','',c.noteKey)); // an optional note of the dataset (sample.json note: e.g. the unit of the lengths); its text says what it is
+ return rows;
+}
 export function initSampleCreditUi(doc=document){
  let box=null,lastId=null;
  const el=(tag,cls,key)=>{const e=doc.createElement(tag);if(cls)e.className=cls;if(key){e.dataset.i18n=key;e.textContent=tr(key)}return e};
- const link=(url,text)=>{const a=doc.createElement('a');a.href=url;a.textContent=text;a.target='_blank';a.rel='noopener noreferrer';return a};
- const line=(labelKey,...parts)=>{const d=doc.createElement('div');d.append(el('span','',labelKey),...parts);return d};
  const build=c=>{
   const b=el('section','hint sample-credit');b.id='sample-credit';b.setAttribute('aria-labelledby','sample-credit-title');
   const title=el('div','','creditTitle');title.id='sample-credit-title';
-  b.append(title,
-   line('creditSource',el('span','',c.sourceKey),doc.createTextNode(' ('),link(c.sourceUrl,c.sourceUrl),doc.createTextNode(')')),
-   line('creditLicense',link(c.licenseUrl,c.licenseName)),
-   line('creditChanges',el('span','',c.changesKey)),
-   el('div','',c.termsKey));
+  b.append(title,...creditRows(doc,c));
   return b;
  };
  const show=id=>{

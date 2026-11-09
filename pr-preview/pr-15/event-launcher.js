@@ -6,12 +6,13 @@
 //   - below it the cards (one per dataset of event-mode.js EVENT_DATASETS) in an area that scrolls by itself
 // A card press opens the dataset through the page's own route ('vrl-event-sample' -> startSample), waits until the page is quiet, then prepares the VR data (prepareVrData + prepareVrGpu 'vr', the work of the
 // prepare panel) so that 「VRで見る」 starts with one press. Nothing is opened or prepared by itself when the page loads. With the mode off none of this exists (the elements go back where they were).
-import { tr } from './i18n.js?v=20261109-build701';
-import { EVENT_DATASETS, chooseEventLevel } from './event-mode.js?v=20261109-build701';
-import { eventCards, eventStatus, EVENT_STATUS_KEYS, openAndPrepare, waitForStandardOpen, createInflight } from './event-launcher-core.js?v=20261109-build701';
-import { settlePage } from './event-prepare-ui.js?v=20261109-build701';
-import { tutorialUiActive, restartTutorial } from './tutorial-ui.js?v=20261109-build701';
-import { sampleSliceUrl } from './sample-sets.js?v=20261109-build701';
+import { tr } from './i18n.js?v=20261109-build702';
+import { EVENT_DATASETS, chooseEventLevel } from './event-mode.js?v=20261109-build702';
+import { eventCards, eventStatus, EVENT_STATUS_KEYS, openAndPrepare, waitForStandardOpen, createInflight } from './event-launcher-core.js?v=20261109-build702';
+import { settlePage } from './event-prepare-ui.js?v=20261109-build702';
+import { tutorialUiActive, restartTutorial } from './tutorial-ui.js?v=20261109-build702';
+import { sampleSliceUrl } from './sample-sets.js?v=20261109-build702';
+import { creditRows } from './sample-credit-ui.js?v=20261109-build702';
 
 const MOVED = ['tutorial-start-button', 'vr-view-button', 'ar-view-button'];
 const XR_CHECK_MS = 10000;
@@ -128,10 +129,14 @@ export function createEventLauncher({ doc = globalThis.document, g = globalThis,
         const gb = el('button', 'event-card-go-btn', key); gb.type = 'button'; gb.dataset[flag] = ''; gb.onclick = () => doc.getElementById(id)?.click(); go.append(gb);
       }
       card.append(go);
-      if (c.license) { // only a dataset that carries a license notice (the marmoset): the existing credit texts + the license link of sample-credits.js
-        const p = el('p', 'event-card-license'), a = doc.createElement('a');
-        a.href = c.license.url; a.textContent = c.license.name; a.target = '_blank'; a.rel = 'noopener noreferrer';
-        p.append(el('span', '', 'creditLicense'), a); card.append(p);
+      if (c.credit) { // only a dataset whose sample.json carries a credit: a short line (source name + license link) and 「詳細」 with the four lines (source, license, changes, terms)
+        const box = el('div', 'event-card-license'), line = doc.createElement('div'), a = doc.createElement('a');
+        a.href = c.credit.licenseUrl; a.textContent = c.credit.licenseName; a.target = '_blank'; a.rel = 'noopener noreferrer';
+        const nm = doc.createElement('span'); nm.textContent = c.credit.name + ' · ';
+        line.append(el('span', '', 'creditSource'), nm, el('span', '', 'creditLicense'), a);
+        const more = doc.createElement('details');
+        more.append(el('summary', '', 'tutPanelDetail'), ...creditRows(doc, c.credit));
+        box.append(line, more); card.append(box);
       }
       area.append(card);
     }

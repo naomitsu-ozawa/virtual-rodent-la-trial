@@ -1,0 +1,28 @@
+{
+  "name": {
+    "ja": "マーモセット脳 MRI（50 µm）",
+    "en": "Marmoset brain MRI (50 µm)"
+  },
+  "level": null,
+  "description": {
+    "ja": "マーモセット脳 MRI（50 µm）",
+    "en": "Marmoset brain MRI (50 µm)"
+  },
+  "credit": {
+    "name": "Cirong Liu / Marmoset Brain Mapping",
+    "url": "https://www.scidb.cn/en/file?fid=6444dd2f292d4e32b96ea092&mode=front",
+    "dataUrl": "https://www.scidb.cn/en/file?fid=6444dd2f292d4e32b96ea092&mode=front"
+  },
+  "license": {
+    "name": "CC BY-NC-SA 4.0",
+    "url": "https://creativecommons.org/licenses/by-nc-sa/4.0/"
+  },
+  "changes": {
+    "ja": "元の3D画像ファイルから DICOM に変換、信号値を100万倍に換算、本アプリで3D再構成",
+    "en": "converted from the original 3D image file to DICOM; signal values scaled ×1,000,000; 3D reconstruction and rendering in this app"
+  },
+  "terms": {
+    "ja": "非営利目的のみ利用できます。改変物（セグメンテーション等）は同じライセンスで共有してください。",
+    "en": "Non-commercial use only. Adapted versions (e.g. segmentations) must be shared under the same license."
+  }
+}
