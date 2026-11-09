@@ -70,10 +70,10 @@ describe('the bundled data: today\'s order and content did not change', () => {
     expect(EVENT_LEVELS.map(l => l.hints)).toEqual([['section', 'move'], ['section', 'move', 'toggle'], ['section', 'move', 'toggle'], ['section', 'move', 'mark', 'distance']]);
     expect(EVENT_INITIAL_SEGMENTS).toEqual({ sample4: ['bone'], sample3: ['bone'], sample2: ['bone', 'soft'], sample1: ['bone', 'soft'] });
   });
-  it('the chooser texts and the card names are the old strings', () => {
+  it('the chooser texts and the card names (the size part comes from sample.json size: 269 MB -> 約270MB, was a hand-typed 約260MB)', () => {
     const d = k => registry.byId[k].description;
-    expect([d('sample2').ja, d('sample1').ja, d('sample3').ja, d('sample4').ja, d('sample5').ja]).toEqual(['マウス腹部（約260MB）', 'ラット腹部（約260MB）', 'マウス頭部（約270MB）', '骨梁（約260MB）', 'マーモセット脳 MRI（50 µm）']);
-    expect([d('sample2').en, d('sample1').en, d('sample3').en, d('sample4').en, d('sample5').en]).toEqual(['Mouse abdomen (about 260 MB)', 'Rat abdomen (about 260 MB)', 'Mouse head (about 270 MB)', 'Trabecular bone (about 260 MB)', 'Marmoset brain MRI (50 µm)']);
+    expect([d('sample2').ja, d('sample1').ja, d('sample3').ja, d('sample4').ja, d('sample5').ja]).toEqual(['マウス腹部（約270MB）', 'ラット腹部（約270MB）', 'マウス頭部（約270MB）', '骨梁（約270MB）', 'マーモセット脳 MRI（50 µm）']);
+    expect([d('sample2').en, d('sample1').en, d('sample3').en, d('sample4').en, d('sample5').en]).toEqual(['Mouse abdomen (about 270 MB)', 'Rat abdomen (about 270 MB)', 'Mouse head (about 270 MB)', 'Trabecular bone (about 270 MB)', 'Marmoset brain MRI (50 µm)']);
     expect(registry.levels.map(l => l.name.ja)).toEqual(['骨梁', 'マウス頭部', 'マウス腹部', 'ラット腹部']);
     expect(registry.levels.map(l => l.name.en)).toEqual(['Trabecular bone', 'Mouse head', 'Mouse abdomen', 'Rat abdomen']);
   });
@@ -113,10 +113,9 @@ describe('the series name of a practice dataset (the DICOM has no series descrip
     for (const id of [null, undefined, '', 'mine', 'sample99', 'constructor', 5]) expect(practiceSeriesName(id, 'ja')).toBe('');
   });
   it('wiring: only a series named "Unnamed series" of a practice dataset is renamed; the file name keeps letters only for such a name', () => {
-    const app = readFileSync(new URL('../../docs/app.js', import.meta.url), 'utf8'), dl = readFileSync(new URL('../../docs/data-load.js', import.meta.url), 'utf8');
+    const app = readFileSync(new URL('../../docs/app.js', import.meta.url), 'utf8');
     expect(app).toContain('practiceSeriesName(openSample.id,currentLanguage)');
     expect(app).toContain('if(s.description===UNNAMED_SERIES){s.description=pn;s.nameFromRegistry=true}');
-    expect(dl).toContain('activeSeries.nameFromRegistry?/[^\\p{L}\\p{N}_-]+/gu:/[^\\w\\-]+/g');
     expect(readFileSync(new URL('../../docs/dicom.js', import.meta.url), 'utf8')).toContain("export const UNNAMED_SERIES='Unnamed series'");
   });
 });

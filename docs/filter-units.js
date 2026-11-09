@@ -6,6 +6,8 @@
 // from the old parameter and the range the old code effectively used (see filterLegacyRange).
 // Pure module (no DOM) so that the unit tests and the signature can use it directly.
 
+import { HIST_MIN, HIST_MAX, isHuLike } from './histogram.js?v=20261109-build704';
+
 const round6 = x => Math.round(x * 1e6) / 1e6;
 const spanOf = range => Math.max(1, (range?.max ?? 0) - (range?.min ?? 0));
 const num = (x, d) => (Number.isFinite(+x) && x !== '' && x !== null && x !== undefined ? +x : d);
@@ -94,6 +96,20 @@ export const FILTER_UNITS = {
   },
 };
 
+// Data that is not in HU (MRI 0..65535, 8-bit 0..255, slope-scaled 0..28): the fixed HU defaults / slider ranges / steps above are written for the CT axis
+// (HIST_MIN..HIST_MAX = 4095 units wide), so on other data they are scaled by (the data's span / 4095). CT-like data (histogram.js isHuLike, the app's own rule) and an unknown range keep the CT values: the scale is exactly 1.
+export function unitScaleFor(range) {
+  const min = +range?.min, max = +range?.max;
+  if (!Number.isFinite(min) || !Number.isFinite(max) || isHuLike(min, max) || !(max > min)) return 1;
+  return (max - min) / (HIST_MAX - HIST_MIN);
+}
+const sig3 = x => (x === null || x === 0 || !Number.isFinite(x) ? x : +x.toPrecision(3));
+// the definition of one parameter at a scale k (1 = the CT values, the same object): def / min / max / step scaled, 0 and null kept
+export function scaledUnitDef(def, k) {
+  if (!def || k === 1) return def;
+  return { ...def, def: sig3(def.def * k), min: def.min === null ? null : sig3(def.min * k), max: def.max === null ? null : sig3(def.max * k), step: def.step === null ? null : sig3(def.step * k) };
+}
+
 // The range v.min / v.max a pre-447 project effectively used. It depends on the load path:
 //  - sourceBacked series, resident GPU volume prepared: the metadata range (sourceRangeFromMetadata(): DICOM tags, else
 //    the full bit-depth range with intercept)
@@ -114,8 +130,9 @@ export function legacyFilterValueHU(key, name, saved, range) {
 // is (never recomputed); a missing one is derived from the old parameters and the range, and if that is not possible
 // (range not finite) the new-project default is used and `fallback` is set. `derived` is empty for a new project.
 export function resolveFilterParams(key, saved, range) {
-  const out = { values: {}, derived: [] };
-  for (const [name, def] of Object.entries(FILTER_UNITS[key]?.params || {})) {
+  const out = { values: {}, derived: [] }, k = unitScaleFor(range);
+  for (const [name, base] of Object.entries(FILTER_UNITS[key]?.params || {})) {
+    const def = scaledUnitDef(base, k);
     const own = saved?.[name];
     if (own !== undefined && own !== null && own !== '' && isValidUnitValue(def, +own)) { out.values[name] = +own; continue; }
     const v = legacyFilterValueHU(key, name, saved, range);

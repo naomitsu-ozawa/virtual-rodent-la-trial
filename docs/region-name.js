@@ -19,3 +19,9 @@ export function regionCustomName(region){
 export function regionDisplayName(region,fallback){
  return regionCustomName(region)||(typeof fallback==='function'?fallback(region):fallback);
 }
+// the 3D chip's first text (PC / iPad pinned analysis label): "<number>. <name | ID atlasId | segment names joined with +>" (display only, same rule as the VR cards)
+// segName = the segment key -> its translated name (tr); a merged region just lists its segmentKeys
+export function regionChipTitle(region,segName){
+ const seg=()=>(region?.segmentKeys||[]).map(k=>(segName?segName(k):'')||k).join('+');
+ return region.id+'. '+regionDisplayName(region,seg);
+}

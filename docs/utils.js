@@ -17,11 +17,13 @@ export const clampRangeValue=(el,value)=>{
 export function withTimeout(promise,ms,timeoutValue){
  return Promise.race([promise,new Promise(resolve=>setTimeout(()=>resolve(timeoutValue),ms))]);
 }
-export function isIPhoneRuntime(){return /iPhone|iPod/i.test(navigator.userAgent||'')}
-export function isIPadRuntime(){return /iPad/i.test(navigator.userAgent||'')||((navigator.maxTouchPoints||0)>1&&/Mac/i.test(navigator.platform||''))}
-export function isDesktopRuntime(){return (navigator.maxTouchPoints||0)===0&&!isIPhoneRuntime()}
+export function isMacPlatformRuntime(){return /Mac/i.test(navigator.platform||'')}
+// A mobile OS in the UA (Android tablets / phones, Meta Quest browser): the same memory caps as the iPad.
+export function isMobileOsUserAgent(ua=navigator.userAgent||''){return /Android|OculusBrowser|Quest/i.test(ua)}
+export function isIPadRuntime(){return /iPad/i.test(navigator.userAgent||'')||((navigator.maxTouchPoints||0)>1&&isMacPlatformRuntime())}
+export function isDesktopRuntime(){return (navigator.maxTouchPoints||0)===0}
 export function isVrHeadsetRuntime(){return /OculusBrowser|\bQuest\b|\bPico\b|Wolvic/i.test(navigator.userAgent||'')}
-export function isTabletRuntime(){return isIPadRuntime()||/Android|OculusBrowser|Quest/i.test(navigator.userAgent||'')}
+export function isTabletRuntime(){return isIPadRuntime()||isMobileOsUserAgent()}
 export const frameYield=()=>new Promise(resolve=>setTimeout(resolve,0));
 // the next animation frame OR a timer, whichever comes first. The window's requestAnimationFrame does not run while a WebXR session is presented (the headset's own frame loop
 // takes over), so a step that awaits the page's rAF would stand still for as long as a VR session runs: the 2D uploads that run while the data is switched inside VR wait with this.
@@ -45,5 +47,3 @@ export function safePair(a){return[a[0],a[1]]}
 export function safeTriple(a){return[a[0],a[1],a[2]]}
 export function esc(v){return String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 
-// from data-load.js (STL export and project download)
-export function downloadBlob(blob,filename){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=filename;document.body.appendChild(a);a.click();const url=a.href;a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000)}

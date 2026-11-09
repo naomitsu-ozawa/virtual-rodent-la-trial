@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
 import { sampleSet, sampleIndexUrl, sampleSliceUrl, sampleCacheKey } from '../../docs/sample-sets.js';
-import { registry, sampleCredit } from '../../docs/sample-registry.js';
+import { registry, sampleCredit, sampleKey } from '../../docs/sample-registry.js';
 import { EVENT_LEVELS, EVENT_OTHER_SAMPLES, levelForSample, levelSwitchItems } from '../../docs/event-mode.js';
 import { I18N } from '../../docs/i18n.js';
 
@@ -47,12 +47,13 @@ describe('sample5 (marmoset brain MRI, 50 um): registration', () => {
 });
 
 describe('sample5: loading text', () => {
-  it('shows its own size; the other samples keep the generic text', () => {
-    expect(I18N.ja.sampleLoading5).toBe('練習データ（560×768×480、約410MB）を取得中…');
-    expect(I18N.en.sampleLoading5).toContain('560×768×480');
-    expect(I18N.en.sampleLoading5).toContain('410 MB');
-    expect(I18N.ja.sampleLoading).toContain('512×512×512');
-    expect(SRC('../../docs/app.js')).toContain("tr(setId==='sample5'?'sampleLoading5':'sampleLoading')");
+  it('shows its own size (from sample.json size); every dataset shows its real size, no dataset is special-cased', () => {
+    expect(I18N.ja[sampleKey('sample5', 'loading')]).toBe('練習データ（560×768×480、約410MB）を取得中…');
+    expect(I18N.en[sampleKey('sample5', 'loading')]).toBe('Loading practice data (560×768×480, about 410 MB)…');
+    expect(I18N.ja[sampleKey('sample1', 'loading')]).toBe('練習データ（512×512×512、約270MB）を取得中…');
+    expect(SRC('../../docs/app.js')).toContain('sampleLoadingTextFor(setId,tr)');
+    expect(SRC('../../docs/app.js')).not.toContain("setId==='sample5'");
+    expect(I18N.ja.sampleLoading5).toBeUndefined();
   });
 });
 

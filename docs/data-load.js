@@ -1,50 +1,54 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { SAMPLE_CACHE, DEFAULT_SAMPLE, sampleIndexUrl, sampleSliceUrl, sampleCacheKey } from './sample-sets.js?v=20261109-build703';
-import { mark3DStale, mark3DCurrent } from './three-state.js?v=20261109-build703';
-import { updateVolumeFilterBadge, set3DBusy, gpuVolumeRefresh } from './three-status.js?v=20261109-build703';
-import { analysisRegions, currentLanguage, current3DVolume, volume, activeSeries, threeRenderMode, sceneState, sourceVolume, setActiveId, setActiveSeries, activeId, setSourceVolume, setVolume, setThreeRenderMode, ipadGpuTargetSide, setResidentGpuUploadSeriesId, setResidentMprReadbackDisabled, residentGpuUploadSeriesId, gpuPrewarmScheduled, gpuPrewarmIndex, setGpuPrewarmScheduled, incGpuPrewarmIndex, setFilterOrder, setCtRangeMode, setCtRangeProfile, ctRangeProfile, incSourceRenderRevision, setThreeDCancelRequested, setCurrent3DVolume, setMemoryGpuPreviewActive, incResidentMprEpoch, ctRangeMode, filterOrder, threeDDirty } from './state.js?v=20261109-build703';
-import { footer, resetFilterBtn, wc, ww, surfaceSmoothEnabled, surfaceSmoothStrength, planes, spikeHoleStrength, spikeHoleThreshold, nlmStrength, nlmSearchRadius, nlmPatchRadius, anisotropicStrength, anisotropicIterations, smoothingType, gaussianStrength, spatialPasses, sigmoidStrength, sigmoidCenter, sigmoidWidth, bilateralStrength, bilateralSpatial, bilateralIntensity, bilateralPasses, tvWeight, tvIterations, unsharpRadius, unsharpAmount, unsharpThreshold, list, selected, prog, volumeAnalysisToggle, threeLabel, state, renderModeToggle, gaussianBtn, spikeHoleBtn, nlmBtn, anisotropicBtn, sigmoidBtn, bilateralBtn, tvBtn, unsharpBtn, filterAddSelect, filterAddButton, ctRangeAuto, ctRangeFull, $, progLabel, bar, anisotropicKappa, tvEps } from './ui-shell.js?v=20261109-build703';
-import { commentsForProject, loadProjectComments, markCommentsSaved } from './comments.js?v=20261109-build703';
-import { normalizeAnalysisLabel, setRegionLabel } from './analysis-label.js?v=20261109-build703';
-import { resetUserState } from './event-fresh.js?v=20261109-build703';
-import { segmentVisibilityPlan } from './event-mode.js?v=20261109-build703';
-import { measurementsForProject, loadProjectMeasurements, markMeasurementsSaved } from './measurements.js?v=20261109-build703';
-import { compareFingerprints, resolveProjectMatch, resolveProjectMatchAsync, legacySpacingUpgrade, datasetFingerprint, decodeRuns, packProject, PROJECT_EXTENSION, encodeRuns } from './project-file.js?v=20261109-build703';
-import { SEGMENT_PRESET_ORDER, segmentState, segmentEditState, segmentNeedsVoxelMask, segmentEditGen, segmentExclusive, applyExclusiveRanges, commitExclusiveRanges, SEGMENT_PRESET_DEFAULTS, segmentShadeRanges, clearSegmentShadeRanges, requestShadeAuto, resetShadeAutoForDataset } from './segments.js?v=20261109-build703';
-import { shadeRangesToProject, shadeRangesFromProject } from './cap-shade.js?v=20261109-build703'; // the per-segment cut-face shading ranges the user set (saved in the project)
-import { materialKey } from './lighting.js?v=20261109-build703';
-import { FILTER_CATALOG_ORDER, addFilter, applyVolumeAfterFilterRebuild, invalidateSourceFilters, syncFilterControls, setFilterUnitControl, formatHU } from './filter-pipeline.js?v=20261109-build703';
-import { sourceRangeFromMetadata } from './dicom.js?v=20261109-build703';
-import { spacingCheckForProject, spacingWarningText, spacingWarningHtml as spacingHtml } from './slice-spacing.js?v=20261109-build703';
-import { sizeWarningHtml } from './vr-real-scale.js?v=20261109-build703';
-import { FILTER_UNITS, filterLegacyRange, resolveFilterParams } from './filter-units.js?v=20261109-build703';
-import { smoothingSync, applyDeviceSmoothing } from './settings.js?v=20261109-build703';
-import { setControlValue, applyCtRangeMode, removeSegmentPreset, addSegmentPreset, segmentControl, setControlChecked, clearAnalysisHighlight, scheduleSegment3D, updateSegmentOutputs, renderSegmentPresets, THIN_SLIDERS, configureThinSliders } from './segment-ui.js?v=20261109-build703';
-import { syncGpuVolumeEdits, gpuVolumeApplied, gpuVolumeTarget, gpuVolumePlanOptions, updateVolumeCacheControl, gpuVolumeDataSignature } from './gpu-volume-data.js?v=20261109-build703';
-import { renderAll, cancelSourceMprWarmup } from './mpr-render.js?v=20261109-build703';
-import { updateAnalysisEditorControls } from './edit-tools.js?v=20261109-build703';
-import { request3DRender } from './scene3d.js?v=20261109-build703';
-import { downloadBlob, esc, fmt, isIPadRuntime, isIPhoneRuntime, isTabletRuntime, niceCtStep, withTimeout } from './utils.js?v=20261109-build703';
-import { decode, prepareSourceMprCache } from './volume-io.js?v=20261109-build703';
-import { progress, clearMemoryFilterPreviewCache, surfaceEditsPending } from './rebuild-3d.js?v=20261109-build703';
-import { ensureMpr3DPreviewCache, syncMpr3DSliceSliders, syncMpr3DOverlayPresentation, disposeMprPlaneGroup } from './mpr3d-overlay.js?v=20261109-build703';
-import { tr } from './i18n.js?v=20261109-build703';
-import { setGpuComputeBackend, gpuFilterRuntime, gpuFilterPipeline } from './gpu-compute.js?v=20261109-build703';
-import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.webgpu.js';
-import { GPU_IDLE_PREWARM_KINDS } from './gpu-shaders.js?v=20261109-build703';
-import { filterState, currentFilterSignature } from './source-filters.js?v=20261109-build703';
-import { loadStat, loadStatTime } from './load-stats.js?v=20261109-build703'; // what the load did (cache hits, ms) for the VR switch report
-import { dispose } from './surface-mesh.js?v=20261109-build703';
-import { residentMprJobs } from './mpr-orthogonal.js?v=20261109-build703';
-import { ensureSegmentBaseRuns } from './segment-runs.js?v=20261109-build703';
-import { APP_VERSION, APP_BUILD } from './version.js?v=20261109-build703';
-import { askInline } from './inline-ask.js?v=20261109-build703';
-import { setBusySlot, reportBusyProgress, setBusyLabel } from './progress-modal.js?v=20261109-build703';
-import { analysisRegionsForProject, restoreAnalysisRegions, clearAllSegmentEdits, getAtlasProvenance, setAtlasProvenance } from './analysis-ops.js?v=20261109-build703';
-import { regionNameFromEntry, normalizeRegionAtlasId } from './region-name.js?v=20261109-build703';
-import { resetLineProfileForDataset } from './line-profile-ui.js?v=20261109-build703';
-import { resetSegmentStyles } from './dataset-reset.js?v=20261109-build703';
+import { defaultSampleId } from './sample-registry.js?v=20261109-build704';
+import { SAMPLE_CACHE, sampleIndexUrl, sampleSliceUrl, sampleCacheKey } from './sample-sets.js?v=20261109-build704';
+import { mark3DStale, mark3DCurrent } from './three-state.js?v=20261109-build704';
+import { updateVolumeFilterBadge, set3DBusy, gpuVolumeRefresh } from './three-status.js?v=20261109-build704';
+import { three3DIsReady, waitThree3DReady, analysisRegions, currentLanguage, current3DVolume, volume, activeSeries, threeRenderMode, sceneState, sourceVolume, setActiveId, setActiveSeries, activeId, setSourceVolume, setVolume, setThreeRenderMode, ipadGpuTargetSide, setResidentGpuUploadSeriesId, setResidentMprReadbackDisabled, residentGpuUploadSeriesId, gpuPrewarmScheduled, gpuPrewarmIndex, setGpuPrewarmScheduled, incGpuPrewarmIndex, setFilterOrder, setCtRangeMode, setCtRangeProfile, ctRangeProfile, incSourceRenderRevision, setThreeDCancelRequested, setCurrent3DVolume, setMemoryGpuPreviewActive, incResidentMprEpoch, ctRangeMode, filterOrder, threeDDirty } from './state.js?v=20261109-build704';
+import { footer, resetFilterBtn, wc, ww, surfaceSmoothEnabled, surfaceSmoothStrength, planes, spikeHoleStrength, spikeHoleThreshold, nlmStrength, nlmSearchRadius, nlmPatchRadius, anisotropicStrength, anisotropicIterations, smoothingType, gaussianStrength, spatialPasses, sigmoidStrength, sigmoidCenter, sigmoidWidth, bilateralStrength, bilateralSpatial, bilateralIntensity, bilateralPasses, tvWeight, tvIterations, unsharpRadius, unsharpAmount, unsharpThreshold, list, selected, prog, volumeAnalysisToggle, threeLabel, state, renderModeToggle, gaussianBtn, spikeHoleBtn, nlmBtn, anisotropicBtn, sigmoidBtn, bilateralBtn, tvBtn, unsharpBtn, filterAddSelect, filterAddButton, ctRangeAuto, ctRangeFull, $, progLabel, bar, anisotropicKappa, tvEps } from './ui-shell.js?v=20261109-build704';
+import { commentsForProject, loadProjectComments, markCommentsSaved } from './comments.js?v=20261109-build704';
+import { normalizeAnalysisLabel, setRegionLabel } from './analysis-label.js?v=20261109-build704';
+import { resetUserState } from './event-fresh.js?v=20261109-build704';
+import { segmentVisibilityPlan } from './event-mode.js?v=20261109-build704';
+import { measurementsForProject, loadProjectMeasurements, markMeasurementsSaved } from './measurements.js?v=20261109-build704';
+import { compareFingerprints, resolveProjectMatch, resolveProjectMatchAsync, legacySpacingUpgrade, datasetFingerprint, decodeRuns, packProject, PROJECT_EXTENSION, encodeRuns } from './project-file.js?v=20261109-build704';
+import { SEGMENT_PRESET_ORDER, segmentState, segmentEditState, segmentNeedsVoxelMask, segmentEditGen, segmentExclusive, applyExclusiveRanges, commitExclusiveRanges, SEGMENT_PRESET_DEFAULTS, segmentShadeRanges, clearSegmentShadeRanges, requestShadeAuto, resetShadeAutoForDataset } from './segments.js?v=20261109-build704';
+import { shadeRangesToProject, shadeRangesFromProject } from './cap-shade.js?v=20261109-build704'; // the per-segment cut-face shading ranges the user set (saved in the project)
+import { materialKey } from './lighting.js?v=20261109-build704';
+import { FILTER_CATALOG_ORDER, addFilter, applyVolumeAfterFilterRebuild, invalidateSourceFilters, syncFilterControls, setFilterUnitControl, formatHU, applyFilterUnitRanges } from './filter-pipeline.js?v=20261109-build704';
+import { sourceRangeFromMetadata } from './dicom.js?v=20261109-build704';
+import { spacingCheckForProject, spacingWarningText, spacingWarningHtml as spacingHtml } from './slice-spacing.js?v=20261109-build704';
+import { sizeWarningHtml } from './vr-real-scale.js?v=20261109-build704';
+import { FILTER_UNITS, filterLegacyRange, resolveFilterParams } from './filter-units.js?v=20261109-build704';
+import { smoothingSync, applyDeviceSmoothing } from './settings.js?v=20261109-build704';
+import { setControlValue, applyCtRangeMode, removeSegmentPreset, addSegmentPreset, segmentControl, setControlChecked, clearAnalysisHighlight, scheduleSegment3D, updateSegmentOutputs, renderSegmentPresets, THIN_SLIDERS, configureThinSliders } from './segment-ui.js?v=20261109-build704';
+import { syncGpuVolumeEdits, gpuVolumeApplied, gpuVolumeTarget, gpuVolumePlanOptions, updateVolumeCacheControl, gpuVolumeDataSignature } from './gpu-volume-data.js?v=20261109-build704';
+import { renderAll, cancelSourceMprWarmup } from './mpr-render.js?v=20261109-build704';
+import { updateAnalysisEditorControls } from './edit-tools.js?v=20261109-build704';
+import { request3DRender } from './scene3d.js?v=20261109-build704';
+import { esc, fmt, isIPadRuntime, isTabletRuntime, niceCtStep, withTimeout } from './utils.js?v=20261109-build704';
+import { decode, prepareSourceMprCache, getDicomCodecModule, releaseDicomCodecWorkers, dicomCodecPoolSize } from './volume-io.js?v=20261109-build704';
+import { seriesNeedsNormalization, createFrameReader, normalizeSeries, releaseNormalizedExcept, NormalizeError, NORMALIZED_CAP_SMALL_DEVICE } from './dicom-normalize.js?v=20261109-build704';
+import { progress, clearMemoryFilterPreviewCache, surfaceEditsPending } from './rebuild-3d.js?v=20261109-build704';
+import { ensureMpr3DPreviewCache, syncMpr3DSliceSliders, syncMpr3DOverlayPresentation, disposeMprPlaneGroup } from './mpr3d-overlay.js?v=20261109-build704';
+import { tr } from './i18n.js?v=20261109-build704';
+import { setGpuComputeBackend, gpuFilterRuntime, gpuFilterPipeline } from './gpu-compute.js?v=20261109-build704';
+import * as THREE from './vendor/three@0.186.0/build/three.webgpu.js';
+import { GPU_IDLE_PREWARM_KINDS } from './gpu-shaders.js?v=20261109-build704';
+import { filterState, currentFilterSignature } from './source-filters.js?v=20261109-build704';
+import { loadStat, loadStatTime } from './load-stats.js?v=20261109-build704'; // what the load did (cache hits, ms) for the VR switch report
+import { dispose } from './surface-mesh.js?v=20261109-build704';
+import { residentMprJobs } from './mpr-orthogonal.js?v=20261109-build704';
+import { ensureSegmentBaseRuns } from './segment-runs.js?v=20261109-build704';
+import { APP_VERSION, APP_BUILD } from './version.js?v=20261109-build704';
+import { askInline } from './inline-ask.js?v=20261109-build704';
+import { setBusySlot, reportBusyProgress, setBusyLabel } from './progress-modal.js?v=20261109-build704';
+import { analysisRegionsForProject, restoreAnalysisRegions, clearAllSegmentEdits, getAtlasProvenance, setAtlasProvenance } from './analysis-ops.js?v=20261109-build704';
+import { regionNameFromEntry, normalizeRegionAtlasId } from './region-name.js?v=20261109-build704';
+import { CHILD_PARENT_KEYS, childSegmentsForProject, childSrcFromEntry } from './child-segments.js?v=20261109-build704';
+import { installChildSegments, resetChildSegmentsForDataset } from './child-segments-ui.js?v=20261109-build704';
+import { resetLineProfileForDataset } from './line-profile-ui.js?v=20261109-build704';
+import { resetSegmentStyles, onDatasetChange } from './dataset-reset.js?v=20261109-build704';
 export function updateRenderModeControl(v=volume){
  updateVolumeFilterBadge();
  if(!renderModeToggle)return;
@@ -110,8 +114,8 @@ export async function activateMedicalVolume(){
  try{
   const tEnsure=performance.now();await mv.ensure(target,planOptions);loadStat('volumeCacheHit',!!mv.lastCacheHit);loadStatTime('volumeMs',tEnsure);if(mv.lastCacheHit)footer.textContent=tr('volumeCacheLoaded');void updateVolumeCacheControl();ensureVolumeTransformProxy();setThreeRenderMode('volume');mv.setActive(true);syncGpuVolumeEdits(target);syncProcessedSegmentsToVolume();setThreeVolumeOverlay(true);syncMpr3DOverlayPresentation();volumeAnalysisToggle.disabled=false;
   const reduced=!!mv.isReduced?.(target),dims=mv.textureDims||[],profile=gpuVolumeProfileLabel();
-  threeLabel.textContent=(sceneState.backend||'3D')+(reduced?' · '+profile+' GPU volume':' · GPU volume');setGpuComputeBackend(reduced?'WEBGPU '+profile.toUpperCase()+' VOLUME RAYCAST · LINEAR':'WEBGPU VOLUME RAYCAST');updateRenderModeControl(target);request3DRender();
-  footer.textContent=reduced?(profile+' GPUボリューム · '+dims.join('×')+' · '+fmt(mv.textureBytes)+' · MPR/元データはフル解像度'):(currentLanguage==='ja'?'GPUボリューム · 16-bit CTを3D textureから直接描画':'GPU Volume · direct 16-bit CT 3D-texture ray casting');
+  threeLabel.textContent=(sceneState.backend||'3D')+(reduced?' · '+profile+' GPU volume':' · GPU volume');const gpuName=mv.drawsInScene?'WEBGL':'WEBGPU';setGpuComputeBackend(reduced?gpuName+' '+profile.toUpperCase()+' VOLUME RAYCAST · LINEAR':gpuName+' VOLUME RAYCAST');updateRenderModeControl(target);request3DRender();
+  footer.textContent=reduced?(profile+' GPUボリューム · '+dims.join('×')+' · '+fmt(mv.textureBytes)+' · MPR/元データはフル解像度'):(currentLanguage==='ja'?'GPUボリューム · '+(target?.series?.bits||16)+'-bit CTを3D textureから直接描画':'GPU Volume · direct '+(target?.series?.bits||16)+'-bit CT 3D-texture ray casting');
  }catch(e){console.error(e);mv.setActive(false);setThreeRenderMode('surface');setGpuComputeBackend('GPU VOLUME ERROR',e?.message||e);footer.textContent='GPU Volume error: '+String(e.message||e);updateRenderModeControl(target)}
  finally{set3DBusy(false)}
 }
@@ -123,7 +127,7 @@ export function clear3DForSeriesChange(){
 // practice dataset hosted on this site (docs/demo/sample1, 512 DICOM slices
 // listed in index.json). Same-origin, so it also opens on a Meta Quest without typing a
 // URL. The browser HTTP cache keeps it for the next visit.
-export async function loadSampleDemo(setId=DEFAULT_SAMPLE){
+export async function loadSampleDemo(setId=defaultSampleId()){
  loadPhase('練習データを取得中','practice data');progLabel.textContent='接続中…';bar.style.width='0%';
  const r=await fetch(sampleIndexUrl(setId),{credentials:'omit'});
  if(!r.ok)throw new Error('Sample index: HTTP '+r.status);
@@ -147,14 +151,7 @@ export async function loadSampleDemo(setId=DEFAULT_SAMPLE){
  return out;
 }
 export const detectedSeries={list:[]};
-export function useWorkspaceUi(){
- const q=new URLSearchParams(location.search).get('ui');
- if(q==='classic')return false;if(q==='workspace')return true;
- // the workspace UI everywhere but the iPhone (was iPad + Mac only)
- return !isIPhoneRuntime();
-}
 export function requestIPadSettingsTab(tab){
- if(!useWorkspaceUi())return;
  document.dispatchEvent(new CustomEvent('vrl-ipad-settings-tab',{detail:{tab}}));
 }
 // non-blocking slice-spacing warning shown with the selected series (wraps; fine on iPad)
@@ -168,10 +165,9 @@ export function refreshSpacingWarning(){
  const badge=selected.querySelector('.ready-badge');
  if(badge)badge.insertAdjacentHTML('beforebegin',html);else selected.insertAdjacentHTML('beforeend',html);
 }
-// small series (<=256 MiB decoded, e.g. 256^3 / 128^3 crops) were decoded into memory and never got the GPU volume,
-// so 3D waited for a rebuild; on PC they now take the source-backed path too (Mac / iPad / iPhone / Quest unchanged)
+const ONE_OPEN_PATH=true;
 function smallSeriesGpuVolume(s){
- if(s.sourceBacked||isTabletRuntime()||isIPhoneRuntime()||/Mac/i.test(navigator.platform||''))return false;
+ if(s.sourceBacked)return false;
  const mv=sceneState?.medicalVolume;return !!mv?.support(openSourceBackedVolume(s),gpuVolumePlanOptions()).ok;
 }
 // the ONE place where the per-dataset state is reset when another dataset is opened (another practice dataset without a page reload,
@@ -191,12 +187,42 @@ export function resetDatasetState(){
  clearAllSegmentEdits();
  clearSegmentShadeRanges(); // another dataset: every segment's shading range follows its segment again
  resetShadeAutoForDataset(); // ... and the auto values of the old data go (the new data's are computed when it is open)
+ resetChildSegmentsForDataset(); // the child segments belong to the data: another dataset, none
  for(const key of resetSegmentStyles(segmentState,SEGMENT_PRESET_DEFAULTS)){const el=segmentControl('material',key);if(el)el.value=segmentState[key].material} // the other controls follow configureSegments
 }
+// Compressed / deflated DICOM: decode every slice once into a 16-bit Blob (dicom-normalize.js), up to 4 at a time, with progress and a cancel button.
+// Returns false when the series was not opened (refused, failed, cancelled or another series was opened meanwhile): the message is on the card and in the footer.
+// The Blobs are released with the series on a dataset switch (the listener below).
+async function normalizeCompressedSeries(s){
+ const nameHtml='<strong>'+esc(s.description)+'</strong><span>'+esc(s.modality)+' · '+s.slices.length+' slices · '+s.columns+'×'+s.rows+'</span>';
+ selected.innerHTML=nameHtml+'<span class="ready-badge">'+esc(tr('dcmNormalizing'))+'</span>';
+ prog.classList.remove('is-hidden');busy(true);loadPhase('圧縮DICOMを展開中','decompressing DICOM');
+ let stopped=false;
+ setBusySlot('dicom-normalize',true,{label:tr('dcmNormalizing'),cancel:()=>{stopped=true}});
+ const codec={decode:async(ts,frame,pixelData)=>(await getDicomCodecModule()).decode(ts,frame,pixelData)}; // the codec workers start only for a codec syntax (not for RLE / deflate)
+ try{
+  await normalizeSeries(s,{readFrame:createFrameReader(s,codec),capBytes:isTabletRuntime()?NORMALIZED_CAP_SMALL_DEVICE:Infinity,concurrency:Math.min(4,dicomCodecPoolSize()),onProgress:(x,y)=>progress(x,y),isCancelled:()=>stopped||activeSeries!==s});
+  if(activeSeries!==s)return false;
+  return true;
+ }catch(e){
+  if(activeSeries!==s)return false; // superseded: that selection does the rest
+  console.error(e);
+  const msg=e instanceof NormalizeError?tr(e.key).replace('{size}',fmt(e.params.size||0)).replace('{limit}',fmt(e.params.limit||0)).replace('{detail}',e.params.detail||''):tr('dcmErrFailed').replace('{detail}',String(e?.message||e));
+  selected.innerHTML=nameHtml+'<span class="ready-badge">'+esc(msg)+'</span>';footer.textContent=msg;
+  return false;
+ }finally{setBusySlot('dicom-normalize',false);releaseDicomCodecWorkers();prog.classList.add('is-hidden');busy(false);set3DBusy(false)}
+}
+// another dataset is opened: the previous series' normalised slices go (its metas are the compressed originals again; selecting it later decodes it anew)
+if(typeof document!=='undefined')onDatasetChange(()=>releaseNormalizedExcept(activeSeries));
 export async function selectSeries(s){
  // per-dataset reset only for another series (the same card again re-decodes the same data and keeps its edits, as before)
  globalThis.__vrlVolumeReady=false; // the tutorial's guidance (tutorial-ui.js sampleReady) waits for this: true only when this function has finished preparing the volume (below)
- const prevSeries=activeSeries;setActiveId(s.id);setActiveSeries(s);clear3DForSeriesChange();if(s!==prevSeries)resetDatasetState();const sourceBacked=s.sourceBacked||smallSeriesGpuVolume(s);
+ if(!three3DIsReady)await waitThree3DReady(); // the GPU volume renderer is created after the 3D renderer starts: a series opened earlier would miss it (no GPU residency); waits a few seconds at most, then goes on as before
+ const prevSeries=activeSeries;setActiveId(s.id);setActiveSeries(s);clear3DForSeriesChange();if(s!==prevSeries)resetDatasetState();
+ 
+ // a compressed / deflated series is decoded once into 16-bit slices (dicom-normalize.js) BEFORE the GPU volume support is asked: from here on every reader sees plain uncompressed slices
+ if(seriesNeedsNormalization(s)&&!await normalizeCompressedSeries(s))return;
+ const sourceBacked=ONE_OPEN_PATH||s.sourceBacked||smallSeriesGpuVolume(s);
  requestIPadSettingsTab('display');
  for(const n of list.children)n.classList.toggle('is-selected',n.dataset.id===activeId);
  selected.innerHTML='<strong>'+esc(s.description)+'</strong><span>'+esc(s.modality)+' · '+s.slices.length+' slices · '+s.columns+'×'+s.rows+(sourceBacked?' · full resolution':'')+'</span>'+spacingWarningHtml(s)+'<span class="ready-badge">CT volume loading…</span>';
@@ -205,19 +231,21 @@ export async function selectSeries(s){
   invalidateSourceFilters();
   setSourceVolume(sourceBacked?openSourceBackedVolume(s):await decode(s,(x,y)=>progress(x,y)));
   setVolume(sourceVolume);phase='configure';configure(volume);applyDeviceSmoothing();enableProcessingControls(true);scheduleGpuPrewarm();
-  let gpuResident=false;
+  let gpuResident=false,residentMpr=false;
   if(sourceBacked){
    const badge=selected.querySelector('.ready-badge');if(badge)badge.textContent='GPU volume…';loadPhase('GPUボリュームを準備中','GPU volume');
    gpuResident=await prepareResidentGpuVolume(sourceVolume);
    // another series was opened during this upload (it was superseded): that selection does the rest
    if(!gpuResident&&activeSeries!==s)return;
-   if(!gpuResident){
+   // the WebGL volume (webgl-volume.js) draws the 3D view only: the MPR planes come from the MPR cache, as without a resident volume
+   residentMpr=gpuResident&&!sceneState?.medicalVolume?.drawsInScene;
+   if(!residentMpr){
     if(badge)badge.textContent='MPR cache…';loadPhase('MPRキャッシュを作成中','MPR cache');
-    await prepareSourceMprCache(sourceVolume,(x,y)=>{progress(x,y);const b=selected.querySelector('.ready-badge');if(b)b.textContent='MPR cache '+x+' / '+y});
+    await prepareSourceMprCache(sourceVolume,(x,y)=>{progress(x,y);const b=selected.querySelector('.ready-badge');if(b)b.textContent='MPR cache '+x+' / '+y});applyFilterUnitRanges({min:sourceVolume.min,max:sourceVolume.max}); // the cache rewrote the range from the metadata one to the data's own: the filter sliders follow it (no change when the scale is the same)
    }
   }
   const badge=selected.querySelector('.ready-badge');
-  if(!gpuResident){if(badge)badge.textContent='3D C/S cache…';loadPhase('3D断面キャッシュを作成中','3D section cache');await ensureMpr3DPreviewCache()}
+  if(!residentMpr){if(badge)badge.textContent='3D C/S cache…';loadPhase('3D断面キャッシュを作成中','3D section cache');await ensureMpr3DPreviewCache()}
   phase='render';renderAll();mark3DStale();
   if(gpuResident){await activateMedicalVolume();mark3DCurrent()}
   if(badge)badge.textContent=sourceBacked?(gpuResident?'CT source ready · GPU volume':(volume.mprData?'CT source ready · MPR cached':'CT source ready · streaming MPR')):'CT volume ready · 2D ready';
@@ -233,7 +261,6 @@ export function openSourceBackedVolume(s){
  return{data:null,mprData:null,mprPlaneBuffers:null,mprSagittalDisplayAll:null,mprSagittalDisplayBuffer:null,mprSagittalDisplayMin:null,mprSagittalDisplayMax:null,sourceBacked:true,series:s,columns:s.columns,rows:s.rows,slices:s.slices.length,spacing:[s.spacingX,s.spacingY,s.spacingZ],min:s.min,max:s.max,windowCenter:s.windowCenter,windowWidth:s.windowWidth,storage:'DICOM source'};
 }
 export function gpuVolumeProfileLabel(){
- if(isIPhoneRuntime())return'iPhone';
  return(isIPadRuntime()?'iPad ':isTabletRuntime()?'tablet ':'GPU ')+(ipadGpuTargetSide||'full');
 }
 export function clearResidentMprJobs(){
@@ -292,7 +319,7 @@ export function buildCtRangeProfile(v){
  return{fullMin,fullMax,fullSpan,center,width,fullWidthMax:Math.max(fullSpan,width)};
 }
 export function configure(v){
- setCtRangeMode('auto');setCtRangeProfile(buildCtRangeProfile(v));
+ setCtRangeMode('auto');setCtRangeProfile(buildCtRangeProfile(v));applyFilterUnitRanges({min:v.min,max:v.max}); // the HU sliders follow the data range when it is not CT-like (CT: unchanged); here the metadata range of a source-backed series (the fallback), replaced by the data's own range once the MPR cache has measured it (below)
  const p=ctRangeProfile,center=p.center,initialWidth=p.width;
  wc.min=p.fullMin;wc.max=p.fullMax;wc.value=Math.max(p.fullMin,Math.min(p.fullMax,center));wc.disabled=false;
  ww.min=Math.max(niceCtStep(p.fullSpan),1e-6);ww.max=p.fullWidthMax;ww.value=Math.max(+ww.min,Math.min(p.fullWidthMax,initialWidth));ww.disabled=false;
@@ -312,9 +339,9 @@ export function configureSegments(v){
   // processed mask is a whole-volume pass, so it runs only when asked for
   cfg.surfaceMm=0;cfg.thicknessMm=0;configureThinSliders(key,v);
   const enabled=$('[data-seg-enabled="'+key+'"]'),color=$('[data-seg-color="'+key+'"]'),min=$('[data-seg-min="'+key+'"]'),max=$('[data-seg-max="'+key+'"]'),opacity=$('[data-seg-opacity="'+key+'"]');
-  const exportBtn=$('[data-seg-export="'+key+'"]'),removeBtn=$('[data-seg-remove="'+key+'"]'),opening=$('[data-seg-opening="'+key+'"]'),closing=$('[data-seg-closing="'+key+'"]'),minComponent=$('[data-seg-min-component="'+key+'"]'),holeFill=$('[data-seg-hole-fill="'+key+'"]');
+  const removeBtn=$('[data-seg-remove="'+key+'"]'),opening=$('[data-seg-opening="'+key+'"]'),closing=$('[data-seg-closing="'+key+'"]'),minComponent=$('[data-seg-min-component="'+key+'"]'),holeFill=$('[data-seg-hole-fill="'+key+'"]');
   const usable=cfg.active;
-  enabled.disabled=color.disabled=min.disabled=max.disabled=opacity.disabled=!usable;opening.disabled=closing.disabled=minComponent.disabled=holeFill.disabled=!usable;for(const [attr] of THIN_SLIDERS){const el=$('[data-seg-'+attr+'="'+key+'"]');if(el)el.disabled=!usable}if(exportBtn)exportBtn.disabled=!usable;if(removeBtn)removeBtn.disabled=!usable;enabled.checked=cfg.enabled;color.value=cfg.color;
+  enabled.disabled=color.disabled=min.disabled=max.disabled=opacity.disabled=!usable;opening.disabled=closing.disabled=minComponent.disabled=holeFill.disabled=!usable;for(const [attr] of THIN_SLIDERS){const el=$('[data-seg-'+attr+'="'+key+'"]');if(el)el.disabled=!usable}if(removeBtn)removeBtn.disabled=!usable;enabled.checked=cfg.enabled;color.value=cfg.color;
   min.min=max.min=Math.floor(v.min);min.max=max.max=Math.ceil(v.max);min.value=cfg.min;max.value=cfg.max;opacity.value=cfg.opacity;opening.value=cfg.opening;closing.value=cfg.closing;minComponent.value=cfg.minComponent;holeFill.checked=cfg.holeFill;$('[data-seg-opening-out="'+key+'"]').value=cfg.opening;$('[data-seg-closing-out="'+key+'"]').value=cfg.closing;$('[data-seg-min-component-out="'+key+'"]').value=cfg.minComponent;cfg._maskCache=null;updateSegmentOutputs(key);
  }
  // new data: no overlaps, the default card order
@@ -359,6 +386,8 @@ export function gatherProject(){
  // analysis results (colour, flags, voxels as runs); volumes are recomputed on load
  const regions=analysisRegionsForProject();
  if(regions.length)project.analysis={regions:regions.map((r,i)=>{const path='analysis/region-'+(i+1)+'.bin';binaries[path]=encodeRuns(r.runsBySlice,slices);const{runsBySlice,...meta}=r;return{...meta,runs:path}})};
+ // the child segments of the tree (name, parent, colour, show flag, opacity, material, shading range, atlasId, mask as runs); they are NOT analysis regions. No project version bump: an older app ignores the field, an older file has none
+ {const kids=childSegmentsForProject();if(kids.length)project.treeSegments=kids.map(({entry,runsBySlice},i)=>{const path='treesegments/seg-'+(i+1)+'.bin';binaries[path]=encodeRuns(runsBySlice,slices);return{...entry,runs:path}})}
  {const ap=getAtlasProvenance();if(ap)project.atlasProvenance=ap} // kept as loaded, never shown (no project version bump)
  return{project,binaries};
 }
@@ -392,7 +421,12 @@ export async function applyProject({project,files}){
   for(const kind of['keep','exclude'])if(entry?.[kind]){const bytes=files[entry[kind]];if(!bytes)throw new Error('missing '+entry[kind]);edits[key][kind]=decodeRuns(bytes,dims)}
  }
  // analysis results (projects before 408 have none)
- const analysis=[];
+ const analysis=[],childSrcs=[];
+ // the child segments of the tree come ONLY from project.treeSegments (their own array: the analysis regions below load exactly as before)
+ for(const e of project.treeSegments||[]){
+  if(!e||!CHILD_PARENT_KEYS.includes(e.parentKey))continue;const bytes=files[e.runs];if(!bytes)throw new Error('missing '+e.runs);
+  childSrcs.push(childSrcFromEntry(e,decodeRuns(bytes,dims)));
+ }
  for(const e of project.analysis?.regions||[]){
   const keys=(e.segmentKeys||[]).filter(k=>SEGMENT_PRESET_ORDER.includes(k));if(!keys.length)continue;
   const bytes=files[e.runs];if(!bytes)throw new Error('missing '+e.runs);
@@ -426,6 +460,8 @@ export async function applyProject({project,files}){
   if(!g.active){if(segmentState[key].active)removeSegmentPreset(key);continue}
   if(!segmentState[key].active)addSegmentPreset(key);
   setControlValue(segmentControl('color',key),g.color);
+  // the range sliders follow the data's window (ctRangeMode 'auto' narrows them around the current value; a source-backed series, now every series, has the metadata window): widen them to hold the saved range first, or the slider clamps the shown value
+  for(const kind of ['min','max']){const el=segmentControl(kind,key);if(!el)continue;for(const x of [+g.min,+g.max])if(Number.isFinite(x)){if(x<+el.min)el.min=String(Math.floor(x));if(x>+el.max)el.max=String(Math.ceil(x))}}
   setControlValue(segmentControl('max',key),g.max);setControlValue(segmentControl('min',key),g.min);setControlValue(segmentControl('max',key),g.max);
   setControlValue(segmentControl('opacity',key),g.opacity);setControlValue(segmentControl('opening',key),g.opening);
   setControlValue(segmentControl('closing',key),g.closing);setControlValue(segmentControl('min-component',key),g.minComponent);
@@ -463,6 +499,7 @@ export async function applyProject({project,files}){
   applyVolumeAfterFilterRebuild.value=true; // see rebuildActiveFilters
  }
  clearAnalysisHighlight();renderAll();scheduleSegment3D();updateAnalysisEditorControls();updateVolumeFilterBadge();
+ installChildSegments(childSrcs); // (child-segments-ui.js: the list is replaced, the parents are rebuilt without them, the rows / surfaces follow)
  if(analysis.length)await restoreAnalysisRegions(analysis);
 }
 // 体験会モード, the VR 「最初の状態に戻す」 button: the annotations of the open practice data go back to what its project file holds, IN PLACE (no decode, no GPU upload:
@@ -499,7 +536,6 @@ export function restoreProjectAnnotations(parsed){
  return true;
 }
 // moved to utils.js (analysis-ops.js needs it without importing data-load.js)
-export { downloadBlob };
 // loading (practice data, series decode) in the progress modal; calls are paired
 // phase of the running load in the modal title (the side-panel texts sit behind the modal)
 export function loadPhase(ja,en){setBusyLabel('load',currentLanguage==='en'?'Loading data · '+en:'データを読み込み中 · '+ja)}

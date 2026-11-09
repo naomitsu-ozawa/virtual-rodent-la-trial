@@ -1,17 +1,18 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { setAnalysisRegions, setAnalysisFocusedRegionId, setNextAnalysisRegionId, setNextAnalysisColorIndex, sceneState, analysisRegions, analysisFocusedRegionId, currentLanguage, volumeAnalysisBusy, volume, current3DVolume, activeSeries } from './state.js?v=20261109-build703';
-import { analysisSummary, analysisRegionList, analysisMergeButton, analysisClearButton, planes } from './ui-shell.js?v=20261109-build703';
-import { tr } from './i18n.js?v=20261109-build703';
-import { REGION_NAME_MAX, normalizeRegionName, regionDisplayName } from './region-name.js?v=20261109-build703';
-import { spacingWarningHtml } from './slice-spacing.js?v=20261109-build703';
-import { analysisRegionById, updateAnalysisEditorControls } from './edit-tools.js?v=20261109-build703';
-import { analysisColorCss, schedulePlaneRender } from './mpr-render.js?v=20261109-build703';
-import { analysisRegionShown, analysisRegionSegmentsShown } from './segments.js?v=20261109-build703';
-import { request3DRender } from './scene3d.js?v=20261109-build703';
-import { dispose } from './surface-mesh.js?v=20261109-build703';
-import { setRegionLabel, setRegionLabelOffset, hasOffset, clampVoxel, onAnalysisLabelsChange, surfaceAnchor, voxelFromLocal3d } from './analysis-label.js?v=20261109-build703';
-import { analysisRunsContain } from './run-length.js?v=20261109-build703';
+import { setAnalysisRegions, setAnalysisFocusedRegionId, setNextAnalysisRegionId, setNextAnalysisColorIndex, sceneState, analysisRegions, analysisFocusedRegionId, currentLanguage, volumeAnalysisBusy, volume, current3DVolume, activeSeries } from './state.js?v=20261109-build704';
+import { analysisSummary, analysisRegionList, analysisMergeButton, analysisClearButton, planes } from './ui-shell.js?v=20261109-build704';
+import { tr } from './i18n.js?v=20261109-build704';
+import { REGION_NAME_MAX, normalizeRegionName, regionDisplayName } from './region-name.js?v=20261109-build704';
+import { spacingWarningHtml } from './slice-spacing.js?v=20261109-build704';
+import { analysisRegionById, updateAnalysisEditorControls } from './edit-tools.js?v=20261109-build704';
+import { analysisColorCss, schedulePlaneRender } from './mpr-render.js?v=20261109-build704';
+import { analysisRegionShown, analysisRegionSegmentsShown } from './segments.js?v=20261109-build704';
+import { request3DRender } from './scene3d.js?v=20261109-build704';
+import { dispose } from './surface-mesh.js?v=20261109-build704';
+import { setRegionLabel, setRegionLabelOffset, hasOffset, clampVoxel, onAnalysisLabelsChange, surfaceAnchor, voxelFromLocal3d } from './analysis-label.js?v=20261109-build704';
+import { analysisRunsContain } from './run-length.js?v=20261109-build704';
+import { setRegionVisible, onRegionVisibleChange } from './region-visibility.js?v=20261109-build704';
 export function analysisRegionRepresentativeVoxel(region){
  if(!region?.runsBySlice)return null;
  const nonEmpty=[];for(let z=0;z<region.runsBySlice.length;z++)if(region.runsBySlice[z]?.length)nonEmpty.push(z);
@@ -62,6 +63,15 @@ export function toggleAnalysisLabel(region){
 }
 // the buttons follow a change made elsewhere (VR pins / unpins; a drag only matters when the label becomes moved / unmoved)
 onAnalysisLabelsChange(e=>{if(!e?.labelOnly||e.moveToggled)renderAnalysisResults()});
+// the one place that applies a region's shown flag in the browser (region-visibility.js: the analysis list, the segment tree and VR all set it through setRegionVisible): the mesh follows
+// (analysisRegionShown: also its segments), the 3D and the 2D views redraw, the lists follow
+onRegionVisibleChange(region=>{
+ if(region.meshGroup)region.meshGroup.visible=analysisRegionShown(region);
+ request3DRender();for(const p of Object.keys(planes))schedulePlaneRender(p);renderAnalysisResults();
+});
+// views that list the regions elsewhere (the segment cards' tree, segment-ui.js) redraw with the list
+const renderHooks=[];
+export function onAnalysisResultsRendered(fn){renderHooks.push(fn)}
 export function analysisRegionName(region){
  return regionDisplayName(region,r=>r.merged?(tr('mergedRegion')+' '+r.id):(tr('analysisRegion')+' '+r.id));
 }
@@ -88,7 +98,8 @@ export function renderAnalysisResults(statusText=null){
    {const nameRow=document.createElement('label');nameRow.className='analysis-region-name';
     const nameText=document.createElement('span');nameText.textContent=tr('regionNameLabel');
     const inp=document.createElement('input');inp.type='text';inp.maxLength=REGION_NAME_MAX;inp.value=focused.name||'';inp.placeholder=tr('regionNameLabel');inp.autocomplete='off';
-    const commit=()=>{const nv=normalizeRegionName(inp.value);inp.value=nv;if(nv===(focused.name||''))return;if(nv)focused.name=nv;else delete focused.name;renderAnalysisResults()};
+    // the pinned 3D chip shows the name: redraw it now (the 3D view renders on demand)
+    const commit=()=>{const nv=normalizeRegionName(inp.value);inp.value=nv;if(nv===(focused.name||''))return;if(nv)focused.name=nv;else delete focused.name;request3DRender();renderAnalysisResults()};
     inp.addEventListener('keydown',e=>{e.stopPropagation();if(e.key==='Enter'){e.preventDefault();inp.blur()}});inp.addEventListener('keyup',e=>e.stopPropagation());
     inp.addEventListener('blur',commit);
     nameRow.append(nameText,inp);card.append(nameRow)}
@@ -122,10 +133,11 @@ export function renderAnalysisResults(statusText=null){
   const visible=document.createElement('button');visible.type='button';visible.className='analysis-region-button';visible.textContent=region.visible?tr('hideRegion'):tr('showRegion');
   // its segments all unticked: the region is hidden with them, so the button rests (greyed, says why) until a segment is ticked
   if(!analysisRegionSegmentsShown(region)){visible.disabled=true;visible.title=tr('regionSegmentHidden')}
-  visible.onclick=()=>{region.visible=!region.visible;if(region.meshGroup)region.meshGroup.visible=analysisRegionShown(region);request3DRender();renderAnalysisResults()};
+  visible.onclick=()=>setRegionVisible(region,!region.visible);
   const remove=document.createElement('button');remove.type='button';remove.className='analysis-region-button analysis-region-delete';remove.textContent=tr('deleteRegion');remove.onclick=()=>removeAnalysisRegion(region.id);
   row.append(select,swatch,info,visible,remove);analysisRegionList.append(row);
  }
+ for(const fn of renderHooks){try{fn()}catch(e){console.warn('[analysis-results] hook',e)}}
 }
 export function disposeAnalysisRegionMesh(region){
  if(!region?.meshGroup)return;if(region.meshGroup.parent)region.meshGroup.parent.remove(region.meshGroup);dispose(region.meshGroup);region.meshGroup=null;

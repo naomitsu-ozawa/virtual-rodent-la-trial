@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import * as L from '../../docs/lighting.js';
 import { volumeShader } from '../../docs/medical-volume.js';
-import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.webgpu.js';
+import * as THREE from 'three/webgpu';
 
 // one lighting model for the desktop WebGPU volume, the VR / AR volume and the 3D-view meshes (docs/lighting.js).
 const read = f => readFileSync(new URL('../../docs/' + f, import.meta.url), 'utf8');

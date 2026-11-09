@@ -4,6 +4,7 @@ import globals from 'globals';
 // longer exist after code moves between modules (no-undef), broken imports
 // and duplicate declarations. Intentionally minimal — not a style linter.
 export default [
+  { ignores: ['docs/vendor/**'] }, // third-party code (tools/vendor-libs.mjs), not linted
   {
     files: ['docs/**/*.js'],
     languageOptions: {

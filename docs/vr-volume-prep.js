@@ -10,10 +10,10 @@
 //                     distance field, the combined texture's bytes for the shown mask, brick occupancy of the mask-only segments)
 // The worker is a Blob made from this site's own functions (the same way as vr-combo-rebuild.js); the data goes in and comes back by
 // transfer (no second copy of a 512 MB array is ever held). Without a Worker (tests) the same job runs on the calling thread.
-import { buildClsData } from './point-cls.js?v=20261109-build703';
-import { chamferDistanceBytes, combineClassificationDistance, fourthChannelBytes } from './distance-field.js?v=20261109-build703';
-import { brickOccupancy, cellRange } from './vr-brick-occupancy.js?v=20261109-build703';
-import { gpuRunsForTexture, gpuRunRowMapToSlice, gpuLowerBound, gpuUpperBound, gpuDilateRuns } from './gpu-runs.js?v=20261109-build703';
+import { buildClsData } from './point-cls.js?v=20261109-build704';
+import { chamferDistanceBytes, combineClassificationDistance, fourthChannelBytes } from './distance-field.js?v=20261109-build704';
+import { brickOccupancy, cellRange } from './vr-brick-occupancy.js?v=20261109-build704';
+import { gpuRunsForTexture, gpuRunRowMapToSlice, gpuLowerBound, gpuUpperBound, gpuDilateRuns } from './gpu-runs.js?v=20261109-build704';
 
 export const BRICK = 8;
 
@@ -67,15 +67,33 @@ export function buildEditMaskOf(descs, sourceDims, dims) {
 export function buildRegionIndexOf(items, sourceDims, dims) {
   if (!items.length) return { data: null, colors: [], segs: [], list: [] };
   const w = dims[0], h = dims[1], d = dims[2], colors = [], segs = [], data = new Uint8Array(w * h * d), ids = new Uint8Array(w * h * d), list = [];
+  // ids = the result's list position + 1 per voxel (up to 255 results; a later result wins where two overlap) = what the GPU reads;
+  // data = the colour index (1..14 distinct colours) per voxel, only for the label histogram, which counts by colour (a result whose colour is the 15th is in ids but not in data)
   for (const r of items) {
-    const c = Number(r.color) >>> 0; let k = colors.indexOf(c); if (k < 0) { if (colors.length >= 14) continue; colors.push(c); segs.push(0); k = colors.length - 1; }
-    segs[k] |= r.segMask | 0;
-    const runs = gpuRunsForTexture(r.runsBySlice, sourceDims, dims, { dilate: 0 });
     if (list.length >= 255) break; const id = list.length + 1;
-    for (let z = 0; z < d; z++) { const rec = runs ? runs[z] : null; if (!rec || !rec.length) continue; for (let i = 0; i < rec.length; i += 3) { const o = (z * h + rec[i]) * w; data.fill(k + 1, o + rec[i + 1], o + rec[i + 2] + 1); ids.fill(id, o + rec[i + 1], o + rec[i + 2] + 1); } }
-    list.push({ color: c, mm3: r.mm3, segmentKeys: r.segmentKeys.slice(), rid: r.rid });
+    const c = Number(r.color) >>> 0; let k = colors.indexOf(c); if (k < 0 && colors.length < 14) { colors.push(c); segs.push(0); k = colors.length - 1; }
+    if (k >= 0) segs[k] |= r.segMask | 0;
+    const runs = gpuRunsForTexture(r.runsBySlice, sourceDims, dims, { dilate: 0 });
+    for (let z = 0; z < d; z++) { const rec = runs ? runs[z] : null; if (!rec || !rec.length) continue; for (let i = 0; i < rec.length; i += 3) { const o = (z * h + rec[i]) * w; if (k >= 0) data.fill(k + 1, o + rec[i + 1], o + rec[i + 2] + 1); ids.fill(id, o + rec[i + 1], o + rec[i + 2] + 1); } }
+    list.push({ color: c, mm3: r.mm3, segmentKeys: r.segmentKeys.slice(), rid: r.rid, segMask: r.segMask | 0 }); // segMask: the slot bits as prepared (the session's look-up table / histogram use these, not the runtime slot order)
   }
   return { data: colors.length ? data : null, ids: colors.length ? ids : null, colors, segs, list };
+}
+
+// the CHILD SEGMENTS of the tree on the grid, in an index of their own (never the results' ids): items = [{key, segMask (bit s = the parent's GPU slot), runsBySlice}] -> {ids: 1..N per voxel (a later child wins where
+// two overlap; up to 255), list: [{key, segMask, hash}] (hash = the mask's revision, to tell later whether the prepared list still matches the page's) (entry i + 1 of the child look-up table)}. Only the masks are prepared: colour, range and the shown flag are read at run time. Self-contained (also the worker's source).
+export function buildChildIndexOf(items, sourceDims, dims) {
+  if (!items || !items.length) return null;
+  const w = dims[0], h = dims[1], d = dims[2], ids = new Uint8Array(w * h * d), list = [];
+  // on a REDUCED grid the mask is dilated by one voxel (as the processing mask's exclude runs are): a coarse voxel the child only touches still belongs to it, so a hidden child leaves no sliver of its surface; same grid: no dilation
+  const dilate = sourceDims[0] !== dims[0] || sourceDims[1] !== dims[1] || sourceDims[2] !== dims[2] ? 1 : 0;
+  for (const r of items) {
+    if (list.length >= 255) break; const id = list.length + 1;
+    const runs = gpuRunsForTexture(r.runsBySlice, sourceDims, dims, { dilate });
+    for (let z = 0; z < d; z++) { const rec = runs ? runs[z] : null; if (!rec || !rec.length) continue; for (let i = 0; i < rec.length; i += 3) { const o = (z * h + rec[i]) * w; ids.fill(id, o + rec[i + 1], o + rec[i + 2] + 1); } }
+    list.push({ key: r.key, segMask: r.segMask | 0, hash: r.hash || '' });
+  }
+  return { dims, ids, list, dropped: Math.max(0, items.length - list.length) }; // dropped: children past the 255th (the look-up table has 255 rows): the caller warns, never silently
 }
 
 // distance-field.js buildDistanceBytes without the yields (it runs in the worker); progress(done, total) between channels
@@ -113,6 +131,7 @@ export function prepRun(m, post) {
       let em; try { em = buildEditMaskOf(m.editDescs, m.editSourceDims, m.dims); } catch (e) { em = { activeMask: 0, maskOnly: 0, data: null }; warnings.push('processing mask: ' + String((e && e.message) || e)); }
       const edit = { data: em.data, dims: m.dims, active: em.activeMask, maskOnly: em.maskOnly };
       let region; try { region = buildRegionIndexOf(m.regionItems, m.editSourceDims, m.dims); } catch (e) { region = { data: null, colors: [], segs: [], list: [] }; warnings.push('analysis index: ' + String((e && e.message) || e)); }
+      let child = null; try { child = buildChildIndexOf(m.childItems, m.editSourceDims, m.dims); } catch (e) { warnings.push('child index: ' + String((e && e.message) || e)); }
       const cls = buildClsData({ dims: m.dims, data: src }, m.calib, edit, m.state, m.order);
       let dist = null, combo = null, cls4 = null;
       if (cls) {
@@ -122,15 +141,15 @@ export function prepRun(m, post) {
         if (four) cls4 = fourthChannelBytes(cls);
       }
       const occFull = brickOccupancy(edit, m.brickDimsFull), occHalf = m.brickDimsHalf ? brickOccupancy(edit, m.brickDimsHalf) : null;
-      const tr = [m.src], bufs = [cls?.data, dist?.data, combo, cls4, occFull, occHalf, em.data, region.data, region.ids];
+      const tr = [m.src], bufs = [cls?.data, dist?.data, combo, cls4, occFull, occHalf, em.data, region.data, region.ids, child?.ids];
       for (const a of bufs) if (a) tr.push(a.buffer);
-      post({ t: 'cls', id: m.id, cls, dist, combo, cls4, occFull, occHalf, src: m.src, edit: { data: em.data, active: em.activeMask, maskOnly: em.maskOnly }, region, warnings }, tr);
+      post({ t: 'cls', id: m.id, cls, dist, combo, cls4, occFull, occHalf, src: m.src, edit: { data: em.data, active: em.activeMask, maskOnly: em.maskOnly }, region, ...(child ? { child } : {}), warnings }, tr);
     } else post({ t: 'error', id: m.id, message: 'unknown job ' + m.t }, []);
   } catch (e) { post({ t: 'error', id: m.id, message: String((e && e.message) || e) }, []); }
 }
 
 const SEGMENT_ORDER_SRC = "const SEGMENT_ORDER=['bone','soft','fat','lung'];const INF=0x3fffffff;";
-export const prepWorkerSource = () => [SEGMENT_ORDER_SRC, computeBricksOf, halveData, buildClsData, chamferDistanceBytes, combineClassificationDistance, fourthChannelBytes, cellRange, brickOccupancy, gpuRunRowMapToSlice, gpuLowerBound, gpuUpperBound, gpuDilateRuns, gpuRunsForTexture, buildEditMaskOf, buildRegionIndexOf, buildDistanceBytesSync, prepRun]
+export const prepWorkerSource = () => [SEGMENT_ORDER_SRC, computeBricksOf, halveData, buildClsData, chamferDistanceBytes, combineClassificationDistance, fourthChannelBytes, cellRange, brickOccupancy, gpuRunRowMapToSlice, gpuLowerBound, gpuUpperBound, gpuDilateRuns, gpuRunsForTexture, buildEditMaskOf, buildRegionIndexOf, buildChildIndexOf, buildDistanceBytesSync, prepRun]
   .map(f => typeof f === 'string' ? f : f.toString()).join('\n') + '\nself.onmessage=e=>prepRun(e.data,(msg,tr)=>self.postMessage(msg,tr));';
 const blobWorker = () => {
   if (typeof Worker === 'undefined' || typeof Blob === 'undefined' || typeof URL === 'undefined' || !URL.createObjectURL) return null;

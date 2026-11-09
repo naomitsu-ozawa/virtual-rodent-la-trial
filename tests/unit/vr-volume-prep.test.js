@@ -47,12 +47,12 @@ function refRegionIndex(regions, slotKeys, sourceDims, dims) { // regions: [{col
   if (!regions.length) return { data: null, colors: [], segs: [], list: [] };
   const [w, h, d] = dims, colors = [], segs = [], data = new Uint8Array(w * h * d), ids = new Uint8Array(w * h * d), list = [];
   for (const r of regions) {
-    const c = Number(r.color) >>> 0; let k = colors.indexOf(c); if (k < 0) { if (colors.length >= 14) continue; colors.push(c); segs.push(0); k = colors.length - 1; }
-    for (const key of r.segmentKeys || []) { const s = slotKeys.indexOf(key); if (s >= 0) segs[k] |= 1 << s; }
+    if (list.length >= 255) break; const id = list.length + 1; // every result (up to 255) is in ids / list; only the colour index (histogram) is capped at 14 colours
+    const c = Number(r.color) >>> 0; let k = colors.indexOf(c); if (k < 0 && colors.length < 14) { colors.push(c); segs.push(0); k = colors.length - 1; }
+    if (k >= 0) for (const key of r.segmentKeys || []) { const s = slotKeys.indexOf(key); if (s >= 0) segs[k] |= 1 << s; }
     const runs = gpuRunsForTexture(r.runsBySlice, sourceDims, dims, { dilate: 0 });
-    if (list.length >= 255) break; const id = list.length + 1;
-    for (let z = 0; z < d; z++) { const rec = runs?.[z]; if (!rec?.length) continue; for (let i = 0; i < rec.length; i += 3) { const o = (z * h + rec[i]) * w; data.fill(k + 1, o + rec[i + 1], o + rec[i + 2] + 1); ids.fill(id, o + rec[i + 1], o + rec[i + 2] + 1); } }
-    list.push({ color: c, mm3: r.mm3, segmentKeys: [...(r.segmentKeys || [])], rid: r.id });
+    for (let z = 0; z < d; z++) { const rec = runs?.[z]; if (!rec?.length) continue; for (let i = 0; i < rec.length; i += 3) { const o = (z * h + rec[i]) * w; if (k >= 0) data.fill(k + 1, o + rec[i + 1], o + rec[i + 2] + 1); ids.fill(id, o + rec[i + 1], o + rec[i + 2] + 1); } }
+    list.push({ color: c, mm3: r.mm3, segmentKeys: [...(r.segmentKeys || [])], rid: r.id, segMask: (r.segmentKeys || []).reduce((m, key) => { const sl = slotKeys.indexOf(key); return sl >= 0 ? m | (1 << sl) : m; }, 0) });
   }
   return { data: colors.length ? data : null, ids: colors.length ? ids : null, colors, segs, list };
 }
@@ -111,7 +111,9 @@ describe('buildEditMaskOf / buildRegionIndexOf = what the page built', () => {
       expect(a.colors).toEqual(b.colors); expect(a.segs).toEqual(b.segs); expect(a.list).toEqual(b.list); same(a.data, b.data); same(a.ids, b.ids);
     }
     expect(buildRegionIndexOf([], dims, dims)).toEqual({ data: null, colors: [], segs: [], list: [] });
-    expect(buildRegionIndexOf(items(mk(20, i => i, () => ['bone'])), dims, dims).colors).toHaveLength(14);
+    const many = buildRegionIndexOf(items(mk(20, i => i, () => ['bone'])), dims, dims);
+    expect(many.colors).toHaveLength(14); expect(many.list).toHaveLength(20); // the 15th..20th colours are results of their own (ids, list), only without a colour index for the histogram
+    expect(new Set(many.ids).has(20)).toBe(true);
     expect(buildRegionIndexOf(items(mk(260, () => 1, () => ['bone'])), dims, dims).list).toHaveLength(255);
   });
 });

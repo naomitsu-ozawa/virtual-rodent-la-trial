@@ -170,14 +170,14 @@ describe('wiring (static): fixes', () => {
     const vr = read('vr-view.js');
     expect(vr).toContain("if(ld0?.pin&&pr.res.kind==='mlabel'){if(rel==='tap'&&!ld0.moved&&!ld0.done)"); expect(vr).toContain('setRegionLabel(reg,null);pulse(c,0.2)');
     expect(vr).toContain('if(analysisOn()&&pins.size)mlb=nearerLabel('); expect(vr).toContain('tagBehindTissue(occlusionGpu(),mlb.distance,vh.distance,occEps))mlb=null');
-    expect(vr).toContain("ctx.fillText(r.rid+'. '+"); expect(vr).toContain("label(X+76,y+34,String(r.rid)+'. '+");
+    expect(vr).toContain("ctx.fillText(vrChipTitle(r),118,50)"); expect(vr).toContain("label(X+76,y+34,vrChipTitle(r),"); // the same \"N. name\" text through vrChipTitle
     expect(vr).toContain('lb.m.position.y+=labelScale()*0.045'); // the unlit size: the card does not move when lit
     expect(vr).toContain('const ridIndex=()=>'); expect(vr).toContain('spacingNoteF'); expect(vr).not.toContain('[...pins]'); expect(vr).not.toContain('hit:tmpPh.clone()');
     expect(vr).toContain('ld.done=true');
   });
   it('PC / project: the chip number is the region id; the surface anchor; merge and split keep the label; a second finger cannot rotate during a label drag', () => {
     const d3 = read('comment-3d.js'), ops = read('analysis-ops.js'), res = read('analysis-results.js');
-    expect(d3).toContain("e.t1.textContent=r.id+'. '+"); expect(d3).toContain('if(labelDragging){'); expect(d3).toContain('labelDragging=true;');
+    expect(d3).toContain('e.t1.textContent=regionChipTitle(r,tr);'); /* the number is r.id (region-name.js regionChipTitle) */ expect(d3).toContain('if(labelDragging){'); expect(d3).toContain('labelDragging=true;');
     expect(res).toContain('surfaceAnchor({contains:(i,j,k)=>analysisRunsContain(region.runsBySlice,i,j,k)');
     expect(ops).toContain('selected.find(r=>r.label)?.label'); expect(ops).toContain('split.label=r.label;delete r.label');
   });

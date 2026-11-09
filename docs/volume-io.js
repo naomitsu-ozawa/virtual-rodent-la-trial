@@ -1,11 +1,11 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { dicomCodecModulePromise, setDicomCodecModulePromise } from './state.js?v=20261109-build703';
-import { fmt, frameYield, isIPhoneRuntime, isTabletRuntime, isDesktopRuntime } from './utils.js?v=20261109-build703';
-import { isNativeDicomTransferSyntax, COMPRESSED_DICOM_TRANSFER_SYNTAXES, encapsulatedFrameBytes, dicomImageFrameInfo } from './dicom.js?v=20261109-build703';
-import dicomParser from 'https://esm.sh/dicom-parser@1.8.21';
+import { dicomCodecModulePromise, setDicomCodecModulePromise } from './state.js?v=20261109-build704';
+import { fmt, frameYield, isTabletRuntime, isDesktopRuntime } from './utils.js?v=20261109-build704';
+import { isNativeDicomTransferSyntax, COMPRESSED_DICOM_TRANSFER_SYNTAXES, encapsulatedFrameBytes, dicomImageFrameInfo } from './dicom.js?v=20261109-build704';
+import dicomParser from './vendor/dicom-parser@1.8.21/index.js';
+import { storedLayout, storedValue, readStored } from './stored-bits.js?v=20261109-build704';
 export function sourceMprCacheLimit(){
- if(isIPhoneRuntime())return 512*1024*1024;
  if(isTabletRuntime())return 1536*1024*1024;
  return Number.MAX_SAFE_INTEGER;
 }
@@ -80,23 +80,23 @@ export function cachedSourceMprPlane(v,p,idx){
  for(let z=0;z<d;z++){const base=z*plane,dst=(d-1-z)*h;for(let y=0;y<h;y++)out[dst+y]=data[base+y*w+idx]}
  return out;
 }
+// the trial has no compressed-DICOM decoding (no user data is loaded and all practice data is uncompressed)
+function startDicomCodecWorker(){throw new Error('Compressed DICOM series are not supported in the trial')}
 export async function getDicomCodecModule(){
- if(!dicomCodecModulePromise)setDicomCodecModulePromise(import('https://esm.sh/@cornerstonejs/dicom-image-loader@5.10.8?bundle').catch(e=>{setDicomCodecModulePromise(null);throw e}));
+ if(!dicomCodecModulePromise)setDicomCodecModulePromise(Promise.resolve().then(startDicomCodecWorker).catch(e=>{setDicomCodecModulePromise(null);throw e}));
  return dicomCodecModulePromise;
 }
+// how many slices a normalised series decodes at once (dicom-normalize.js): up to 4; also the size limit of the codec worker pool. Outside the codec-worker block above on purpose: the public trial export cuts that block (tools/export-public.mjs), this stays.
+export function dicomCodecPoolSize(){const hc=Number(navigator.hardwareConcurrency)||2;return Math.max(1,Math.min(4,hc-1))}
+// the codec workers (each holds its wasm) are not kept after a series is normalised: the next compressed frame starts new ones
+export function releaseDicomCodecWorkers(){const p=dicomCodecModulePromise;setDicomCodecModulePromise(null);p?.then(c=>c.terminate?.(),()=>{})}
 export async function decodeCompressedDicomSlice(meta,opts){
  if(!COMPRESSED_DICOM_TRANSFER_SYNTAXES.has(meta.ts))throw new Error('Unsupported compressed DICOM transfer syntax: '+meta.ts);
  if((meta.samples||1)!==1)throw new Error('Compressed color DICOM is outside the CT viewer scope');
- const bytes=new Uint8Array(await meta.file.arrayBuffer()),ds=dicomParser.parseDicom(bytes),element=ds.elements.x7fe00010,pixelData=encapsulatedFrameBytes(ds,element,meta.ts,meta.frameIndex||0),frame=dicomImageFrameInfo(meta),module=await getDicomCodecModule(),decoders=module.decoders;
- let decoded;
- if(meta.ts==='1.2.840.10008.1.2.5')decoded=await decoders.RLE(frame,pixelData);
- else if(meta.ts==='1.2.840.10008.1.2.4.50')decoded=await decoders.JPEGBaseline8Bit(pixelData,frame);
- else if(meta.ts==='1.2.840.10008.1.2.4.51')decoded=await decoders.JPEGBaseline12Bit(frame,pixelData);
- else if(meta.ts==='1.2.840.10008.1.2.4.57'||meta.ts==='1.2.840.10008.1.2.4.70')decoded=await decoders.JPEGLossless(frame,pixelData);
- else if(meta.ts==='1.2.840.10008.1.2.4.80'||meta.ts==='1.2.840.10008.1.2.4.81')decoded=await decoders.JPEGLS(pixelData,frame);
- else if(meta.ts==='1.2.840.10008.1.2.4.90'||meta.ts==='1.2.840.10008.1.2.4.91')decoded=await decoders.JPEG2000(pixelData,frame);
- else decoded=await decoders.HTJ2K(pixelData,frame);
- const stored=decoded?.pixelData;if(!stored||stored.length<meta.rows*meta.columns)throw new Error('Compressed DICOM decoder returned incomplete pixel data');
+ const bytes=new Uint8Array(await meta.file.arrayBuffer()),ds=dicomParser.parseDicom(bytes),element=ds.elements.x7fe00010,pixelData=encapsulatedFrameBytes(ds,element,meta.ts,meta.frameIndex||0),frame=dicomImageFrameInfo(meta),codec=await getDicomCodecModule();
+ let stored;
+ try{stored=await codec.decode(meta.ts,frame,pixelData)}catch(e){if(/worker failed/.test(String(e?.message)))setDicomCodecModulePromise(null);throw e}
+ if(!stored||stored.length<meta.rows*meta.columns)throw new Error('Compressed DICOM decoder returned incomplete pixel data');
  if(opts?.stored)return stored; // crop export: the stored integers as decoded, before RescaleSlope / Intercept
  const n=meta.rows*meta.columns,out=new Float32Array(n);for(let i=0;i<n;i++)out[i]=Number(stored[i])*meta.slope+meta.intercept;
  return out;
@@ -113,17 +113,16 @@ export async function decodeSourceSlice(meta){
   const all=new Uint8Array(await meta.file.arrayBuffer()),ds=dicomParser.parseDicom(all),el=ds.elements.x7fe00010;
   if(!el)throw new Error('Pixel Data missing');bytes=all;offset=el.dataOffset;
  }
- const little=meta.ts!=='1.2.840.10008.1.2.2',view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength),n=meta.rows*meta.columns,out=new Float32Array(n),td=performance.now();
+ const little=meta.ts!=='1.2.840.10008.1.2.2',view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength),n=meta.rows*meta.columns,out=new Float32Array(n),td=performance.now(),L=storedLayout(meta);
  // typed-array fast path (DataView per pixel was 6.9 s per rebuild)
  if(meta.bits===16&&little&&((bytes.byteOffset+offset)&1)===0&&bytes.byteLength-offset>=n*2){
-  const a=meta.signed?new Int16Array(bytes.buffer,bytes.byteOffset+offset,n):new Uint16Array(bytes.buffer,bytes.byteOffset+offset,n),sl=meta.slope,ic=meta.intercept;
-  for(let i=0;i<n;i++)out[i]=a[i]*sl+ic;
+  const sl=meta.slope,ic=meta.intercept;
+  if(L.plain){const a=meta.signed?new Int16Array(bytes.buffer,bytes.byteOffset+offset,n):new Uint16Array(bytes.buffer,bytes.byteOffset+offset,n);for(let i=0;i<n;i++)out[i]=a[i]*sl+ic}
+  else{const a=new Uint16Array(bytes.buffer,bytes.byteOffset+offset,n);for(let i=0;i<n;i++)out[i]=storedValue(a[i],L)*sl+ic}
   globalThis.__vrlTime?.('read:decode',performance.now()-td);return out;
  }
  try{for(let i=0;i<n;i++){
-  let raw;
-  if(meta.bits===8){raw=bytes[offset+i];if(meta.signed&&raw>127)raw-=256}
-  else raw=meta.signed?view.getInt16(offset+i*2,little):view.getUint16(offset+i*2,little);
+  const raw=readStored(bytes,view,offset+i*bpp,little,L);
   out[i]=raw*meta.slope+meta.intercept;
  }}finally{globalThis.__vrlTime?.('read:decode',performance.now()-td)}
  return out;
@@ -132,8 +131,12 @@ export async function readSourceRows(meta,rowStart,rowCount){
  const bpp=meta.bits===8?1:meta.bits===16?2:0;if(!bpp)throw new Error('Unsupported BitsAllocated='+meta.bits);
  const count=Math.max(0,Math.min(rowCount,meta.rows-rowStart));if(!count)return new Float32Array();
  if(!isNativeDicomTransferSyntax(meta.ts)||meta.pixelOffset==null){const full=await decodeSourceSlice(meta);return full.slice(rowStart*meta.columns,(rowStart+count)*meta.columns)}
- const start=meta.pixelOffset+rowStart*meta.columns*bpp,end=start+count*meta.columns*bpp,bytes=new Uint8Array(await meta.file.slice(start,end).arrayBuffer()),little=meta.ts!=='1.2.840.10008.1.2.2',view=new DataView(bytes.buffer),out=new Float32Array(count*meta.columns);
- for(let i=0;i<out.length;i++){let raw;if(meta.bits===8){raw=bytes[i];if(meta.signed&&raw>127)raw-=256}else raw=meta.signed?view.getInt16(i*2,little):view.getUint16(i*2,little);out[i]=raw*meta.slope+meta.intercept}
+ const start=meta.pixelOffset+rowStart*meta.columns*bpp,end=start+count*meta.columns*bpp,bytes=new Uint8Array(await meta.file.slice(start,end).arrayBuffer()),little=meta.ts!=='1.2.840.10008.1.2.2',view=new DataView(bytes.buffer),out=new Float32Array(count*meta.columns),L=storedLayout(meta);
+ if(L.plain){ // the whole allocated word is the value (every ordinary 8 / 16-bit series): the plain DataView loop (no per-pixel call: this is the pass over a slice's rows)
+  for(let i=0;i<out.length;i++){let raw;if(meta.bits===8){raw=bytes[i];if(meta.signed&&raw>127)raw-=256}else raw=meta.signed?view.getInt16(i*2,little):view.getUint16(i*2,little);out[i]=raw*meta.slope+meta.intercept}
+  return out;
+ }
+ for(let i=0;i<out.length;i++)out[i]=readStored(bytes,view,i*bpp,little,L)*meta.slope+meta.intercept; // BitsStored < allocated / HighBit shifted: mask, shift and sign-extend
  return out;
 }
 export async function readSourceColumn(meta,column){
@@ -144,11 +147,18 @@ export async function readSourceColumn(meta,column){
  }
  const bpp=meta.bits===8?1:meta.bits===16?2:0;if(!bpp)throw new Error('Unsupported BitsAllocated='+meta.bits);
  if(!isNativeDicomTransferSyntax(meta.ts)||meta.pixelOffset==null){const full=await decodeSourceSlice(meta),out=new Float32Array(meta.rows);for(let y=0;y<meta.rows;y++)out[y]=full[y*meta.columns+column];return out}
- const bytes=new Uint8Array(await meta.file.slice(meta.pixelOffset,meta.pixelOffset+meta.rows*meta.columns*bpp).arrayBuffer()),little=meta.ts!=='1.2.840.10008.1.2.2',view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength),out=new Float32Array(meta.rows);
+ const bytes=new Uint8Array(await meta.file.slice(meta.pixelOffset,meta.pixelOffset+meta.rows*meta.columns*bpp).arrayBuffer()),little=meta.ts!=='1.2.840.10008.1.2.2',view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength),out=new Float32Array(meta.rows),L=storedLayout(meta);
+ if(L.plain){
+  for(let y=0;y<meta.rows;y++){
+   const off=(y*meta.columns+column)*bpp;let raw;
+   if(meta.bits===8){raw=bytes[off];if(meta.signed&&raw>127)raw-=256}
+   else raw=meta.signed?view.getInt16(off,little):view.getUint16(off,little);
+   out[y]=raw*meta.slope+meta.intercept;
+  }
+  return out;
+ }
  for(let y=0;y<meta.rows;y++){
-  const off=(y*meta.columns+column)*bpp;let raw;
-  if(meta.bits===8){raw=bytes[off];if(meta.signed&&raw>127)raw-=256}
-  else raw=meta.signed?view.getInt16(off,little):view.getUint16(off,little);
+  const off=(y*meta.columns+column)*bpp,raw=readStored(bytes,view,off,little,L);
   out[y]=raw*meta.slope+meta.intercept;
  }
  return out;

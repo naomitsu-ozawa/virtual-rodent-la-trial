@@ -9,8 +9,8 @@
 // that another clipping section has cut away. A section whose intersection is outside the volume is skipped, never clamped.
 // Voxel rule: voxel i covers the fraction [i/n, (i+1)/n) of the box along its axis, so the index is floor(fraction * n); a point
 // outside [0,1) on any axis (the far face itself included) is NOT recorded: it is never moved into the volume.
-import { createComment, addComment, getComments, removeComment, restoreComment, updateCommentPosition, updateCommentColor, commentMatchesSeries } from './comments.js?v=20261109-build703';
-import { marchClassificationHitInfo } from './vr-pick.js?v=20261109-build703';
+import { createComment, addComment, getComments, removeComment, restoreComment, updateCommentPosition, updateCommentColor, commentMatchesSeries } from './comments.js?v=20261109-build704';
+import { marchClassificationHitInfo } from './vr-pick.js?v=20261109-build704';
 const T_MIN=1e-6,EDGE_EPS=1e-4;
 
 // t of the ray o + t*q on the plane, or null (parallel, or behind the origin)
@@ -147,14 +147,14 @@ export function sectionRelation(p,plane,halfExt,dims){
 // point towards the head (the middle of both eyes), a voxel of a SHOWN segment (the classification channels `chs`, >= 128) is met on the side
 // that every clipping section keeps, before reaching the head. The point's own voxel is skipped: the march starts one half voxel diagonal
 // away from the point. Otherwise the point is EXPOSED. Nothing shown = exposed. Segment opacity is not considered (VR draws 100 % by default).
-// pLocal / headLocal: object space of the volume (the head converted with the mesh's worldToLocal). pick: {cls,dims,halfExt} of volPick.
-export function pointIsHidden(pLocal,headLocal,{cls,dims,halfExt,chs,planes=[],count=0,cut=0,voxel}){
+// pLocal / headLocal: object space of the volume (the head converted with the mesh's worldToLocal). pick: {cls,dims,halfExt} of volPick.: skip (optional) = (x,y,z) -> true for a voxel of a hidden child segment (invisible: it hides nothing).
+export function pointIsHidden(pLocal,headLocal,{cls,dims,halfExt,chs,planes=[],count=0,cut=0,voxel,skip=null}){
  if(!cls||!chs||!chs.length)return false;
  const q={x:headLocal.x-pLocal.x,y:headLocal.y-pLocal.y,z:headLocal.z-pLocal.z},L=Math.hypot(q.x,q.y,q.z);
  if(!(L>1e-9))return false;
- const sz=voxel||[2*halfExt[0]/dims[0],2*halfExt[1]/dims[1],2*halfExt[2]/dims[2]],skip=0.5*Math.hypot(sz[0],sz[1],sz[2])/L;
- if(skip>=1)return false;
- return marchClassificationHitInfo(pLocal,q,halfExt,dims,cls,chs,planes,count,cut,skip,1)!==null;
+ const sz=voxel||[2*halfExt[0]/dims[0],2*halfExt[1]/dims[1],2*halfExt[2]/dims[2]],skipT=0.5*Math.hypot(sz[0],sz[1],sz[2])/L;
+ if(skipT>=1)return false;
+ return marchClassificationHitInfo(pLocal,q,halfExt,dims,cls,chs,planes,count,cut,skipT,1,skip)!==null;
 }
 
 // ---- surface mode ----

@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { registry } from '../../docs/sample-registry.js';
-import { resolveSampleBase, sampleSet, sampleJsonUrl, DEFAULT_SAMPLE, sampleCacheKey, sampleSliceUrl, sampleIndexUrl, sampleProjectUrl } from '../../docs/sample-sets.js';
+import { registry, defaultSampleId } from '../../docs/sample-registry.js';
+import { resolveSampleBase, sampleSet, sampleJsonUrl, sampleCacheKey, sampleSliceUrl, sampleIndexUrl, sampleProjectUrl } from '../../docs/sample-sets.js';
 
 describe('practice dataset paths and cache keys', () => {
   it('keeps sample1 URLs and its existing cache key unchanged', () => {
-    expect(DEFAULT_SAMPLE).toBe('sample1');
+    expect(defaultSampleId()).toBe('sample1'); // the default now comes from the registry (sample1/sample.json "default": true), unchanged for the user
     expect(sampleIndexUrl('sample1')).toBe('demo/sample1/index.json');
     expect(sampleProjectUrl('sample1')).toBe('demo/sample1/project.vrlab');
     expect(sampleSliceUrl('sample1', 'a b.dcm')).toBe('demo/sample1/a%20b.dcm');
@@ -21,7 +21,7 @@ describe('practice dataset paths and cache keys', () => {
   it('appends sample3 (mouse head) with its own folder key and keeps the default', () => {
     const n = '01784_crop512_0001.dcm';
     expect(registry.samples.map(s => s.id).sort()).toEqual(['sample1', 'sample2', 'sample3', 'sample4', 'sample5', 'sample6']); // the folders of docs/demo (registry), each set by the one rule
-    expect(DEFAULT_SAMPLE).toBe('sample1');
+    expect(defaultSampleId()).toBe('sample1');
     expect(sampleIndexUrl('sample3')).toBe('demo/sample3/index.json');
     expect(sampleSliceUrl('sample3', n)).toBe('demo/sample3/' + n);
     expect(sampleCacheKey('https://x.io', 'sample3', n)).toBe('https://x.io/__vrl-sample/v1/sample3/' + n);

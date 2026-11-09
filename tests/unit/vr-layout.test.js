@@ -149,9 +149,9 @@ describe('slice fill (slice tab row + shader guards, static)', () => {
   });
   it('shader: the contrast spreads the gamma value about the middle of its range, clamped to 0.05..1; exactly 1 returns the gamma value unchanged; only inside ctLumHU', () => {
     expect(v).toContain('uniform float ctShadeContrast;');
-    expect(v).toContain(' float g=1.0/max(ctShadeBright,0.1),l=pow(mix(CT_SHADE_MIN,1.0,clamp((hu-a.x)/max(min(a.y-a.x,CT_SHADE_SPAN),1.0),0.0,1.0)),g);');
+    expect(v).toContain(' float g=1.0/max(ctShadeBright,0.1),l=pow(mix(CT_SHADE_MIN,1.0,t),g);');
     expect(v).toContain(' if(ctShadeContrast==1.0)return l;'); expect(v).toContain(' float p=0.5*(pow(CT_SHADE_MIN,g)+1.0);return clamp(p+(l-p)*ctShadeContrast,0.05,1.0);');
-    const sh = v.slice(0, v.indexOf('bool editAllows(')); expect(sh.match(/ctShadeContrast/g).length).toBe(7); // the comment above ctLumHU, the uniform and its comment, and the two uses in ctLumHU
+    const sh = v.slice(0, v.indexOf('bool editAllows(')); expect(sh.match(/ctShadeContrast/g).length).toBe(5); // the comment above ctLumHU, the uniform and its comment, and the two uses in ctLumHU
     const lum = (t, b, c) => { const g = 1 / b, l = Math.pow(0.35 + 0.65 * t, g); if (c === 1) return l; const p = 0.5 * (Math.pow(0.35, g) + 1); return Math.min(1, Math.max(0.05, p + (l - p) * c)); };
     for (const b of [0.5, 1, 1.3, 2]) for (let i = 0; i <= 10; i++) { const t = i / 10; expect(lum(t, b, 1)).toBe(Math.pow(0.35 + 0.65 * t, 1 / b)); }
     for (const b of [1, 1.3, 2]) { const span = c => lum(1, b, c) - lum(0, b, c); expect(span(1.5)).toBeGreaterThan(span(1)); expect(span(2)).toBeGreaterThan(span(1.5)); expect(span(0.5)).toBeLessThan(span(1)); }
@@ -160,7 +160,7 @@ describe('slice fill (slice tab row + shader guards, static)', () => {
   });
   it('shader: the brightness is a gamma on the CT factor (pow(lum,1/b)): 1 at the top whatever b is, identity at 100 %, only inside ctLumHU (so only CT shading uses it)', () => {
     expect(v).toContain('uniform float ctShadeBright;'); expect(v.match(/ctShadeBright/g).length).toBeGreaterThanOrEqual(2);
-    expect(v).toContain(' float g=1.0/max(ctShadeBright,0.1),l=pow(mix(CT_SHADE_MIN,1.0,clamp((hu-a.x)/max(min(a.y-a.x,CT_SHADE_SPAN),1.0),0.0,1.0)),g);'); // the gamma value l (the contrast step after it returns l itself at 100 %)
+    expect(v).toContain(' float g=1.0/max(ctShadeBright,0.1),l=pow(mix(CT_SHADE_MIN,1.0,t),g);'); // the gamma value l (the contrast step after it returns l itself at 100 %)
     const lum = (t, b) => Math.pow(0.35 + 0.65 * t, 1 / b); // the same formula in JS
     for (const b of [0.5, 1, 1.3, 2]) { expect(lum(1, b)).toBe(1); expect(lum(0, b)).toBeGreaterThan(0); }
     for (let i = 0; i <= 9; i++) { const t = i / 10; expect(lum(t, 1)).toBeCloseTo(0.35 + 0.65 * t, 12); expect(lum(t, 1.3)).toBeGreaterThan(lum(t, 1)); expect(lum(t, 2)).toBeGreaterThan(lum(t, 1.3)); expect(lum(t, 1.3)).toBeLessThanOrEqual(1); }
@@ -171,9 +171,9 @@ describe('slice fill (slice tab row + shader guards, static)', () => {
     expect(v).toContain('labelHide:LABEL_HIDE_DEFAULT,ctShade:1,'); expect(v).toContain('ctShade:{value:1}'); expect(v).toContain('sliceSegOnly:{value:0}');
   });
   it('shader: the CT factor is used by the two slice branches only; surface hits and caps keep the flat colour; 陰影なし (diag 3) is flat', () => {
-    expect(v.match(/ctLumHU\(/g)).toHaveLength(2); expect(v.match(/ctLumTint\(/g)).toHaveLength(2); // ctLumHU = the definition + the 0 % branch (window based); ctLumTint = the definition + the above-0 % tint (the formula, unchanged)
+    expect(v.match(/ctLumHU\(/g)).toHaveLength(3); expect(v).not.toContain('ctLumTint'); // ctLumHU = the definition + the 0 % branch + the above-0 % tint (one rule: the segment's own shading range; the old ctLumTint with the fixed 1500 span is removed)
     expect(v).toContain('vec4(regionColor(p,segC[si].rgb,si)*ctLumHU(hu,si),ctShade>0.5?SEG_ALPHA:sliceTint)'); // 0 %: CT shading at the fixed opacity, solid at the tint
-    expect(v).toContain('vec4(mix(vec3(g),regionColor(p,segC[si].rgb,si)*ctLumTint(hu,si),sliceTint),a)'); // above 0 %: the tint colour carries the CT value (factor 1 when solid = the old slice)
+    expect(v).toContain('vec4(mix(vec3(g),regionColor(p,segC[si].rgb,si)*ctLumHU(hu,si),sliceTint),a)'); // above 0 %: the tint colour carries the CT value (factor 1 when solid = the old slice)
     expect(v).not.toContain('segHitColor'); expect(v).not.toContain('CT_SHADE_DEPTH');
     expect(v.match(/lit=regionColor\(hp\+dir\*\(0\.75\*voxelMin\),segC\[idx\]\.rgb,idx\)\*diffuse\+vec3\(spec\)/g)).toHaveLength(4);
     expect(v.match(/lit=mix\(regionColor\(cp,segC\[ci\]\.rgb,ci\),vec3\(1\.0\),0\.22\)\*diffuse/g)).toHaveLength(2);

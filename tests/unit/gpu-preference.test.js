@@ -9,20 +9,19 @@ const LINUX = nav('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/155
 const WIN = nav('Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/155', 'Win32');
 const MAC = nav('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Chrome/155', 'MacIntel');
 const IPAD = nav('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Safari/605.1.15', 'MacIntel', 5);
-const IPHONE = nav('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) Safari/604', 'iPhone', 5);
 const ANDROID = nav('Mozilla/5.0 (Linux; Android 14; Quest 3) Chrome/155 Mobile', 'Linux armv8l', 5);
 const CROS = nav('Mozilla/5.0 (X11; CrOS x86_64 15000.0.0) Chrome/155', 'Linux x86_64');
 
 describe('platform gating', () => {
   it('detects the platform (iPadOS reports a Mac, told apart by touch)', () => {
-    expect([LINUX, WIN, MAC, IPAD, IPHONE, ANDROID, CROS, {}].map(n => gpuPlatformOs(n))).toEqual(['linux', 'windows', 'mac', 'ios', 'ios', 'android', 'other', 'other']);
+    expect([LINUX, WIN, MAC, IPAD, ANDROID, CROS, {}].map(n => gpuPlatformOs(n))).toEqual(['linux', 'windows', 'mac', 'ios', 'android', 'other', 'other']);
   });
   it('the choice is offered on Linux and Windows only', () => {
     expect([LINUX, WIN].map(n => gpuPreferenceSupported(n))).toEqual([true, true]);
-    expect([MAC, IPAD, IPHONE, ANDROID, CROS, {}].map(n => gpuPreferenceSupported(n))).toEqual([false, false, false, false, false, false]);
+    expect([MAC, IPAD, ANDROID, CROS, {}].map(n => gpuPreferenceSupported(n))).toEqual([false, false, false, false, false]);
   });
   it('Mac / iPad / others are forced to auto whatever is stored', () => {
-    for (const n of [MAC, IPAD, IPHONE, ANDROID, CROS, {}]) for (const s of ['high-performance', 'low-power', 'auto', undefined]) expect(gpuEffectivePreference(s, n)).toBe('auto');
+    for (const n of [MAC, IPAD, ANDROID, CROS, {}]) for (const s of ['high-performance', 'low-power', 'auto', undefined]) expect(gpuEffectivePreference(s, n)).toBe('auto');
   });
   it('Linux / Windows honour the stored value; anything unknown is auto', () => {
     for (const n of [LINUX, WIN]) {

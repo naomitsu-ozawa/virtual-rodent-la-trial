@@ -1,15 +1,16 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { indexedGeometryFromTrianglePositions, makeSource3DCoordinates, makeVolume3DCoordinates, Float32FaceBuilder, appendAnalysisRunBoundaryFaces } from './mesh-geometry.js?v=20261109-build703';
-import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.webgpu.js';
-import { createSurfaceMaterial } from './mesh-material.js?v=20261109-build703';
-import { list, surfaceSmoothStrength } from './ui-shell.js?v=20261109-build703';
-import { segmentState, segmentEditState } from './segments.js?v=20261109-build703';
-import { surfaceSmoothingActive } from './settings.js?v=20261109-build703';
-import { frameYield } from './utils.js?v=20261109-build703';
-import { constrainedSmoothPositions, constrainedSmoothSchedule } from './constrained-smooth.js?v=20261109-build703';
-import { smoothChunkHalo, createSeamLinker, OrderedChunkSmoother } from './smooth-chunks.js?v=20261109-build703';
-import { smoothMethod } from './smooth-workers.js?v=20261109-build703';
+import { indexedGeometryFromTrianglePositions, makeSource3DCoordinates, makeVolume3DCoordinates, Float32FaceBuilder, appendAnalysisRunBoundaryFaces } from './mesh-geometry.js?v=20261109-build704';
+import * as THREE from './vendor/three@0.186.0/build/three.webgpu.js';
+import { createSurfaceMaterial } from './mesh-material.js?v=20261109-build704';
+import { list, surfaceSmoothStrength } from './ui-shell.js?v=20261109-build704';
+import { segmentState, segmentEditState, segmentById } from './segments.js?v=20261109-build704';
+import { isChildKey } from './segment-look.js?v=20261109-build704';
+import { surfaceSmoothingActive } from './settings.js?v=20261109-build704';
+import { frameYield } from './utils.js?v=20261109-build704';
+import { constrainedSmoothPositions, constrainedSmoothSchedule } from './constrained-smooth.js?v=20261109-build704';
+import { smoothChunkHalo, createSeamLinker, OrderedChunkSmoother } from './smooth-chunks.js?v=20261109-build704';
+import { smoothMethod } from './smooth-workers.js?v=20261109-build704';
 // ignoreCut: runs that are not the segment itself (an analysis region), so the
 // segment's raw cut faces do not apply
 // slices of the neighbouring chunks smoothed with a chunk: smoothChunkHalo
@@ -29,7 +30,8 @@ export function runSurfaceRoute(v){
   grid:[v.columns,v.rows,v.slices],spacing:[...(v.spacing||[])].map(Number),sourceBacked:!!v.sourceBacked};
 }
 export async function buildEditableRunsGroup(v,runs,key,shouldContinue=null,forceRaw=false,ignoreCut=false){
- const seg=segmentState[key],st=segmentEditState[key],smooth=!forceRaw&&surfaceSmoothingActive(),hasRawCut=!ignoreCut&&!!(st?.rawCutSurface&&st?.cutRuns);
+ // a child segment (key 's<id>') is drawn like a segment of its own: its colour / opacity (segments.js segmentById), no edit state
+ const seg=isChildKey(key)?segmentById(key):segmentState[key],st=segmentEditState[key],smooth=!forceRaw&&surfaceSmoothingActive(),hasRawCut=!ignoreCut&&!!(st?.rawCutSurface&&st?.cutRuns);
  // no one-piece isosurface any more (a blurred field and marching tetrahedra, then Taubin): every run surface is
  // the voxel faces, smoothed by the constrained smoothing (constrained-smooth.js) chunk by chunk
  const coords=v.sourceBacked?makeSource3DCoordinates(v.series):makeVolume3DCoordinates(v),group=new THREE.Group(),builder=new Float32FaceBuilder(),limit=runSurfaceChunkLimit(smooth),pinnedKeys=hasRawCut?new Set():null;

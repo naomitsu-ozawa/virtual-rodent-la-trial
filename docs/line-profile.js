@@ -3,7 +3,7 @@
 // spacing apart (the last sample is exactly b), and every sample reads the raw HU by trilinear interpolation. The reading goes slice by
 // slice (z ascending, at most two slices held at once), so a source-backed study is never copied: the caller supplies getSlice(z) ->
 // Float32Array | Int16Array (or a promise of one).
-import { createHist, binValues, histStats } from './histogram.js?v=20261109-build703';
+import { createHist, binValues, histStats, HU_AXIS } from './histogram.js?v=20261109-build704';
 
 export const PROFILE_MAX_SAMPLES = 4096;
 const spacingOf = sp => [0, 1, 2].map(n => { const x = +(sp?.[n]); return Number.isFinite(x) && x > 0 ? x : 1; });
@@ -72,16 +72,16 @@ export async function sampleLine(samples, dims, getSlice, opts = {}) {
   return opts.cancelled?.() ? null : out;
 }
 
-// stats of the sampled values: exact count / mean / SD (population) / min / max; percentiles from the 1-HU histogram (histogram.js)
-export function profileStats(values) {
+// stats of the sampled values: exact count / mean / SD (population) / min / max; percentiles from the histogram (histogram.js) on `axis` (default: the CT axis, 1-HU bins; the data's own range for MRI / 8-bit data, histogram.js axisFor)
+export function profileStats(values, axis = HU_AXIS) {
   const hist = createHist();
   let n = 0, sum = 0, min = Infinity, max = -Infinity;
   for (const v of values) { if (v !== v) continue; n++; sum += v; if (v < min) min = v; if (v > max) max = v; }
-  if (!n) return { count: 0, mean: null, sd: null, min: null, max: null, percentiles: { 5: null, 25: null, 50: null, 75: null, 95: null }, hist };
-  binValues(hist, values);
+  if (!n) return { count: 0, mean: null, sd: null, min: null, max: null, percentiles: { 5: null, 25: null, 50: null, 75: null, 95: null }, hist, axis };
+  binValues(hist, values, 0, values.length, axis);
   const mean = sum / n; let ss = 0;
   for (const v of values) if (v === v) ss += (v - mean) * (v - mean);
-  return { count: n, mean, sd: Math.sqrt(ss / n), min, max, percentiles: histStats(hist).percentiles, hist };
+  return { count: n, mean, sd: Math.sqrt(ss / n), min, max, percentiles: histStats(hist, undefined, axis).percentiles, hist, axis };
 }
 // the sample nearest to a distance (mm) along the line (-1 when there are none); dist ascending
 export function nearestSample(dist, mm) {

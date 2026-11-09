@@ -1,19 +1,19 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { beginSharedMpr3DPreview } from './mpr3d-overlay.js?v=20261109-build703';
-import { gpuStepTimes, gpuFilterRuntime, gpuCounts } from './gpu-compute.js?v=20261109-build703';
-import { gpuVolumeRefresh, updateVolumeFilterBadge, set3DBusy } from './three-status.js?v=20261109-build703';
-import { sourceVolume, volume, sceneState, currentLanguage, threeRenderMode, ipadGpuTargetSide } from './state.js?v=20261109-build703';
-import { SEGMENT_PRESET_ORDER, gpuSegmentOrder, segmentEditState, segmentState, segmentHasProcessedMask, segmentAddsVoxels } from './segments.js?v=20261109-build703';
-import { request3DRender } from './scene3d.js?v=20261109-build703';
-import { footer, volumeCacheClearBtn } from './ui-shell.js?v=20261109-build703';
-import { subtractRunArrays, intersectRunArrays } from './run-length.js?v=20261109-build703';
-import { tr } from './i18n.js?v=20261109-build703';
-import { fmt, isTabletRuntime, isIPhoneRuntime } from './utils.js?v=20261109-build703';
-import { setPlaneCacheProvider } from './plane-cache.js?v=20261109-build703';
-import { openVolumeCache, cacheKey, textureCacheHandle, pruneOtherFilterSettings } from './gpu-volume-cache.js?v=20261109-build703';
-import { datasetFingerprint } from './project-file.js?v=20261109-build703';
-import { getFilteredSourceAxialBlock, currentFilterSignature, volumeBlockDepth, volumeBlockBudget } from './source-filters.js?v=20261109-build703';
+import { beginSharedMpr3DPreview } from './mpr3d-overlay.js?v=20261109-build704';
+import { gpuStepTimes, gpuFilterRuntime, gpuCounts } from './gpu-compute.js?v=20261109-build704';
+import { gpuVolumeRefresh, updateVolumeFilterBadge, set3DBusy } from './three-status.js?v=20261109-build704';
+import { sourceVolume, volume, sceneState, currentLanguage, threeRenderMode, ipadGpuTargetSide, childSegments } from './state.js?v=20261109-build704';
+import { SEGMENT_PRESET_ORDER, gpuSegmentOrder, segmentEditState, segmentState, segmentHasProcessedMask, segmentAddsVoxels } from './segments.js?v=20261109-build704';
+import { request3DRender } from './scene3d.js?v=20261109-build704';
+import { footer, volumeCacheClearBtn } from './ui-shell.js?v=20261109-build704';
+import { subtractRunArrays, intersectRunArrays, unionRunArrays } from './run-length.js?v=20261109-build704';
+import { tr } from './i18n.js?v=20261109-build704';
+import { fmt, isTabletRuntime } from './utils.js?v=20261109-build704';
+import { setPlaneCacheProvider } from './plane-cache.js?v=20261109-build704';
+import { openVolumeCache, cacheKey, textureCacheHandle, pruneOtherFilterSettings } from './gpu-volume-cache.js?v=20261109-build704';
+import { datasetFingerprint } from './project-file.js?v=20261109-build704';
+import { getFilteredSourceAxialBlock, currentFilterSignature, volumeBlockDepth, volumeBlockBudget } from './source-filters.js?v=20261109-build704';
 export const gpuVolumeApplied={seriesId:null,signature:''};
 export function gpuVolumeDataSignature(){
  const id=(sourceVolume||volume)?.series?.id??null,applied=gpuVolumeApplied.seriesId===id?gpuVolumeApplied.signature:'';
@@ -175,18 +175,25 @@ function noteSegment3D(key,text,error){
  const el=typeof document!=='undefined'?document.querySelector('[data-seg-status="'+key+'"]'):null;if(!el||el.classList.contains('is-hidden'))return;
  el.textContent=el.textContent.replace(/ · (3D反映済み|shown in 3D|3D反映エラー: .*|3D error: .*)$/,'')+' · '+text;if(error)el.classList.add('is-error');
 }
+// the page builds a preset WITHOUT its children's voxels (segments.js segmentSourcesOf: the mesh, 2D, histogram, measurement and STL see the parent without them), but the volume shader decides a child
+// at run time from its own index texture (medical-volume.js setChildSegments: a hidden child is marched through, a shown one has its own colour) and needs the child's voxels INSIDE the parent's mask. So, for the volume only, the
+// children's masks are put back: a keep mask gets them added, an exclude mask loses them (the same as vr-view.js editDescsOf does for VR). Without child segments this returns the descriptors as they are.
+function withChildRuns(descs,v){
+ if(!childSegments.length)return descs;
+ const kids=new Map();
+ for(const c of childSegments){if(!c.runsBySlice)continue;const cur=kids.get(c.parentKey);kids.set(c.parentKey,cur?unionRunArrays(cur,c.runsBySlice,v.slices):c.runsBySlice)}
+ for(const [key,kr] of kids){const d=descs[key];if(!d?.runs)continue;descs[key]={...d,runs:d.mode==='keep'?unionRunArrays(d.runs,kr,v.slices):subtractRunArrays(d.runs,kr,v.slices)}}
+ return descs;
+}
 export function syncGpuVolumeEdits(v=sourceVolume||volume){
  // the 2D views draw the edited segment from finalRuns, which the volume-view edits reset and nothing
  // rebuilt (2D kept showing deleted voxels): app.js rebuilds them and repaints 2D on this event
  if(v&&typeof document!=='undefined')document.dispatchEvent(new CustomEvent('vrl-gpu-edits-synced'));
  const mv=sceneState?.medicalVolume;if(!mv||!v)return;
- const descs=gpuVolumeEditDescriptors(v),processed=Object.keys(descs).filter(key=>segmentHasProcessedMask(key));
+ const descs=withChildRuns(gpuVolumeEditDescriptors(v),v),processed=Object.keys(descs).filter(key=>segmentHasProcessedMask(key));
  try{mv.setEditRuns(descs,gpuSegmentOrder(),v);request3DRender();for(const key of processed)noteSegment3D(key,currentLanguage==='ja'?'3D反映済み':'shown in 3D',false)}
  catch(e){console.error(e);footer.textContent=(currentLanguage==='ja'?'GPU編集マスク更新エラー: ':'GPU edit mask error: ')+String(e.message||e);for(const key of processed)noteSegment3D(key,(currentLanguage==='ja'?'3D反映エラー: ':'3D error: ')+String(e.message||e),true)}
 }
 export function gpuVolumePlanOptions(){
- if(isIPhoneRuntime())return{maxTextureBytes:96*1024*1024,targetInPlane:0};
- // iPad and desktop: 512 by default (Mac GPUs are no faster than an iPad Air
- // for 3D); 768 or full size (0, desktop only) are explicit choices
  return{maxTextureBytes:0,targetInPlane:ipadGpuTargetSide};
 }

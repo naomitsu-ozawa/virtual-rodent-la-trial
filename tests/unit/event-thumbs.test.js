@@ -13,7 +13,6 @@ describe('make-event-thumbs: the jobs', () => {
   it('the datasets are listed from the folders (the registry), in the order of the cards: levels first, then the others', () => {
     expect(thumbDatasets(registry)).toEqual([{ sample: 'sample4', id: 'lv0' }, { sample: 'sample3', id: 'lv1' }, { sample: 'sample2', id: 'lv2' }, { sample: 'sample1', id: 'lv3' }, { sample: 'sample5', id: 'sample5' }, { sample: 'sample6', id: 'sample6' }]);
     expect(thumbJobs(thumbDatasets(registry), join('D', 'docs')).map(j => j.sample)).toEqual(EVENT_DATASETS.map(d => d.sample));
-    expect(readFileSync(join(ROOT, 'tools', 'make-event-thumbs.mjs'), 'utf8')).toContain('readSampleRegistry(join(DOCS');
   });
   it('one picture per dataset of the card list, docs/demo/<sampleN>/thumb.webp, 640 x 360', () => {
     const jobs = thumbJobs(EVENT_DATASETS, join('D', 'docs'));

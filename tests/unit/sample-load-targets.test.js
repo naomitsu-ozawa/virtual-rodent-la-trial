@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
 import { parse } from 'acorn';
 import { full } from 'acorn-walk';
-import { registry } from '../../docs/sample-registry.js';
+import { registry, defaultSampleId } from '../../docs/sample-registry.js';
 import { sampleIndexUrl, sampleSliceUrl, sampleProjectUrl, sampleCacheKey, sampleSet } from '../../docs/sample-sets.js';
 
 // The practice data is the only data the app loads. Every network target of the loading path comes from the fixed
@@ -31,7 +31,7 @@ function depsTemplate(fetched = [], indexFiles = ['a.dcm'], hasCache = false) {
   const cache = { match: async () => null, put: async () => {} };
   return {
     loadStat: () => {}, loadStatTime: () => {}, loadPhase: () => {}, progLabel: {}, bar: { style: {} }, footer: {}, progress: () => {}, tr: k => k, fmt: n => String(n),
-    DEFAULT_SAMPLE: 'sample1', SAMPLE_CACHE: 'cache', withTimeout: p => Promise.resolve(p),
+    defaultSampleId, SAMPLE_CACHE: 'cache', withTimeout: p => Promise.resolve(p),
     sampleIndexUrl, sampleSliceUrl, sampleCacheKey,
     location: new URL(SITE + 'index.html'),
     window: hasCache ? { caches: {} } : {},

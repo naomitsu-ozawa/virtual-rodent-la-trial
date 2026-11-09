@@ -1,46 +1,56 @@
-import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.webgpu.js';
-import dicomParser from 'https://esm.sh/dicom-parser@1.8.21';
-import { canvasBackground3dUnit } from './canvas-theme.js?v=20261109-build703';
-import { lightOffsetExpr, lightingWGSL, MATERIALS, materialKey } from './lighting.js?v=20261109-build703';
-import { EDIT_MASK_MAX_BYTES, editMaskInfoWord, editMaskLayout, editMaskPlanes, fillEditMaskWords, sameU32 } from './edit-mask-texture.js?v=20261109-build703';
-import { loadStats } from './load-stats.js?v=20261109-build703'; // what the load did, for the VR switch report
-import { frameOrTimer } from './utils.js?v=20261109-build703'; // rAF or a timer (the window rAF stands still during a WebXR session)
-import { SHADE_BRIGHT_DEFAULT, SHADE_CONTRAST_DEFAULT, brightOf, contrastOf } from './cap-shade.js?v=20261109-build703'; // the cut face's shading when the slice image is hidden (same maths as the WGSL capShadeLum below;: per-segment range)
-import { gpuRunsForTexture } from './gpu-runs.js?v=20261109-build703'; // the run-mapping functions moved to their own module (the VR preparation worker is made from them)
+import * as THREE from './vendor/three@0.186.0/build/three.webgpu.js';
+import dicomParser from './vendor/dicom-parser@1.8.21/index.js';
+import { canvasBackground3dUnit } from './canvas-theme.js?v=20261109-build704';
+import { lightOffsetExpr, lightingWGSL, MATERIALS, materialKey } from './lighting.js?v=20261109-build704';
+import { EDIT_MASK_MAX_BYTES, editMaskInfoWord, editMaskLayout, editMaskPlanes, fillEditMaskWords, sameU32 } from './edit-mask-texture.js?v=20261109-build704';
+import { loadStats } from './load-stats.js?v=20261109-build704'; // what the load did, for the VR switch report
+import { frameOrTimer } from './utils.js?v=20261109-build704'; // rAF or a timer (the window rAF stands still during a WebXR session)
+import { SHADE_BRIGHT_DEFAULT, SHADE_CONTRAST_DEFAULT, brightOf, contrastOf } from './cap-shade.js?v=20261109-build704'; // the cut face's shading when the slice image is hidden (same maths as the WGSL capShadeLum below;: per-segment range)
+import { storedLayout, storedValue } from './stored-bits.js?v=20261109-build704';
+import { gpuRunsForTexture } from './gpu-runs.js?v=20261109-build704'; // the run-mapping functions moved to their own module (the VR preparation worker is made from them)
 export { gpuRunsForTexture };
 
 const UNCOMPRESSED_TS=new Set(['1.2.840.10008.1.2','1.2.840.10008.1.2.1','1.2.840.10008.1.2.2']);
 const safeWgsl=source=>source.replace(/\bmeta\b/g,'vrlMeta').replace(/\bactive\b/g,'vrlActive').replace(/\btarget\b/g,'vrlTarget');
 
-async function rawPixelBytes(meta){
- if(meta.bits!==16||meta.samples!==1)throw new Error('GPU volume requires single-channel 16-bit DICOM');
+// 8-bit uncompressed DICOM is widened to 16-bit words here, so that everything after (packedRgSlice, the rg8 texture, the shaders) sees the same layout as for
+// 16-bit data: unsigned zero-extends, signed (PixelRepresentation 1) sign-extends. The words are written in the byte order packedRgSlice reads (the transfer syntax).
+export function widen8To16(bytes,count,signed,little){
+ const out=new Uint8Array(count*2),lo=little?0:1,hi=little?1:0;
+ for(let i=0;i<count;i++){const v=bytes[i];out[i*2+lo]=v;out[i*2+hi]=signed&&v>127?255:0}
+ return out;
+}
+export async function rawPixelBytes(meta){
+ if((meta.bits!==16&&meta.bits!==8)||meta.samples!==1)throw new Error('GPU volume requires single-channel 8-bit or 16-bit DICOM');
  if(!UNCOMPRESSED_TS.has(meta.ts))throw new Error('GPU volume currently requires uncompressed DICOM');
- const bytesNeeded=meta.rows*meta.columns*2;
+ const count=meta.rows*meta.columns,bytesNeeded=count*(meta.bits===8?1:2);
+ let bytes;
  if(meta.pixelOffset!=null){
-  const bytes=new Uint8Array(await meta.file.slice(meta.pixelOffset,meta.pixelOffset+bytesNeeded).arrayBuffer());
+  bytes=new Uint8Array(await meta.file.slice(meta.pixelOffset,meta.pixelOffset+bytesNeeded).arrayBuffer());
   if(bytes.byteLength<bytesNeeded)throw new Error('Pixel Data is shorter than expected');
-  return bytes;
+ }else{
+  const all=new Uint8Array(await meta.file.arrayBuffer()),ds=dicomParser.parseDicom(all),el=ds.elements.x7fe00010;
+  if(!el)throw new Error('Pixel Data missing');
+  bytes=all.slice(el.dataOffset,el.dataOffset+bytesNeeded);
+  if(bytes.byteLength<bytesNeeded)throw new Error('Pixel Data is shorter than expected');
  }
- const all=new Uint8Array(await meta.file.arrayBuffer()),ds=dicomParser.parseDicom(all),el=ds.elements.x7fe00010;
- if(!el)throw new Error('Pixel Data missing');
- return all.slice(el.dataOffset,el.dataOffset+bytesNeeded);
+ return meta.bits===8?widen8To16(bytes,count,!!meta.signed,meta.ts!=='1.2.840.10008.1.2.2'):bytes;
 }
 
+const HOST_LITTLE=new Uint8Array(new Uint16Array([1]).buffer)[0]===1;
 export async function packedRgSlice(meta){
- const src=await rawPixelBytes(meta),little=meta.ts!=='1.2.840.10008.1.2.2';
- const signed=!!meta.signed,bitsStored=Math.max(1,Math.min(16,meta.bitsStored||16)),highBit=Number.isFinite(meta.highBit)?meta.highBit:bitsStored-1,lowBit=Math.max(0,highBit-bitsStored+1);
- const fastUnsigned=little&&!signed&&lowBit===0;
- if(fastUnsigned)return src;
- const out=new Uint8Array(src.byteLength),view=new DataView(src.buffer,src.byteOffset,src.byteLength),mask=bitsStored===16?0xffff:(1<<bitsStored)-1,signBit=1<<(bitsStored-1);
- for(let i=0;i<meta.rows*meta.columns;i++){
-  let word=view.getUint16(i*2,little);
-  if(lowBit)word>>=lowBit;
-  word&=mask;
-  let encoded;
-  if(signed){
-   const value=(word&signBit)?word-(bitsStored===16?65536:(1<<bitsStored)):word;
-   encoded=(value+32768)&0xffff;
-  }else encoded=word;
+ const src=await rawPixelBytes(meta),little=meta.ts!=='1.2.840.10008.1.2.2',L=storedLayout(meta),signed=L.signed;
+ if(little&&!signed&&L.plain)return src;
+ const out=new Uint8Array(src.byteLength),view=new DataView(src.buffer,src.byteOffset,src.byteLength),n=meta.rows*meta.columns;
+ const words=little&&HOST_LITTLE&&src.byteOffset%2===0?new Uint16Array(src.buffer,src.byteOffset,n):null; // a 12-bit CT (BitsStored < BitsAllocated) takes this loop for every slice: typed array when it can
+ if(words&&L.lowBit===0){ // the usual 12-bit CT: no shift, and the signed test is made once, not per pixel (the same value as storedValue below)
+  const mask=L.mask,sb=L.signBit,full=mask+1;
+  if(signed)for(let i=0;i<n;i++){const w=words[i]&mask,e=((w&sb?w-full:w)+32768)&0xffff;out[i*2]=e&255;out[i*2+1]=e>>>8}
+  else for(let i=0;i<n;i++){const e=words[i]&mask;out[i*2]=e&255;out[i*2+1]=e>>>8}
+  return out;
+ }
+ for(let i=0;i<n;i++){
+  const value=storedValue(words?words[i]:view.getUint16(i*2,little),L),encoded=signed?(value+32768)&0xffff:value;
   out[i*2]=encoded&255;out[i*2+1]=encoded>>>8;
  }
  return out;
@@ -766,6 +776,126 @@ fn main(@builtin(global_invocation_id) gid:vec3<u32>){
 }`;
 }
 
+// ---- child segments (tree-added segments) in the volume ----
+// A child segment is a REAL segment of its own (colour, opacity, material, cut-face shading range, hide) that lives inside one of the four slots: where its mask covers a voxel of the parent slot, the child's look replaces the parent's.
+// It does NOT share the analysis results' tables: setChildSegments (below) builds an index texture of its own (childTex: r8uint for <= 255 children, r16uint above (the page allows 255 at most); 0 = none, 1..N = the child, the order of the
+// entries) and a look-up table (childLut, N+1 x 2 texels, rgba32uint because the values are fetched with textureLoad only; the f32 values are stored as their bit patterns, bitcast in the shader). Row 0 (texel i = child i):
+// (r, g, b as 0..255, parent slot 0..3, or 255 = the parent has no GPU slot: the child is never drawn nor hides anything). Row 1: (lower, upper = the child's own cut-face shading range as f32 bits, upper <= lower = the parent
+// slot's range; opacity + 2 x material index as one f32 (material = floor(v / 2), opacity = v - 2 x material); hidden 0 / 1). The same content as the VR look-up table, in integer storage. The analysis results (setAnalysisRuns) are
+// not touched: their colour still shows where a result and a child overlap and hiding a result stays colour-only; a hidden CHILD is invisible (the rays march through it). The parent's own voxel mask must CONTAIN the children's voxels
+// (gpu-volume-data.js puts them back: the page builds a parent without its children for the mesh / 2D views); the child is drawn only where its mask covers a voxel of its parent's slot.
+// The shader text for data WITHOUT a child is volumeShader() / volumePickShader() exactly as they were: the child variants below are made from them by exact-text patches (patchOnce throws when an anchor is not found exactly once),
+// and the renderer switches to them only while a child exists (no child lookup, no extra code, no extra binding for the data without).
+const patchOnce = (src, anchor, replacement) => {
+ const i = src.indexOf(anchor);
+ if (i < 0 || src.indexOf(anchor, i + 1) >= 0) throw new Error('child shader patch: anchor not found exactly once: ' + anchor.slice(0, 80));
+ return src.slice(0, i) + replacement + src.slice(i + anchor.length);
+};
+const MATERIAL_KEYS_4 = Object.keys(MATERIALS).slice(0, 4);
+const slotOfChild = e => (Number.isFinite(+e.parentSlot) && +e.parentSlot >= 0 && +e.parentSlot <= 3 ? +e.parentSlot | 0 : -1); // -1: the parent has no GPU slot
+const f32bits = new DataView(new ArrayBuffer(4));
+const bitsOf = x => { f32bits.setFloat32(0, x, true); return f32bits.getUint32(0, true); };
+// the 8 words (2 texels) of a child: entry {color (0xRRGGBB number or '#rrggbb'), opacity, material (lighting.js MATERIALS key), shade ({lower, upper} | null), visible, parentSlot}; range = the app-resolved range of the child's key
+// (section.shade.ranges) when it has none of its own
+export function childLutWords(e, range = null) {
+ let c = e.color; if (typeof c === 'string') c = parseInt(c.replace('#', ''), 16);
+ const rgb = (Number.isFinite(+c) ? +c : 0xffffff) & 0xffffff, ok = r => r && Number.isFinite(+r.lower) && Number.isFinite(+r.upper) && +r.upper > +r.lower;
+ const sh = ok(e.shade) ? e.shade : ok(range) ? range : null;
+ const mat = Math.max(0, MATERIAL_KEYS_4.indexOf(materialKey(e.material))), op = Number.isFinite(+e.opacity) ? Math.max(0, Math.min(1, +e.opacity)) : 1;
+ const slot = slotOfChild(e);
+ return [(rgb >> 16) & 255, (rgb >> 8) & 255, rgb & 255, slot < 0 ? 255 : slot, bitsOf(sh ? +sh.lower : 0), bitsOf(sh ? +sh.upper : 0), bitsOf(op + 2 * mat), e.visible === false ? 1 : 0];
+}
+// capShade.w of the child shaders = hiddenAny * 16 + (bit s: slot s is the parent of a child)
+export const childFlagsWord = entries => { let m = 0, h = 0; for (const e of entries) { const s = slotOfChild(e); if (s < 0) continue; m |= 1 << s; if (e.visible === false) h = 16; } return m | h; };
+const CHILD_WGSL = `
+@group(0) @binding(13) var childTex:texture_3d<u32>;
+@group(0) @binding(14) var childLut:texture_2d<u32>;
+fn childIdxAt(tc0:vec3<f32>)->u32{
+ let dims=vec3<u32>(u32(u.textureDims.x),u32(u.textureDims.y),u32(u.textureDims.z));
+ let tc=clamp(tc0,vec3<f32>(0.0),vec3<f32>(0.999999));
+ let p=min(vec3<u32>(tc*vec3<f32>(dims)),dims-vec3<u32>(1u));
+ return textureLoad(childTex,vec3<i32>(p),0).r;
+}
+fn chRow0(i:u32)->vec4<u32>{return textureLoad(childLut,vec2<i32>(i32(i),0),0);}
+fn chRow1(i:u32)->vec4<u32>{return textureLoad(childLut,vec2<i32>(i32(i),1),0);}
+fn childRgb(r:vec4<u32>)->vec3<f32>{return vec3<f32>(f32(r.x),f32(r.y),f32(r.z))/255.0;}
+fn childHiddenAt(s:u32,tc:vec3<f32>)->bool{
+ if((u32(u.capShade.w)&16u)==0u){return false;}
+ let i=childIdxAt(tc);return i!=0u&&chRow0(i).w==s&&chRow1(i).w!=0u;
+}
+`;
+const CHILD_WGSL_MAIN = `
+fn chMatOf(k:u32)->vec3<f32>{
+ var t=array<vec3<f32>,4>(${MATERIAL_KEYS_4.map(k => { const m = MATERIALS[k]; return `vec3<f32>(${[m.ambient, m.spec, m.shininess].map(x => Number.isInteger(x) ? x.toFixed(1) : String(x)).join(',')})`; }).join(',')});
+ return t[k&3u];
+}
+fn capShadeLumR(hv:f32,lo:f32,hi:f32)->f32{
+ let t=clamp((hv-lo)/max(hi-lo,0.001),0.0,1.0);
+ let g=1.0/max(u.capShade.y,0.1);let l=pow(mix(0.35,1.0,t),g);
+ if(u.capShade.z==1.0){return l;}
+ let p=0.5*(pow(0.35,g)+1.0);return clamp(p+(l-p)*u.capShade.z,0.05,1.0);
+}
+// the normal of the cut a hidden child leaves: the gradient of the hidden indicator, pointing into the hidden child (the same convention as appliedCutNormal)
+fn hiddenChildNormal(s:u32,tc0:vec3<f32>)->vec3<f32>{
+ let dims=max(u.textureDims.xyz,vec3<f32>(1.0));
+ let d=vec3<f32>(1.0/dims.x,1.0/dims.y,1.0/dims.z);
+ let gx=select(0.0,1.0,childHiddenAt(s,tc0+vec3<f32>(d.x,0.0,0.0)))-select(0.0,1.0,childHiddenAt(s,tc0-vec3<f32>(d.x,0.0,0.0)));
+ let gy=select(0.0,1.0,childHiddenAt(s,tc0+vec3<f32>(0.0,d.y,0.0)))-select(0.0,1.0,childHiddenAt(s,tc0-vec3<f32>(0.0,d.y,0.0)));
+ let gz=select(0.0,1.0,childHiddenAt(s,tc0+vec3<f32>(0.0,0.0,d.z)))-select(0.0,1.0,childHiddenAt(s,tc0-vec3<f32>(0.0,0.0,d.z)));
+ let voxel=2.0*u.halfStep.xyz/dims;
+ let g=vec3<f32>(gx/max(voxel.x,1e-6),-gy/max(voxel.y,1e-6),gz/max(voxel.z,1e-6));
+ let l=length(g);
+ if(l<1e-6){return vec3<f32>(0.0,0.0,1.0);}
+ return g/l;
+}
+`;
+export function volumeShaderChild() {
+ let s = volumeShader();
+ s = patchOnce(s, 'struct VOut{', CHILD_WGSL + CHILD_WGSL_MAIN + 'struct VOut{');
+ // a hidden child is not a member of its segment: the surface search marches through it
+ s = patchOnce(s, 'if((excludeMode&(1u<<s))!=0u&&!excludeMaskedInside(s,tc,a)){continue;}', 'if((excludeMode&(1u<<s))!=0u&&!excludeMaskedInside(s,tc,a)){continue;} if(childHiddenAt(s,tc)){continue;}');
+ s = patchOnce(s, 'if(segMember(s,v,a,tc)){return i32(s);}}\n return -1;\n}\nfn brickMayContain', 'if(segMember(s,v,a,tc)&&!childHiddenAt(s,tc)){return i32(s);}}\n return -1;\n}\nfn brickMayContain');
+ // the cut face: the child colour x its own shading range (an analysis result's colour, below, still replaces it)
+ s = patchOnce(s, 'if(u.capShade.x>0.5){capColor*=capShadeLum(huAt(ctc),capIndex);}',
+  `var capChild=0u;if(((u32(u.capShade.w)>>u32(capIndex))&1u)!=0u){capChild=childIdxAt(ctc);}
+     if(capChild!=0u&&chRow0(capChild).w==u32(capIndex)){capColor=mix(childRgb(chRow0(capChild)),vec3<f32>(1.0),0.22);
+      if(u.capShade.x>0.5){let r1=chRow1(capChild);let lo=bitcast<f32>(r1.x);let hi=bitcast<f32>(r1.y);if(hi>lo){capColor*=capShadeLumR(huAt(ctc),lo,hi);}else{capColor*=capShadeLum(huAt(ctc),capIndex);}}
+     }else if(u.capShade.x>0.5){capColor*=capShadeLum(huAt(ctc),capIndex);}`);
+ // the surface hit: the child's material (before the shading), colour and opacity
+ s = patchOnce(s, 'let later=acc.a>0.0;', `let later=acc.a>0.0;
+     var chI=0u;var chMat=u.segMat[u32(idx)].xyz;
+     if(((u32(u.capShade.w)>>u32(idx))&1u)!=0u){
+      chI=childIdxAt(insideVoxelTc(tc,dir,inward,u32(idx)));
+      if(chI!=0u&&chRow0(chI).w!=u32(idx)){chI=0u;}
+      if(chI!=0u){chMat=chMatOf(u32(floor(bitcast<f32>(chRow1(chI).z)*0.5)));}
+     }`);
+ s = patchOnce(s, 'select(0.0,1.0,later),u.segMat[u32(idx)].xyz);', 'select(0.0,1.0,later),chMat);');
+ s = patchOnce(s, 'var alpha=clamp(a.z,0.03,1.0);', `var alpha=clamp(a.z,0.03,1.0);
+     if(chI!=0u){let r1=chRow1(chI);col=childRgb(chRow0(chI));let oz=bitcast<f32>(r1.z);alpha=clamp(oz-2.0*floor(oz*0.5),0.03,1.0);if(r1.w!=0u){alpha=0.0;}}`);
+ // a hidden child leaves a cut, not an HU iso-surface; no uniform-brick jump over it
+ s = patchOnce(s, 'let iso=u.mprVisible.w>0.5&&', 'let iso=u.mprVisible.w>0.5&&(u32(u.capShade.w)&16u)==0u&&');
+ s = patchOnce(s, 'uniformSeg=select(-1,bc-2,bc>=2);', 'uniformSeg=select(-1,bc-2,bc>=2&&(u32(u.capShade.w)&16u)==0u);');
+ s = patchOnce(s, 'var previousT=t;var lastIndex:i32=-1;var previousCutIdx:i32=-1;', 'var previousT=t;var lastIndex:i32=-1;var previousCutIdx:i32=-1;var previousHideIdx:i32=-1;');
+ s = patchOnce(s, 'n=appliedCutNormal(u32(idx),prevTc);\n     }', 'n=appliedCutNormal(u32(idx),prevTc);\n     }else if(previousHideIdx==idx){n=hiddenChildNormal(u32(idx),texCoord(u.camOrigin.xyz+dir*previousT));}');
+ s = patchOnce(s, '    lastIndex=idx;\n    previousCutIdx=-1;', '    lastIndex=idx;\n    previousCutIdx=-1;\n    previousHideIdx=select(-1,rawIdx,idx<0&&rawIdx>=0&&childHiddenAt(u32(rawIdx),tc0));');
+ s = patchOnce(s, '}else if(idx<0){\n    lastIndex=-1;\n   }', '}else if(idx<0){\n    lastIndex=-1;\n    previousHideIdx=select(-1,rawIdx,rawIdx>=0&&childHiddenAt(u32(rawIdx),tc0));\n   }');
+ s = patchOnce(s, '}else if(!canSample&&!uniformJump){lastIndex=-1;previousCutIdx=-1;}', '}else if(!canSample&&!uniformJump){lastIndex=-1;previousCutIdx=-1;previousHideIdx=-1;}');
+ return s;
+}
+// the pick shader with the children: a hidden child is not hit, and the hit reports the child under it (result word 3 = slot + 1 | (child index) << 8). Extra bindings: 6 = childTex, 7 = childLut
+export function volumePickShaderChild() {
+ let s = volumePickShader();
+ s = patchOnce(s, 'sectionCap:vec4<f32>,textureDims:vec4<f32>\n};', 'sectionCap:vec4<f32>,textureDims:vec4<f32>,background:vec4<f32>,segMat:array<vec4<f32>,4>,capShade:vec4<f32>\n};');
+ s = patchOnce(s, '@group(0) @binding(5) var<storage,read> editIntervals:array<u32>;', `@group(0) @binding(5) var<storage,read> editIntervals:array<u32>;
+@group(0) @binding(6) var childTex:texture_3d<u32>;
+@group(0) @binding(7) var childLut:texture_2d<u32>;
+${CHILD_WGSL.replace(/@group\(0\) @binding\(1[34]\)[^\n]*\n/g, '')}`);
+ s = patchOnce(s, 'if(segMember(s,v,a,tc)){return preferred;}', 'if(segMember(s,v,a,tc)&&!childHiddenAt(s,tc)){return preferred;}');
+ s = patchOnce(s, 'if(segMember(s,v,a,tc)){return i32(s);}}\n return -1;', 'if(segMember(s,v,a,tc)&&!childHiddenAt(s,tc)){return i32(s);}}\n return -1;');
+ s = patchOnce(s, 'result[ob+3u]=u32(idx)+1u;return;', 'var ci=childIdxAt(texCoord(u.camOrigin.xyz+dir*t));if(ci!=0u&&chRow0(ci).w!=u32(idx)){ci=0u;}result[ob+3u]=(u32(idx)+1u)|(ci<<8u);return;');
+ return s;
+}
+
 export function mprPlaneShader(){
  return `
 struct MprParams{
@@ -871,6 +1001,7 @@ export class MedicalVolumeRenderer{
   this.sampler=this.device.createSampler({magFilter:'linear',minFilter:'linear',addressModeU:'clamp-to-edge',addressModeV:'clamp-to-edge',addressModeW:'clamp-to-edge'});
   const module=this.device.createShaderModule({label:'VRL medical volume raycast',code:safeWgsl(volumeShader())});
   this.pipeline=this.device.createRenderPipeline({label:'VRL medical volume raycast',layout:'auto',vertex:{module,entryPoint:'vs'},fragment:{module,entryPoint:'fs',targets:[{format:this.format}]},primitive:{topology:'triangle-list'}});
+  this.pipelineChild=null;this.pickPipelineChild=null;this.bindGroupChild=null;this.childCount=0;this.childTex=null;this.childLut=null;this.childLutData=null;this.childEntries=null;this.childFlags=0;this.childSignature='';this.childTexSignature='';
   const pickModule=this.device.createShaderModule({label:'VRL medical volume pick',code:safeWgsl(volumePickShader())});this.pickPipeline=this.device.createComputePipeline({label:'VRL medical volume pick',layout:'auto',compute:{module:pickModule,entryPoint:'main'}});this.pickBuffer=null;this.pickOutput=null;this.pickCapacity=0;
   const brickModule=this.device.createShaderModule({label:'VRL volume minmax bricks',code:safeWgsl(brickShader())});this.brickPipeline=this.device.createComputePipeline({label:'VRL volume minmax bricks',layout:'auto',compute:{module:brickModule,entryPoint:'main'}});this.brickBuffer=null;this.brickDims=[1,1,1];this.brickSize=8;
   const mprModule=this.device.createShaderModule({label:'VRL resident volume MPR',code:safeWgsl(mprPlaneShader())});this.mprPipeline=this.device.createComputePipeline({label:'VRL resident volume MPR',layout:'auto',compute:{module:mprModule,entryPoint:'main'}});this.mprUniformBuffer=this.device.createBuffer({size:48,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
@@ -885,7 +1016,7 @@ export class MedicalVolumeRenderer{
  support(v,{maxTextureBytes=0,targetInPlane=0}={}){
   const s=v?.series;if(!v?.sourceBacked||!s)return{ok:false,reason:'GPU volume currently targets source-backed DICOM'};
   if(!this.device||!this.context)return{ok:false,reason:'WebGPU device unavailable'};
-  if(!s.slices.length||s.slices.some(m=>m.bits!==16||m.samples!==1||!UNCOMPRESSED_TS.has(m.ts)))return{ok:false,reason:'16-bit uncompressed single-channel DICOM required'};
+  if(!s.slices.length||s.slices.some(m=>!(m.bits===16||m.bits===8)||m.samples!==1||!UNCOMPRESSED_TS.has(m.ts)))return{ok:false,reason:'8/16-bit uncompressed single-channel DICOM required'};
   if(s.slices.some(m=>m.rows!==s.rows||m.columns!==s.columns))return{ok:false,reason:'Inconsistent DICOM matrix'};
   const first=s.slices[0],slope=first.slope,intercept=first.intercept,signed=!!first.signed;
   if(s.slices.some(m=>Math.abs(m.slope-slope)>1e-9||Math.abs(m.intercept-intercept)>1e-6||!!m.signed!==signed))return{ok:false,reason:'Per-slice calibration differs'};
@@ -1026,8 +1157,8 @@ export class MedicalVolumeRenderer{
   this.bricksReady=true;this.onStatus('WEBGPU VOLUME READY');
  }
  rebuildBindGroup(){
-  if(!this.texture||!this.brickBuffer||!this.editRowsBuffer||!this.editIntervalsBuffer||!this.previewRowsBuffer||!this.previewIntervalsBuffer||!this.appliedCutRowsBuffer||!this.appliedCutIntervalsBuffer||!this.analysisOverlayBuffer){this.bindGroup=null;return}
-  this.bindGroup=this.device.createBindGroup({layout:this.pipeline.getBindGroupLayout(0),entries:[
+  if(!this.texture||!this.brickBuffer||!this.editRowsBuffer||!this.editIntervalsBuffer||!this.previewRowsBuffer||!this.previewIntervalsBuffer||!this.appliedCutRowsBuffer||!this.appliedCutIntervalsBuffer||!this.analysisOverlayBuffer){this.bindGroup=null;this.bindGroupChild=null;return}
+  const entries=[
    {binding:0,resource:{buffer:this.uniformBuffer}},{binding:1,resource:this.texture.createView({dimension:'3d'})},
    {binding:2,resource:{buffer:this.editRowsBuffer}},{binding:3,resource:{buffer:this.brickBuffer}},{binding:4,resource:this.sampler},{binding:5,resource:{buffer:this.editIntervalsBuffer}},
    {binding:6,resource:{buffer:this.previewRowsBuffer}},{binding:7,resource:{buffer:this.previewIntervalsBuffer}},
@@ -1036,7 +1167,73 @@ export class MedicalVolumeRenderer{
    // the mask texture only once its out-of-memory scope came back clean (an invalid texture would invalidate the whole group)
    {binding:12,resource:(this.editMaskTexture&&this.editMaskBuilt?.ready?this.editMaskTexture:this.regionDummy()).createView({dimension:'3d'})},
    {binding:10,resource:{buffer:this.analysisOverlayBuffer}}
-  ]});
+  ];
+  this.bindGroup=this.device.createBindGroup({layout:this.pipeline.getBindGroupLayout(0),entries});
+  // the child variant (a patched copy of the same shader) has a layout of its own and two more bindings: its own bind group, only while a child exists
+  this.bindGroupChild=this.pipelineChild&&this.childTex&&this.childLut?this.device.createBindGroup({layout:this.pipelineChild.getBindGroupLayout(0),entries:[...entries,{binding:13,resource:this.childTex.createView({dimension:'3d'})},{binding:14,resource:this.childLut.createView()}]}):null;
+ }
+ // the shader variants with child segments, made on first use (data without a child never compiles, binds or runs any of it)
+ ensureChildPipeline(){
+  if(this.pipelineChild)return;
+  const module=this.device.createShaderModule({label:'VRL medical volume raycast (children)',code:safeWgsl(volumeShaderChild())});
+  this.pipelineChild=this.device.createRenderPipeline({label:'VRL medical volume raycast (children)',layout:'auto',vertex:{module,entryPoint:'vs'},fragment:{module,entryPoint:'fs',targets:[{format:this.format}]},primitive:{topology:'triangle-list'}});
+  const pickModule=this.device.createShaderModule({label:'VRL medical volume pick (children)',code:safeWgsl(volumePickShaderChild())});
+  this.pickPipelineChild=this.device.createComputePipeline({label:'VRL medical volume pick (children)',layout:'auto',compute:{module:pickModule,entryPoint:'main'}});
+ }
+ clearChildSegments(){
+  this.childTex?.destroy?.();this.childLut?.destroy?.();
+  this.childTex=null;this.childLut=null;this.childLutData=null;this.childEntries=null;this.childCount=0;this.childFlags=0;this.childSignature='';this.childTexSignature='';this.childError='';
+  this.bindGroupChild=null;
+ }
+ // entries = childRenderEntries() (segments.js): [{key, runs (the mask: per-slice [y, x0, x1] triples of the source grid, as the analysis results), color, opacity, material, shade ({lower, upper} | null), visible, parentSlot (0..3: the GPU slot of the parent preset), hash?}]
+ // signature: changes when anything of the entries changes (the look included); the index texture is rebuilt only when a mask (key / hash) or the grid changes. Reduced textures point-sample the source: the masks are dilated by one texel as the results are.
+ setChildSegments(entries,v,signature=''){
+  if(signature&&signature===this.childSignature)return;
+  if(!v||!this.textureDims||!entries?.length){this.clearChildSegments();this.childSignature=signature;this.rebuildBindGroup();return}
+  const n=entries.length,[w,h,d]=this.textureDims;
+  if(n>65535)throw new Error('GPU child segments: more than 65535');
+  const texSig=this.textureDims.join('x')+'|'+this.seriesId+'|'+entries.map(e=>e.key+':'+(e.hash??e.voxels??0)).join(',');
+  const lutData=new Uint32Array((n+1)*8);
+  for(let i=0;i<n;i++){const wd=childLutWords(entries[i]);for(let j=0;j<4;j++){lutData[(i+1)*4+j]=wd[j];lutData[(n+1)*4+(i+1)*4+j]=wd[4+j]}}
+  const lut=this.device.createTexture({label:'VRL child look-up',size:{width:n+1,height:2},format:'rgba32uint',usage:GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.COPY_DST});
+  this.device.queue.writeTexture({texture:lut},lutData,{bytesPerRow:(n+1)*16},{width:n+1,height:2});
+  this.childLut?.destroy?.();this.childLut=lut;this.childLutData=lutData;this.childEntries=entries.map(e=>({key:e.key,color:e.color,opacity:e.opacity,material:e.material,shade:e.shade,visible:e.visible,parentSlot:e.parentSlot}));
+  this.childFlags=childFlagsWord(entries);this.childCount=n;this.childSignature=signature;
+  if(!(texSig===this.childTexSignature&&this.childTex)){
+   const wide=n>255,bpv=wide?2:1,bytesPerRow=Math.ceil(w*bpv/256)*256,rowElems=bytesPerRow/bpv,bytes=bytesPerRow*h*d;
+   const grids=entries.map(e=>gpuRunsForTexture(e.runs,[v.columns,v.rows,v.slices],[w,h,d],{dilate:this.reducedVolume?1:0}));
+   let tex=null,staging=null,pushed=false;this.childError='';
+   try{
+    this.device.pushErrorScope?.('out-of-memory');pushed=!!this.device.pushErrorScope;
+    staging=this.device.createBuffer({label:'VRL child index staging',size:bytes,usage:GPUBufferUsage.COPY_SRC,mappedAtCreation:true});
+    const words=wide?new Uint16Array(staging.getMappedRange()):new Uint8Array(staging.getMappedRange());
+    for(let ci=0;ci<n;ci++){const g=grids[ci];if(!g)continue;
+     for(let z=0;z<d;z++){const rec=g[z];if(!rec)continue;for(let i=0;i<rec.length;i+=3){const base=(z*h+rec[i])*rowElems;for(let x=rec[i+1];x<=rec[i+2];x++)words[base+x]=ci+1}}}
+    staging.unmap();
+    tex=this.device.createTexture({label:'VRL child index',size:{width:w,height:h,depthOrArrayLayers:d},dimension:'3d',format:wide?'r16uint':'r8uint',usage:GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.COPY_DST});
+    const enc=this.device.createCommandEncoder({label:'VRL child index upload'});
+    enc.copyBufferToTexture({buffer:staging,bytesPerRow,rowsPerImage:h},{texture:tex},{width:w,height:h,depthOrArrayLayers:d});
+    this.device.queue.submit([enc.finish()]);
+    const created=tex,stagingBuf=staging;
+    this.device.queue.onSubmittedWorkDone?.()?.then(()=>stagingBuf.destroy?.()).catch(()=>{});
+    // WebGPU reports an allocation failure through the error scope: without the index texture the children are not drawn (the parent shows as before)
+    pushed=false;
+    this.device.popErrorScope?.()?.then(err=>{if(err&&this.childTex===created){console.warn('Child index texture not available; child segments are not drawn.',err.message);this.clearChildSegments();this.childError=String(err.message||err);this.rebuildBindGroup();this.onChildError?.(this.childError)}}).catch(()=>{});
+   }catch(e){
+    console.warn('Child index texture not available; child segments are not drawn.',e);
+    if(pushed){try{this.device.popErrorScope().catch(()=>{})}catch{}}
+    tex?.destroy?.();tex=null;staging?.destroy?.();this.childError=String(e?.message||e);
+   }
+   this.childTex?.destroy?.();this.childTex=tex;this.childTexSignature=tex?texSig:'';
+  }
+  if(this.childTex){this.ensureChildPipeline()}else{this.childCount=0}
+  this.rebuildBindGroup();
+ }
+ // the cut-face shading range of a child without a range of its own is the one the app resolves per key (section.shade.ranges, segments.js segmentShadeRange: the automatic range included); the look-up row is rewritten only when one changed
+ refreshChildShade(ranges){
+  const es=this.childEntries,data=this.childLutData;if(!es||!data||!this.childLut)return;const n=es.length;let dirty=false;
+  for(let i=0;i<n;i++){const r=ranges?.[es[i].key],wd=childLutWords(es[i],r);for(let j=0;j<4;j++)if(data[(n+1)*4+(i+1)*4+j]!==wd[4+j]){data[(n+1)*4+(i+1)*4+j]=wd[4+j];dirty=true}}
+  if(dirty)this.device.queue.writeTexture({texture:this.childLut},data,{bytesPerRow:(n+1)*16},{width:n+1,height:2});
  }
  clearEditRuns(){
   this.editRunsInfo='';this.editUpload=null;
@@ -1487,10 +1684,12 @@ struct O{@builtin(position) p:vec4<f32>,@location(0) uv:vec2<f32>};
    // slots 28 / 29 = each segment slot's shading range (lower, upper) = section.shade.ranges[key] (sectionShadeParams, from segments.js segmentShadeRange); a slot without a segment: 0, 1
    const rg=s=>{const r=sh.ranges?.[segmentOrder[s]];return r&&Number.isFinite(r.lower)&&Number.isFinite(r.upper)?[r.lower,r.upper]:[0,1]};
    put(28,...rg(0),...rg(1));put(29,...rg(2),...rg(3))}
+  if(this.childCount>0){data[27*4+3]=this.childFlags||0;this.refreshChildShade(section.shade?.ranges)} // slot 27 w = the child flags (setChildSegments), read only by the child shader variant
   this.device.queue.writeBuffer(this.uniformBuffer,0,data);
   const low=(this.renderW&&(this.renderW!==this.canvas.width||this.renderH!==this.canvas.height))?this.lowTarget(this.renderW,this.renderH):null;
   const encoder=this.device.createCommandEncoder({label:'VRL volume frame'}),canvasView=this.context.getCurrentTexture().createView(),view=low?low.view:canvasView,pass=encoder.beginRenderPass({colorAttachments:[{view,clearValue:{r:canvasBackground3dUnit()[0],g:canvasBackground3dUnit()[1],b:canvasBackground3dUnit()[2],a:1},loadOp:'clear',storeOp:'store'}]});
-  pass.setPipeline(this.pipeline);pass.setBindGroup(0,this.bindGroup);pass.draw(3);pass.end();
+  const kid=this.childCount>0&&this.pipelineChild&&this.bindGroupChild;
+  pass.setPipeline(kid?this.pipelineChild:this.pipeline);pass.setBindGroup(0,kid?this.bindGroupChild:this.bindGroup);pass.draw(3);pass.end();
   if(low){const bp=encoder.beginRenderPass({colorAttachments:[{view:canvasView,loadOp:'clear',clearValue:{r:0,g:0,b:0,a:1},storeOp:'store'}]});bp.setPipeline(this.blitPipeline);bp.setBindGroup(0,low.group);bp.draw(3);bp.end()}
   // diagnostics (640x343 took longer than 1516x813, so the time is
   // not the ray casting alone): wait = GPU work queued before this frame,
@@ -1512,21 +1711,26 @@ struct O{@builtin(position) p:vec4<f32>,@location(0) uv:vec2<f32>};
   for(let i=0;i<count;i++){const p=points[i],base=(i+1)*4;data[base]=(p.clientX-rect.left)/Math.max(rect.width,1)*(this.renderW||this.canvas.width);data[base+1]=(p.clientY-rect.top)/Math.max(rect.height,1)*(this.renderH||this.canvas.height);data[base+2]=preferred>=0?preferred+1:0}
   this.device.queue.writeBuffer(this.pickBuffer,0,data);
   const zero=new Uint32Array(count*4);this.device.queue.writeBuffer(this.pickOutput,0,zero);
-  const group=this.device.createBindGroup({layout:this.pickPipeline.getBindGroupLayout(0),entries:[
+  const kid=this.childCount>0&&this.childTex&&this.childLut&&this.pickPipelineChild,pickPipeline=kid?this.pickPipelineChild:this.pickPipeline;
+  const group=this.device.createBindGroup({layout:pickPipeline.getBindGroupLayout(0),entries:[
    {binding:0,resource:{buffer:this.uniformBuffer}},{binding:1,resource:this.texture.createView({dimension:'3d'})},{binding:2,resource:{buffer:this.editRowsBuffer}},
-   {binding:3,resource:{buffer:this.pickBuffer}},{binding:4,resource:{buffer:this.pickOutput}},{binding:5,resource:{buffer:this.editIntervalsBuffer}}
+   {binding:3,resource:{buffer:this.pickBuffer}},{binding:4,resource:{buffer:this.pickOutput}},{binding:5,resource:{buffer:this.editIntervalsBuffer}},
+   ...(kid?[{binding:6,resource:this.childTex.createView({dimension:'3d'})},{binding:7,resource:this.childLut.createView()}]:[])
   ]});
   const bytes=count*16,read=this.device.createBuffer({size:bytes,usage:GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ}),encoder=this.device.createCommandEncoder({label:'VRL volume batch pick'}),pass=encoder.beginComputePass();
-  pass.setPipeline(this.pickPipeline);pass.setBindGroup(0,group);pass.dispatchWorkgroups(Math.ceil(count/64));pass.end();encoder.copyBufferToBuffer(this.pickOutput,0,read,0,bytes);this.device.queue.submit([encoder.finish()]);
+  pass.setPipeline(pickPipeline);pass.setBindGroup(0,group);pass.dispatchWorkgroups(Math.ceil(count/64));pass.end();encoder.copyBufferToBuffer(this.pickOutput,0,read,0,bytes);this.device.queue.submit([encoder.finish()]);
   await read.mapAsync(GPUMapMode.READ);const out=new Uint32Array(read.getMappedRange().slice(0));read.unmap();read.destroy();
   const result=new Array(count);
-  for(let i=0;i<count;i++){const b=i*4,index=out[b+3];result[i]=index?{x:out[b],y:out[b+1],z:out[b+2],key:segmentOrder[index-1]}:null}
+  for(let i=0;i<count;i++){
+   const b=i*4,word=out[b+3],index=word&255,child=word>>>8; // child = the child segment under the hit (1-based index of setChildSegments' entries), 0 = none
+   result[i]=index?(child?{x:out[b],y:out[b+1],z:out[b+2],key:segmentOrder[index-1],childKey:this.childEntries?.[child-1]?.key??null}:{x:out[b],y:out[b+1],z:out[b+2],key:segmentOrder[index-1]}):null;
+  }
   return result;
  }
  async pick(clientX,clientY,camera,obj,segmentState,segmentOrder,preferredKey=null){
   const result=await this.pickMany([{clientX,clientY}],camera,obj,segmentState,segmentOrder,preferredKey);return result[0]||null;
  }
- resetData(){this.dataGeneration=(this.dataGeneration|0)+1;this.setActive(false);this.dropEditMaskTexture();this.texture?.destroy?.();this.brickBuffer?.destroy?.();this.texture=null;this.brickBuffer=null;this.bindGroup=null;this.seriesId=null;this.bricksReady=false;this.previewVolume=null;this.previewPlaneBuffers={coronal:null,sagittal:null};this.volume=null;this.textureDims=[1,1,1];this.reducedVolume=false;this.textureBytes=0;this.planSignature='';this.clearEditRuns();this.clearPreviewRuns();this.clearAppliedCutRuns();this.clearAnalysisRuns()} // the region index texture (r32uint, 67 MB at 512³) and the overlay buffer belong to the old grid too: released here, not at the next clearAnalysisRuns
+ resetData(){this.dataGeneration=(this.dataGeneration|0)+1;this.setActive(false);this.dropEditMaskTexture();this.texture?.destroy?.();this.brickBuffer?.destroy?.();this.texture=null;this.brickBuffer=null;this.bindGroup=null;this.seriesId=null;this.bricksReady=false;this.previewVolume=null;this.previewPlaneBuffers={coronal:null,sagittal:null};this.volume=null;this.textureDims=[1,1,1];this.reducedVolume=false;this.textureBytes=0;this.planSignature='';this.clearEditRuns();this.clearPreviewRuns();this.clearAppliedCutRuns();this.clearAnalysisRuns();this.clearChildSegments()} // the region index texture (r32uint, 67 MB at 512³) and the overlay buffer belong to the old grid too: released here, not at the next clearAnalysisRuns
  destroy(){this.resetData();this.regionTexture?.destroy?.();this._regionDummy?.destroy?.();this.uniformBuffer?.destroy?.();this.pickBuffer?.destroy?.();this.pickOutput?.destroy?.();this.editRowsBuffer?.destroy?.();this.editIntervalsBuffer?.destroy?.();this.previewRowsBuffer?.destroy?.();this.previewIntervalsBuffer?.destroy?.();this.analysisOverlayBuffer?.destroy?.();this.appliedCutRowsBuffer?.destroy?.();this.appliedCutIntervalsBuffer?.destroy?.();this.mprUniformBuffer?.destroy?.();this.canvas.remove()}
 }
 
@@ -1561,8 +1765,8 @@ function smallStorage(device,data){
 export async function extractSourceThresholdRuns(device,series,zStart,depth,seg){
  const coreDepth=Math.min(depth,series.slices.length-zStart),w=series.columns,h=series.rows,first=series.slices[zStart];
  if(coreDepth<=0)return{items:new Uint32Array(0),coreDepth:0};
- if(first.bits!==16||first.samples!==1||!UNCOMPRESSED_TS.has(first.ts))return null;
- if(series.slices.slice(zStart,zStart+coreDepth).some(m=>m.rows!==h||m.columns!==w||m.bits!==16||m.samples!==1||!UNCOMPRESSED_TS.has(m.ts)||Math.abs(m.slope-first.slope)>1e-9||Math.abs(m.intercept-first.intercept)>1e-6||!!m.signed!==!!first.signed))return null;
+ if(!(first.bits===16||first.bits===8)||first.samples!==1||!UNCOMPRESSED_TS.has(first.ts))return null;
+ if(series.slices.slice(zStart,zStart+coreDepth).some(m=>m.rows!==h||m.columns!==w||!(m.bits===16||m.bits===8)||m.samples!==1||!UNCOMPRESSED_TS.has(m.ts)||Math.abs(m.slope-first.slope)>1e-9||Math.abs(m.intercept-first.intercept)>1e-6||!!m.signed!==!!first.signed))return null;
  const texture=device.createTexture({label:'VRL analysis DICOM block',size:{width:w,height:h,depthOrArrayLayers:coreDepth},dimension:'3d',format:'rg8unorm',usage:GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.COPY_DST});
  try{
   for(let z=0;z<coreDepth;z++){
