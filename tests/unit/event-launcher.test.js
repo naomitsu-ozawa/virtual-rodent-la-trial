@@ -353,6 +353,28 @@ describe('the page layout (fake DOM)', () => {
     await vi.waitFor(() => expect(launcher.phase).toBe('ready'), { timeout: 8000 });
     expect(asked).toBe(1); expect(calls).toEqual(['open:sample4', 'data', 'gpu:vr']);
   }, 15000);
+  it('an XR session that starts while the card is still opening stops the flow: no prepareVrData / prepareVrGpuOnce, the status goes back to nothing', async () => {
+    const calls = [], t = make({ getVr: async () => fakeVr(calls) }), gate = page(t, calls, { hold: true });
+    t.launcher.enable();
+    t.doc.getElementById('event-cards').querySelector('[data-event-level="lv1"]').onclick();
+    expect(t.launcher.phase).toBe('loading');
+    t.doc.dispatchEvent(new CustomEvent('vrl-tut-signal', { detail: { kind: 'vr-start' } }));
+    expect(t.launcher.phase).toBe('');
+    gate.release();
+    await new Promise(r => setTimeout(r, 1800));
+    expect(calls).toEqual(['open:sample3']); expect(t.launcher.phase).toBe('');
+  }, 15000);
+  it('an AR session that starts while the VR module is loading stops the flow before prepareVrData (no second preparation during the session)', async () => {
+    const calls = []; let release; const slow = new Promise(r => { release = r; });
+    const t = make({ getVr: async () => { await slow; return fakeVr(calls); } }); page(t, calls);
+    t.launcher.enable();
+    t.doc.getElementById('event-cards').querySelector('[data-event-level="lv1"]').onclick();
+    await vi.waitFor(() => expect(t.launcher.phase).toBe('preparing'), { timeout: 8000 });
+    t.doc.dispatchEvent(new CustomEvent('vrl-tut-signal', { detail: { kind: 'ar-start' } }));
+    expect(t.launcher.phase).toBe('');
+    release(); await new Promise(r => setTimeout(r, 300));
+    expect(calls).toEqual(['open:sample3']); expect(t.launcher.phase).toBe('');
+  }, 15000);
   it('a press while loading does nothing: one open, one preparation', async () => {
     const calls = [], t = make({ getVr: async () => fakeVr(calls) }), gate = page(t, calls, { hold: true });
     t.launcher.enable();
@@ -424,6 +446,15 @@ describe('the views are not drawn while the page is on, and the layout is not an
     const ui = SRC('event-launcher.js').split('\n').filter(l => !l.trim().startsWith('//')).join('\n');
     expect(ui).not.toMatch(/viewer-grid|viewport-3d|medicalVolume|MedicalVolumeRenderer|sceneState/);
     expect(SRC('event-mode-ui.js')).not.toMatch(/medicalVolume|sceneState/);
+  });
+  it('vr-view.js prepareVrGpuOnce is a no-op (resolved null) while an XR session runs, before it touches anything', () => {
+    const vr = SRC('vr-view.js');
+    const i = vr.indexOf("export function prepareVrGpuOnce(P,mode='vr'){");
+    expect(i).toBeGreaterThan(0);
+    const body = vr.slice(i, vr.indexOf('\n}\n', i)).replace(/\/\/.*$/gm, '');
+    expect(body.split('\n')[1].trim()).toContain('if(running)return Promise.resolve(null);');
+    expect(body.indexOf('if(running)')).toBeLessThan(body.indexOf('prepareVrGpu(P,mode)'));
+    expect(body).not.toMatch(/initialVrModes|P\.combo|P\.cls4/);
   });
   it('event mode off: the layout code is idle (enable only from the switch; no class, no flag, no element until then)', () => {
     const ui = SRC('event-mode-ui.js');

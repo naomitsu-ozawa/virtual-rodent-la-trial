@@ -1,7 +1,7 @@
 // the credit box of a practice dataset with a license notice (sample-credits.js): shown in the データ panel while that dataset is open
 // (a 'vrl-event-sample-open' with its id), hidden when other data replaces it. Source and license are real links. Nothing is loaded from anywhere.
-import { tr } from './i18n.js?v=20261109-build699';
-import { sampleCredit } from './sample-credits.js?v=20261109-build699';
+import { tr } from './i18n.js?v=20261109-build700';
+import { sampleCredit } from './sample-credits.js?v=20261109-build700';
 export function initSampleCreditUi(doc=document){
  let box=null,lastId=null;
  const el=(tag,cls,key)=>{const e=doc.createElement(tag);if(cls)e.className=cls;if(key){e.dataset.i18n=key;e.textContent=tr(key)}return e};
