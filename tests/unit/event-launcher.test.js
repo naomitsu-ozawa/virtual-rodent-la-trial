@@ -488,8 +488,8 @@ describe('the views are not drawn while the page is on, and the layout is not an
     const css = SRC('style.css');
     expect(css).toContain('html.vrl-event-layout .viewer-grid,\nhtml.vrl-event-layout .ipad-workspace-toolbar{display:none!important}');
     const block = css.slice(css.indexOf('/* the 体験会モード page'), css.indexOf('/* 設定 > デバッグ > テスト機能'));
-    expect(block).not.toMatch(/position:\s*fixed/); // not an overlay: nothing is laid over the normal UI (the only absolute box is the picture inside its own frame)
-    expect(block.match(/position:\s*absolute/g)?.length).toBe(1); expect(block).toContain('.event-card-thumb img{position:absolute;inset:0');
+    expect(block).not.toMatch(/position:\s*fixed/); // not an overlay: nothing is laid over the normal UI (the only absolute boxes are the picture inside its own frame and,, the opened 詳細 inside its own card)
+    expect(block.match(/position:\s*absolute/g)?.length).toBe(2); expect(block).toContain('.event-card-thumb img{position:absolute;inset:0'); expect(block).toContain('details[open]>.event-card-details-body{position:absolute');
     expect(block).not.toMatch(/z-index/);
     expect(block).toContain('html.vrl-event-layout .app-shell{grid-template-rows:auto auto minmax(0,1fr) auto}');
     expect(block).toMatch(/\.event-cards\{[^}]*overflow-y:auto/);
