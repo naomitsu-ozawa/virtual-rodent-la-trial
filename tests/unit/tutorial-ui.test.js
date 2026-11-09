@@ -89,8 +89,8 @@ describe('Lv0 card: starts the tutorial from ステップ1 every time; nothing i
   });
   it('wiring: only Lv0 and only while the tutorial UI is live; the switch is never turned on by the card', async () => {
     const { readFileSync } = await import('node:fs');
-    const ui = readFileSync(new URL('../../docs/event-mode-ui.js', import.meta.url), 'utf8');
-    expect(ui).toContain("if(lv.id==='lv0'&&tutorialUiActive()){try{restartTutorial()}");
+    const ui = readFileSync(new URL('../../docs/event-launcher.js', import.meta.url), 'utf8'); // the cards moved from event-mode-ui.js to the event page
+    expect(ui).toContain("if (!tutorial && d.id === 'lv0' && tutorialUiActive()) { try { restartTutorial(); }");
     expect(ui).not.toMatch(/settings\.set\('tutorialMode'/);
     expect(tutorialUiActive()).toBe(false); // no panel mounted in this test: the Lv0 card is the plain card
   });
@@ -221,7 +221,7 @@ describe('page introduction', () => {
     const ui = readFileSync(new URL('../../docs/tutorial-ui.js', import.meta.url), 'utf8');
     expect(ui).toContain("b.id='tutorial-start-button'");
     expect(ui).toContain("const at=document.getElementById('vr-view-button');"); // the top bar, just before 「VRで見る」
-    expect(ui).toContain("const begin=()=>{if(settings.get('tutorialMode')!==true)settings.set('tutorialMode',true);sync();restartTutorial();intro.start()};"); // every start is from ステップ1: nothing is remembered
+    expect(ui).toContain("const begin=()=>{if(settings.get('tutorialMode')!==true)settings.set('tutorialMode',true);sync();restartTutorial();intro.start();try{document.dispatchEvent(new CustomEvent('vrl-tutorial-begin'))}catch{}};"); // every start is from ステップ1;: the event page listens to 'vrl-tutorial-begin' (opens Lv0): nothing is remembered
     expect(ui).toContain('b.onclick=()=>chooseVoice(begin);'); // the voice is chosen first
     // the dialog: 女性 / 男性 buttons, each says 「私が案内します」 in its own voice on hover / focus, a press saves the voice and starts; × (the first focus) closes silently; the credits are shown
     expect(ui).toContain("for(const v of ['F1','M1'])"); expect(ui).toContain("settings.set('tutorialVoice',v);d._onPick?.()");

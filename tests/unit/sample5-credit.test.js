@@ -22,10 +22,13 @@ describe('sample5 (marmoset brain MRI, 50 um): registration', () => {
     expect(files.length).toBe(480);
     expect(files).toEqual(dcm);
   });
-  it('is not a level: Lv0-Lv3 and the VR data-switch buttons are unchanged', () => {
+  it('is not a level: Lv0-Lv3 are unchanged; the VR data-switch items include it as a fifth one with its plain name, the level list passed explicitly stays at four', () => {
     expect(levelForSample('sample5')).toBeNull();
     expect(EVENT_LEVELS.map(l => l.sample)).toEqual(['sample4', 'sample3', 'sample2', 'sample1']);
-    expect(levelSwitchItems(k => k, 'sample5').map(i => i.sample)).toEqual(['sample4', 'sample3', 'sample2', 'sample1']);
+    expect(levelSwitchItems(k => k, 'sample5', null, EVENT_LEVELS).map(i => i.sample)).toEqual(['sample4', 'sample3', 'sample2', 'sample1']);
+    expect(levelSwitchItems(k => k, 'sample5').map(i => i.sample)).toEqual(['sample4', 'sample3', 'sample2', 'sample1', 'sample5']);
+    expect(levelSwitchItems(k => k, 'sample5').map(i => i.label)).toEqual(['Lv0 evLv0Name', 'Lv1 evLv1Name', 'Lv2 evLv2Name', 'Lv3 evLv3Name', 'sampleMarmoset']);
+    expect(levelSwitchItems(k => k, 'sample5').map(i => i.on)).toEqual([false, false, false, false, true]);
     expect(EVENT_OTHER_SAMPLES.map(o => o.sample)).toEqual(['sample5']);
     expect(Object.isFrozen(EVENT_OTHER_SAMPLES)).toBe(true);
   });

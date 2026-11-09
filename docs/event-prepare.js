@@ -10,7 +10,7 @@
 export const PREPARE_STATES = ['wait', 'building', 'saved', 'cached', 'failed'];
 
 export async function prepareEventLevels({ levels, io, onStatus = () => {}, isCancelled = () => false }) {
-  const results = levels.map(l => ({ id: l.id, lv: l.lv, sample: l.sample, state: 'wait', why: '' }));
+  const results = levels.map(l => ({ id: l.id, lv: l.lv, nameKey: l.nameKey, sample: l.sample, state: 'wait', why: '' })); // nameKey = how a dataset without a Lv number is called
   const set = (r, state, why = '') => { r.state = state; r.why = why; try { onStatus(results.map(x => ({ ...x }))); } catch { /* none */ } };
   onStatus(results.map(x => ({ ...x })));
   try {

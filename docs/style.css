@@ -864,6 +864,8 @@ footer #footer:empty{display:block}
 .job-help{color:rgb(var(--ui-t4));font-size:12px}
 /* the pre-build modal (event-prepare-ui.js): the same card as above, one layer higher, its lines keep their breaks */
 .job-modal.event-prepare-modal{z-index:20001}
+dialog.job-modal{width:auto;height:auto;max-width:none;max-height:none;margin:0;border:0;box-sizing:border-box;overflow:visible}
+dialog.job-modal::backdrop{background:transparent}
 .event-prepare-modal .job-detail{white-space:pre-line}
 .job-modal.event-prepare-modal.is-finished .job-spinner{display:none}
 @media (prefers-reduced-motion:reduce){.job-spinner{animation-duration:1.6s}.job-track.is-indeterminate .job-bar{animation:none;width:100%;opacity:.45}}
@@ -1248,11 +1250,11 @@ html.vrl-ipad-ui .ws-file-actions{display:grid;gap:10px;padding:2px 0 12px;margi
 html.vrl-ipad-ui .ws-file-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
 html.vrl-ipad-ui .ws-file-row>.ws-cap{grid-column:1 / -1}
 html.vrl-ipad-ui .ws-file-row>button{min-height:40px;padding:7px 8px;font-size:12px;white-space:normal;line-height:1.25;width:100%}
-/* 設定 panel (theme / language / all settings) and VR / AR at the top of 表示; the top bar keeps only the title */
+/* the rail's 設定 entry and VR / AR at the top of 表示; the top bar keeps only the title */
 html.vrl-ipad-ui .ws-pref-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid rgb(var(--ui-b1))}
 html.vrl-ipad-ui .ws-pref-row>.ws-cap{font-size:12px;white-space:normal}
 html.vrl-ipad-ui .ws-pref-row .theme-quick,html.vrl-ipad-ui .ws-pref-row .theme-quick select,html.vrl-ipad-ui .ws-pref-row>button{width:100%;min-height:40px}
-@media (orientation:landscape){html.vrl-ipad-ui .sidebar>.ws-tool-rail>[data-ipad-drawer-tab="prefs"]{margin-top:auto}}
+@media (orientation:landscape){html.vrl-ipad-ui .sidebar>.ws-tool-rail>#ws-settings-entry{margin-top:auto}}
 html.vrl-ipad-ui .topbar{min-height:0}
 html.vrl-ipad-ui .ws-sample-picker{display:grid;grid-template-rows:0fr;visibility:hidden;transition:grid-template-rows .22s ease,visibility 0s linear .22s}
 html.vrl-ipad-ui .ws-sample-picker.is-open{grid-template-rows:1fr;visibility:visible;transition:grid-template-rows .22s ease,visibility 0s}
@@ -1262,16 +1264,6 @@ html.vrl-ipad-ui .ws-sample-picker .sample-choice{min-height:48px;font-size:12px
 html.vrl-ipad-ui .ws-sample-picker.is-open .sample-choice{opacity:1;transform:none}
 html.vrl-ipad-ui #sample-demo-button[aria-expanded="true"]{box-shadow:inset 0 0 0 2px rgb(var(--ui-blue-bd))}
 html.vrl-ipad-ui .ws-empty-sample{margin-top:10px;justify-self:center}
-html.vrl-ipad-ui .ws-settings-embed{display:grid;gap:4px;padding-top:10px}
-html.vrl-ipad-ui .ws-settings-embed .settings-tabs{flex-wrap:wrap;gap:2px}
-html.vrl-ipad-ui .ws-settings-embed .settings-tab{padding:7px 9px;font-size:12px}
-html.vrl-ipad-ui .ws-settings-embed .settings-row:not(.settings-check){display:grid;grid-template-columns:minmax(0,1fr);align-items:stretch;gap:4px;min-height:0;padding:4px 0}
-html.vrl-ipad-ui .ws-settings-embed .settings-row:not(.settings-check)>span{font-size:12px;color:rgb(var(--ui-t2));overflow-wrap:anywhere}
-html.vrl-ipad-ui .ws-settings-embed .settings-check{justify-content:flex-start;gap:8px;min-height:36px}
-html.vrl-ipad-ui .ws-settings-embed .settings-check>span{overflow-wrap:anywhere;font-size:13px}
-html.vrl-ipad-ui .ws-settings-embed select{width:100%;max-width:100%;min-width:0}
-html.vrl-ipad-ui .ws-settings-embed .settings-cache-head{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
-html.vrl-ipad-ui .ws-settings-embed .settings-cache-list,html.vrl-ipad-ui .ws-settings-embed .gpu-report{max-width:100%;min-width:0;box-sizing:border-box}
 .ws-ask{display:grid;gap:8px;margin:0 0 10px;padding:10px 12px;border:1px solid rgb(var(--ui-amber-bd));border-radius:10px;background:rgb(var(--ui-amber-bg));color:rgb(var(--ui-amber-tx));animation:ws-ask-in .2s ease}
 .ws-ask.is-leaving{opacity:0;transform:translateY(-4px);transition:opacity .18s,transform .18s}
 .ws-ask-text{margin:0;font-size:12px;line-height:1.45;white-space:pre-line}
@@ -1286,31 +1278,48 @@ html.vrl-ipad-ui .ws-settings-embed .settings-cache-list,html.vrl-ipad-ui .ws-se
 .three-rebuild-chip{position:absolute;right:10px;bottom:10px;z-index:7;min-height:36px;padding:6px 14px;border-radius:18px;border:1px solid rgb(var(--ui-amber-bg2));background:rgb(var(--ui-amber-bg2) / 0.95);color:rgb(var(--ui-on-amber));font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.35)}
 .three-rebuild-chip[hidden]{display:none}
 
-/* 体験会モード - level choice in the データ panel (event-mode-ui.js); present only while the setting is on */
+/* 体験会モード - the データ panel keeps only 「最初の状態に戻す」 (event-mode-ui.js); present only while the setting is on.: the level cards moved to the event page (below) */
 .event-level-panel{display:grid;gap:10px;padding:2px 0 12px;margin-bottom:10px;border-bottom:1px solid rgb(var(--ui-b1))}
-.event-level-title{font-size:15px;color:rgb(var(--ui-t1))}
-.event-level-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,200px),1fr));gap:10px}
-.event-level-card{display:grid;gap:7px;align-content:start;width:100%;min-height:96px;padding:12px 14px;border-radius:14px;border:2px solid rgb(var(--ui-b2));background:rgb(var(--ui-s2));color:rgb(var(--ui-t2));text-align:left;font:inherit;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
-.event-level-card:hover{border-color:rgb(var(--ui-blue-bd2))}
-.event-level-card:focus-visible{outline:3px solid rgb(var(--ui-accent));outline-offset:2px}
-.event-level-card.is-selected{border-color:rgb(var(--ui-blue-bd));background:rgb(var(--ui-blue-bg));color:rgb(var(--ui-blue-tx))}
-.event-level-card:disabled{cursor:progress;opacity:.7}
-.event-level-card.is-selected:disabled{opacity:1}
-.event-level-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.event-level-badge{padding:2px 10px;border-radius:99px;border:1px solid rgb(var(--ui-blue-bd));background:rgb(var(--ui-blue-bg));color:rgb(var(--ui-blue-tx));font-weight:700;font-size:15px}
-.event-level-name{font-size:18px;font-weight:700}
-.event-level-mark{display:none;margin-left:auto;padding:2px 10px;border-radius:99px;border:1px solid rgb(var(--ui-blue-bd));font-size:13px;font-weight:700}
-.event-level-mark::before{content:'\2713  '}
-.event-level-card.is-selected .event-level-mark{display:inline-block}
-.event-level-mission{font-size:15px;line-height:1.5}
-.event-level-hints{display:flex;flex-wrap:wrap;gap:6px}
-.event-level-hint{padding:3px 8px;border-radius:8px;background:rgb(var(--ui-s4));color:rgb(var(--ui-t3));font-size:12px;line-height:1.4}
 .event-reset-btn{justify-self:start;min-height:44px;padding:8px 18px;border-radius:12px;border:2px solid rgb(var(--ui-b2));background:rgb(var(--ui-s2));color:rgb(var(--ui-t2));font:inherit;font-weight:700;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
 .event-reset-btn:hover:not(:disabled){border-color:rgb(var(--ui-blue-bd2))}
 .event-reset-btn:focus-visible{outline:3px solid rgb(var(--ui-accent));outline-offset:2px}
 .event-reset-btn.is-armed{border-color:rgb(var(--ui-amber-bg2));background:rgb(var(--ui-amber-bg2));color:rgb(var(--ui-on-amber))}
 .event-reset-btn:disabled{cursor:default;opacity:.55}
-.event-level-after{margin:0}
+
+/* the 体験会モード page (event-launcher.js). With the mode on the views (2D / 3D) and their bar are not laid out at all (display:none: no box, no size, nothing drawn);
+   the event bar (VR / AR / チュートリアル / status) is a grid row of its own under the top bar and never scrolls; the cards scroll by themselves in the area of the views. The left menu
+   (データ / 設定) stays where it is. Sizes are for the Quest browser's laser pointer (big targets, wide gaps); the grids reflow for any width. */
+html.vrl-event-layout .viewer-grid,
+html.vrl-event-layout .ipad-workspace-toolbar{display:none!important}
+html.vrl-event-layout .app-shell{grid-template-rows:auto auto minmax(0,1fr) auto}
+.event-bar{display:flex;flex-wrap:wrap;align-items:center;gap:14px;padding:10px 14px;border-radius:14px;border:1px solid rgb(var(--ui-b1));background:rgb(var(--ui-s1))}
+.event-bar button{min-height:64px;min-width:160px;padding:10px 26px;border-radius:16px;font-size:20px;font-weight:700;touch-action:manipulation}
+.event-bar [hidden]{display:none!important}
+.event-status{margin-left:auto;min-height:1.4em;font-size:22px;font-weight:700;color:rgb(var(--ui-t1))}
+.event-status[data-state="ready"]{color:rgb(var(--ui-green-tx))}
+.event-launcher{min-width:0;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+html.vrl-ipad-ui .event-launcher{grid-column:2;grid-row:1}
+.event-cards{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr));gap:24px;align-content:start;padding:6px 6px 28px}
+.event-card{display:grid;gap:10px;align-content:start;min-width:0}
+.event-card-btn{display:grid;gap:12px;align-content:start;width:100%;padding:16px;border-radius:20px;border:3px solid rgb(var(--ui-b2));background:rgb(var(--ui-s2));color:rgb(var(--ui-t2));text-align:left;font:inherit;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+.event-card-btn:hover:not(:disabled){border-color:rgb(var(--ui-blue-bd2))}
+.event-card-btn:focus-visible{outline:4px solid rgb(var(--ui-accent));outline-offset:3px}
+.event-card-btn.is-selected{border-color:rgb(var(--ui-blue-bd));background:rgb(var(--ui-blue-bg));color:rgb(var(--ui-blue-tx))}
+.event-card-btn:disabled{cursor:progress;opacity:.7}
+.event-card-btn.is-selected:disabled{opacity:1}
+.event-card-thumb{display:block;position:relative;width:100%;aspect-ratio:16/9;border-radius:14px;overflow:hidden;background:rgb(var(--ui-s4));border:1px solid rgb(var(--ui-b1))}
+.event-card-thumb img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
+.event-card-top{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.event-card-badge{padding:3px 14px;border-radius:99px;border:1px solid rgb(var(--ui-blue-bd));background:rgb(var(--ui-blue-bg));color:rgb(var(--ui-blue-tx));font-weight:700;font-size:20px}
+.event-card-name{font-size:24px;font-weight:700;line-height:1.3}
+.event-card-mission{font-size:18px;line-height:1.55}
+.event-card-license{margin:0 4px;font-size:15px;line-height:1.5;color:rgb(var(--ui-t3));overflow-wrap:anywhere;-webkit-user-select:text;user-select:text}
+.event-card-license a{color:inherit;font-weight:700;text-decoration:underline}
+@media(max-width:900px){html.vrl-event-layout:not(.vrl-ipad-ui),html.vrl-event-layout:not(.vrl-ipad-ui) body{overflow:hidden}html.vrl-event-layout:not(.vrl-ipad-ui) .app-shell{height:100dvh;min-height:0}}
+html.vrl-event-layout:not(.vrl-ipad-ui) .sidebar{display:none}
+html.vrl-event-layout:not(.vrl-ipad-ui) .workspace{grid-template-columns:minmax(0,1fr)}
+@media(orientation:portrait){html.vrl-ipad-ui .event-launcher{grid-column:1}}
+@media(max-width:640px){.event-bar button{min-width:0;flex:1 1 calc(50% - 7px)}.event-status{flex:1 1 100%;margin-left:0}}
 
 /* 設定 > デバッグ > テスト機能 (debug-switches-ui.js): collapsed by default, below the debug-mode switch */
 .debug-switches{margin-top:12px;border-top:1px solid rgb(var(--ui-b3));padding-top:8px}
@@ -1346,4 +1355,31 @@ button,a,img,svg{-webkit-user-drag:none}
 .sample-credit[hidden]{display:none}
 .sample-credit>div:first-child{font-weight:700}
 .sample-credit a{color:inherit;font-weight:700;text-decoration:underline}
-.event-other-title{font-size:13px;font-weight:700;color:rgb(var(--ui-t3));margin-top:2px}
+
+#settings-dialog{width:min(90vw,1200px);max-width:calc(100vw - 16px);height:90vh;height:90dvh;max-height:calc(100vh - 16px);max-height:calc(100dvh - 16px);padding:0;box-sizing:border-box}
+#settings-dialog[open]{display:flex;flex-direction:column;overflow:hidden}
+#settings-dialog .settings-head{flex:0 0 auto;margin:0;padding:12px 20px;border-bottom:1px solid rgb(var(--ui-b1))}
+#settings-dialog .settings-head strong{font-size:20px}
+#settings-dialog .settings-head button{min-width:52px;min-height:52px;font-size:24px;line-height:1;touch-action:manipulation}
+#settings-dialog .settings-body{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;padding:0 20px 20px;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;touch-action:pan-y}
+#settings-dialog .settings-tabs{position:sticky;top:0;z-index:2;flex-wrap:wrap;margin-bottom:12px;background:rgb(var(--ui-s2))}
+#settings-dialog .settings-tab{min-height:48px;padding:10px 18px;font-size:16px;touch-action:manipulation}
+#settings-dialog .settings-row{min-height:52px}
+#settings-dialog .settings-row select{min-height:44px;font-size:16px}
+#settings-dialog .settings-check input{width:26px;height:26px}
+#settings-dialog .settings-panel button,#settings-dialog .settings-panel .secondary-button{min-height:44px;touch-action:manipulation}
+#settings-dialog .event-level-panel{padding-top:12px}
+#settings-dialog .ws-pref-rows{padding:8px 0 10px}
+#settings-dialog .ws-pref-row{max-width:720px}
+#settings-dialog .ws-pref-row>.ws-cap{font-size:16px}
+#settings-dialog .ws-pref-row .theme-quick select,#settings-dialog .ws-pref-row>button{min-height:48px;font-size:16px}
+/* event mode: the left rail keeps only the 設定 entry; there is no panel next to the cards (workspace UI; the classic UI hides the whole sidebar above) */
+html.vrl-event-layout.vrl-ipad-ui .sidebar>.ipad-settings-head,
+html.vrl-event-layout.vrl-ipad-ui .sidebar>.sidebar-scroll,
+html.vrl-event-layout.vrl-ipad-ui .pane-resizer,
+html.vrl-event-layout.vrl-ipad-ui .ws-tool-rail>[data-ipad-drawer-tab]{display:none!important}
+@media (orientation:landscape){html.vrl-event-layout.vrl-ipad-ui.ipad-settings-persistent .workspace{grid-template-columns:80px minmax(0,1fr)}}
+@media (orientation:portrait){
+ html.vrl-event-layout.vrl-ipad-ui.ipad-settings-persistent .workspace{grid-template-rows:minmax(0,1fr) auto}
+ html.vrl-event-layout.vrl-ipad-ui .sidebar{grid-template-rows:auto!important}
+}
