@@ -168,7 +168,7 @@ describe('every view uses the shared lighting (static)', () => {
     const wgsl = volumeShader();
     expect(wgsl).toContain('fn vrlShade(');
     expect(wgsl).toMatch(/let shade=vrlShade\(select\(n,-inward,later\),viewDir,u\.camRightTan\.xyz\*[\d.]+\+u\.camUpAspect\.xyz\*[\d.]+,vrlDepth01\(hi,u\.camOrigin\.xyz,u\.halfStep\.xyz\),select\(0\.0,1\.0,later\),u\.segMat\[u32\(idx\)\]\.xyz\);/);
-    expect(wgsl).toContain('segMat:array<vec4<f32>,4>,\n capShade:vec4<f32>\n};'); // segMat appended at the END of the struct (the pick shader's struct is a prefix of it);: capShade after it
+    expect(wgsl).toContain('segMat:array<vec4<f32>,4>,\n capShade:vec4<f32>,\n capRange:array<vec4<f32>,2>\n};'); // segMat appended at the END of the struct (the pick shader's struct is a prefix of it);: capShade after it;: capRange after that
     expect(wgsl).toContain('let later=acc.a>0.0;');
     // n itself is not flipped; the outward normal of a later hit is -inward, so inward must be defined before the shading
     expect(wgsl).toContain('let inward=select(-n,n,hvPrev<-1e8||hvPrev<a.x);');
