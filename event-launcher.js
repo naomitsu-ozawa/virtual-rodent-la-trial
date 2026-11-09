@@ -6,13 +6,13 @@
 //   - below it the cards (one per dataset of event-mode.js EVENT_DATASETS) in an area that scrolls by itself
 // A card press opens the dataset through the page's own route ('vrl-event-sample' -> startSample), waits until the page is quiet, then prepares the VR data (prepareVrData + prepareVrGpu 'vr', the work of the
 // prepare panel) so that 「VRで見る」 starts with one press. Nothing is opened or prepared by itself when the page loads. With the mode off none of this exists (the elements go back where they were).
-import { tr } from './i18n.js?v=20261109-build702';
-import { EVENT_DATASETS, chooseEventLevel } from './event-mode.js?v=20261109-build702';
-import { eventCards, eventStatus, EVENT_STATUS_KEYS, openAndPrepare, waitForStandardOpen, createInflight } from './event-launcher-core.js?v=20261109-build702';
-import { settlePage } from './event-prepare-ui.js?v=20261109-build702';
-import { tutorialUiActive, restartTutorial } from './tutorial-ui.js?v=20261109-build702';
-import { sampleSliceUrl } from './sample-sets.js?v=20261109-build702';
-import { creditRows } from './sample-credit-ui.js?v=20261109-build702';
+import { tr } from './i18n.js?v=20261109-build703';
+import { EVENT_DATASETS, chooseEventLevel } from './event-mode.js?v=20261109-build703';
+import { eventCards, eventStatus, EVENT_STATUS_KEYS, openAndPrepare, waitForStandardOpen, createInflight } from './event-launcher-core.js?v=20261109-build703';
+import { settlePage } from './event-prepare-ui.js?v=20261109-build703';
+import { tutorialUiActive, restartTutorial } from './tutorial-ui.js?v=20261109-build703';
+import { sampleSliceUrl } from './sample-sets.js?v=20261109-build703';
+import { creditRows } from './sample-credit-ui.js?v=20261109-build703';
 
 const MOVED = ['tutorial-start-button', 'vr-view-button', 'ar-view-button'];
 const XR_CHECK_MS = 10000;
@@ -124,6 +124,7 @@ export function createEventLauncher({ doc = globalThis.document, g = globalThis,
       const d = EVENT_DATASETS.find(x => x.sample === c.sample);
       btn.onclick = () => { if (d) void press(d); };
       card.append(btn);
+      card.onclick = e => { if (e.target === btn || btn.contains(e.target) || e.target.closest?.('a, summary, details, button')) return; if (!btn.disabled) btn.click(); }; // the card's padding / empty parts press the card as well; the credit link, 「詳細」 and the VR / AR buttons do not
       const go = el('div', 'event-card-go'); go.dataset.eventGo = c.sample; go.hidden = true; // pressing = pressing the top bar's own button
       for (const [id, key, flag] of [['vr-view-button', 'vrView', 'eventGoVr'], ['ar-view-button', 'arView', 'eventGoAr']]) {
         const gb = el('button', 'event-card-go-btn', key); gb.type = 'button'; gb.dataset[flag] = ''; gb.onclick = () => doc.getElementById(id)?.click(); go.append(gb);
@@ -135,7 +136,18 @@ export function createEventLauncher({ doc = globalThis.document, g = globalThis,
         const nm = doc.createElement('span'); nm.textContent = c.credit.name + ' · ';
         line.append(el('span', '', 'creditSource'), nm, el('span', '', 'creditLicense'), a);
         const more = doc.createElement('details');
-        more.append(el('summary', '', 'tutPanelDetail'), ...creditRows(doc, c.credit));
+        const body = doc.createElement('div'); body.className = 'event-card-details-body'; body.append(...creditRows(doc, c.credit));
+        more.append(el('summary', '', 'tutPanelDetail'), body);
+        // the opened details lie inside the card's own box (absolute, scrolling inside), so the card keeps its size. They cover the body below the title down to the card's VR / AR buttons (or the credit line)
+        // when that is tall enough; else (a card with a short body) the picture area above the title. The title, the VR / AR buttons and 「詳細」 itself stay visible.
+        const fit = () => {
+          if (!more.open) return;
+          const edge = (!go.hidden && go.offsetHeight > 0 ? go.offsetTop : box.offsetTop) - 8, below = top.offsetTop + top.offsetHeight + 8;
+          const [t, e] = edge - below >= 140 ? [below, edge] : [thumb.offsetTop, top.offsetTop - 8];
+          card.style.setProperty('--details-top', t + 'px'); card.style.setProperty('--details-bottom', Math.max(0, card.clientHeight - e) + 'px');
+        };
+        more.addEventListener('toggle', fit); g.addEventListener?.('resize', fit); more.addEventListener('click', e => e.stopPropagation());
+        try { new g.MutationObserver(fit).observe(go, { attributes: true, attributeFilter: ['hidden'] }); } catch { /* none */ }
         box.append(line, more); card.append(box);
       }
       area.append(card);
