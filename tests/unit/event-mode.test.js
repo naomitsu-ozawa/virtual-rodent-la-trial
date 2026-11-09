@@ -3,13 +3,14 @@ import { readFileSync } from 'node:fs';
 import { unzipSync, strFromU8 } from 'fflate';
 import { EVENT_LEVELS, EVENT_HINT_KEYS, levelById, levelForSample, chooseEventLevel, chosenEventLevel, eventModeOn, activeEventLevel, simpleMenuSegments, MAX_SEG_ROWS, triggerModeRow, triggerMode, TRIGGER_AT_START, EVENT_INITIAL_SEGMENTS, segmentVisibilityPlan, simpleMenuLayout, SIMPLE_MENU, SLICE_OPACITY_DEFAULT, sliceOpacityValue, wrapWords, missionLines, resetPress, resetArmed, RESET_ARM_MS, BOTTOM_WEIGHTS } from '../../docs/event-mode.js';
 import { I18N } from '../../docs/i18n.js';
-import { SAMPLE_SETS } from '../../docs/sample-sets.js';
+import { sampleSet } from '../../docs/sample-sets.js';
+import { sampleKey } from '../../docs/sample-registry.js';
 
 // 体験会モード. Levels -> bundled practice datasets (the names must match the practice-data chooser's buttons).
 describe('event mode levels', () => {
   it('Lv0..Lv3 map to sample4 / sample3 / sample2 / sample1', () => {
     expect(EVENT_LEVELS.map(l => [l.id, l.lv, l.sample])).toEqual([['lv0', 0, 'sample4'], ['lv1', 1, 'sample3'], ['lv2', 2, 'sample2'], ['lv3', 3, 'sample1']]);
-    for (const l of EVENT_LEVELS) expect(SAMPLE_SETS[l.sample]).toBeTruthy();
+    for (const l of EVENT_LEVELS) expect(sampleSet(l.sample)).toBeTruthy();
     expect(levelForSample('sample1').id).toBe('lv3');
     expect(levelForSample('sample9')).toBeNull();
     expect(levelById('lv2').sample).toBe('sample2');
@@ -17,22 +18,21 @@ describe('event mode levels', () => {
     expect(Object.isFrozen(EVENT_LEVELS) && Object.isFrozen(EVENT_LEVELS[0])).toBe(true);
   });
   it('level names are the chooser names of the same dataset, in both languages', () => {
-    const chooser = { sample1: 'sampleRat', sample2: 'sampleMouse', sample3: 'sampleMouseHead', sample4: 'sampleTrabecular' };
-    for (const lang of ['ja', 'en']) for (const l of EVENT_LEVELS) expect(I18N[lang][chooser[l.sample]].startsWith(I18N[lang][l.nameKey])).toBe(true);
-    expect(I18N.ja.evLv0Name).toBe('骨梁');
-    expect(I18N.ja.evLv3Name).toBe('ラット腹部');
+    for (const lang of ['ja', 'en']) for (const l of EVENT_LEVELS) expect(I18N[lang][sampleKey(l.sample, 'desc')].startsWith(I18N[lang][l.nameKey])).toBe(true); // the chooser button's text = the dataset's description
+    expect(I18N.ja[EVENT_LEVELS[0].nameKey]).toBe('骨梁');
+    expect(I18N.ja[EVENT_LEVELS[3].nameKey]).toBe('ラット腹部');
   });
   it('every text key exists in ja and en (missions as given)', () => {
     const keys = ['setEventMode', 'setEventModeNote', 'evTitle', 'evSelected', 'evAfter', 'evMissionCap', ...Object.values(EVENT_HINT_KEYS), ...EVENT_LEVELS.flatMap(l => [l.nameKey, l.missionKey])];
     for (const lang of ['ja', 'en']) for (const k of keys) expect(typeof I18N[lang][k], `${lang}.${k}`).toBe('string');
-    expect(I18N.ja.evLv0Mission).toBe('骨の中のスポンジ構造を断面で観察しよう');
-    expect(I18N.ja.evLv1Mission).toBe('断面で頭の中を観察しよう → 軟部組織を表示して、肺の構造を確かめよう');
-    expect(I18N.ja.evLv2Mission).toBe('断面でおなかの中を観察しよう → 軟部組織を隠して脂肪を表示しよう → メニューで「解析モード」に切り替えよう → 脂肪にレーザーを向けるとラベルが出る（トリガーで固定）');
+    expect(I18N.ja[EVENT_LEVELS[0].missionKey]).toBe('骨の中のスポンジ構造を断面で観察しよう');
+    expect(I18N.ja[EVENT_LEVELS[1].missionKey]).toBe('断面で頭の中を観察しよう → 軟部組織を表示して、肺の構造を確かめよう');
+    expect(I18N.ja[EVENT_LEVELS[2].missionKey]).toBe('断面でおなかの中を観察しよう → 軟部組織を隠して脂肪を表示しよう → メニューで「解析モード」に切り替えよう → 脂肪にレーザーを向けるとラベルが出る（トリガーで固定）');
     // the mission names the menu's mode button by its exact label (Lv2 starts in point mode, so the step is needed)
     for (const lang of ['ja', 'en']) {
-      expect(I18N[lang].evLv2Mission).toContain(I18N[lang].evModeAnalysis);
+      expect(I18N[lang][EVENT_LEVELS[2].missionKey]).toContain(I18N[lang].evModeAnalysis);
     }
-    expect(I18N.ja.evLv3Mission).toBe('断面で腹腔を観察しよう → 腎臓を探して、長さを測ろう');
+    expect(I18N.ja[EVENT_LEVELS[3].missionKey]).toBe('断面で腹腔を観察しよう → 腎臓を探して、長さを測ろう');
     for (const l of EVENT_LEVELS) for (const h of l.hints) expect(EVENT_HINT_KEYS[h]).toBeTruthy();
   });
   it('the chosen level only counts while the mode is on', () => {
@@ -343,7 +343,7 @@ describe('mission wrap for the VR help board', () => {
   });
   it('each step starts a line, later steps keep the arrow', () => {
     expect(missionLines('A b → C d', 1000, w)).toEqual(['A b', '→ C d']);
-    expect(missionLines(I18N.ja.evLv0Mission, 1000, w)).toEqual([I18N.ja.evLv0Mission]);
+    expect(missionLines(I18N.ja[EVENT_LEVELS[0].missionKey], 1000, w)).toEqual([I18N.ja[EVENT_LEVELS[0].missionKey]]);
   });
 });
 
@@ -601,7 +601,7 @@ describe('initial segments of the practice datasets', () => {
     // Lv2 asks to hide the soft tissue and show the fat: soft starts shown, fat starts hidden
     const p2 = bundled('sample2');
     expect(p2.segments.soft.enabled).toBe(true); expect(p2.segments.fat.enabled).toBe(false);
-    expect(I18N.ja.evLv2Mission).toContain('軟部組織を隠して脂肪を表示しよう');
+    expect(I18N.ja[EVENT_LEVELS[2].missionKey]).toContain('軟部組織を隠して脂肪を表示しよう');
     // Lv1 asks to show the soft tissue (starts hidden) and to look at the lung (starts hidden: it has to be shown too)
     const p3 = bundled('sample3');
     expect(p3.segments.soft.enabled).toBe(false); expect(p3.segments.lung.enabled).toBe(false);

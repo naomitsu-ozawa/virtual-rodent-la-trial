@@ -3,27 +3,27 @@ import { readFileSync } from 'node:fs';
 import { installDomStub, importApp } from '../helpers/dom-stub.js';
 import { EVENT_LEVELS, EVENT_OTHER_SAMPLES, EVENT_DATASETS, buildEventDatasets, datasetForSample, datasetLabel, levelSwitchItems } from '../../docs/event-mode.js';
 import { eventCards, eventStatus, EVENT_STATUS_KEYS, openAndPrepare, waitForStandardOpen, createInflight } from '../../docs/event-launcher-core.js';
-import { SAMPLE_CREDITS } from '../../docs/sample-credits.js';
+import { sampleCredit, sampleKey } from '../../docs/sample-registry.js';
 import { I18N } from '../../docs/i18n.js';
 
 const SRC = f => readFileSync(new URL('../../docs/' + f, import.meta.url), 'utf8');
 
 // the 体験会モード page. The card list, the license line, the in-VR data switch, the pre-cache targets, the status text, the order after a card press and the one-run guard.
 describe('the datasets of the event page: ONE list', () => {
-  it('Lv0-Lv3 first, then the practice datasets that are not levels (the marmoset): five datasets, sample1-5', () => {
-    expect(EVENT_DATASETS.map(d => d.sample)).toEqual(['sample4', 'sample3', 'sample2', 'sample1', 'sample5']);
-    expect(EVENT_DATASETS.map(d => d.kind)).toEqual(['level', 'level', 'level', 'level', 'other']);
-    expect(EVENT_DATASETS.map(d => d.lv)).toEqual([0, 1, 2, 3, null]);
+  it('Lv0-Lv3 first, then the practice datasets that are not levels (the marmoset, the Zika virus): six datasets, sample1-6', () => {
+    expect(EVENT_DATASETS.map(d => d.sample)).toEqual(['sample4', 'sample3', 'sample2', 'sample1', 'sample5', 'sample6']);
+    expect(EVENT_DATASETS.map(d => d.kind)).toEqual(['level', 'level', 'level', 'level', 'other', 'other']);
+    expect(EVENT_DATASETS.map(d => d.lv)).toEqual([0, 1, 2, 3, null, null]);
     expect(Object.isFrozen(EVENT_DATASETS) && Object.isFrozen(EVENT_DATASETS[4])).toBe(true);
-    expect(datasetForSample('sample5').nameKey).toBe('sampleMarmoset');
+    expect(datasetForSample('sample5').nameKey).toBe('smp.sample5.name');
     expect(datasetForSample('sample9')).toBeNull();
-    expect(datasetLabel(EVENT_DATASETS[0], k => k)).toBe('Lv0 evLv0Name');
-    expect(datasetLabel(EVENT_DATASETS[4], k => k)).toBe('sampleMarmoset');
+    expect(datasetLabel(EVENT_DATASETS[0], k => k)).toBe('Lv0 smp.sample4.name');
+    expect(datasetLabel(EVENT_DATASETS[4], k => k)).toBe('smp.sample5.name');
   });
   it('the cards, the in-VR data tab and the pre-cache all read it: a dataset registered later appears in each of them', () => {
     const more = buildEventDatasets(EVENT_LEVELS, [...EVENT_OTHER_SAMPLES, { sample: 'sample9', nameKey: 'sampleNine' }]);
     expect(more.map(d => d.sample).at(-1)).toBe('sample9');
-    expect(eventCards(more).map(c => c.sample)).toEqual(['sample4', 'sample3', 'sample2', 'sample1', 'sample5', 'sample9']);
+    expect(eventCards(more).map(c => c.sample)).toEqual(['sample4', 'sample3', 'sample2', 'sample1', 'sample5', 'sample6', 'sample9']);
     expect(levelSwitchItems(k => k, null, null, more).map(i => i.sample).at(-1)).toBe('sample9');
     // the three consumers are written against EVENT_DATASETS, not against a list of their own
     expect(SRC('event-launcher-core.js')).toContain('eventCards(datasets = EVENT_DATASETS');
@@ -36,10 +36,10 @@ describe('the datasets of the event page: ONE list', () => {
 describe('the cards', () => {
   const cards = eventCards();
   it('one card per dataset, in order, with the existing texts (names / missions) and the data-event-level attribute of the levels only', () => {
-    expect(cards.map(c => c.sample)).toEqual(['sample4', 'sample3', 'sample2', 'sample1', 'sample5']);
-    expect(cards.map(c => c.levelAttr)).toEqual(['lv0', 'lv1', 'lv2', 'lv3', null]);
-    expect(cards.map(c => c.nameKey)).toEqual(['evLv0Name', 'evLv1Name', 'evLv2Name', 'evLv3Name', 'sampleMarmoset']);
-    expect(cards.map(c => c.missionKey)).toEqual(['evLv0Mission', 'evLv1Mission', 'evLv2Mission', 'evLv3Mission', null]);
+    expect(cards.map(c => c.sample)).toEqual(['sample4', 'sample3', 'sample2', 'sample1', 'sample5', 'sample6']);
+    expect(cards.map(c => c.levelAttr)).toEqual(['lv0', 'lv1', 'lv2', 'lv3', null, null]);
+    expect(cards.map(c => c.nameKey)).toEqual(['smp.sample4.name', 'smp.sample3.name', 'smp.sample2.name', 'smp.sample1.name', 'smp.sample5.name', 'smp.sample6.name']);
+    expect(cards.map(c => c.missionKey)).toEqual(['smp.sample4.mission', 'smp.sample3.mission', 'smp.sample2.mission', 'smp.sample1.mission', null, null]);
     for (const lang of ['ja', 'en']) for (const c of cards) { expect(typeof I18N[lang][c.nameKey]).toBe('string'); if (c.missionKey) expect(typeof I18N[lang][c.missionKey]).toBe('string'); }
   });
   it('a thumbnail slot per card: docs/demo/<sampleN>/thumb.webp', () => {
@@ -49,23 +49,27 @@ describe('the cards', () => {
     expect(ui).toContain('img.onerror = () => img.remove()'); // no file: the frame stays empty, no text
     expect(ui).toContain("img.alt = ''");
   });
-  it('the license line is only on the marmoset card (sample5), from sample-credits.js; sample1-4 have none', () => {
-    expect(cards.filter(c => c.license).map(c => c.sample)).toEqual(['sample5']);
-    expect(cards.find(c => c.sample === 'sample5').license).toEqual({ name: SAMPLE_CREDITS.sample5.licenseName, url: SAMPLE_CREDITS.sample5.licenseUrl });
-    expect(SAMPLE_CREDITS.sample5.licenseName).toBe('CC BY-NC-SA 4.0');
-    for (const s of ['sample1', 'sample2', 'sample3', 'sample4']) expect(cards.find(c => c.sample === s).license).toBeNull();
-    for (const lang of ['ja', 'en']) expect(typeof I18N[lang].creditLicense).toBe('string');
+  it('the credit (short line + 「詳細」) is only on the cards of sample5 (marmoset) and sample6 (Zika virus), from their sample.json; sample1-4 have none', () => {
+    expect(cards.filter(c => c.credit).map(c => c.sample)).toEqual(['sample5', 'sample6']);
+    expect(cards.find(c => c.sample === 'sample5').credit).toEqual(sampleCredit('sample5'));
+    expect(sampleCredit('sample5').licenseName).toBe('CC BY-NC-SA 4.0');
+    for (const s of ['sample1', 'sample2', 'sample3', 'sample4']) expect(cards.find(c => c.sample === s).credit).toBeNull();
+    for (const lang of ['ja', 'en']) for (const k of ['creditSource', 'creditLicense', 'creditChanges', 'tutPanelDetail']) expect(typeof I18N[lang][k], k).toBe('string'); // existing label texts only (no new string)
+    const ui = SRC('event-launcher.js');
+    expect(ui).toContain("doc.createElement('details')");
+    expect(ui).toContain("el('summary', '', 'tutPanelDetail')");
+    expect(ui).toContain('creditRows(doc, c.credit)');
   });
 });
 
 describe('the in-VR data switch', () => {
   it('the items include the marmoset as a fifth one (plain name); the かんたん menu row is passed the four levels explicitly (no room for a fifth button there)', () => {
     const name = k => k, items = levelSwitchItems(name, 'sample3', 'lv2');
-    expect(items.map(i => i.sample)).toEqual(['sample4', 'sample3', 'sample2', 'sample1', 'sample5']);
-    expect(items.map(i => i.id)).toEqual(['lv0', 'lv1', 'lv2', 'lv3', 'sample5']);
+    expect(items.map(i => i.sample)).toEqual(['sample4', 'sample3', 'sample2', 'sample1', 'sample5', 'sample6']);
+    expect(items.map(i => i.id)).toEqual(['lv0', 'lv1', 'lv2', 'lv3', 'sample5', 'sample6']);
     expect(items.find(i => i.sample === 'sample3').on).toBe(true);
     expect(items.find(i => i.id === 'lv2').armed).toBe(true);
-    expect(levelSwitchItems(name, 'sample5', 'sample5').find(i => i.sample === 'sample5')).toMatchObject({ on: true, armed: true, label: 'sampleMarmoset' });
+    expect(levelSwitchItems(name, 'sample5', 'sample5').find(i => i.sample === 'sample5')).toMatchObject({ on: true, armed: true, label: 'smp.sample5.name' });
     expect(levelSwitchItems(name, null, null, EVENT_LEVELS).map(i => i.sample)).toEqual(['sample4', 'sample3', 'sample2', 'sample1']);
     const vr = SRC('vr-view.js');
     expect(vr).toContain('levelSwitchItems(tr,globalThis.__vrlOpenSample,datasetForSample(al)?.id??null,dsList)'); // the full menu's データ tab: every dataset ...
@@ -85,25 +89,26 @@ describe('the in-VR data switch', () => {
 
 describe('体験会用データを準備: the marmoset is a target', () => {
   beforeAll(() => { installDomStub(); });
-  it('runEventPrepare prepares the five datasets in order (the cached ones are skipped, the restore reopens the earlier one)', async () => {
+  it('runEventPrepare prepares every dataset (six) in order (the cached ones are skipped, the restore reopens the earlier one)', async () => {
     const m = await importApp('event-prepare-ui');
     const seen = [], opened = [];
     const vr = { standardLevelCached: async () => true, prepareStandardLevel: async () => ({ ok: true }), releaseVrPrepared: () => {} };
     const out = await m.runEventPrepare({ getVr: async () => vr, openLevel: async s => { opened.push(s); }, onStatus: r => seen.push(r.map(x => x.sample + ':' + x.state).join()) });
     expect(out.ok).toBe(true);
-    expect(out.results.map(r => r.sample)).toEqual(['sample4', 'sample3', 'sample2', 'sample1', 'sample5']);
-    expect(out.results.at(-1)).toMatchObject({ id: 'sample5', lv: null, nameKey: 'sampleMarmoset', state: 'cached' });
+    expect(out.results.map(r => r.sample)).toEqual(['sample4', 'sample3', 'sample2', 'sample1', 'sample5', 'sample6']);
+    expect(out.results.at(-2)).toMatchObject({ id: 'sample5', lv: null, nameKey: 'smp.sample5.name', state: 'cached' });
+    expect(out.results.at(-1)).toMatchObject({ id: 'sample6', lv: null, nameKey: 'smp.sample6.name', state: 'cached' });
     expect(opened).toEqual([]);
-    expect(seen.at(-1)).toBe('sample4:cached,sample3:cached,sample2:cached,sample1:cached,sample5:cached');
+    expect(seen.at(-1)).toBe('sample4:cached,sample3:cached,sample2:cached,sample1:cached,sample5:cached,sample6:cached');
   });
   it('the reports name the marmoset by its own name (it has no Lv number), the levels as before', async () => {
     const m = await importApp('event-prepare-ui');
     const r = EVENT_DATASETS.map(d => ({ id: d.id, lv: d.lv, nameKey: d.nameKey, sample: d.sample, state: 'saved' }));
     expect(m.statusLine(r)).toContain('Lv0 ');
-    expect(m.statusLine(r)).toContain(I18N.ja.sampleMarmoset + ' ');
+    expect(m.statusLine(r)).toContain(I18N.ja[sampleKey('sample5', 'name')] + ' ');
     expect(m.statusLine(r)).not.toContain('Lvnull');
     expect(m.statusLine(r)).not.toContain('Lvundefined');
-    expect(m.targetTag(r[4])).toBe(I18N.ja.sampleMarmoset);
+    expect(m.targetTag(r[4])).toBe(I18N.ja[sampleKey('sample5', 'name')]);
     expect(m.targetTag(r[3])).toBe('Lv3');
   });
 });
@@ -118,8 +123,8 @@ describe('the status text', () => {
     expect(eventStatus({ preparing: true, ready: true })).toBe('preparing');
   });
   it('the texts are the three new strings, in ja and en (and only these)', () => {
-    expect([I18N.ja[EVENT_STATUS_KEYS.loading], I18N.ja[EVENT_STATUS_KEYS.preparing], I18N.ja[EVENT_STATUS_KEYS.ready]]).toEqual(['読み込み中…', '準備中…', '準備完了']);
-    expect([I18N.en[EVENT_STATUS_KEYS.loading], I18N.en[EVENT_STATUS_KEYS.preparing], I18N.en[EVENT_STATUS_KEYS.ready]]).toEqual(['Loading…', 'Preparing…', 'Ready']);
+    expect([I18N.ja[EVENT_STATUS_KEYS.loading], I18N.ja[EVENT_STATUS_KEYS.preparing], I18N.ja[EVENT_STATUS_KEYS.ready]]).toEqual(['読み込み中…', '準備中…', '準備完了 —「VRで見る」か「ARで見る」を押してください']);
+    expect([I18N.en[EVENT_STATUS_KEYS.loading], I18N.en[EVENT_STATUS_KEYS.preparing], I18N.en[EVENT_STATUS_KEYS.ready]]).toEqual(['Loading…', 'Preparing…', 'Ready — press “View in VR” or “View in AR”']);
   });
 });
 
@@ -226,8 +231,10 @@ function fakeDom() {
     return !!m && camel(m[1]) in e.dataset && (m[2] === undefined || e.dataset[camel(m[1])] === m[2]);
   };
   const node = (tag, isComment = false) => {
-    const e = { tag, isComment, id: '', className: '', hidden: false, disabled: false, dataset: {}, children: [], parentNode: null, attrs: {}, _text: '', onclick: null, onerror: null,
+    const e = { tag, isComment, id: '', className: '', hidden: false, disabled: false, dataset: {}, children: [], parentNode: null, attrs: {}, _text: '', onclick: null, onerror: null, _ls: [],
       classList: { add: c => { if (!e.className.split(/\s+/).includes(c)) e.className = (e.className + ' ' + c).trim(); }, remove: c => { e.className = e.className.split(/\s+/).filter(x => x && x !== c).join(' '); }, toggle: (c, on) => (on ? e.classList.add(c) : e.classList.remove(c)), contains: c => e.className.split(/\s+/).includes(c) },
+      addEventListener: (t, f) => { if (t === 'click') e._ls.push(f); }, removeEventListener: (t, f) => { e._ls = e._ls.filter(x => x !== f); },
+      click: () => { e._ls.slice().forEach(f => f({})); e.onclick?.(); },
       setAttribute: (k, v) => { e.attrs[k] = String(v); }, getAttribute: k => e.attrs[k] ?? null,
       get textContent() { return e._text; }, set textContent(v) { e._text = String(v); },
       append: (...k) => k.forEach(c => { c.remove?.(); c.parentNode = e; e.children.push(c); }),
@@ -273,11 +280,11 @@ describe('the page layout (fake DOM)', () => {
     expect(t.workspace.children).toContain(t.viewerGrid); // not removed from the page: the views and their state stay (display:none by style.css)
     expect(t.doc.documentElement.classList.contains('vrl-event-layout')).toBe(true);
     expect(t.g.__vrlEventLayout).toBe(true);
-    expect(cards.querySelectorAll('[data-event-sample]').map(c => c.dataset.eventSample)).toEqual(['sample4', 'sample3', 'sample2', 'sample1', 'sample5']);
+    expect(cards.querySelectorAll('[data-event-sample]').map(c => c.dataset.eventSample)).toEqual(['sample4', 'sample3', 'sample2', 'sample1', 'sample5', 'sample6']);
     expect(cards.querySelectorAll('[data-event-level]').map(c => c.dataset.eventLevel)).toEqual(['lv0', 'lv1', 'lv2', 'lv3']);
-    expect(cards.querySelectorAll('.event-card-license').length).toBe(1); // only the marmoset card
-    expect(cards.querySelectorAll('.event-card-license')[0].parentNode.children[0].dataset.eventSample).toBe('sample5');
-    expect(cards.querySelectorAll('.event-card-thumb').length).toBe(5);
+    expect(cards.querySelectorAll('.event-card-license').length).toBe(2); // only the cards of the datasets with a credit
+    expect(cards.querySelectorAll('.event-card-license').map(l => l.parentNode.children[0].dataset.eventSample)).toEqual(['sample5', 'sample6']);
+    expect(cards.querySelectorAll('.event-card-thumb').length).toBe(6);
     expect(t.doc.getElementById('event-status').textContent).toBe('');
   });
   it('mode off again: the buttons go back to their own place (before the others), the page is as it was; the late tutorial button too', () => {
@@ -317,11 +324,67 @@ describe('the page layout (fake DOM)', () => {
     gate.release();
     await vi.waitFor(() => expect(t.launcher.phase).toBe('ready'), { timeout: 8000 });
     expect(calls).toEqual(['open:sample2', 'data', 'gpu:vr']);
-    expect(t.doc.getElementById('event-status').textContent).toBe('準備完了');
+    expect(t.doc.getElementById('event-status').textContent).toBe('準備完了 —「VRで見る」か「ARで見る」を押してください');
     expect(t.doc.getElementById('event-status').dataset.state).toBe('ready');
     expect(card.classList.contains('is-selected')).toBe(true); expect(card.attrs['aria-pressed']).toBe('true');
     expect(card.disabled).toBe(false);
   }, 15000);
+  it('the ready text names both buttons (ja / en)', () => {
+    expect(I18N.ja.evStReady).toBe('準備完了 —「VRで見る」か「ARで見る」を押してください');
+    expect(I18N.en.evStReady).toBe('Ready — press “View in VR” or “View in AR”');
+  });
+  const ready = async (t, calls, ready, lv = 'lv1') => {
+    t.launcher.enable(); t.doc.getElementById('event-cards').querySelector(`[data-event-level="${lv}"]`).onclick();
+    await vi.waitFor(() => expect(t.launcher.phase).toBe('ready'), { timeout: 8000 });
+  };
+  it('the top bar glows when ready; a press of either button stops it', async () => {
+    for (const which of ['vrB', 'arB']) {
+      const calls = [], rd = { v: false }, t = make({ getVr: async () => fakeVr(calls, { ready: rd }) }); page(t, calls); t.arB.hidden = false;
+      const bar = () => t.doc.getElementById('event-bar');
+      t.launcher.enable(); expect(bar().classList.contains('is-ready-glow')).toBe(false);
+      await ready(t, calls, rd);
+      expect(bar().classList.contains('is-ready-glow')).toBe(true);
+      t.launcher.refresh(); expect(bar().classList.contains('is-ready-glow')).toBe(true); // a refresh does not restart or stop it
+      t[which].click();
+      expect(bar().classList.contains('is-ready-glow')).toBe(false);
+      t.launcher.refresh(); expect(bar().classList.contains('is-ready-glow')).toBe(false); // still ready, but no glow again
+    }
+  }, 30000);
+  it('the glow stops on another card press and on a session start', async () => {
+    const calls = [], rd = { v: false }, t = make({ getVr: async () => fakeVr(calls, { ready: rd }) }), gate = page(t, calls, { hold: true });
+    const bar = () => t.doc.getElementById('event-bar');
+    t.launcher.enable(); t.doc.getElementById('event-cards').querySelector('[data-event-level="lv2"]').onclick(); gate.release();
+    await vi.waitFor(() => expect(t.launcher.phase).toBe('ready'), { timeout: 8000 });
+    expect(bar().classList.contains('is-ready-glow')).toBe(true);
+    t.doc.getElementById('event-cards').querySelector('[data-event-level="lv0"]').onclick();
+    expect(t.launcher.phase).toBe('loading'); expect(bar().classList.contains('is-ready-glow')).toBe(false);
+    gate.release();
+    await vi.waitFor(() => expect(t.launcher.phase).toBe('ready'), { timeout: 8000 });
+    expect(bar().classList.contains('is-ready-glow')).toBe(true); // a new preparation glows again
+    t.doc.dispatchEvent(new CustomEvent('vrl-tut-signal', { detail: { kind: 'vr-start' } }));
+    expect(bar().classList.contains('is-ready-glow')).toBe(false);
+  }, 30000);
+  it('the buttons in the card appear only in the ready card, press the top bar buttons, and the AR one follows the top bar AR button', async () => {
+    const calls = [], rd = { v: false }, t = make({ getVr: async () => fakeVr(calls, { ready: rd }) }), gate = page(t, calls, { hold: true });
+    const goOf = s => t.doc.getElementById('event-cards').querySelector(`[data-event-go="${s}"]`);
+    const visible = () => t.doc.getElementById('event-cards').querySelectorAll('[data-event-go]').filter(g => !g.hidden).map(g => g.dataset.eventGo);
+    t.launcher.enable();
+    expect(visible()).toEqual([]);
+    t.doc.getElementById('event-cards').querySelector('[data-event-level="lv2"]').onclick();
+    expect(visible()).toEqual([]); // loading
+    gate.release();
+    await vi.waitFor(() => expect(t.launcher.phase).toBe('ready'), { timeout: 8000 });
+    expect(visible()).toEqual(['sample2']);
+    const vrBtn = goOf('sample2').querySelector('[data-event-go-vr]'), arBtn = goOf('sample2').querySelector('[data-event-go-ar]');
+    expect(vrBtn.textContent).toBe('VRで見る'); expect(vrBtn.dataset.i18n).toBe('vrView'); expect(arBtn.dataset.i18n).toBe('arView');
+    expect(arBtn.hidden).toBe(true); // AR unavailable (top bar AR button hidden)
+    t.arB.hidden = false; t.launcher.refresh(); expect(arBtn.hidden).toBe(false);
+    let vrClicks = 0, arClicks = 0; t.vrB.addEventListener('click', () => vrClicks++); t.arB.addEventListener('click', () => arClicks++);
+    vrBtn.onclick(); expect(vrClicks).toBe(1); expect(arClicks).toBe(0);
+    arBtn.onclick(); expect(arClicks).toBe(1);
+    t.doc.getElementById('event-cards').querySelector('[data-event-level="lv0"]').onclick(); // another card: loading
+    expect(visible()).toEqual([]);
+  }, 30000);
   it('the status goes back to nothing when the prepared data is gone (a session used it) or another dataset is opened', async () => {
     const calls = [], ready = { v: false }, t = make({ getVr: async () => fakeVr(calls, { ready }) }); page(t, calls);
     t.launcher.enable(); t.doc.getElementById('event-cards').querySelector('[data-event-level="lv1"]').onclick();
