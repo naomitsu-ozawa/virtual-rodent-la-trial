@@ -4,7 +4,7 @@ import { TUTORIAL_MISSIONS, TUT_SIGNALS, TUT_VOICES, TUT_FEEDBACK, TUT_INTRO, TU
 import { GUIDE_SLIDES, LEVEL_SLIDES, guideSlide, levelSlide, slideItem, loc } from '../../docs/tutorial-slides.js';
 import { SIGNAL_KINDS } from '../../docs/tutorial-signal.js';
 import { I18N } from '../../docs/i18n.js';
-import { SAMPLE_SETS } from '../../docs/sample-sets.js';
+import { sampleSet } from '../../docs/sample-sets.js';
 
 const steps = TUTORIAL_MISSIONS.flatMap(m => m.steps);
 describe('tutorial data', () => {
@@ -69,9 +69,9 @@ describe('tutorial data', () => {
     expect(m2.audioText).toMatch(/ひょうじ/);
     const [, s1] = missionById('slice').steps; expect(s1.audioText).toMatch(/ひだりのメニュー.*スライスのぎょう.*つまみ.*トリガーを引いたまま/); expect(s1.then.audioText).toMatch(/ひだりで.*みぎで/);
   });
-  it('every step practises on sample4 (骨梁 Lv0), a bundled practice dataset', () => {
+  it('every step practises on the Lv0 data of the registry (sample4 = 骨梁 today), a bundled practice dataset', () => {
     expect(TUT_SAMPLE).toBe('sample4');
-    for (const m of TUTORIAL_MISSIONS) { expect(m.sample, m.id).toBe('sample4'); expect(SAMPLE_SETS[m.sample], m.id).toBeTruthy(); }
+    for (const m of TUTORIAL_MISSIONS) { expect(m.sample, m.id).toBe('sample4'); expect(sampleSet(m.sample), m.id).toBeTruthy(); }
   });
   it('ids are unique (missions, steps, audio)', () => {
     for (const list of [TUTORIAL_MISSIONS.map(m => m.id), steps.map(s => s.id), [...steps.map(s => s.audio), ...steps.filter(s => s.then).map(s => s.then.audio)]]) expect(new Set(list).size).toBe(list.length);

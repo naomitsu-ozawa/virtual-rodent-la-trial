@@ -227,13 +227,13 @@ describe('swapPlan', () => {
 
 describe('the data / level buttons (event-mode.js)', () => {
   const name = k => k;
-  it('one per level, the open data lit, the armed one marked; labels carry the level number', () => {
+  it('one per level, the open data lit, the armed one marked; labels carry the level number (the default list also has the datasets that are not levels (marmoset, Zika virus), by their plain names)', () => {
     const items = levelSwitchItems(name, 'sample3', 'lv2', EVENT_LEVELS);
     expect(items.map(i => i.id)).toEqual(EVENT_LEVELS.map(l => l.id));
-    expect(levelSwitchItems(name, 'sample3', 'lv2').map(i => i.id)).toEqual([...EVENT_LEVELS.map(l => l.id), 'sample5']);
+    expect(levelSwitchItems(name, 'sample3', 'lv2').map(i => i.id)).toEqual([...EVENT_LEVELS.map(l => l.id), 'sample5', 'sample6']);
     expect(items.find(i => i.sample === 'sample3')).toMatchObject({ on: true, armed: false });
     expect(items.find(i => i.id === 'lv2')).toMatchObject({ on: false, armed: true });
-    expect(items[0].label).toBe('Lv0 evLv0Name');
+    expect(items[0].label).toBe('Lv0 ' + EVENT_LEVELS[0].nameKey);
     expect(levelSwitchItems(name, null).some(i => i.on || i.armed)).toBe(false);
   });
   it('the かんたん menu layout has the row above the bottom row only when asked, and the results list gives it the room', () => {

@@ -2,19 +2,17 @@
 // Four levels, each one of the bundled practice datasets (docs/demo/sampleN, the same set ids as the practice-data chooser);
 // texts are i18n keys (i18n.js). The switch is settings.eventMode (app-settings.js, per device, default off); the chosen
 // level lives only in this page (a reload starts with none chosen) and follows whichever practice dataset was opened last.
+import { registry, sampleKey } from './sample-registry.js?v=20261109-build702';
 export const EVENT_HINT_KEYS={section:'evHintSection',move:'evHintMove',toggle:'evHintToggle',mark:'evHintMark',distance:'evHintDistance'};
-export const EVENT_LEVELS=Object.freeze([
- {id:'lv0',lv:0,sample:'sample4',nameKey:'evLv0Name',missionKey:'evLv0Mission',hints:['section','move']},
- {id:'lv1',lv:1,sample:'sample3',nameKey:'evLv1Name',missionKey:'evLv1Mission',hints:['section','move','toggle']},
- {id:'lv2',lv:2,sample:'sample2',nameKey:'evLv2Name',missionKey:'evLv2Mission',hints:['section','move','toggle']},
- {id:'lv3',lv:3,sample:'sample1',nameKey:'evLv3Name',missionKey:'evLv3Mission',hints:['section','move','mark','distance']},
-].map(l=>Object.freeze({...l,hints:Object.freeze(l.hints)})));
+// the levels, the other datasets and each dataset's starting segments are no longer tables here: they come from the registry (sample-registry.js), built from the sample.json
+// of every docs/demo/sampleN folder. Order: Lv0..Lv3 by the level field, then the datasets without a level by folder number. Names / missions are i18n keys the registry adds (sampleKey).
+export const EVENT_LEVELS=Object.freeze(registry.levels.map(s=>Object.freeze({id:'lv'+s.level,lv:s.level,sample:s.id,nameKey:sampleKey(s.id,'name'),missionKey:sampleKey(s.id,'mission'),hints:s.hints})));
 // practice datasets that are NOT one of the levels (group 「その他」 in the chooser and under the level cards): no Lv number, no mission, not in the VR data-switch buttons, not prepared by 体験会用データを準備.
-export const EVENT_OTHER_SAMPLES=Object.freeze([{sample:'sample5',nameKey:'sampleMarmoset'}].map(o=>Object.freeze(o)));
-// The segments each practice dataset STARTS with shown (体験会: 骨梁 = 骨 / マウス頭部 = 骨 / マウス腹部 = 骨 + 軟部組織 / ラット腹部 = 骨 + 軟部組織). The state itself lives in the datasets' own
+export const EVENT_OTHER_SAMPLES=Object.freeze(registry.others.map(s=>Object.freeze({sample:s.id,nameKey:sampleKey(s.id,'name')})));
+// The segments each practice dataset STARTS with shown (sample.json initialSegments; 体験会: 骨梁 = 骨 / マウス頭部 = 骨 / マウス腹部 = 骨 + 軟部組織 / ラット腹部 = 骨 + 軟部組織). The state itself lives in the datasets' own
 // project files (docs/demo/sampleN/project.vrlab: a shown segment is active + enabled; the others stay in the list as active + not enabled, so they are loaded and prepared like the
 // rest and can be shown at any time, on the page and in VR), so a first load, every switch and the VR reset all start from it. tests/unit/event-mode.test.js checks the files against this table.
-export const EVENT_INITIAL_SEGMENTS=Object.freeze({sample4:Object.freeze(['bone']),sample3:Object.freeze(['bone']),sample2:Object.freeze(['bone','soft']),sample1:Object.freeze(['bone','soft'])});
+export const EVENT_INITIAL_SEGMENTS=Object.freeze(Object.fromEntries(registry.levels.map(s=>[s.id,s.initialSegments])));
 // The visibility a project file starts its segments with, against the page's current flags: which segments have to be switched off / on to get back to it (only segments active in BOTH:
 // adding / removing a segment is not a visitor's doing in event mode). Off first, on second: the page allows at most 4 shown segments at once. Pure (data-load.js restoreProjectAnnotations
 // applies it, vr-view.js 最初の状態に戻す then derives the VR-side modes from the page flags: initialVrModes).

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { resolveSampleBase, SAMPLE_SETS, DEFAULT_SAMPLE, sampleCacheKey, sampleSliceUrl, sampleIndexUrl, sampleProjectUrl } from '../../docs/sample-sets.js';
+import { registry } from '../../docs/sample-registry.js';
+import { resolveSampleBase, sampleSet, sampleJsonUrl, DEFAULT_SAMPLE, sampleCacheKey, sampleSliceUrl, sampleIndexUrl, sampleProjectUrl } from '../../docs/sample-sets.js';
 
 describe('practice dataset paths and cache keys', () => {
   it('keeps sample1 URLs and its existing cache key unchanged', () => {
@@ -19,7 +20,7 @@ describe('practice dataset paths and cache keys', () => {
   });
   it('appends sample3 (mouse head) with its own folder key and keeps the default', () => {
     const n = '01784_crop512_0001.dcm';
-    expect(Object.keys(SAMPLE_SETS)).toEqual(['sample1', 'sample2', 'sample3', 'sample4', 'sample5']);
+    expect(registry.samples.map(s => s.id).sort()).toEqual(['sample1', 'sample2', 'sample3', 'sample4', 'sample5', 'sample6']); // the folders of docs/demo (registry), each set by the one rule
     expect(DEFAULT_SAMPLE).toBe('sample1');
     expect(sampleIndexUrl('sample3')).toBe('demo/sample3/index.json');
     expect(sampleSliceUrl('sample3', n)).toBe('demo/sample3/' + n);
@@ -32,9 +33,15 @@ describe('practice dataset paths and cache keys', () => {
     expect(sampleCacheKey('https://x.io', 'sample4', n)).toBe('https://x.io/__vrl-sample/v1/sample4/' + n);
   });
   it('key prefixes are distinct across sets and an unknown set throws', () => {
-    const prefixes = Object.values(SAMPLE_SETS).map(s => s.keyPrefix);
+    const prefixes = registry.samples.map(s => sampleSet(s.id).keyPrefix);
     expect(new Set(prefixes).size).toBe(prefixes.length);
+    expect(sampleSet('sample1')).toEqual({ base: 'demo/sample1/', keyPrefix: '/__vrl-sample/v1/' }); // existing caches stay valid
+    expect(sampleSet('sample2')).toEqual({ base: 'demo/sample2/', keyPrefix: '/__vrl-sample/v1/sample2/' });
     expect(() => sampleCacheKey('o', 'nope', 'a')).toThrow();
+    expect(() => sampleCacheKey('o', 'sample7', 'a')).toThrow(); // right name, but no such registered dataset
+    expect(sampleJsonUrl('sample4')).toBe('demo/sample4/sample.json');
+    expect(sampleJsonUrl('sample4', '/r/pr-preview/pr-1/')).toBe('demo/sample4/sample.json'); // flag is false in the repo
+    expect(() => sampleJsonUrl('../x')).toThrow(/Unknown sample set/);
   });
 });
 
@@ -60,8 +67,8 @@ describe('resolveSampleBase (PR previews read the practice data from the site ro
     expect(resolveSampleBase(b, '/site/pr-preview/pr-12/', false)).toBe(b);
   });
   it('sample3 goes through the same base resolution', () => {
-    expect(resolveSampleBase(SAMPLE_SETS.sample3.base, '/r/pr-preview/pr-157/', true)).toBe('/r/demo/sample3/');
-    expect(resolveSampleBase(SAMPLE_SETS.sample3.base, '/r/pr-preview/pr-157/', false)).toBe('demo/sample3/');
+    expect(resolveSampleBase(sampleSet('sample3').base, '/r/pr-preview/pr-157/', true)).toBe('/r/demo/sample3/');
+    expect(resolveSampleBase(sampleSet('sample3').base, '/r/pr-preview/pr-157/', false)).toBe('demo/sample3/');
     expect(sampleIndexUrl('sample3', '/r/pr-preview/pr-157/')).toBe('demo/sample3/index.json'); // flag is false in the repo
     expect(sampleProjectUrl('sample3', '/')).toBe('demo/sample3/project.vrlab');
   });

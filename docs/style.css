@@ -1323,6 +1323,8 @@ html.vrl-ipad-ui .event-launcher{grid-column:2;grid-row:1}
 .event-card-mission{font-size:18px;line-height:1.55}
 .event-card-license{margin:0 4px;font-size:15px;line-height:1.5;color:rgb(var(--ui-t3));overflow-wrap:anywhere;-webkit-user-select:text;user-select:text}
 .event-card-license a{color:inherit;font-weight:700;text-decoration:underline}
+.event-card-license summary{cursor:pointer;margin-top:2px}
+.event-card-license details>div{margin-top:4px}
 @media(max-width:900px){html.vrl-event-layout:not(.vrl-ipad-ui),html.vrl-event-layout:not(.vrl-ipad-ui) body{overflow:hidden}html.vrl-event-layout:not(.vrl-ipad-ui) .app-shell{height:100dvh;min-height:0}}
 html.vrl-event-layout:not(.vrl-ipad-ui) .sidebar{display:none}
 html.vrl-event-layout:not(.vrl-ipad-ui) .workspace{grid-template-columns:minmax(0,1fr)}
@@ -1391,3 +1393,5 @@ html.vrl-event-layout.vrl-ipad-ui .ws-tool-rail>[data-ipad-drawer-tab]{display:n
  html.vrl-event-layout.vrl-ipad-ui.ipad-settings-persistent .workspace{grid-template-rows:minmax(0,1fr) auto}
  html.vrl-event-layout.vrl-ipad-ui .sidebar{grid-template-rows:auto!important}
 }
+.analysis-region-name{display:flex;align-items:center;gap:8px;font-size:10px;color:rgb(var(--ui-t4))}
+.analysis-region-name input{flex:1;min-width:0;min-height:28px;border:1px solid rgb(var(--ui-b3));border-radius:7px;background:rgb(var(--ui-s2));color:rgb(var(--ui-t1));padding:4px 8px;font-size:11px}

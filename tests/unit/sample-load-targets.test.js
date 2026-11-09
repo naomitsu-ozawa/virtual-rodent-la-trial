@@ -2,11 +2,12 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
 import { parse } from 'acorn';
 import { full } from 'acorn-walk';
-import { SAMPLE_SETS, sampleIndexUrl, sampleSliceUrl, sampleProjectUrl, sampleCacheKey, sampleSet } from '../../docs/sample-sets.js';
+import { registry } from '../../docs/sample-registry.js';
+import { sampleIndexUrl, sampleSliceUrl, sampleProjectUrl, sampleCacheKey, sampleSet } from '../../docs/sample-sets.js';
 
 // The practice data is the only data the app loads. Every network target of the loading path comes from the fixed
-// SAMPLE_SETS table (docs/sample-sets.js): an id that is not in the table throws, and a file name from an index.json can
-// only be appended to the table's folder.
+// registry (docs/sample-registry.js: the folders with a sample.json; docs/sample-sets.js builds each set by one rule): an id that is not registered throws, and a file name
+// from an index.json can only be appended to the registered folder.
 
 const SITE = 'https://site.example/app/';
 const readDocs = f => readFileSync(new URL(`../../docs/${f}`, import.meta.url), 'utf8');
@@ -43,12 +44,12 @@ function depsTemplate(fetched = [], indexFiles = ['a.dcm'], hasCache = false) {
   };
 }
 
-describe('practice-data fetch targets come from the SAMPLE_SETS table only', () => {
-  const ids = Object.keys(SAMPLE_SETS);
+describe('practice-data fetch targets come from the registered datasets only', () => {
+  const ids = registry.samples.map(s => s.id).sort();
 
-  it('the table is the five bundled sets, each below its own demo/ folder', () => {
-    expect(ids).toEqual(['sample1', 'sample2', 'sample3', 'sample4', 'sample5']);
-    for (const id of ids) expect(SAMPLE_SETS[id].base).toBe(`demo/${id}/`);
+  it('the registry is the six bundled sets, each below its own demo/ folder', () => {
+    expect(ids).toEqual(['sample1', 'sample2', 'sample3', 'sample4', 'sample5', 'sample6']);
+    for (const id of ids) expect(sampleSet(id).base).toBe(`demo/${id}/`);
   });
 
   it.each(ids)('loadSampleDemo(%s) fetches the index and the slices of that set and nothing else', async id => {
@@ -84,7 +85,7 @@ describe('practice-data fetch targets come from the SAMPLE_SETS table only', () 
     }
   });
 
-  const UNKNOWN = ['sample0', 'sample6', 'sample10', 'Sample1', ' sample1', 'sample1 ', '', '../sample1', 'sample1/..', 'sample1/', 'https://evil.example/', '//evil.example/', null, 0, 1, {}];
+  const UNKNOWN = ['sample0', 'sample7', 'sample10', 'Sample1', ' sample1', 'sample1 ', '', '../sample1', 'sample1/..', 'sample1/', 'https://evil.example/', '//evil.example/', null, 0, 1, {}];
   it.each(UNKNOWN.map(v => [JSON.stringify(v) ?? String(v), v]))('an unknown set id (%s) throws and fetches nothing', async (_label, id) => {
     const { run } = loadSampleDemoFromSource();
     const calls = [];
@@ -98,7 +99,7 @@ describe('practice-data fetch targets come from the SAMPLE_SETS table only', () 
     expect(() => sampleCacheKey('https://x.io', id, 'a.dcm')).toThrow(/Unknown sample set/);
     expect(sampleSet(id)).toBeNull();
   });
-  // Object.prototype names are not own keys of the table, so they are refused like any unknown id.
+  // Object.prototype names are not registered ids, so they are refused like any unknown id.
   it('names of Object.prototype members are refused too', () => {
     for (const id of ['constructor', '__proto__', 'toString', 'hasOwnProperty']) expect(() => sampleIndexUrl(id)).toThrow(/Unknown sample set/);
   });
@@ -129,7 +130,7 @@ describe('practice-data fetch targets come from the SAMPLE_SETS table only', () 
     expect(app).toMatch(/typeof id==='string'&&\/\^sample\\d\+\$\/\.test\(id\)/);
   });
 
-  it('static: every fetch( in docs/ targets a table-built URL, the version file, or a worker-local function', () => {
+  it('static: every fetch( in docs/ targets a registry / table-built URL, the version file, or a worker-local function', () => {
     const found = [];
     for (const f of readdirSync(new URL('../../docs/', import.meta.url)).filter(n => n.endsWith('.js'))) {
       const src = readDocs(f);
@@ -142,6 +143,7 @@ describe('practice-data fetch targets come from the SAMPLE_SETS table only', () 
       "app.js: './version.json?t='+Date.now()",
       'app.js: sampleProjectUrl(setId)',
       'data-load.js: sampleIndexUrl(setId)',
+      'sample-registry.js: sampleJsonUrl(id)', // the registry's own list: sample.json of demo/sampleN, built by the folder-name rule (sample-sets.js)
       'data-load.js: url',
       'source-filters.js: k', // a local slice-prefetch function named fetch, not window.fetch
     ].sort());

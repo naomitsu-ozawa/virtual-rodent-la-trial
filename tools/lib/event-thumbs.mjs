@@ -20,6 +20,8 @@ export function parseArgs(argv = [], env = {}) {
   }
   return o;
 }
+// the datasets of a registry (docs/sample-registry.js; read from the folders by tools/lib/sample-folders.mjs): [{ sample, id }] in the order of the cards (id = 'lv0'.. for a level, the folder id otherwise)
+export const thumbDatasets = registry => registry.samples.map(s => ({ sample: s.id, id: s.level != null ? 'lv' + s.level : s.id }));
 // the datasets to do, with where each picture goes (path.join: Windows and POSIX); an unknown name in `only` is an error
 export function thumbJobs(datasets, docsDir, only = null) {
   const known = datasets.map(d => d.sample);

@@ -2,16 +2,22 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseArgs, thumbJobs, launchPlans, coverRect, looksBlank, pngSize, THUMB_W, THUMB_H, THUMB_FILE } from '../../tools/lib/event-thumbs.mjs';
+import { thumbDatasets, parseArgs, thumbJobs, launchPlans, coverRect, looksBlank, pngSize, THUMB_W, THUMB_H, THUMB_FILE } from '../../tools/lib/event-thumbs.mjs';
 import { EVENT_DATASETS } from '../../docs/event-mode.js';
+import { registry } from '../../docs/sample-registry.js';
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 
 // tools/make-event-thumbs.mjs (the card pictures; run on a Windows PC with a GPU). Its pure parts are in tools/lib/event-thumbs.mjs; the checks of the tool file itself (no POSIX-only code, never exported) are in public-exclude.test.js.
 describe('make-event-thumbs: the jobs', () => {
+  it('the datasets are listed from the folders (the registry), in the order of the cards: levels first, then the others', () => {
+    expect(thumbDatasets(registry)).toEqual([{ sample: 'sample4', id: 'lv0' }, { sample: 'sample3', id: 'lv1' }, { sample: 'sample2', id: 'lv2' }, { sample: 'sample1', id: 'lv3' }, { sample: 'sample5', id: 'sample5' }, { sample: 'sample6', id: 'sample6' }]);
+    expect(thumbJobs(thumbDatasets(registry), join('D', 'docs')).map(j => j.sample)).toEqual(EVENT_DATASETS.map(d => d.sample));
+    expect(readFileSync(join(ROOT, 'tools', 'make-event-thumbs.mjs'), 'utf8')).toContain('readSampleRegistry(join(DOCS');
+  });
   it('one picture per dataset of the card list, docs/demo/<sampleN>/thumb.webp, 640 x 360', () => {
     const jobs = thumbJobs(EVENT_DATASETS, join('D', 'docs'));
-    expect(jobs.map(j => j.sample)).toEqual(['sample4', 'sample3', 'sample2', 'sample1', 'sample5']);
+    expect(jobs.map(j => j.sample)).toEqual(['sample4', 'sample3', 'sample2', 'sample1', 'sample5', 'sample6']);
     expect(jobs[0].out).toBe(join('D', 'docs', 'demo', 'sample4', 'thumb.webp'));
     expect(THUMB_FILE).toBe('thumb.webp'); expect([THUMB_W, THUMB_H]).toEqual([640, 360]);
     expect(thumbJobs(EVENT_DATASETS, 'docs', ['sample5']).map(j => j.sample)).toEqual(['sample5']);

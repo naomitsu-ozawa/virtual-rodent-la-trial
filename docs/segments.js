@@ -1,16 +1,16 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { volume, incNextSegmentMaskVolumeId } from './state.js?v=20261109-build701';
-import { hexRgb } from './utils.js?v=20261109-build701';
-import { settings } from './app-settings.js?v=20261109-build701';
-import { buildThresholdMask, morphMask, fillMaskHoles, removeSmallMaskComponents } from './mask-ops.js?v=20261109-build701';
-import { thinSuppressActive, suppressThinMask } from './thin-suppress.js?v=20261109-build701';
-import { effectiveRanges } from './segment-exclusive.js?v=20261109-build701';
-import { maskFromAnalysisRuns } from './run-length.js?v=20261109-build701';
-import { sourceFilterStages } from './source-filters.js?v=20261109-build701';
-import { gpuSlotOrder, slotSignature } from './segment-slots.js?v=20261109-build701';
-import { segmentPresetDefaults } from './dataset-reset.js?v=20261109-build701';
-import { dataRangeOf, shadeRangeOf, moveShadeEnd, autoShadeRange, shadeSpanOf, createShadeAutoScheduler } from './cap-shade.js?v=20261109-build701';
+import { volume, incNextSegmentMaskVolumeId } from './state.js?v=20261109-build702';
+import { hexRgb } from './utils.js?v=20261109-build702';
+import { settings } from './app-settings.js?v=20261109-build702';
+import { buildThresholdMask, morphMask, fillMaskHoles, removeSmallMaskComponents } from './mask-ops.js?v=20261109-build702';
+import { thinSuppressActive, suppressThinMask } from './thin-suppress.js?v=20261109-build702';
+import { effectiveRanges } from './segment-exclusive.js?v=20261109-build702';
+import { maskFromAnalysisRuns } from './run-length.js?v=20261109-build702';
+import { sourceFilterStages } from './source-filters.js?v=20261109-build702';
+import { gpuSlotOrder, slotSignature } from './segment-slots.js?v=20261109-build702';
+import { segmentPresetDefaults } from './dataset-reset.js?v=20261109-build702';
+import { dataRangeOf, shadeRangeOf, moveShadeEnd, autoShadeRange, shadeSpanOf, createShadeAutoScheduler } from './cap-shade.js?v=20261109-build702';
 // 'contrast' (造影領域) is the fifth preset; at most GPU_SEGMENT_SLOTS (4) are enabled at once (segment-slots.js)
 export const SEGMENT_PRESET_ORDER=['bone','soft','fat','lung','contrast'];
 export const segmentEditState=Object.fromEntries(SEGMENT_PRESET_ORDER.map(key=>[key,{baseRuns:null,baseSignature:'',keepRuns:null,excludeRuns:null,cutRuns:null,finalRuns:null,revision:0,undo:[],redo:[],surfaceGroup:null,rawCutSurface:false}]));
