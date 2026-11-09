@@ -30,7 +30,7 @@ h1{margin:0;font-size:clamp(23px,3vw,34px);line-height:1;letter-spacing:-.035em}
 .mpr-canvas{display:block;width:100%;height:100%;object-fit:contain;background:rgb(var(--ui-canvas-bg-2d))}.slice-slider{position:absolute;z-index:5;left:12px;right:12px;bottom:8px;width:calc(100% - 24px);opacity:.82;min-height:44px}
 .error-panel{width:100%;height:100%;display:grid;place-content:center;gap:8px;text-align:center;padding:28px;color:rgb(var(--ui-red-tx))}footer{color:rgb(var(--ui-t5));font-size:11px}
 @media(max-width:900px){body{overflow:auto}.app-shell{height:auto;min-height:100dvh}.workspace,.viewer-grid{grid-template-columns:1fr}.sidebar{grid-template-rows:auto auto}.series-list{max-height:360px}.mpr-column{grid-template-columns:repeat(3,minmax(0,1fr));grid-template-rows:none}.mpr-canvas{min-height:180px}}
-@media(max-width:640px){.app-shell{padding:9px}.topbar{align-items:flex-start;flex-direction:column}.topbar-actions{width:100%;flex-wrap:wrap;gap:8px}.status{width:100%;text-align:center}.primary-button,.secondary-button{flex:1 1 calc(50% - 4px)}.subtitle{display:none}.viewport-card-main{min-height:56dvh}.mpr-column{grid-template-columns:1fr;grid-template-rows:repeat(3,240px);gap:10px}.mpr-card{min-height:240px}.selected-series-overlay{left:8px;right:8px;bottom:8px;max-width:none}footer{font-size:10px}}
+@media(max-width:640px){.app-shell{padding:9px}.topbar{align-items:flex-start;flex-direction:column}.topbar-actions{width:100%;flex-wrap:wrap;gap:8px}.status{width:100%;text-align:center}.primary-button,.secondary-button{flex:1 1 calc(50% - 4px)}.subtitle{display:none}.viewport-card-main{min-height:56dvh}.mpr-column{grid-template-columns:1fr;grid-template-rows:repeat(3,240px);gap:10px}.mpr-card{min-height:240px}.selected-series-overlay{left:10px;right:10px;bottom:8px;max-width:none}footer{font-size:10px}}
 
 .segment-heading{margin-top:10px}
 .segment-controls{display:grid;gap:8px;margin-bottom:10px}
@@ -1308,23 +1308,27 @@ html.vrl-event-layout .app-shell{grid-template-rows:auto auto minmax(0,1fr) auto
 .event-launcher{min-width:0;min-height:0;display:flex;flex-direction:column;overflow:hidden}
 html.vrl-ipad-ui .event-launcher{grid-column:2;grid-row:1}
 .event-cards{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr));gap:24px;align-content:start;padding:6px 6px 28px}
-.event-card{display:grid;gap:10px;align-content:start;min-width:0}
-.event-card-btn{display:grid;gap:12px;align-content:start;width:100%;padding:16px;border-radius:20px;border:3px solid rgb(var(--ui-b2));background:rgb(var(--ui-s2));color:rgb(var(--ui-t2));text-align:left;font:inherit;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
-.event-card-btn:hover:not(:disabled){border-color:rgb(var(--ui-blue-bd2))}
-.event-card-btn:focus-visible{outline:4px solid rgb(var(--ui-accent));outline-offset:3px}
-.event-card-btn.is-selected{border-color:rgb(var(--ui-blue-bd));background:rgb(var(--ui-blue-bg));color:rgb(var(--ui-blue-tx))}
-.event-card-btn:disabled{cursor:progress;opacity:.7}
-.event-card-btn.is-selected:disabled{opacity:1}
+.event-card{display:grid;gap:12px;align-content:start;min-width:0;position:relative;padding:16px;border-radius:20px;border:3px solid rgb(var(--ui-b2));background:rgb(var(--ui-s2));color:rgb(var(--ui-t2));cursor:pointer}
+.event-card:has(>.event-card-btn:hover:not(:disabled)){border-color:rgb(var(--ui-blue-bd2))}
+.event-card:has(>.event-card-btn.is-selected){border-color:rgb(var(--ui-blue-bd));background:rgb(var(--ui-blue-bg));color:rgb(var(--ui-blue-tx))}
+.event-card:has(>.event-card-btn:disabled){cursor:progress;opacity:.7}
+.event-card:has(>.event-card-btn.is-selected:disabled){opacity:1}
+/* the card's rounded box is the article (picture, title, mission, VR / AR, credit line and 「詳細」 all inside); the button inside it is the pressable part, the credit / 「詳細」 / VR / AR are its siblings (no control inside a button) */
+.event-card-btn{display:grid;gap:12px;align-content:start;width:100%;padding:0;border:0;border-radius:0;background:transparent;color:inherit;text-align:left;font:inherit;cursor:inherit;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+.event-card-btn:focus-visible{outline:4px solid rgb(var(--ui-accent));outline-offset:6px;border-radius:14px}
 .event-card-thumb{display:block;position:relative;width:100%;aspect-ratio:16/9;border-radius:14px;overflow:hidden;background:rgb(var(--ui-s4));border:1px solid rgb(var(--ui-b1))}
 .event-card-thumb img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
 .event-card-top{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .event-card-badge{padding:3px 14px;border-radius:99px;border:1px solid rgb(var(--ui-blue-bd));background:rgb(var(--ui-blue-bg));color:rgb(var(--ui-blue-tx));font-weight:700;font-size:20px}
 .event-card-name{font-size:24px;font-weight:700;line-height:1.3}
 .event-card-mission{font-size:18px;line-height:1.55}
-.event-card-license{margin:0 4px;font-size:15px;line-height:1.5;color:rgb(var(--ui-t3));overflow-wrap:anywhere;-webkit-user-select:text;user-select:text}
+.event-card-license{margin:0;font-size:15px;line-height:1.5;color:rgb(var(--ui-t3));overflow-wrap:anywhere;-webkit-user-select:text;user-select:text}
 .event-card-license a{color:inherit;font-weight:700;text-decoration:underline}
 .event-card-license summary{cursor:pointer;margin-top:2px}
-.event-card-license details>div{margin-top:4px}
+.event-card-license details>.event-card-details-body>div{margin-top:4px}
+.event-card-license details>.event-card-details-body>div:first-child{margin-top:0}
+/* the opened details are inside the card's own box (no change of the card's size); the panel scrolls inside */
+.event-card-license details[open]>.event-card-details-body{position:absolute;left:10px;right:10px;top:var(--details-top,40%);bottom:var(--details-bottom,64px);box-sizing:border-box;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding:10px 14px;border-radius:16px;border:3px solid rgb(var(--ui-b2));background:rgb(var(--ui-s2));color:rgb(var(--ui-t2))}
 @media(max-width:900px){html.vrl-event-layout:not(.vrl-ipad-ui),html.vrl-event-layout:not(.vrl-ipad-ui) body{overflow:hidden}html.vrl-event-layout:not(.vrl-ipad-ui) .app-shell{height:100dvh;min-height:0}}
 html.vrl-event-layout:not(.vrl-ipad-ui) .sidebar{display:none}
 html.vrl-event-layout:not(.vrl-ipad-ui) .workspace{grid-template-columns:minmax(0,1fr)}
