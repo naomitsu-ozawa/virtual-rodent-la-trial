@@ -1,16 +1,16 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { volume, incNextSegmentMaskVolumeId } from './state.js?v=20261108-build694';
-import { hexRgb } from './utils.js?v=20261108-build694';
-import { settings } from './app-settings.js?v=20261108-build694';
-import { buildThresholdMask, morphMask, fillMaskHoles, removeSmallMaskComponents } from './mask-ops.js?v=20261108-build694';
-import { thinSuppressActive, suppressThinMask } from './thin-suppress.js?v=20261108-build694';
-import { effectiveRanges } from './segment-exclusive.js?v=20261108-build694';
-import { maskFromAnalysisRuns } from './run-length.js?v=20261108-build694';
-import { sourceFilterStages } from './source-filters.js?v=20261108-build694';
-import { gpuSlotOrder, slotSignature } from './segment-slots.js?v=20261108-build694';
-import { segmentPresetDefaults } from './dataset-reset.js?v=20261108-build694';
-import { dataRangeOf, shadeRangeOf, moveShadeEnd, autoShadeRange, shadeSpanOf, createShadeAutoScheduler } from './cap-shade.js?v=20261108-build694';
+import { volume, incNextSegmentMaskVolumeId } from './state.js?v=20261108-build695';
+import { hexRgb } from './utils.js?v=20261108-build695';
+import { settings } from './app-settings.js?v=20261108-build695';
+import { buildThresholdMask, morphMask, fillMaskHoles, removeSmallMaskComponents } from './mask-ops.js?v=20261108-build695';
+import { thinSuppressActive, suppressThinMask } from './thin-suppress.js?v=20261108-build695';
+import { effectiveRanges } from './segment-exclusive.js?v=20261108-build695';
+import { maskFromAnalysisRuns } from './run-length.js?v=20261108-build695';
+import { sourceFilterStages } from './source-filters.js?v=20261108-build695';
+import { gpuSlotOrder, slotSignature } from './segment-slots.js?v=20261108-build695';
+import { segmentPresetDefaults } from './dataset-reset.js?v=20261108-build695';
+import { dataRangeOf, shadeRangeOf, moveShadeEnd, autoShadeRange, shadeSpanOf, createShadeAutoScheduler } from './cap-shade.js?v=20261108-build695';
 // 'contrast' (造影領域) is the fifth preset; at most GPU_SEGMENT_SLOTS (4) are enabled at once (segment-slots.js)
 export const SEGMENT_PRESET_ORDER=['bone','soft','fat','lung','contrast'];
 export const segmentEditState=Object.fromEntries(SEGMENT_PRESET_ORDER.map(key=>[key,{baseRuns:null,baseSignature:'',keepRuns:null,excludeRuns:null,cutRuns:null,finalRuns:null,revision:0,undo:[],redo:[],surfaceGroup:null,rawCutSurface:false}]));
@@ -56,6 +56,8 @@ export const setShadeAutoSource=fn=>{shadeAutoSource=fn};
 export const shadeAutoPage=createShadeAutoScheduler({compute:(keys,stale)=>shadeAutoSource&&volume?shadeAutoSource(keys,stale):null,apply:applyShadeAutoHistograms});
 // the triggers (only these two): a dataset was opened (every segment), a segment's threshold min / max changed (its keys; applyExclusiveRanges below). Another dataset: the old values go.
 export const requestShadeAuto=(keys=SEGMENT_PRESET_ORDER)=>shadeAutoPage.request(keys);
+// while an XR session is on the browser's counting does not run (vr-view.js tells: true at the session start, false at its end); the requests made meanwhile are asked again when it ends
+export const setShadeAutoPageHeld=on=>shadeAutoPage.hold(on);
 export function resetShadeAutoForDataset(){shadeAutoPage.reset();clearSegmentShadeAuto()}
 // the presets' own settings as defined above (dataset-reset.js): a segment the next dataset does not use goes back to them
 export const SEGMENT_PRESET_DEFAULTS=segmentPresetDefaults(segmentState);

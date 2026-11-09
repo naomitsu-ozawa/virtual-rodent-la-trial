@@ -8,7 +8,7 @@
 //         clamp(p + (l - p) * contrast, 0.05, 1), p = (0.35^(1/brightness) + 1) / 2      contrast (コントラスト): spreads l about the middle of its range
 // 0.35 = SHADE_FLOOR, the darkest level (fixed, as in VR). medical-volume.js (WGSL capShadeLum) and mpr3d-overlay.js (shadeLumT) use this; tests/unit/cap-shade.test.js keeps all three equal.
 //
-// The range of a segment: AUTO unless the user set it. Auto = the 2nd..98th percentile of the values of the voxels that belong to the segment (counted from the segment's per-segment histogram, see autoShadeRange), at least 2 % of the data's
+// The range of a segment: AUTO unless the user set it. Auto = the 2nd..98th percentile (tails cut by the IQR) of the values of the voxels that belong to the segment (counted from the segment's per-segment histogram, see autoShadeRange), at least 0.5 % of the data's
 // full width; until it is ready (and for a segment without voxels / with one value) the initial value is used: the segment's own min..max (what its sliders show) cut to the data's actual min..max (an open-ended segment, bone up to
 // 61535, ends at the data's top). Once the user moves one of the two range sliders of a segment both ends are kept (manual) until 「自動に戻す」. The manual ranges live in segments.js (segmentShadeRanges), saved in the project file; the auto values are not saved.
 
@@ -72,10 +72,11 @@ export function moveShadeEnd(range, which, value, data) {
 // ---- the auto range of a segment ----
 // From the segment's histogram: SHADE_HIST_BINS (4096) equal bins over the DATA's own range (data.min..data.max, so CT, MRI up to 65535 or anything else counts the same way; NOT the fixed HU bins of histogram.js), holding only the
 // voxels that belong to the segment (a Uint32Array; made with binShadeValues / binShadeRuns here or by the VR label pass, vr-label-histogram.js binLut with histMax). Everything below is in data units; a bin's value is its centre.
-//   lower = the 2nd percentile, upper = the 98th percentile (nearest rank); when upper - lower is under 2 % of the data's full width it is widened symmetrically to 2 %; both are cut to the data's min..max.
+//   lower = the 2nd percentile, upper = the 98th percentile (nearest rank);: the long tails are cut with the interquartile range (IQR = p75 - p25): lower = max(p2, p25 - k*IQR), upper = min(p98, p75 + k*IQR), k = 1 (a wide
+//   distribution such as bone or MRI keeps p2 / p98; a narrow peak with a long tail, soft tissue, no longer stretches the range). When upper - lower is under 0.5 % of the data's full width it is widened symmetrically to 0.5 %; both are cut to the data's min..max.
 //   span = the values really present (lower edge of the first non-empty bin .. upper edge of the last one) plus 5 % of that width on each side, cut to the data: the range the lower / upper sliders run over (step span / 200).
 // null (= use the initial value, the full data range for the sliders) for a segment without voxels, with one distinct value (all in one bin), or without a histogram.
-export const SHADE_AUTO_LOW_P = 2, SHADE_AUTO_HIGH_P = 98, SHADE_AUTO_MIN_FRAC = 0.02, SHADE_SPAN_MARGIN = 0.05, SHADE_HIST_BINS = 4096;
+export const SHADE_AUTO_LOW_P = 2, SHADE_AUTO_HIGH_P = 98, SHADE_AUTO_MIN_FRAC = 0.005, SHADE_SPAN_MARGIN = 0.05, SHADE_HIST_BINS = 4096, SHADE_AUTO_IQR_K = 1;
 export const createShadeHist = () => new Uint32Array(SHADE_HIST_BINS);
 // the bin of a data value (clamped; the data's max is in the last bin)
 export function shadeBinOf(v, min, max) {
@@ -109,7 +110,8 @@ export function autoShadeRange(hist, data) {
   for (let i = 0; i < hist.length; i++) { const c = hist[i]; if (!c) continue; if (first < 0) first = i; last = i; count += c; }
   if (!count || last <= first) return null;
   const at = p => { const target = Math.max(1, Math.ceil(count * p / 100)); let cum = 0; for (let i = first; i <= last; i++) { cum += hist[i]; if (cum >= target) return shadeBinValue(i, data.min, data.max); } return shadeBinValue(last, data.min, data.max); };
-  let lo = at(SHADE_AUTO_LOW_P), hi = at(SHADE_AUTO_HIGH_P);
+  const p25 = at(25), p75 = at(75), iqr = p75 - p25; // the IQR cuts the long tails (p2 / p98 stay the outer limits)
+  let lo = Math.max(at(SHADE_AUTO_LOW_P), p25 - SHADE_AUTO_IQR_K * iqr), hi = Math.min(at(SHADE_AUTO_HIGH_P), p75 + SHADE_AUTO_IQR_K * iqr);
   const bw = (data.max - data.min) / hist.length, a = data.min + first * bw, b = data.min + (last + 1) * bw, margin = (b - a) * SHADE_SPAN_MARGIN;
   let smin = a - margin, smax = b + margin;
   const minW = (data.max - data.min) * SHADE_AUTO_MIN_FRAC;
@@ -124,11 +126,14 @@ export const shadeSpanOf = (auto, data) => (auto && auto.span && finite(auto.spa
 // The scheduler of the auto computation (one per source: the browser's, VR's). request(keys) is the only way in: a data open or a threshold change of those segments. It waits `delay` ms after the LAST request (a slider
 // drag asks on every move), then computes: compute(keys, stale) -> Promise of {key: hist | null} (null = this segment has no voxels), or null when it cannot run now (retried a few times). Every request bumps the generation: a
 // computation that is still running is stale, its result is thrown away (and `cancel` is called so it stops working), and its keys are asked again with the new request. apply(results) gets only the result of the current generation.
-export function createShadeAutoScheduler({ compute, apply, cancel = () => {}, delay = 300, retries = 5, setTimer = (f, ms) => setTimeout(f, ms), clearTimer = id => clearTimeout(id) }) {
-  let gen = 0, timer = null, tries = 0;
+// retryDelay = the wait between the retries of a compute that returned null (default: delay; VR waits 1000 ms x 60 for the cache write). hold(true) = nothing runs (the XR session is on): requests are only remembered
+// (no timer, no retry used up), a running computation is cancelled and its keys kept; hold(false) asks for all the remembered keys again.
+export function createShadeAutoScheduler({ compute, apply, cancel = () => {}, delay = 300, retries = 5, retryDelay = delay, setTimer = (f, ms) => setTimeout(f, ms), clearTimer = id => clearTimeout(id) }) {
+  let gen = 0, timer = null, tries = 0, held = false;
   const pending = new Set(), inflight = new Set();
   const fire = async () => {
     timer = null;
+    if (held) return; // the keys stay in pending until hold(false)
     const mine = ++gen, keys = [...pending]; pending.clear();
     if (!keys.length) return;
     for (const k of keys) inflight.add(k);
@@ -138,7 +143,7 @@ export function createShadeAutoScheduler({ compute, apply, cancel = () => {}, de
     if (stale()) return; // a newer request owns the keys now
     for (const k of keys) inflight.delete(k);
     if (out) { tries = 0; apply(out); return; }
-    if (tries++ < retries) { for (const k of keys) pending.add(k); timer = setTimer(fire, delay); } else tries = 0;
+    if (tries++ < retries) { for (const k of keys) pending.add(k); timer = setTimer(fire, retryDelay); } else tries = 0;
   };
   return {
     request(keys) {
@@ -146,8 +151,14 @@ export function createShadeAutoScheduler({ compute, apply, cancel = () => {}, de
       if (inflight.size) { cancel(); for (const k of inflight) pending.add(k); inflight.clear(); }
       for (const k of keys) pending.add(k);
       if (timer !== null) clearTimer(timer);
-      timer = setTimer(fire, delay);
+      timer = held ? null : setTimer(fire, delay);
     },
+    hold(on) {
+      on = !!on; if (on === held) return; held = on;
+      if (on) { gen++; tries = 0; if (inflight.size) { cancel(); for (const k of inflight) pending.add(k); inflight.clear(); } if (timer !== null) { clearTimer(timer); timer = null; } }
+      else if (pending.size) { tries = 0; timer = setTimer(fire, delay); }
+    },
+    get held() { return held; },
     // the data went away / was replaced: nothing is computed or applied any more
     reset() { gen++; tries = 0; pending.clear(); inflight.clear(); if (timer !== null) { clearTimer(timer); timer = null; } cancel(); },
     get generation() { return gen; },

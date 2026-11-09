@@ -1,13 +1,13 @@
 import { describe, it, expect, beforeAll, afterEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import {
-  SHADE_HIST_BINS, createShadeHist, shadeBinOf, shadeBinValue, binShadeValues, binShadeRuns, shadeHistCount, SHADE_AUTO_LOW_P, SHADE_AUTO_HIGH_P, SHADE_AUTO_MIN_FRAC, SHADE_SPAN_MARGIN, SHADE_RANGE_STEPS, autoShadeRange, shadeSpanOf, shadeRangeOf, shadeRangeStep,
+  SHADE_HIST_BINS, createShadeHist, shadeBinOf, shadeBinValue, binShadeValues, binShadeRuns, shadeHistCount, SHADE_AUTO_LOW_P, SHADE_AUTO_HIGH_P, SHADE_AUTO_MIN_FRAC, SHADE_AUTO_IQR_K, SHADE_SPAN_MARGIN, SHADE_RANGE_STEPS, autoShadeRange, shadeSpanOf, shadeRangeOf, shadeRangeStep,
   shadeValueAt, shadePosOf, initialShadeRange, dataRangeOf, moveShadeEnd, shadeRangesToProject, createShadeAutoScheduler,
 } from '../../docs/cap-shade.js';
 import { binLut } from '../../docs/vr-label-histogram.js';
 import { installDomStub, importApp } from '../helpers/dom-stub.js';
 
-// the AUTO shading range of a segment = the 2nd..98th percentile of the values of the voxels that belong to the segment (at least 2 % of the data's width),
+// the AUTO shading range of a segment = the 2nd..98th percentile of the values of the voxels that belong to the segment,
 // the sliders run over the values present in the segment + 5 %; manual (user) ranges win, the reset button goes back to auto; only manual ranges are saved.
 const vr = readFileSync('docs/vr-view.js', 'utf8'), segmentsSrc = readFileSync('docs/segments.js', 'utf8'), dataLoad = readFileSync('docs/data-load.js', 'utf8');
 const histUi = readFileSync('docs/histogram-ui.js', 'utf8'), sectionShade = readFileSync('docs/section-shade.js', 'utf8');
@@ -21,8 +21,9 @@ const histOf = (values, data = CT) => binShadeValues(createShadeHist(), Float64A
 const range = (a, b) => Array.from({ length: b - a + 1 }, (_, i) => a + i);
 
 describe('autoShadeRange: percentiles of the segment\'s own values (4096 bins over the data\'s own range)', () => {
-  it('the constants of the spec: 2nd / 98th percentile, 2 % of the data width at least, 5 % margin on the slider span, 200 steps, 4096 bins', () => {
-    expect([SHADE_AUTO_LOW_P, SHADE_AUTO_HIGH_P, SHADE_AUTO_MIN_FRAC, SHADE_SPAN_MARGIN, SHADE_RANGE_STEPS, SHADE_HIST_BINS]).toEqual([2, 98, 0.02, 0.05, 200, 4096]);
+  it('the constants of the spec: 2nd / 98th percentile, IQR factor 1, 0.5 % of the data width at least, 5 % margin on the slider span, 200 steps, 4096 bins', () => {
+    expect([SHADE_AUTO_LOW_P, SHADE_AUTO_HIGH_P, SHADE_AUTO_MIN_FRAC, SHADE_SPAN_MARGIN, SHADE_RANGE_STEPS, SHADE_HIST_BINS]).toEqual([2, 98, 0.005, 0.05, 200, 4096]);
+    expect(SHADE_AUTO_IQR_K).toBe(1);
   });
   it('the bins: equal width over min..max, the max in the last bin, outside values clamped, NaN skipped, a segment\'s own range as the voxel test', () => {
     expect(shadeBinOf(0, 0, 4096)).toBe(0); expect(shadeBinOf(4096, 0, 4096)).toBe(4095); expect(shadeBinOf(-5, 0, 4096)).toBe(0); expect(shadeBinOf(9999, 0, 4096)).toBe(4095);
@@ -54,19 +55,21 @@ describe('autoShadeRange: percentiles of the segment\'s own values (4096 bins ov
       expect(Number.isFinite(r.lower + r.upper + r.span.min + r.span.max)).toBe(true);
     }
   });
-  it('a width under 2 % of the data\'s full width is widened symmetrically to 2 %', () => {
-    const minW = 0.02 * 4095, r = autoShadeRange(histOf([...Array(990).fill(50), ...Array(10).fill(52)]), CT); // p2 = p98: width 0
+  it('a width under 0.5 % of the data\'s full width is widened symmetrically to 0.5 %', () => {
+    const minW = 0.005 * 4095, r = autoShadeRange(histOf([...Array(990).fill(50), ...Array(10).fill(52)]), CT); // p2 = p98: width 0
     expect(r.upper - r.lower).toBeCloseTo(minW, 9); expect((r.lower + r.upper) / 2).toBeCloseTo(50, 0);
-    const w = autoShadeRange(histOf([...range(100, 120), ...range(100, 120)]), CT); // about 20 wide < 81.9
-    expect(w.upper - w.lower).toBeCloseTo(minW, 9); expect((w.lower + w.upper) / 2).toBeCloseTo(110, 0);
+    const w = autoShadeRange(histOf([...range(100, 110), ...range(100, 110)]), CT); // about 10 wide < 20.5
+    expect(w.upper - w.lower).toBeCloseTo(minW, 9); expect((w.lower + w.upper) / 2).toBeCloseTo(105, 0);
+    const mid = autoShadeRange(histOf([...range(100, 150), ...range(100, 150)]), CT); // about 49 wide: over 0.5 % (and under the old 2 % = 81.9): kept as it is, not widened
+    expect(mid.upper - mid.lower).toBeGreaterThan(minW + 20); expect(mid.upper - mid.lower).toBeLessThan(0.02 * 4095);
     const wide = autoShadeRange(histOf(range(0, 999)), CT); expect(wide.upper - wide.lower).toBeGreaterThan(950);
   });
   it('the widening follows the data\'s width (no fixed numbers) and is cut to the data\'s min..max', () => {
-    const small = dataRangeOf(0, 200), r = autoShadeRange(histOf([0, 0, 0, 0, 1, 1], small), small);
-    expect(r.lower).toBe(0); expect(r.upper).toBeCloseTo(0.5 + 0.02 * 200 / 2, 0); // 2 % of 200 = 4, centred near 0.5 -> cut at 0
+    const small = dataRangeOf(0, 2000), r = autoShadeRange(histOf([0, 0, 0, 0, 1, 1], small), small);
+    expect(r.lower).toBe(0); expect(r.upper).toBeCloseTo(5.7, 0); // 0.5 % of 2000 = 10, centred near 0.7 -> cut at 0
     const big = dataRangeOf(0, 65535), b = autoShadeRange(histOf([1000, 1000, 1000, 1100], big), big);
     expect(autoShadeRange(histOf([1000, 1001], big), big)).toBe(null); // inside one bin (16 wide here): one value, the initial value
-    expect(b.upper - b.lower).toBeCloseTo(0.02 * 65535, 6);
+    expect(b.upper - b.lower).toBeCloseTo(0.005 * 65535, 6);
   });
   it('slider span = the values present (first bin .. last bin) plus 5 % of that width on each side, cut to the data', () => {
     const r = autoShadeRange(histOf(range(100, 300)), CT);
@@ -87,6 +90,54 @@ describe('autoShadeRange: percentiles of the segment\'s own values (4096 bins ov
   });
 });
 
+// the maths as it was (2nd..98th percentile, widened to 2 %), to show where it is unchanged
+function ref694(hist, data) {
+  let first = -1, last = -1, count = 0;
+  for (let i = 0; i < hist.length; i++) { const c = hist[i]; if (!c) continue; if (first < 0) first = i; last = i; count += c; }
+  const at = p => { const target = Math.max(1, Math.ceil(count * p / 100)); let cum = 0; for (let i = first; i <= last; i++) { cum += hist[i]; if (cum >= target) return shadeBinValue(i, data.min, data.max); } return shadeBinValue(last, data.min, data.max); };
+  let lo = at(2), hi = at(98); const minW = (data.max - data.min) * 0.02;
+  if (hi - lo < minW) { const m = (lo + hi) / 2; lo = m - minW / 2; hi = m + minW / 2; }
+  return { lower: Math.min(Math.max(lo, data.min), data.max), upper: Math.min(Math.max(hi, data.min), data.max) };
+}
+describe('the IQR cuts the long tails; wide distributions (bone, MRI) are; the minimum width is 0.5 %', () => {
+  // soft tissue: a narrow peak (30..50, 90 % of the voxels) and a long tail up to 350
+  const peakAndTail = () => { const v = []; for (let i = 0; i < 9000; i++) v.push(30 + (i * 37) % 21); for (let i = 0; i < 1000; i++) v.push(50 + i * 0.3); return v; };
+  it('narrow peak + long tail: the upper end is p75 + IQR (near the peak), not the 98th percentile far out in the tail', () => {
+    const h = histOf(peakAndTail()), old = ref694(h, CT), r = autoShadeRange(h, CT);
+    expect(old.upper).toBeGreaterThan(250); // stretched by the tail
+    expect(r.upper).toBeLessThan(70); expect(r.upper).toBeGreaterThan(50); expect(r.lower).toBeGreaterThan(28); expect(r.lower).toBeLessThan(32);
+    expect(r.upper - r.lower).toBeGreaterThan(0.005 * 4095); // wide enough: not the minimum width
+    expect(r.span.max).toBeGreaterThan(340); // the sliders still reach the tail (span unchanged)
+  });
+  it('the cut is max(p2, p25 - IQR) .. min(p98, p75 + IQR) (checked against an independent count of the raw values)', () => {
+    const vals = peakAndTail(), h = histOf(vals), sorted = Float64Array.from(vals).sort(), n = sorted.length, bin = 4095 / 4096;
+    const q = p => sorted[Math.max(1, Math.ceil(n * p / 100)) - 1];
+    const iqr = q(75) - q(25), up = Math.min(q(98), q(75) + iqr), lo = Math.max(q(2), q(25) - iqr), r = autoShadeRange(h, CT);
+    expect(Math.abs(r.upper - up)).toBeLessThan(1.5 * bin); expect(Math.abs(r.lower - lo)).toBeLessThan(1.5 * bin);
+  });
+  it('bone-like (wide, flat) and MRI-like distributions: p2 / p98 win, the result equals\'s', () => {
+    const boneLike = []; for (let v = 300; v <= 2900; v++) boneLike.push(v, v);
+    const MR = dataRangeOf(0, 65535);
+    for (const [vals, d] of [[boneLike, CT], [range(0, 999), CT], [range(12000, 52000), MR], [range(20000, 30000), MR]]) {
+      const h = histOf(vals, d), a = autoShadeRange(h, d), b = ref694(h, d);
+      expect(a.lower).toBeCloseTo(b.lower, 9); expect(a.upper).toBeCloseTo(b.upper, 9);
+    }
+  });
+  it('the IQR never widens the range beyond p2 / p98', () => {
+    const h = histOf([...range(0, 999), ...range(0, 999)]), r = autoShadeRange(h, CT), p = ref694(h, CT);
+    expect(r.lower).toBeGreaterThanOrEqual(p.lower - 1e-9); expect(r.upper).toBeLessThanOrEqual(p.upper + 1e-9);
+  });
+  it('the minimum width is 0.5 % of the data\'s full width: a 10 HU wide peak is widened to 20.5 HU only', () => {
+    const r = autoShadeRange(histOf([...range(40, 49), ...range(40, 49), ...range(40, 49)]), CT);
+    expect(r.upper - r.lower).toBeCloseTo(0.005 * 4095, 9); expect(r.upper - r.lower).toBeLessThan(0.02 * 4095);
+  });
+  it('the slider span and the step are unchanged by the IQR (the values present + 5 %)', () => {
+    const r = autoShadeRange(histOf(peakAndTail()), CT);
+    expect(Math.abs(r.span.min - (30 - 0.05 * 320))).toBeLessThan(2); expect(Math.abs(r.span.max - (350 + 0.05 * 320))).toBeLessThan(3);
+    expect(shadeRangeStep(shadeSpanOf(r, CT))).toBeCloseTo((r.span.max - r.span.min) / 200, 12);
+  });
+});
+
 describe('MRI-like data (values 0..65535, far outside the HU bins): the auto range and the span are right', () => {
   const MR = dataRangeOf(0, 65535);
   it('a segment of values 20000..30000: percentiles and span are in data units (the fixed -1024..3071 bins would pile them all into the last bin)', () => {
@@ -100,9 +151,9 @@ describe('MRI-like data (values 0..65535, far outside the HU bins): the auto ran
     const vals = [...range(20000, 30000), ...Array(50).fill(65535)], r = autoShadeRange(histOf(vals, MR), MR);
     expect(r.upper).toBeLessThan(31000); expect(r.span.max).toBeGreaterThan(65000);
   });
-  it('a narrow cluster is widened to 2 % of 65535 (about 1311) around its middle, cut to the data', () => {
+  it('a narrow cluster is widened to 0.5 % of 65535 (about 328) around its middle, cut to the data', () => {
     const r = autoShadeRange(histOf([...Array(500).fill(40000), ...Array(500).fill(40100)], MR), MR);
-    expect(r.upper - r.lower).toBeCloseTo(0.02 * 65535, 6); expect((r.lower + r.upper) / 2).toBeCloseTo(40050, -2);
+    expect(r.upper - r.lower).toBeCloseTo(0.005 * 65535, 6); expect((r.lower + r.upper) / 2).toBeCloseTo(40050, -2);
   });
   it('the VR lookup table (vr-label-histogram.js binLut with histMax) bins the same way; without histMax it is the board\'s 1-HU bins', () => {
     const cal = [1, 0, 0], lut = binLut(cal, 0, 4096, 65535);
@@ -225,6 +276,64 @@ describe('the scheduler: triggers, 300 ms after the last request, stale results 
   });
 });
 
+describe('no counting during an XR session (hold) and the VR side\'s own wait', () => {
+  it('hold(true): requests are only remembered (no timer, no compute, no retry used up); hold(false) asks for them again once', async () => {
+    const t = fakeTimers(), calls = [], applied = [];
+    const sch = createShadeAutoScheduler({ compute: async keys => { calls.push([...keys]); return Object.fromEntries(keys.map(k => [k, null])); }, apply: r => applied.push(r), retries: 2, ...t });
+    sch.hold(true); expect(sch.held).toBe(true);
+    sch.request(['soft']); sch.request(['bone']); await t.advance(10000); await settle();
+    expect(calls).toEqual([]); expect(t.pending).toBe(0); expect(sch.busy).toBe(false);
+    sch.hold(false); expect(t.pending).toBe(1); await t.advance(300); await settle();
+    expect(calls).toEqual([['soft', 'bone']]); expect(applied).toEqual([{ soft: null, bone: null }]);
+    sch.hold(false); await t.advance(1000); await settle(); expect(calls.length).toBe(1); // nothing left: no second run
+  });
+  it('a computation that is running when the XR session starts is cancelled, its result thrown away, and its keys are computed after the session', async () => {
+    const t = fakeTimers(), applied = [], gates = []; let cancelled = 0;
+    const sch = createShadeAutoScheduler({ compute: (keys, stale) => new Promise(res => { gates.push(() => res(stale() ? null : Object.fromEntries(keys.map(k => [k, 'h'])))); }), apply: r => applied.push(r), cancel: () => { cancelled++; }, ...t });
+    sch.request(['soft', 'bone']); await t.advance(300); expect(gates.length).toBe(1);
+    sch.hold(true); expect(cancelled).toBe(1); gates[0](); await settle(); expect(applied).toEqual([]);
+    await t.advance(5000); expect(gates.length).toBe(1);
+    sch.hold(false); await t.advance(300); expect(gates.length).toBe(2); gates[1](); await settle(); expect(applied).toEqual([{ soft: 'h', bone: 'h' }]);
+  });
+  it('a pending (not yet fired) request when the session starts waits for the end of it; reset still clears everything', async () => {
+    const t = fakeTimers(); let calls = 0;
+    const sch = createShadeAutoScheduler({ compute: async () => { calls++; return {}; }, apply() {}, ...t });
+    sch.request(['soft']); sch.hold(true); await t.advance(2000); expect(calls).toBe(0);
+    sch.hold(false); sch.reset(); await t.advance(2000); expect(calls).toBe(0); // the data went away meanwhile
+  });
+  it('retries are not used up by the requests made during the session: after it the full retry count is still there', async () => {
+    const t = fakeTimers(); let calls = 0;
+    const sch = createShadeAutoScheduler({ compute: async () => { calls++; return null; }, apply() {}, retries: 3, ...t });
+    sch.hold(true); for (let i = 0; i < 20; i++) { sch.request(['soft']); await t.advance(300); }
+    sch.hold(false); await t.advance(300 + 3 * 300 + 2000); await settle(); expect(calls).toBe(4); // first try + 3 retries
+  });
+  it('retryDelay: the wait between retries of a "not now" compute (VR: 1000 ms x 60) is separate from the 300 ms debounce; the start is still after 300 ms', async () => {
+    const t = fakeTimers(); let calls = 0, saving = true; const applied = [];
+    const sch = createShadeAutoScheduler({ compute: async () => { calls++; return saving ? null : { soft: null }; }, apply: r => applied.push(r), retryDelay: 1000, retries: 60, ...t });
+    sch.request(['soft']); await t.advance(299); expect(calls).toBe(0); await t.advance(1); await settle(); expect(calls).toBe(1);
+    await t.advance(999); await settle(); expect(calls).toBe(1); await t.advance(1); await settle(); expect(calls).toBe(2); // 1000 ms between the tries
+    await t.advance(50 * 1000); await settle(); expect(calls).toBe(52); expect(applied).toEqual([]); // still waiting for a long save
+    saving = false; await t.advance(1000); await settle(); expect(applied).toEqual([{ soft: null }]); // the save finished: counted, no give-up
+  });
+  it('the VR wait gives up only after 60 retries (a save longer than a minute); the default retries are unchanged (5, 300 ms)', async () => {
+    const t = fakeTimers(); let calls = 0;
+    const sch = createShadeAutoScheduler({ compute: async () => { calls++; return null; }, apply() {}, retryDelay: 1000, retries: 60, ...t });
+    sch.request(['soft']); await t.advance(300 + 61 * 1000 + 5000); await settle(); expect(calls).toBe(61); expect(t.pending).toBe(0);
+    const t2 = fakeTimers(); let c2 = 0; const s2 = createShadeAutoScheduler({ compute: async () => { c2++; return null; }, apply() {}, ...t2 });
+    s2.request(['soft']); await t2.advance(300 + 5 * 300 + 5000); await settle(); expect(c2).toBe(6);
+  });
+  it('wiring: the browser counting is held from the XR session start to its end (segments.js setShadeAutoPageHeld, called in vr-view.js); the VR counting waits for the cache write', () => {
+    expect(segmentsSrc).toContain('export const setShadeAutoPageHeld=on=>shadeAutoPage.hold(on);');
+    expect(vr).toContain("running={session};setShadeAutoPageHeld(true);vrHold(true);step('in-session');");
+    expect(vr).toContain('renderer.domElement.remove();running=null;setShadeAutoPageHeld(false);');
+    expect((vr.match(/setShadeAutoPageHeld\(/g) || []).length).toBe(2);
+    expect(vr).toContain("if([...storeStatus.map.values()].some(s=>s.state==='saving'))return null;"); // not now while the VR prep cache is being written (the same test as flushVrStores)
+    expect(vr.indexOf("some(s=>s.state==='saving'))return null;")).toBeLessThan(vr.indexOf('const ok=await shadeHist.run(inp)')); // before any counting starts
+    expect(vr).toContain('apply:applyShadeAutoHistograms,cancel:()=>shadeHist.cancel(),retryDelay:1000,retries:60});');
+    expect(segmentsSrc).not.toMatch(/createShadeAutoScheduler\(\{[^}]*retryDelay/); // the browser keeps the default wait
+  });
+});
+
 describe('the triggers: only a data open and a threshold change', () => {
   it('a data open asks for every segment (once the data is ready), another dataset clears the auto values first', () => {
     expect(dataLoad).toContain('projectSaveBtn.disabled=false;syncMpr3DSliceSliders();requestShadeAuto();void applyPendingProject();');
@@ -321,7 +430,7 @@ describe('computeSegmentHistograms on a small volume', () => {
     expect(await H.computeSegmentHistograms(['soft'], () => true)).toBe(null);
     // and the auto range made from it spans the values that are there, not the threshold range
     const r = autoShadeRange(out.soft, dr);
-    expect(r.upper - r.lower).toBeCloseTo(0.02 * 907, 9); expect(Math.abs(r.span.min - 9.85)).toBeLessThan(0.5); expect(Math.abs(r.span.max - 13.15)).toBeLessThan(0.5); // 10..13 (3 wide) -> widened to 2 % of the data's 907
+    expect(r.upper - r.lower).toBeCloseTo(0.005 * 907, 9); expect(Math.abs(r.span.min - 9.85)).toBeLessThan(0.5); expect(Math.abs(r.span.max - 13.15)).toBeLessThan(0.5); // 10..13 (3 wide) -> widened to 0.5 % of the data's 907
     St.setVolume(null);
   });
 });
