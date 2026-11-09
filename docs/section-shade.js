@@ -3,13 +3,13 @@
 // The data value is read through the range of the segment (segments.js segmentShadeRange: auto = the 2nd..98th percentile of the values of the segment's voxels, manual = the user's), not through the slice image's window.
 // The controls only act while a section is open, the cap is on and the slice image is hidden, so they are disabled otherwise (明るさ / コントラスト also with 単色).
 // Like VR (vr-view.js ctShade / ctShadeBright / ctShadeContrast: device settings saved in localStorage, defaults CT濃淡 / 1.8 / 1.7) the three values are kept on this device and restored at start.
-import { sectionViewOpen, sectionViewPlane, sectionSliceImageVisible, sectionCapEnabled, sectionShadeMode, currentLanguage, sectionShadeBright, sectionShadeContrast, setSectionShadeMode, setSectionShadeBright, setSectionShadeContrast } from './state.js?v=20261108-build695';
-import { sectionShadeModeControl, sectionShadeBrightControl, sectionShadeBrightValue, sectionShadeContrastControl, sectionShadeContrastValue, sectionShadeSegGroup, sectionShadeLowerControl, sectionShadeLowerValue, sectionShadeLowerMinus, sectionShadeLowerPlus, sectionShadeUpperControl, sectionShadeUpperValue, sectionShadeUpperMinus, sectionShadeUpperPlus, sectionShadeResetButton } from './ui-shell.js?v=20261108-build695';
-import { brightOf, contrastOf, shadeRangeStep, shadeValueAt, shadePosOf } from './cap-shade.js?v=20261108-build695';
-import { SEGMENT_PRESET_ORDER, segmentState, segmentShadeRange, segmentShadeSpan, setSegmentShadeEnd, resetSegmentShadeRange, shadeDataRange, onShadeAutoChange } from './segments.js?v=20261108-build695';
-import { wireStepButton, stepClamp } from './value-step.js?v=20261108-build695';
-import { formatCtValue } from './utils.js?v=20261108-build695';
-import { tr } from './i18n.js?v=20261108-build695';
+import { sectionViewOpen, sectionViewPlane, sectionSliceImageVisible, sectionCapEnabled, sectionShadeMode, currentLanguage, sectionShadeBright, sectionShadeContrast, setSectionShadeMode, setSectionShadeBright, setSectionShadeContrast } from './state.js?v=20261109-build696';
+import { sectionShadeModeControl, sectionShadeBrightControl, sectionShadeBrightValue, sectionShadeContrastControl, sectionShadeContrastValue, sectionShadeSegGroup, sectionShadeLowerControl, sectionShadeLowerValue, sectionShadeLowerMinus, sectionShadeLowerPlus, sectionShadeUpperControl, sectionShadeUpperValue, sectionShadeUpperMinus, sectionShadeUpperPlus, sectionShadeResetButton } from './ui-shell.js?v=20261109-build696';
+import { brightOf, contrastOf, shadeRangeStep, shadeValueAt, shadePosOf } from './cap-shade.js?v=20261109-build696';
+import { SEGMENT_PRESET_ORDER, segmentState, segmentShadeRange, segmentShadeSpan, setSegmentShadeEnd, resetSegmentShadeRange, shadeDataRange, onShadeAutoChange } from './segments.js?v=20261109-build696';
+import { wireStepButton, stepClamp } from './value-step.js?v=20261109-build696';
+import { formatCtValue } from './utils.js?v=20261109-build696';
+import { tr } from './i18n.js?v=20261109-build696';
 
 const KEY = 'vrl-section-shade';
 

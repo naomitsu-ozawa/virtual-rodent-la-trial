@@ -21,9 +21,9 @@ const histOf = (values, data = CT) => binShadeValues(createShadeHist(), Float64A
 const range = (a, b) => Array.from({ length: b - a + 1 }, (_, i) => a + i);
 
 describe('autoShadeRange: percentiles of the segment\'s own values (4096 bins over the data\'s own range)', () => {
-  it('the constants of the spec: 2nd / 98th percentile, IQR factor 1, 0.5 % of the data width at least, 5 % margin on the slider span, 200 steps, 4096 bins', () => {
+  it('the constants of the spec: 2nd / 98th percentile, IQR factor 2, 0.5 % of the data width at least, 5 % margin on the slider span, 200 steps, 4096 bins', () => {
     expect([SHADE_AUTO_LOW_P, SHADE_AUTO_HIGH_P, SHADE_AUTO_MIN_FRAC, SHADE_SPAN_MARGIN, SHADE_RANGE_STEPS, SHADE_HIST_BINS]).toEqual([2, 98, 0.005, 0.05, 200, 4096]);
-    expect(SHADE_AUTO_IQR_K).toBe(1);
+    expect(SHADE_AUTO_IQR_K).toBe(2);
   });
   it('the bins: equal width over min..max, the max in the last bin, outside values clamped, NaN skipped, a segment\'s own range as the voxel test', () => {
     expect(shadeBinOf(0, 0, 4096)).toBe(0); expect(shadeBinOf(4096, 0, 4096)).toBe(4095); expect(shadeBinOf(-5, 0, 4096)).toBe(0); expect(shadeBinOf(9999, 0, 4096)).toBe(4095);
@@ -102,18 +102,26 @@ function ref694(hist, data) {
 describe('the IQR cuts the long tails; wide distributions (bone, MRI) are; the minimum width is 0.5 %', () => {
   // soft tissue: a narrow peak (30..50, 90 % of the voxels) and a long tail up to 350
   const peakAndTail = () => { const v = []; for (let i = 0; i < 9000; i++) v.push(30 + (i * 37) % 21); for (let i = 0; i < 1000; i++) v.push(50 + i * 0.3); return v; };
-  it('narrow peak + long tail: the upper end is p75 + IQR (near the peak), not the 98th percentile far out in the tail', () => {
+  it('narrow peak + long tail: the upper end is p75 + 2 IQR (near the peak), not the 98th percentile far out in the tail', () => {
     const h = histOf(peakAndTail()), old = ref694(h, CT), r = autoShadeRange(h, CT);
     expect(old.upper).toBeGreaterThan(250); // stretched by the tail
-    expect(r.upper).toBeLessThan(70); expect(r.upper).toBeGreaterThan(50); expect(r.lower).toBeGreaterThan(28); expect(r.lower).toBeLessThan(32);
+    expect(r.upper).toBeLessThan(80); expect(r.upper).toBeGreaterThan(50); expect(r.lower).toBeGreaterThan(28); expect(r.lower).toBeLessThan(32);
     expect(r.upper - r.lower).toBeGreaterThan(0.005 * 4095); // wide enough: not the minimum width
     expect(r.span.max).toBeGreaterThan(340); // the sliders still reach the tail (span unchanged)
   });
-  it('the cut is max(p2, p25 - IQR) .. min(p98, p75 + IQR) (checked against an independent count of the raw values)', () => {
+  it('the cut is max(p2, p25 - 2 IQR) .. min(p98, p75 + 2 IQR) (checked against an independent count of the raw values)', () => {
     const vals = peakAndTail(), h = histOf(vals), sorted = Float64Array.from(vals).sort(), n = sorted.length, bin = 4095 / 4096;
     const q = p => sorted[Math.max(1, Math.ceil(n * p / 100)) - 1];
-    const iqr = q(75) - q(25), up = Math.min(q(98), q(75) + iqr), lo = Math.max(q(2), q(25) - iqr), r = autoShadeRange(h, CT);
+    const iqr = q(75) - q(25), up = Math.min(q(98), q(75) + 2 * iqr), lo = Math.max(q(2), q(25) - 2 * iqr), r = autoShadeRange(h, CT);
     expect(Math.abs(r.upper - up)).toBeLessThan(1.5 * bin); expect(Math.abs(r.lower - lo)).toBeLessThan(1.5 * bin);
+  });
+  it('narrow peak + a bright tail with p98 - p75 about 2.4 IQR: upper = min(p98, p75 + 2 IQR) = p75 + 2 IQR', () => {
+    const vals = []; for (let i = 0; i < 9000; i++) vals.push(30 + (i * 37) % 21); for (let i = 0; i < 1000; i++) vals.push(50 + i * 0.0322);
+    const sorted = Float64Array.from(vals).sort(), n = sorted.length, bin = 4095 / 4096;
+    const q = p => sorted[Math.max(1, Math.ceil(n * p / 100)) - 1], iqr = q(75) - q(25);
+    expect((q(98) - q(75)) / iqr).toBeGreaterThan(2.2); expect((q(98) - q(75)) / iqr).toBeLessThan(2.6);
+    const r = autoShadeRange(histOf(vals), CT);
+    expect(Math.abs(r.upper - (q(75) + 2 * iqr))).toBeLessThan(1.5 * bin); expect(r.upper).toBeLessThan(q(98) - bin);
   });
   it('bone-like (wide, flat) and MRI-like distributions: p2 / p98 win, the result equals\'s', () => {
     const boneLike = []; for (let v = 300; v <= 2900; v++) boneLike.push(v, v);
