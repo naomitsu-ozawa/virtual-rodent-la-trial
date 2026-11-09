@@ -1,9 +1,9 @@
 // 体験会モード - the 設定 > 外観 switch. With it on the page shows the event page (event-launcher.js: the bar with VR / AR / チュートリアル / status, and one card per practice dataset that
-// opens its data through the practice-data chooser's own startSample and goes on to prepare VR); the データ panel keeps 「最初の状態に戻す」. With the switch off (default) nothing is added to the page.
-import { settings } from './app-settings.js?v=20261109-build697';
-import { tr } from './i18n.js?v=20261109-build697';
-import { levelForSample, chooseEventLevel, resetPress, resetArmed, RESET_ARM_MS } from './event-mode.js?v=20261109-build697';
-import { createEventLauncher } from './event-launcher.js?v=20261109-build697';
+// opens its data through the practice-data chooser's own startSample and goes on to prepare VR); the 設定 panel keeps 「最初の状態に戻す」. With the switch off (default) nothing is added to the page.
+import { settings } from './app-settings.js?v=20261109-build698';
+import { tr } from './i18n.js?v=20261109-build698';
+import { levelForSample, chooseEventLevel, resetPress, resetArmed, RESET_ARM_MS } from './event-mode.js?v=20261109-build698';
+import { createEventLauncher } from './event-launcher.js?v=20261109-build698';
 export function initEventModeUi(){
  const box=document.getElementById('set-event-mode');
  if(box){box.checked=settings.get('eventMode')===true;box.onchange=()=>settings.set('eventMode',box.checked)}
@@ -34,8 +34,8 @@ export function initEventModeUi(){
  const mount=()=>{
   if(!launcher.enable())return; // the page's layout is there from startup (app.js builds it before this runs)
   panel=build();
-  // at the top of the データ panel (workspace UI; the first sidebar panel in the classic UI), above the open / practice-data rows
-  const host=document.querySelector('[data-ipad-drawer-section="data"]')||document.querySelector('.sidebar-scroll > .panel');
+  // at the top of the 設定 panel (workspace UI; the first sidebar panel in the classic UI, which has no left rail)
+  const host=document.querySelector('[data-ipad-drawer-section="prefs"]')||document.querySelector('.sidebar-scroll > .panel');
   if(host)host.prepend(panel);else document.body.append(panel);
   mark();
  };
