@@ -4,8 +4,8 @@
 //  - openAndPrepare: the order after a card press (open the data, wait until the page is quiet, wait for the standard-open record, prepare the VR data)
 //  - waitForStandardOpen: the bounded wait for the record standard-open.js sets (so the prepared entry is marked standard)
 //  - createInflight: a run that is already in flight is shared, never started twice
-import { EVENT_DATASETS } from './event-mode.js?v=20261109-build699';
-import { sampleCredit } from './sample-credits.js?v=20261109-build699';
+import { EVENT_DATASETS } from './event-mode.js?v=20261109-build700';
+import { sampleCredit } from './sample-credits.js?v=20261109-build700';
 
 export function eventCards(datasets = EVENT_DATASETS, creditOf = sampleCredit) {
   return datasets.map(d => {
