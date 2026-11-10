@@ -4,9 +4,9 @@ import { installDomStub, importApp } from '../helpers/dom-stub.js';
 import { pickRay, hitBox, texCoordOf } from '../../docs/webgl-volume-pick.js';
 
 installDomStub();
-let patchFragmentShader, SHADER_PATCHES, planeState, maskDims, webglVolumeEnabled, fragmentShader, vertexShader;
+let patchFragmentShader, SHADER_PATCHES, planeState, maskDims, webglVolumeEnabled, fragmentShader, vertexShader, CHILD_SHADER_PATCHES, childItemsOfEntries, childShadeOf, fillChildLut, syncChildListMasks;
 beforeAll(async () => {
-  ({ patchFragmentShader, SHADER_PATCHES, planeState, maskDims, webglVolumeEnabled } = await importApp('webgl-volume'));
+  ({ patchFragmentShader, SHADER_PATCHES, planeState, maskDims, webglVolumeEnabled, CHILD_SHADER_PATCHES, childItemsOfEntries, childShadeOf, fillChildLut, syncChildListMasks } = await importApp('webgl-volume'));
   ({ fragmentShader, vertexShader } = await importApp('vr-view')); // the VR shader strings (exported for the page's WebGL volume)
 });
 
@@ -40,6 +40,55 @@ describe('the VR shader patched for the page', () => {
   });
   it('fails loudly when an anchor is missing', () => {
     expect(() => patchFragmentShader('void main(){}')).toThrow(/anchor/);
+  });
+});
+
+// Child segments: the shader gets the child additions ONLY for a session with child segments (VRL_CHILDREN); without them the patched text is the one it always was.
+describe('child segments in the page volume', () => {
+  it('every child anchor exists once, and the child additions are applied only on request', () => {
+    const base = patchFragmentShader(fragmentShader);
+    for (const p of CHILD_SHADER_PATCHES) expect(base.split(p.find).length - 1, 'anchor ' + p.name).toBe(1);
+    expect(patchFragmentShader(fragmentShader, { children: false })).toBe(base); // no child segment: the same text as before
+    expect(base).not.toContain('childBase(p,base,s)*diffuse'); expect(base).not.toContain('ctLumAt(cp');
+    const kids = patchFragmentShader(fragmentShader, { children: true });
+    expect(kids).toContain('return childBase(p,base,s)*diffuse+vec3(spec);'); expect(kids).toContain('ctLumAt(cp,huAt(texCoord(cp)),s)');
+    expect(kids.length).toBeGreaterThan(base.length);
+  });
+  it('the VR shader has the child block the page relies on (uniforms childTex / childLut, childBase, ctLumAt)', () => {
+    for (const t of ['#ifdef VRL_CHILDREN', 'uniform VRL_MP sampler3D childTex;', 'uniform highp sampler2D childLut;', 'vec3 childBase(vec3 p,vec3 base,int s)', 'float ctLumAt(vec3 p,float hu,int s)']) expect(fragmentShader, t).toContain(t);
+  });
+  it('childItemsOfEntries: only children with a mask, voxels and a parent slot; the slot becomes the mask bit', () => {
+    const runs = [[0, 0, 1]];
+    const items = childItemsOfEntries([{ key: 'a', runs, voxels: 5, parentSlot: 2, hash: 'h' }, { key: 'b', runs: null, voxels: 5, parentSlot: 0 }, { key: 'c', runs, voxels: 0, parentSlot: 0 }, { key: 'd', runs, voxels: 3, parentSlot: -1 }, { key: 'e', runs, parentSlot: 0 }]);
+    expect(items.map(i => [i.key, i.segMask, i.hash])).toEqual([['a', 4, 'h'], ['e', 1, 0]]);
+  });
+  it('childShadeOf: own range, else the app-resolved one (this frame\'s automatic range wins), else the one handed over, else 0..1', () => {
+    expect(childShadeOf({ shade: { lower: 10, upper: 20 }, shadeRange: { lower: 1, upper: 2 } })).toEqual([10, 20]);
+    expect(childShadeOf({ shade: null, shadeRange: { lower: 1, upper: 2 } }, { lower: 5, upper: 6 })).toEqual([5, 6]);
+    expect(childShadeOf({ shade: null, shadeRange: { lower: 1, upper: 2 } })).toEqual([1, 2]);
+    expect(childShadeOf({ shadeRange: { lower: 1, upper: 2 } }, { lower: 7, upper: 7 })).toEqual([1, 2]); // an unusable resolved range falls back
+    expect(childShadeOf({}, { lower: 5, upper: 6 })).toEqual([5, 6]);
+    expect(childShadeOf({ shade: { lower: 5, upper: 5 } })).toEqual([0, 1]);
+  });
+  it('syncChildListMasks: a parent whose slot moved changes the prepared list\'s bits (colour / hidden mask follow), the rest stays', () => {
+    const list = [{ key: 'a', segMask: 1, hash: 'h' }, { key: 'b', segMask: 2, hash: 'g' }, { key: 'gone', segMask: 4, hash: 'x' }];
+    const items = childItemsOfEntries([{ key: 'a', runs: [[0, 0, 1]], voxels: 1, parentSlot: 3, hash: 'h' }, { key: 'b', runs: [[0, 0, 1]], voxels: 1, parentSlot: 1, hash: 'g' }]);
+    expect(syncChildListMasks(list, items).map(e => [e.key, e.segMask, e.hash])).toEqual([['a', 8, 'h'], ['b', 2, 'g'], ['gone', 4, 'x']]);
+    // the table built from it: the hidden child's mask is its NEW slot bit, a shown child's slot bit moved too
+    const a = new Float32Array(256 * 12), R = 1024, rgbOf = () => [1, 1, 1], mats = () => ({ ambient: 0, spec: 0, shininess: 1 });
+    fillChildLut(a, list, [{ key: 'a', shown: false }, { key: 'b', shown: true }], rgbOf, mats);
+    expect([a[7], a[R + 7], a[11], a[R + 11]]).toEqual([0, 8, 2, 0]); // child 1 = a (hidden: row 0 alpha 0, hidden mask = bit 3), child 2 = b (slot bit 1, not hidden)
+  });
+  it('fillChildLut = vr-view.js refreshChildLut: colour + slot bit (0 hidden), range / flat / hidden mask, material + opacity', () => {
+    const a = new Float32Array(256 * 12), R = 1024, rgbOf = c => [c === 'red' ? 1 : 0, 0.5, 0.25], mats = () => ({ ambient: 0.1, spec: 0.2, shininess: 30 });
+    const list = [{ key: 'a', segMask: 2 }, { key: 'b', segMask: 1 }, { key: 'gone', segMask: 1 }];
+    fillChildLut(a, list, [{ key: 'a', color: 'red', shown: true, opacity: 0.5, shadeRange: { lower: 100, upper: 400 } }, { key: 'b', color: 'x', shown: false, opacity: 2 }], rgbOf, mats);
+    expect([...a.slice(4, 8)]).toEqual([1, 0.5, 0.25, 2]); // child 1: colour, parent slot 1 bit
+    expect([...a.slice(R + 4, R + 8)]).toEqual([100, 400, 0, 0]); // range, no flat, not hidden
+    expect([...a.slice(2 * R + 4, 2 * R + 8)].map(x => Math.round(x * 1000) / 1000)).toEqual([0.1, 0.2, 30, 0.5]);
+    expect(a[8 + 3]).toBe(0); expect(a[R + 8 + 3]).toBe(1); // child 2 hidden: no slot bit in row 0, its hidden mask in row 1
+    expect(a[2 * R + 8 + 3]).toBe(1); // opacity clamped
+    expect([...a.slice(12, 16)]).toEqual([0, 0, 0, 0]); // a child without an entry has no row
   });
 });
 

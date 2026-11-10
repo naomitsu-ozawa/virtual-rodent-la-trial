@@ -1,14 +1,16 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { analysisFocusedRegionId, sceneState, threeRenderMode, analysisEditTargetKey, analysisEditTool, setAnalysisEditTool, analysisEditTargetMode, analysisCutApplying, analysisPendingCut, setAnalysisEditTargetMode, setAnalysisEditTargetKey, currentLanguage, current3DVolume, volume, cutResultPreviewTimer, incCutResultPreviewRevision, setCutResultPreviewTimer, cutResultPreviewRevision, sourceVolume, analysisRegions } from './state.js?v=20261109-build704';
-import { SEGMENT_PRESET_ORDER, gpuSegmentOrder, segmentState, segmentEditState, segmentEditActive } from './segments.js?v=20261109-build704';
-import { analysisNavigateButton, analysisSelectRegionButton, analysisLassoButton, analysisLassoDeselectButton, analysisDeselectAll, analysisEditDeselectAll, analysisCutButton, analysisLineCutButton, analysisEditRemoveSelected, analysisRemoveSelected, analysisKeepSelected, analysisUndo, analysisRedo, analysisResetEdit, analysisEditTargetSelect, threeEditStatus, analysisCutWidth, analysisCutDepth, analysisCutYaw, analysisCutPitch, analysisCutApply, analysisCutCancel, analysisCutConfirm, analysisCutOffset, threeEditHelp, viewport, state, analysisCutWidthValue, analysisCutDepthValue, analysisCutYawValue, analysisCutPitchValue, analysisCutOffsetValue } from './ui-shell.js?v=20261109-build704';
-import { tr } from './i18n.js?v=20261109-build704';
-import { dispose, buildEditableRunsGroup } from './surface-mesh.js?v=20261109-build704';
-import { request3DRender } from './scene3d.js?v=20261109-build704';
+import { analysisFocusedRegionId, sceneState, threeRenderMode, analysisEditTargetKey, analysisEditTool, setAnalysisEditTool, analysisEditTargetMode, analysisCutApplying, analysisPendingCut, setAnalysisEditTargetMode, setAnalysisEditTargetKey, currentLanguage, current3DVolume, volume, cutResultPreviewTimer, incCutResultPreviewRevision, setCutResultPreviewTimer, cutResultPreviewRevision, sourceVolume, analysisRegions, childSegments } from './state.js?v=20261110-build705';
+import { SEGMENT_PRESET_ORDER, gpuSegmentOrder, segmentState, segmentEditState, segmentEditActive, segmentById, shownSegmentKeys } from './segments.js?v=20261110-build705';
+import { isChildKey } from './segment-look.js?v=20261110-build705';
+import { childByKey } from './child-segments.js?v=20261110-build705';
+import { analysisNavigateButton, analysisSelectRegionButton, analysisLassoButton, analysisLassoDeselectButton, analysisDeselectAll, analysisEditDeselectAll, analysisCutButton, analysisLineCutButton, analysisEditRemoveSelected, analysisRemoveSelected, analysisKeepSelected, analysisUndo, analysisRedo, analysisResetEdit, analysisEditTargetSelect, threeEditStatus, analysisCutWidth, analysisCutDepth, analysisCutYaw, analysisCutPitch, analysisCutApply, analysisCutCancel, analysisCutConfirm, analysisCutOffset, threeEditHelp, viewport, state, analysisCutWidthValue, analysisCutDepthValue, analysisCutYawValue, analysisCutPitchValue, analysisCutOffsetValue } from './ui-shell.js?v=20261110-build705';
+import { tr } from './i18n.js?v=20261110-build705';
+import { dispose, buildEditableRunsGroup } from './surface-mesh.js?v=20261110-build705';
+import { request3DRender } from './scene3d.js?v=20261110-build705';
 import * as THREE from './vendor/three@0.186.0/build/three.webgpu.js';
-import { getFinalSegmentRuns } from './segment-runs.js?v=20261109-build704';
-import { intersectRunArrays, rowsToRunSlice } from './run-length.js?v=20261109-build704';
+import { getFinalSegmentRuns } from './segment-runs.js?v=20261110-build705';
+import { intersectRunArrays, rowsToRunSlice } from './run-length.js?v=20261110-build705';
 export function analysisRegionById(id){return analysisRegions.find(r=>r.id===id)||null}
 export function configureCutControlRanges(v=current3DVolume||volume){
  if(!v||!analysisCutWidth)return;
@@ -199,7 +201,8 @@ export function scheduleCutResultPreview(delay=180){
     const v=sourceVolume||current3DVolume||volume;
     const cut=cutRunsFromVoxelStroke(v,pending.points,cutWidthMm(),+analysisCutDepth.value||5,+analysisCutYaw.value||0,+analysisCutPitch.value||0,pending.mode,+analysisCutOffset.value||0);
     if(revision!==cutResultPreviewRevision||pending!==analysisPendingCut)return;
-    sceneState.medicalVolume.setPreviewRuns(pending.key,cut,gpuSegmentOrder(),v);request3DRender();
+    if(childSegments.length&&isChildKey(pending.key)){const c=childByKey(pending.key);sceneState.medicalVolume.setPreviewRuns(c?.parentKey,c?intersectRunArrays(c.runsBySlice,cut,v.slices):null,gpuSegmentOrder(),v)} // a child segment: what the cut takes from it, shown in its parent's slot (the volume holds the child's voxels inside the parent's mask)
+    else sceneState.medicalVolume.setPreviewRuns(pending.key,cut,gpuSegmentOrder(),v);request3DRender();
    }catch(e){console.warn('GPU cut preview failed.',e);sceneState?.medicalVolume?.clearPreviewRuns?.()}
   },Math.min(delay,90)));return;
  }
@@ -320,12 +323,35 @@ export function updateCutPreview(point=null){
 
  obj.add(group);state.editCutPreview=group;state.editCutPreviewPoint=curve[curve.length-1];request3DRender();
 }
+// The edit target list holds the child segments too (the 3D edit of a child: the preset edit code runs on its own runs, segments.js registerChildEditState). One option per child, named like its tree row; a child that went leaves the list
+// (an edit target that no longer exists goes back to Auto). Without a child segment (and none listed) nothing here runs.
+let childOptionCount=0; // the child options in the list now (so that no child and none listed costs one comparison)
+export function syncChildEditTargets(){
+ if(!childSegments.length&&!childOptionCount)return false;
+ const sel=analysisEditTargetSelect;if(!sel)return false;
+ const listed=[...sel.options].filter(o=>isChildKey(o.value));
+ for(const o of listed)if(!childByKey(o.value))o.remove();
+ let at=sel.querySelector('option[value="contrast"]')||sel.options[sel.options.length-1];
+ for(const c of childSegments){
+  let o=sel.querySelector('option[value="'+c.key+'"]');
+  if(!o){o=document.createElement('option');o.value=c.key;at.after(o)}
+  const name=segmentById(c.key)?.name||c.key;if(o.textContent!==name)o.textContent=name;
+  at=o;
+ }
+ if(isChildKey(analysisEditTargetMode)&&!childByKey(analysisEditTargetMode)){setAnalysisEditTargetMode('auto');setAnalysisEditTargetKey(analysisPendingCut?.key||null);sel.value='auto'}
+ childOptionCount=childSegments.length;
+ return true;
+}
+// the key whose edit history (undo / redo) is wanted when no target is set: the first child segment with a history (presets are looked at by the callers first)
+export const childHistoryKey=(kind='undo')=>{for(const c of childSegments){const st=segmentEditState[c.key];if(st&&st[kind]?.length)return c.key}return null};
+const childEdited=key=>{const st=segmentEditState[key];return !!st&&(st.keepRuns!==st.baseRuns||!!st.excludeRuns)};
 export function updateThreeEditUi(message=null){
+ syncChildEditTargets();
  configureCutControlRanges();refreshCutControlReadouts();
- const enabledKeys=SEGMENT_PRESET_ORDER.filter(k=>segmentState[k].active&&segmentState[k].enabled);
+ const enabledKeys=shownSegmentKeys(); // the ticked presets (the child segments too, while there are some)
  const surfaceUsable=!!sceneState?.obj&&enabledKeys.length>0&&(threeRenderMode==='surface'||(threeRenderMode==='volume'&&!!sceneState?.medicalVolume?.active));
  const modeLabel=analysisEditTool==='lasso'?tr('lassoSelectRegion'):analysisEditTool==='unlasso'?tr('lassoDeselectRegion'):analysisEditTool==='region'?tr('selectEditRegion'):analysisEditTool==='pen'?tr('cutRegion'):analysisEditTool==='line'?tr('lineCutRegion'):tr('editNavigate');
- const targetLabel=analysisEditTargetMode==='auto'?tr('editAuto'):(tr(analysisEditTargetMode)||analysisEditTargetMode);
+ const targetLabel=analysisEditTargetMode==='auto'?tr('editAuto'):(childSegments.length&&isChildKey(analysisEditTargetMode)?(segmentById(analysisEditTargetMode)?.name||analysisEditTargetMode):(tr(analysisEditTargetMode)||analysisEditTargetMode));
  analysisNavigateButton?.classList.toggle('is-active',analysisEditTool==='select');
  analysisSelectRegionButton?.classList.toggle('is-active',analysisEditTool==='region');
  analysisLassoButton?.classList.toggle('is-active',analysisEditTool==='lasso');
@@ -339,7 +365,7 @@ export function updateThreeEditUi(message=null){
  if(analysisCutButton)analysisCutButton.disabled=!surfaceUsable||analysisCutApplying||!!analysisPendingCut;
  if(analysisLineCutButton)analysisLineCutButton.disabled=!surfaceUsable||analysisCutApplying||!!analysisPendingCut;
  if(analysisEditTargetSelect){
-  for(const option of analysisEditTargetSelect.options){if(option.value==='auto'){option.disabled=false;continue}option.disabled=!(segmentState[option.value]?.active&&segmentState[option.value]?.enabled)}
+  for(const option of analysisEditTargetSelect.options){if(option.value==='auto'){option.disabled=false;continue}option.disabled=childSegments.length&&isChildKey(option.value)?!segmentById(option.value)?.enabled:!(segmentState[option.value]?.active&&segmentState[option.value]?.enabled)}
   if(analysisEditTargetMode!=='auto'&&analysisEditTargetSelect.querySelector('option[value="'+analysisEditTargetMode+'"]')?.disabled){setAnalysisEditTargetMode('auto');setAnalysisEditTargetKey(analysisPendingCut?.key||null)}
   analysisEditTargetSelect.value=analysisEditTargetMode;analysisEditTargetSelect.disabled=!surfaceUsable||analysisCutApplying||!!(analysisPendingCut&&analysisPendingCut.key);
  }
@@ -381,7 +407,7 @@ export function editTargetRegions(){
 export function updateAnalysisEditorControls(){
  const region=analysisRegionById(analysisFocusedRegionId),single=region?.segmentKeys?.length===1,regionKey=single?region.segmentKeys[0]:null;
  const surfaceUsable=!!sceneState?.obj&&SEGMENT_PRESET_ORDER.some(k=>segmentState[k].active&&segmentState[k].enabled)&&(threeRenderMode==='surface'||(threeRenderMode==='volume'&&!!sceneState?.medicalVolume?.active));
- const historyKey=analysisEditTargetKey||regionKey||SEGMENT_PRESET_ORDER.find(k=>segmentEditState[k].undo.length||segmentEditState[k].redo.length||segmentEditActive(k)),historyState=historyKey?segmentEditState[historyKey]:null;
+ const historyKey=analysisEditTargetKey||regionKey||SEGMENT_PRESET_ORDER.find(k=>segmentEditState[k].undo.length||segmentEditState[k].redo.length||segmentEditActive(k))||(childSegments.length?(childHistoryKey('undo')||childHistoryKey('redo')):null),historyState=historyKey?segmentEditState[historyKey]:null;
  if(!surfaceUsable&&(analysisEditTool==='region'||analysisEditTool==='lasso'||analysisEditTool==='unlasso'||analysisEditTool==='pen'||analysisEditTool==='line'))setAnalysisEditTool('select');
  if(analysisNavigateButton)analysisNavigateButton.disabled=!sceneState?.obj;
  if(analysisSelectRegionButton)analysisSelectRegionButton.disabled=!surfaceUsable;
@@ -397,6 +423,6 @@ export function updateAnalysisEditorControls(){
  for(const b of [analysisDeselectAll,analysisEditDeselectAll])if(b)b.disabled=!anyTicked&&!analysisRegionById(analysisFocusedRegionId);
  if(analysisUndo)analysisUndo.disabled=!historyState?.undo?.length;
  if(analysisRedo)analysisRedo.disabled=!historyState?.redo?.length;
- if(analysisResetEdit)analysisResetEdit.disabled=!historyKey||!segmentEditActive(historyKey);
+ if(analysisResetEdit)analysisResetEdit.disabled=!historyKey||!(childSegments.length&&isChildKey(historyKey)?childEdited(historyKey):segmentEditActive(historyKey));
  updateThreeEditUi();
 }

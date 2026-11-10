@@ -5,8 +5,8 @@
   },
   "level": 2,
   "description": {
-    "ja": "マウス腹部（{mb}）",
-    "en": "Mouse abdomen ({mb})"
+    "ja": "マウス腹部（約260MB）",
+    "en": "Mouse abdomen (about 260 MB)"
   },
   "mission": {
     "ja": "断面でおなかの中を観察しよう → 軟部組織を隠して脂肪を表示しよう → メニューで「解析モード」に切り替えよう → 脂肪にレーザーを向けるとラベルが出る（トリガーで固定）",
@@ -20,13 +20,5 @@
   "initialSegments": [
     "bone",
     "soft"
-  ],
-  "size": {
-    "dims": [
-      512,
-      512,
-      512
-    ],
-    "megabytes": 269.2
-  }
+  ]
 }

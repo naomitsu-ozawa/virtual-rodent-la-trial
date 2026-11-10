@@ -24,13 +24,5 @@
   "terms": {
     "ja": "非営利目的のみ利用できます。改変物（セグメンテーション等）は同じライセンスで共有してください。",
     "en": "Non-commercial use only. Adapted versions (e.g. segmentations) must be shared under the same license."
-  },
-  "size": {
-    "dims": [
-      560,
-      768,
-      480
-    ],
-    "megabytes": 413.4
   }
 }

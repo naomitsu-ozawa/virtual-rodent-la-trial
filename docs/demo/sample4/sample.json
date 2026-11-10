@@ -5,8 +5,8 @@
   },
   "level": 0,
   "description": {
-    "ja": "骨梁（{mb}）",
-    "en": "Trabecular bone ({mb})"
+    "ja": "骨梁（約260MB）",
+    "en": "Trabecular bone (about 260 MB)"
   },
   "mission": {
     "ja": "骨の中のスポンジ構造を断面で観察しよう",
@@ -18,14 +18,5 @@
   ],
   "initialSegments": [
     "bone"
-  ],
-  "size": {
-    "dims": [
-      512,
-      512,
-      512
-    ],
-    "megabytes": 269.1
-  },
-  "vrInitialScale": 4
+  ]
 }

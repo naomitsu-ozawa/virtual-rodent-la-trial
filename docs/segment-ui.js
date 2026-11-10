@@ -1,23 +1,23 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { mark3DStale } from './three-state.js?v=20261109-build704';
-import { $, footer, threeLabel, ctRangeAuto, ctRangeFull, wc, ww, sigmoidCenter, wcVal, wwVal, sigmoidCenterValue, segmentControls, segmentAddSelect, segmentAddButton } from './ui-shell.js?v=20261109-build704';
-import { sceneState, analysisRegions, childSegments, analysisFocusedRegionId, setAnalysisRegions, setAnalysisFocusedRegionId, setNextAnalysisRegionId, setNextAnalysisColorIndex, volume, segmentRenderTimer, incSourceRenderRevision, threeRenderMode, ctRangeMode, ctRangeProfile, setCtRangeMode, sourceVolume } from './state.js?v=20261109-build704';
-import { dispose } from './surface-mesh.js?v=20261109-build704';
-import { request3DRender } from './scene3d.js?v=20261109-build704';
-import { renderAnalysisResults, setAnalysisFocusedRegion, onAnalysisResultsRendered } from './analysis-results.js?v=20261109-build704';
-import { setRegionVisible } from './region-visibility.js?v=20261109-build704';
-import { regionChipTitle } from './region-name.js?v=20261109-build704';
-import { buildSegmentTree, treeDefaultExpanded } from './segment-tree.js?v=20261109-build704';
-import { buildSegmentLookControls } from './segment-tree-ui.js?v=20261109-build704';
-import { childDisplayName } from './child-segments.js?v=20261109-build704';
-import { onChildSegmentsChange, addChildSegmentFromSelectedRegions } from './child-segments-ui.js?v=20261109-build704';
-import { analysisRegionSegmentsShown, segmentEditState, segmentEditGen, SEGMENT_PRESET_ORDER, segmentState, segmentExclusive, commitExclusiveRanges, gpuSegmentSignature, setChildLook, onChildSegLookChange } from './segments.js?v=20261109-build704';
-import { canEnableSegment } from './segment-slots.js?v=20261109-build704';
-import { tr } from './i18n.js?v=20261109-build704';
-import { niceCtStep, formatCtValue } from './utils.js?v=20261109-build704';
-import { syncGpuVolumeEdits } from './gpu-volume-data.js?v=20261109-build704';
-import { renderAll, analysisColorCss } from './mpr-render.js?v=20261109-build704';
+import { mark3DStale } from './three-state.js?v=20261110-build705';
+import { $, footer, threeLabel, ctRangeAuto, ctRangeFull, wc, ww, sigmoidCenter, wcVal, wwVal, sigmoidCenterValue, segmentControls, segmentAddSelect, segmentAddButton } from './ui-shell.js?v=20261110-build705';
+import { sceneState, analysisRegions, childSegments, analysisFocusedRegionId, setAnalysisRegions, setAnalysisFocusedRegionId, setNextAnalysisRegionId, setNextAnalysisColorIndex, volume, segmentRenderTimer, incSourceRenderRevision, threeRenderMode, ctRangeMode, ctRangeProfile, setCtRangeMode, sourceVolume } from './state.js?v=20261110-build705';
+import { dispose } from './surface-mesh.js?v=20261110-build705';
+import { request3DRender } from './scene3d.js?v=20261110-build705';
+import { renderAnalysisResults, setAnalysisFocusedRegion, onAnalysisResultsRendered, removeAnalysisRegion } from './analysis-results.js?v=20261110-build705';
+import { setRegionVisible } from './region-visibility.js?v=20261110-build705';
+import { regionChipTitle } from './region-name.js?v=20261110-build705';
+import { buildSegmentTree, treeDefaultExpanded } from './segment-tree.js?v=20261110-build705';
+import { buildSegmentLookControls } from './segment-tree-ui.js?v=20261110-build705';
+import { childDisplayName } from './child-segments.js?v=20261110-build705';
+import { onChildSegmentsChange, addChildSegmentFromSelectedRegions } from './child-segments-ui.js?v=20261110-build705';
+import { analysisRegionSegmentsShown, segmentEditState, segmentEditGen, SEGMENT_PRESET_ORDER, segmentState, segmentExclusive, commitExclusiveRanges, gpuSegmentSignature, setChildLook, onChildSegLookChange } from './segments.js?v=20261110-build705';
+import { canEnableSegment } from './segment-slots.js?v=20261110-build705';
+import { tr } from './i18n.js?v=20261110-build705';
+import { niceCtStep, formatCtValue } from './utils.js?v=20261110-build705';
+import { syncGpuVolumeEdits } from './gpu-volume-data.js?v=20261110-build705';
+import { renderAll, analysisColorCss } from './mpr-render.js?v=20261110-build705';
 export function installSegmentReorder(onCommit){
  let drag=null;
  const cards=()=>[...segmentControls.querySelectorAll('[data-segment]')];
@@ -182,7 +182,7 @@ export function removeSegmentPreset(key){
  const seg=segmentState[key];seg.active=false;seg.enabled=false;clearSegmentEditCache(key,true);if(threeRenderMode==='volume')syncGpuVolumeEdits(sourceVolume||volume);
  const enabled=$('[data-seg-enabled="'+key+'"]'),removeBtn=$('[data-seg-remove="'+key+'"]');
  if(enabled)enabled.checked=false;if(removeBtn)removeBtn.disabled=true;
- renderSegmentPresets();commitExclusiveRanges();clearAnalysisHighlight();renderAll();scheduleSegment3D();
+ renderSegmentPresets();commitExclusiveRanges();clearAnalysisRegionsOf(key);renderAll();scheduleSegment3D();
 }
 export function ctSliderUnit(p){
  return Number.isInteger(p.fullMin)&&Number.isInteger(p.fullMax)?1:niceCtStep(p.fullSpan)/10;
@@ -277,6 +277,8 @@ export function clearSegmentEditCache(key,clearEdits=false){
  if(clearEdits&&st.surfaceGroup){const old=st.surfaceGroup;if(old.parent)old.parent.remove(old);dispose(old);st.surfaceGroup=null;request3DRender()}st.baseRuns=null;st.baseSignature='';st.finalRuns=null;st.pendingBase=null;
  if(clearEdits){segmentEditGen[key]=(segmentEditGen[key]|0)+1;st.keepRuns=null;st.excludeRuns=null;st.cutRuns=null;st.rawCutSurface=false;st.undo=[];st.redo=[];st.revision=0}
 }
+// only the results that belong to this segment: the other segments' results (e.g. the child regions on the contrast preset) are not touched when a segment is added, removed or its range changes
+export function clearAnalysisRegionsOf(key){for(const r of [...analysisRegions])if(r.segmentKeys?.includes(key))removeAnalysisRegion(r.id)}
 export function clearAnalysisHighlight(){
  if(sceneState?.analysisMesh){const root=sceneState.analysisMesh;if(root.parent)root.parent.remove(root);dispose(root);sceneState.analysisMesh=null}
  setAnalysisRegions([]);setAnalysisFocusedRegionId(null);setNextAnalysisRegionId(1);setNextAnalysisColorIndex(0);request3DRender();renderAnalysisResults();

@@ -1,20 +1,20 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { volume, activeSeries, incNextSegmentMaskVolumeId, childSegments } from './state.js?v=20261109-build704';
-import { isChildKey, childSegNormalizeName, childSegColorCss, childSegLookOf, childSegNormalizeOpacity, childSegNormalizeMaterial, childSegNormalizeShade } from './segment-look.js?v=20261109-build704';
-import { childByKey, childKeysOf, childDisplayName, onChildSegChange, emitChildSegChange } from './child-segments.js?v=20261109-build704';
-import { tr } from './i18n.js?v=20261109-build704';
-import { HU_AXIS, axisFor, valueStepOf } from './histogram.js?v=20261109-build704';
-import { hexRgb } from './utils.js?v=20261109-build704';
-import { settings } from './app-settings.js?v=20261109-build704';
-import { buildThresholdMask, morphMask, fillMaskHoles, removeSmallMaskComponents } from './mask-ops.js?v=20261109-build704';
-import { thinSuppressActive, suppressThinMask } from './thin-suppress.js?v=20261109-build704';
-import { effectiveRanges } from './segment-exclusive.js?v=20261109-build704';
-import { maskFromAnalysisRuns } from './run-length.js?v=20261109-build704';
-import { sourceFilterStages } from './source-filters.js?v=20261109-build704';
-import { gpuSlotOrder, slotSignature } from './segment-slots.js?v=20261109-build704';
-import { segmentPresetDefaults } from './dataset-reset.js?v=20261109-build704';
-import { dataRangeOf, shadeRangeOf, moveShadeEnd, autoShadeRange, shadeSpanOf, createShadeAutoScheduler } from './cap-shade.js?v=20261109-build704';
+import { volume, activeSeries, incNextSegmentMaskVolumeId, childSegments } from './state.js?v=20261110-build705';
+import { isChildKey, childSegNormalizeName, childSegColorCss, childSegLookOf, childSegNormalizeOpacity, childSegNormalizeMaterial, childSegNormalizeShade } from './segment-look.js?v=20261110-build705';
+import { childByKey, childKeysOf, childDisplayName, onChildSegChange, emitChildSegChange, setChildRuns } from './child-segments.js?v=20261110-build705';
+import { tr } from './i18n.js?v=20261110-build705';
+import { HU_AXIS, axisFor, valueStepOf } from './histogram.js?v=20261110-build705';
+import { hexRgb } from './utils.js?v=20261110-build705';
+import { settings } from './app-settings.js?v=20261110-build705';
+import { buildThresholdMask, morphMask, fillMaskHoles, removeSmallMaskComponents } from './mask-ops.js?v=20261110-build705';
+import { thinSuppressActive, suppressThinMask } from './thin-suppress.js?v=20261110-build705';
+import { effectiveRanges } from './segment-exclusive.js?v=20261110-build705';
+import { maskFromAnalysisRuns, intersectRunArrays, subtractRunArrays } from './run-length.js?v=20261110-build705';
+import { sourceFilterStages } from './source-filters.js?v=20261110-build705';
+import { gpuSlotOrder, slotSignature } from './segment-slots.js?v=20261110-build705';
+import { segmentPresetDefaults } from './dataset-reset.js?v=20261110-build705';
+import { dataRangeOf, shadeRangeOf, moveShadeEnd, autoShadeRange, shadeSpanOf, createShadeAutoScheduler } from './cap-shade.js?v=20261110-build705';
 // 'contrast' (造影領域) is the fifth preset; at most GPU_SEGMENT_SLOTS (4) are enabled at once (segment-slots.js)
 export const SEGMENT_PRESET_ORDER=['bone','soft','fat','lung','contrast'];
 export const segmentEditState=Object.fromEntries(SEGMENT_PRESET_ORDER.map(key=>[key,{baseRuns:null,baseSignature:'',keepRuns:null,excludeRuns:null,cutRuns:null,finalRuns:null,revision:0,undo:[],redo:[],surfaceGroup:null,rawCutSurface:false}]));
@@ -89,7 +89,7 @@ export const setShadeAutoPageHeld=on=>shadeAutoPage.hold(on);
 export function resetShadeAutoForDataset(){shadeAutoPage.reset();clearSegmentShadeAuto()}
 // the presets' own settings as defined above (dataset-reset.js): a segment the next dataset does not use goes back to them
 export const SEGMENT_PRESET_DEFAULTS=segmentPresetDefaults(segmentState);
-export function analysisRegionSegmentsShown(r){return !r?.segmentKeys?.length||r.segmentKeys.some(k=>segmentState[k]?.enabled)}
+export function analysisRegionSegmentsShown(r){return !r?.segmentKeys?.length||r.segmentKeys.some(k=>segmentState[k]?.enabled||(childSegments.length>0&&isChildKey(k)&&!!segmentById(k)?.enabled))} // a selection region of a child segment (3D edit target) follows the child (shown AND its parent ticked)
 export function analysisRegionShown(r){return !!r&&r.visible!==false&&analysisRegionSegmentsShown(r)}
 
 // ---- ONE segment interface for the presets and the CHILD SEGMENTS of the tree (never the analysis regions) ----
@@ -149,6 +149,19 @@ export function gpuSegmentSignature(){return slotSignature(SEGMENT_PRESET_ORDER,
 // the range in use. pending = keys whose range in use changed since the last commit (invalidated on slider release).
 export const segmentExclusive={order:['contrast','bone','fat','soft','lung'],mode:'priority',pending:new Set(),invalidate:null,invalidateParent:null}; // invalidateParent(key): a preset's child segments changed, its voxels with them (app.js: the analysis results are NOT cleared)
 export const segmentEditGen=Object.fromEntries(SEGMENT_PRESET_ORDER.map(k=>[k,0]));
+// a child has an edit state of the preset's shape, so the preset edit code (analysis-ops.js: keep / delete selected, cut, undo / redo / reset) runs on it unchanged. baseRuns = the child's mask before the edits;
+// the child's own runsBySlice is always the FINAL one (base ∩ keep - exclude, segmentEditsChanged below), so every renderer, the STL, the measurement and the project file see the edited child. The undo stack is not saved (a project holds the final mask).
+export function registerChildEditState(c){segmentEditState[c.key]={baseRuns:c.runsBySlice,baseSignature:'',keepRuns:c.runsBySlice,excludeRuns:null,cutRuns:null,finalRuns:null,revision:0,undo:[],redo:[],surfaceGroup:null,rawCutSurface:false,isChild:true};segmentEditGen[c.key]=0} // keepRuns = baseRuns = "edited, nothing taken yet": segmentEditActive stays the 704 expression
+export function unregisterChildEditState(key){delete segmentEditState[key];delete segmentEditGen[key]}
+function childEditsChanged(key,st){
+ if(!childByKey(key))return;
+ if(!st.keepRuns)st.keepRuns=st.baseRuns; // an undo / reset to "no edit" restores the marker (see registerChildEditState)
+ let runs=st.baseRuns;const d=runs.length;
+ if(st.keepRuns!==st.baseRuns)runs=intersectRunArrays(runs,st.keepRuns,d);
+ if(st.excludeRuns)runs=subtractRunArrays(runs,st.excludeRuns,d);
+ st.finalRuns=runs;segmentEditGen[key]=(segmentEditGen[key]|0)+1;
+ setChildRuns(key,runs); // the listeners (child-segments-ui.js) rebuild the parent without / with the voxels, the surface, the GPU volume, the 2D views
+}
 export function segmentAddsVoxels(seg){return seg.closing>0||!!seg.holeFill}
 export function segmentIsVoxelTaker(key){const s=segmentState[key];return !!s&&(segmentNeedsGlobalMask(s)||segmentEditActive(key))}
 // the child segments of a preset are among its sources: their voxels belong to them, so the preset is built WITHOUT them (the same voxel-taker path as the segments above it: subtracted from the mask / runs, the run surface,
@@ -206,6 +219,7 @@ export function commitExclusiveRanges(...keys){
 // that take its final voxels change too. The segment itself is handled by the caller (it knows its own refresh).
 export function segmentEditsChanged(key){
  const st=segmentEditState[key];if(!st)return;
+ if(st.isChild){childEditsChanged(key,st);return} // a child segment: its mask follows its edit state; the parent is rebuilt through the child's change event, the analysis results are not cleared
  st.finalRuns=null;segmentEditGen[key]=(segmentEditGen[key]|0)+1;
  const before=dependentsOf(key);
  const changed=applyExclusiveRanges();segmentExclusive.pending.clear();
@@ -269,4 +283,4 @@ export function activeMprSegments(){
  }
  return out;
 }
-export function segmentEditActive(key){const s=segmentEditState[key];return !!(s?.keepRuns||s?.excludeRuns)}
+export function segmentEditActive(key){const s=segmentEditState[key];return !!(s?.keepRuns||s?.excludeRuns)} // a child segment always counts as edited (its keepRuns is its baseRuns: registerChildEditState), so its voxels are its own runs, never a threshold

@@ -1,0 +1,36 @@
+{
+  "name": {
+    "ja": "マウス後足",
+    "en": "Mouse hindpaw"
+  },
+  "level": null,
+  "description": {
+    "ja": "マウス後足 microCT（{mb}）",
+    "en": "Mouse hindpaw micro-CT ({mb})"
+  },
+  "credit": {
+    "name": "Kenney / Awad, University of Rochester Medical Center",
+    "url": "https://data.mendeley.com/datasets/7sm9wznp6d/1",
+    "dataUrl": "https://data.mendeley.com/datasets/7sm9wznp6d/1"
+  },
+  "license": {
+    "name": "CC BY 4.0",
+    "url": "https://creativecommons.org/licenses/by/4.0/"
+  },
+  "changes": {
+    "ja": "元の DICOM から片足分を切り出して面内を半分に縮小、骨ラベルを解析領域に変換して骨の名称ラベルを付与、本アプリで3D再構成",
+    "en": "cropped to one hindpaw and downsampled in-plane by half from the original DICOM; bone labels converted to analysis regions with a name label for each bone; 3D reconstruction and rendering in this app"
+  },
+  "terms": {
+    "ja": "出典を表示すれば、営利・非営利を問わず利用・改変できます。",
+    "en": "You may use and adapt it for any purpose, including commercial use, with attribution."
+  },
+  "size": {
+    "dims": [
+      346,
+      306,
+      408
+    ],
+    "megabytes": 86.9
+  }
+}

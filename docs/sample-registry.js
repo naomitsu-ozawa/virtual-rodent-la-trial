@@ -9,8 +9,8 @@
 // magnification the VR / AR view starts the data at (1 = real size; the registry's Lv0 bone has 4); default (true on at most one dataset) = the dataset the page opens when none is chosen.
 // Order: the levels Lv0, Lv1, Lv2, Lv3 by the `level` field, then the datasets without a level (「その他」) by folder number. A second dataset that claims a level
 // already taken is treated as 「その他」 (console warning).
-import { I18N } from './i18n.js?v=20261109-build704';
-import { sampleJsonUrl, setKnownSampleIds } from './sample-sets.js?v=20261109-build704';
+import { I18N } from './i18n.js?v=20261110-build705';
+import { sampleJsonUrl, setKnownSampleIds } from './sample-sets.js?v=20261110-build705';
 
 export const SAMPLE_JSON_MAX = 32;
 export const SAMPLE_LEVELS = Object.freeze([0, 1, 2, 3]);
