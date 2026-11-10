@@ -208,7 +208,7 @@ describe('GHOST_ALPHA and the pass rule', () => {
   });
   it('vr-view.js: pinned result labels (card + leader) have NO ghost (hidden behind tissue, vr-label-occlusion.js) and follow the setting; the hand labels are untouched', () => {
     expect(has(src, 'const makeLabel=(faces=null)=>{')).toBe(true); expect(has(src, 'lb=makeLabel();lb.rid=reg.id;pins.set(reg.id,lb)')).toBe(true);
-    expect(has(src, 'for(const lb of pins.values()){lb.lit=pinLit.has(lb.rid);embedLabel(lb,occ,pinHeld.has(lb.rid));placeLabel(lb)}thinPins(occ);for(const lb of pins.values())pinOcclusion(lb,lb.lit)')).toBe(true);
+    expect(has(src, 'for(const lb of pins.values()){lb.lit=pinLit.has(lb.rid);embedLabel(lb,occ,pinHeld.has(lb.rid));placeLabel(lb)}thinPins(occ);for(const lb of pins.values())pinOcclusion(lb,lb.lit||lb.glow)')).toBe(true);
     expect(has(src, 'const st=pinMaterialState(occlusionGpu(),lit,lb.trans);')).toBe(true); expect(has(src, 'lb.m.material.depthTest=st.depthTest;lb.line.material.depthTest=st.depthTest;lb.m.material.opacity=st.card;lb.line.material.opacity=st.line;')).toBe(true);
     expect(has(src, 'lb.mg')).toBe(false); expect(has(src, 'lb.lg')).toBe(false); expect(has(src, 'mg=new THREE.Mesh')).toBe(false);
     expect(has(src, 'const hoverLabelOf=c=>c.userData.hoverLabel||=Object.assign(makeLabel(hoverFaces),{hand:c});')).toBe(true);

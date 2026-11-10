@@ -6,7 +6,7 @@
 //   offset : where the user left the label, as the vector from the anchor in VOXEL units (the same convention as a distance label's labelOffset in measurements.js), so it does not
 //            depend on the model's move / rotation / scale and is the same in VR and on the PC. No offset = the view's default placement (beside the anchor, facing the viewer).
 // A leader line joins a moved label to its anchor (leaderVisible).
-import { stepDelta, offsetFromDelta } from './measure-label.js?v=20261110-build708';
+import { stepDelta, offsetFromDelta } from './measure-label.js?v=20261110-build709';
 
 export const ANALYSIS_LABEL_MAX=1e4; // |component| limit (voxels): anything beyond is a corrupt file, dropped
 const num=(x)=>typeof x==='number'&&Number.isFinite(x)&&Math.abs(x)<=ANALYSIS_LABEL_MAX;
@@ -83,6 +83,19 @@ export const labelForProject=region=>normalizeAnalysisLabel(region?.label)||unde
 // a result's label follows its segments' visibility (VR; the PC 3D view gets it through analysisRegionShown): shown while the result has no segment, or at least one of its segments
 // is shown (`isShown(key)`); hidden while all of them are hidden. Nothing about the label changes (its anchor / moved place stay), so showing the segment again brings it back where it was.
 export const labelSegmentsShown=(segmentKeys,isShown)=>!segmentKeys?.length||segmentKeys.some(k=>isShown(k));
+
+export const glowRid=(enabled,visible,hitRid,onLabel)=>enabled&&visible&&!onLabel&&hitRid?hitRid:0;
+
+export function createBoneGlow(onChange){
+ let seq=0,cur=0;
+ const set=v=>{if(v!==cur){const p=cur;cur=v;if(onChange)onChange(v,p)}};
+ return{get:()=>cur,ticket:()=>++seq,clear(){seq++;set(0)},settle(tok,rid){if(tok===seq)set(rid||0)}};
+}
+// may a bone pick run for this pointer state? touch / a pressed button (rotate, pan, a drag) / a target that is not the 3D canvas (menu, panel, dock) / a label card under the pointer (that card is lit by its own rule) /
+// the gate (analysis select mode with a volume pick available) / no shown result with a label: no.
+export const boneHoverPickable=({touch,buttons,onCanvas,overLabel,gate,labelled})=>!touch&&!buttons&&!!onCanvas&&!overLabel&&!!gate&&!!labelled;
+// the shown result with a label that owns a picked voxel (the pick's segment key must be one of the result's segments, as the click-to-select rule); regions = [{id,segmentKeys,label}] in the shown order
+export const glowRegionOf=(regions,picked,runsContain)=>{if(!picked)return 0;const r=regions.find(q=>q.label&&q.segmentKeys?.includes(picked.key)&&runsContain(q,picked.x,picked.y,picked.z));return r?r.id:0};
 
 // ---- the views' per-voxel steps ----
 // VR: object-space change per voxel along i / j / k (vr-point.js voxelToLocal); PC 3D: crosshair.js voxelToLocal3D (the longest side is 3.3 units)

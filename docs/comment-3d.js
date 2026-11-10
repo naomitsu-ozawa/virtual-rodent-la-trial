@@ -11,24 +11,25 @@
 // view's cut plane included; refreshed at most about 10 times a second while the view moves and once more when it stops
 // (comment-3d-hidden.js). Until the bytes are ready, or when no segment is shown / no source data is in memory, every point is exposed.
 import * as THREE from './vendor/three@0.186.0/build/three.webgpu.js';
-import { sceneState, volume, activeSeries, volumeAnalysisMode, analysisEditTool, sectionViewOpen, sectionViewPlane, analysisRegions } from './state.js?v=20261110-build708';
-import { tr } from './i18n.js?v=20261110-build708';
-import { datasetFingerprint } from './project-file.js?v=20261110-build708';
-import { voxelToLocal3D } from './crosshair.js?v=20261110-build708';
-import { pointColor, darkFill, inkOn } from './point-colors.js?v=20261110-build708';
-import { getComments, onCommentsChange, commentMatchesSeries, commentTarget, getMarkersShown, onMarkersShownChange } from './comments.js?v=20261110-build708';
-import { getMeasurements, setLabelOffset, onMeasurementsChange, measurementMm, measureLabel, seriesSpacing, spacingLevel, getMeasureStart, onMeasureStartChange, createLongPress } from './measurements.js?v=20261110-build708';
-import { openPointMenu, endMeasureAt, cancelMeasureUi } from './point-menu.js?v=20261110-build708';
-import { request3DRender } from './scene3d.js?v=20261110-build708';
-import { gpuVolumeTarget } from './gpu-volume-data.js?v=20261110-build708';
-import { analysisRegionShown, segmentState, segmentEditState, SEGMENT_PRESET_ORDER, gpuSegmentOrder } from './segments.js?v=20261110-build708';
-import { sectionLocalPoint, sectionLocalNormal } from './section-view.js?v=20261110-build708';
-import { planeLabelPlacement, clampLabelCenter, stepDelta, createFocusTracker, LINE_SAMPLES, probeKey, labelPart, lineSamplePoints, lineAlphas, lineStopOffsets, createIdMaker } from './measure-label.js?v=20261110-build708';
-import { planeRelations, boxHalfExtent, clipSegmentNear } from './comment-3d-section.js?v=20261110-build708';
-import { computeHiddenIds, shownChannels, sectionPlaneLocal, createHiddenThrottle } from './comment-3d-hidden.js?v=20261110-build708';
-import { regionCustomName, regionChipTitle } from './region-name.js?v=20261110-build708'; // the shared region name rule (name, else ID <atlas id>), as the VR cards
-import { judgeLabelPlace, labelDisplay, thinOverlaps, putAttr, putStyle } from './comment-3d-label-occlusion.js?v=20261110-build708'; // occlusion of the analysis labels (behind = hidden, embedded = translucent, pushed out, overlaps thinned)
-import { setRegionLabelOffset, onAnalysisLabelsChange, leaderVisible, labelLocal, offsetForLocal, rectEdgePoint, pcVoxelStep } from './analysis-label.js?v=20261110-build708';
+import { sceneState, volume, activeSeries, volumeAnalysisMode, analysisEditTool, sectionViewOpen, sectionViewPlane, analysisRegions, threeRenderMode } from './state.js?v=20261110-build709';
+import { tr } from './i18n.js?v=20261110-build709';
+import { datasetFingerprint } from './project-file.js?v=20261110-build709';
+import { voxelToLocal3D } from './crosshair.js?v=20261110-build709';
+import { pointColor, darkFill, inkOn } from './point-colors.js?v=20261110-build709';
+import { getComments, onCommentsChange, commentMatchesSeries, commentTarget, getMarkersShown, onMarkersShownChange } from './comments.js?v=20261110-build709';
+import { getMeasurements, setLabelOffset, onMeasurementsChange, measurementMm, measureLabel, seriesSpacing, spacingLevel, getMeasureStart, onMeasureStartChange, createLongPress } from './measurements.js?v=20261110-build709';
+import { openPointMenu, endMeasureAt, cancelMeasureUi } from './point-menu.js?v=20261110-build709';
+import { request3DRender } from './scene3d.js?v=20261110-build709';
+import { gpuVolumeTarget } from './gpu-volume-data.js?v=20261110-build709';
+import { analysisRegionShown, segmentState, segmentEditState, SEGMENT_PRESET_ORDER, gpuSegmentOrder } from './segments.js?v=20261110-build709';
+import { sectionLocalPoint, sectionLocalNormal } from './section-view.js?v=20261110-build709';
+import { planeLabelPlacement, clampLabelCenter, stepDelta, createFocusTracker, LINE_SAMPLES, probeKey, labelPart, lineSamplePoints, lineAlphas, lineStopOffsets, createIdMaker } from './measure-label.js?v=20261110-build709';
+import { planeRelations, boxHalfExtent, clipSegmentNear } from './comment-3d-section.js?v=20261110-build709';
+import { computeHiddenIds, shownChannels, sectionPlaneLocal, createHiddenThrottle } from './comment-3d-hidden.js?v=20261110-build709';
+import { regionCustomName, regionChipTitle } from './region-name.js?v=20261110-build709'; // the shared region name rule (name, else ID <atlas id>), as the VR cards
+import { judgeLabelPlace, labelDisplay, thinOverlaps, putAttr, putStyle } from './comment-3d-label-occlusion.js?v=20261110-build709'; // occlusion of the analysis labels (behind = hidden, embedded = translucent, pushed out, overlaps thinned)
+import { setRegionLabelOffset, onAnalysisLabelsChange, leaderVisible, labelLocal, offsetForLocal, rectEdgePoint, pcVoxelStep, createBoneGlow, boneHoverPickable, glowRegionOf } from './analysis-label.js?v=20261110-build709';
+import { analysisRunsContain } from './run-length.js?v=20261110-build709';
 
 
 // analysis result labels (analysis-label.js, region.label): a chip (colour, number, segments, volume) at its anchor, MOVABLE by a drag (mouse / pen / touch) in the camera-facing plane through the label's
@@ -73,7 +74,7 @@ function refreshHidden(obj,camera,pts,plane){
  if(!anyShown||!pts.length){const had=hiddenIds.size>0;hiddenIds=new Set();if(lastPrep){lastPrep=null;refreshSoon()}return had}
  if(vrModFailed)return false; // the builder could not be loaded: every point stays exposed
  if(!vrMod){ // the classification builder lives in vr-view.js: loaded once, on the first need; until then the previous judgement stays
-  if(!vrModLoading){vrModLoading=true;import('./vr-view.js?v=20261110-build708').then(m=>{vrMod=m;throttle.reset();refreshSoon()},()=>{vrModFailed=true;if(hiddenIds.size){hiddenIds=new Set();refreshSoon()}})}
+  if(!vrModLoading){vrModLoading=true;import('./vr-view.js?v=20261110-build709').then(m=>{vrMod=m;throttle.reset();refreshSoon()},()=>{vrModFailed=true;if(hiddenIds.size){hiddenIds=new Set();refreshSoon()}})}
   return false;
  }
  const prep=vrMod.hiddenClsFor(()=>{throttle.reset();refreshSoon()});
@@ -112,7 +113,12 @@ const measEls=new Map(); // measurement id -> {line,label,text}
 // keys 'M:<measurement id>' / 'A:<region id>' (distance labels and analysis labels share the tracker)
 const alEls=new Map(); // region id -> {label,leader,dot,...}
 const litEntry=key=>key==null?null:key.startsWith('A:')?alEls.get(+key.slice(2)):measEls.get(key.slice(2));
-const labelFocus=createFocusTracker((n,p)=>{for(const [key,on] of [[p,false],[n,true]]){const e=litEntry(key);if(e){e.label.classList.toggle('is-lit',on);e.leader.classList.toggle('is-lit',on);e.dot?.classList.toggle('is-lit',on)}}syncHoverFocus();refreshSoon()}); // a lit card always stays: the overlap thinning is redone
+// a card is lit by the label hover / drag (labelFocus) OR by the mouse resting on its bone (boneGlow, below): litKey = either
+const boneKey=()=>{const id=boneGlow.get();return id?'A:'+id:null};
+const isLitKey=key=>key!=null&&(labelFocus.get()===key||boneKey()===key);
+const setLitClass=key=>{const e=litEntry(key);if(e){const on=isLitKey(key);e.label.classList.toggle('is-lit',on);e.leader.classList.toggle('is-lit',on);e.dot?.classList.toggle('is-lit',on)}};
+const labelFocus=createFocusTracker((n,p)=>{setLitClass(p);setLitClass(n);syncHoverFocus();refreshSoon()});
+const boneGlow=createBoneGlow((n,p)=>{if(p)setLitClass('A:'+p);if(n)setLitClass('A:'+n);refreshSoon()}); // only when the glowing result changes (no volume focus: the bone itself is not touched) // a lit card always stays: the overlap thinning is redone
 // the result under the mouse (its label is lit) gets the volume's temporary focus (webgl-volume.js setHoverFocus: only the look-up table's focus bit, the page's selection stays). Synced when the lit label changes and after every redraw,
 // so it is released when the mouse leaves, the label disappears (hidden result, label removed), or the 3D view is closed (no entry left).
 let hoverFocusRuns=null;
@@ -202,7 +208,7 @@ function drawAnalysisLabels(obj,camera,W,H,regs,keep,dims){
    const dot=document.createElementNS('http://www.w3.org/2000/svg','circle');dot.setAttribute('class','analysis-anchor-3d');dot.setAttribute('r','3.5');svg.appendChild(dot);
    const label=document.createElement('div');label.className='analysis-label-3d';
    const sw=document.createElement('i'),t1=document.createElement('b'),t2=document.createElement('span');label.append(sw,t1,t2);layer.appendChild(label);
-   if(labelFocus.get()==='A:'+r.id){label.classList.add('is-lit');leader.classList.add('is-lit')}
+   if(isLitKey('A:'+r.id)){label.classList.add('is-lit');leader.classList.add('is-lit')}
    e={label,leader,dot,sw,t1,t2,sig:'',w:90,h:16,sx:0,sy:0,ctx:null,lh:false,disp:'off',z:0,st:'',over:false};alEls.set(r.id,e);
   }
   const sig=r.id+'|'+(r.segmentKeys||[]).join()+'|'+r.mm3+'|'+r.color+'|'+(warn?1:0)+'|'+tr('analysisRegion')+'|'+regionCustomName(r); // a rename (or atlas ID) redraws the chip
@@ -231,8 +237,8 @@ function drawAnalysisLabels(obj,camera,W,H,regs,keep,dims){
   e.z=lz;e.disp=labelDisplay({embedded:!!pl?.embedded,pushed,behind:hiddenIds.has('A|'+r.id),dragging:e.label.classList.contains('is-dragging')});
  }
  // of the cards that overlap on the screen only the nearest stays (the lit one always); hidden-behind cards take no room
- const lit=labelFocus.get(),items=[];
- for(const r of regs){const e=alEls.get(r.id);if(e&&e.ctx&&e.disp!=='off'&&e.disp!=='hide'&&!e.label.hidden)items.push({id:r.id,x:e.sx,y:e.sy,w:e.w,h:e.h,z:e.z,keep:lit==='A:'+r.id})}
+ const lit=labelFocus.get(),bg=boneGlow.get(),items=[];
+ for(const r of regs){const e=alEls.get(r.id);if(e&&e.ctx&&e.disp!=='off'&&(e.disp!=='hide'||r.id===bg)&&!e.label.hidden)items.push({id:r.id,x:e.sx,y:e.sy,w:e.w,h:e.h,z:e.z,keep:lit==='A:'+r.id||r.id===bg})} // the card of the bone under the mouse always stays (even one judged behind the tissue), nearer cards that overlap it give way
  const over=thinOverlaps(items);
  for(const r of regs){const e=alEls.get(r.id);if(e)setAlState(e,e.disp,over.has(r.id))}
 }
@@ -349,6 +355,7 @@ export function updateComment3dMarkers(){
  }
  pruneMeasures(keepM);pruneAnalysisLabels(keepA);
  syncHoverFocus();
+ {const bg=boneGlow.get();if(bg&&(!alEls.has(bg)||!boneGate()))boneGlow.clear()} // the glowing result lost its card (hidden / deleted / label removed) or the mode changed: out
  if(!list.length&&!als.length){clearTimeout(hiddenTimer);hiddenTimer=0}
  for(const [id,m] of [...els])if(!keep.has(id)){m.el.remove();m.line?.remove();els.delete(id)}
  if(bubbleId!=null)placeBubble();
@@ -373,6 +380,38 @@ function labelAt(x,y){
 const analysisGate=()=>analysisEditTool==='select';
 const regionOf=id=>analysisRegions.find(r=>r.id===id)||null;
 let labelDragging=false; // while a label is dragged every other pointerdown on the canvas (a second finger) is stopped at the capture phase, so it cannot rotate / pan the camera
+// ---- the mouse resting on a bone lights that result's card (like the VR laser) ----
+// The bone is found with the volume pick a click already uses (medicalVolume.pick: GPU compute, or the CPU march of the WebGL volume), the voxel -> result by the shown labelled results' runs (the click-to-select rule).
+// Cost rule: no work while the mouse moves; one pick when it rests (80 ms), at most one in flight and one per 200 ms while it keeps moving; none when no shown result has a label, in the surface mode (a mesh ray cast
+// per move would be heavy), with a button down / touch / off the canvas. Not part of the click picks: nothing is selected or changed.
+const boneGate=()=>analysisEditTool==='select'&&threeRenderMode==='volume'&&!!sceneState?.medicalVolume?.active&&!!volume;
+const bonePick={x:0,y:0,timer:0,at:0,busy:false,again:false,live:false};
+function bonePickRun(){
+ bonePick.timer=0;if(!bonePick.live||bonePick.busy||!boneGate())return;
+ const s=sceneState,mv=s.medicalVolume,regs=analysisLabelRegions();if(!regs.length||!s.obj||!s.camera){boneGlow.clear();return}
+ const tok=boneGlow.ticket();bonePick.busy=true;bonePick.at=performance.now();
+ let p;try{p=mv.pick(bonePick.x,bonePick.y,s.camera,s.obj,segmentState,gpuSegmentOrder())}catch(e){p=Promise.reject(e)}
+ Promise.resolve(p).then(hit=>boneGlow.settle(tok,glowRegionOf(analysisLabelRegions(),hit,(r,x,y,z)=>analysisRunsContain(r.runsBySlice,x,y,z))),()=>boneGlow.settle(tok,0)).finally(()=>{bonePick.busy=false;if(bonePick.again){bonePick.again=false;bonePickSchedule()}});
+}
+function bonePickSchedule(){
+ clearTimeout(bonePick.timer);if(!bonePick.live)return;
+ if(bonePick.busy){bonePick.again=true;return} // one pick at a time; the newest position is asked for when it returns
+ const wait=performance.now()-bonePick.at>=200?0:80;bonePick.timer=setTimeout(bonePickRun,wait);
+}
+function boneHoverOff(){bonePick.live=false;bonePick.again=false;clearTimeout(bonePick.timer);bonePick.timer=0;boneGlow.clear()}
+function installBoneHover(){
+ // capture phase: the dock / menus stop their own pointer events, so only the capture on the host sees every move over the view (target != the canvas = off the bone)
+ host.addEventListener('pointermove',ev=>{
+  const onCanvas=ev.target?.tagName==='CANVAS'&&ev.target.parentElement===host;
+  const r=onCanvas?host.getBoundingClientRect():null,h=r?labelAt(ev.clientX-r.left,ev.clientY-r.top):null;
+  const ok=boneHoverPickable({touch:ev.pointerType==='touch',buttons:ev.buttons,onCanvas,overLabel:!!(h&&h.kind==='a'&&analysisGate()),gate:boneGate(),labelled:analysisLabelRegions().length>0});
+  if(!ok){boneHoverOff();return}
+  bonePick.x=ev.clientX;bonePick.y=ev.clientY;bonePick.live=true;bonePickSchedule();
+ },true);
+ host.addEventListener('pointerleave',boneHoverOff);host.addEventListener('pointerdown',boneHoverOff,true);host.addEventListener('pointercancel',boneHoverOff);
+ host.addEventListener('wheel',()=>{if(bonePick.live){boneGlow.ticket();bonePickSchedule()}},{passive:true}); // the view zooms under a resting mouse: the old answer is stale, ask again
+ window.addEventListener('blur',boneHoverOff);document.addEventListener('keydown',e=>{if(e.key==='Escape')boneHoverOff()});
+}
 function installLabelDrag(nearestDot,gate){
  const allowed=(h,x,y)=>h.kind==='a'?analysisGate()&&!(gate()&&nearestDot(x,y)!=null):gate()&&nearestDot(x,y)==null; // a point wins over a label
  host.addEventListener('pointermove',ev=>{ // hover (mouse / pen): the label under the pointer lights up
@@ -440,7 +479,7 @@ function installTap(){
 export function installComment3d(viewportEl){
  if(layer||!viewportEl)return;
  host=viewportEl;layer=document.createElement('div');layer.className='comment-layer-3d';layer.setAttribute('aria-hidden','false');host.appendChild(layer);
- installTap();
+ installTap();installBoneHover();
  const again=()=>{request3DRender()};
  onCommentsChange(again);onMeasurementsChange(again);onAnalysisLabelsChange(again);onMeasureStartChange(again);onMarkersShownChange(()=>{closeBubble3d();if(!getMarkersShown())releaseHidden();again()});
  document.addEventListener('vrl-serieschange',()=>{releaseHidden();again()});

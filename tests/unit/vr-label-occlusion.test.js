@@ -142,7 +142,7 @@ describe('vr-view.js wiring (source)', () => {
     expect(src).toContain('if(ld.moved&&!ld.done)pinHeld.add(ld.id)'); // a bare press on a pushed card does not make it jump
     expect(src).toContain('const bw=lb.ext?tmpLe.copy(lb.ext):null;'); expect(src).toContain('SEGMENT_PRESET_ORDER.map(k=>{const g=segmentState[k]||{};return g.min');
     expect(src).toContain('const d=lb.ext||labelLocal(lb.anchor,lb.off,vrVoxelStep(vrHalfExt,vrDims));');
-    expect(src).toContain('{if(lb.lit)lb.thin=false;if(lb.thin){lb.m.visible=false;lb.line.visible=false}}');
+    expect(src).toContain('{if(lb.lit||lb.glow)lb.thin=false;if(lb.thin){lb.m.visible=false;lb.line.visible=false}}');
     expect(src).toContain('if(thinFrame++%3===0)thinCompute();');
   });
 });

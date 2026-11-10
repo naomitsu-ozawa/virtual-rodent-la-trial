@@ -187,7 +187,7 @@ describe('wiring (static): VR pins and the PC chips use the shared region.label'
   const read = f => readFileSync(new URL('../../docs/' + f, import.meta.url), 'utf8');
   it('VR: pins are rebuilt from region.label every frame, can be grabbed (pin ref), long press resets, lit pins draw on top; the project carries the label', () => {
     const vr = read('vr-view.js');
-    expect(vr).toContain('const syncPins=()=>'); expect(vr).toContain('for(const lb of pins.values()){lb.lit=pinLit.has(lb.rid);embedLabel(lb,occ,pinHeld.has(lb.rid));placeLabel(lb)}thinPins(occ);for(const lb of pins.values())pinOcclusion(lb,lb.lit)');
+    expect(vr).toContain('const syncPins=()=>'); expect(vr).toContain('for(const lb of pins.values()){lb.lit=pinLit.has(lb.rid);embedLabel(lb,occ,pinHeld.has(lb.rid));placeLabel(lb)}thinPins(occ);for(const lb of pins.values())pinOcclusion(lb,lb.lit||lb.glow)');
     expect(vr).toContain('mlb=nearerLabel(mlb,pickPin('); expect(vr).toContain('if(ld.pin){'); expect(vr).toContain('resetPin(c)');
     expect(vr).toContain('pinMaterialState(occlusionGpu(),lit,lb.trans)');
     expect(vr).toContain('rid:r.id');
