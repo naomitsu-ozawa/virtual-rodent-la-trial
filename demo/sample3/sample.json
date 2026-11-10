@@ -5,8 +5,8 @@
   },
   "level": 1,
   "description": {
-    "ja": "マウス頭部（約270MB）",
-    "en": "Mouse head (about 270 MB)"
+    "ja": "マウス頭部（{mb}）",
+    "en": "Mouse head ({mb})"
   },
   "mission": {
     "ja": "断面で頭の中を観察しよう → 軟部組織を表示して、肺の構造を確かめよう",
@@ -19,5 +19,13 @@
   ],
   "initialSegments": [
     "bone"
-  ]
+  ],
+  "size": {
+    "dims": [
+      512,
+      512,
+      512
+    ],
+    "megabytes": 269.2
+  }
 }
