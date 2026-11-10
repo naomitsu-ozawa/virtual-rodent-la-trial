@@ -11,23 +11,25 @@
 // view's cut plane included; refreshed at most about 10 times a second while the view moves and once more when it stops
 // (comment-3d-hidden.js). Until the bytes are ready, or when no segment is shown / no source data is in memory, every point is exposed.
 import * as THREE from './vendor/three@0.186.0/build/three.webgpu.js';
-import { sceneState, volume, activeSeries, volumeAnalysisMode, analysisEditTool, sectionViewOpen, sectionViewPlane, analysisRegions } from './state.js?v=20261110-build705';
-import { tr } from './i18n.js?v=20261110-build705';
-import { datasetFingerprint } from './project-file.js?v=20261110-build705';
-import { voxelToLocal3D } from './crosshair.js?v=20261110-build705';
-import { pointColor, darkFill, inkOn } from './point-colors.js?v=20261110-build705';
-import { getComments, onCommentsChange, commentMatchesSeries, commentTarget, getMarkersShown, onMarkersShownChange } from './comments.js?v=20261110-build705';
-import { getMeasurements, setLabelOffset, onMeasurementsChange, measurementMm, measureLabel, seriesSpacing, spacingLevel, getMeasureStart, onMeasureStartChange, createLongPress } from './measurements.js?v=20261110-build705';
-import { openPointMenu, endMeasureAt, cancelMeasureUi } from './point-menu.js?v=20261110-build705';
-import { request3DRender } from './scene3d.js?v=20261110-build705';
-import { gpuVolumeTarget } from './gpu-volume-data.js?v=20261110-build705';
-import { analysisRegionShown, segmentState, segmentEditState, SEGMENT_PRESET_ORDER, gpuSegmentOrder } from './segments.js?v=20261110-build705';
-import { sectionLocalPoint, sectionLocalNormal } from './section-view.js?v=20261110-build705';
-import { planeLabelPlacement, clampLabelCenter, stepDelta, createFocusTracker, LINE_SAMPLES, probeKey, labelPart, lineSamplePoints, lineAlphas, lineStopOffsets, createIdMaker } from './measure-label.js?v=20261110-build705';
-import { planeRelations, boxHalfExtent, clipSegmentNear } from './comment-3d-section.js?v=20261110-build705';
-import { computeHiddenIds, shownChannels, sectionPlaneLocal, createHiddenThrottle } from './comment-3d-hidden.js?v=20261110-build705';
-import { regionCustomName, regionChipTitle } from './region-name.js?v=20261110-build705'; // the shared region name rule (name, else ID <atlas id>), as the VR cards
-import { setRegionLabelOffset, onAnalysisLabelsChange, leaderVisible, labelLocal, offsetForLocal, rectEdgePoint, pcVoxelStep } from './analysis-label.js?v=20261110-build705';
+import { sceneState, volume, activeSeries, volumeAnalysisMode, analysisEditTool, sectionViewOpen, sectionViewPlane, analysisRegions } from './state.js?v=20261110-build706';
+import { tr } from './i18n.js?v=20261110-build706';
+import { datasetFingerprint } from './project-file.js?v=20261110-build706';
+import { voxelToLocal3D } from './crosshair.js?v=20261110-build706';
+import { pointColor, darkFill, inkOn } from './point-colors.js?v=20261110-build706';
+import { getComments, onCommentsChange, commentMatchesSeries, commentTarget, getMarkersShown, onMarkersShownChange } from './comments.js?v=20261110-build706';
+import { getMeasurements, setLabelOffset, onMeasurementsChange, measurementMm, measureLabel, seriesSpacing, spacingLevel, getMeasureStart, onMeasureStartChange, createLongPress } from './measurements.js?v=20261110-build706';
+import { openPointMenu, endMeasureAt, cancelMeasureUi } from './point-menu.js?v=20261110-build706';
+import { request3DRender } from './scene3d.js?v=20261110-build706';
+import { gpuVolumeTarget } from './gpu-volume-data.js?v=20261110-build706';
+import { analysisRegionShown, segmentState, segmentEditState, SEGMENT_PRESET_ORDER, gpuSegmentOrder } from './segments.js?v=20261110-build706';
+import { sectionLocalPoint, sectionLocalNormal } from './section-view.js?v=20261110-build706';
+import { planeLabelPlacement, clampLabelCenter, stepDelta, createFocusTracker, LINE_SAMPLES, probeKey, labelPart, lineSamplePoints, lineAlphas, lineStopOffsets, createIdMaker } from './measure-label.js?v=20261110-build706';
+import { planeRelations, boxHalfExtent, clipSegmentNear } from './comment-3d-section.js?v=20261110-build706';
+import { computeHiddenIds, shownChannels, sectionPlaneLocal, createHiddenThrottle } from './comment-3d-hidden.js?v=20261110-build706';
+import { regionCustomName, regionChipTitle } from './region-name.js?v=20261110-build706'; // the shared region name rule (name, else ID <atlas id>), as the VR cards
+import { judgeLabelPlace, labelDisplay, thinOverlaps, putAttr, putStyle } from './comment-3d-label-occlusion.js?v=20261110-build706'; // occlusion of the analysis labels (behind = hidden, embedded = translucent, pushed out, overlaps thinned)
+import { setRegionLabelOffset, onAnalysisLabelsChange, leaderVisible, labelLocal, offsetForLocal, rectEdgePoint, pcVoxelStep } from './analysis-label.js?v=20261110-build706';
+
 
 // analysis result labels (analysis-label.js, region.label): a chip (colour, number, segments, volume) at its anchor, MOVABLE by a drag (mouse / pen / touch) in the camera-facing plane through the label's
 // depth; a moved label keeps a leader line to its anchor and is judged hidden-behind-tissue like a dragged distance label (the same pass). Stored in voxel units: the same place in VR and on the PC, saved in the project.
@@ -35,6 +37,7 @@ let host=null,layer=null,bubble=null,bubbleId=null,bubbleTimer=0;
 let rels=new Map(),relSig='',svg=null,cuesOn=false;
 let hiddenIds=new Set(),hiddenSig='',hiddenTimer=0,vrMod=null,vrModLoading=false,vrModFailed=false;
 const throttle=createHiddenThrottle();
+let lastPrep=null,placeCtx='',clsSeq=0;const places=new Map(),clsIds=new WeakMap(); // the classification bytes of the last judgement; per analysis label {key,base,embedded,push}
 const els=new Map(); // comment id -> {el,x,y,vis,no}
 const v3=new THREE.Vector3(),c3=new THREE.Vector3(),eye3=new THREE.Vector3(),p3=new THREE.Vector3(),q3=new THREE.Vector3();
 
@@ -63,18 +66,19 @@ function hiddenSignature(obj,camera,ids,plane,fp){
 }
 const refreshSoon=()=>request3DRender();
 // frees the classification bytes (series change, markers hidden): the next judgement builds them again
-function releaseHidden(){clearTimeout(hiddenTimer);hiddenTimer=0;hiddenIds=new Set();hiddenSig='';throttle.reset();vrMod?.releaseHiddenCls?.()}
+function releaseHidden(){lastPrep=null;placeCtx='';places.clear();clearTimeout(hiddenTimer);hiddenTimer=0;hiddenIds=new Set();hiddenSig='';throttle.reset();vrMod?.releaseHiddenCls?.()}
 // the throttled judgement: returns true when the hidden set changed
 function refreshHidden(obj,camera,pts,plane){
  const anyShown=SEGMENT_PRESET_ORDER.some(k=>segmentState[k]?.active&&segmentState[k]?.enabled);
- if(!anyShown||!pts.length){const had=hiddenIds.size>0;hiddenIds=new Set();return had}
+ if(!anyShown||!pts.length){const had=hiddenIds.size>0;hiddenIds=new Set();if(lastPrep){lastPrep=null;refreshSoon()}return had}
  if(vrModFailed)return false; // the builder could not be loaded: every point stays exposed
  if(!vrMod){ // the classification builder lives in vr-view.js: loaded once, on the first need; until then the previous judgement stays
-  if(!vrModLoading){vrModLoading=true;import('./vr-view.js?v=20261110-build705').then(m=>{vrMod=m;throttle.reset();refreshSoon()},()=>{vrModFailed=true;if(hiddenIds.size){hiddenIds=new Set();refreshSoon()}})}
+  if(!vrModLoading){vrModLoading=true;import('./vr-view.js?v=20261110-build706').then(m=>{vrMod=m;throttle.reset();refreshSoon()},()=>{vrModFailed=true;if(hiddenIds.size){hiddenIds=new Set();refreshSoon()}})}
   return false;
  }
  const prep=vrMod.hiddenClsFor(()=>{throttle.reset();refreshSoon()});
  if(!prep)return false; // still being built: keep the previous judgement
+ if(lastPrep?.cls!==prep.cls){lastPrep=prep;refreshSoon()} // the embedded / push-out judgement of the analysis labels uses the same bytes (updateLabelPlaces)
  const chs=shownChannels(prep?.cls,segmentState,gpuSegmentOrder());
  eye3.setFromMatrixPosition(camera.matrixWorld);obj.worldToLocal(eye3);
  const eye={x:eye3.x,y:eye3.y,z:eye3.z};
@@ -108,7 +112,7 @@ const measEls=new Map(); // measurement id -> {line,label,text}
 // keys 'M:<measurement id>' / 'A:<region id>' (distance labels and analysis labels share the tracker)
 const alEls=new Map(); // region id -> {label,leader,dot,...}
 const litEntry=key=>key==null?null:key.startsWith('A:')?alEls.get(+key.slice(2)):measEls.get(key.slice(2));
-const labelFocus=createFocusTracker((n,p)=>{for(const [key,on] of [[p,false],[n,true]]){const e=litEntry(key);if(e){e.label.classList.toggle('is-lit',on);e.leader.classList.toggle('is-lit',on)}}});
+const labelFocus=createFocusTracker((n,p)=>{for(const [key,on] of [[p,false],[n,true]]){const e=litEntry(key);if(e){e.label.classList.toggle('is-lit',on);e.leader.classList.toggle('is-lit',on);e.dot?.classList.toggle('is-lit',on)}}refreshSoon()}); // a lit card always stays: the overlap thinning is redone
 let hintEl=null;
 // object-space change per voxel along i / j / k in this view (voxelToLocal3D: the longest side is 3.3 units)
 function voxelStep3d(dims,spacing){const[sx,sy,sz]=spacing||[1,1,1],k=3.3/Math.max(dims.columns*sx,dims.rows*sy,dims.slices*sz,1);return[sx*k,-sy*k,sz*k]}
@@ -154,15 +158,34 @@ function drawMeasures(obj,camera,W,H,pts,keep,dims){
 const shownRegion=r=>analysisRegionShown(r)&&!!r.runsBySlice&&r.voxels>0;
 const regionCss=c=>'#'+((Number(c)>>>0)&0xffffff).toString(16).padStart(6,'0');
 function analysisLabelRegions(){return analysisRegions.filter(r=>r.label&&shownRegion(r))}
-// the places of the MOVED labels (object space), judged hidden-behind-tissue with the points; a label at its default place (beside its anchor on the screen) is not judged
-function analysisProbes(regs,dims){
- const out=[],step=pcVoxelStep(dims,volume.spacing);
- for(const r of regs){if(!leaderVisible(r.label))continue;out.push({id:'A|'+r.id,local:labelLocal(voxelToLocal3D(r.label.anchor,dims,volume.spacing),r.label.offset,step)})}
+// where each analysis label's card is judged, in object space. The judgement of "embedded" (the card's place lies inside the tissue shown now) and the push out of the
+// tissue are redone per label only when its anchor / offset change, and for all labels when the shown segments, the classification bytes, the section plane or the volume change
+// (not with the camera). base = the anchor, or the anchor + the stored label.offset (an offset is respected: only a card that still lies in the tissue is pushed).
+function updateLabelPlaces(regs,dims,plane){
+ const prep=lastPrep,chs=prep?.cls?shownChannels(prep.cls,segmentState,gpuSegmentOrder()):[];
+ let cid=0;if(prep?.cls){cid=clsIds.get(prep.cls);if(!cid){cid=++clsSeq;clsIds.set(prep.cls,cid)}}
+ const ctx=cid+'|'+chs.join()+'|'+(plane?[plane.x,plane.y,plane.z,plane.w].join(','):'')+'|'+dims.columns+','+dims.rows+','+dims.slices+'|'+(volume.spacing||[1,1,1]).join(',');
+ if(ctx!==placeCtx){placeCtx=ctx;places.clear()}
+ const step=pcVoxelStep(dims,volume.spacing),can=!!prep?.cls&&chs.length>0,live=new Set();
+ for(const r of regs){
+  live.add(r.id);const lab=r.label,o=lab.offset,key=lab.anchor.i+','+lab.anchor.j+','+lab.anchor.k+'|'+(o?o.i+','+o.j+','+o.k:'');
+  if(places.get(r.id)?.key===key)continue;
+  const base=labelLocal(voxelToLocal3D(lab.anchor,dims,volume.spacing),o,step),j=can?judgeLabelPlace(base,prep,chs,plane):{embedded:false,push:null};
+  places.set(r.id,{key,base,embedded:j.embedded,push:j.push});
+ }
+ for(const id of [...places.keys()])if(!live.has(id))places.delete(id);
+}
+// the places of ALL shown labels' cards (object space), judged hidden-behind-tissue with the points; an embedded card that could not be pushed out is not judged (it is drawn translucent)
+function analysisProbes(regs){
+ const out=[];
+ for(const r of regs){const pl=places.get(r.id);if(!pl||(pl.embedded&&!pl.push))continue;out.push({id:'A|'+r.id,local:pl.push||pl.base})}
  return out;
 }
+// DOM writes only when the value changed (a frame in which nothing moved writes nothing: the camera / the labels / the display are unchanged); the last written value sits on the element
+function putHidden(el,v){if(el.hidden!==v)el.hidden=v}
 function drawAnalysisLabels(obj,camera,W,H,regs,keep,dims){
  if(!regs.length)return;
- ensureSvg();svg.setAttribute('width',W);svg.setAttribute('height',H);
+ ensureSvg();putAttr(svg,'width',W);putAttr(svg,'height',H);
  const step=pcVoxelStep(dims,volume.spacing),warn=spacingLevel(activeSeries)==='warn'; // the chip's number is the result's number in the panel (analysisRegionName: the region id)
  for(const r of regs){
   keep.add(r.id);let e=alEls.get(r.id);
@@ -172,7 +195,7 @@ function drawAnalysisLabels(obj,camera,W,H,regs,keep,dims){
    const label=document.createElement('div');label.className='analysis-label-3d';
    const sw=document.createElement('i'),t1=document.createElement('b'),t2=document.createElement('span');label.append(sw,t1,t2);layer.appendChild(label);
    if(labelFocus.get()==='A:'+r.id){label.classList.add('is-lit');leader.classList.add('is-lit')}
-   e={label,leader,dot,sw,t1,t2,sig:'',w:90,h:16,sx:0,sy:0,ctx:null,lh:false};alEls.set(r.id,e);
+   e={label,leader,dot,sw,t1,t2,sig:'',w:90,h:16,sx:0,sy:0,ctx:null,lh:false,disp:'off',z:0,st:'',over:false};alEls.set(r.id,e);
   }
   const sig=r.id+'|'+(r.segmentKeys||[]).join()+'|'+r.mm3+'|'+r.color+'|'+(warn?1:0)+'|'+tr('analysisRegion')+'|'+regionCustomName(r); // a rename (or atlas ID) redraws the chip
   if(e.sig!==sig){
@@ -182,23 +205,33 @@ function drawAnalysisLabels(obj,camera,W,H,regs,keep,dims){
    if(warn)e.label.title=tr('measureWarn');
    e.label.hidden=false;e.w=e.label.offsetWidth||90;e.h=e.label.offsetHeight||16;
   }
-  const lab=r.label,al=voxelToLocal3D(lab.anchor,dims,volume.spacing),moved=leaderVisible(lab);
+  const lab=r.label,al=voxelToLocal3D(lab.anchor,dims,volume.spacing),pl=places.get(r.id),pushed=!!pl?.push,moved=leaderVisible(lab)||pushed; // a card pushed out of the tissue gets a leader to its anchor too
   v3.set(al.x,al.y,al.z).applyMatrix4(obj.matrixWorld).project(camera);
   const ax=(v3.x+1)/2*W,ay=(1-v3.y)/2*H,az=v3.z,aOk=az>-1&&az<1&&Number.isFinite(ax)&&Number.isFinite(ay);
   let lx=ax,ly=ay-(e.h/2+10),lz=az,lOk=aOk; // default: just above its anchor, on the screen
-  if(moved){ // where the user left it (anchor + offset, voxel units)
-   const p=labelLocal(al,lab.offset,step);v3.set(p.x,p.y,p.z).applyMatrix4(obj.matrixWorld).project(camera);
+  if(moved){ // where the user left it (anchor + offset, voxel units), or where it was pushed to (out of the tissue)
+   const p=pushed?pl.push:labelLocal(al,lab.offset,step);v3.set(p.x,p.y,p.z).applyMatrix4(obj.matrixWorld).project(camera);
    lx=(v3.x+1)/2*W;ly=(1-v3.y)/2*H;lz=v3.z;lOk=lz>-1&&lz<1&&Number.isFinite(lx)&&Number.isFinite(ly);
   }
-  if(!lOk){e.label.hidden=true;e.leader.style.display='none';e.dot.style.display='none';e.ctx=null;continue}
+  if(!lOk){e.disp='off';putHidden(e.label,true);putStyle(e.leader,'display','none');putStyle(e.dot,'display','none');e.ctx=null;continue}
   const c=clampLabelCenter(lx,ly,{w:e.w,h:e.h,x0:0,y0:0,iw:W,ih:H}); // shown inside the view (the stored offset is untouched)
   e.sx=c.x;e.sy=c.y;e.ctx={ml:al,step,ndcZ:lz}; // what a drag works from: the anchor (object space) and the depth of the label
-  e.label.hidden=false;e.label.style.transform='translate('+c.x.toFixed(1)+'px,'+c.y.toFixed(1)+'px) translate(-50%,-50%)';
-  if(aOk){e.dot.setAttribute('cx',ax.toFixed(1));e.dot.setAttribute('cy',ay.toFixed(1));e.dot.style.display=''}else e.dot.style.display='none';
-  if(moved&&aOk){const ed=rectEdgePoint(ax-c.x,ay-c.y,e.w/2,e.h/2);e.leader.setAttribute('x1',ax.toFixed(1));e.leader.setAttribute('y1',ay.toFixed(1));e.leader.setAttribute('x2',(c.x+ed.x).toFixed(1));e.leader.setAttribute('y2',(c.y+ed.y).toFixed(1));e.leader.style.display=''}
-  else e.leader.style.display='none';
-  const lh=moved&&hiddenIds.has('A|'+r.id);if(e.lh!==lh){e.lh=lh;e.label.classList.toggle('is-behind',lh);e.leader.classList.toggle('is-behind',lh)}
+  putHidden(e.label,false);putStyle(e.label,'transform','translate('+c.x.toFixed(1)+'px,'+c.y.toFixed(1)+'px) translate(-50%,-50%)');
+  if(aOk){putAttr(e.dot,'cx',ax.toFixed(1));putAttr(e.dot,'cy',ay.toFixed(1));putStyle(e.dot,'display','')}else putStyle(e.dot,'display','none');
+  if(moved&&aOk){const ed=rectEdgePoint(ax-c.x,ay-c.y,e.w/2,e.h/2);putAttr(e.leader,'x1',ax.toFixed(1));putAttr(e.leader,'y1',ay.toFixed(1));putAttr(e.leader,'x2',(c.x+ed.x).toFixed(1));putAttr(e.leader,'y2',(c.y+ed.y).toFixed(1));putStyle(e.leader,'display','')}
+  else putStyle(e.leader,'display','none');
+  e.z=lz;e.disp=labelDisplay({embedded:!!pl?.embedded,pushed,behind:hiddenIds.has('A|'+r.id),dragging:e.label.classList.contains('is-dragging')});
  }
+ // of the cards that overlap on the screen only the nearest stays (the lit one always); hidden-behind cards take no room
+ const lit=labelFocus.get(),items=[];
+ for(const r of regs){const e=alEls.get(r.id);if(e&&e.ctx&&e.disp!=='off'&&e.disp!=='hide'&&!e.label.hidden)items.push({id:r.id,x:e.sx,y:e.sy,w:e.w,h:e.h,z:e.z,keep:lit==='A:'+r.id})}
+ const over=thinOverlaps(items);
+ for(const r of regs){const e=alEls.get(r.id);if(e)setAlState(e,e.disp,over.has(r.id))}
+}
+// the three looks of a label, its leader and its anchor dot (CSS): .is-behind = hidden completely, .is-faint = translucent (embedded), .is-overlapped = hidden under a nearer card
+function setAlState(e,disp,over){
+ const sig=disp+(over?'o':'');e.over=over;if(e.st===sig)return;e.st=sig;
+ for(const n of [e.label,e.leader,e.dot]){n.classList.toggle('is-behind',disp==='hide');n.classList.toggle('is-faint',disp==='faint');n.classList.toggle('is-overlapped',over)}
 }
 function pruneAnalysisLabels(keep){for(const [id,e] of [...alEls])if(!keep.has(id)){e.label.remove();e.leader.remove();e.dot.remove();alEls.delete(id)}}
 function pruneMeasures(keep){for(const [id,e] of [...measEls])if(!keep.has(id)){e.line.remove();e.leader.remove();e.label.remove();e.grad?.remove();measEls.delete(id)}}
@@ -244,7 +277,7 @@ function drawSectionCues(obj,camera,W,H,pts){
  if(!hasPlane&&!cuesOn)return; // no active section and nothing left to clear
  cuesOn=hasPlane;
  if(hasPlane)ensureSvg();
- if(svg){svg.setAttribute('width',W);svg.setAttribute('height',H)}
+ if(svg){putAttr(svg,'width',W);putAttr(svg,'height',H)}
  for(const p of pts){
   const m=els.get(p.id),r=rels.get(p.id);if(!m)continue;
   const on=!!r&&r.on;if(m.on!==on){m.on=on;m.el.classList.toggle('is-on-section',on)}
@@ -291,7 +324,8 @@ export function updateComment3dMarkers(){
   // hidden behind tissue: judged at most ~10 times a second (the positions above follow every frame), plus once more after the view stops
   const plane=sectionViewOpen&&sectionViewPlane?sectionPlaneLocal(sectionLocalPoint(),sectionLocalNormal()):null;
   // the distances' probes (line samples, a dragged label) are judged in the same pass; their places are part of the signature (a moved point / label is judged again)
-  const probes=measureProbes(pts,dims).concat(analysisProbes(als,dims)),judged=probes.length?pts.concat(probes):pts;
+  updateLabelPlaces(als,dims,plane);
+  const probes=measureProbes(pts,dims).concat(analysisProbes(als)),judged=probes.length?pts.concat(probes):pts;
   const sig=hiddenSignature(obj,camera,pts.map(p=>p.id).concat(probes.map(p=>p.id+'@'+p.local.x.toFixed(3)+','+p.local.y.toFixed(3)+','+p.local.z.toFixed(3))),plane,fp),now=performance.now(),st=throttle.step(now,sig!==hiddenSig);
   clearTimeout(hiddenTimer);hiddenTimer=0;
   if(st.run){hiddenSig=sig;refreshHidden(obj,camera,judged,plane)}
@@ -321,6 +355,7 @@ let lastLabelDown={key:null,t:0,x:0,y:0};
 const inLabel=(e,x,y)=>!e.label.hidden&&Math.abs(x-e.sx)<=e.w/2+4&&Math.abs(y-e.sy)<=e.h/2+4;
 // the label under (x,y) (view px): {kind:'m'|'a',id,key} (a distance label or an analysis label), or null
 function labelAt(x,y){
+ for(const [id,e] of alEls)if(!e.over&&e.disp!=='hide'&&inLabel(e,x,y))return{kind:'a',id,key:'A:'+id}; // a shown card wins; a card hidden under a nearer one or behind a volume can still be reached (it comes to the front while lit: the old behaviour)
  for(const [id,e] of alEls)if(inLabel(e,x,y))return{kind:'a',id,key:'A:'+id};
  for(const [id,e] of measEls)if(inLabel(e,x,y))return{kind:'m',id,key:'M:'+id};
  return null;

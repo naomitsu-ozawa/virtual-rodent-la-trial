@@ -3,6 +3,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { parse } from 'acorn';
 import { full } from 'acorn-walk';
 import { registry, defaultSampleId } from '../../docs/sample-registry.js';
+import { listedIds } from '../helpers/demo-lists.js';
 import { sampleIndexUrl, sampleSliceUrl, sampleProjectUrl, sampleCacheKey, sampleSet } from '../../docs/sample-sets.js';
 
 // The practice data is the only data the app loads. Every network target of the loading path comes from the fixed
@@ -47,8 +48,8 @@ function depsTemplate(fetched = [], indexFiles = ['a.dcm'], hasCache = false) {
 describe('practice-data fetch targets come from the registered datasets only', () => {
   const ids = registry.samples.map(s => s.id).sort();
 
-  it('the registry is the six bundled sets, each below its own demo/ folder', () => {
-    expect(ids).toEqual(['sample1', 'sample2', 'sample3', 'sample4', 'sample5', 'sample6']);
+  it('the registry is the sets of docs/demo/samples.json, each below its own demo/ folder', () => {
+    expect(ids).toEqual([...listedIds].sort());
     for (const id of ids) expect(sampleSet(id).base).toBe(`demo/${id}/`);
   });
 
@@ -85,7 +86,7 @@ describe('practice-data fetch targets come from the registered datasets only', (
     }
   });
 
-  const UNKNOWN = ['sample0', 'sample7', 'sample10', 'Sample1', ' sample1', 'sample1 ', '', '../sample1', 'sample1/..', 'sample1/', 'https://evil.example/', '//evil.example/', null, 0, 1, {}];
+  const UNKNOWN = ['sample0', 'sample99', 'sample10', 'unlisted-folder', 'Sample1', ' sample1', 'sample1 ', '', '../sample1', 'sample1/..', 'sample1/', 'https://evil.example/', '//evil.example/', null, 0, 1, {}];
   it.each(UNKNOWN.map(v => [JSON.stringify(v) ?? String(v), v]))('an unknown set id (%s) throws and fetches nothing', async (_label, id) => {
     const { run } = loadSampleDemoFromSource();
     const calls = [];
@@ -126,8 +127,8 @@ describe('practice-data fetch targets come from the registered datasets only', (
     expect(callers.sort()).toEqual(['app.js', 'data-load.js (definition)']);
     const app = readDocs('app.js');
     expect(app).toMatch(/const startSample=async setId=>\{[^]*?await loadSampleDemo\(setId\)/);
-    // the event path hands over only `sample<digits>`; the chooser buttons pass their data-sample-set
-    expect(app).toMatch(/typeof id==='string'&&\/\^sample\\d\+\$\/\.test\(id\)/);
+    // the event path hands over only an id that follows the folder name rule (sample-sets.js isSampleId); the chooser buttons pass their data-sample-set
+    expect(app).toContain("if(isSampleId(id))e.detail.done=startSample(id)");
   });
 
   it('static: every fetch( in docs/ targets a registry / table-built URL, the version file, or a worker-local function', () => {
@@ -143,7 +144,8 @@ describe('practice-data fetch targets come from the registered datasets only', (
       "app.js: './version.json?t='+Date.now()",
       'app.js: sampleProjectUrl(setId)',
       'data-load.js: sampleIndexUrl(setId)',
-      'sample-registry.js: sampleJsonUrl(id)', // the registry's own list: sample.json of demo/sampleN, built by the folder-name rule (sample-sets.js)
+      'sample-registry.js: sampleJsonUrl(id)', // sample.json of a LISTED folder, built by the folder-name rule (sample-sets.js)
+      'sample-registry.js: sampleListUrl()', // the list demo/samples.json (one read)
       'data-load.js: url',
       'source-filters.js: k', // a local slice-prefetch function named fetch, not window.fetch
     ].sort());

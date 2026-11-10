@@ -7,7 +7,7 @@ import { createViewToggle } from '../../docs/vr-view-toggle.js';
 // a VR / AR session starts at 1x (real size), AR and VR alike, and the AR passthrough <-> VR view toggle never changes the scale.
 const src = readFileSync(new URL('../../docs/vr-view.js', import.meta.url), 'utf8');
 const DEFAULT_SCALE = 0.165 / NORM_LONG; // baseScale: the old 16.5 cm fit, used only when the physical size is unknown
-const LONGEST = [2.4, 60.4, 75.8, 100, 300]; // synthetic test volume, practice mouse (sample2), practice rat (sample1), a 10 cm and a 30 cm animal
+const LONGEST = [20, 60.4, 75.8, 100, 300]; // a 2 cm volume (data under 2 cm now starts enlarged to 2 cm: tests/unit/vr-min-start-2cm.test.js), practice mouse (sample2), practice rat (sample1), a 10 cm and a 30 cm animal
 
 // what vr-view.js does for the holder scale: placement (bringVolumeFront), then the per-frame clamp; the toggle is the only thing that runs afterwards
 function session(isAr, longMm) {

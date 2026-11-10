@@ -11,8 +11,9 @@ import { createHash } from 'node:crypto';
 const SOURCES = ['vr-volume-prep.js', 'point-cls.js', 'distance-field.js', 'vr-brick-occupancy.js', 'gpu-runs.js', 'vr-prep-cache.js'];
 const KNOWN_HASHES = {
   3: '537024a77ad091c7',
-  5: 'd272302c85831b6e', // the list entries carry segMask (the prepared slot bits). (child segments): the new buildChildIndexOf + a `child` field of the worker answer, present only when child items were sent; the output WITHOUT child segments is byte-identical to before, and an entry made with children has its own key (the child items are an extra hashed `child` part), so no old entry can be mistaken for it: same version
+  5: '5e53f21df1612fef', // the list entries carry segMask (the prepared slot bits). (child segments): the new buildChildIndexOf + a `child` field of the worker answer, present only when child items were sent; the output WITHOUT child segments is byte-identical to before, and an entry made with children has its own key (the child items are an extra hashed `child` part), so no old entry can be mistaken for it: same version
   4: '18ca6924fc9d55f1', // buildRegionIndexOf keeps every result (up to 255) in ids / list, the 14-colour cap only limits the colour index of the histogram (a result of the 15th colour used to be dropped)
+  6: '621de90b954405ef', // buildRegionIndexOf on a reduced grid fills the coarse voxels still 0 from the source block they cover (second pass; the first pass is never overwritten); same grid: byte-identical
 };
 
 const read = f => readFileSync(new URL('../../docs/' + f, import.meta.url), 'utf8');

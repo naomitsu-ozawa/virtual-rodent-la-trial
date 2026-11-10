@@ -22,6 +22,7 @@
 - 骨梁（{mb}）
 - マーモセット脳 MRI（50 µm）
 - ジカウイルス EMD-8116
+- マウス後足 microCT（{mb}）
 
 ## VR / AR で観察する
 
@@ -100,6 +101,7 @@ All practice data is bundled with this site.
 - Trabecular bone ({mb})
 - Marmoset brain MRI (50 µm)
 - Zika virus EMD-8116
+- Mouse hindpaw micro-CT ({mb})
 
 ### Viewing in VR / AR
 

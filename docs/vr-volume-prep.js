@@ -10,10 +10,10 @@
 //                     distance field, the combined texture's bytes for the shown mask, brick occupancy of the mask-only segments)
 // The worker is a Blob made from this site's own functions (the same way as vr-combo-rebuild.js); the data goes in and comes back by
 // transfer (no second copy of a 512 MB array is ever held). Without a Worker (tests) the same job runs on the calling thread.
-import { buildClsData } from './point-cls.js?v=20261110-build705';
-import { chamferDistanceBytes, combineClassificationDistance, fourthChannelBytes } from './distance-field.js?v=20261110-build705';
-import { brickOccupancy, cellRange } from './vr-brick-occupancy.js?v=20261110-build705';
-import { gpuRunsForTexture, gpuRunRowMapToSlice, gpuLowerBound, gpuUpperBound, gpuDilateRuns } from './gpu-runs.js?v=20261110-build705';
+import { buildClsData } from './point-cls.js?v=20261110-build706';
+import { chamferDistanceBytes, combineClassificationDistance, fourthChannelBytes } from './distance-field.js?v=20261110-build706';
+import { brickOccupancy, cellRange } from './vr-brick-occupancy.js?v=20261110-build706';
+import { gpuRunsForTexture, gpuRunRowMapToSlice, gpuLowerBound, gpuUpperBound, gpuDilateRuns } from './gpu-runs.js?v=20261110-build706';
 
 export const BRICK = 8;
 
@@ -69,13 +69,36 @@ export function buildRegionIndexOf(items, sourceDims, dims) {
   const w = dims[0], h = dims[1], d = dims[2], colors = [], segs = [], data = new Uint8Array(w * h * d), ids = new Uint8Array(w * h * d), list = [];
   // ids = the result's list position + 1 per voxel (up to 255 results; a later result wins where two overlap) = what the GPU reads;
   // data = the colour index (1..14 distinct colours) per voxel, only for the label histogram, which counts by colour (a result whose colour is the 15th is in ids but not in data)
+  // on a REDUCED grid the nearest-voxel mapping below picks ONE source voxel per coarse voxel, which on a thin bone often lies outside the result (index 0 = the base colour, grey streaks and specks).
+  // So there is a second pass (after the loop): a coarse voxel that is still 0 takes the result(s) that have ANY voxel in the source block it covers. Voxels the first pass painted are never overwritten
+  // (a neighbouring bone is not eaten); among several results in one block the later one in the list wins (the same rule as the first pass), in ids and in data alike. Same grid: no second pass, output unchanged.
+  const reduced = w !== sourceDims[0] || h !== sourceDims[1] || d !== sourceDims[2], placed = [];
   for (const r of items) {
     if (list.length >= 255) break; const id = list.length + 1;
     const c = Number(r.color) >>> 0; let k = colors.indexOf(c); if (k < 0 && colors.length < 14) { colors.push(c); segs.push(0); k = colors.length - 1; }
     if (k >= 0) segs[k] |= r.segMask | 0;
+    if (reduced && r.runsBySlice) placed.push({ src: r.runsBySlice, id, k });
     const runs = gpuRunsForTexture(r.runsBySlice, sourceDims, dims, { dilate: 0 });
     for (let z = 0; z < d; z++) { const rec = runs ? runs[z] : null; if (!rec || !rec.length) continue; for (let i = 0; i < rec.length; i += 3) { const o = (z * h + rec[i]) * w; if (k >= 0) data.fill(k + 1, o + rec[i + 1], o + rec[i + 2] + 1); ids.fill(id, o + rec[i + 1], o + rec[i + 2] + 1); } }
     list.push({ color: c, mm3: r.mm3, segmentKeys: r.segmentKeys.slice(), rid: r.rid, segMask: r.segMask | 0 }); // segMask: the slot bits as prepared (the session's look-up table / histogram use these, not the runtime slot order)
+  }
+  if (placed.length) {
+    const sw = sourceDims[0], sh = sourceDims[1], sd = sourceDims[2], hole = new Uint8Array(w * h * d); // hole = still 0 after the first pass (judged on ids: a 15th-colour result is in ids only)
+    for (let i = 0; i < hole.length; i++) if (ids[i] === 0) hole[i] = 1;
+    // source voxel s of n lies in the coarse voxels floor(s*t/n) .. floor(((s+1)*t-1)/n) of t (2:1: s >> 1); clamped, so an odd or non-integer ratio never writes outside the grid
+    const lo = (s, n, t) => Math.max(0, Math.floor(s * t / n)), hi = (s, n, t) => Math.min(t - 1, Math.floor(((s + 1) * t - 1) / n));
+    for (const p of placed) { // list order: a later result overwrites an earlier one's second-pass voxels (never a first-pass voxel: not a hole)
+      const src = p.src, zn = Math.min(sd, src.length);
+      for (let z = 0; z < zn; z++) {
+        const rec = src[z]; if (!rec || !rec.length) continue;
+        const z0 = lo(z, sd, d), z1 = hi(z, sd, d);
+        for (let i = 0; i < rec.length; i += 3) {
+          if (rec[i] >= sh) continue; const y0 = lo(rec[i], sh, h), y1 = hi(rec[i], sh, h), xa = Math.min(rec[i + 1], sw - 1), xb = Math.min(rec[i + 2], sw - 1); if (xb < xa) continue;
+          const x0 = lo(xa, sw, w), x1 = hi(xb, sw, w);
+          for (let tz = z0; tz <= z1; tz++) for (let ty = y0; ty <= y1; ty++) { const o = (tz * h + ty) * w; for (let x = x0; x <= x1; x++) if (hole[o + x]) { ids[o + x] = p.id; if (p.k >= 0) data[o + x] = p.k + 1; } }
+        }
+      }
+    }
   }
   return { data: colors.length ? data : null, ids: colors.length ? ids : null, colors, segs, list };
 }

@@ -6,7 +6,7 @@
 // from the old parameter and the range the old code effectively used (see filterLegacyRange).
 // Pure module (no DOM) so that the unit tests and the signature can use it directly.
 
-import { HIST_MIN, HIST_MAX, isHuLike } from './histogram.js?v=20261110-build705';
+import { HIST_MIN, HIST_MAX, isHuLike } from './histogram.js?v=20261110-build706';
 
 const round6 = x => Math.round(x * 1e6) / 1e6;
 const spanOf = range => Math.max(1, (range?.max ?? 0) - (range?.min ?? 0));

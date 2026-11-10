@@ -51,9 +51,14 @@ export function realHolderScale(longMm) {
   return clampScale(realScaleOf(longMm), longMm);
 }
 
+export const MIN_START_LONG_M = 0.02;
 export function startHolderScale(longMm, fallbackScale, mag = 1) {
   const r = realHolderScale(longMm); // null: unknown physical size or oversize data -> the fit, whatever the magnification
-  if (r) return clampScale(r * (mag > 0 ? mag : 1), longMm);
+  if (r) {
+    let s = r * (mag > 0 ? mag : 1);
+    if (longMm < 20) s = Math.max(s, MIN_START_LONG_M / NORM_LONG);
+    return clampScale(s, longMm);
+  }
   return clampScale(fallbackScale, longMm);
 }
 // while the tutorial runs the volume is put where the hands reach it (0.65 m ahead, at chest height, a quarter metre below the eyes).: its size is the tutorial data's start magnification (`mag`: its sample.json vrInitialScale, 4 for the Lv0 bone; was 0.25 m = about x9.8).

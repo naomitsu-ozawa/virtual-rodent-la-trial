@@ -29,7 +29,11 @@ export function marchClassificationHitInfo(o,q,halfExt,dims,cls,chs,planes=[],pl
  if(!(t0<=t1))return null;
  const data=cls.data,C=cls.C,len=Math.hypot(q.x,q.y,q.z);
  if(len<1e-12)return null;
- const dt=0.5*Math.min(2*he[0]/w,2*he[1]/h,2*he[2]/d)/len;
+ // step = half a voxel along the ray. s = voxel edge per axis, r = smin/s (1 on an isotropic grid, so the step is then exactly the old 0.5*smin/len);
+ // hypot(q*r)/smin = the ray's length in voxel units, so no axis moves more than half a voxel per step (a 1-voxel plate is never skipped) and
+ // rays along a coarse axis take fewer steps than with the finest axis' step
+ const sx=2*he[0]/w,sy=2*he[1]/h,sz=2*he[2]/d,sm=Math.min(sx,sy,sz);
+ const dt=0.5*sm/Math.hypot(q.x*(sm/sx),q.y*(sm/sy),q.z*(sm/sz));
  for(let t=t0;t<=t1;t+=dt){
   const x=Math.min(w-1,Math.max(0,Math.floor(((o.x+q.x*t)/(2*he[0])+0.5)*w)));
   const y=Math.min(h-1,Math.max(0,Math.floor((0.5-(o.y+q.y*t)/(2*he[1]))*h)));

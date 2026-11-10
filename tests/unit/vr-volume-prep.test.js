@@ -45,14 +45,28 @@ function refEditMask(descs, sourceDims, dims) { // descs: {key: {mode, maskOnly,
 }
 function refRegionIndex(regions, slotKeys, sourceDims, dims) { // regions: [{color, segmentKeys, runsBySlice, mm3, id}]
   if (!regions.length) return { data: null, colors: [], segs: [], list: [] };
-  const [w, h, d] = dims, colors = [], segs = [], data = new Uint8Array(w * h * d), ids = new Uint8Array(w * h * d), list = [];
+  const [w, h, d] = dims, colors = [], segs = [], data = new Uint8Array(w * h * d), ids = new Uint8Array(w * h * d), list = [], placed = [];
   for (const r of regions) {
     if (list.length >= 255) break; const id = list.length + 1; // every result (up to 255) is in ids / list; only the colour index (histogram) is capped at 14 colours
     const c = Number(r.color) >>> 0; let k = colors.indexOf(c); if (k < 0 && colors.length < 14) { colors.push(c); segs.push(0); k = colors.length - 1; }
     if (k >= 0) for (const key of r.segmentKeys || []) { const s = slotKeys.indexOf(key); if (s >= 0) segs[k] |= 1 << s; }
     const runs = gpuRunsForTexture(r.runsBySlice, sourceDims, dims, { dilate: 0 });
     for (let z = 0; z < d; z++) { const rec = runs?.[z]; if (!rec?.length) continue; for (let i = 0; i < rec.length; i += 3) { const o = (z * h + rec[i]) * w; if (k >= 0) data.fill(k + 1, o + rec[i + 1], o + rec[i + 2] + 1); ids.fill(id, o + rec[i + 1], o + rec[i + 2] + 1); } }
+    placed.push({ id, k, runs: r.runsBySlice });
     list.push({ color: c, mm3: r.mm3, segmentKeys: [...(r.segmentKeys || [])], rid: r.id, segMask: (r.segmentKeys || []).reduce((m, key) => { const sl = slotKeys.indexOf(key); return sl >= 0 ? m | (1 << sl) : m; }, 0) });
+  }
+  // on a reduced grid a voxel still 0 after the pass above takes the result(s)
+  // with any voxel in that block; a voxel the first pass painted is kept; the later result in the list wins
+  const [sw, sh, sd] = sourceDims;
+  if (w !== sw || h !== sh || d !== sd) {
+    const hole = ids.map(v => (v === 0 ? 1 : 0)), has = (runs, x, y, z) => { const rec = runs?.[z]; if (!rec) return false; for (let i = 0; i < rec.length; i += 3) if (rec[i] === y && x >= rec[i + 1] && x <= rec[i + 2]) return true; return false; };
+    const span = (t, n, tn) => [Math.floor(t * n / tn), Math.min(n - 1, Math.ceil((t + 1) * n / tn) - 1)];
+    for (const p of placed) for (let z = 0; z < d; z++) for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const o = (z * h + y) * w + x; if (!hole[o]) continue;
+      const [x0, x1] = span(x, sw, w), [y0, y1] = span(y, sh, h), [z0, z1] = span(z, sd, d); let hit = false;
+      for (let sz = z0; sz <= z1 && !hit; sz++) for (let sy = y0; sy <= y1 && !hit; sy++) for (let sx = x0; sx <= x1 && !hit; sx++) hit = has(p.runs, sx, sy, sz);
+      if (hit) { ids[o] = p.id; if (p.k >= 0) data[o] = p.k + 1; }
+    }
   }
   return { data: colors.length ? data : null, ids: colors.length ? ids : null, colors, segs, list };
 }

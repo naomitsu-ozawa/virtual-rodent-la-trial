@@ -1,18 +1,18 @@
 // The registry of the practice datasets hosted on this site: ONE loader, ONE registry (pure parts unit-tested: tests/unit/sample-registry.test.js).
-// Every dataset is a folder docs/demo/sampleN/ with a sample.json (names, level, mission, initial segments, credit / license) and a thumb.webp. The app reads
-// demo/sample1/sample.json, demo/sample2/sample.json, ... and stops at the first folder that has none (at most SAMPLE_JSON_MAX). Nothing else lists the datasets:
+// Every dataset is a folder docs/demo/<id>/ with a sample.json (names, level, mission, initial segments, credit / license) and a thumb.webp. The app reads the list
+// docs/demo/samples.json ONCE (an array of folder ids, the display order) and then the sample.json of every listed folder, at the same time. A folder that is not in the list is never read.
+// The list is all there is: no search for folders. Nothing else lists the datasets:
 // the 体験会 cards, the practice-data chooser, the in-VR data list, the preparation list, the tutorial's data and the credit boxes are all built from this registry.
 //
 // The module waits for the registry before it finishes loading (top-level await at the bottom), so every module that imports it already sees the finished registry.
-// If the files cannot be read (offline, server error) the registry stays EMPTY: no cards and no chooser buttons, the rest of the page works as usual.
+// If the list or a file cannot be read (offline, server error) the registry stays EMPTY: no cards and no chooser buttons, the rest of the page works as usual.
 // Optional fields (all validated here, never required): size {dims:[columns,rows,slices], megabytes} = the real size shown while the data loads; vrInitialScale (a number > 0) = the
 // magnification the VR / AR view starts the data at (1 = real size; the registry's Lv0 bone has 4); default (true on at most one dataset) = the dataset the page opens when none is chosen.
-// Order: the levels Lv0, Lv1, Lv2, Lv3 by the `level` field, then the datasets without a level (「その他」) by folder number. A second dataset that claims a level
+// Order: the levels Lv0, Lv1, Lv2, Lv3 by the `level` field, then the datasets without a level (「その他」) in the order of the list. A second dataset that claims a level
 // already taken is treated as 「その他」 (console warning).
-import { I18N } from './i18n.js?v=20261110-build705';
-import { sampleJsonUrl, setKnownSampleIds } from './sample-sets.js?v=20261110-build705';
+import { I18N } from './i18n.js?v=20261110-build706';
+import { sampleJsonUrl, sampleListUrl, setKnownSampleIds, isSampleId } from './sample-sets.js?v=20261110-build706';
 
-export const SAMPLE_JSON_MAX = 32;
 export const SAMPLE_LEVELS = Object.freeze([0, 1, 2, 3]);
 export const VR_INITIAL_SCALE_RANGE = Object.freeze({ min: 0.1, max: 20 }); // sane bounds for sample.json vrInitialScale (the viewer clamps to its own limits anyway)
 export const HINT_NAMES = Object.freeze(['section', 'move', 'toggle', 'mark', 'distance']); // the keys of event-mode.js EVENT_HINT_KEYS
@@ -21,7 +21,6 @@ const FETCH_TIMEOUT_MS = 8000;
 const isText = v => typeof v === 'string' && v.trim() !== '';
 const isBilingual = v => !!v && typeof v === 'object' && isText(v.ja) && isText(v.en);
 const isUrl = v => { try { const u = new URL(v); return u.protocol === 'https:' || u.protocol === 'http:'; } catch { return false; } };
-export const sampleNumber = id => { const m = /^sample([1-9]\d*)$/.exec(typeof id === 'string' ? id : ''); return m ? Number(m[1]) : null; };
 export const sampleKey = (id, part) => 'smp.' + id + '.' + part; // the i18n keys the registry adds (name, desc, mission, changes, terms, note)
 
 // '約270MB' / 'about 270 MB': the megabytes of sample.json size, rounded to the nearest 10 MB from 100 MB up (269 -> 270). The ONE formatting of every size text (loading text, chooser / card description).
@@ -33,8 +32,8 @@ const withMb = (text, size, lang) => size ? text.replaceAll('{mb}', mbLabel(size
 
 // Validates the parsed content of one sample.json. Returns { entry, errors }: entry = null when anything required is missing or wrong.
 export function parseSample(raw, id) {
-  const errors = [], n = sampleNumber(id);
-  if (n == null) return { entry: null, errors: ['bad folder id ' + id] };
+  const errors = [];
+  if (!isSampleId(id)) return { entry: null, errors: ['bad folder id ' + id] };
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { entry: null, errors: ['not an object'] };
   const need = (ok, what) => { if (!ok) errors.push(what); };
   need(isBilingual(raw.name), 'name{ja,en}');
@@ -63,7 +62,7 @@ export function parseSample(raw, id) {
   need(raw.note === undefined || (isBilingual(raw.note) && hasCredit), 'note{ja,en} (optional; shown with the credit, so it needs one)');
   if (errors.length) return { entry: null, errors };
   const entry = {
-    id, n, level: isLevel ? raw.level : null,
+    id, level: isLevel ? raw.level : null,
     size: sz ? Object.freeze({ dims: Object.freeze([...sz.dims]), megabytes: sz.megabytes }) : null,
     vrInitialScale: raw.vrInitialScale ?? null, isDefault: raw.default === true,
     name: { ja: raw.name.ja, en: raw.name.en }, description: { ja: withMb(raw.description.ja, sz, 'ja'), en: withMb(raw.description.en, sz, 'en') }, // {mb} of a description = the size from sample.json size (the same words as the loading text)
@@ -78,31 +77,45 @@ export function parseSample(raw, id) {
   return { entry, errors };
 }
 
-// The discovery: readJson(id) -> the parsed sample.json, or null/undefined when the folder has none (the end of the list). A read that FAILS throws (the whole
-// registry then stays empty). A sample.json that is not valid is skipped with a warning. Returns the valid entries in folder order.
-export async function discoverSamples(readJson, { cap = SAMPLE_JSON_MAX, warn = console.warn } = {}) {
+// The list of the datasets (the parsed docs/demo/samples.json): an array of folder ids. Returns the valid ids in the order of the list; an id that breaks the folder name rule
+// (sample-sets.js isSampleId) or is given twice is skipped with a warning. Anything that is not an array is an error (the whole registry then stays empty).
+export function parseSampleList(raw, { warn = console.warn } = {}) {
+  if (!Array.isArray(raw)) throw new Error('samples.json is not an array of folder ids');
   const out = [];
-  for (let n = 1; n <= cap; n++) {
-    const id = 'sample' + n, raw = await readJson(id);
-    if (raw == null) break;
-    const { entry, errors } = parseSample(raw, id);
-    if (entry) out.push(entry); else warn('Sample registry: ' + id + '/sample.json ignored (' + errors.join(', ') + ')');
+  for (const id of raw) {
+    if (!isSampleId(id)) warn('Sample registry: ' + JSON.stringify(id) + ' in samples.json is not a valid folder name; skipped');
+    else if (out.includes(id)) warn('Sample registry: ' + id + ' is listed twice in samples.json; the second one is skipped');
+    else out.push(id);
   }
   return out;
 }
 
-// entries (folder order) -> the registry. levels: by level; others: by folder number; a duplicate level becomes an 'other'.
+// The loading: ids = the listed folder ids (parseSampleList), readJson(id) -> the parsed sample.json, or null/undefined when the listed folder has none. Reads ONLY the listed folders, all at the same time
+// (one read per id, nothing else). A read that FAILS throws (the whole registry then stays empty). A listed folder without a sample.json, or a sample.json that is not valid, is skipped with a warning.
+// Returns the valid entries in the order of the list.
+export async function discoverSamples(ids, readJson, { warn = console.warn } = {}) {
+  const raws = await Promise.all(ids.map(id => readJson(id)));
+  const out = [];
+  ids.forEach((id, i) => {
+    if (raws[i] == null) { warn('Sample registry: ' + id + ' is in samples.json but has no sample.json; skipped'); return; }
+    const { entry, errors } = parseSample(raws[i], id);
+    if (entry) out.push(entry); else warn('Sample registry: ' + id + '/sample.json ignored (' + errors.join(', ') + ')');
+  });
+  return out;
+}
+
+// entries (the order of the list) -> the registry. levels: by level; others: in the order of the list; a duplicate level becomes an 'other'.
 export function buildRegistry(entries, { warn = console.warn } = {}) {
   const taken = new Set(), levels = [], others = [];
-  for (const e of [...entries].sort((a, b) => a.n - b.n)) {
+  for (const e of entries.map((x, order) => ({ ...x, order }))) {
     if (e.level != null && !taken.has(e.level)) { taken.add(e.level); levels.push(Object.freeze({ ...e })); continue; }
     if (e.level != null) warn('Sample registry: ' + e.id + ' claims level ' + e.level + ' that another dataset has; it is listed under 「その他」');
     others.push(Object.freeze({ ...e, level: null, mission: null, hints: Object.freeze([]), initialSegments: Object.freeze([]) }));
   }
   levels.sort((a, b) => a.level - b.level);
   const samples = Object.freeze([...levels, ...others]);
-  // the dataset opened when none is chosen: the first folder (by number) that says "default": true; none says it -> the lowest folder number (sample1 when it exists, as before the flag)
-  const byNumber = [...samples].sort((a, b) => a.n - b.n), flagged = byNumber.filter(s => s.isDefault);
+  // the dataset opened when none is chosen: the first one of the list that says "default": true; none says it -> the first one of the list
+  const byNumber = [...samples].sort((a, b) => a.order - b.order), flagged = byNumber.filter(s => s.isDefault);
   if (flagged.length > 1) warn('Sample registry: ' + flagged.map(s => s.id).join(', ') + ' all say "default": true; ' + flagged[0].id + ' is used');
   const defaultId = (flagged[0] || byNumber[0])?.id ?? '';
   return Object.freeze({ samples, levels: Object.freeze(levels), others: Object.freeze(others), byId: Object.freeze(Object.fromEntries(samples.map(s => [s.id, s]))), defaultId });
@@ -161,18 +174,26 @@ export function practiceSeriesName(id, lang, reg = registry) {
   return s ? s.name[lang === 'en' ? 'en' : 'ja'] : '';
 }
 
-// ---- the page's own loader: sample.json of every folder, read next to the page like the data itself (sample-sets.js sampleJsonUrl)
+// ---- the page's own loader: the list docs/demo/samples.json (ONE read), then sample.json of every listed folder (one read each), read next to the page like the data itself (sample-sets.js)
+async function fetchSampleList() {
+  const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), FETCH_TIMEOUT_MS);
+  try {
+    const res = await fetch(sampleListUrl(), { cache: 'no-cache', signal: ctl.signal });
+    if (!res.ok) throw new Error('HTTP ' + res.status + ' for samples.json'); // no list = no datasets (the registry stays empty); there is no search for folders
+    return await res.json();
+  } finally { clearTimeout(timer); }
+}
 async function fetchSampleJson(id) {
   const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), FETCH_TIMEOUT_MS);
   try {
     const res = await fetch(sampleJsonUrl(id), { cache: 'no-cache', signal: ctl.signal });
     if (res.status === 404) return null;
     if (!res.ok) throw new Error('HTTP ' + res.status + ' for ' + id + '/sample.json');
-    try { return await res.json(); } catch { return null; } // a server that answers a missing file with a page (200): the end of the list
+    try { return await res.json(); } catch { return null; } // a server that answers a missing file with a page (200): no such file
   } finally { clearTimeout(timer); }
 }
 export async function loadRegistry() {
-  try { setRegistry(await discoverSamples(fetchSampleJson)); } catch (e) { console.warn('Sample registry: the practice data list could not be read; no practice data cards are shown', e); registry = EMPTY_REGISTRY; setKnownSampleIds([]); }
+  try { setRegistry(await discoverSamples(parseSampleList(await fetchSampleList()), fetchSampleJson)); } catch (e) { console.warn('Sample registry: the practice data list could not be read; no practice data cards are shown', e); registry = EMPTY_REGISTRY; setKnownSampleIds([]); }
   return registry;
 }
 // Waits for the list before this module finishes loading (browser only: Node tools and tests fill the registry with setRegistry).

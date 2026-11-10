@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { mbLabel, parseSample, buildRegistry, registerSampleTexts, sizeLabel, loadingText, sampleLoadingTextFor, defaultSampleId, vrInitialScaleOf, sampleKey, registry } from '../../docs/sample-registry.js';
 import { I18N } from '../../docs/i18n.js';
+import { publicIds } from '../helpers/demo-lists.js';
 
 // the optional sample.json fields that replaced the sample-specific hard-codes: size (loading text), vrInitialScale (VR start), default (the page's default dataset)
 const SRC = f => readFileSync(new URL('../../docs/' + f, import.meta.url), 'utf8');
@@ -49,8 +50,8 @@ describe('sample.json size', () => {
     expect(sampleLoadingTextFor('sample1', tr, reg)).toBe('練習データ（10×20×30、約55MB）を取得中…');
     expect(sampleLoadingTextFor('nope', tr, reg)).toBe('練習データを取得中…');
   });
-  it('the bundled datasets: every one has a size that matches its files, and the texts show the real numbers', () => {
-    for (const s of registry.samples) {
+  it('the bundled datasets: every public one has a size that matches its files, and the texts show the real numbers', () => {
+    for (const s of registry.samples.filter(x => publicIds.includes(x.id))) { // a dataset that is not public may still lack its size (then the loading text has no numbers)
       expect(s.size, s.id).not.toBeNull();
       const { files } = JSON.parse(readFileSync(new URL(`../../docs/demo/${s.id}/index.json`, import.meta.url), 'utf8'));
       expect(s.size.dims[2], s.id).toBe(files.length);

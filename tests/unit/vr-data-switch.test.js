@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { createSwapGuard, runDataSwap, createUploadQueue, createSettleGate, createFrameGapMonitor, swapPlan, SWAP_STAGES, SETTLE_TIMEOUT_MS, LOAD_TIMEOUT_MS, withTimeout, saveShouldWait } from '../../docs/vr-data-switch.js';
 import { frameOrTimer } from '../../docs/utils.js';
 import { levelSwitchItems, simpleMenuLayout, SIMPLE_MENU, EVENT_LEVELS } from '../../docs/event-mode.js';
+import { OTHER_IDS } from '../helpers/demo-lists.js';
 
 // switching the data inside a running VR session. The pieces (docs/vr-data-switch.js) are pure; vr-view.js (a WebXR file, not run in node) wires them, checked on its source.
 
@@ -230,7 +231,7 @@ describe('the data / level buttons (event-mode.js)', () => {
   it('one per level, the open data lit, the armed one marked; labels carry the level number (the default list also has the datasets that are not levels (marmoset, Zika virus), by their plain names)', () => {
     const items = levelSwitchItems(name, 'sample3', 'lv2', EVENT_LEVELS);
     expect(items.map(i => i.id)).toEqual(EVENT_LEVELS.map(l => l.id));
-    expect(levelSwitchItems(name, 'sample3', 'lv2').map(i => i.id)).toEqual([...EVENT_LEVELS.map(l => l.id), 'sample5', 'sample6']);
+    expect(levelSwitchItems(name, 'sample3', 'lv2').map(i => i.id)).toEqual([...EVENT_LEVELS.map(l => l.id), ...OTHER_IDS]); // then every dataset that is not a level, in the order of docs/demo/samples.json
     expect(items.find(i => i.sample === 'sample3')).toMatchObject({ on: true, armed: false });
     expect(items.find(i => i.id === 'lv2')).toMatchObject({ on: false, armed: true });
     expect(items[0].label).toBe('Lv0 ' + EVENT_LEVELS[0].nameKey);

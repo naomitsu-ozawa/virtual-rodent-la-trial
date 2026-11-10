@@ -1,12 +1,12 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { registry, sampleKey } from './sample-registry.js?v=20261110-build705';
+import { registry, sampleKey } from './sample-registry.js?v=20261110-build706';
 // the practice-data chooser's buttons come from the registry (sample-registry.js): the datasets with a level in folder order (sample1, sample2, ...), then 「その他」 and the datasets without a level, also in folder order.
 // The text of a button is the dataset's description (ja here; applyLanguage switches it by its data-i18n key). No datasets (the list could not be read) = no buttons.
 const escHtml=t=>String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const choiceButton=s=>`<button type="button" class="secondary-button sample-choice" data-sample-set="${escHtml(s.id)}" data-i18n="${escHtml(sampleKey(s.id,'desc'))}">${escHtml(s.description.ja)}</button>`;
 function sampleChoicesHtml(){
- const byFolder=(a,b)=>a.n-b.n; // the chooser lists the folders in numeric order (the cards / VR list / tutorial use the registry's Lv order)
+ const byFolder=(a,b)=>a.order-b.order; // the chooser lists the datasets in the order of the list docs/demo/samples.json (the cards / VR list / tutorial use the registry's Lv order)
  return [...registry.levels].sort(byFolder).map(choiceButton).join('')+(registry.others.length?'<div class="sample-group-label" data-i18n="sampleGroupOther">その他</div>'+[...registry.others].sort(byFolder).map(choiceButton).join(''):'');
 }
 export const app=document.querySelector('#app');

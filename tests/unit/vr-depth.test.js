@@ -206,11 +206,29 @@ describe('GHOST_ALPHA and the pass rule', () => {
     expect(occludedPass(true, false)).toBe(true); expect(occludedPass(true, true)).toBe(false); expect(occludedPass(false, false)).toBe(false); expect(occludedPass(false, true)).toBe(false); expect(occludedPass(undefined, false)).toBe(false);
     for (const f of ['vr-measure', 'vr-point-markers']) { const t = readFileSync(new URL('../../docs/' + f + '.js', import.meta.url), 'utf8'); expect(t, f).toMatch(/GHOST_ALPHA/); expect(t, f).not.toMatch(/[^_A-Z]0\.15\b|opacity:0\.3\b/); }
   });
-  it('vr-view.js: pinned result labels (card + leader) have a ghost too and follow the setting; the hand labels are untouched', () => {
-    expect(has(src, 'const makeLabel=(pin=false)=>{')).toBe(true); expect(has(src, 'lb=makeLabel(true);lb.rid=reg.id;pins.set(reg.id,lb)')).toBe(true);
-    expect(has(src, 'syncPins();for(const lb of pins.values()){lb.lit=pinLit.has(lb.rid);placeLabel(lb);pinOcclusion(lb,lb.lit)}')).toBe(true);
-    expect(has(src, 'const occ=occludedPass(occlusionGpu(),lit);')).toBe(true);
-    expect(has(src, 'const hoverLabelOf=c=>c.userData.hoverLabel||=Object.assign(makeLabel(),{hand:c});')).toBe(true);
+  it('vr-view.js: pinned result labels (card + leader) have NO ghost (hidden behind tissue, vr-label-occlusion.js) and follow the setting; the hand labels are untouched', () => {
+    expect(has(src, 'const makeLabel=(faces=null)=>{')).toBe(true); expect(has(src, 'lb=makeLabel();lb.rid=reg.id;pins.set(reg.id,lb)')).toBe(true);
+    expect(has(src, 'for(const lb of pins.values()){lb.lit=pinLit.has(lb.rid);embedLabel(lb,occ,pinHeld.has(lb.rid));placeLabel(lb)}thinPins(occ);for(const lb of pins.values())pinOcclusion(lb,lb.lit)')).toBe(true);
+    expect(has(src, 'const st=pinMaterialState(occlusionGpu(),lit,lb.trans);')).toBe(true); expect(has(src, 'lb.m.material.depthTest=st.depthTest;lb.line.material.depthTest=st.depthTest;lb.m.material.opacity=st.card;lb.line.material.opacity=st.line;')).toBe(true);
+    expect(has(src, 'lb.mg')).toBe(false); expect(has(src, 'lb.lg')).toBe(false); expect(has(src, 'mg=new THREE.Mesh')).toBe(false);
+    expect(has(src, 'const hoverLabelOf=c=>c.userData.hoverLabel||=Object.assign(makeLabel(hoverFaces),{hand:c});')).toBe(true);
+  });
+  it('pinMaterialState: every combination of the setting (gpu), lit and embedded (trans)', async () => {
+    const { pinMaterialState, EMBEDDED_ALPHA } = await load('vr-depth');
+    const on = { depthTest: false, card: 1, line: 0.9 }, hidden = { depthTest: true, card: 1, line: 0.9 }, emb = { depthTest: false, card: EMBEDDED_ALPHA, line: EMBEDDED_ALPHA };
+    for (const trans of [false, true]) {
+      expect(pinMaterialState(false, false, trans)).toEqual(on); // old mode (薄くする / no usable GPU depth): on top, card 1, leader 0.9, no depth test, whatever the card state
+      expect(pinMaterialState(false, true, trans)).toEqual(on);
+      expect(pinMaterialState(true, true, trans)).toEqual(on); // lit: on top, opaque
+    }
+    expect(pinMaterialState(true, false, false)).toEqual(hidden); // 実際に隠す: depth tested, what the tissue covers is not drawn (no ghost)
+    expect(pinMaterialState(true, false, true)).toEqual(emb); // embedded and not pushed out: translucent, drawn on top
+    expect(pinMaterialState(true, false, undefined)).toEqual(hidden); expect(pinMaterialState(undefined, undefined, undefined)).toEqual(on);
+    expect(pinMaterialState(true, false, false)).toBe(pinMaterialState(true, false, false)); // shared objects: nothing allocated per frame
+  });
+  it('EMBEDDED_ALPHA is 0.45 (an embedded pinned card that cannot be pushed out); the scale tag keeps its ghost', async () => {
+    const { EMBEDDED_ALPHA } = await load('vr-depth'); expect(EMBEDDED_ALPHA).toBe(0.45);
+    expect(has(src, 'scaleTag.setOcclusion(occlusionGpu(),GHOST_ALPHA)')).toBe(true);
   });
 });
 

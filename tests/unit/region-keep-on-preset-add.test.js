@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterEach } from 'vitest';
 import { installDomStub, importApp } from '../helpers/dom-stub.js';
 
 // The overlap settings as loaded (mode, order, the loaded segment's min / max / sources) are not touched by adding / removing another segment; only the added segment itself gets its own range / sources from the priority.
-// sample7 (zebrafish, 8 regions) / sample8 (12 regions): analysis regions on the contrast preset, overlap rule 'priority' in the saved card order, bone / fat inactive with a default range that covers the whole data (0..255), the contrast preset edited (keep runs).
+// a saved project with analysis regions (8 or 12 regions) on the contrast preset, overlap rule 'priority' in the saved card order, bone / fat inactive with a default range that covers the whole data (0..255), the contrast preset edited (keep runs).
 // Adding a preset (bone, then fat) and removing it again must leave the regions as they were: count, colour, name, label, ids. (The page: segment-ui.js addSegmentPreset / removeSegmentPreset, app.js invalidateSegment.)
 installDomStub();
 let S, ST, U, V;
@@ -12,7 +12,7 @@ afterEach(() => { ST.setAnalysisRegions([]); S.segmentExclusive.mode = 'priority
 const runs = i => { const r = Array.from({ length: 4 }, () => null); r[1] = [i, 2, 9]; return r; };
 const regions = n => Array.from({ length: n }, (_, i) => ({ id: i + 1, key: 'contrast', segmentKeys: ['contrast'], color: 0x100000 + i * 0x1111, name: 'R' + i, label: 'L' + i, atlasId: 1000 + i, voxels: 8, mm3: 1, visible: true, runsBySlice: runs(i) }));
 function load(n, order) {
-  S.segmentExclusive.mode = 'priority'; S.segmentExclusive.order = order; // sample7 / sample8 as saved: rule priority, the saved card order
+  S.segmentExclusive.mode = 'priority'; S.segmentExclusive.order = order; // as saved: rule priority, the saved card order
   for (const k of S.SEGMENT_PRESET_ORDER) { const s = S.segmentState[k]; s.active = k === 'contrast'; s.enabled = k === 'contrast'; s.min = 0; s.max = 255; s.userMin = 0; s.userMax = 255; s.opening = s.closing = s.minComponent = 0; s.holeFill = false; }
   S.segmentEditState.contrast.keepRuns = runs(1); // the project's edits/contrast-keep.bin: contrast is a voxel taker
   S.commitExclusiveRanges();
