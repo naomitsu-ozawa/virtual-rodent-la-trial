@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { registry } from '../../docs/sample-registry.js';
-import { resolveSampleBase, sampleSet, sampleJsonUrl, DEFAULT_SAMPLE, sampleCacheKey, sampleSliceUrl, sampleIndexUrl, sampleProjectUrl } from '../../docs/sample-sets.js';
+import { resolveSampleBase, sampleSet, sampleJsonUrl, DEFAULT_SAMPLE, sampleCacheKey, sampleSliceUrl, sampleIndexUrl, sampleProjectUrl, sliceRoot } from '../../docs/sample-sets.js';
+import { SLICE_ROOT } from '../../docs/sample-config.js';
 
 describe('practice dataset paths and cache keys', () => {
   it('keeps sample1 URLs and its existing cache key unchanged', () => {
@@ -75,5 +76,47 @@ describe('resolveSampleBase (PR previews read the practice data from the site ro
   it('url helpers keep the same cache key whichever base is used', () => {
     expect(sampleCacheKey('https://x.io', 'sample2', 'a.dcm')).toBe('https://x.io/__vrl-sample/v1/sample2/a.dcm');
     expect(sampleIndexUrl('sample2', '/r/pr-preview/pr-1/')).toBe('demo/sample2/index.json'); // flag is false in the repo
+  });
+});
+
+// The published site carries no .dcm: .github/workflows/pages.yml writes SLICE_ROOT (this repository's main branch on raw.githubusercontent.com)
+// into the published copy of docs/sample-config.js, and only the slices are read from there.
+describe('slice root (SLICE_ROOT)', () => {
+  const ROOT = 'https://raw.githubusercontent.com/acct-1/repo.name_x-trial/main/docs/';
+  it('is empty in the repository, so the slices are read as before', () => {
+    expect(SLICE_ROOT).toBe('');
+    expect(sliceRoot(SLICE_ROOT)).toBe('');
+    expect(sampleSliceUrl('sample2', 'a.dcm')).toBe('demo/sample2/a.dcm');
+    expect(sampleSliceUrl('sample2', 'a.dcm', '/r/pr-preview/pr-3/', '')).toBe('demo/sample2/a.dcm');
+  });
+  it('a root of the one accepted shape: the .dcm slices of every set are read from <root>demo/<id>/ (preview or not)', () => {
+    expect(sliceRoot(ROOT)).toBe(ROOT);
+    expect(sampleSliceUrl('sample1', 'a b.dcm', '/', ROOT)).toBe(ROOT + 'demo/sample1/a%20b.dcm');
+    expect(sampleSliceUrl('sample5', '001.dcm', '/r/pr-preview/pr-15/', ROOT)).toBe(ROOT + 'demo/sample5/001.dcm');
+    expect(sampleSliceUrl('sample3', 'X.DCM', '/', ROOT)).toBe(ROOT + 'demo/sample3/X.DCM');
+    // a hostile name stays one path segment below the set folder
+    expect(sampleSliceUrl('sample2', '../../x.dcm', '/', ROOT)).toBe(ROOT + 'demo/sample2/..%2F..%2Fx.dcm');
+  });
+  it('anything that is not a .dcm slice (a thumbnail, ...) is not read from the root', () => {
+    expect(sampleSliceUrl('sample2', 'thumb.webp', '/', ROOT)).toBe('demo/sample2/thumb.webp');
+    expect(sampleSliceUrl('sample2', 'a.dcm.webp', '/', ROOT)).toBe('demo/sample2/a.dcm.webp');
+  });
+  it('the cache key does not depend on the root (devices that already downloaded a set do not download it again)', () => {
+    expect(sampleCacheKey('https://x.io', 'sample1', 'a.dcm')).toBe('https://x.io/__vrl-sample/v1/a.dcm');
+    expect(sampleCacheKey('https://x.io', 'sample2', 'a.dcm')).toBe('https://x.io/__vrl-sample/v1/sample2/a.dcm');
+  });
+  it.each([
+    'https://raw.githubusercontent.com/o/r/dev/docs/', 'https://raw.githubusercontent.com/o/r/main/', 'https://raw.githubusercontent.com/o/r/main/docs',
+    'https://raw.githubusercontent.com/o/../main/docs/', 'https://raw.githubusercontent.com/o/.r/main/docs/', 'https://raw.githubusercontent.com/-o/r/main/docs/',
+    'http://raw.githubusercontent.com/o/r/main/docs/', 'https://evil.example/o/r/main/docs/', 'https://raw.githubusercontent.com.evil.example/o/r/main/docs/',
+    '//raw.githubusercontent.com/o/r/main/docs/', 'https://raw.githubusercontent.com/o/r/main/docs/?x=1', 'https://raw.githubusercontent.com/o/r/main/docs/#h',
+    'https://raw.githubusercontent.com/o/r/x/main/docs/', ' ' + 'https://raw.githubusercontent.com/o/r/main/docs/', '/', 'demo/', null, undefined, 0, {},
+  ].map(v => [String(v), v]))('a root of any other shape (%s) is ignored: the slices are read as before', (_l, root) => {
+    expect(sliceRoot(root)).toBe('');
+    expect(sampleSliceUrl('sample2', 'a.dcm', '/', root)).toBe('demo/sample2/a.dcm');
+    expect(sampleSliceUrl('sample2', 'a.dcm', '/r/pr-preview/pr-3/', root)).toBe('demo/sample2/a.dcm'); // flag is false in the repo
+  });
+  it('an unknown set id still throws, root or not', () => {
+    expect(() => sampleSliceUrl('sample99', 'a.dcm', '/', ROOT)).toThrow(/Unknown sample set/);
   });
 });
