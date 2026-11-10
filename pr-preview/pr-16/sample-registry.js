@@ -10,8 +10,8 @@
 // magnification the VR / AR view starts the data at (1 = real size; the registry's Lv0 bone has 4); default (true on at most one dataset) = the dataset the page opens when none is chosen.
 // Order: the levels Lv0, Lv1, Lv2, Lv3 by the `level` field, then the datasets without a level (「その他」) in the order of the list. A second dataset that claims a level
 // already taken is treated as 「その他」 (console warning).
-import { I18N } from './i18n.js?v=20261110-build709';
-import { sampleJsonUrl, sampleListUrl, setKnownSampleIds, isSampleId } from './sample-sets.js?v=20261110-build709';
+import { I18N } from './i18n.js?v=20261110-build710';
+import { sampleJsonUrl, sampleListUrl, setKnownSampleIds, isSampleId } from './sample-sets.js?v=20261110-build710';
 
 export const SAMPLE_LEVELS = Object.freeze([0, 1, 2, 3]);
 export const VR_INITIAL_SCALE_RANGE = Object.freeze({ min: 0.1, max: 20 }); // sane bounds for sample.json vrInitialScale (the viewer clamps to its own limits anyway)
