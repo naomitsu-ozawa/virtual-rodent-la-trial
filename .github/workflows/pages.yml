@@ -7,6 +7,12 @@ name: Pages
 # This replaces committing docs/preview-NNN/ snapshot folders to main: open a
 # PR and check the preview URL on a real device (iPad/Mac with WebGPU).
 #
+# The practice slices (docs/demo/*/*.dcm, about 1.9 GB) are NOT published: the site would come close to the size
+# limit of Pages and every deploy would upload them. The app reads them from this repository's main branch instead
+# (https://raw.githubusercontent.com/<this repository>/main/docs/demo/...: docs/sample-config.js SLICE_ROOT, written
+# into the published copy below; docs/sample-sets.js accepts only that shape). Everything else of docs/demo (the list,
+# index.json, sample.json, project.vrlab, thumb.webp) is published as before. docs/ itself is never modified; only the copy is.
+#
 # Requires Settings > Pages > Source: "Deploy from a branch", gh-pages / (root).
 
 on:
@@ -31,9 +37,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      - name: Prepare site (without the .dcm slices)
+        run: |
+          site="_site"
+          root="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/main/docs/"
+          rm -rf "$site" && mkdir -p "$site"
+          tar -C docs --exclude='./demo/*/*.[dD][cC][mM]' -cf - . | tar -C "$site" -xf -
+          if find "$site" -iname '*.dcm' | grep -q .; then echo "a .dcm is left in the site copy"; exit 1; fi
+          test -f "$site/.nojekyll"
+          ls "$site"/demo/*/index.json
+          sed -i "s|SLICE_ROOT='';|SLICE_ROOT='$root';|" "$site/sample-config.js"
+          grep -qF "SLICE_ROOT='$root';" "$site/sample-config.js"
+          du -sh "$site"
       - uses: JamesIves/github-pages-deploy-action@v4.9.0
         with:
-          folder: docs
+          folder: _site
           branch: gh-pages
           clean-exclude: pr-preview/   # keep PR previews when main redeploys
           force: false                 # rebase instead of force-push (previews may land concurrently)
@@ -45,20 +63,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      # The practice data (docs/demo, hundreds of MB) is NOT copied into previews: every preview
-      # would add it to gh-pages and the published site would exceed the size limit of Pages.
-      # The preview app always reads it from the main site's /demo/ instead (docs/sample-config.js
-      # flag, set to true in the copy below), whatever the PR changes. docs/ itself is never
-      # modified; only the copy is.
+      # The practice data (docs/demo) is NOT copied into previews, whatever the PR changes: the preview app reads it
+      # from the main site's /demo/ (docs/sample-config.js flag, set to true in the copy below) and the slices from
+      # this repository's main branch (SLICE_ROOT, as on the main site). docs/ itself is never modified; only the copy is.
       - name: Prepare preview site
         if: github.event.action != 'closed'
         run: |
           site="$RUNNER_TEMP/preview-site"
-          echo "preview reads practice data from the site root (docs/demo is not copied)"
+          root="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/main/docs/"
+          echo "preview reads practice data from the site root and the slices from the main branch (docs/demo is not copied)"
           mkdir -p "$site"
           tar -C docs --exclude=./demo -cf - . | tar -C "$site" -xf -
           sed -i 's/DEMO_FROM_SITE_ROOT=false/DEMO_FROM_SITE_ROOT=true/' "$site/sample-config.js"
           grep -q 'DEMO_FROM_SITE_ROOT=true' "$site/sample-config.js"
+          sed -i "s|SLICE_ROOT='';|SLICE_ROOT='$root';|" "$site/sample-config.js"
+          grep -qF "SLICE_ROOT='$root';" "$site/sample-config.js"
           du -sh "$site"
       - uses: rossjrw/pr-preview-action@v1.8.1
         with:

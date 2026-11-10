@@ -21,8 +21,8 @@ function loadSampleDemoFromSource() {
   expect(decl, 'export async function loadSampleDemo exists').toBeTruthy();
   const fnSrc = src.slice(decl.declaration.start, decl.declaration.end);
   const factory = new Function('deps', `const {${Object.keys(depsTemplate()).join(',')}}=deps;return (${fnSrc});`);
-  return { fnSrc, run: async (setId, indexFiles, { hasCache = false } = {}) => {
-    const fetched = [], deps = depsTemplate(fetched, indexFiles, hasCache);
+  return { fnSrc, run: async (setId, indexFiles, { hasCache = false, deps: extra = {} } = {}) => {
+    const fetched = [], deps = { ...depsTemplate(fetched, indexFiles, hasCache), ...extra };
     const fn = factory(deps);
     const result = await (setId === undefined ? fn() : fn(setId));
     return { fetched, result };
@@ -84,6 +84,17 @@ describe('practice-data fetch targets come from the registered datasets only', (
       expect(u.search).toBe('');
       expect(u.hash).toBe('');
     }
+  });
+
+  it('with a slice root (the published site without .dcm), the index stays on the site and only the slices come from <root>demo/<id>/', async () => {
+    const ROOT = 'https://raw.githubusercontent.com/o/r/main/docs/';
+    const names = ['s 1.dcm', '../../x.dcm', 'https://evil.example/x.dcm'];
+    const { run } = loadSampleDemoFromSource();
+    const { fetched } = await run('sample3', names, { deps: { sampleSliceUrl: (id, n, p) => sampleSliceUrl(id, n, p, ROOT) } });
+    const targets = fetched.map(f => new URL(f.url, SITE).href);
+    expect(targets[0]).toBe(`${SITE}demo/sample3/index.json`);
+    expect(targets.slice(1).sort()).toEqual(names.map(n => ROOT + 'demo/sample3/' + encodeURIComponent(n)).sort());
+    expect(fetched.every(f => f.opts.credentials === 'omit')).toBe(true);
   });
 
   const UNKNOWN = ['sample0', 'sample99', 'sample10', 'unlisted-folder', 'Sample1', ' sample1', 'sample1 ', '', '../sample1', 'sample1/..', 'sample1/', 'https://evil.example/', '//evil.example/', null, 0, 1, {}];
