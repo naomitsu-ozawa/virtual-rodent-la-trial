@@ -1,16 +1,17 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import dicomParser from 'https://esm.sh/dicom-parser@1.8.21';
-import { multi, safePair, num, safeTriple, numberOr, frameYield } from './utils.js?v=20261109-build703';
-import { analyzeSliceSpacing, excludeDuplicateSlices, seriesNormal, slicePosition } from './slice-spacing.js?v=20261109-build703';
+import dicomParser from './vendor/dicom-parser@1.8.21/index.js';
+import { multi, safePair, num, safeTriple, numberOr, frameYield } from './utils.js?v=20261110-build708';
+import { dicomInflater } from './dicom-native-codecs.js?v=20261110-build708';
+import { analyzeSliceSpacing, excludeDuplicateSlices, seriesNormal, slicePosition } from './slice-spacing.js?v=20261110-build708';
 export async function parseDicomHeader(file){
  const attempts=[Math.min(file.size,256*1024),Math.min(file.size,1024*1024)];
  let lastError=null;
  for(const size of [...new Set(attempts)]){
-  try{return dicomParser.parseDicom(new Uint8Array(await file.slice(0,size).arrayBuffer()),{untilTag:'x7fe00010'})}
+  try{return dicomParser.parseDicom(new Uint8Array(await file.slice(0,size).arrayBuffer()),{untilTag:'x7fe00010',inflater:dicomInflater})}
   catch(e){lastError=e}
  }
- try{return dicomParser.parseDicom(new Uint8Array(await file.arrayBuffer()),{untilTag:'x7fe00010'})}
+ try{return dicomParser.parseDicom(new Uint8Array(await file.arrayBuffer()),{untilTag:'x7fe00010',inflater:dicomInflater})}
  catch(e){throw lastError||e}
 }
 export const UNNAMED_SERIES='Unnamed series'; // the description of a series whose DICOM has no SeriesDescription

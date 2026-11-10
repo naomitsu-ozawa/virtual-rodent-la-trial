@@ -51,26 +51,23 @@ export function realHolderScale(longMm) {
   return clampScale(realScaleOf(longMm), longMm);
 }
 
-// the scale when VR / AR starts (and on Home): 1x (real size). Oversize data -> fitted to 0.30 m (locked); unknown physical size
-// (no spacing) -> the old default fit (fallbackScale, 16.5 cm display), because there is no real size to show.
-export function startHolderScale(longMm, fallbackScale) {
-  const r = realHolderScale(longMm);
-  if (r) return r;
+export const MIN_START_LONG_M = 0.05;
+export function startHolderScale(longMm, fallbackScale, mag = 1) {
+  const r = realHolderScale(longMm); // null: unknown physical size or oversize data -> the fit, whatever the magnification
+  if (r) {
+    let s = r * (mag > 0 ? mag : 1);
+    if (longMm < 50) s = Math.max(s, MIN_START_LONG_M / NORM_LONG);
+    return clampScale(s, longMm);
+  }
   return clampScale(fallbackScale, longMm);
 }
-
-export const LV0_START_MAG = 4;
-export const lv0HolderScale = (longMm, fallbackScale) => {
-  const r = realHolderScale(longMm); // null: unknown physical size or oversize data -> same as every other start
-  return r ? clampScale(r * LV0_START_MAG, longMm) : clampScale(fallbackScale, longMm);
-};
-// while the tutorial runs the volume is put where the hands reach it (0.65 m ahead, at chest height, a quarter metre below the eyes).: its size is x4 real size (LV0_START_MAG; was 0.25 m = about x9.8).
+// while the tutorial runs the volume is put where the hands reach it (0.65 m ahead, at chest height, a quarter metre below the eyes).: its size is the tutorial data's start magnification (`mag`: its sample.json vrInitialScale, 4 for the Lv0 bone; was 0.25 m = about x9.8).
 // Only the tutorial uses TUT_VOLUME_*; unknown physical size: TUT_LONG_M (0.1 m longest side).
 export const TUT_VOLUME_FWD = 0.65, TUT_VOLUME_DOWN = 0.25;
 export const TUT_LONG_M = 0.1;
-export const tutorialHolderScale = longMm => (longMm > 0 ? lv0HolderScale(longMm, TUT_LONG_M / NORM_LONG) : clampScale(TUT_LONG_M / NORM_LONG, longMm));
+export const tutorialHolderScale = (longMm, mag = 1) => (longMm > 0 ? startHolderScale(longMm, TUT_LONG_M / NORM_LONG, mag) : clampScale(TUT_LONG_M / NORM_LONG, longMm));
 // the volume is "small" for the tutorial's grab steps when it is displayed at less than 95 % of the tutorial size (the visitor shrank it, or it was never enlarged)
-export const smallForTutorial = (holderScale, longMm) => holderScale < tutorialHolderScale(longMm) * 0.95;
+export const smallForTutorial = (holderScale, longMm, mag = 1) => holderScale < tutorialHolderScale(longMm, mag) * 0.95;
 
 // two-hand pinch: the new scale from the scale and hand distance at the grab (s0, d0) and the current distance d.
 // Always derived from the grab values (not accumulated), so pushing past a limit and coming back resumes exactly where the hands cross the limit.
@@ -78,6 +75,54 @@ export function pinchScale(s0, d0, d, longMm) {
   const l = scaleLimits(longMm);
   if (l.locked) return l.max;
   return clampScale(s0 * d / Math.max(d0, 1e-3), longMm);
+}
+
+// slider position (0..1) <-> holder scale, logarithmic between the limits of scaleLimits (left end = the lower limit = real size,
+// right end = the upper limit = 0.30 m longest side; unknown size: FALLBACK_MIN..FALLBACK_MAX). Locked (oversize) data has no range: position 0 / the locked scale.
+// The ends are returned exactly (no exp / log round trip), everything in between is clamped into the limits.
+export function scalePosOf(s, longMm) {
+  const l = scaleLimits(longMm);
+  if (l.locked || !(l.max > l.min) || !(s > 0)) return 0;
+  return Math.min(1, Math.max(0, Math.log(s / l.min) / Math.log(l.max / l.min)));
+}
+export function posToScale(pos, longMm) {
+  const l = scaleLimits(longMm);
+  if (l.locked) return l.max;
+  const p = Math.min(1, Math.max(0, +pos || 0));
+  if (p <= 0) return l.min;
+  if (p >= 1) return l.max;
+  return clampScale(l.min * Math.pow(l.max / l.min, p), longMm);
+}
+// the same in the shown unit, the real-size magnification (known physical size only; 0 / 0 without one)
+export const magToPos = (mag, longMm) => (longMm > 0 ? scalePosOf(mag * realScaleOf(longMm), longMm) : 0);
+export const posToMag = (pos, longMm) => (longMm > 0 ? realMagnification(posToScale(pos, longMm), longMm) : 0);
+
+// the － / ＋ buttons at the ends of the 拡大率 slider: one press multiplies the scale by 1 / SCALE_STEP or SCALE_STEP (a constant step on the log track), clamped to the
+// limits of scaleLimits (real size .. 30 cm longest side); locked data does not move. Holding repeats (vr-view.js, value-step.js timing: starts after 0.4 s, then one step every 0.1 s).
+export const SCALE_STEP = 1.1;
+export function scaleStep(s, dir, longMm, steps = 1) { // steps: how many 1.1 steps at once (1 for a press and for every repeat of a hold)
+  const l = scaleLimits(longMm);
+  if (l.locked || !(s > 0)) return clampScale(s, longMm);
+  const n = Math.max(1, Math.round(+steps || 1)), d = dir < 0 ? -1 : 1;
+  return clampScale(s * Math.pow(SCALE_STEP, d * n), longMm);
+}
+
+// the 表示 tab's row of the VR full menu (1024 px board, rows 80 px apart, the bottom row at yb): 拡大率 label + slider + the 実寸 button on one row (yb - 320), and the
+// 「よく使う（リング）を設定」 button on the histogram row (yb - 480) beside its 線形 / 対数 buttons (which end at x = X + 512): the row below the 実寸 button is full, so no row is added.
+// Pure so that the coordinates are tested. text.maxW = the width the value text may use (it shrinks to it).
+export function viewTabScaleLayout(yb, W = 1024, X = 40) {
+  // － / ＋ buttons at both ends of the slider. The row: the name (拡大率) with the value text under it (24 px, up to textMax wide: it shrinks to it), － (X + 270, 64 wide), the slider track (knob radius 26: it clears
+  // both buttons by 14 px), ＋, the 実寸 button (280 wide, at the right edge). The value text is no longer at the slider's right (the ＋ is there).
+  const H = 72, real = { x: W - X - 280, y: yb - 320, w: 280, h: H }, mw = 64, mx = X + 270, sx = mx + mw + 40, sw = 170, px = sx + sw + 40;
+  return {
+    wheel: { x: X + 530, y: yb - 480, w: W - X - (X + 530), h: H },
+    label: { x: X, y: yb - 320 + 26 },
+    text: { x: X, y: yb - 320 + 62, maxW: mx - 20 - X },
+    minus: { x: mx, y: yb - 320, w: mw, h: H },
+    slider: { x: sx, y: yb - 320, w: sw, h: H },
+    plus: { x: px, y: yb - 320, w: mw, h: H },
+    real,
+  };
 }
 
 // the section frame (outline, grab band, number tag, glow) is UI, not volume: it is a child of the holder, so it used to grow with the zoom

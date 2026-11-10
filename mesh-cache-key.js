@@ -3,10 +3,10 @@
 //
 // A key must hold EVERY input that can change the mesh: a missing input would show an old mesh for new settings, which is a
 // wrong result, not a slow one. The functions below therefore throw on a missing input instead of leaving it out of the key.
-import { cacheKey } from './gpu-volume-cache.js?v=20261109-build703';
-import { datasetFingerprint } from './project-file.js?v=20261109-build703';
-import { segmentKeyFields } from './segment-cache-key.js?v=20261109-build703';
-import { packRuns } from './run-pack.js?v=20261109-build703';
+import { cacheKey } from './gpu-volume-cache.js?v=20261110-build708';
+import { datasetFingerprint } from './project-file.js?v=20261110-build708';
+import { segmentKeyFields } from './segment-cache-key.js?v=20261110-build708';
+import { packRuns } from './run-pack.js?v=20261110-build708';
 
 // Version of the mesh GENERATION. Raise it whenever a change makes the same inputs build a different mesh: the surface
 // extraction (GPU surface nets / run faces), the smoothing (constrained-smooth.js), the chunking and halo, the vertex merge or
@@ -19,7 +19,8 @@ export const MESH_FORMAT=3;
 // What the dataset fingerprint (ids, size, spacing) does not tell: the size of every slice file and how its pixels are decoded.
 // A different file set with the same UIDs (re-exported, cropped, edited) gives another digest.
 export async function sliceContentDigest(series){
- const rows=(series?.slices||[]).map(s=>[s?.file?.size??null,s?.slope??null,s?.intercept??null,s?.bits??null,s?.signed?1:0,s?.ts??null]);
+ // a normalised slice (dicom-normalize.js) is identified by its ORIGINAL file, bits and transfer syntax: the size of its 16-bit Blob only follows the matrix
+ const rows=(series?.slices||[]).map(s=>{const o=s?.orig||s;return[o?.file?.size??null,s?.slope??null,s?.intercept??null,o?.bits??null,s?.signed?1:0,o?.ts??null]});
  const hash=new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(rows))));
  return[...hash].map(b=>b.toString(16).padStart(2,'0')).join('');
 }

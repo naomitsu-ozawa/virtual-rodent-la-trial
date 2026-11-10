@@ -2,7 +2,7 @@
 // Four levels, each one of the bundled practice datasets (docs/demo/sampleN, the same set ids as the practice-data chooser);
 // texts are i18n keys (i18n.js). The switch is settings.eventMode (app-settings.js, per device, default off); the chosen
 // level lives only in this page (a reload starts with none chosen) and follows whichever practice dataset was opened last.
-import { registry, sampleKey } from './sample-registry.js?v=20261109-build703';
+import { registry, sampleKey } from './sample-registry.js?v=20261110-build708';
 export const EVENT_HINT_KEYS={section:'evHintSection',move:'evHintMove',toggle:'evHintToggle',mark:'evHintMark',distance:'evHintDistance'};
 // the levels, the other datasets and each dataset's starting segments are no longer tables here: they come from the registry (sample-registry.js), built from the sample.json
 // of every docs/demo/sampleN folder. Order: Lv0..Lv3 by the level field, then the datasets without a level by folder number. Names / missions are i18n keys the registry adds (sampleKey).
@@ -66,12 +66,13 @@ export const simpleMenuSegments=shownKeys=>[...(shownKeys||[])].slice(0,MAX_SEG_
 export const triggerModeRow=hasResults=>!!hasResults;
 export const TRIGGER_AT_START='point';
 export const triggerMode=(labelsOn,hasResults)=>hasResults&&labelsOn?'label':'point';
-// the かんたん menu's board layout (1024 x 1180 px canvas), pure so that it can be tested and drawn without a headset. Widgets only carry an id;
+// the かんたん menu's board layout (1024 x 1400 px canvas,: was 1180; the bottom edge keeps its place, the board grows upward, vr-layout.js MENU_CANVAS), pure so that it can be tested and drawn without a headset. Widgets only carry an id;
 // vr-view.js maps the id to its action: 'seg:<key>:show|hide', 'section:show|hide', 'sliceOpacity' (the one slider: the same widget and setting as the full menu's スライス tab), 'trigger:point|label', 'undo', 'home', 'reset', 'all', 'exit'.
 // Advanced settings (quality, foveation, HU window, ...) are not here: すべての設定 opens the full menu.
-export const SIMPLE_MENU=Object.freeze({W:1024,H:1180,X:40,STATUS:140,TOP:180,ROW:82,TRIG_ROW:104,BTN_H:72,LIST_ROW:46,BOTTOM:1086,LEVEL_Y:1004});
+export const SIMPLE_MENU=Object.freeze({W:1024,H:1400,X:40,STATUS:140,TOP:180,ROW:82,TRIG_ROW:104,BTN_H:72,LIST_ROW:46,BOTTOM:1306,LEVEL_Y:1224}); // BOTTOM / LEVEL_Y moved down by the 220 px the board grew (the rows above start at the top as before; the results list gets 4 more rows)
 // There is no title line and no level text; the board's status line sits at STATUS and the rows start at TOP.
 // o: {segments:[{key,name,color,on}], sectionOn, sliceOpacity (0..1, the slider's value; default SLICE_OPACITY_DEFAULT), trigger:{show,label}, results:[{hex,name,text}], total, resetArmed, text:{...},
+//     page (0-based, the results list's page: rounded into range), text.page ('ページ' / 'Page'),
 //     levels?: {items:[{id,label,on,armed}], busy, hint, text:{title,again}}}
 // The slice-opacity slider row (always there, for every dataset: it only shows once a section is) sits under the 断面 row; its steps are 5 % (sliceOpacityValue).
 export const SLICE_OPACITY_DEFAULT=0.6;
@@ -84,6 +85,24 @@ export function sliceDrawState({on,clear,opacity,tint,ctShade}){
  if(!on)return{opacity:0,segOnly:0};
  if(!clear&&opacity>0)return{opacity,segOnly:0};
  return ctShade||(+tint||0)>0?{opacity:1,segOnly:1}:{opacity:0,segOnly:0};
+}
+// the 拡大率 slider is only grabbed at its knob: a press within KNOB_GRAB_PX (canvas px, either side of the knob's centre) starts a drag, a press anywhere else on the track does NOT move the value
+// (the other sliders still jump to the pressed place). A slider widget opts in with knob: KNOB_GRAB_PX. The drag keeps the offset between the press and the knob's centre, so it never jumps at the press either.
+// Pure (vr-view.js makeMenu: hit / beginDrag / drag): w = {x, y, w, h, value 0..1, knob?}; p = {x, y} in canvas px.
+export const KNOB_GRAB_PX = 40;
+const clamp01 = v => Math.min(1, Math.max(0, +v || 0));
+export const sliderKnobX = w => w.x + w.w * clamp01(w.value);
+export function sliderHitTest(p, w) {
+ if (p.y < w.y || p.y > w.y + w.h) return false;
+ if (w.knob > 0) return Math.abs(p.x - sliderKnobX(w)) <= w.knob;
+ return p.x >= w.x - 26 && p.x <= w.x + w.w + 26; // the other sliders: the track and a knob's radius beyond it, as before
+}
+export const sliderGrabOffset = (px, w) => (w.knob > 0 ? px - sliderKnobX(w) : 0);
+export const sliderValueAt = (px, w, off = 0) => clamp01((px - off - w.x) / w.w);
+// the results list's paging: cap = the rows that fit between the 拡大率 / trigger rows and the bottom row; with more results than that, ◀ ▶ page through them (page is rounded into range)
+export function resultPaging(n, page, cap) {
+ const pages = cap > 0 && n > cap ? Math.ceil(n / cap) : 1, pg = Math.min(Math.max(0, Math.floor(+page) || 0), pages - 1);
+ return { pages, page: pg, start: pg * (cap > 0 ? cap : 0), count: pages > 1 ? Math.min(cap, n - pg * cap) : Math.min(Math.max(cap, 0), n) };
 }
 export function simpleMenuLayout(o){
  const M=SIMPLE_MENU,t=o.text,w=[],X=M.X,label=(id,x,y,text,extra={})=>w.push({type:'label',id,x,y,text,...extra});
@@ -98,6 +117,13 @@ export function simpleMenuLayout(o){
  const so=sliceOpacityValue(o.sliceOpacity??SLICE_OPACITY_DEFAULT);
  label('sliceOpacity:name',X,y+40,t.sliceOpacity,{color:'#cfe3f0',bold:true,size:34});
  w.push({type:'slider',id:'sliceOpacity',x:440,y,w:330,h:M.BTN_H,value:so,text:Math.round(so*100)+'%'});y+=M.ROW;
+ // 拡大率 (o.scale = {pos 0..1 (log, vr-real-scale.js scalePosOf), text (「×N（実寸比）」, '' when the size is unknown; the locked note when locked), locked}): the volume's scale, under the slice-opacity row.
+ // Left end = real size, right end = the upper limit. Locked data (longest side over 30 cm): the slider is disabled. Without o.scale the row is not drawn.
+ // − / ＋ at both ends of the slider (×1 / 1.1 and ×1.1 per press, hold repeats; disabled when locked), the slider grabbed only at its knob (knob), the value text under the row's name (not at the slider's right any more: the ＋ is there)
+ if(o.scale){const lk=!!o.scale.locked;label('scale:name',X,y+26,t.scale,{color:'#cfe3f0',bold:true,size:34});label('scale:text',X,y+62,o.scale.text||'',{size:24,color:lk?'#6b7885':'#cfe3f0'});
+  btn('scale:minus',440,y,72,'−',false,{size:44,hold:true,...(lk?{disabled:true}:{})});
+  w.push({type:'slider',id:'scale',x:552,y,w:320,h:M.BTN_H,value:Math.min(1,Math.max(0,+o.scale.pos||0)),text:'',knob:KNOB_GRAB_PX,...(lk?{disabled:true}:{})});
+  btn('scale:plus',912,y,72,'＋',false,{size:44,hold:true,...(lk?{disabled:true}:{})});y+=M.ROW}
  if(o.trigger?.show){
   // the trigger switch: the lit button is what the trigger does now, the line below says it in words
   const lab=!!o.trigger.label;
@@ -108,12 +134,20 @@ export function simpleMenuLayout(o){
  const res=o.results||[],listEnd=o.levels?M.LEVEL_Y-M.ROW/2:M.BOTTOM;
  if(res.length){
   label('results',X,y+30,t.results,{bold:true,size:28});
-  const top=y+56,cap=Math.max(0,Math.floor((listEnd-24-30-top)/M.LIST_ROW)),shown=res.slice(0,cap);
-  shown.forEach((r,i)=>{const ry=top+i*M.LIST_ROW;
-   w.push({type:'button',id:'result:'+i,x:X,y:ry,w:56,h:40,label:'',on:true,color:r.hex});
-   label('result:'+i+':name',X+76,ry+30,r.name,{size:28,bold:true,color:r.hex});label('result:'+i+':vol',X+520,ry+30,r.text,{size:28})});
-  const more=res.length-shown.length;
-  label('total',X,top+shown.length*M.LIST_ROW+26,t.total+' '+o.total+' · '+res.length+(more>0?'  (… +'+more+')':''),{size:24,color:'#9fb3c3'});
+  // the whole row is the hit area of its show / hide switch (same action as the colour chip: id 'result:<i>:row', target 'result:<i>'); with more results than rows, ◀ ▶ and 「ページ n/N」 sit right of the total
+  const top=y+56,cap=Math.max(0,Math.floor((listEnd-24-30-top)/M.LIST_ROW)),pg=resultPaging(res.length,o.page,cap),shown=res.slice(pg.start,pg.start+pg.count);
+  shown.forEach((r,k)=>{const i=pg.start+k,ry=top+k*M.LIST_ROW;
+   const on=r.on!==false; // the chip is the result's show / hide switch (lit = shown)
+   w.push({type:'hit',id:'result:'+i+':row',target:'result:'+i,x:X,y:ry,w:M.W-2*X,h:M.LIST_ROW,on});
+   w.push({type:'button',id:'result:'+i,x:X,y:ry,w:56,h:40,label:'',on,color:r.hex});
+   label('result:'+i+':name',X+76,ry+30,r.name,{size:28,bold:true,color:on?r.hex:'#6b7885'});label('result:'+i+':vol',X+520,ry+30,r.text,{size:28})});
+  const more=res.length-shown.length,py=top+shown.length*M.LIST_ROW;
+  label('total',X,py+26,t.total+' '+o.total+' · '+res.length+(more>0&&pg.pages<2?'  (… +'+more+')':''),{size:24,color:'#9fb3c3'});
+  if(pg.pages>1){
+   w.push({type:'button',id:'results:prev',page:pg.page-1,x:560,y:py+2,w:96,h:50,label:'◀',on:false,size:28,disabled:pg.page<=0});
+   w.push({type:'button',id:'results:next',page:pg.page+1,x:666,y:py+2,w:96,h:50,label:'▶',on:false,size:28,disabled:pg.page>=pg.pages-1});
+   label('results:page',778,py+28,(t.page||'')+' '+(pg.page+1)+'/'+pg.pages,{size:26,color:'#9fb3c3'});
+  }
  }
  if(o.levels){
   const lv=o.levels,n=lv.items.length,gap=10,x0=270,bw=Math.floor((M.W-X-x0-(n-1)*gap)/Math.max(1,n));

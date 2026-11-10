@@ -6,13 +6,13 @@
 //   - below it the cards (one per dataset of event-mode.js EVENT_DATASETS) in an area that scrolls by itself
 // A card press opens the dataset through the page's own route ('vrl-event-sample' -> startSample), waits until the page is quiet, then prepares the VR data (prepareVrData + prepareVrGpu 'vr', the work of the
 // prepare panel) so that 「VRで見る」 starts with one press. Nothing is opened or prepared by itself when the page loads. With the mode off none of this exists (the elements go back where they were).
-import { tr } from './i18n.js?v=20261109-build703';
-import { EVENT_DATASETS, chooseEventLevel } from './event-mode.js?v=20261109-build703';
-import { eventCards, eventStatus, EVENT_STATUS_KEYS, openAndPrepare, waitForStandardOpen, createInflight } from './event-launcher-core.js?v=20261109-build703';
-import { settlePage } from './event-prepare-ui.js?v=20261109-build703';
-import { tutorialUiActive, restartTutorial } from './tutorial-ui.js?v=20261109-build703';
-import { sampleSliceUrl } from './sample-sets.js?v=20261109-build703';
-import { creditRows } from './sample-credit-ui.js?v=20261109-build703';
+import { tr } from './i18n.js?v=20261110-build708';
+import { EVENT_DATASETS, chooseEventLevel } from './event-mode.js?v=20261110-build708';
+import { eventCards, eventStatus, EVENT_STATUS_KEYS, openAndPrepare, waitForStandardOpen, createInflight } from './event-launcher-core.js?v=20261110-build708';
+import { settlePage } from './event-prepare-ui.js?v=20261110-build708';
+import { tutorialUiActive, restartTutorial } from './tutorial-ui.js?v=20261110-build708';
+import { sampleSliceUrl } from './sample-sets.js?v=20261110-build708';
+import { creditRows } from './sample-credit-ui.js?v=20261110-build708';
 
 const MOVED = ['tutorial-start-button', 'vr-view-button', 'ar-view-button'];
 const XR_CHECK_MS = 10000;

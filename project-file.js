@@ -2,7 +2,7 @@
 // session — filter settings, segment settings, 3D edits and display state —
 // without the DICOM data itself. Pure functions (no DOM); app.js gathers and
 // applies the state. Layout: a zip with project.json plus binary run files.
-import { zipSync, unzipSync, strToU8, strFromU8 } from 'https://esm.sh/fflate@0.8.2';
+import { zipSync, unzipSync, strToU8, strFromU8 } from './vendor/fflate@0.8.2/index.js';
 
 export const PROJECT_FORMAT='virtual-rodent-lab-project';
 export const PROJECT_VERSION=1;

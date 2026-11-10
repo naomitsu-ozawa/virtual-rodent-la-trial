@@ -6,8 +6,8 @@
 // chunks go to the GPU first (smooth-gpu.js registers itself here with setSmoothGpuBackend); the pool is then only the
 // fallback for the kernel; the workers still prepare the chunks for it (snap, weld) and are started for that.
 // A chunk's preparation and normals (smooth-prepare.js) run in the worker with its kernel: the main thread only cuts the core.
-import { constrainedSmoothPositions } from './constrained-smooth.js?v=20261109-build703';
-import { snapToLattice, weldTrianglePositions, vertexNormals, prepareSmoothChunk } from './smooth-prepare.js?v=20261109-build703';
+import { constrainedSmoothPositions } from './constrained-smooth.js?v=20261110-build708';
+import { snapToLattice, weldTrianglePositions, vertexNormals, prepareSmoothChunk } from './smooth-prepare.js?v=20261110-build708';
 
 // one job, in a worker or on the main thread: either a chunk's faces (prepared here: snap, weld, pinned flags) or welded
 // positions; then the kernel (iterations > 0) and the vertex normals (normals). null: no triangle. (exported: tests)
@@ -34,7 +34,7 @@ const pool={slots:null,queue:[],nextId:1,disabled:false,source:''};
 // what the GPU path (smooth-gpu.js) returns for a job whose build was cancelled before it ran (null: too large for the GPU)
 export const SMOOTH_CANCELLED=Object.freeze({cancelled:true});
 // workers in the pool: two cores stay with the page and the GPU process (with one, a 4-core machine stalled the page's
-// drawing for seconds), at most 4 on a desktop and 2 on an iPad / iPhone (memory: every chunk in flight holds its own
+// drawing for seconds), at most 4 on a desktop and 2 on an iPad (memory: every chunk in flight holds its own
 // copy of the mesh and the kernel's buffers)
 export function smoothWorkerCount(){
  const cores=Math.max(1,(typeof navigator!=='undefined'&&navigator.hardwareConcurrency)||2),touch=typeof navigator!=='undefined'&&navigator.maxTouchPoints>0;
@@ -51,7 +51,7 @@ export function setSmoothGpuBackend(backend){gpuBackend=backend}
 export function smoothMethod(){return gpuBackend?.usable?.()?'gpu':'cpu'}
 // floats of faces (chunk with its halo slices) in flight: a chunk being smoothed holds ~12 bytes per float (welded mesh, its
 // copies in the worker and the kernel's arrays), over all segments and builds (smooth-chunks.js throttleSmoothing).
-// Desktop: 72M floats, ~0.9 GB; iPad / iPhone: 16M floats, ~190 MB (two average chunks with their halos; a larger chunk
+// Desktop: 72M floats, ~0.9 GB; iPad: 16M floats, ~190 MB (two average chunks with their halos; a larger chunk
 // still goes, alone).
 export function smoothInFlightFloats(){return(typeof navigator!=='undefined'&&navigator.maxTouchPoints>0?16:72)*1024*1024}
 // a worker that has not answered after this long is taken as stalled: it is replaced and its chunk is smoothed on the main

@@ -1,5 +1,5 @@
-import { HIST_MIN, HIST_MAX, MIN_WINDOW } from './histogram.js?v=20261109-build703';
-import { LABELS, SLOTS, UNLABELED } from './vr-label-histogram.js?v=20261109-build703';
+import { HIST_BINS, HU_AXIS, MIN_WINDOW, windowBins, axisSnap, axisWidth } from './histogram.js?v=20261110-build708';
+import { LABELS, SLOTS, UNLABELED } from './vr-label-histogram.js?v=20261110-build708';
 
 // canvas size and the plot rectangle inside it (px)
 export const PANEL_W = 1024, PANEL_H = 640;
@@ -18,8 +18,9 @@ export const boardHeightM = widthM => widthM * PANEL_H / PANEL_W;
 export const pxToLocalX = (px, widthM) => (px / PANEL_W - 0.5) * widthM;
 export const pxToLocalY = (py, widthM) => (0.5 - py / PANEL_H) * boardHeightM(widthM);
 
-// the number of bar columns for the window [lo, hi]: one per HU when there is room, else at most one per 2 px
-export const columnsFor = (lo, hi) => Math.max(1, Math.min(Math.round(hi - lo + 1), Math.floor(PLOT.w / 2)));
+// the number of bar columns for the window [lo, hi]: one per bin (1 HU on the CT axis) when there is room, else at most one per 2 px
+export const MAX_COLUMNS = Math.min(HIST_BINS, Math.floor(PLOT.w / 2)); // the most columns any window can have (every axis has HIST_BINS bins)
+export const columnsFor = (lo, hi, axis = HU_AXIS) => Math.max(1, Math.min(windowBins(lo, hi, axis), MAX_COLUMNS));
 // 0..1 bar height for a count
 export const barFraction = (count, ymax, log) => (ymax > 0 && count > 0 ? (log ? Math.log10(1 + count) / Math.log10(1 + ymax) : count / ymax) : 0);
 export const countLabel = n => (n >= 1e6 ? +(n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? +(n / 1e3).toFixed(n >= 1e4 ? 0 : 1) + 'k' : String(Math.round(n)));
@@ -54,8 +55,9 @@ export function stackColumn(cols, c, ymax, log, plotH, out) {
   return total;
 }
 // the res object of histogram.js windowFor (the display range: 自動 / 全体 / 手動, as on PC): one entry per shown segment (its voxels = its slot's
-// label plus its analysis colours), and the whole volume. slotKeys: the GPU slot order; shownSlots: bit s = slot s shown; regionSegs: slot bits per colour
-export function rangeRes(hists, total, slotKeys, shownSlots, segs, regionSegs) {
+// label plus its analysis colours), and the whole volume. slotKeys: the GPU slot order; shownSlots: bit s = slot s shown; regionSegs: slot bits per colour;
+// axis: the histogram axis the counts were made on (histogram.js axisFor; the CT axis when omitted)
+export function rangeRes(hists, total, slotKeys, shownSlots, segs, regionSegs, axis = HU_AXIS) {
   const list = [];
   for (let s = 0; s < SLOTS; s++) {
     const key = slotKeys[s]; if (!((shownSlots >> s) & 1) || !segs[key]) continue;
@@ -65,7 +67,7 @@ export function rangeRes(hists, total, slotKeys, shownSlots, segs, regionSegs) {
     (regionSegs || []).forEach((bits, k) => { if ((bits >> s) & 1) add(hists[1 + SLOTS + k]); });
     list.push({ key, seg: segs[key], hist });
   }
-  return { list, total: total ? { hist: total } : null };
+  return { list, total: total ? { hist: total } : null, axis };
 }
 // the legend: the labels that have voxels in the whole volume, in STACK_ORDER, as {label, color, name}
 export function legendItems(hists, colorOf, nameOf) {
@@ -122,10 +124,10 @@ export function axisTarget(px, py) {
 export const localToPxX = (x, widthM) => (x / widthM + 0.5) * PANEL_W;
 export const localToPxY = (y, widthM) => (0.5 - y / boardHeightM(widthM)) * PANEL_H;
 // the window while an end is dragged: that end moves by the laser's x travel since the grab, at the scale of the window at the grab (so the bars
-// under the laser do not run away while the scale changes); whole HU, at least MIN_WINDOW wide, inside HIST_MIN..HIST_MAX; the other end stays
-export function dragWindow(end, start, px, out = [0, 0]) {
-  const d = (px - start.px) * (start.hi - start.lo) / PLOT.w;
-  if (end === 'lo') { out[0] = Math.max(HIST_MIN, Math.min(start.hi - MIN_WINDOW, Math.round(start.lo + d))); out[1] = start.hi; }
-  else { out[0] = start.lo; out[1] = Math.min(HIST_MAX, Math.max(start.lo + MIN_WINDOW, Math.round(start.hi + d))); }
+// under the laser do not run away while the scale changes); rounded to the axis' decimals (whole HU on the CT axis), at least MIN_WINDOW bins wide, inside the axis; the other end stays
+export function dragWindow(end, start, px, out = [0, 0], axis = HU_AXIS) {
+  const d = (px - start.px) * (start.hi - start.lo) / PLOT.w, c0 = axis.min + axisWidth(axis) / 2, cN = c0 + (HIST_BINS - 1) * axisWidth(axis), minW = MIN_WINDOW * axisWidth(axis);
+  if (end === 'lo') { out[0] = Math.max(c0, Math.min(start.hi - minW, axisSnap(start.lo + d, axis))); out[1] = start.hi; }
+  else { out[0] = start.lo; out[1] = Math.min(cN, Math.max(start.lo + minW, axisSnap(start.hi + d, axis))); }
   return out;
 }

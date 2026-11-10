@@ -4,10 +4,10 @@
 // but not bit for bit, and a crack of that size is an open edge in an STL: the seam copy gives the vertices of a chunk's
 // first plane the positions the previous chunk gave them, so the assembled surface is watertight.
 // Free of DOM-bound imports so the unit tests can use it directly.
-import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.webgpu.js';
-import { constrainedSmoothPositions, constrainedSmoothSchedule } from './constrained-smooth.js?v=20261109-build703';
-import { snapToLattice, prepareSmoothChunk, vertexNormals } from './smooth-prepare.js?v=20261109-build703';
-import { smoothChunkInPool, smoothInFlightLimit, smoothInFlightFloats } from './smooth-workers.js?v=20261109-build703';
+import * as THREE from './vendor/three@0.186.0/build/three.webgpu.js';
+import { constrainedSmoothPositions, constrainedSmoothSchedule } from './constrained-smooth.js?v=20261110-build708';
+import { snapToLattice, prepareSmoothChunk, vertexNormals } from './smooth-prepare.js?v=20261110-build708';
+import { smoothChunkInPool, smoothInFlightLimit, smoothInFlightFloats } from './smooth-workers.js?v=20261110-build708';
 export { snapToLattice };
 
 // slices of the neighbouring chunks smoothed with a chunk: the constrained smoothing reaches farther the stronger it is.
