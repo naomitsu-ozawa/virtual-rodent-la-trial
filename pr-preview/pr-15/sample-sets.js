@@ -1,7 +1,7 @@
 // Practice datasets hosted on this site (pure: no DOM, unit-tested).
 // sample1 keeps its original base path and Cache Storage key, so users who already
 // downloaded it do not download it again; later sets put their folder in the key.
-import { DEMO_FROM_SITE_ROOT } from './sample-config.js?v=20261110-build707';
+import { DEMO_FROM_SITE_ROOT } from './sample-config.js?v=20261110-build708';
 export const SAMPLE_CACHE='virtual-rodent-sample-v1';
 // The sets follow one rule: base demo/<id>/, cache key prefix /__vrl-sample/v1/<id>/ (sample1 keeps the original prefix). Which folders exist is the registry's business
 // (docs/sample-registry.js, which hands the ids over with setKnownSampleIds): an id that is not a registered dataset is refused, so the loading path can only reach those folders.
