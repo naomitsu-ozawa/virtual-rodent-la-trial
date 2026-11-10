@@ -77,7 +77,7 @@ describe('the generic VR かんたん menu: segments and the trigger switch', ()
 // the かんたん menu board: simpleMenuLayout is the pure layout vr-view.js draws
 const TEXT = lang => {
   const t = I18N[lang], ja = lang === 'ja';
-  return { show: t.evShow, hide: t.evHide, section: ja ? '断面' : 'Sections', sliceOpacity: ja ? 'スライス不透明度' : 'Slice opacity', trigger: t.evMode, trigPoint: t.evModePoint, trigLabel: t.evModeAnalysis, trigHintPoint: t.evModeHintPoint, trigHintLabel: t.evModeHintAnalysis, results: ja ? '解析結果（体積）' : 'Analysis results (volume)', total: ja ? '合計' : 'Total', noSeg: 'none', home: ja ? '正面に戻す' : 'Bring to front', undo: ja ? '元に戻す' : 'Undo', reset: t.evReset, resetAgain: t.evResetAgain, all: t.evAllSettings, exit: t.evExitVr };
+  return { show: t.evShow, hide: t.evHide, section: ja ? '断面' : 'Sections', sliceOpacity: ja ? 'スライス不透明度' : 'Slice opacity', trigger: t.evMode, trigPoint: t.evModePoint, trigLabel: t.evModeAnalysis, trigHintPoint: t.evModeHintPoint, trigHintLabel: t.evModeHintAnalysis, results: ja ? '解析結果（体積）' : 'Analysis results (volume)', total: ja ? '合計' : 'Total', page: ja ? 'ページ' : 'Page', noSeg: 'none', home: ja ? '正面に戻す' : 'Bring to front', undo: ja ? '元に戻す' : 'Undo', reset: t.evReset, resetAgain: t.evResetAgain, all: t.evAllSettings, exit: t.evExitVr };
 };
 const SEG_NAMES = { ja: { bone: '骨', soft: '軟部組織', fat: '脂肪', lung: '肺', contrast: '造影剤' }, en: { bone: 'Bone', soft: 'Soft tissue', fat: 'Fat', lung: 'Lung', contrast: 'Contrast' } };
 const COLORS = { bone: '#f3f0e8', soft: '#f7a99c', fat: '#e7c85d', lung: '#7fb3d9', contrast: '#9b7fd9' };
@@ -140,7 +140,7 @@ describe('the generic かんたん menu board per bundled dataset', () => {
   });
   it('no advanced settings and no level text on the board', () => {
     for (const s of [...SAMPLES, null]) for (const x of layoutFor(s)) {
-      expect(x.id).toMatch(/^(noseg|seg:\w+(:name|:show|:hide|)|section(:name|:show|:hide)|sliceOpacity(:name)?|trigger:(name|point|label|hint)|results|result:\d+(:name|:vol)?|total|home|undo|reset|all|exit)$/);
+      expect(x.id).toMatch(/^(noseg|seg:\w+(:name|:show|:hide|)|section(:name|:show|:hide)|sliceOpacity(:name)?|trigger:(name|point|label|hint)|results|results:(prev|next|page)|result:\d+(:name|:vol|:row)?|scale(:name|:text|:minus|:plus)?|total|home|undo|reset|all|exit)$/);
       expect(x.text || x.label || '').not.toMatch(/Lv\s?\d/);
     }
   });
@@ -186,7 +186,7 @@ describe('the かんたん menu: slice-opacity slider (generic: every dataset, n
   it('vr-view.js draws it with the full menu\'s slider widget and the full menu\'s setting (saved on release like any slider), and the hand help names the sliders', () => {
     const src = readFileSync(new URL('../../docs/vr-view.js', import.meta.url), 'utf8');
     expect(src).toContain("else if(it.type==='slider')w.push({...it,set:v=>{ui.sliceClear=false;settings.sliceOpacity=sliceOpacityValue(v);emit('slice-opacity')}});"); // + the tutorial signal
-    expect(src).toContain('sliceOpacity:settings.sliceOpacity,trigger:');
+    expect(src).toContain('sliceOpacity:settings.sliceOpacity,scale:scaleView(),trigger:'); // + the 拡大率 row
     expect(src).toContain('sliceOpacity:L.sl,');
     expect(src).toContain('ui.sliceClear=false;settings.sliceOpacity=Math.round(v*20)/20'); // the スライス tab's slider: same steps, and it also cancels the transparent toggle
     const hand = readFileSync(new URL('../../docs/vr-hand.js', import.meta.url), 'utf8');
@@ -287,7 +287,7 @@ describe('the かんたん menu board layout fits the canvas', () => {
     for (const x of w.filter(x => /^(result|total)/.test(x.id))) expect(x.y + (x.h || 0), `${name} ${x.id}`).toBeLessThan(bottomY);
     // the slider: knob (26 px) and value text (30 px, 4 chars) stay inside the board and clear of every button
     for (const sl of w.filter(x => x.type === 'slider')) {
-      const box = { x: sl.x - 26, y: sl.y, w: sl.w + 26 + 110, h: sl.h }; // knob radius left of the track; value text from x+w+30, up to ~80 px
+      const box = { x: sl.x - 26, y: sl.y, w: sl.w + 26 + (sl.text === '' ? 26 : 110), h: sl.h }; // knob radius left of the track; value text from x+w+30, up to ~80 px
       expect(box.x, 'slider left').toBeGreaterThanOrEqual(0); expect(box.x + box.w, 'slider right').toBeLessThanOrEqual(M.W); expect(sl.y + sl.h, 'slider bottom').toBeLessThanOrEqual(M.H);
       for (const b of bs) expect(overlap(box, rect(b)), `${name} slider / ${b.id}`).toBe(false);
     }
@@ -309,14 +309,17 @@ describe('the かんたん menu board layout fits the canvas', () => {
       expect(n, lang).toBeGreaterThan(0);
     }
   });
-  it('with more results than fit, the list is cut and the count of the rest is shown', () => {
+  it('with more results than fit, the list is paged: every result is on some page', () => {
     const results = Array.from({ length: 12 }, (_, i) => ({ hex: '#fff', name: `${i + 1}. Fat`, text: '1.00 mm³' }));
     const w = simpleMenuLayout({ segments: ['bone', 'soft', 'fat'].map(k => ({ key: k, name: k, color: '#fff', on: true })), sectionOn: true, trigger: { show: true, label: false }, results, total: '12.00 mm³', text: TEXT('en') });
-    const n = buttons(w).filter(b => b.id.startsWith('result:')).length;
+    const n = buttons(w).filter(b => /^result:\d+$/.test(b.id)).length;
     expect(n).toBeGreaterThan(0);
     expect(n).toBeLessThan(12);
-    expect(w.find(x => x.id === 'total').text).toBe(`Total 12.00 mm³ · 12  (… +${12 - n})`);
+    expect(w.find(x => x.id === 'total').text).toBe('Total 12.00 mm³ · 12');
+    expect(w.find(x => x.id === 'results:page').text).toBe(`Page 1/${Math.ceil(12 / n)}`);
     check(w, 'cut');
+    const w2 = simpleMenuLayout({ segments: ['bone', 'soft', 'fat'].map(k => ({ key: k, name: k, color: '#fff', on: true })), sectionOn: true, trigger: { show: true, label: false }, results, total: '12.00 mm³', text: TEXT('en'), page: 1 });
+    expect(w2.filter(x => /^result:\d+$/.test(x.id)).map(x => x.id)[0]).toBe('result:' + n); // page 2 starts right after page 1
   });
   it('more segments than MAX_SEG_ROWS: the rows are capped, the rest is counted, nothing overlaps the bottom row', () => {
     const segs = Array.from({ length: MAX_SEG_ROWS + 3 }, (_, i) => ({ key: 's' + i, name: 'S' + i, color: '#fff', on: true }));

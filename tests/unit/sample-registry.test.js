@@ -2,14 +2,16 @@ import { describe, it, expect, vi } from 'vitest';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
-import { parseSample, discoverSamples, buildRegistry, registerSampleTexts, sampleCredit, sampleKey, sampleNumber, practiceSeriesName, registry, HINT_NAMES, SAMPLE_JSON_MAX } from '../../docs/sample-registry.js';
+import { parseSample, parseSampleList, discoverSamples, buildRegistry, registerSampleTexts, sampleCredit, sampleKey, practiceSeriesName, registry, HINT_NAMES } from '../../docs/sample-registry.js';
+import { isSampleId } from '../../docs/sample-sets.js';
 import { EVENT_LEVELS, EVENT_OTHER_SAMPLES, EVENT_DATASETS, EVENT_INITIAL_SEGMENTS } from '../../docs/event-mode.js';
 import { readSampleEntries } from '../../tools/lib/sample-folders.mjs';
+import { listedIds, publicIds, ORDER, LEVEL_IDS, OTHER_IDS } from '../helpers/demo-lists.js';
 
 const DEMO = fileURLToPath(new URL('../../docs/demo/', import.meta.url));
 // folders whose thumb.webp is still to be made on the PC (tools/make-event-thumbs.mjs --only sampleN); remove the name when the picture is added
 const THUMB_PENDING = [];
-const folders = readdirSync(DEMO).filter(n => /^sample\d+$/.test(n)).sort((a, b) => Number(a.slice(6)) - Number(b.slice(6)));
+const folders = listedIds; // the datasets of docs/demo/samples.json, in the order of the list (nothing is counted or named here)
 const raws = Object.fromEntries(folders.map(f => [f, JSON.parse(readFileSync(join(DEMO, f, 'sample.json'), 'utf8'))]));
 const bi = (ja, en) => ({ ja, en });
 const lvl = (over = {}) => ({ name: bi('名', 'n'), level: 1, description: bi('説明', 'd'), mission: bi('み', 'm'), hints: ['section'], initialSegments: ['bone'], ...over });
@@ -19,17 +21,20 @@ const credit = () => ({
   changes: bi('かえた', 'changed'), terms: bi('ルール', 'rules'),
 });
 
-describe('every docs/demo/sampleN/sample.json', () => {
-  it('there are sample folders, numbered 1..N without a gap (the app stops at the first missing one)', () => {
-    expect(folders.length).toBeGreaterThan(0);
-    expect(folders.map(f => Number(f.slice(6)))).toEqual(folders.map((_, i) => i + 1));
-    expect(folders.length).toBeLessThanOrEqual(SAMPLE_JSON_MAX);
+describe('docs/demo/samples.json and every listed docs/demo/<folder>/sample.json', () => {
+  it('every folder of docs/demo is in samples.json, every listed name is a folder, and no name is listed twice (a folder that is not listed is never read)', () => {
+    const dirs = readdirSync(DEMO, { withFileTypes: true }).filter(d => d.isDirectory()).map(d => d.name).sort();
+    expect(dirs).toEqual([...listedIds].sort());
+    expect(new Set(listedIds).size).toBe(listedIds.length);
+    expect(listedIds.length).toBeGreaterThan(0);
+    for (const id of listedIds) expect(isSampleId(id), id).toBe(true);
+    expect(readdirSync(DEMO).filter(n => !dirs.includes(n))).toEqual(['samples.json']); // nothing else lies in docs/demo
   });
-  it.each(folders)('%s: valid (required fields), has thumb.webp, index.json and project.vrlab', f => {
+  it.each(folders)('%s: valid (required fields), has index.json (and thumb.webp when it is a public dataset)', f => {
     const { entry, errors } = parseSample(raws[f], f);
     expect(errors, f).toEqual([]);
     expect(entry.id).toBe(f);
-    if (!THUMB_PENDING.includes(f)) expect(existsSync(join(DEMO, f, 'thumb.webp')), 'thumb.webp').toBe(true);
+    if (publicIds.includes(f) && !THUMB_PENDING.includes(f)) expect(existsSync(join(DEMO, f, 'thumb.webp')), 'thumb.webp').toBe(true); // the cards of a dataset that is not public may still lack their picture (an empty frame is shown)
     expect(existsSync(join(DEMO, f, 'index.json')), 'index.json').toBe(true);
   });
   it.each(folders)('%s: levels carry mission / hints / initialSegments; credit and license are complete when present', f => {
@@ -55,25 +60,28 @@ describe('every docs/demo/sampleN/sample.json', () => {
     expect(new Set(levels).size).toBe(levels.length);
   });
   it('the folders read from the file system give exactly the registry the tests run with', async () => {
-    expect((await readSampleEntries(DEMO)).map(e => e.id)).toEqual(folders);
+    expect((await readSampleEntries(DEMO)).map(e => e.id)).toEqual(folders); // the order of the list
     expect(registry.samples.map(s => s.id).sort()).toEqual([...folders].sort());
+    expect(registry.samples.map(s => s.id)).toEqual(ORDER);
   });
 });
 
-describe('the bundled data: today\'s order and content did not change', () => {
-  it('Lv0 sample4, Lv1 sample3, Lv2 sample2, Lv3 sample1, then 「その他」 sample5, sample6', () => {
-    expect(EVENT_LEVELS.map(l => [l.id, l.sample])).toEqual([['lv0', 'sample4'], ['lv1', 'sample3'], ['lv2', 'sample2'], ['lv3', 'sample1']]);
-    expect(EVENT_OTHER_SAMPLES.map(o => o.sample)).toEqual(['sample5', 'sample6']);
-    expect(EVENT_DATASETS.map(d => d.sample)).toEqual(['sample4', 'sample3', 'sample2', 'sample1', 'sample5', 'sample6']);
+describe('the bundled data: the order and the content of the earlier datasets did not change', () => {
+  it('the levels Lv0..Lv3 first, then 「その他」 in the order of samples.json (read from the files, nothing counted)', () => {
+    expect(EVENT_LEVELS.map(l => l.sample)).toEqual(LEVEL_IDS);
+    expect(EVENT_LEVELS.map(l => l.lv)).toEqual([...EVENT_LEVELS.map(l => l.lv)].sort((a, b) => a - b));
+    expect(EVENT_OTHER_SAMPLES.map(o => o.sample)).toEqual(OTHER_IDS);
+    expect(EVENT_DATASETS.map(d => d.sample)).toEqual(ORDER);
+    expect(['sample4', 'sample3', 'sample2', 'sample1'].map(id => registry.byId[id].level)).toEqual([0, 1, 2, 3]); // the levels the earlier datasets always had
   });
   it('hints and initial segments are the old tables', () => {
     expect(EVENT_LEVELS.map(l => l.hints)).toEqual([['section', 'move'], ['section', 'move', 'toggle'], ['section', 'move', 'toggle'], ['section', 'move', 'mark', 'distance']]);
     expect(EVENT_INITIAL_SEGMENTS).toEqual({ sample4: ['bone'], sample3: ['bone'], sample2: ['bone', 'soft'], sample1: ['bone', 'soft'] });
   });
-  it('the chooser texts and the card names are the old strings', () => {
+  it('the chooser texts and the card names (the size part comes from sample.json size: 269 MB -> 約270MB, was a hand-typed 約260MB)', () => {
     const d = k => registry.byId[k].description;
-    expect([d('sample2').ja, d('sample1').ja, d('sample3').ja, d('sample4').ja, d('sample5').ja]).toEqual(['マウス腹部（約260MB）', 'ラット腹部（約260MB）', 'マウス頭部（約270MB）', '骨梁（約260MB）', 'マーモセット脳 MRI（50 µm）']);
-    expect([d('sample2').en, d('sample1').en, d('sample3').en, d('sample4').en, d('sample5').en]).toEqual(['Mouse abdomen (about 260 MB)', 'Rat abdomen (about 260 MB)', 'Mouse head (about 270 MB)', 'Trabecular bone (about 260 MB)', 'Marmoset brain MRI (50 µm)']);
+    expect([d('sample2').ja, d('sample1').ja, d('sample3').ja, d('sample4').ja, d('sample5').ja]).toEqual(['マウス腹部（約270MB）', 'ラット腹部（約270MB）', 'マウス頭部（約270MB）', '骨梁（約270MB）', 'マーモセット脳 MRI（50 µm）']);
+    expect([d('sample2').en, d('sample1').en, d('sample3').en, d('sample4').en, d('sample5').en]).toEqual(['Mouse abdomen (about 270 MB)', 'Rat abdomen (about 270 MB)', 'Mouse head (about 270 MB)', 'Trabecular bone (about 270 MB)', 'Marmoset brain MRI (50 µm)']);
     expect(registry.levels.map(l => l.name.ja)).toEqual(['骨梁', 'マウス頭部', 'マウス腹部', 'ラット腹部']);
     expect(registry.levels.map(l => l.name.en)).toEqual(['Trabecular bone', 'Mouse head', 'Mouse abdomen', 'Rat abdomen']);
   });
@@ -110,13 +118,12 @@ describe('the series name of a practice dataset (the DICOM has no series descrip
     expect(practiceSeriesName('sample4', 'ja')).toBe('骨梁');
     expect(practiceSeriesName('sample4', 'en')).toBe('Trabecular bone');
     expect(practiceSeriesName('sample6', 'ja')).toBe('ジカウイルス EMD-8116');
-    for (const id of [null, undefined, '', 'mine', 'sample99', 'constructor', 5]) expect(practiceSeriesName(id, 'ja')).toBe('');
+    for (const id of [null, undefined, '', 'mine', 'sample99', 'constructor', 5]) expect(practiceSeriesName(id, 'ja')).toBe(''); // valid names that are not listed give nothing too
   });
   it('wiring: only a series named "Unnamed series" of a practice dataset is renamed; the file name keeps letters only for such a name', () => {
-    const app = readFileSync(new URL('../../docs/app.js', import.meta.url), 'utf8'), dl = readFileSync(new URL('../../docs/data-load.js', import.meta.url), 'utf8');
+    const app = readFileSync(new URL('../../docs/app.js', import.meta.url), 'utf8');
     expect(app).toContain('practiceSeriesName(openSample.id,currentLanguage)');
     expect(app).toContain('if(s.description===UNNAMED_SERIES){s.description=pn;s.nameFromRegistry=true}');
-    expect(dl).toContain('activeSeries.nameFromRegistry?/[^\\p{L}\\p{N}_-]+/gu:/[^\\w\\-]+/g');
     expect(readFileSync(new URL('../../docs/dicom.js', import.meta.url), 'utf8')).toContain("export const UNNAMED_SERIES='Unnamed series'");
   });
 });
@@ -145,45 +152,77 @@ describe('parseSample', () => {
   });
   it('rejects non-objects and bad folder ids', () => {
     for (const raw of [null, 5, 'x', [], undefined]) expect(parseSample(raw, 'sample7').entry).toBeNull();
-    for (const id of ['sample0', 'sample', 'Sample1', '../sample1', 'sample01']) expect(parseSample(lvl(), id).entry).toBeNull();
-    expect(sampleNumber('sample12')).toBe(12); expect(sampleNumber('nope')).toBeNull();
+    for (const id of ['Sample1', '../sample1', 'sample1/', '/sample1', '-sample', '', 'a b', 'A', null, 5]) expect(parseSample(lvl(), id).entry, String(id)).toBeNull();
+    for (const id of ['sample0', 'sample', 'sample01', 'rat-kidney-4um', 'a']) expect(parseSample(lvl(), id).errors, id).toEqual([]); // the folder name rule is isSampleId (sample-sets.js)
   });
 });
 
-describe('discoverSamples: sample1, sample2, ... stops at the first folder without a sample.json', () => {
-  const store = { sample1: lvl({ level: 2 }), sample2: other(), sample3: lvl({ level: 0 }), sample5: other() }; // sample4 is missing: sample5 is never read
-  it('reads in order and stops at the first missing one', async () => {
-    const read = vi.fn(async id => store[id] ?? null);
-    const out = await discoverSamples(read);
-    expect(out.map(e => e.id)).toEqual(['sample1', 'sample2', 'sample3']);
-    expect(read.mock.calls.map(c => c[0])).toEqual(['sample1', 'sample2', 'sample3', 'sample4']);
-  });
-  it('is capped (32 by default)', async () => {
-    const read = vi.fn(async () => other());
-    expect((await discoverSamples(read)).length).toBe(32);
-    expect(read).toHaveBeenCalledTimes(32);
-    expect((await discoverSamples(async () => other(), { cap: 3 })).length).toBe(3);
-  });
-  it('an invalid file is skipped with a warning (the discovery goes on); a failing read rejects (the whole list stays empty)', async () => {
+describe('parseSampleList and discoverSamples: the list is read ONCE, then exactly the listed folders (no search for folders)', () => {
+  const store = { sample1: lvl({ level: 2 }), sample2: other(), 'rat-kidney-4um': lvl({ level: 0 }), sample5: other(), 'unlisted-folder': other() }; // sample3 / sample4 do not exist; unlisted-folder exists but is not listed
+  it('the list gives the ids in order; an invalid name or a second copy is skipped with a warning; anything but an array is an error', () => {
     const warn = vi.fn();
-    const out = await discoverSamples(async id => ({ sample1: lvl(), sample2: { nope: 1 }, sample3: other() })[id] ?? null, { warn });
-    expect(out.map(e => e.id)).toEqual(['sample1', 'sample3']);
-    expect(warn).toHaveBeenCalledTimes(1); expect(warn.mock.calls[0][0]).toContain('sample2');
-    await expect(discoverSamples(async () => { throw new Error('offline'); })).rejects.toThrow('offline');
+    expect(parseSampleList(['sample1', 'rat-kidney-4um', 'sample2'], { warn })).toEqual(['sample1', 'rat-kidney-4um', 'sample2']);
+    expect(warn).not.toHaveBeenCalled();
+    expect(parseSampleList(['sample1', '../x', 'Upper', 5, 'sample1', 'b'], { warn })).toEqual(['sample1', 'b']);
+    expect(warn).toHaveBeenCalledTimes(4);
+    for (const bad of [null, {}, 'sample1', 5, undefined, { samples: ['sample1'] }]) expect(() => parseSampleList(bad)).toThrow(/array/);
+    expect(parseSampleList([])).toEqual([]);
+  });
+  it('reads one sample.json per listed id and nothing else: a folder that exists but is not listed is never read, a gap in the numbers does not stop anything', async () => {
+    const read = vi.fn(async id => store[id] ?? null), warn = vi.fn();
+    const ids = ['sample1', 'sample2', 'sample5', 'rat-kidney-4um'];
+    const out = await discoverSamples(ids, read, { warn });
+    expect(out.map(e => e.id)).toEqual(ids); // the order of the list
+    expect(read).toHaveBeenCalledTimes(ids.length);
+    expect(read.mock.calls.map(c => c[0]).sort()).toEqual([...ids].sort());
+    expect(read.mock.calls.map(c => c[0])).not.toContain('unlisted-folder');
+    expect(warn).not.toHaveBeenCalled();
+  });
+  it('the total number of reads is the list plus one read per listed id (the same count as before: one request per dataset, plus one)', async () => {
+    let reads = 0;
+    const readList = async () => { reads++; return ['sample1', 'sample2', 'sample5']; }, readJson = async id => { reads++; return store[id] ?? null; };
+    const out = await discoverSamples(parseSampleList(await readList()), readJson);
+    expect(out).toHaveLength(3); expect(reads).toBe(1 + 3);
+  });
+  it('reads the listed folders at the same time (all started before the first one answers)', async () => {
+    const started = []; let release;
+    const gate = new Promise(r => { release = r; });
+    const p = discoverSamples(['sample1', 'sample2', 'sample5'], async id => { started.push(id); await gate; return store[id]; });
+    await Promise.resolve(); await Promise.resolve();
+    expect(started).toEqual(['sample1', 'sample2', 'sample5']);
+    release(); expect((await p).length).toBe(3);
+  });
+  it('no cap on the list; an empty list gives no datasets and no read', async () => {
+    const many = Array.from({ length: 50 }, (_, i) => 'sample' + (i + 1)), read = vi.fn(async () => other());
+    expect((await discoverSamples(many, read)).length).toBe(50);
+    const none = vi.fn();
+    expect(await discoverSamples([], none)).toEqual([]); expect(none).not.toHaveBeenCalled();
+  });
+  it('a listed folder without a sample.json, or with an invalid one, is skipped with a warning (the others still load); a failing read rejects (the whole list stays empty)', async () => {
+    const warn = vi.fn();
+    const out = await discoverSamples(['sample1', 'sample2', 'sample3', 'sample4'], async id => ({ sample1: lvl(), sample2: { nope: 1 }, sample4: other() })[id] ?? null, { warn });
+    expect(out.map(e => e.id)).toEqual(['sample1', 'sample4']);
+    expect(warn).toHaveBeenCalledTimes(2); expect(warn.mock.calls.map(c => c[0]).join('\n')).toContain('sample2'); expect(warn.mock.calls.map(c => c[0]).join('\n')).toContain('sample3');
+    await expect(discoverSamples(['sample1'], async () => { throw new Error('offline'); })).rejects.toThrow('offline');
   });
 });
 
 describe('buildRegistry', () => {
   const E = (id, raw) => parseSample(raw, id).entry;
-  it('orders Lv0..Lv3 by the level field, then the others by folder number', () => {
+  it('orders Lv0..Lv3 by the level field, then the others in the order of the list (not by number)', () => {
+    const named = buildRegistry([E('zeta-data', other()), E('alpha-data', other()), E('sample3', lvl({ level: 2 })), E('mid-data', lvl({ level: 0 }))]);
+    expect(named.samples.map(s => s.id)).toEqual(['mid-data', 'sample3', 'zeta-data', 'alpha-data']);
+    expect(named.defaultId).toBe('zeta-data'); // none says default: the first of the list
+    expect(buildRegistry([E('b-data', other()), E('a-data', other({ default: true }))]).defaultId).toBe('a-data');
     const r = buildRegistry([E('sample1', lvl({ level: 3 })), E('sample2', other()), E('sample3', lvl({ level: 0 })), E('sample4', lvl({ level: 2 })), E('sample5', lvl({ level: 1 })), E('sample6', other())]);
     expect(r.samples.map(s => s.id)).toEqual(['sample3', 'sample5', 'sample4', 'sample1', 'sample2', 'sample6']);
     expect(r.levels.map(s => s.level)).toEqual([0, 1, 2, 3]);
     expect(r.others.map(s => s.id)).toEqual(['sample2', 'sample6']);
     expect(r.byId.sample5.id).toBe('sample5');
+    expect(r.samples.map(s => s.order)).toEqual([2, 4, 3, 0, 1, 5]); // the position in the list
     expect(Object.isFrozen(r.samples)).toBe(true);
   });
-  it('a duplicate level becomes 「その他」 with a console warning; the lower folder number keeps the level', () => {
+  it('a duplicate level becomes 「その他」 with a console warning; the one that comes first in the list keeps the level', () => {
     const warn = vi.fn();
     const r = buildRegistry([E('sample1', lvl({ level: 1 })), E('sample2', lvl({ level: 1 })), E('sample3', other())], { warn });
     expect(r.levels.map(s => s.id)).toEqual(['sample1']);
@@ -220,6 +259,9 @@ describe('static wiring', () => {
     expect(src).toMatch(/^if \(typeof document !== 'undefined' && typeof fetch === 'function' && globalThis\.location\?\.href\) await loadRegistry\(\);$/m);
     expect(src).not.toMatch(/\bimport\s*\(/);
     expect(src).toContain("fetch(sampleJsonUrl(id), { cache: 'no-cache', signal: ctl.signal })");
+    expect(src).toContain("fetch(sampleListUrl(), { cache: 'no-cache', signal: ctl.signal })");
+    expect(src).toContain('discoverSamples(parseSampleList(await fetchSampleList()), fetchSampleJson)'); // the list once, then the listed folders: no search for folders, no fallback
+    expect(src.match(/\bfetch\(/g)).toHaveLength(2); // the list and the listed sample.json files: no other read
   });
   it('no table of datasets is left in the code (the ids sample1..sample5 appear only as examples / comments)', () => {
     for (const f of ['event-mode.js', 'tutorial-data.js']) expect(SRC(f).replace(/\/\/.*$/gm, '')).not.toMatch(/['"]sample[1-9]['"]/);

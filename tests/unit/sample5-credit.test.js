@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
 import { sampleSet, sampleIndexUrl, sampleSliceUrl, sampleCacheKey } from '../../docs/sample-sets.js';
-import { registry, sampleCredit } from '../../docs/sample-registry.js';
+import { registry, sampleCredit, sampleKey } from '../../docs/sample-registry.js';
 import { EVENT_LEVELS, EVENT_OTHER_SAMPLES, levelForSample, levelSwitchItems } from '../../docs/event-mode.js';
 import { I18N } from '../../docs/i18n.js';
+import { ORDER, LEVEL_IDS, OTHER_IDS, CREDIT_IDS } from '../helpers/demo-lists.js';
 
 const DIR = new URL('../../docs/demo/sample5/', import.meta.url);
 const SRC = u => readFileSync(new URL(u, import.meta.url), 'utf8');
@@ -22,14 +23,15 @@ describe('sample5 (marmoset brain MRI, 50 um): registration', () => {
     expect(files.length).toBe(480);
     expect(files).toEqual(dcm);
   });
-  it('is not a level: Lv0-Lv3 are unchanged; the VR data-switch items include it as a fifth one with its plain name, the level list passed explicitly stays at four', () => {
+  it('is not a level: the levels are the datasets with a level; the VR data-switch items include it after them with its plain name, the level list passed explicitly has the levels only', () => {
     expect(levelForSample('sample5')).toBeNull();
-    expect(EVENT_LEVELS.map(l => l.sample)).toEqual(['sample4', 'sample3', 'sample2', 'sample1']);
-    expect(levelSwitchItems(k => k, 'sample5', null, EVENT_LEVELS).map(i => i.sample)).toEqual(['sample4', 'sample3', 'sample2', 'sample1']);
-    expect(levelSwitchItems(k => k, 'sample5').map(i => i.sample)).toEqual(['sample4', 'sample3', 'sample2', 'sample1', 'sample5', 'sample6']);
-    expect(levelSwitchItems(k => k, 'sample5').map(i => i.label)).toEqual(['Lv0 smp.sample4.name', 'Lv1 smp.sample3.name', 'Lv2 smp.sample2.name', 'Lv3 smp.sample1.name', 'smp.sample5.name', 'smp.sample6.name']);
-    expect(levelSwitchItems(k => k, 'sample5').map(i => i.on)).toEqual([false, false, false, false, true, false]);
-    expect(EVENT_OTHER_SAMPLES.map(o => o.sample)).toEqual(['sample5', 'sample6']);
+    expect(OTHER_IDS).toContain('sample5');
+    expect(EVENT_LEVELS.map(l => l.sample)).toEqual(LEVEL_IDS);
+    expect(levelSwitchItems(k => k, 'sample5', null, EVENT_LEVELS).map(i => i.sample)).toEqual(LEVEL_IDS);
+    expect(levelSwitchItems(k => k, 'sample5').map(i => i.sample)).toEqual(ORDER);
+    expect(levelSwitchItems(k => k, 'sample5').map(i => i.label).slice(LEVEL_IDS.length)).toEqual(OTHER_IDS.map(id => 'smp.' + id + '.name'));
+    expect(levelSwitchItems(k => k, 'sample5').map(i => i.on)).toEqual(ORDER.map(id => id === 'sample5'));
+    expect(EVENT_OTHER_SAMPLES.map(o => o.sample)).toEqual(OTHER_IDS);
     expect(Object.isFrozen(EVENT_OTHER_SAMPLES)).toBe(true);
   });
   it('is in the chooser under the 「その他」 group, after the levels\' datasets (generated from the registry: the datasets with a level in folder order, then the group label, then the others)', () => {
@@ -38,7 +40,8 @@ describe('sample5 (marmoset brain MRI, 50 um): registration', () => {
     expect(iL).toBeGreaterThan(0); expect(g).toBeGreaterThan(iL); expect(iO).toBeGreaterThan(g);
     expect(shell).not.toContain('data-sample-set="sample'); // no hand-written chooser button any more
     expect(shell).toContain('data-sample-set="${escHtml(s.id)}"'); // the attribute stays
-    expect(registry.others.map(o => o.id)).toEqual(['sample5', 'sample6']); // sample5 first, then sample6
+    expect(registry.others.map(o => o.id)).toEqual(OTHER_IDS); // in the order of docs/demo/samples.json
+    expect(OTHER_IDS.indexOf('sample5')).toBeGreaterThanOrEqual(0);
     expect(I18N.ja['smp.sample5.desc']).toBe('マーモセット脳 MRI（50 µm）');
     expect(I18N.en['smp.sample5.desc']).toBe('Marmoset brain MRI (50 µm)');
     expect(I18N.ja.sampleGroupOther).toBe('その他');
@@ -47,20 +50,22 @@ describe('sample5 (marmoset brain MRI, 50 um): registration', () => {
 });
 
 describe('sample5: loading text', () => {
-  it('shows its own size; the other samples keep the generic text', () => {
-    expect(I18N.ja.sampleLoading5).toBe('練習データ（560×768×480、約410MB）を取得中…');
-    expect(I18N.en.sampleLoading5).toContain('560×768×480');
-    expect(I18N.en.sampleLoading5).toContain('410 MB');
-    expect(I18N.ja.sampleLoading).toContain('512×512×512');
-    expect(SRC('../../docs/app.js')).toContain("tr(setId==='sample5'?'sampleLoading5':'sampleLoading')");
+  it('shows its own size (from sample.json size); every dataset shows its real size, no dataset is special-cased', () => {
+    expect(I18N.ja[sampleKey('sample5', 'loading')]).toBe('練習データ（560×768×480、約410MB）を取得中…');
+    expect(I18N.en[sampleKey('sample5', 'loading')]).toBe('Loading practice data (560×768×480, about 410 MB)…');
+    expect(I18N.ja[sampleKey('sample1', 'loading')]).toBe('練習データ（512×512×512、約270MB）を取得中…');
+    expect(SRC('../../docs/app.js')).toContain('sampleLoadingTextFor(setId,tr)');
+    expect(SRC('../../docs/app.js')).not.toContain("setId==='sample5'");
+    expect(I18N.ja.sampleLoading5).toBeUndefined();
   });
 });
 
 describe('sample5: attribution (CC BY-NC-SA 4.0)', () => {
   const c = sampleCredit('sample5');
-  it('only sample5 and sample6 have a credit; unknown ids give none', () => {
-    expect(registry.samples.filter(x => x.credit).map(x => x.id)).toEqual(['sample5', 'sample6']);
-    for (const id of ['sample1', 'sample4', 'constructor', '__proto__', null, undefined, 5]) expect(sampleCredit(id)).toBeNull();
+  it('only the datasets whose sample.json has a credit have one (sample5 among them); unknown ids give none', () => {
+    expect(registry.samples.filter(x => x.credit).map(x => x.id)).toEqual(CREDIT_IDS);
+    expect(CREDIT_IDS).toContain('sample5');
+    for (const id of [...ORDER.filter(i => !CREDIT_IDS.includes(i)), 'constructor', '__proto__', null, undefined, 5]) expect(sampleCredit(id)).toBeNull();
   });
   it('links to the data and to the license', () => {
     expect(c.url).toBe('https://www.scidb.cn/en/file?fid=6444dd2f292d4e32b96ea092&mode=front');

@@ -170,14 +170,14 @@ describe('wiring (static): fixes', () => {
     const vr = read('vr-view.js');
     expect(vr).toContain("if(ld0?.pin&&pr.res.kind==='mlabel'){if(rel==='tap'&&!ld0.moved&&!ld0.done)"); expect(vr).toContain('setRegionLabel(reg,null);pulse(c,0.2)');
     expect(vr).toContain('if(analysisOn()&&pins.size)mlb=nearerLabel('); expect(vr).toContain('tagBehindTissue(occlusionGpu(),mlb.distance,vh.distance,occEps))mlb=null');
-    expect(vr).toContain("ctx.fillText(r.rid+'. '+"); expect(vr).toContain("label(X+76,y+34,String(r.rid)+'. '+");
+    expect(vr).toContain("ctx.fillText(vrChipTitle(r),118,50)"); expect(vr).toContain("label(X+76,y+34,vrChipTitle(r),"); // the same \"N. name\" text through vrChipTitle
     expect(vr).toContain('lb.m.position.y+=labelScale()*0.045'); // the unlit size: the card does not move when lit
     expect(vr).toContain('const ridIndex=()=>'); expect(vr).toContain('spacingNoteF'); expect(vr).not.toContain('[...pins]'); expect(vr).not.toContain('hit:tmpPh.clone()');
     expect(vr).toContain('ld.done=true');
   });
   it('PC / project: the chip number is the region id; the surface anchor; merge and split keep the label; a second finger cannot rotate during a label drag', () => {
     const d3 = read('comment-3d.js'), ops = read('analysis-ops.js'), res = read('analysis-results.js');
-    expect(d3).toContain("e.t1.textContent=r.id+'. '+"); expect(d3).toContain('if(labelDragging){'); expect(d3).toContain('labelDragging=true;');
+    expect(d3).toContain('e.t1.textContent=regionChipTitle(r,tr);'); /* the number is r.id (region-name.js regionChipTitle) */ expect(d3).toContain('if(labelDragging){'); expect(d3).toContain('labelDragging=true;');
     expect(res).toContain('surfaceAnchor({contains:(i,j,k)=>analysisRunsContain(region.runsBySlice,i,j,k)');
     expect(ops).toContain('selected.find(r=>r.label)?.label'); expect(ops).toContain('split.label=r.label;delete r.label');
   });
@@ -187,16 +187,16 @@ describe('wiring (static): VR pins and the PC chips use the shared region.label'
   const read = f => readFileSync(new URL('../../docs/' + f, import.meta.url), 'utf8');
   it('VR: pins are rebuilt from region.label every frame, can be grabbed (pin ref), long press resets, lit pins draw on top; the project carries the label', () => {
     const vr = read('vr-view.js');
-    expect(vr).toContain('const syncPins=()=>'); expect(vr).toContain('syncPins();for(const lb of pins.values()){lb.lit=pinLit.has(lb.rid);placeLabel(lb);pinOcclusion(lb,lb.lit)}');
+    expect(vr).toContain('const syncPins=()=>'); expect(vr).toContain('for(const lb of pins.values()){lb.lit=pinLit.has(lb.rid);embedLabel(lb,occ,pinHeld.has(lb.rid));placeLabel(lb)}thinPins(occ);for(const lb of pins.values())pinOcclusion(lb,lb.lit)');
     expect(vr).toContain('mlb=nearerLabel(mlb,pickPin('); expect(vr).toContain('if(ld.pin){'); expect(vr).toContain('resetPin(c)');
-    expect(vr).toContain('occludedPass(occlusionGpu(),lit)');
+    expect(vr).toContain('pinMaterialState(occlusionGpu(),lit,lb.trans)');
     expect(vr).toContain('rid:r.id');
     const ops = read('analysis-ops.js'); expect(ops).toContain('label:labelForProject(r)'); expect(ops).toContain('normalizeAnalysisLabel(e.label)');
     expect(read('data-load.js')).toContain('label:normalizeAnalysisLabel(e.label)||undefined');
   });
-  it('PC: the chips are drawn in the comment layer, moved by the capture-phase drag, the leader only when moved, hidden-behind judged for moved labels only', () => {
+  it('PC: the chips are drawn in the comment layer, moved by the capture-phase drag, the leader only when moved (or pushed out of the tissue), hidden-behind judged for every shown label (comment-3d-label-occlusion.js)', () => {
     const d3 = read('comment-3d.js');
-    expect(d3).toContain('function drawAnalysisLabels('); expect(d3).toContain('analysisProbes(als,dims)'); expect(d3).toContain('if(moved&&aOk)');
+    expect(d3).toContain('function drawAnalysisLabels('); expect(d3).toContain('analysisProbes(als)'); expect(d3).toContain('if(moved&&aOk)');
     expect(d3).toContain('setRegionLabelOffset(regionOf(h.id),off)'); expect(d3).toContain('onAnalysisLabelsChange(again)');
     expect(d3).toContain("const analysisGate=()=>analysisEditTool==='select';"); // movable in the analysis mode too, not while an edit tool owns the pointer
   });

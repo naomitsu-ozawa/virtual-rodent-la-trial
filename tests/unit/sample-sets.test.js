@@ -1,11 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { registry } from '../../docs/sample-registry.js';
-import { resolveSampleBase, sampleSet, sampleJsonUrl, DEFAULT_SAMPLE, sampleCacheKey, sampleSliceUrl, sampleIndexUrl, sampleProjectUrl, sliceRoot } from '../../docs/sample-sets.js';
+import { registry, defaultSampleId } from '../../docs/sample-registry.js';
+import { resolveSampleBase, sampleSet, sampleJsonUrl, sampleListUrl, isSampleId, sampleCacheKey, sampleSliceUrl, sampleIndexUrl, sampleProjectUrl, sliceRoot } from '../../docs/sample-sets.js';
+import { listedIds } from '../helpers/demo-lists.js';
 import { SLICE_ROOT } from '../../docs/sample-config.js';
 
 describe('practice dataset paths and cache keys', () => {
   it('keeps sample1 URLs and its existing cache key unchanged', () => {
-    expect(DEFAULT_SAMPLE).toBe('sample1');
+    expect(defaultSampleId()).toBe('sample1'); // the default now comes from the registry (sample1/sample.json "default": true), unchanged for the user
     expect(sampleIndexUrl('sample1')).toBe('demo/sample1/index.json');
     expect(sampleProjectUrl('sample1')).toBe('demo/sample1/project.vrlab');
     expect(sampleSliceUrl('sample1', 'a b.dcm')).toBe('demo/sample1/a%20b.dcm');
@@ -21,8 +22,8 @@ describe('practice dataset paths and cache keys', () => {
   });
   it('appends sample3 (mouse head) with its own folder key and keeps the default', () => {
     const n = '01784_crop512_0001.dcm';
-    expect(registry.samples.map(s => s.id).sort()).toEqual(['sample1', 'sample2', 'sample3', 'sample4', 'sample5', 'sample6']); // the folders of docs/demo (registry), each set by the one rule
-    expect(DEFAULT_SAMPLE).toBe('sample1');
+    expect(registry.samples.map(s => s.id).sort()).toEqual([...listedIds].sort()); // exactly the datasets of docs/demo/samples.json (the registry), each set by the one rule
+    expect(defaultSampleId()).toBe('sample1');
     expect(sampleIndexUrl('sample3')).toBe('demo/sample3/index.json');
     expect(sampleSliceUrl('sample3', n)).toBe('demo/sample3/' + n);
     expect(sampleCacheKey('https://x.io', 'sample3', n)).toBe('https://x.io/__vrl-sample/v1/sample3/' + n);
@@ -39,10 +40,33 @@ describe('practice dataset paths and cache keys', () => {
     expect(sampleSet('sample1')).toEqual({ base: 'demo/sample1/', keyPrefix: '/__vrl-sample/v1/' }); // existing caches stay valid
     expect(sampleSet('sample2')).toEqual({ base: 'demo/sample2/', keyPrefix: '/__vrl-sample/v1/sample2/' });
     expect(() => sampleCacheKey('o', 'nope', 'a')).toThrow();
-    expect(() => sampleCacheKey('o', 'sample7', 'a')).toThrow(); // right name, but no such registered dataset
+    expect(() => sampleCacheKey('o', 'sample99', 'a')).toThrow(); // a valid name, but not a registered dataset (not in docs/demo/samples.json)
     expect(sampleJsonUrl('sample4')).toBe('demo/sample4/sample.json');
     expect(sampleJsonUrl('sample4', '/r/pr-preview/pr-1/')).toBe('demo/sample4/sample.json'); // flag is false in the repo
     expect(() => sampleJsonUrl('../x')).toThrow(/Unknown sample set/);
+  });
+});
+
+describe('the folder name rule (isSampleId): the ONE function every module asks', () => {
+  it('accepts `sample` + a number, and a name of lower-case letters, digits and hyphens that starts with a letter', () => {
+    for (const id of ['sample1', 'sample12', 'sample01', 'sample', 'a', 'rat-kidney-4um', 'mouse-skull-e12-5', 'x1', 'a--b']) expect(isSampleId(id), id).toBe(true);
+  });
+  it('refuses `../`, `/`, capitals, a leading hyphen or digit, spaces, dots, backslashes, and anything that is not a string', () => {
+    for (const id of ['../sample1', '..', '.', 'sample1/', '/sample1', 'a/b', 'a\\b', 'Sample1', 'sAmple1', 'RAT', '-x', '1sample', '9', 'a b', ' a', 'a ', 'a.b', 'a%2e', 'a_b', '', 'é', 'sample1\n', null, undefined, 0, 1, {}, [], ['sample1']]) expect(isSampleId(id), String(id)).toBe(false);
+  });
+  it('is what the URL builders use: a name that breaks the rule has no URL, a name that follows it gets the folder of that name', () => {
+    expect(() => sampleJsonUrl('../x')).toThrow(/Unknown sample set/);
+    expect(() => sampleJsonUrl('Upper')).toThrow(/Unknown sample set/);
+    expect(sampleJsonUrl('rat-kidney-4um')).toBe('demo/rat-kidney-4um/sample.json');
+  });
+  it('the cache key of a named folder carries the folder name; sample1 keeps the original key (existing caches stay valid)', () => {
+    expect(sampleSet('sample1')?.keyPrefix).toBe('/__vrl-sample/v1/');
+    for (const id of listedIds.filter(i => i !== 'sample1')) expect(sampleSet(id).keyPrefix).toBe('/__vrl-sample/v1/' + id + '/');
+  });
+  it('the list of the datasets is demo/samples.json, resolved like the data (a PR preview reads the site root)', () => {
+    expect(sampleListUrl('/')).toBe('demo/samples.json');
+    expect(sampleListUrl()).toBe('demo/samples.json');
+    expect(resolveSampleBase('demo/samples.json', '/r/pr-preview/pr-9/', true)).toBe('/r/demo/samples.json');
   });
 });
 

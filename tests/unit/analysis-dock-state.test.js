@@ -95,7 +95,7 @@ describe('placement toggle and sizing', () => {
 
 describe('cards and i18n', () => {
   it('lists the two result cards by DOM id (a VR panel can reuse the list)', () => {
-    expect(ANALYSIS_CARDS.map(c => c.id)).toEqual(['hist', 'line', 'crop']);
+    expect(ANALYSIS_CARDS.map(c => c.id)).toEqual(['hist', 'line']);
   });
   it('every dock label exists in ja and en', () => {
     const keys = ['dockTitle', 'dockCollapse', 'dockExpand', 'dockPin', 'dockUnpin', 'dockSide', 'dockBelow', 'dockUnder2d', 'dockFull', 'dockResize', ...ANALYSIS_CARDS.map(c => c.titleKey)];

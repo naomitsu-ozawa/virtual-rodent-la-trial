@@ -157,19 +157,33 @@ const between = (s, a, b) => s.slice(s.indexOf(a) + a.length, s.indexOf(b, s.ind
 const RANGES = [{ lower: -50, upper: 350 }, { lower: 350, upper: 3071 }, { lower: 100, upper: 100 }, { lower: 300, upper: -20 }, { lower: 0, upper: 1500 }];
 
 describe('VR / AR shader (vr-view.js ctLumHU): the segment slot\'s own range, no slice window', () => {
-  const lumFn = between(vr, 'float ctLumHU(float hu,int s){\n', '\n}\n// shading of the tint');
-  const tintFn = between(vr, 'float ctLumTint(float hu,int s){\n', '\n}\nbool editAllows');
-  it('the factor is read through ctShadeRange[s] and the fixed floor CT_SHADE_MIN; no sliceWindow, no segment min / max, no CT_SHADE_SPAN', () => {
+  const lumFn = between(vr, 'float ctLumHU(float hu,int s){\n', '\n}\nbool editAllows');
+  it('the factor is read through ctShadeRange[s] and the fixed floor CT_SHADE_MIN; no sliceWindow, no segment min / max, no fixed span', () => {
     expect(vr).toContain('uniform vec2 ctShadeRange[4];');
     expect(lumFn).toContain('vec2 rg=ctShadeRange[s];float t=clamp((hu-rg.x)/max(rg.y-rg.x,1e-3),0.0,1.0);');
     expect(lumFn).toContain('pow(mix(CT_SHADE_MIN,1.0,t),g)'); expect(lumFn).not.toMatch(/segA|a\.x|a\.y|CT_SHADE_SPAN|sliceWindow/); expect(vr).toContain('#define CT_SHADE_MIN 0.35');
     expect(lumFn).not.toMatch(/ctLike|isCt|modality/i);
   });
-  it('only the slice-hidden branch (0 % opacity) uses it; the tint over the visible slice image keeps the formula (the segment range, CT_SHADE_SPAN) in its own function, unchanged', () => {
+  it('both slice branches (0 % opacity and the tint over the visible slice image) use the SAME ctLumHU: no separate tint formula, no fixed span (the old ctLumTint / CT_SHADE_SPAN 1500 is gone)', () => {
     expect(vr).toContain('vec4(regionColor(p,segC[si].rgb,si)*ctLumHU(hu,si),ctShade>0.5?SEG_ALPHA:sliceTint)');
-    expect(vr).toContain('regionColor(p,segC[si].rgb,si)*ctLumTint(hu,si),sliceTint),a)');
-    expect(tintFn).toBe(' if(ctShade<0.5||diag==3||segC[s].w>0.5)return 1.0;\n vec4 a=segA[s];\n float g=1.0/max(ctShadeBright,0.1),l=pow(mix(CT_SHADE_MIN,1.0,clamp((hu-a.x)/max(min(a.y-a.x,CT_SHADE_SPAN),1.0),0.0,1.0)),g);\n if(ctShadeContrast==1.0)return l;\n float p=0.5*(pow(CT_SHADE_MIN,g)+1.0);return clamp(p+(l-p)*ctShadeContrast,0.05,1.0);');
-    expect(vr).toContain('#define CT_SHADE_SPAN 1500.0');
+    expect(vr).toContain('regionColor(p,segC[si].rgb,si)*ctLumHU(hu,si),sliceTint),a)');
+    expect(vr.match(/ctLumHU\(/g)).toHaveLength(3); // the definition + the two branches
+    expect(vr).not.toMatch(/ctLumTint|CT_SHADE_SPAN|1500\.0/);
+  });
+  it('the tint path reads the value through the per-segment range like cap-shade.js: the same GLSL function, so the factor for any value / range equals shadeLumV; a segment max open-ended (bone up to 61535) no longer matters', () => {
+    const body = lumFn.replace(/\bfloat /g, 'let ').replace(/vec2 rg=ctShadeRange\[s\];/, 'let rg={x:ctShadeRange[s][0],y:ctShadeRange[s][1]};').replace(/^ if\(ctShade<0\.5[^\n]*\n/, '').replace('CT_SHADE_MIN', '0.35').replace('CT_SHADE_MIN', '0.35');
+    // the tint site in sliceColor: the call passes the slot of the segment under the pixel (si), the range of that slot is the segment's own
+    const tintSite = between(vr, 'if(sliceTint>0.0){int si=segmentIndexAt(texCoord(p));', ',a);}');
+    expect(tintSite).toContain('ctLumHU(hu,si)'); expect(tintSite).not.toMatch(/segA|min\(|1500/);
+    // a wide, open-ended segment (bone 698 .. 61535) and a narrow one: the old formula cut the top at min + 1500, the new one follows the range given
+    const ctShadeRange = [[698, 61535], [-200, 299], [-250, -50], [0, 1]];
+    for (const [s, r] of ctShadeRange.map((a, k) => [k, { lower: a[0], upper: a[1] }])) for (const frac of [0, 0.02, 0.05, 0.25, 0.5, 1]) {
+      const hu = r.lower + frac * (r.upper - r.lower);
+      const got = shaderFn(body, { hu, s, ctShadeRange, ctShadeBright: 1.8, ctShadeContrast: 1.7 });
+      expect(got).toBeCloseTo(shadeLumV(hu, r.lower, r.upper, 1.8, 1.7), 5);
+    }
+    // 1500 above the bone's min is NOT the top of the tint any more: the factor there is still near the bottom of the range
+    expect(shadeLumV(698 + 1500, 698, 61535)).toBeLessThan(shadeLumV(61535, 698, 61535) * 0.6);
   });
   it('the slice image still uses the window (sliceWindow) for its own grey, set every frame; the shading does not', () => {
     expect(vr).toContain('float g=clamp((hu-(sliceWindow.x-0.5*sliceWindow.y))/max(sliceWindow.y,1e-3),0.0,1.0);'); expect(vr).toContain('u.sliceWindow.value.set(vrWindow.c,Math.max(1,vrWindow.w));');
@@ -199,12 +213,12 @@ describe('browser GPU volume shader (medical-volume.js): the cut face with the s
     expect(wgsl).toContain('capShade:vec4<f32>,\n capRange:array<vec4<f32>,2>\n};'); expect(wgsl).toContain('if(u.capShade.x>0.5){capColor*=capShadeLum(huAt(ctc),capIndex);}');
     const i = wgsl.indexOf('capColor*=capShadeLum(huAt(ctc),capIndex)');
     expect(i).toBeGreaterThan(wgsl.indexOf('var capColor=mix(u.segments[')); expect(i).toBeLessThan(wgsl.indexOf('analysisOverlayAt(ctc)')); expect(i).toBeLessThan(wgsl.indexOf('if(u.sectionCap.z>0.5){')); // segment colour -> shade -> result colour -> hatching
-    expect(wgsl).toContain('let t=clamp((hv-lo)/max(hi-lo,0.001),0.0,1.0);'); expect(between(wgsl, 'fn capShadeLum', '\n}\n// ')).not.toContain('mprWindow');
+    expect(wgsl).toContain('let t=clamp((hv-lo)/max(hi-lo,0.001),0.0,1.0);'); expect(between(wgsl, 'fn capShadeLum', '\n}\n')).not.toContain('mprWindow');
     expect(wgsl).toContain('let planePoint=u.camOrigin.xyz+dir*pt;let planeValue=huAt(texCoord(planePoint));\n   let ww=max(u.mprWindow.y,1.0);let low=u.mprWindow.x-ww*0.5;'); // the slice image keeps its own window
     expect(wgsl).not.toMatch(/ctLike|isCt|modality/i);
   });
   it('the WGSL maths equals cap-shade.js for each slot (incl. width <= 0)', () => {
-    const body = between(wgsl, 'fn capShadeLum(hv:f32,slot:i32)->f32{\n', '\n}\n// ').replace(/u\.capShade\./g, 'capShade_').replace(/let cr=u\.capRange\[u32\(slot\)\/2u\];let odd=\(u32\(slot\)&1u\)==1u;let lo=select\(cr\.x,cr\.z,odd\);let hi=select\(cr\.y,cr\.w,odd\);/, 'let cr=capRange[slot>>1];let odd=(slot&1)==1;let lo=odd?cr[2]:cr[0];let hi=odd?cr[3]:cr[1];');
+    const body = between(wgsl, 'fn capShadeLum(hv:f32,slot:i32)->f32{\n', '\n}\n').replace(/u\.capShade\./g, 'capShade_').replace(/let cr=u\.capRange\[u32\(slot\)\/2u\];let odd=\(u32\(slot\)&1u\)==1u;let lo=select\(cr\.x,cr\.z,odd\);let hi=select\(cr\.y,cr\.w,odd\);/, 'let cr=capRange[slot>>1];let odd=(slot&1)==1;let lo=odd?cr[2]:cr[0];let hi=odd?cr[3]:cr[1];');
     expect(body).toContain('let lo=odd?cr[2]:cr[0];'); // the replacement above matched the real text
     const capRange = [[RANGES[0].lower, RANGES[0].upper, RANGES[1].lower, RANGES[1].upper], [RANGES[2].lower, RANGES[2].upper, RANGES[3].lower, RANGES[3].upper]];
     for (let slot = 0; slot < 4; slot++) for (const [bright, contrast] of [[1.8, 1.7], [1, 1], [2, 0.5]]) for (let i = -2; i <= 12; i++) {
@@ -224,13 +238,13 @@ describe('browser GPU volume shader (medical-volume.js): the cut face with the s
 });
 
 describe('browser mesh view (mpr3d-overlay.js, mpr-render.js)', () => {
-  it('the mesh cap, slice image hidden and CT濃淡: the segment colour x shadeLumV of the pixel\'s value through its segment\'s range, only where the cap shows a segment colour (not an analysis result)', () => {
-    expect(ov).toContain('if(!sectionSliceImageVisible&&sectionShadeMode===1&&ca&&seg&&val){'); expect(ov).toContain('ranges:SEGMENT_PRESET_ORDER.map(k=>segmentShadeRange(k,data))');
+  it('the mesh cap, slice image hidden and CT濃淡: the segment colour x shadeLumV of the pixel\'s value through its segment\'s range, only where the cap shows a segment colour (a preset or a child segment: its own colour and range; not an analysis result)', () => {
+    expect(ov).toContain('if(!sectionSliceImageVisible&&sectionShadeMode===1&&ca&&seg&&val){'); expect(ov).toContain('ranges:(keys||[]).map(k=>segmentShadeRange(k,data))'); // the keys of the paint (the presets, then the child segments)
     expect(ov).toContain('if(shade&&seg[i]){const q=shade.ranges[seg[i]-1];if(q){const l=shadeLumV(val[i],q.lower,q.upper,shade.b,shade.k2);r*=l;gg*=l;b*=l}}');
     expect(ov.indexOf('if(shade&&seg[i])')).toBeLessThan(ov.indexOf('if(sectionCapHatch){')); expect(ov).not.toMatch(/lum\[g\]|shadeLumT\(k\/255/);
-    expect(ov).toContain('export function setSectionCapColors(p,idx,w,h,pixels,gray,seg,val){'); expect(ov).toContain('entry.capColors={w,h,pixels,gray,seg,val};');
+    expect(ov).toContain('export function setSectionCapColors(p,idx,w,h,pixels,gray,seg,val,keys=null){'); expect(ov).toContain('entry.capColors={w,h,pixels,gray,seg,val,keys};');
     expect(mprRender).toContain('low=+wc.value-(+ww.value)/2,scale=255/Math.max(+ww.value,1)'); // gray = the slice image's window: the slice image keeps it
-    expect(mprRender).toContain('val[i]=v;'); expect(mprRender).toContain('c=rr||rgb;isSeg=rr?0:1+SEGMENT_PRESET_ORDER.indexOf(key)}}'); expect(mprRender).toContain('setSectionCapColors(p,idx,w,h,out,gray,seg,val)');
+    expect(mprRender).toContain('val[i]=v;'); expect(mprRender).toContain('c=rr||rgb;isSeg=rr?0:1+SEGMENT_PRESET_ORDER.indexOf(key)}}'); expect(mprRender).toContain('c=rr||rgb;isSeg=rr?0:capIndex.get(key)||0}}'); // no child: the 704 loop; with children: the loop through the keys list expect(mprRender).toContain('setSectionCapColors(p,idx,w,h,out,gray,seg,val,capKeys)');
   });
   it('the mesh view uses the same maths as the GPU volume and VR: per segment, per pixel', () => {
     for (const r of RANGES) for (const v of [-200, 0, 150, 400, 3000]) expect(shadeLumV(v, r.lower, r.upper, 1.8, 1.7)).toBeCloseTo(shadeLumT(shadeT(v, r.lower, r.upper), 1.8, 1.7), 12);
@@ -266,7 +280,7 @@ describe('browser panel (断面解析): the same set of controls, enabled like �
     expect(sectionShade).toContain('control.onchange = save;'); expect(sectionShade).toContain('setSectionShadeMode(+sectionShadeModeControl.value === 0 ? 0 : 1); save();'); expect(sectionShade).toContain('restore();');
     expect(sectionShade).toContain('sectionViewOpen && !!sectionViewPlane && sectionCapEnabled && !sectionSliceImageVisible'); expect(sectionShade).toContain('control.disabled = !enabled || sectionShadeMode !== 1');
     expect(sectionShade).toContain('on = enabled && sectionShadeMode === 1 && !!key && !!data'); expect(sectionShade).toContain('control.disabled = !on'); expect(sectionShade).toContain('sectionShadeResetButton.disabled = !on || !r?.touched');
-    expect(sectionShade).toContain('segmentState[k].active && segmentState[k].enabled'); // the segments shown now
+    expect(sectionShade).toContain('shownSegmentKeys()'); // the segments shown now
     expect(sectionShade).toContain('control.step = String(step || 1)'); expect(sectionShade).toContain('control.min = String(span.min); control.max = String(span.max);'); // the segment's span
     expect(sectionShade).toContain('moveEnd(which, shadeValueAt(shadePosOf(+control.value, d), d))'); expect(sectionShade).toContain('setSegmentShadeEnd(key, which, value); syncSectionShadeUi(); refresh();');
     expect(sectionShade).toContain('wireStepButton(minus, -1, step()); if (plus) wireStepButton(plus, 1, step());'); expect(sectionShade).toContain("stepClamp(which === 'lower' ? r.lower : r.upper, delta, d.min, d.max)");
@@ -290,8 +304,10 @@ describe('VR menu: the 濃淡の範囲 page (tab 12), opened from the スライ�
     for (const s of ['y:y0+44,w:300', 'y:y0+126,w:300', "row(y0+216,L.wcL,'c',cMin,cMax);row(y0+298,L.wwL,'w',1,wMax);", 'btn(X+i*244,y0+390,232,', 'label(X,y0+490,L.winHelp,', 'x:CX+26,y:y0+520,w:300,h:72', 'label(X,y0+618,L.airHelp', 'choice(y0+650,L.ctSh,', 'y:y0+734,w:300', 'y:y0+818,w:300']) expect(sliceTab).toContain(s);
   });
   it('the page: the segments shown now (vrSegShown), lower / upper sliders of the chosen one with − / ＋, 初期値に戻す, a back button to the スライス tab; it is not in the tab bar', () => {
-    expect(page).toContain('const keys=gpuSegmentOrder().filter(k=>k&&vrSegShown(k)),key=keys.includes(ui.shadeSeg)?ui.shadeSeg:(keys[0]??null),data=shadeDataRange();');
-    expect(page).toContain('keys.forEach((k,i)=>btn(X+i*(bw+12),y0+130,bw,tr(k),k===key,()=>{ui.shadeSeg=k;menu.refresh()}');
+    // the shown child segments of the tree follow the presets in the chooser (same key / data rule)
+    expect(page).toContain('const keys=[...gpuSegmentOrder().filter(k=>k&&vrSegShown(k)),...childList.map(e=>e.key)');
+    expect(page).toContain('key=keys.includes(ui.shadeSeg)?ui.shadeSeg:(keys[0]??null),data=shadeDataRange();');
+    expect(page).toContain('pageKeys.forEach((k,i)=>{const sg=segmentById(k);btn(X+aw+i*(bw+12),y0+130,bw,ellipsize(sg?.name??tr(k),bw-16,z=>menu.measure(z,28,true)),k===key,()=>{ui.shadeSeg=k;menu.refresh()}'); // up to 5 per row, ◀ ▶ with more (child segments)
     expect(page).toContain("rowOf(y0+250,L.shLower,'lower',r.lower);rowOf(y0+350,L.shUpper,'upper',r.upper);");
     expect(page).toContain('btn(X,y0+470,420,L.shReset,false,()=>{resetSegmentShadeRange(key)},{size:28,disabled:!r.touched});');
     expect(page).toContain('btn(X,MENU_H-100,260,L.back,false,()=>{ui.tab=2;menu.refresh()},{size:28});');

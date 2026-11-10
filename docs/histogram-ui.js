@@ -12,22 +12,26 @@
 //   same events as the slider itself (input while moving, change on release), so the segment code runs exactly as for a slider.
 // -: the VR board counts the VR data itself (vr-label-histogram.js) and reads only the display range and the scale from here; the VR
 //   consumer / texture pass of-566 (acquireHistogram, getHistogramView, ...) is gone.
-import { volume, current3DVolume, currentLanguage } from './state.js?v=20261109-build703';
-import { segmentState, SEGMENT_PRESET_ORDER, segmentNeedsVoxelMask, segmentEditGen, segmentSourceSignature, setShadeAutoSource, shadeDataRange } from './segments.js?v=20261109-build703';
-import { getFinalSegmentRuns } from './segment-runs.js?v=20261109-build703';
-import { sourceFilterStages, sourceFilterSignature } from './source-filters.js?v=20261109-build703';
-import { getHuMode, effectiveHuSignature, huModeToggle, segmentNeedsRuns, HU_MODE_FILTERED } from './effective-hu.js?v=20261109-build703';
-import { readEffectiveSlice, rawHuVolume, filtersActive } from './effective-hu-source.js?v=20261109-build703';
-import { segmentRunsCacheKey } from './segment-cache-key.js?v=20261109-build703';
-import { setCtSliderRange, ctSliderFullBounds, segmentControl } from './segment-ui.js?v=20261109-build703';
-import { createShadeHist, binShadeValues, binShadeRuns, shadeHistCount } from './cap-shade.js?v=20261109-build703';
-import { tr } from './i18n.js?v=20261109-build703';
-import { frameYield } from './utils.js?v=20261109-build703';
-import { createHist, binValues, binRuns, scaleHist, histInRange, rebinHist, histExtent, histStats, voxelsToMm3, huToX, xToHu, nearestLine, niceStep, windowFor, clampWindow, zoomWindow, normalizeRange } from './histogram.js?v=20261109-build703';
+import { volume, current3DVolume, currentLanguage } from './state.js?v=20261110-build708';
+import { segmentState, segmentNeedsVoxelMask, segmentEditGen, segmentSourceSignature, setShadeAutoSource, shadeDataRange, dataAxis, shownSegmentKeys, segmentById } from './segments.js?v=20261110-build708';
+import { isChildKey } from './segment-look.js?v=20261110-build708';
+import { childByKey } from './child-segments.js?v=20261110-build708';
+import { getFinalSegmentRuns } from './segment-runs.js?v=20261110-build708';
+import { sourceFilterStages, sourceFilterSignature } from './source-filters.js?v=20261110-build708';
+import { getHuMode, effectiveHuSignature, huModeToggle, segmentNeedsRuns, HU_MODE_FILTERED } from './effective-hu.js?v=20261110-build708';
+import { readEffectiveSlice, rawHuVolume, filtersActive } from './effective-hu-source.js?v=20261110-build708';
+import { segmentRunsCacheKey } from './segment-cache-key.js?v=20261110-build708';
+import { setCtSliderRange, ctSliderFullBounds, segmentControl } from './segment-ui.js?v=20261110-build708';
+import { createShadeHist, binShadeValues, binShadeRuns, shadeHistCount } from './cap-shade.js?v=20261110-build708';
+import { tr } from './i18n.js?v=20261110-build708';
+import { frameYield } from './utils.js?v=20261110-build708';
+import { createHist, binValues, binRuns, scaleHist, histInRange, rebinHist, histExtent, histStats, voxelsToMm3, huToX, xToHu, nearestLine, niceStep, windowFor, clampWindow, zoomWindow, normalizeRange, HU_AXIS, axisKey, axisDecimals, axisWidth, fmtAxisValue, windowBins, tickText } from './histogram.js?v=20261110-build708';
 const MAX_RETRIES = 6, POLL_MS = 400, DRAFT_MIN_SLICES = 240, DRAFT_SLICES = 80, CACHE_MAX = 24, CHART_H = 150, GRAB_PX = 6, PAD = { l: 34, r: 8, t: 14, b: 20 };
 const RANGE_KEY = 'vrl-hist-range-v1';
+// the axis of the data open now (histogram.js axisFor): the CT axis (1-HU bins, as always) for CT-like data, else equal bins over the data's own range (MRI 0..65535, 8-bit, slope-scaled values)
+const axisOf = v => (v ? dataAxis(v) : HU_AXIS);
 // the chart's display range ('auto' = robust to tails, 'full' = min..max, 'manual'): remembered per viewer, never required
-function loadRange() { try { return normalizeRange(JSON.parse(localStorage.getItem(RANGE_KEY))); } catch { return normalizeRange(null); } }
+function loadRange() { try { return normalizeRange(JSON.parse(localStorage.getItem(RANGE_KEY)), null); } catch { return normalizeRange(null); } } // null: a manual window is only checked for being finite here; it is clamped to the data's axis when drawn (windowFor), and only on the axis it was set on
 function saveRange() { try { localStorage.setItem(RANGE_KEY, JSON.stringify(st.range)); } catch { /* private window: the choice just lasts for the session */ } }
 const st = {
   open: false, log: false, timer: 0, job: null, lastRun: '', lastDisp: '', doneSig: '', stopSig: '', message: '', lang: '',
@@ -40,25 +44,30 @@ const st = {
 const effSig = () => { const stages = sourceFilterStages(); return effectiveHuSignature(getHuMode(), stages.length, stages.length ? sourceFilterSignature(stages) : ''); };
 const totalKey = v => volId(v) + '|' + effSig();
 const volId = v => { let id = st.volIds.get(v); if (!id) { id = st.nextVolId++; st.volIds.set(v, id); } return id; };
-const enabledKeys = () => SEGMENT_PRESET_ORDER.filter(k => segmentState[k].active && segmentState[k].enabled);
+// the child segments (key 's<id>', child-segments.js) are segments of the histogram too: while one is shown (visible, its parent ticked) it has its own curve, row and shade range. Its voxels are its own mask
+// (child.runsBySlice); it has no min / max of its own to drag (no range lines). (Ported from the tree-segments work d99f5414 for child segments.)
+const enabledKeys = () => shownSegmentKeys();
+const segOf = key => { if (!isChildKey(key)) return segmentState[key]; const g = segmentById(key); return { color: g?.color || '#888', min: null, max: null, userMin: null, userMax: null }; };
+const nameOf = key => isChildKey(key) ? (segmentById(key)?.name || key) : (tr(key) || key);
 // does the segment need its final runs (post-processing / edits / takers above / filtered source), or is it a plain range of the raw data?
-const needsRuns = key => segmentNeedsRuns(segmentNeedsVoxelMask(key), sourceFilterStages().length);
+const needsRuns = key => isChildKey(key) || segmentNeedsRuns(segmentNeedsVoxelMask(key), sourceFilterStages().length);
 // the volume the segment code builds a segment from: source-backed = the volume itself; in-memory = the 3D build volume (the filtered one when filters are on)
 const segmentVolume = v => (v.sourceBacked ? v : current3DVolume || v);
-const keySig = (key, v) => { const s = segmentState[key]; return [volId(v), sourceFilterSignature(sourceFilterStages()), effSig(), key, s.min, s.max, s.opening, s.closing, s.minComponent, s.holeFill ? 1 : 0, s.surfaceMm, s.thicknessMm, segmentEditGen[key] | 0, segmentSourceSignature(key, true)].join(','); };
+const keySig = (key, v) => { if (isChildKey(key)) { const c = childByKey(key); return [volId(v), sourceFilterSignature(sourceFilterStages()), effSig(), key, c?.hash, c?.voxels].join('|'); } const s = segmentState[key]; return [volId(v), sourceFilterSignature(sourceFilterStages()), effSig(), key, s.min, s.max, s.opening, s.closing, s.minComponent, s.holeFill ? 1 : 0, s.surfaceMm, s.thicknessMm, segmentEditGen[key] | 0, segmentSourceSignature(key, true)].join(','); };
 // what must be (re)computed: the run-based segments and whether the whole-volume histogram is needed
 function runSignature(v) {
   const keys = enabledKeys(), runKeys = keys.filter(k => needsRuns(k, v)), needTotal = !keys.length || runKeys.length < keys.length;
   return volId(v) + '|' + effSig() + '|' + (needTotal ? 'T' : '-') + '|' + runKeys.map(k => keySig(k, v)).join(';') + '|-';
 }
 // what is drawn: every shown segment's range as well (cheap: a plain range is a slice of the total)
-const displaySignature = v => runSignature(v) + '|' + enabledKeys().map(k => { const s = segmentState[k]; return [k, s.min, s.max, s.userMin, s.userMax, s.color].join(','); }).join(';') + '|' + st.log + '|' + currentLanguage + '|' + (st.job ? 1 : 0) + st.message;
+const displaySignature = v => runSignature(v) + '|' + enabledKeys().map(k => { const s = segOf(k); return [k, s.min, s.max, s.userMin, s.userMax, s.color, isChildKey(k) ? nameOf(k) : ''].join(','); }).join(';') + '|' + st.log + '|' + currentLanguage + '|' + (st.job ? 1 : 0) + st.message;
 
 function remember(ck, entry) {
   st.runCache.delete(ck); st.runCache.set(ck, entry);
   while (st.runCache.size > CACHE_MAX) st.runCache.delete(st.runCache.keys().next().value);
 }
 async function cacheKeyFor(v, key) {
+  if (isChildKey(key)) return keySig(key, v);
   const seg = segmentState[key], extra = { hist: 1, vol: volId(v), gen: segmentEditGen[key] | 0, src: segmentSourceSignature(key, true), hu: effSig() };
   try { return await segmentRunsCacheKey(v.series, sourceFilterSignature(sourceFilterStages()), seg, extra); } catch { return keySig(key, v); }
 }
@@ -76,7 +85,7 @@ const CHUNK = 32768, RUN_CHUNK = 3 * 2048; // voxels / run triples binned betwee
 async function streamPass(job, v, runs, todo, wantTotal, step, label) {
   const n = v.slices, w = v.columns;
   const total = wantTotal ? createHist() : null, hists = todo.map(() => createHist());
-  const raw = rawHuVolume(), mode = getHuMode();
+  const raw = rawHuVolume(), mode = getHuMode(), axis = axisOf(v);
   let last = performance.now(), sampled = 0;
   // the work of one slice is cut into chunks, and the time is checked after each: a pass never holds the thread much longer than sliceMs
   const budget = async z => { if (performance.now() - last > st.sliceMs) { setProgress(label + ' ' + Math.round(100 * z / n) + '%', z / n); await pause(); last = performance.now(); } return !job.cancelled; };
@@ -84,10 +93,10 @@ async function streamPass(job, v, runs, todo, wantTotal, step, label) {
     if (job.cancelled) return null;
     const values = await readEffectiveSlice(z, { mode, volume: raw });
     if (job.cancelled) return null;
-    if (total) for (let a = 0; a < values.length; a += CHUNK) { binValues(total, values, a, Math.min(values.length, a + CHUNK)); if (!(await budget(z))) return null; }
+    if (total) for (let a = 0; a < values.length; a += CHUNK) { binValues(total, values, a, Math.min(values.length, a + CHUNK), axis); if (!(await budget(z))) return null; }
     for (let i = 0; i < todo.length; i++) {
       const r = runs[todo[i]]?.[z]; if (!r) continue;
-      for (let a = 0; a < r.length; a += RUN_CHUNK) { binRuns(hists[i], values, r, w, a, a + RUN_CHUNK); if (!(await budget(z))) return null; }
+      for (let a = 0; a < r.length; a += RUN_CHUNK) { binRuns(hists[i], values, r, w, a, a + RUN_CHUNK, axis); if (!(await budget(z))) return null; }
     }
     sampled++;
     if (!(await budget(z))) return null;
@@ -110,8 +119,9 @@ async function runJob(sig) {
     if (!todo.length && !wantTotal) { finish(); return; }
     const runs = {};
     for (const k of todo) {
-      setProgress(tr('segHistPrepare') + ': ' + (tr(k) || k), 0);
-      runs[k] = await getFinalSegmentRuns(k, segmentVolume(v), (d, t) => { if (!job.cancelled) setProgress(tr('segHistPrepare') + ': ' + (tr(k) || k) + ' ' + Math.round(100 * d / Math.max(1, t)) + '%', d / Math.max(1, t)); });
+      setProgress(tr('segHistPrepare') + ': ' + nameOf(k), 0);
+      if (isChildKey(k)) { runs[k] = childByKey(k)?.runsBySlice || []; continue; }
+      runs[k] = await getFinalSegmentRuns(k, segmentVolume(v), (d, t) => { if (!job.cancelled) setProgress(tr('segHistPrepare') + ': ' + nameOf(k) + ' ' + Math.round(100 * d / Math.max(1, t)) + '%', d / Math.max(1, t)); });
       if (job.cancelled) return;
     }
     const steps = v.slices >= DRAFT_MIN_SLICES ? [Math.ceil(v.slices / DRAFT_SLICES), 1] : [1];
@@ -152,9 +162,12 @@ function cancelJob(userAsked) {
 export async function computeSegmentHistograms(keys, stale) {
   const v = volume, data = shadeDataRange();
   if (!v || !data) return null;
-  const runKeys = keys.filter(k => segmentState[k]?.active && needsRuns(k, v)), plainKeys = keys.filter(k => segmentState[k] && !needsRuns(k, v));
-  const runs = {};
-  for (const k of runKeys) { runs[k] = await getFinalSegmentRuns(k, segmentVolume(v)); if (stale()) return null; }
+  // a child segment counts its own mask (no pass to find it); the presets as before
+  const childKeys = keys.filter(k => isChildKey(k) && childByKey(k)?.runsBySlice);
+  const presetRunKeys = keys.filter(k => !isChildKey(k) && segmentState[k]?.active && needsRuns(k, v)), plainKeys = keys.filter(k => !isChildKey(k) && segmentState[k] && !needsRuns(k, v));
+  const runKeys = [...presetRunKeys, ...childKeys], runs = {};
+  for (const k of presetRunKeys) { runs[k] = await getFinalSegmentRuns(k, segmentVolume(v)); if (stale()) return null; }
+  for (const k of childKeys) runs[k] = childByKey(k).runsBySlice;
   const n = v.slices, w = v.columns, raw = rawHuVolume(), plain = plainKeys.map(() => createShadeHist()), hists = runKeys.map(() => createShadeHist());
   let last = performance.now();
   const budget = async () => { if (performance.now() - last > st.sliceMs) { await frameYield(); last = performance.now(); } return !stale(); };
@@ -179,18 +192,18 @@ export async function computeSegmentHistograms(keys, stale) {
 
 // ---- results as drawn ----
 function resultsFor(v) {
-  const out = [], tot = st.totals.get(totalKey(v));
+  const out = [], tot = st.totals.get(totalKey(v)), axis = axisOf(v);
   for (const key of enabledKeys()) {
-    const seg = segmentState[key];
+    const seg = segOf(key);
     let hist = null, draft = false;
     if (needsRuns(key, v)) {
       const c = st.cur[key], ok = c && c.ks === keySig(key, v);
       const e = ok ? st.runCache.get(c.ck) : null; if (e) { hist = e.hist; draft = e.draft; }
     }
-    else if (tot) { hist = histInRange(tot.hist, seg.min, seg.max); draft = tot.draft; }
-    out.push({ key, seg, hist, draft, stats: hist ? histStats(hist) : null });
+    else if (tot) { hist = histInRange(tot.hist, seg.min, seg.max, axis); draft = tot.draft; }
+    out.push({ key, seg, hist, draft, stats: hist ? histStats(hist, undefined, axis) : null });
   }
-  return { list: out, total: tot || null };
+  return { list: out, total: tot || null, axis };
 }
 
 // ---- chart ----
@@ -200,12 +213,12 @@ function chartWindow(res) {
   return (st.win = windowFor(res, st.range));
 }
 // the display range only moves what is drawn: stats and the table are always over the whole data
-function setRange(range) { st.range = normalizeRange(range); st.win = null; saveRange(); draw(true); }
+function setRange(range) { const axis = axisOf(volume); st.range = normalizeRange({ ...range, ax: axisKey(axis) }, axis); st.win = null; saveRange(); draw(true); } // a manual window remembers the axis it was set on (a CT window is not applied to MRI data)
 function zoomAt(e) {
   const v = volume; if (!v || !st.canvas) return;
   const res = resultsFor(v), r = plotRect(st.canvas), [lo, hi] = chartWindow(res);
   const x = Math.max(0, Math.min(r.w, e.clientX - st.canvas.getBoundingClientRect().left - r.x)), anchor = xToHu(x, lo, hi, r.w);
-  const w = zoomWindow(lo, hi, anchor, e.deltaY < 0 ? 0.8 : 1.25);
+  const w = zoomWindow(lo, hi, anchor, e.deltaY < 0 ? 0.8 : 1.25, res.axis);
   if (w) setRange({ mode: 'manual', lo: w[0], hi: w[1] });
 }
 function plotRect(canvas) { return { x: PAD.l, y: PAD.t, w: Math.max(10, canvas.clientWidth - PAD.l - PAD.r), h: CHART_H - PAD.t - PAD.b }; }
@@ -216,23 +229,23 @@ function drawChart(res) {
   if (canvas.width !== Math.round(W * dpr) || canvas.height !== Math.round(CHART_H * dpr)) { canvas.width = Math.round(W * dpr); canvas.height = Math.round(CHART_H * dpr); }
   const ctx = canvas.getContext('2d');
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, CHART_H);
-  const fg = getComputedStyle(canvas).color || '#888', r = plotRect(canvas), [lo, hi] = chartWindow(res);
+  const fg = getComputedStyle(canvas).color || '#888', r = plotRect(canvas), [lo, hi] = chartWindow(res), axis = res.axis, minSpan = axisWidth(axis);
   ctx.font = '9px system-ui,sans-serif'; ctx.textBaseline = 'middle';
   const series = res.list.filter(s => s.hist);
   if (!res.list.length && res.total) series.push({ key: 'all', seg: { color: '#8c969c' }, hist: res.total.hist });
-  const cols = Math.max(1, Math.min(Math.round(hi - lo + 1), Math.floor(r.w / 2)));
-  const bars = series.map(s => rebinHist(s.hist, lo, hi, cols));
+  const cols = Math.max(1, Math.min(windowBins(lo, hi, axis), Math.floor(r.w / 2)));
+  const bars = series.map(s => rebinHist(s.hist, lo, hi, cols, undefined, axis));
   let ymax = 1; for (const b of bars) for (const c of b) if (c > ymax) ymax = c;
   const yOf = c => (st.log ? Math.log10(1 + c) / Math.log10(1 + ymax) : c / ymax);
   // axes
   ctx.globalAlpha = 0.35; ctx.strokeStyle = fg; ctx.fillStyle = fg; ctx.lineWidth = 1;
   ctx.beginPath(); ctx.moveTo(r.x, r.y); ctx.lineTo(r.x, r.y + r.h); ctx.lineTo(r.x + r.w, r.y + r.h); ctx.stroke();
   ctx.globalAlpha = 0.8; ctx.textAlign = 'center';
-  const step = niceStep(hi - lo, Math.max(3, Math.floor(r.w / 48)));
-  for (let hu = Math.ceil(lo / step) * step; hu <= hi; hu += step) {
-    const x = r.x + huToX(hu, lo, hi, r.w);
+  const step = niceStep(hi - lo, Math.max(3, Math.floor(r.w / 48)), axis);
+  for (let k = Math.ceil(lo / step - 1e-9), hu; (hu = k * step) <= hi + step * 1e-9; k++) {
+    const x = r.x + huToX(hu, lo, hi, r.w, minSpan);
     ctx.globalAlpha = 0.18; ctx.beginPath(); ctx.moveTo(x, r.y); ctx.lineTo(x, r.y + r.h); ctx.stroke();
-    ctx.globalAlpha = 0.8; ctx.fillText(String(hu), x, r.y + r.h + 10);
+    ctx.globalAlpha = 0.8; ctx.fillText(tickText(hu, step), x, r.y + r.h + 10);
   }
   ctx.textAlign = 'right'; ctx.fillText(ymax >= 1e6 ? (ymax / 1e6).toFixed(1) + 'M' : ymax >= 1e3 ? Math.round(ymax / 1e3) + 'k' : String(ymax), r.x - 3, r.y + 4);
   ctx.fillText('0', r.x - 3, r.y + r.h);
@@ -247,18 +260,19 @@ function drawChart(res) {
   let edgeL = 0, edgeR = 0;
   for (const s of res.list) {
     const a = s.seg.userMin ?? s.seg.min, b = s.seg.userMax ?? s.seg.max;
+    if (a == null || b == null) continue; // a child segment has no range of its own
     for (const [hu, side] of [[a, 1], [b, -1]]) {
       if (hu < lo || hu > hi) { // outside the visible range: a marker on that edge (still draggable there), stacked so two do not overlap
         const left = hu < lo, k = left ? edgeL++ : edgeR++, ex = r.x + (left ? 0 : r.w), ey = r.y + 6 + 11 * k, d = left ? 1 : -1;
         ctx.fillStyle = s.seg.color; ctx.beginPath(); ctx.moveTo(ex - d * 5, ey); ctx.lineTo(ex + d * 3, ey - 4); ctx.lineTo(ex + d * 3, ey + 4); ctx.fill();
-        ctx.fillStyle = fg; ctx.textAlign = left ? 'left' : 'right'; ctx.fillText(String(Math.round(hu)), ex + d * 7, ey);
+        ctx.fillStyle = fg; ctx.textAlign = left ? 'left' : 'right'; ctx.fillText(fmtAxisValue(hu, axis), ex + d * 7, ey);
         continue;
       }
-      const x = r.x + huToX(hu, lo, hi, r.w);
+      const x = r.x + huToX(hu, lo, hi, r.w, minSpan);
       ctx.strokeStyle = s.seg.color; ctx.fillStyle = s.seg.color;
       ctx.beginPath(); ctx.moveTo(x, r.y - 2); ctx.lineTo(x, r.y + r.h); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(x, r.y - 2); ctx.lineTo(x + 4 * side, r.y - 2); ctx.lineTo(x, r.y + 3); ctx.fill();
-      ctx.fillStyle = fg; ctx.textAlign = side > 0 ? 'left' : 'right'; ctx.fillText(String(Math.round(hu)), x + 5 * side, r.y - 5 + 0);
+      ctx.fillStyle = fg; ctx.textAlign = side > 0 ? 'left' : 'right'; ctx.fillText(fmtAxisValue(hu, axis), x + 5 * side, r.y - 5 + 0);
     }
   }
   ctx.globalAlpha = 1;
@@ -268,9 +282,9 @@ function drawChart(res) {
 const fmt = (x, d = 1) => (x == null ? '—' : x.toFixed(d));
 function drawTable(res, v) {
   const t = st.table; if (!t) return;
-  const sp = v?.spacing, head = [tr('statSegment'), tr('statCount'), sp ? tr('statVolume') : null, tr('statMean'), 'SD', 'p5', 'p25', 'p50', 'p75', 'p95', tr('statMin'), tr('statMax')].filter(Boolean);
-  const rows = res.list.map(s => ({ name: tr(s.key) || s.key, color: s.seg.color, stats: s.stats, draft: s.draft }));
-  if (!rows.length && res.total) rows.push({ name: tr('segHistWhole'), color: '#8c969c', stats: histStats(res.total.hist), draft: res.total.draft });
+  const axis = res.axis, dp = axisDecimals(axis), sp = v?.spacing, head = [tr('statSegment'), tr('statCount'), sp ? tr('statVolume') : null, tr('statMean'), 'SD', 'p5', 'p25', 'p50', 'p75', 'p95', tr('statMin'), tr('statMax')].filter(Boolean);
+  const rows = res.list.map(s => ({ name: nameOf(s.key), color: s.seg.color, stats: s.stats, draft: s.draft }));
+  if (!rows.length && res.total) rows.push({ name: tr('segHistWhole'), color: '#8c969c', stats: histStats(res.total.hist, undefined, axis), draft: res.total.draft });
   const table = document.createElement('table'); table.className = 'seg-hist-table';
   const tr0 = table.createTHead().insertRow(); for (const h of head) { const th = document.createElement('th'); th.textContent = h; tr0.append(th); }
   const body = table.createTBody();
@@ -281,7 +295,7 @@ function drawTable(res, v) {
     if (!s) { const c = tr1.insertCell(); c.colSpan = head.length - 1; c.textContent = '…'; continue; }
     cells.push(s.count.toLocaleString());
     if (sp) { const mm3 = voxelsToMm3(s.count, sp); cells.push(mm3 == null ? '—' : mm3.toLocaleString(undefined, { maximumFractionDigits: 1 })); }
-    cells.push(fmt(s.mean), fmt(s.sd), ...[5, 25, 50, 75, 95].map(p => fmt(s.percentiles[p], 0)), fmt(s.min, 0), fmt(s.max, 0));
+    cells.push(fmt(s.mean, dp + 1), fmt(s.sd, dp + 1), ...[5, 25, 50, 75, 95].map(p => fmt(s.percentiles[p], dp)), fmt(s.min, dp), fmt(s.max, dp)); // whole HU on the CT axis (dp 0: mean / SD one decimal, as before); finer on a narrow data range
     for (const c of cells) tr1.insertCell().textContent = c;
   }
   t.replaceChildren(table);
@@ -302,9 +316,10 @@ function draw(force = false) {
 // the range boxes show the window really drawn (also in auto / full); a box being typed in is left alone
 function syncRangeUi(res) {
   const e = st.rangeEls; if (!e) return;
-  const [lo, hi] = chartWindow(res);
-  if (document.activeElement !== e.lo) e.lo.value = String(lo);
-  if (document.activeElement !== e.hi) e.hi.value = String(hi);
+  const [lo, hi] = chartWindow(res), step = res.axis.hu ? '10' : 'any'; // the spin step: 10 HU on the CT axis; any value on another data range
+  if (e.lo.step !== step) e.lo.step = e.hi.step = step;
+  if (document.activeElement !== e.lo) e.lo.value = fmtAxisValue(lo, res.axis);
+  if (document.activeElement !== e.hi) e.hi.value = fmtAxisValue(hi, res.axis);
   e.auto.classList.toggle('is-active', st.range.mode === 'auto'); e.full.classList.toggle('is-active', st.range.mode === 'full');
 }
 // "Recalculate" is offered when a pass was cancelled / failed for the current settings
@@ -328,8 +343,9 @@ function hitLine(e) {
   const res = resultsFor(v), r = plotRect(st.canvas), [lo, hi] = chartWindow(res), x = e.clientX - st.canvas.getBoundingClientRect().left;
   const cand = [], edge = []; // edge: lines outside the visible range, grabbed at the chart edge only when no visible line is under the pointer
   for (const s of res.list) for (const which of ['min', 'max']) {
+    if ((s.seg.userMin ?? s.seg.min) == null) continue; // a child segment has no range lines
     const hu = which === 'min' ? (s.seg.userMin ?? s.seg.min) : (s.seg.userMax ?? s.seg.max);
-    (hu < lo || hu > hi ? edge : cand).push({ key: s.key, which, x: r.x + (hu < lo ? 0 : hu > hi ? r.w : huToX(hu, lo, hi, r.w)) });
+    (hu < lo || hu > hi ? edge : cand).push({ key: s.key, which, x: r.x + (hu < lo ? 0 : hu > hi ? r.w : huToX(hu, lo, hi, r.w, axisWidth(res.axis))) });
   }
   for (const list of [cand, edge]) { const i = nearestLine(list.map(c => c.x), x, GRAB_PX); if (i >= 0) return { key: list[i].key, which: list[i].which }; }
   return null;
@@ -370,7 +386,7 @@ function build() {
   const row = mk('div', 'seg-hist-range'), num = () => { const i = mk('input', 'seg-hist-num'); i.type = 'number'; i.step = '10'; i.inputMode = 'numeric'; return i; };
   const lo = num(), hi = num(), auto = mk('button', 'seg-hist-mini', tr('segHistAuto')), full = mk('button', 'seg-hist-mini', tr('segHistFull'));
   auto.type = full.type = 'button'; lo.setAttribute('aria-label', tr('segHistRange') + ' min'); hi.setAttribute('aria-label', tr('segHistRange') + ' max');
-  const commit = () => { const w = clampWindow(lo.value, hi.value); if (w) { lo.value = String(w[0]); hi.value = String(w[1]); setRange({ mode: 'manual', lo: w[0], hi: w[1] }); } else draw(true); };
+  const commit = () => { const axis = axisOf(volume), w = clampWindow(lo.value, hi.value, axis); if (w) { lo.value = fmtAxisValue(w[0], axis); hi.value = fmtAxisValue(w[1], axis); setRange({ mode: 'manual', lo: w[0], hi: w[1] }); } else draw(true); };
   for (const i of [lo, hi]) { i.onchange = commit; i.onkeydown = e => { e.stopPropagation(); if (e.key === 'Enter') commit(); }; i.onpointerdown = e => e.stopPropagation(); }
   auto.onclick = () => setRange({ mode: 'auto' }); full.onclick = () => setRange({ mode: 'full' });
   row.append(mk('span', '', tr('segHistRange')), lo, mk('span', '', '–'), hi, mk('span', '', 'HU'), auto, full);

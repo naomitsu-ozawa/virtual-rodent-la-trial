@@ -101,7 +101,7 @@ describe('the direction arrow at the edge of the view', () => {
   });
 });
 describe('the arrow over the menu', () => {
-  const W = 1024, H = 1180, widthM = 0.5, s = widthM / W;
+  const W = 1024, H = 1400, widthM = 0.6, s = widthM / W;
   it('a child of the board; its tip is above / below the rect (a gap that bobs), pointing at it, in front of the board; hidden without a rect', () => {
     const board = new THREE.Mesh(new THREE.PlaneGeometry(widthM, widthM * H / W)), b = createBoardArrow(THREE, board);
     expect(b.mesh.parent).toBe(board); b.update(0, null); expect(b.mesh.visible).toBe(false);

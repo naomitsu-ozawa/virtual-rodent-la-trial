@@ -1,21 +1,21 @@
 // start3D pieces that use no start3D-local mutable state (camera distance,
 // pointer maps, fast-interaction flags stay in start3D). Statement bodies are
 // verbatim from app.js; each factory takes the locals they used as parameters.
-import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.webgpu.js';
-import { WebGLRenderer } from 'https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js';
-import { frameYield } from './utils.js?v=20261109-build703';
-import { tr } from './i18n.js?v=20261109-build703';
-import { analysisCutScreen, analysisEditTargetMode, analysisEditTool, current3DVolume, sceneState, sectionViewOpen, sectionViewPlane, setAnalysisCutScreen, setAnalysisEditTargetKey, threeRenderMode, volume } from './state.js?v=20261109-build703';
-import { planes, sectionPosition, threeEditOverlay, viewport } from './ui-shell.js?v=20261109-build703';
-import { adoptRendererGpuDevice, adoptSplitGpuDevices, requestVrlGpuDevice, requestVrlPrimaryGpuDevice, requestVrlSplitRenderDevice, resetSplitGpuDevices } from './gpu-compute.js?v=20261109-build703';
-import { request3DRender } from './scene3d.js?v=20261109-build703';
-import { logGpuError } from './gpu-diagnostics.js?v=20261109-build703';
-import { canvasBackground3d, onCanvasThemeChange } from './canvas-theme.js?v=20261109-build703';
-import { updateMpr3DPlanePositions } from './mpr3d-overlay.js?v=20261109-build703';
-import { gpuSegmentOrder, segmentState } from './segments.js?v=20261109-build703';
-import { rebindWebGpuSectionClipGroup, sectionLocalPoint, updateSectionClipPlaneWorld, updateSectionViewUi, sectionLocalStep } from './section-view.js?v=20261109-build703';
-import { renderSectionPlaneLive } from './mpr-render.js?v=20261109-build703';
-import { cutPointerVoxel } from './analysis-ops.js?v=20261109-build703';
+import * as THREE from './vendor/three@0.186.0/build/three.webgpu.js';
+import { WebGLRenderer } from './vendor/three@0.186.0/build/three.module.js';
+import { frameYield } from './utils.js?v=20261110-build708';
+import { tr } from './i18n.js?v=20261110-build708';
+import { analysisCutScreen, analysisEditTargetMode, analysisEditTool, current3DVolume, sceneState, sectionViewOpen, sectionViewPlane, setAnalysisCutScreen, setAnalysisEditTargetKey, threeRenderMode, volume } from './state.js?v=20261110-build708';
+import { planes, sectionPosition, threeEditOverlay, viewport } from './ui-shell.js?v=20261110-build708';
+import { adoptRendererGpuDevice, adoptSplitGpuDevices, requestVrlGpuDevice, requestVrlPrimaryGpuDevice, requestVrlSplitRenderDevice, resetSplitGpuDevices } from './gpu-compute.js?v=20261110-build708';
+import { request3DRender } from './scene3d.js?v=20261110-build708';
+import { logGpuError } from './gpu-diagnostics.js?v=20261110-build708';
+import { canvasBackground3d, onCanvasThemeChange } from './canvas-theme.js?v=20261110-build708';
+import { updateMpr3DPlanePositions } from './mpr3d-overlay.js?v=20261110-build708';
+import { gpuSegmentOrder, segmentState } from './segments.js?v=20261110-build708';
+import { rebindWebGpuSectionClipGroup, sectionLocalPoint, updateSectionClipPlaneWorld, updateSectionViewUi, sectionLocalStep } from './section-view.js?v=20261110-build708';
+import { renderSectionPlaneLive } from './mpr-render.js?v=20261110-build708';
+import { cutPointerVoxel } from './analysis-ops.js?v=20261110-build708';
 // Orientation axes widget attached to the camera (bottom-left XYZ).
 export function makeAxisWidget(camera){
  const axisWidget=new THREE.Group();axisWidget.name='orientation_axes';camera.add(axisWidget);
@@ -75,7 +75,7 @@ export function makeViewOverlays(renderer){
  Object.assign(pivotIndicator.style,{position:'absolute',left:'50%',top:'50%',width:'18px',height:'18px',transform:'translate(-50%,-50%)',border:'1px solid rgba(255,255,255,.78)',boxShadow:'0 0 0 1px rgba(0,0,0,.55),inset 0 0 0 1px rgba(0,0,0,.35)',borderRadius:'50%',boxSizing:'border-box',pointerEvents:'none',zIndex:'12',opacity:'0',transition:'opacity 90ms linear'});
  const pivotDot=document.createElement('div');Object.assign(pivotDot.style,{position:'absolute',left:'50%',top:'50%',width:'4px',height:'4px',transform:'translate(-50%,-50%)',borderRadius:'50%',background:'rgba(255,255,255,.92)',boxShadow:'0 0 0 1px rgba(0,0,0,.55)'});
  pivotIndicator.appendChild(pivotDot);viewport.appendChild(pivotIndicator);
- const ws=document.documentElement.classList.contains('vrl-ipad-ui');
+ const ws=true;
  const viewControls=document.createElement('div');viewControls.setAttribute('aria-label','3D view controls');viewControls.className='three-view-controls';
  Object.assign(viewControls.style,{position:'absolute',right:'10px',bottom:'10px',display:'flex',gap:'5px',padding:'5px',border:'1px solid rgba(122,145,154,.55)',borderRadius:'9px',background:'rgba(10,14,16,.78)',backdropFilter:'blur(5px)',zIndex:'13',pointerEvents:'auto'});
  const makeViewButton=(label,title,handler)=>{

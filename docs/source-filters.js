@@ -1,17 +1,18 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { gpuStagesSupported, runGpuSourceFilters, gpuFilterRuntime, setGpuComputeBackend, addGpuStepTime } from './gpu-compute.js?v=20261109-build703';
-import { sourceVolume, filterOrder } from './state.js?v=20261109-build703';
-import { ww, spikeHoleStrength, spikeHoleThreshold, nlmStrength, nlmSearchRadius, nlmPatchRadius, anisotropicStrength, anisotropicKappa, anisotropicIterations, smoothingType, gaussianStrength, spatialPasses, sigmoidStrength, sigmoidCenter, sigmoidWidth, bilateralStrength, bilateralSpatial, bilateralIntensity, bilateralPasses, tvWeight, tvEps, tvIterations, unsharpRadius, unsharpAmount, unsharpThreshold } from './ui-shell.js?v=20261109-build703';
-import { frameYield, isIPhoneRuntime, isTabletRuntime, isDesktopRuntime } from './utils.js?v=20261109-build703';
-import { isNativeDicomTransferSyntax } from './dicom.js?v=20261109-build703';
-import { decodeSourceSlice, sourceSliceCache } from './volume-io.js?v=20261109-build703';
-import { cacheKey } from './gpu-volume-cache.js?v=20261109-build703';
-import { isCacheablePlane, planeCacheInfo, planeCacheKey, loadCachedPlane, storeCachedPlane, createPlaneWriteQueue, planeCacheStats, planeCacheProvider } from './plane-cache.js?v=20261109-build703';
-import { sourceFilterSignature as signatureOf, withSpacingWeights } from './filter-units.js?v=20261109-build703';
+import { gpuStagesSupported, runGpuSourceFilters, gpuFilterRuntime, setGpuComputeBackend, addGpuStepTime } from './gpu-compute.js?v=20261110-build708';
+import { sourceVolume, filterOrder } from './state.js?v=20261110-build708';
+import { ww, spikeHoleStrength, spikeHoleThreshold, nlmStrength, nlmSearchRadius, nlmPatchRadius, anisotropicStrength, anisotropicKappa, anisotropicIterations, smoothingType, gaussianStrength, spatialPasses, sigmoidStrength, sigmoidCenter, sigmoidWidth, bilateralStrength, bilateralSpatial, bilateralIntensity, bilateralPasses, tvWeight, tvEps, tvIterations, unsharpRadius, unsharpAmount, unsharpThreshold } from './ui-shell.js?v=20261110-build708';
+import { frameYield, isTabletRuntime, isDesktopRuntime } from './utils.js?v=20261110-build708';
+import { isNativeDicomTransferSyntax } from './dicom.js?v=20261110-build708';
+import { storedLayout, readStored } from './stored-bits.js?v=20261110-build708';
+import { decodeSourceSlice, sourceSliceCache } from './volume-io.js?v=20261110-build708';
+import { cacheKey } from './gpu-volume-cache.js?v=20261110-build708';
+import { isCacheablePlane, planeCacheInfo, planeCacheKey, loadCachedPlane, storeCachedPlane, createPlaneWriteQueue, planeCacheStats, planeCacheProvider } from './plane-cache.js?v=20261110-build708';
+import { sourceFilterSignature as signatureOf, withSpacingWeights } from './filter-units.js?v=20261110-build708';
 export const memoryFilterPreviewCache={map:new Map(),bytes:0};
 export const filterState={spikeHole:false,nlm:false,anisotropic:false,gaussian:false,sigmoid:false,bilateral:false,tv:false,unsharp:false};
-export function sourceSliceCacheLimit(){return isIPhoneRuntime()?64*1024*1024:isTabletRuntime()?192*1024*1024:256*1024*1024}
+export function sourceSliceCacheLimit(){return isTabletRuntime()?192*1024*1024:256*1024*1024}
 // parallel read-ahead: one decode per slice even if requested twice
 const sliceInflight=new Map();
 export async function getCachedSourceSlice(meta){
@@ -131,14 +132,24 @@ export async function readSourceSubregion(meta,x0,y0,width,height,preferFullSlic
   return out;
  }
  const firstPixel=y0*meta.columns+x0,lastPixel=(y0+height-1)*meta.columns+x0+width,start=meta.pixelOffset+firstPixel*bpp,end=meta.pixelOffset+lastPixel*bpp;
- const bytes=new Uint8Array(await meta.file.slice(start,end).arrayBuffer()),view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength),little=meta.ts!=='1.2.840.10008.1.2.2',out=new Float32Array(width*height);
+ const bytes=new Uint8Array(await meta.file.slice(start,end).arrayBuffer()),view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength),little=meta.ts!=='1.2.840.10008.1.2.2',out=new Float32Array(width*height),L=storedLayout(meta);
  let q=0;
+ if(L.plain){ // the whole allocated word is the value (every ordinary 8 / 16-bit series): the plain DataView loop
+  for(let y=0;y<height;y++){
+   const rowBase=y*meta.columns*bpp;
+   for(let x=0;x<width;x++){
+    const off=rowBase+x*bpp;let raw;
+    if(meta.bits===8){raw=bytes[off];if(meta.signed&&raw>127)raw-=256}
+    else raw=meta.signed?view.getInt16(off,little):view.getUint16(off,little);
+    out[q++]=raw*meta.slope+meta.intercept;
+   }
+  }
+  return out;
+ }
  for(let y=0;y<height;y++){
   const rowBase=y*meta.columns*bpp;
   for(let x=0;x<width;x++){
-   const off=rowBase+x*bpp;let raw;
-   if(meta.bits===8){raw=bytes[off];if(meta.signed&&raw>127)raw-=256}
-   else raw=meta.signed?view.getInt16(off,little):view.getUint16(off,little);
+   const raw=readStored(bytes,view,rowBase+x*bpp,little,L);
    out[q++]=raw*meta.slope+meta.intercept;
   }
  }

@@ -48,9 +48,21 @@ describe('build markers', () => {
   it.each(modules)('relative imports in %s are tagged with this build', file => {
     const src = read(`docs/${file}`);
     for (const [, spec] of src.matchAll(/\bfrom\s*['"](\.\/[^'"]+)['"]/g)) {
+      // vendored third-party libraries (docs/vendor/<package>@<version>/, tools/vendor-libs.mjs) are immutable files: the version in the
+      // path is their cache tag, and they are imported without a query so that every module (and every test) shares one instance
+      if (spec.startsWith('./vendor/')) { expect(spec, `${file}: ${spec}`).toMatch(/^\.\/vendor\/[\w.-]+@\d+\.\d+\.\d+\/[\w./-]+\.js$/); continue; }
       const q = spec.slice(spec.indexOf('?'));
       expect(spec.includes('?'), `${file}: ${spec} has no ?v= tag`).toBe(true);
       expect(q, `${file}: ${spec}`).toMatch(tagFor());
+    }
+  });
+
+  it('no module loads anything from a network host (static / dynamic import, importScripts, Worker)', () => {
+    for (const file of modules) {
+      const src = read(`docs/${file}`);
+      expect(src, file).not.toMatch(/\b(?:from|import)\s*\(?\s*['"`](?:https?:)?\/\//);
+      expect(src, file).not.toMatch(/\bimportScripts\s*\(\s*['"`](?:https?:)?\/\//);
+      expect(src, file).not.toMatch(/new\s+(?:Shared)?Worker\s*\(\s*['"`](?:https?:)?\/\//);
     }
   });
 

@@ -1,86 +1,89 @@
 
-import { ledgerText } from './mem-ledger.js?v=20261109-build703';
-import * as memVolumeIo from './volume-io.js?v=20261109-build703';
-import * as memSourceFilters from './source-filters.js?v=20261109-build703';
-import * as memState from './state.js?v=20261109-build703';
-import * as memGpu from './gpu-compute.js?v=20261109-build703';
-import { initSettingsDialog } from './settings-ui.js?v=20261109-build703';
-import { initTutorialUi } from './tutorial-ui.js?v=20261109-build703';
-import { initEventModeUi } from './event-mode-ui.js?v=20261109-build703';
-import { initSampleCreditUi } from './sample-credit-ui.js?v=20261109-build703'; // the credit box of a practice dataset with a license notice (sample5)
-import { logGpuError } from './gpu-diagnostics.js?v=20261109-build703';
-import { initThemeUi } from './theme-ui.js?v=20261109-build703';
-import { mark3DCurrent, mark3DStale, set3DState } from './three-state.js?v=20261109-build703';
-import { gpuVolumeRefresh, set3DBusy } from './three-status.js?v=20261109-build703';
-import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.webgpu.js';
-import 'https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js';
-import dicomParser from 'https://esm.sh/dicom-parser@1.8.21';
-import { MedicalVolumeRenderer } from './medical-volume.js?v=20261109-build703';
-import 'https://esm.sh/fflate@0.8.2';
-import { rangeWheelSteps, installRangeEntry, setRangeEntryBounds } from './range-entry.js?v=20261109-build703';
-import { clampRangeValue, esc, fmt, frameYield, isIPadRuntime, rangeNumber, rangeStep } from './utils.js?v=20261109-build703';
-import { setMeshMaterialBackend, updateMeshDepth, setSegmentMeshMaterial } from './mesh-material.js?v=20261109-build703'; // the surface meshes evaluate the same lighting formula as the two volume shaders (lighting.js)
-import { materialKey } from './lighting.js?v=20261109-build703';
-import { groupSeries, parseFiles, UNNAMED_SERIES } from './dicom.js?v=20261109-build703';
-import { practiceSeriesName } from './sample-registry.js?v=20261109-build703';
-import './mask-ops.js?v=20261109-build703';
-import './run-length.js?v=20261109-build703';
-import './mesh-geometry.js?v=20261109-build703';
-import { applyLanguage, tr, I18N } from './i18n.js?v=20261109-build703';
-import { installComments, refreshCommentsUi } from './comment-ui.js?v=20261109-build703';
-import { installComment3d, updateComment3dMarkers } from './comment-3d.js?v=20261109-build703';
-import { installHuLine3d, updateHuLine3d } from './hu-line-3d.js?v=20261109-build703';
-import { installCrosshair, crosshairPointerDown, crosshairPointerMove, crosshairPointerEnd, setCrosshairMode, refreshCrosshairUi } from './crosshair-ui.js?v=20261109-build703';
-import './gpu-shaders.js?v=20261109-build703';
-import { analysisCutApplying, analysisCutScreen, analysisEditPreparing, analysisEditTargetKey, analysisEditTargetMode, analysisEditTool, analysisPendingCut, analysisRegions, ctRangeMode, current3DVolume, currentLanguage, cutControlPreviewRaf, filterRebuildTimer, incFilterRebuildRevision, incSourceRenderRevision, MPR3D_SURFACE_OPACITY_DEFAULT, mpr3DSurfaceOpacity, mpr3DVolumeOpacity, precisionRangeDrag, sceneState, sectionCapEnabled, sectionCapHatch, sectionCapOpacity, sectionSliceImageVisible, sectionViewOpen, sectionViewPlane, sectionViewReverse, setActiveId, setActiveSeries, setAnalysisCutApplying, setAnalysisCutScreen, setAnalysisCutStroke, setAnalysisEditPreparing, setAnalysisEditTargetKey, setAnalysisEditTargetMode, setAnalysisEditTool, setAnalysisPendingCut, setCtRangeMode, setCtRangeProfile, setCurrent3DVolume, setCutControlPreviewRaf, setFilterOrder, setMemoryGpuPreviewActive, setMpr3DSurfaceOpacity, setMpr3DVolumeOpacity, setPrecisionRangeDrag, setSceneState, setSectionCapEnabled, setSectionCapHatch, setSectionCapOpacity, setSectionSliceImageVisible, setSectionViewOpen, setSectionViewPlane, setSectionViewReverse, setSmoothingRefreshTimer, setSourceOrthogonalPlaneCacheBytes, setSourceVolume, setThreeDCancelRequested, setThreeRenderMode, setVolume, setVolumeAnalysisBusy, setVolumeAnalysisMode, smoothingRefreshTimer, sourceVolume, threeDApplying, threeDCancelRequested, threeDDirty, threeRenderMode, volume, volumeAnalysisBusy, volumeAnalysisMode, clearCrosshair } from './state.js?v=20261109-build703';
-import { $, sampleDemoBtn, sampleDialog, sampleDialogClose, sampleChoiceButtons, vrViewBtn, arViewBtn, analysisClearButton, analysisCutApply, analysisCutButton, analysisCutCancel, analysisCutDepth, analysisCutOffset, analysisCutPitch, analysisCutWidth, analysisCutYaw, analysisEditRemoveSelected, analysisEditTargetSelect, analysisExportSelected, analysisKeepSelected, analysisLassoButton, analysisLassoDeselectButton, analysisDeselectAll, analysisEditDeselectAll, analysisLineCutButton, analysisMergeButton, analysisNavigateButton, analysisRedo, analysisRemoveSelected, analysisResetEdit, analysisSelectRegionButton, analysisUndo, anisotropicBtn, anisotropicIterations, anisotropicIterationsValue, anisotropicStrength, anisotropicStrengthValue, app, appVersionBadge, bar, bilateralBtn, bilateralIntensity, bilateralIntensityValue, bilateralPasses, bilateralPassesValue, bilateralSpatial, bilateralSpatialValue, bilateralStrength, bilateralStrengthValue, ctRangeAuto, ctRangeFull, filterRebuild3D, footer, gaussianBtn, gaussianStrength, gaussianStrengthValue, languageToggle, list, mainViewSlot, mpr3DSliceSliders, mprSurfaceOpacity, mprSurfaceOpacityValue, mprVolumeOpacity, mprVolumeOpacityValue, nlmBtn, nlmPatchRadius, nlmPatchRadiusValue, nlmSearchRadius, nlmSearchRadiusValue, nlmStrength, nlmStrengthValue, planes, prog, renderModeToggle, resetFilterBtn, sectionCapEnabledControl, sectionCapHatchControl, sectionCapOpacityControl, sectionCapOpacityValue, sectionPosition, sectionReverse, sectionSliceImageControl, sectionViewToggle, segmentAddButton, segmentAddSelect, selected, sigmoidBtn, sigmoidCenter, sigmoidCenterValue, sigmoidWidth, sigmoidWidthValue, sigmoidStrength, sigmoidStrengthValue, smoothingType, spatialPasses, spatialPassesValue, spikeHoleBtn, spikeHoleStrength, spikeHoleStrengthValue, spikeHoleThreshold, spikeHoleThresholdValue, state, status, surfaceSmoothEnabled, surfaceSmoothStrength, surfaceSmoothValue, threeBusyCancel, threeBusyLabel, threeEditOverlay, threeLabel, tvBtn, tvIterations, tvIterationsValue, tvWeight, tvWeightValue, unsharpAmount, unsharpAmountValue, unsharpBtn, unsharpRadius, unsharpRadiusValue, unsharpThreshold, unsharpThresholdValue, viewport, volumeAnalysisResult, volumeAnalysisToggle, volumeCacheClearBtn, wc, wcVal, ww, wwVal, anisotropicKappa, anisotropicKappaValue } from './ui-shell.js?v=20261109-build703';
-import './latest-runner.js?v=20261109-build703';
-import { saveDeviceSmoothing, applyDeviceSmoothing } from './settings.js?v=20261109-build703';
-import { ensureGpuFilterDevice, setGpuComputeBackend, updateGpuStatus } from './gpu-compute.js?v=20261109-build703';
-import { sourceSliceCache } from './volume-io.js?v=20261109-build703';
-import './lasso.js?v=20261109-build703';
-import { spacingWarningText } from './slice-spacing.js?v=20261109-build703';
-import { resolveProjectMatch, datasetFingerprint, unpackProject } from './project-file.js?v=20261109-build703';
-import './gpu-volume-cache.js?v=20261109-build703';
-import { filterState, getFilteredSourceAxialBlock, currentFilterSignature } from './source-filters.js?v=20261109-build703';
-import { sourceOrthogonalPlaneCache, sourceOrthogonalPlanePending } from './mpr-orthogonal.js?v=20261109-build703';
-import { request3DRender } from './scene3d.js?v=20261109-build703';
-import { makeAxisWidget, create3DRenderer, makeViewOverlays, makeViewRotation, makeCutTools } from './scene-view.js?v=20261109-build703';
-import './cpu-filters.js?v=20261109-build703';
-import { mpr3DOpacitySource, mpr3DOrthoSliding, mpr3DPreviewCache, mpr3DVisibility, recomposeSectionCaps, restoreSectionAutoPlane, setMpr3DOverlayVisible, showSectionPlaneOverlay, syncMpr3DOverlayPresentation, syncMpr3DSliceSliders, syncSectionCapPresentation, updateMpr3DPlanePositions } from './mpr3d-overlay.js?v=20261109-build703';
-import { SEGMENT_PRESET_ORDER, gpuSegmentOrder, segmentEditActive, segmentEditState, segmentNeedsGlobalMask, segmentNeedsVoxelMask, segmentHasProcessedMask, segmentState, segmentExclusive, applyExclusiveRanges, commitExclusiveRanges } from './segments.js?v=20261109-build703';
-import { rebindWebGpuSectionClipGroup, sectionPlaneLabel, updateSectionClipPlaneWorld, updateSectionViewUi } from './section-view.js?v=20261109-build703';
-import { initSectionShadeUi, syncSectionShadeUi, sectionShadeParams } from './section-shade.js?v=20261109-build703'; // browser cut-face shading controls (slice image hidden)
-import { cancelSourceMprWarmup, renderAll, renderSectionPlaneLive, schedulePlaneRender, updateMprCanvasPhysicalAspect } from './mpr-render.js?v=20261109-build703';
-import './busy.js?v=20261109-build703';
-import { setBusySlot } from './progress-modal.js?v=20261109-build703';
-import { createXrFeedback } from './xr-feedback.js?v=20261109-build703';
-import { ensureSegmentBaseRuns, getFinalSegmentRuns, setSegmentStatus } from './segment-runs.js?v=20261109-build703';
-import { dispose } from './surface-mesh.js?v=20261109-build703';
-import { clearCutResultPreview, refreshCutControlReadouts, scheduleCutResultPreview, updateAnalysisEditorControls, updateCutPreview, updateThreeEditUi } from './edit-tools.js?v=20261109-build703';
-import { applySectionClippingMaterials, ensureEditRaycastReady, ensureGpuResidentCpuPositions, refreshEditedSegmentSurface, segmentHasSurface, setSegmentSurfaceShown, syncSectionClipParent } from './surface-build.js?v=20261109-build703';
-import { removeAnalysisRegion, renderAnalysisResults, setAnalysisFocusedRegion } from './analysis-results.js?v=20261109-build703';
-import { syncGpuVolumeEdits, updateVolumeCacheControl, volumeCache } from './gpu-volume-data.js?v=20261109-build703';
-import { resetLoadStats, loadStat, loadStatTime } from './load-stats.js?v=20261109-build703'; // what the load did, for the VR switch report
-import { clearMemoryFilterPreviewCache, progress, rebuildCurrent3D, surfaceEditsPending, surfaceRebuildPending } from './rebuild-3d.js?v=20261109-build703';
-import { formatHU, restoreFilterUnitRange, resetFilterUnitControls, currentMainViewKey, installFilterReorder, invalidateSourceFilters, liveFilterState, renderFilterOrder, scheduleFilterRebuild, syncFilterControls } from './filter-pipeline.js?v=20261109-build703';
-import { APP_BUILD, APP_VERSION } from './version.js?v=20261109-build703';
-import { addSegmentPreset, refuseSegmentEnable, setSegmentEnabled, ctSliderFullBounds, installSegmentReorder, applyCtRangeMode, clearAnalysisHighlight, clearSegmentEditCache, removeSegmentPreset, renderSegmentPresets, scheduleSegment3D, updateSegmentOutputs, THIN_SLIDERS, formatMmVoxels, thinSliderValue } from './segment-ui.js?v=20261109-build703';
-import { installSegmentHistogram } from './histogram-ui.js?v=20261109-build703';
-import { installLineProfile, lineProfilePointerDown, lineProfilePointerMove, lineProfilePointerEnd } from './line-profile-ui.js?v=20261109-build703';
-import { installCropExport, installCrop3d, updateCrop3d, cropPointerDown, cropPointerMove, cropPointerEnd } from './crop-ui.js?v=20261109-build703';
-import { sampleProjectUrl } from './sample-sets.js?v=20261109-build703';
-import { syncProcessedSegmentsToVolume, loadSampleDemo, activateMedicalVolume, applyPendingProject, busy, loadPhase, detectedSeries, enableProcessingControls, refreshSpacingWarning, pendingProject, requestIPadSettingsTab, selectSeries, setThreeVolumeOverlay, updateRenderModeControl, restoreProjectAnnotations } from './data-load.js?v=20261109-build703';
-import { initIPadGpuQualityControl, initIPadWorkspaceUi } from './workspace-ui.js?v=20261109-build703';
-import { installAnalysisDock } from './analysis-dock.js?v=20261109-build703';
-import { installPaneResize } from './pane-resize.js?v=20261109-build703';
-import { askInline, armConfirm } from './inline-ask.js?v=20261109-build703';
-import { freshForEventSelection, resetUserState, EVENT_FRESH_EVENT } from './event-fresh.js?v=20261109-build703';
-import { eventModeOn } from './event-mode.js?v=20261109-build703';
-import { runEventPrepare } from './event-prepare-ui.js?v=20261109-build703'; // 「体験会用データを準備」 (settings > cache)
-import { watchStandardOpen } from './standard-open.js?v=20261109-build703'; // records the standard state of a practice level once it has opened (event mode) // 体験会モード: every practice dataset opens fresh from its project file
-import { deselectAllAnalysisRegions, deselectRegionsInLasso, analysisRegionAtVoxel, analyzeEditRegionAtPointer, analyzeVolumeAtPointer, analyzeVolumeAtVoxel, applyCutStroke, applyEditKeepSelected, applyEditRemoveSelected, clearAllSegmentEdits, clearThreeEditOverlay, exportFocusedAnalysisRegionStl, exportSegmentStl, mergeSelectedAnalysisRegions, redoSegmentEdit, resetFocusedSegmentEdit, returnToNavigate, scheduleAnalysisRunPrewarm, selectRegionsInLasso, syncVolumeAnalysisOverlay, undoSegmentEdit } from './analysis-ops.js?v=20261109-build703';
-import { makeDeferredEnd } from './deferred-end.js?v=20261109-build703';
+import { ledgerText } from './mem-ledger.js?v=20261110-build708';
+import * as memVolumeIo from './volume-io.js?v=20261110-build708';
+import * as memSourceFilters from './source-filters.js?v=20261110-build708';
+import * as memState from './state.js?v=20261110-build708';
+import * as memGpu from './gpu-compute.js?v=20261110-build708';
+import { initSettingsDialog } from './settings-ui.js?v=20261110-build708';
+import { initTutorialUi } from './tutorial-ui.js?v=20261110-build708';
+import { initEventModeUi } from './event-mode-ui.js?v=20261110-build708';
+import { initSampleCreditUi } from './sample-credit-ui.js?v=20261110-build708'; // the credit box of a practice dataset with a license notice (sample5)
+import { logGpuError } from './gpu-diagnostics.js?v=20261110-build708';
+import { initThemeUi } from './theme-ui.js?v=20261110-build708';
+import { mark3DCurrent, mark3DStale, set3DState } from './three-state.js?v=20261110-build708';
+import { gpuVolumeRefresh, set3DBusy } from './three-status.js?v=20261110-build708';
+import * as THREE from './vendor/three@0.186.0/build/three.webgpu.js';
+import './vendor/three@0.186.0/build/three.module.js';
+import dicomParser from './vendor/dicom-parser@1.8.21/index.js';
+import { MedicalVolumeRenderer } from './medical-volume.js?v=20261110-build708';
+import './vendor/fflate@0.8.2/index.js';
+import { rangeWheelSteps, installRangeEntry, setRangeEntryBounds } from './range-entry.js?v=20261110-build708';
+import { clampRangeValue, esc, fmt, frameYield, isIPadRuntime, rangeNumber, rangeStep } from './utils.js?v=20261110-build708';
+import { setMeshMaterialBackend, updateMeshDepth, setSegmentMeshMaterial } from './mesh-material.js?v=20261110-build708'; // the surface meshes evaluate the same lighting formula as the two volume shaders (lighting.js)
+import { materialKey } from './lighting.js?v=20261110-build708';
+import { groupSeries, parseFiles, UNNAMED_SERIES } from './dicom.js?v=20261110-build708';
+import { practiceSeriesName, sampleLoadingTextFor } from './sample-registry.js?v=20261110-build708';
+import './mask-ops.js?v=20261110-build708';
+import './run-length.js?v=20261110-build708';
+import './mesh-geometry.js?v=20261110-build708';
+import { applyLanguage, tr, I18N } from './i18n.js?v=20261110-build708';
+import { installComments, refreshCommentsUi } from './comment-ui.js?v=20261110-build708';
+import { installComment3d, updateComment3dMarkers } from './comment-3d.js?v=20261110-build708';
+import { installHuLine3d, updateHuLine3d } from './hu-line-3d.js?v=20261110-build708';
+import { installCrosshair, crosshairPointerDown, crosshairPointerMove, crosshairPointerEnd, setCrosshairMode, refreshCrosshairUi } from './crosshair-ui.js?v=20261110-build708';
+import './gpu-shaders.js?v=20261110-build708';
+import { analysisCutApplying, analysisCutScreen, analysisEditPreparing, analysisEditTargetKey, analysisEditTargetMode, analysisEditTool, analysisPendingCut, analysisRegions, ctRangeMode, current3DVolume, currentLanguage, cutControlPreviewRaf, filterRebuildTimer, incFilterRebuildRevision, incSourceRenderRevision, MPR3D_SURFACE_OPACITY_DEFAULT, mpr3DSurfaceOpacity, mpr3DVolumeOpacity, precisionRangeDrag, sceneState, sectionCapEnabled, sectionCapHatch, sectionCapOpacity, sectionSliceImageVisible, sectionViewOpen, sectionViewPlane, sectionViewReverse, setActiveId, setActiveSeries, setAnalysisCutApplying, setAnalysisCutScreen, setAnalysisCutStroke, setAnalysisEditPreparing, setAnalysisEditTargetKey, setAnalysisEditTargetMode, setAnalysisEditTool, setAnalysisPendingCut, setCtRangeMode, setCtRangeProfile, setCurrent3DVolume, setCutControlPreviewRaf, setFilterOrder, setMemoryGpuPreviewActive, setMpr3DSurfaceOpacity, setMpr3DVolumeOpacity, setPrecisionRangeDrag, setSceneState, setSectionCapEnabled, setSectionCapHatch, setSectionCapOpacity, setSectionSliceImageVisible, setSectionViewOpen, setSectionViewPlane, setSectionViewReverse, setSmoothingRefreshTimer, setSourceOrthogonalPlaneCacheBytes, setSourceVolume, setThreeDCancelRequested, setThreeRenderMode, setVolume, setVolumeAnalysisBusy, setVolumeAnalysisMode, smoothingRefreshTimer, sourceVolume, threeDApplying, threeDCancelRequested, threeDDirty, threeRenderMode, volume, volumeAnalysisBusy, volumeAnalysisMode, clearCrosshair, setCrosshairSlice } from './state.js?v=20261110-build708';
+import { $, sampleDemoBtn, sampleChoiceButtons, vrViewBtn, arViewBtn, analysisClearButton, analysisCutApply, analysisCutButton, analysisCutCancel, analysisCutDepth, analysisCutOffset, analysisCutPitch, analysisCutWidth, analysisCutYaw, analysisEditRemoveSelected, analysisEditTargetSelect, analysisKeepSelected, analysisLassoButton, analysisLassoDeselectButton, analysisDeselectAll, analysisEditDeselectAll, analysisLineCutButton, analysisMergeButton, analysisNavigateButton, analysisRedo, analysisRemoveSelected, analysisResetEdit, analysisSelectRegionButton, analysisUndo, anisotropicBtn, anisotropicIterations, anisotropicIterationsValue, anisotropicStrength, anisotropicStrengthValue, app, appVersionBadge, bar, bilateralBtn, bilateralIntensity, bilateralIntensityValue, bilateralPasses, bilateralPassesValue, bilateralSpatial, bilateralSpatialValue, bilateralStrength, bilateralStrengthValue, ctRangeAuto, ctRangeFull, filterRebuild3D, footer, gaussianBtn, gaussianStrength, gaussianStrengthValue, languageToggle, list, mainViewSlot, mpr3DSliceSliders, mprSurfaceOpacity, mprSurfaceOpacityValue, mprVolumeOpacity, mprVolumeOpacityValue, nlmBtn, nlmPatchRadius, nlmPatchRadiusValue, nlmSearchRadius, nlmSearchRadiusValue, nlmStrength, nlmStrengthValue, planes, prog, renderModeToggle, resetFilterBtn, sectionCapEnabledControl, sectionCapHatchControl, sectionCapOpacityControl, sectionCapOpacityValue, sectionPosition, sectionReverse, sectionSliceImageControl, sectionViewToggle, segmentAddButton, segmentAddSelect, selected, sigmoidBtn, sigmoidCenter, sigmoidCenterValue, sigmoidWidth, sigmoidWidthValue, sigmoidStrength, sigmoidStrengthValue, smoothingType, spatialPasses, spatialPassesValue, spikeHoleBtn, spikeHoleStrength, spikeHoleStrengthValue, spikeHoleThreshold, spikeHoleThresholdValue, state, status, surfaceSmoothEnabled, surfaceSmoothStrength, surfaceSmoothValue, threeBusyCancel, threeBusyLabel, threeEditOverlay, threeLabel, tvBtn, tvIterations, tvIterationsValue, tvWeight, tvWeightValue, unsharpAmount, unsharpAmountValue, unsharpBtn, unsharpRadius, unsharpRadiusValue, unsharpThreshold, unsharpThresholdValue, viewport, volumeAnalysisResult, volumeAnalysisToggle, volumeCacheClearBtn, wc, wcVal, ww, wwVal, anisotropicKappa, anisotropicKappaValue } from './ui-shell.js?v=20261110-build708';
+import './latest-runner.js?v=20261110-build708';
+import { saveDeviceSmoothing, applyDeviceSmoothing } from './settings.js?v=20261110-build708';
+import { ensureGpuFilterDevice, setGpuComputeBackend, updateGpuStatus } from './gpu-compute.js?v=20261110-build708';
+import { sourceSliceCache } from './volume-io.js?v=20261110-build708';
+import './lasso.js?v=20261110-build708';
+import { spacingWarningText } from './slice-spacing.js?v=20261110-build708';
+import { resolveProjectMatch, datasetFingerprint, unpackProject } from './project-file.js?v=20261110-build708';
+import './gpu-volume-cache.js?v=20261110-build708';
+import { filterState, getFilteredSourceAxialBlock, currentFilterSignature } from './source-filters.js?v=20261110-build708';
+import { sourceOrthogonalPlaneCache, sourceOrthogonalPlanePending } from './mpr-orthogonal.js?v=20261110-build708';
+import { request3DRender } from './scene3d.js?v=20261110-build708';
+import { makeAxisWidget, create3DRenderer, makeViewOverlays, makeViewRotation, makeCutTools } from './scene-view.js?v=20261110-build708';
+import './cpu-filters.js?v=20261110-build708';
+import { mpr3DOpacitySource, mpr3DOrthoSliding, mpr3DPreviewCache, mpr3DVisibility, recomposeSectionCaps, restoreSectionAutoPlane, setMpr3DOverlayVisible, showSectionPlaneOverlay, syncMpr3DOverlayPresentation, syncMpr3DSliceSliders, syncSectionCapPresentation, updateMpr3DPlanePositions } from './mpr3d-overlay.js?v=20261110-build708';
+import { SEGMENT_PRESET_ORDER, gpuSegmentOrder, segmentEditActive, segmentEditState, segmentNeedsGlobalMask, segmentNeedsVoxelMask, segmentHasProcessedMask, segmentState, segmentExclusive, applyExclusiveRanges, commitExclusiveRanges } from './segments.js?v=20261110-build708';
+import { rebindWebGpuSectionClipGroup, sectionPlaneLabel, updateSectionClipPlaneWorld, updateSectionViewUi } from './section-view.js?v=20261110-build708';
+import { initSectionShadeUi, syncSectionShadeUi, sectionShadeParams } from './section-shade.js?v=20261110-build708'; // browser cut-face shading controls (slice image hidden)
+import { cancelSourceMprWarmup, renderAll, renderSectionPlaneLive, schedulePlaneRender, updateMprCanvasPhysicalAspect } from './mpr-render.js?v=20261110-build708';
+import './busy.js?v=20261110-build708';
+import { setBusySlot } from './progress-modal.js?v=20261110-build708';
+import { setSegmentTreeActions } from './segment-tree-ui.js?v=20261110-build708';
+import { deleteChildSegment, setChildRepaint, syncChildSegmentsToVolume, onChildSegmentsChange } from './child-segments-ui.js?v=20261110-build708';
+import { applyChildCutStroke, prepareChildHistoryTarget } from './child-edit.js?v=20261110-build708';
+import { isChildKey } from './segment-look.js?v=20261110-build708';
+import { createXrFeedback } from './xr-feedback.js?v=20261110-build708';
+import { ensureSegmentBaseRuns, getFinalSegmentRuns, setSegmentStatus } from './segment-runs.js?v=20261110-build708';
+import { dispose } from './surface-mesh.js?v=20261110-build708';
+import { clearCutResultPreview, refreshCutControlReadouts, scheduleCutResultPreview, updateAnalysisEditorControls, updateCutPreview, updateThreeEditUi, syncChildEditTargets } from './edit-tools.js?v=20261110-build708';
+import { applySectionClippingMaterials, ensureEditRaycastReady, ensureGpuResidentCpuPositions, refreshEditedSegmentSurface, segmentHasSurface, setSegmentSurfaceShown, syncSectionClipParent } from './surface-build.js?v=20261110-build708';
+import { removeAnalysisRegion, renderAnalysisResults, setAnalysisFocusedRegion } from './analysis-results.js?v=20261110-build708';
+import { syncGpuVolumeEdits, updateVolumeCacheControl, volumeCache } from './gpu-volume-data.js?v=20261110-build708';
+import { resetLoadStats, loadStat, loadStatTime } from './load-stats.js?v=20261110-build708'; // what the load did, for the VR switch report
+import { clearMemoryFilterPreviewCache, progress, rebuildCurrent3D, surfaceEditsPending, surfaceRebuildPending } from './rebuild-3d.js?v=20261110-build708';
+import { formatHU, restoreFilterUnitRange, resetFilterUnitControls, currentMainViewKey, installFilterReorder, invalidateSourceFilters, liveFilterState, renderFilterOrder, scheduleFilterRebuild, syncFilterControls } from './filter-pipeline.js?v=20261110-build708';
+import { APP_BUILD, APP_VERSION } from './version.js?v=20261110-build708';
+import { addSegmentPreset, refuseSegmentEnable, setSegmentEnabled, ctSliderFullBounds, installSegmentReorder, applyCtRangeMode, clearAnalysisHighlight, clearSegmentEditCache, removeSegmentPreset, renderSegmentPresets, scheduleSegment3D, updateSegmentOutputs, THIN_SLIDERS, formatMmVoxels, thinSliderValue } from './segment-ui.js?v=20261110-build708';
+import { installSegmentHistogram } from './histogram-ui.js?v=20261110-build708';
+import { installLineProfile, lineProfilePointerDown, lineProfilePointerMove, lineProfilePointerEnd } from './line-profile-ui.js?v=20261110-build708';
+import { sampleProjectUrl, isSampleId } from './sample-sets.js?v=20261110-build708';
+import { syncProcessedSegmentsToVolume, loadSampleDemo, activateMedicalVolume, applyPendingProject, busy, loadPhase, detectedSeries, enableProcessingControls, refreshSpacingWarning, pendingProject, requestIPadSettingsTab, selectSeries, setThreeVolumeOverlay, updateRenderModeControl, restoreProjectAnnotations } from './data-load.js?v=20261110-build708';
+import { initIPadGpuQualityControl, initIPadWorkspaceUi } from './workspace-ui.js?v=20261110-build708';
+import { installAnalysisDock } from './analysis-dock.js?v=20261110-build708';
+import { installPaneResize } from './pane-resize.js?v=20261110-build708';
+import { askInline, armConfirm } from './inline-ask.js?v=20261110-build708';
+import { freshForEventSelection, resetUserState, EVENT_FRESH_EVENT } from './event-fresh.js?v=20261110-build708';
+import { eventModeOn } from './event-mode.js?v=20261110-build708';
+import { runEventPrepare } from './event-prepare-ui.js?v=20261110-build708'; // 「体験会用データを準備」 (settings > cache)
+import { watchStandardOpen } from './standard-open.js?v=20261110-build708'; // records the standard state of a practice level once it has opened (event mode) // 体験会モード: every practice dataset opens fresh from its project file
+import { deselectAllAnalysisRegions, deselectRegionsInLasso, analysisRegionAtVoxel, analyzeEditRegionAtPointer, analyzeVolumeAtPointer, analyzeVolumeAtVoxel, applyCutStroke, applyEditKeepSelected, applyEditRemoveSelected, clearAllSegmentEdits, clearThreeEditOverlay, mergeSelectedAnalysisRegions, redoSegmentEdit, resetFocusedSegmentEdit, returnToNavigate, scheduleAnalysisRunPrewarm, selectRegionsInLasso, syncVolumeAnalysisOverlay, undoSegmentEdit } from './analysis-ops.js?v=20261110-build708';
+import { makeDeferredEnd } from './deferred-end.js?v=20261110-build708';
 async function ensureLatestDeployedBuild(){
  try{
   const res=await fetch('./version.json?t='+Date.now(),{cache:'no-store',headers:{'Cache-Control':'no-cache'}});
@@ -302,9 +305,9 @@ analysisEditTargetSelect.onchange=()=>{if(analysisCutApplying)return;const next=
 analysisEditRemoveSelected.onclick=()=>void applyEditRemoveSelected();
 analysisRemoveSelected.onclick=()=>void applyEditRemoveSelected();
 analysisKeepSelected.onclick=()=>void applyEditKeepSelected();
-analysisUndo.onclick=()=>void undoSegmentEdit();
-analysisRedo.onclick=()=>void redoSegmentEdit();
-analysisResetEdit.onclick=()=>void resetFocusedSegmentEdit();
+analysisUndo.onclick=()=>{prepareChildHistoryTarget('undo');void undoSegmentEdit()};
+analysisRedo.onclick=()=>{prepareChildHistoryTarget('redo');void redoSegmentEdit()};
+analysisResetEdit.onclick=()=>{prepareChildHistoryTarget('reset');void resetFocusedSegmentEdit()};
 const onCutControlInput=()=>{
  refreshCutControlReadouts();updateThreeEditUi();
  if(cutControlPreviewRaf)cancelAnimationFrame(cutControlPreviewRaf);
@@ -320,9 +323,16 @@ for(const control of [analysisCutWidth,analysisCutDepth,analysisCutYaw,analysisC
  control.onchange=onCutControlInput;
  control.onpointermove=e=>{if(e.buttons||e.pointerType==='touch'||e.pointerType==='pen')onCutControlInput()};
 }
-analysisCutApply.onclick=async()=>{if(!analysisPendingCut||analysisCutApplying)return;const pending=analysisPendingCut;setAnalysisPendingCut(null);setAnalysisCutApplying(true);setAnalysisCutStroke(null);setAnalysisCutScreen([]);clearThreeEditOverlay();if(sceneState)sceneState.editCutPreviewPoint=null;updateCutPreview(null);updateAnalysisEditorControls();updateThreeEditUi(currentLanguage==='ja'?'切断を反映中…':'Applying cut…');let ok=false;setBusySlot('edit',true,{label:currentLanguage==='ja'?'切断を反映中…':'Applying cut…',counted:true});try{ok=await applyCutStroke(pending.points,pending.key,pending.mode)}finally{setBusySlot('edit',false,{counted:true});clearCutResultPreview();setAnalysisCutApplying(false);setAnalysisEditTool('select');setAnalysisEditTargetKey(analysisEditTargetMode==='auto'?null:analysisEditTargetMode);if(sceneState)sceneState.editCutPreviewPoint=null;updateAnalysisEditorControls();const ready=ok?(currentLanguage==='ja'?'切断を反映しました · 操作モードに戻りました':'Cut applied · returned to Navigate'):(currentLanguage==='ja'?'切断結果を確認してください · 操作モードに戻りました':'Check cut result · returned to Navigate');updateThreeEditUi(ready);request3DRender()}};
+analysisCutApply.onclick=async()=>{if(!analysisPendingCut||analysisCutApplying)return;const pending=analysisPendingCut;setAnalysisPendingCut(null);setAnalysisCutApplying(true);setAnalysisCutStroke(null);setAnalysisCutScreen([]);clearThreeEditOverlay();if(sceneState)sceneState.editCutPreviewPoint=null;updateCutPreview(null);updateAnalysisEditorControls();updateThreeEditUi(currentLanguage==='ja'?'切断を反映中…':'Applying cut…');let ok=false;setBusySlot('edit',true,{label:currentLanguage==='ja'?'切断を反映中…':'Applying cut…',counted:true});try{ok=await(isChildKey(pending.key)?applyChildCutStroke(pending.points,pending.key,pending.mode):applyCutStroke(pending.points,pending.key,pending.mode))}finally{setBusySlot('edit',false,{counted:true});clearCutResultPreview();setAnalysisCutApplying(false);setAnalysisEditTool('select');setAnalysisEditTargetKey(analysisEditTargetMode==='auto'?null:analysisEditTargetMode);if(sceneState)sceneState.editCutPreviewPoint=null;updateAnalysisEditorControls();const ready=ok?(currentLanguage==='ja'?'切断を反映しました · 操作モードに戻りました':'Cut applied · returned to Navigate'):(currentLanguage==='ja'?'切断結果を確認してください · 操作モードに戻りました':'Check cut result · returned to Navigate');updateThreeEditUi(ready);request3DRender()}};
 analysisCutCancel.onclick=()=>{if(analysisCutApplying)return;setAnalysisPendingCut(null);setAnalysisCutStroke(null);setAnalysisCutScreen([]);clearThreeEditOverlay();clearCutResultPreview();if(sceneState)sceneState.editCutPreviewPoint=null;updateCutPreview(null);setAnalysisEditTargetKey(analysisEditTargetMode==='auto'?null:analysisEditTargetMode);updateAnalysisEditorControls();returnToNavigate();updateThreeEditUi(currentLanguage==='ja'?'切断をキャンセルしました':'Cut cancelled');request3DRender()};
-analysisExportSelected.onclick=()=>void exportFocusedAnalysisRegionStl();
+// the tree rows of the CHILD SEGMENTS (segment-tree-ui.js): delete (its voxels go back to the parent), and the views that repaint after a look change
+setSegmentTreeActions({deleteChild:key=>deleteChildSegment(key)});
+onChildSegmentsChange(()=>{ // the edit target list follows the child segments (3D edit of a child); what a deleted child leaves behind goes with it: its selection regions and the edit target
+ for(const r of [...analysisRegions])if(r.segmentKeys?.some(k=>isChildKey(k)&&!segmentEditState[k]))removeAnalysisRegion(r.id);
+ if(isChildKey(analysisEditTargetKey)&&!segmentEditState[analysisEditTargetKey])setAnalysisEditTargetKey(null);
+ if(syncChildEditTargets())updateAnalysisEditorControls();
+});
+setChildRepaint((c,changed)=>{if(changed.some(k=>k==='opacity'||k==='visible'||k==='color'||k==='removed'||k==='edited'))for(const p of Object.keys(planes))schedulePlaneRender(p);request3DRender()});
 renderModeToggle.onclick=async()=>{
  if(threeRenderMode==='volume'){
   deactivateMedicalVolume();
@@ -336,7 +346,7 @@ renderModeToggle.onclick=async()=>{
 sectionViewToggle.onclick=()=>{if(!volume)return;setSectionViewOpen(!sectionViewOpen);if(!sectionViewOpen)clearSectionView();else{requestIPadSettingsTab('analysis');const p=currentPlane();setSectionView(p);selectPlane(p,'section')}};
 document.querySelectorAll('[data-section-view]').forEach(button=>button.addEventListener('click',()=>{const k=button.dataset.sectionView;setSectionView(k);if(k!=='off')selectPlane(k,'section')}));
 sectionReverse.onclick=()=>{if(!sectionViewPlane)return;setSectionViewReverse(!sectionViewReverse);if(threeRenderMode!=='volume'){updateSectionClipPlaneWorld();rebindWebGpuSectionClipGroup();syncSectionClipParent();applySectionClippingMaterials(sceneState?.obj)}updateSectionViewUi();request3DRender()};
-sectionPosition.oninput=()=>{if(!sectionViewPlane)return;const p=sectionViewPlane,idx=Math.max(0,Math.min(+planes[p].slider.max,+sectionPosition.value));planes[p].slider.value=idx;planes[p].label.textContent=idx+1;updateMpr3DPlanePositions();if(threeRenderMode!=='volume'){updateSectionClipPlaneWorld();rebindWebGpuSectionClipGroup()}updateSectionViewUi();request3DRender();if(threeRenderMode!=='volume')renderSectionPlaneLive(p)};
+sectionPosition.oninput=()=>{if(!sectionViewPlane)return;const p=sectionViewPlane,idx=Math.max(0,Math.min(+planes[p].slider.max,+sectionPosition.value));planes[p].slider.value=idx;planes[p].label.textContent=idx+1;updateMpr3DPlanePositions();if(threeRenderMode!=='volume'){updateSectionClipPlaneWorld();rebindWebGpuSectionClipGroup()}updateSectionViewUi();request3DRender();if(threeRenderMode!=='volume')renderSectionPlaneLive(p);else if(sceneState?.medicalVolume?.drawsInScene)setCrosshairSlice(p,idx,'section-'+p)}; // the WebGL volume (no WebGPU): the crosshair follows the section position as it did in the surface view (renderSectionPlaneLive)
 sectionPosition.onchange=()=>{if(sectionViewPlane)renderSectionPlaneLive(sectionViewPlane,true)};
 volumeAnalysisToggle.onclick=async()=>{
  if(!volume)return;
@@ -368,7 +378,7 @@ volumeAnalysisToggle.onclick=async()=>{
 };
 // practice dataset on this site (docs/demo/sample1)
 // VR prototype (WebXR + WebGL2, own module; loaded on first use)
-{const vrModule=()=>import('./vr-view.js?v=20261109-build703');
+{const vrModule=()=>import('./vr-view.js?v=20261110-build708');
 document.addEventListener('vrl-vr-module',e=>{e.detail.done=vrModule()}); // the 体験会 page (event-launcher.js) prepares the VR data after a card press and asks for the module here
 document.addEventListener('vrl-event-prepare',e=>{e.detail.done=runEventPrepare({getVr:vrModule,openLevel:id=>startSample(id),onStatus:e.detail.onStatus,onPhase:e.detail.onPhase})}); // the settings > cache button; the page opens each practice level, the VR module builds and saves its data
 const xrShow=(kind,btn)=>navigator.xr?.isSessionSupported?navigator.xr.isSessionSupported(kind).then(ok=>{if(ok)btn.hidden=false},()=>{}):Promise.resolve();Promise.all([xrShow('immersive-vr',vrViewBtn),xrShow('immersive-ar',arViewBtn)]).then(()=>{globalThis.__vrlXrChecked=true}); // true once both support checks have answered (whether the AR button exists is only known then: the tutorial's guidance waits for it)
@@ -410,7 +420,7 @@ async function loadSampleProject(setId){
  try{return sampleProjectNow.value=pendingProject.value=unpackProject(bytes)}catch(e){console.warn('Sample project ignored:',e);return null}
 }
 // vr-view.js asks for the bytes of a practice level's project (detail.done = a promise of Uint8Array | null): the key of the VR data cache for that level is computed from them
-document.addEventListener('vrl-sample-key',e=>{const id=e.detail?.id;if(typeof id==='string'&&/^sample\d+$/.test(id))e.detail.done=sampleProjectBytes(id)});
+document.addEventListener('vrl-sample-key',e=>{const id=e.detail?.id;if(isSampleId(id))e.detail.done=sampleProjectBytes(id)});
 {let pending=false;document.addEventListener('vrl-gpu-edits-synced',()=>{if(pending)return;pending=true;setTimeout(async()=>{pending=false;
  const v=current3DVolume||volume;if(!v)return;let changed=false;
  for(const key of SEGMENT_PRESET_ORDER){if(!segmentState[key]?.active||!segmentEditActive(key)||segmentEditState[key].finalRuns)continue;
@@ -429,16 +439,14 @@ document.addEventListener('vrl-filters-changed',async()=>{
  }
  renderAll();
 });
-const startSample=async setId=>{resetLoadStats();const tStart=performance.now();if(freshForEventSelection())pendingProject.value=null;sampleProjectNow.value=null;setOpenSample(setId);busy(true);resetVolume();list.replaceChildren();state.classList.remove('is-hidden');prog.classList.remove('is-hidden');state.innerHTML='<strong>'+tr(setId==='sample5'?'sampleLoading5':'sampleLoading')+'</strong>';try{const files=await loadSampleDemo(setId),bundled=await loadSampleProject(setId);loadStatTime('sampleFetchMs',tStart);const tInspect=performance.now();await inspect(files,true);loadStatTime('inspectMs',tInspect);if(bundled&&pendingProject.value===bundled){pendingProject.value=null;console.warn('Sample project ignored: it does not match the practice data')}}catch(e){console.error(e);state.innerHTML='<strong>'+tr('demoFailed')+'</strong><span>'+esc(e.message||e)+'</span>';footer.textContent='Demo error: '+String(e.message||e)}finally{busy(false);prog.classList.add('is-hidden')}};
+const startSample=async setId=>{resetLoadStats();const tStart=performance.now();if(freshForEventSelection())pendingProject.value=null;sampleProjectNow.value=null;setOpenSample(setId);busy(true);resetVolume();list.replaceChildren();state.classList.remove('is-hidden');prog.classList.remove('is-hidden');state.innerHTML='<strong>'+sampleLoadingTextFor(setId,tr)+'</strong>';try{const files=await loadSampleDemo(setId),bundled=await loadSampleProject(setId);loadStatTime('sampleFetchMs',tStart);const tInspect=performance.now();await inspect(files,true);loadStatTime('inspectMs',tInspect);if(bundled&&pendingProject.value===bundled){pendingProject.value=null;console.warn('Sample project ignored: it does not match the practice data')}}catch(e){console.error(e);state.innerHTML='<strong>'+tr('demoFailed')+'</strong><span>'+esc(e.message||e)+'</span>';footer.textContent='Demo error: '+String(e.message||e)}finally{busy(false);prog.classList.add('is-hidden')}};
 const samplePicker=()=>document.getElementById('ws-sample-picker');
 const setSamplePicker=open=>{const pk=samplePicker();if(!pk)return;pk.classList.toggle('is-open',open);pk.inert=!open;sampleDemoBtn.setAttribute('aria-expanded',String(open));sampleDemoBtn.classList.toggle('is-active',open);if(open)pk.querySelector('.sample-choice')?.focus({preventScroll:true})};
-sampleDemoBtn.onclick=()=>{const pk=samplePicker();if(pk){setSamplePicker(!pk.classList.contains('is-open'));return}sampleDialog.showModal?sampleDialog.showModal():sampleDialog.setAttribute('open','')};
+sampleDemoBtn.onclick=()=>{const pk=samplePicker();if(pk)setSamplePicker(!pk.classList.contains('is-open'))};
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&samplePicker()?.classList.contains('is-open'))setSamplePicker(false)});
-sampleDialogClose.onclick=()=>sampleDialog.close?sampleDialog.close():sampleDialog.removeAttribute('open');
-sampleDialog.addEventListener('click',e=>{if(e.target===sampleDialog)sampleDialog.close?.()});
-for(const b of sampleChoiceButtons)b.onclick=()=>{const id=b.dataset.sampleSet;setSamplePicker(false);if(sampleDialog.open){if(sampleDialog.close)sampleDialog.close();else sampleDialog.removeAttribute('open')}void startSample(id)};
+for(const b of sampleChoiceButtons)b.onclick=()=>{const id=b.dataset.sampleSet;setSamplePicker(false);void startSample(id)};
 // 体験会モード - a level card (event-mode-ui.js) opens its practice dataset through the same startSample as the chooser; done lets the card wait for it
-document.addEventListener('vrl-event-sample',e=>{const id=e.detail?.sampleSet;if(typeof id==='string'&&/^sample\d+$/.test(id))e.detail.done=startSample(id)});
+document.addEventListener('vrl-event-sample',e=>{const id=e.detail?.sampleSet;if(isSampleId(id))e.detail.done=startSample(id)});
 // 体験会モード: the VR menu's 「最初の状態に戻す」 (vr-view.js): the open practice data's points / distances / pinned labels go back to its project file, in place (event mode only); detail.done = true when it ran
 // 体験会モード, the データ panel's 「最初の状態に戻す」: the open practice dataset is opened again from its project file (startSample = the same fresh start as choosing it again: every state of the page, the points /
 // distances, the VR view settings, ... back to the project's); detail.done = its promise, or stays null when no practice data is open / the mode is off
@@ -467,13 +475,14 @@ for(const btn of document.querySelectorAll('[data-seg-collapse]')){
 const segmentInvalidators={};
 // invalidate(keys, dependents): the dependents are segments below that follow a higher segment's voxels; only
 // their own analysis results are dropped, the other results stay
+segmentExclusive.invalidateParent=key=>segmentInvalidators[key]?.(true,false,true);
 segmentExclusive.invalidate=(keys,dependents=[])=>{for(const k of keys)segmentInvalidators[k]?.(true);for(const k of dependents)segmentInvalidators[k]?.(true,true);for(const k of SEGMENT_PRESET_ORDER)updateSegmentOutputs(k)};
 function clearAnalysisResultsFor(key){for(const r of [...analysisRegions])if(r.segmentKeys?.includes(key))removeAnalysisRegion(r.id)}
 installSegmentReorder(()=>{renderSegmentPresets();commitExclusiveRanges();for(const k of SEGMENT_PRESET_ORDER)updateSegmentOutputs(k);renderAll();scheduleSegment3D()});
-installSegmentHistogram();installLineProfile();installCropExport();
+installSegmentHistogram();installLineProfile();
 {const sel=document.getElementById('segment-exclusive-mode');if(sel)sel.onchange=()=>{segmentExclusive.mode=sel.value==='off'?'off':'priority';commitExclusiveRanges();for(const k of SEGMENT_PRESET_ORDER)updateSegmentOutputs(k);renderAll();scheduleSegment3D()}}
 for(const key of Object.keys(segmentState)){
- const enabled=$('[data-seg-enabled="'+key+'"]'),color=$('[data-seg-color="'+key+'"]'),min=$('[data-seg-min="'+key+'"]'),max=$('[data-seg-max="'+key+'"]'),opacity=$('[data-seg-opacity="'+key+'"]'),exportBtn=$('[data-seg-export="'+key+'"]'),removeBtn=$('[data-seg-remove="'+key+'"]'),opening=$('[data-seg-opening="'+key+'"]'),closing=$('[data-seg-closing="'+key+'"]'),minComponent=$('[data-seg-min-component="'+key+'"]'),holeFill=$('[data-seg-hole-fill="'+key+'"]');
+ const enabled=$('[data-seg-enabled="'+key+'"]'),color=$('[data-seg-color="'+key+'"]'),min=$('[data-seg-min="'+key+'"]'),max=$('[data-seg-max="'+key+'"]'),opacity=$('[data-seg-opacity="'+key+'"]'),removeBtn=$('[data-seg-remove="'+key+'"]'),opening=$('[data-seg-opening="'+key+'"]'),closing=$('[data-seg-closing="'+key+'"]'),minComponent=$('[data-seg-min-component="'+key+'"]'),holeFill=$('[data-seg-hole-fill="'+key+'"]');
  enabled.onchange=()=>{if(enabled.checked&&refuseSegmentEnable(key)){enabled.checked=false;return}setSegmentEnabled(key,enabled.checked);renderAll();
   // the analysis regions of this segment follow its checkbox (analysisRegionShown): the next 3D frame applies it, the list greys their button
   renderAnalysisResults();request3DRender();
@@ -498,7 +507,7 @@ for(const key of Object.keys(segmentState)){
  // the material preset (lighting.js MATERIALS) is a render setting only: the volume (desktop / VR) reads it every frame, the segment's meshes share one uniform
  const material=$('[data-seg-material="'+key+'"]');
  if(material)material.onchange=()=>{const k=materialKey(material.value);material.value=k;segmentState[key].material=k;setSegmentMeshMaterial(key,k);request3DRender()};
- const invalidateSegment=(full=false,dependent=false)=>{segmentState[key]._maskCache=null;segmentState[key]._maskCacheKey='';clearSegmentEditCache(key,false);if(dependent)clearAnalysisResultsFor(key);else clearAnalysisHighlight();if(full)renderAll();else renderMainMprPreview();scheduleSegment3D();if(full&&threeRenderMode==='volume')syncGpuVolumeEdits(sourceVolume||volume);if(full&&(volume?.sourceBacked||threeRenderMode==='volume')&&segmentHasProcessedMask(key))void prepareSourceSegmentPostprocess(key);
+ const invalidateSegment=(full=false,dependent=false,keepAnalysis=false)=>{segmentState[key]._maskCache=null;segmentState[key]._maskCacheKey='';clearSegmentEditCache(key,false);if(keepAnalysis){/* its child segments changed: the analysis results stay */}else clearAnalysisResultsFor(key);if(full)renderAll();else renderMainMprPreview();scheduleSegment3D();if(full&&threeRenderMode==='volume')syncGpuVolumeEdits(sourceVolume||volume);if(full&&(volume?.sourceBacked||threeRenderMode==='volume')&&segmentHasProcessedMask(key))void prepareSourceSegmentPostprocess(key);
   // an edited plain segment draws its edits in 2D from finalRuns: rebuild them for the new settings
   else if(full&&segmentNeedsVoxelMask(key))void getFinalSegmentRuns(key,current3DVolume||volume).then(()=>renderAll(),e=>{if(String(e?.message||e)!=='__SUPERSEDED__')console.warn(e)})};
  segmentInvalidators[key]=invalidateSegment;
@@ -518,8 +527,6 @@ for(const key of Object.keys(segmentState)){
   el.oninput=()=>{out.value=formatMmVoxels(thinSliderValue(el))};
   el.onchange=()=>{const mm=thinSliderValue(el);if(mm===segmentState[key][field])return;segmentState[key][field]=mm;out.value=formatMmVoxels(mm);if(!segmentNeedsGlobalMask(segmentState[key]))setSegmentStatus(key,'');commitExclusiveRanges(key)};
  }
- // STL export in the progress modal
- exportBtn.onclick=async()=>{setBusySlot('export',true,{label:currentLanguage==='ja'?'STL を書き出し中…':'Exporting STL…',counted:true});try{await exportSegmentStl(key)}finally{setBusySlot('export',false,{counted:true})}};
  removeBtn.onclick=()=>removeSegmentPreset(key);
 }
 // the processed / edited voxels of one segment, recomputed when stale (cheap when still valid) and pushed to 3D
@@ -618,6 +625,8 @@ async function inspect(files,auto){
 
 function renderSeries(series){detectedSeries.list=series;list.replaceChildren();for(const s of series){const b=document.createElement('button');b.className='series-card';b.innerHTML='<div class="series-card-header"><div><span class="modality-badge">'+esc(s.modality)+'</span><strong>'+esc(s.description)+'</strong>'+(s.spacingCheck?.warn?'<span class="spacing-mark" title="'+esc(spacingWarningText(s.spacingCheck)?.[currentLanguage==='ja'?'ja':'en']||'')+'" aria-label="スライス間隔に不整合 / slice spacing issue"> ⚠</span>':'')+'</div><strong class="memory-estimate">'+fmt(s.bytes)+'</strong></div><dl class="series-meta-grid"><div><dt>Slices</dt><dd>'+s.slices.length+'</dd></div><div><dt>Matrix</dt><dd>'+s.columns+' × '+s.rows+'</dd></div><div><dt>Voxel</dt><dd>'+s.spacingX.toFixed(4)+' × '+s.spacingY.toFixed(4)+' × '+s.spacingZ.toFixed(4)+' mm</dd></div><div><dt>Stored</dt><dd>'+s.bits+'-bit</dd></div></dl><p class="series-note">推定展開サイズ: '+fmt(s.decodedBytes)+' · '+(s.sourceBacked?'フル解像度・ストリーミング':(s.compact?'Int16':'Float32'))+'</p>';b.onclick=()=>selectSeries(s);b.dataset.id=s.id;list.appendChild(b)}}
 
+// Workspace UI (built for iPad): the only UI, on every device (the old layout and its URL switch are gone).
+// Layout only: performance settings (texture plan, cache limits) stay keyed to the device caps.
 
 
 initIPadWorkspaceUi();installAnalysisDock();installPaneResize();
@@ -647,7 +656,7 @@ function renderMainMprPreview(){
 
 
 const mprWheelFinalizeTimers={axial:null,coronal:null,sagittal:null};
-function installMprTouch(p){const c=planes[p];let id=null,startX=0,startY=0,start=0,moved=false;c.canvas.onpointerdown=e=>{if(!volume||c.slider.disabled)return;if(cropPointerDown(p,e)||lineProfilePointerDown(p,e)||crosshairPointerDown(p,e))return;id=e.pointerId;startX=e.clientX;startY=e.clientY;start=+c.slider.value;moved=false;c.canvas.setPointerCapture(id)};c.canvas.onpointermove=e=>{if(cropPointerMove(p,e)||lineProfilePointerMove(p,e)||crosshairPointerMove(p,e))return;if(id!==e.pointerId)return;const dx=e.clientX-startX,dy=e.clientY-startY;if(Math.hypot(dx,dy)>5)moved=true;if(volumeAnalysisMode&&!moved)return;const max=+c.slider.max,sens=Math.max(1,c.canvas.clientWidth/(max+1)),next=Math.round(start+dx/sens);c.slider.value=Math.max(0,Math.min(max,next));schedulePlaneRender(p)};const end=e=>{if(cropPointerEnd(p,e)||lineProfilePointerEnd(p,e)||crosshairPointerEnd(p,e))return;if(id!==e.pointerId)return;const wasClick=!moved&&e.type==='pointerup';if(c.canvas.hasPointerCapture(id))c.canvas.releasePointerCapture(id);id=null;if(moved)schedulePlaneRender(p,true);if(wasClick&&selectAnalysisRegionFromMpr(p,e))e.preventDefault()};c.canvas.onpointerup=end;c.canvas.onpointercancel=end;c.canvas.addEventListener('wheel',e=>{if(!volume||c.slider.disabled)return;e.preventDefault();const max=+c.slider.max,delta=e.deltaY===0?e.deltaX:e.deltaY,step=delta>0?1:-1;c.slider.value=Math.max(0,Math.min(max,+c.slider.value+step));schedulePlaneRender(p,false);clearTimeout(mprWheelFinalizeTimers[p]);mprWheelFinalizeTimers[p]=setTimeout(()=>schedulePlaneRender(p,true),48)},{passive:false})}
+function installMprTouch(p){const c=planes[p];let id=null,startX=0,startY=0,start=0,moved=false;c.canvas.onpointerdown=e=>{if(!volume||c.slider.disabled)return;if(lineProfilePointerDown(p,e)||crosshairPointerDown(p,e))return;id=e.pointerId;startX=e.clientX;startY=e.clientY;start=+c.slider.value;moved=false;c.canvas.setPointerCapture(id)};c.canvas.onpointermove=e=>{if(lineProfilePointerMove(p,e)||crosshairPointerMove(p,e))return;if(id!==e.pointerId)return;const dx=e.clientX-startX,dy=e.clientY-startY;if(Math.hypot(dx,dy)>5)moved=true;if(volumeAnalysisMode&&!moved)return;const max=+c.slider.max,sens=Math.max(1,c.canvas.clientWidth/(max+1)),next=Math.round(start+dx/sens);c.slider.value=Math.max(0,Math.min(max,next));schedulePlaneRender(p)};const end=e=>{if(lineProfilePointerEnd(p,e)||crosshairPointerEnd(p,e))return;if(id!==e.pointerId)return;const wasClick=!moved&&e.type==='pointerup';if(c.canvas.hasPointerCapture(id))c.canvas.releasePointerCapture(id);id=null;if(moved)schedulePlaneRender(p,true);if(wasClick&&selectAnalysisRegionFromMpr(p,e))e.preventDefault()};c.canvas.onpointerup=end;c.canvas.onpointercancel=end;c.canvas.addEventListener('wheel',e=>{if(!volume||c.slider.disabled)return;e.preventDefault();const max=+c.slider.max,delta=e.deltaY===0?e.deltaX:e.deltaY,step=delta>0?1:-1;c.slider.value=Math.max(0,Math.min(max,+c.slider.value+step));schedulePlaneRender(p,false);clearTimeout(mprWheelFinalizeTimers[p]);mprWheelFinalizeTimers[p]=setTimeout(()=>schedulePlaneRender(p,true),48)},{passive:false})}
 
 function setMpr3DInteractive(active){
  if(!sceneState)return;sceneState.mprInteractionActive=!!active;
@@ -703,11 +712,15 @@ async function start3D(){
  setMeshMaterialBackend(backend);
  threeLabel.textContent=backend;
  viewport.appendChild(renderer.domElement);
- installComment3d(viewport);installHuLine3d(viewport);installCrop3d(viewport);
+ installComment3d(viewport);installHuLine3d(viewport);
  const sectionClipPlane=new THREE.Plane(new THREE.Vector3(1,0,0),0),sectionClipGroup=backend==='WEBGPU'&&THREE.ClippingGroup?new THREE.ClippingGroup():null;
  if(sectionClipGroup){sectionClipGroup.name='section_clip_group';sectionClipGroup.enabled=false;scene.add(sectionClipGroup)}
  setSceneState({scene,camera,renderer,obj:null,analysisMesh:null,backend,needsRender:true,medicalVolume:null,mprPlaneGroup:null,mprPlaneEntries:null,mprPlaneSignature:'',mprInteractionActive:false,editCutPreview:null,editCutPreviewPoint:null,cutResultPreviewGroup:null,cutResultPreviewKey:null,axisWidget,sectionClipPlane,sectionClipGroup});
  if(backend==='WEBGPU')try{sceneState.medicalVolume=new MedicalVolumeRenderer({device:renderer.backend.device,host:viewport,rendererCanvas:renderer.domElement,onProgress:(a,b)=>set3DBusy(true,(currentLanguage==='ja'?'GPUボリューム準備中… ':'Preparing GPU volume… ')+a+' / '+b),onStatus:label=>setGpuComputeBackend(label),onRedraw:request3DRender})}catch(e){console.warn('Medical volume renderer unavailable.',e)}
+ // no WebGPU: the page's own WebGL renderer draws the volume with the VR ray-march shader (webgl-volume.js); ?webglvolume=0 turns it off. The classes come through the VR module (vr-view.js re-exports them), asked for
+ // through the existing 'vrl-vr-module' lazy load above: a device WITH WebGPU never loads vr-view.js or webgl-volume.js here (the same start-up loading as before)
+ if(backend!=='WEBGPU')try{const ev=new CustomEvent('vrl-vr-module',{detail:{done:null}});document.dispatchEvent(ev);const vrMod=await ev.detail.done;if(vrMod.webglVolumeEnabled())sceneState.medicalVolume=new vrMod.WebGlVolumeRenderer({renderer,host:viewport,vr:vrMod,onProgress:(a,b)=>set3DBusy(true,(currentLanguage==='ja'?'GPUボリューム準備中… ':'Preparing GPU volume… ')+a+' / '+b),onStatus:label=>setGpuComputeBackend(label),onRedraw:request3DRender})}catch(e){console.warn('WebGL volume renderer unavailable.',e)}
+ memState.markThree3DReady(); // the GPU volume renderer exists now (or this runtime has none): selectSeries waits for this before choosing the GPU path
  if(sceneState.medicalVolume)void updateVolumeCacheControl();
  updateGpuStatus();updateRenderModeControl();void ensureGpuFilterDevice().then(()=>updateGpuStatus());
  const pointers=new Map();const pointerStarts=new Map();const MIN_3D_DISTANCE=.05,MAX_3D_DISTANCE=12;let distance=5.2,lastPinch=0,lastCenter=null,lastTwist=null;
@@ -743,7 +756,7 @@ async function start3D(){
   const lowerRes=globalThis.__vrlSettings?.get?.('dragLowerRes')!==false;
   // volume view: the three.js canvas only draws light overlays, so keep its
   // size; the volume renderer lowers its own resolution
-  const nextRatio=next&&lowerRes&&!(threeRenderMode==='volume'&&sceneState?.medicalVolume?.active)?Math.min(full3DPixelRatio,ratios[tier]||ratios[0]):full3DPixelRatio;
+  const nextRatio=next&&lowerRes&&!(threeRenderMode==='volume'&&sceneState?.medicalVolume?.active&&!sceneState.medicalVolume.drawsInScene)?Math.min(full3DPixelRatio,ratios[tier]||ratios[0]):full3DPixelRatio;
   if(nextRatio!==active3DPixelRatio){active3DPixelRatio=nextRatio;renderer.setPixelRatio(active3DPixelRatio);if(viewport.clientWidth>=8&&viewport.clientHeight>=8){renderer.setSize(viewport.clientWidth,viewport.clientHeight,false);globalThis.__vrlThreeResizes=(globalThis.__vrlThreeResizes||0)+1}}
   sceneState?.medicalVolume?.setInteractive?.(next,next?tier:0);setHeavyOverlayInteraction(next&&!keepOverlays);request3DRender();
  };
@@ -820,7 +833,7 @@ async function start3D(){
  camera.aspect=w/h;camera.updateProjectionMatrix();updateAxisWidget();renderer.setPixelRatio(active3DPixelRatio);renderer.setSize(w,h,false);resizeEditOverlay(w,h);sceneState?.medicalVolume?.resize();request3DRender()};sceneState.resize=resize;new ResizeObserver(resize).observe(viewport);resize();
  {const draw=renderer.render.bind(renderer);renderer.render=(sc,cam)=>{const t=performance.now();draw(sc,cam);globalThis.__vrlThreeRenderMs=performance.now()-t}} // diagnostics
  renderer.setAnimationLoop(()=>{if(!sceneState?.needsRender)return;if(viewport.clientWidth<8||viewport.clientHeight<8)return;sceneState.needsRender=false;// 3D hidden (2D-only layout): keep the request until it is shown again
-if(sceneState.obj){sceneState.obj.updateMatrixWorld(true);updateMeshDepth(camera,sceneState.obj,current3DVolume)}syncVolumeAnalysisOverlay();if(sceneState.obj){axisWidget.quaternion.copy(sceneState.obj.quaternion);if(sectionViewOpen&&sectionViewPlane)updateSectionClipPlaneWorld();syncSectionCapPresentation();if(sceneState.mprPlaneGroup){sceneState.mprPlaneGroup.visible=true;sceneState.mprPlaneGroup.position.copy(sceneState.obj.position);sceneState.mprPlaneGroup.quaternion.copy(sceneState.obj.quaternion);sceneState.mprPlaneGroup.scale.copy(sceneState.obj.scale)}}else if(sceneState.mprPlaneGroup)sceneState.mprPlaneGroup.visible=false;if(threeRenderMode==='volume'&&sceneState.medicalVolume?.active){const interactiveVisible=mpr3DHideDuringCameraMoves&&fastInteractionActive&&!fastKeepOverlays?[sectionViewOpen&&sectionViewPlane==='axial'&&sectionSliceImageVisible?1:0,sectionViewOpen&&sectionViewPlane==='coronal'&&sectionSliceImageVisible?1:0,sectionViewOpen&&sectionViewPlane==='sagittal'&&sectionSliceImageVisible?1:0]:[sectionViewOpen&&sectionViewPlane==='axial'?(sectionSliceImageVisible?1:0):(mpr3DVisibility.axial?1:0),sectionViewOpen&&sectionViewPlane==='coronal'?(sectionSliceImageVisible?1:0):(mpr3DVisibility.coronal?1:0),sectionViewOpen&&sectionViewPlane==='sagittal'?(sectionSliceImageVisible?1:0):(mpr3DVisibility.sagittal?1:0)];sceneState.medicalVolume.render(camera,sceneState.obj,segmentState,gpuSegmentOrder(),{indices:[+planes.axial.slider.value,+planes.coronal.slider.value,+planes.sagittal.slider.value],visible:interactiveVisible,opacity:mpr3DVolumeOpacity,windowCenter:+wc.value,windowWidth:+ww.value,section:{active:sectionViewOpen&&!!sectionViewPlane,plane:sectionViewPlane,index:sectionViewPlane?+planes[sectionViewPlane].slider.value:0,reverse:sectionViewReverse,capEnabled:sectionCapEnabled,capOpacity:sectionCapOpacity,hatch:sectionCapHatch,shade:sectionShadeParams()}});renderer.render(scene,camera)}else renderer.render(scene,camera);reportSectionRenderStats(renderer);updateComment3dMarkers();updateHuLine3d();updateCrop3d()});
+if(sceneState.obj){sceneState.obj.updateMatrixWorld(true);updateMeshDepth(camera,sceneState.obj,current3DVolume)}syncVolumeAnalysisOverlay();syncChildSegmentsToVolume();if(sceneState.obj){axisWidget.quaternion.copy(sceneState.obj.quaternion);if(sectionViewOpen&&sectionViewPlane)updateSectionClipPlaneWorld();syncSectionCapPresentation();if(sceneState.mprPlaneGroup){sceneState.mprPlaneGroup.visible=true;sceneState.mprPlaneGroup.position.copy(sceneState.obj.position);sceneState.mprPlaneGroup.quaternion.copy(sceneState.obj.quaternion);sceneState.mprPlaneGroup.scale.copy(sceneState.obj.scale)}}else if(sceneState.mprPlaneGroup)sceneState.mprPlaneGroup.visible=false;if(threeRenderMode==='volume'&&sceneState.medicalVolume?.active){const interactiveVisible=mpr3DHideDuringCameraMoves&&fastInteractionActive&&!fastKeepOverlays?[sectionViewOpen&&sectionViewPlane==='axial'&&sectionSliceImageVisible?1:0,sectionViewOpen&&sectionViewPlane==='coronal'&&sectionSliceImageVisible?1:0,sectionViewOpen&&sectionViewPlane==='sagittal'&&sectionSliceImageVisible?1:0]:[sectionViewOpen&&sectionViewPlane==='axial'?(sectionSliceImageVisible?1:0):(mpr3DVisibility.axial?1:0),sectionViewOpen&&sectionViewPlane==='coronal'?(sectionSliceImageVisible?1:0):(mpr3DVisibility.coronal?1:0),sectionViewOpen&&sectionViewPlane==='sagittal'?(sectionSliceImageVisible?1:0):(mpr3DVisibility.sagittal?1:0)];sceneState.medicalVolume.render(camera,sceneState.obj,segmentState,gpuSegmentOrder(),{indices:[+planes.axial.slider.value,+planes.coronal.slider.value,+planes.sagittal.slider.value],visible:interactiveVisible,opacity:mpr3DVolumeOpacity,windowCenter:+wc.value,windowWidth:+ww.value,section:{active:sectionViewOpen&&!!sectionViewPlane,plane:sectionViewPlane,index:sectionViewPlane?+planes[sectionViewPlane].slider.value:0,reverse:sectionViewReverse,capEnabled:sectionCapEnabled,capOpacity:sectionCapOpacity,hatch:sectionCapHatch,shade:sectionShadeParams()}});renderer.render(scene,camera)}else renderer.render(scene,camera);reportSectionRenderStats(renderer);updateComment3dMarkers();updateHuLine3d()});
 }
 armConfirm(volumeCacheClearBtn,async()=>{
  const cache=await volumeCache();if(!cache)return;
@@ -828,9 +841,9 @@ armConfirm(volumeCacheClearBtn,async()=>{
  void updateVolumeCacheControl();
 });
 
-function resetVolume(){setCrosshairMode(false);clearCrosshair('series');incSourceRenderRevision(false);setThreeDCancelRequested(false);gpuVolumeRefresh.token++;gpuVolumeRefresh.running=null;setCurrent3DVolume(null);setAnalysisEditPreparing(false);setAnalysisEditTool('select');setAnalysisEditTargetKey(null);setAnalysisEditTargetMode('auto');setAnalysisCutStroke(null);setAnalysisCutScreen([]);setAnalysisPendingCut(null);if(analysisEditTargetSelect)analysisEditTargetSelect.value='auto';setMemoryGpuPreviewActive(false);clearMemoryFilterPreviewCache();invalidateSourceFilters();clearSourceSliceCache();setActiveSeries(null);setSectionViewOpen(false);clearSectionView();updateSectionViewUi();if(threeRenderMode==='volume')setThreeVolumeOverlay(false);setThreeRenderMode('surface');sceneState?.medicalVolume?.resetData();clearAllSegmentEdits();clearAnalysisHighlight();smoothingType.value='gaussian';setFilterOrder([]);for(const box of [spikeHoleBtn,nlmBtn,anisotropicBtn,gaussianBtn,sigmoidBtn,bilateralBtn,tvBtn,unsharpBtn])box.checked=false;renderFilterOrder();for(const key of SEGMENT_PRESET_ORDER){segmentState[key].active=false;segmentState[key].enabled=false;const enabled=$('[data-seg-enabled="'+key+'"]');if(enabled)enabled.checked=false}renderSegmentPresets();setVolumeAnalysisMode(false);setVolumeAnalysisBusy(false);volumeAnalysisToggle.disabled=true;volumeAnalysisToggle.classList.remove('is-active');volumeAnalysisToggle.textContent=tr('volumeMode');sectionViewToggle.disabled=true;volumeAnalysisResult.classList.add('is-hidden');clearAnalysisHighlight();incFilterRebuildRevision(false);filterState.spikeHole=filterState.nlm=filterState.anisotropic=filterState.gaussian=filterState.sigmoid=filterState.bilateral=filterState.tv=filterState.unsharp=false;setVolume(null);setSourceVolume(null);enableProcessingControls(false);surfaceSmoothEnabled.disabled=true;surfaceSmoothStrength.disabled=true;gaussianStrength.disabled=true;spatialPasses.disabled=true;spikeHoleStrength.disabled=true;spikeHoleThreshold.disabled=true;nlmStrength.disabled=true;nlmSearchRadius.disabled=true;nlmPatchRadius.disabled=true;anisotropicStrength.disabled=true;anisotropicIterations.disabled=true;bilateralStrength.disabled=true;bilateralSpatial.disabled=true;bilateralIntensity.disabled=true;bilateralPasses.disabled=true;tvWeight.disabled=true;tvIterations.disabled=true;unsharpRadius.disabled=true;unsharpAmount.disabled=true;unsharpThreshold.disabled=true;wc.disabled=ww.disabled=true;setCtRangeProfile(null);setCtRangeMode('auto');ctRangeAuto.disabled=ctRangeFull.disabled=true;ctRangeAuto.classList.add('is-active');ctRangeFull.classList.remove('is-active');for(const key of Object.keys(segmentState)){for(const sel of ['enabled','color','min','max','opacity','opening','closing','min-component','hole-fill','surface-mm','thickness-mm']){const el=$('[data-seg-'+sel+'="'+key+'"]');if(el)el.disabled=true}const exportBtn=$('[data-seg-export="'+key+'"]');if(exportBtn)exportBtn.disabled=true;const removeBtn=$('[data-seg-remove="'+key+'"]');if(removeBtn)removeBtn.disabled=true;setSegmentStatus(key,'')}wcVal.value=wwVal.value='—';for(const p of Object.values(planes)){p.slider.disabled=true;p.label.textContent='—';p.canvas.getContext('2d')?.clearRect(0,0,p.canvas.width,p.canvas.height)}if(sceneState?.obj){sceneState.obj.parent?.remove(sceneState.obj);dispose(sceneState.obj);sceneState.obj=null}set3DBusy(false);updateRenderModeControl(null);updateAnalysisEditorControls();updateThreeEditUi();request3DRender();set3DState('current');threeLabel.textContent=sceneState?.backend||'3D'}
+function resetVolume(){setCrosshairMode(false);clearCrosshair('series');incSourceRenderRevision(false);setThreeDCancelRequested(false);gpuVolumeRefresh.token++;gpuVolumeRefresh.running=null;setCurrent3DVolume(null);setAnalysisEditPreparing(false);setAnalysisEditTool('select');setAnalysisEditTargetKey(null);setAnalysisEditTargetMode('auto');setAnalysisCutStroke(null);setAnalysisCutScreen([]);setAnalysisPendingCut(null);if(analysisEditTargetSelect)analysisEditTargetSelect.value='auto';setMemoryGpuPreviewActive(false);clearMemoryFilterPreviewCache();invalidateSourceFilters();clearSourceSliceCache();setActiveSeries(null);setSectionViewOpen(false);clearSectionView();updateSectionViewUi();if(threeRenderMode==='volume')setThreeVolumeOverlay(false);setThreeRenderMode('surface');sceneState?.medicalVolume?.resetData();clearAllSegmentEdits();clearAnalysisHighlight();smoothingType.value='gaussian';setFilterOrder([]);for(const box of [spikeHoleBtn,nlmBtn,anisotropicBtn,gaussianBtn,sigmoidBtn,bilateralBtn,tvBtn,unsharpBtn])box.checked=false;renderFilterOrder();for(const key of SEGMENT_PRESET_ORDER){segmentState[key].active=false;segmentState[key].enabled=false;const enabled=$('[data-seg-enabled="'+key+'"]');if(enabled)enabled.checked=false}renderSegmentPresets();setVolumeAnalysisMode(false);setVolumeAnalysisBusy(false);volumeAnalysisToggle.disabled=true;volumeAnalysisToggle.classList.remove('is-active');volumeAnalysisToggle.textContent=tr('volumeMode');sectionViewToggle.disabled=true;volumeAnalysisResult.classList.add('is-hidden');clearAnalysisHighlight();incFilterRebuildRevision(false);filterState.spikeHole=filterState.nlm=filterState.anisotropic=filterState.gaussian=filterState.sigmoid=filterState.bilateral=filterState.tv=filterState.unsharp=false;setVolume(null);setSourceVolume(null);enableProcessingControls(false);surfaceSmoothEnabled.disabled=true;surfaceSmoothStrength.disabled=true;gaussianStrength.disabled=true;spatialPasses.disabled=true;spikeHoleStrength.disabled=true;spikeHoleThreshold.disabled=true;nlmStrength.disabled=true;nlmSearchRadius.disabled=true;nlmPatchRadius.disabled=true;anisotropicStrength.disabled=true;anisotropicIterations.disabled=true;bilateralStrength.disabled=true;bilateralSpatial.disabled=true;bilateralIntensity.disabled=true;bilateralPasses.disabled=true;tvWeight.disabled=true;tvIterations.disabled=true;unsharpRadius.disabled=true;unsharpAmount.disabled=true;unsharpThreshold.disabled=true;wc.disabled=ww.disabled=true;setCtRangeProfile(null);setCtRangeMode('auto');ctRangeAuto.disabled=ctRangeFull.disabled=true;ctRangeAuto.classList.add('is-active');ctRangeFull.classList.remove('is-active');for(const key of Object.keys(segmentState)){for(const sel of ['enabled','color','min','max','opacity','opening','closing','min-component','hole-fill','surface-mm','thickness-mm']){const el=$('[data-seg-'+sel+'="'+key+'"]');if(el)el.disabled=true}const removeBtn=$('[data-seg-remove="'+key+'"]');if(removeBtn)removeBtn.disabled=true;setSegmentStatus(key,'')}wcVal.value=wwVal.value='—';for(const p of Object.values(planes)){p.slider.disabled=true;p.label.textContent='—';p.canvas.getContext('2d')?.clearRect(0,0,p.canvas.width,p.canvas.height)}if(sceneState?.obj){sceneState.obj.parent?.remove(sceneState.obj);dispose(sceneState.obj);sceneState.obj=null}set3DBusy(false);updateRenderModeControl(null);updateAnalysisEditorControls();updateThreeEditUi();request3DRender();set3DState('current');threeLabel.textContent=sceneState?.backend||'3D'}
 void ensureLatestDeployedBuild();
-start3D().catch(e=>{console.error(e);logGpuError('start3D',e);status.textContent='3D RENDERER ERROR';status.className='status status-error';{const bar=document.getElementById('gpu-status-bar'),t=document.getElementById('gpu-status-text');if(bar&&t){t.textContent='3D RENDERER ERROR';bar.classList.add('is-warning')}}threeLabel.textContent='MPR ONLY';footer.textContent='3D初期化に失敗しました。DICOM/MPRは利用できます: '+String(e.message||e)});
+start3D().catch(e=>{console.error(e);logGpuError('start3D',e);status.textContent='3D RENDERER ERROR';status.className='status status-error';{const bar=document.getElementById('gpu-status-bar'),t=document.getElementById('gpu-status-text');if(bar&&t){t.textContent='3D RENDERER ERROR';bar.classList.add('is-warning')}}threeLabel.textContent='MPR ONLY';footer.textContent='3D初期化に失敗しました。DICOM/MPRは利用できます: '+String(e.message||e)}).finally(()=>memState.markThree3DReady());
 
 // debug: what the app holds in memory, every 2 s in the status bar
 setInterval(()=>{

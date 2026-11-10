@@ -12,7 +12,8 @@ export function marchClassificationHit(o,q,halfExt,dims,cls,chs,planes=[],planeC
 // the same march, returning the hit voxel and the channel that matched (null when nothing is hit)
 // tMin / tMax (optional, default 0 / Infinity): only the part of the ray between them is marched (VR points: from just outside a point's own
 // voxel to the head, see vr-point.js pointIsHidden)
-export function marchClassificationHitInfo(o,q,halfExt,dims,cls,chs,planes=[],planeCount=0,planeCut=0,tMin=0,tMax=Infinity){
+// skipVoxel (optional) = (x,y,z,ch) -> true for a voxel that is NOT a hit (ch = the channel that matched: the child hides only its parent's slot, as in the shader) although a channel matches (a hidden child segment of the tree: invisible, the ray goes on); absent = the march as before
+export function marchClassificationHitInfo(o,q,halfExt,dims,cls,chs,planes=[],planeCount=0,planeCut=0,tMin=0,tMax=Infinity,skipVoxel=null){
  if(!chs.length)return null;
  const he=halfExt,[w,h,d]=dims,O=[o.x,o.y,o.z],Q=[q.x,q.y,q.z];let t0=tMin,t1=tMax;
  for(let a=0;a<3;a++){
@@ -28,24 +29,29 @@ export function marchClassificationHitInfo(o,q,halfExt,dims,cls,chs,planes=[],pl
  if(!(t0<=t1))return null;
  const data=cls.data,C=cls.C,len=Math.hypot(q.x,q.y,q.z);
  if(len<1e-12)return null;
- const dt=0.5*Math.min(2*he[0]/w,2*he[1]/h,2*he[2]/d)/len;
+ // step = half a voxel along the ray. s = voxel edge per axis, r = smin/s (1 on an isotropic grid, so the step is then exactly the old 0.5*smin/len);
+ // hypot(q*r)/smin = the ray's length in voxel units, so no axis moves more than half a voxel per step (a 1-voxel plate is never skipped) and
+ // rays along a coarse axis take fewer steps than with the finest axis' step
+ const sx=2*he[0]/w,sy=2*he[1]/h,sz=2*he[2]/d,sm=Math.min(sx,sy,sz);
+ const dt=0.5*sm/Math.hypot(q.x*(sm/sx),q.y*(sm/sy),q.z*(sm/sz));
  for(let t=t0;t<=t1;t+=dt){
   const x=Math.min(w-1,Math.max(0,Math.floor(((o.x+q.x*t)/(2*he[0])+0.5)*w)));
   const y=Math.min(h-1,Math.max(0,Math.floor((0.5-(o.y+q.y*t)/(2*he[1]))*h)));
   const z=Math.min(d-1,Math.max(0,Math.floor(((o.z+q.z*t)/(2*he[2])+0.5)*d)));
   const k=(x+w*(y+h*z))*C;
-  for(const ch of chs)if(data[k+ch]>=128)return{t,x,y,z,ch};
+  for(const ch of chs)if(data[k+ch]>=128){if(skipVoxel&&skipVoxel(x,y,z,ch))break;return{t,x,y,z,ch}}
  }
  return null;
 }
 // is the point p (object space, as the march's o + q t) inside a shown segment? The same classification bytes and voxel indexing as the march above (nearest
 // voxel, a channel >= 128): the tissue test of the Surface mode applied to one place. False outside the box, for no channel / no data, and for a non-finite point.
 // Used for recording a VR point on a section: only where the section shows tissue, never on air / empty.
-export function classifiedAt(p,halfExt,dims,cls,chs){
+// skipVoxel (optional) = (x,y,z,ch) -> true for a voxel of a hidden child segment of the channel's slot: no tissue there
+export function classifiedAt(p,halfExt,dims,cls,chs,skipVoxel=null){
  if(!p||!chs||!chs.length||!cls||!cls.data||!halfExt||!dims)return false;
  const [w,h,d]=dims,fx=p.x/(2*halfExt[0])+0.5,fy=0.5-p.y/(2*halfExt[1]),fz=p.z/(2*halfExt[2])+0.5;
  if(!(fx>=0&&fx<=1&&fy>=0&&fy<=1&&fz>=0&&fz<=1))return false; // also false for NaN
  const x=Math.min(w-1,Math.floor(fx*w)),y=Math.min(h-1,Math.floor(fy*h)),z=Math.min(d-1,Math.floor(fz*d)),k=(x+w*(y+h*z))*cls.C;
- for(const ch of chs)if(cls.data[k+ch]>=128)return true;
+ for(const ch of chs)if(cls.data[k+ch]>=128)return !(skipVoxel&&skipVoxel(x,y,z,ch));
  return false;
 }

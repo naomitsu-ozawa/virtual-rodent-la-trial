@@ -1,12 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { lv0HolderScale, LV0_START_MAG, startHolderScale, realMagnification, clampScale, scaleLineText, magnificationText, NORM_LONG } from '../../docs/vr-real-scale.js';
+import { startHolderScale, realMagnification, clampScale, scaleLineText, magnificationText, NORM_LONG } from '../../docs/vr-real-scale.js';
+import { registry, vrInitialScaleOf } from '../../docs/sample-registry.js';
 import { createViewToggle } from '../../docs/vr-view-toggle.js';
 
 // a VR / AR session starts at 1x (real size), AR and VR alike, and the AR passthrough <-> VR view toggle never changes the scale.
 const src = readFileSync(new URL('../../docs/vr-view.js', import.meta.url), 'utf8');
 const DEFAULT_SCALE = 0.165 / NORM_LONG; // baseScale: the old 16.5 cm fit, used only when the physical size is unknown
-const LONGEST = [2.4, 60.4, 75.8, 100, 300]; // synthetic test volume, practice mouse (sample2), practice rat (sample1), a 10 cm and a 30 cm animal
+const LONGEST = [50, 60.4, 75.8, 100, 300]; // a 5 cm volume (data under 5 cm now starts enlarged to 5 cm: tests/unit/vr-min-start-2cm.test.js), practice mouse (sample2), practice rat (sample1), a 10 cm and a 30 cm animal
 
 // what vr-view.js does for the holder scale: placement (bringVolumeFront), then the per-frame clamp; the toggle is the only thing that runs afterwards
 function session(isAr, longMm) {
@@ -56,7 +57,7 @@ describe('the AR view toggle leaves the scale alone', () => {
   it('vr-view.js: the start places the volume with startHolderScale (real size), AR and VR through the same line', () => {
     const e = src.indexOf('const bringVolumeFront=');
     const fn = src.slice(e, src.indexOf('// grab: one hand', e)); // the function has two lines now (the tutorial's own placement is the first branch of a ternary)
-    expect(fn).toContain('holder.scale.setScalar(tut?tutorialHolderScale(realLongMm()):globalThis.__vrlOpenSample===TUT_SAMPLE?lv0HolderScale(realLongMm(),baseScale):startHolderScale(realLongMm(),baseScale))');
+    expect(fn).toContain('holder.scale.setScalar(tut?tutorialHolderScale(realLongMm(),vrInitialScaleOf(TUT_SAMPLE)):startHolderScale(realLongMm(),baseScale,vrInitialScaleOf(globalThis.__vrlOpenSample)))');
     expect(src).not.toMatch(/holder\.scale\.setScalar\([^)]*\bar\b/); // no AR-specific scale
   });
 });
@@ -79,25 +80,33 @@ describe('detail tab scale line', () => {
   });
 });
 
-describe('Lv0 (the practice bone, sample4) starts at x4, every other data at x1', () => {
-  it('the Lv0 start reads x4（実寸比） and is 4 x the real size; the physical size is 2.56 cm so 10.2 cm', () => {
-    const L = 25.6, s = lv0HolderScale(L, DEFAULT_SCALE);
-    expect(LV0_START_MAG).toBe(4);
+describe('the start magnification comes from sample.json vrInitialScale (Lv0 bone = 4), every other data starts at x1', () => {
+  const MAG = vrInitialScaleOf('sample4');
+  it('the registry says x4 for the Lv0 bone (sample4) and x1 for every other dataset, an unknown id and a missing id', () => {
+    expect(registry.byId.sample4.level).toBe(0); // sample4 is the Lv0 data: the bone trabeculae
+    expect(MAG).toBe(4);
+    for (const id of ['sample1', 'sample2', 'sample3', 'sample5', 'sample6', 'nope', undefined, null]) expect(vrInitialScaleOf(id), String(id)).toBe(1);
+    expect(registry.samples.filter(s => s.vrInitialScale != null).map(s => s.id)).toEqual(['sample4']); // nothing else is enlarged
+  });
+  it('the x4 start reads x4（実寸比） and is 4 x the real size; the physical size is 2.56 cm so 10.2 cm', () => {
+    const L = 25.6, s = startHolderScale(L, DEFAULT_SCALE, MAG);
     expect(realMagnification(s, L)).toBeCloseTo(4, 10);
     expect(magnificationText(realMagnification(s, L), 'ja')).toBe('×4（実寸比）');
     expect(scaleLineText(s, L, 'ja')).toBe('×4（実寸比）');
     expect(scaleLineText(s, L, 'en')).toBe('×4 (real size)');
     expect(NORM_LONG * s).toBeCloseTo(0.1024, 6);
   });
-  it('the other data keep x1 (startHolderScale), and the per-frame clamp leaves the x4 start alone', () => {
-    for (const L of LONGEST) expect(realMagnification(startHolderScale(L, DEFAULT_SCALE), L)).toBeCloseTo(1, 10);
-    const s = lv0HolderScale(25.6, DEFAULT_SCALE); expect(clampScale(s, 25.6)).toBe(s);
+  it('without a magnification (or with 1 / an invalid one) the start is the real size; the per-frame clamp leaves the x4 start alone', () => {
+    for (const L of LONGEST) { expect(realMagnification(startHolderScale(L, DEFAULT_SCALE), L)).toBeCloseTo(1, 10); expect(startHolderScale(L, DEFAULT_SCALE, 1)).toBe(startHolderScale(L, DEFAULT_SCALE)); expect(startHolderScale(L, DEFAULT_SCALE, 0)).toBe(startHolderScale(L, DEFAULT_SCALE)); }
+    const s = startHolderScale(25.6, DEFAULT_SCALE, MAG); expect(clampScale(s, 25.6)).toBe(s);
   });
-  it('unknown physical size and oversize data fall back as every other start does', () => {
-    expect(lv0HolderScale(0, DEFAULT_SCALE)).toBe(startHolderScale(0, DEFAULT_SCALE));
-    expect(lv0HolderScale(500, DEFAULT_SCALE)).toBe(startHolderScale(500, DEFAULT_SCALE));
+  it('unknown physical size and oversize data fall back as every other start does, whatever the magnification', () => {
+    expect(startHolderScale(0, DEFAULT_SCALE, MAG)).toBe(startHolderScale(0, DEFAULT_SCALE));
+    expect(startHolderScale(500, DEFAULT_SCALE, MAG)).toBe(startHolderScale(500, DEFAULT_SCALE));
   });
-  it('vr-view.js: only the practice bone (the open sample is TUT_SAMPLE) takes the x4 start', () => {
-    expect(src).toContain('globalThis.__vrlOpenSample===TUT_SAMPLE?lv0HolderScale(');
+  it('vr-view.js: the magnification is read from the registry; no level-0 special case is left in the start (nor in vr-real-scale.js)', () => {
+    expect(src).toContain('startHolderScale(realLongMm(),baseScale,vrInitialScaleOf(globalThis.__vrlOpenSample))');
+    expect(src).not.toContain('lv0HolderScale');
+    expect(readFileSync(new URL('../../docs/vr-real-scale.js', import.meta.url), 'utf8')).not.toMatch(/LV0_START_MAG|lv0HolderScale/);
   });
 });

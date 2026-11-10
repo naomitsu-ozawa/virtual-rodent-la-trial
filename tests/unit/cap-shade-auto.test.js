@@ -344,7 +344,7 @@ describe('no counting during an XR session (hold) and the VR side\'s own wait', 
 
 describe('the triggers: only a data open and a threshold change', () => {
   it('a data open asks for every segment (once the data is ready), another dataset clears the auto values first', () => {
-    expect(dataLoad).toContain('projectSaveBtn.disabled=false;syncMpr3DSliceSliders();requestShadeAuto();void applyPendingProject();');
+    expect(dataLoad).toContain('syncMpr3DSliceSliders();requestShadeAuto();void applyPendingProject();');
     expect(dataLoad).toContain('resetShadeAutoForDataset(); // ');
     expect(dataLoad.indexOf('resetShadeAutoForDataset();')).toBeLessThan(dataLoad.indexOf('requestShadeAuto();void applyPendingProject'));
     expect(segmentsSrc).toContain('export const requestShadeAuto=(keys=SEGMENT_PRESET_ORDER)=>shadeAutoPage.request(keys);');

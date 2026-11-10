@@ -5,23 +5,23 @@ import { fileURLToPath } from 'node:url';
 import { thumbDatasets, parseArgs, thumbJobs, launchPlans, coverRect, looksBlank, pngSize, THUMB_W, THUMB_H, THUMB_FILE } from '../../tools/lib/event-thumbs.mjs';
 import { EVENT_DATASETS } from '../../docs/event-mode.js';
 import { registry } from '../../docs/sample-registry.js';
+import { ORDER, LEVEL_IDS, OTHER_IDS, LEVEL_NUMBERS } from '../helpers/demo-lists.js';
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 
 // tools/make-event-thumbs.mjs (the card pictures; run on a Windows PC with a GPU). Its pure parts are in tools/lib/event-thumbs.mjs; the checks of the tool file itself (no POSIX-only code, never exported) are in public-exclude.test.js.
 describe('make-event-thumbs: the jobs', () => {
   it('the datasets are listed from the folders (the registry), in the order of the cards: levels first, then the others', () => {
-    expect(thumbDatasets(registry)).toEqual([{ sample: 'sample4', id: 'lv0' }, { sample: 'sample3', id: 'lv1' }, { sample: 'sample2', id: 'lv2' }, { sample: 'sample1', id: 'lv3' }, { sample: 'sample5', id: 'sample5' }, { sample: 'sample6', id: 'sample6' }]);
+    expect(thumbDatasets(registry)).toEqual([...LEVEL_IDS.map((sample, i) => ({ sample, id: 'lv' + LEVEL_NUMBERS[i] })), ...OTHER_IDS.map(sample => ({ sample, id: sample }))]);
     expect(thumbJobs(thumbDatasets(registry), join('D', 'docs')).map(j => j.sample)).toEqual(EVENT_DATASETS.map(d => d.sample));
-    expect(readFileSync(join(ROOT, 'tools', 'make-event-thumbs.mjs'), 'utf8')).toContain('readSampleRegistry(join(DOCS');
   });
-  it('one picture per dataset of the card list, docs/demo/<sampleN>/thumb.webp, 640 x 360', () => {
+  it('one picture per dataset of the card list, docs/demo/<folder>/thumb.webp, 640 x 360', () => {
     const jobs = thumbJobs(EVENT_DATASETS, join('D', 'docs'));
-    expect(jobs.map(j => j.sample)).toEqual(['sample4', 'sample3', 'sample2', 'sample1', 'sample5', 'sample6']);
-    expect(jobs[0].out).toBe(join('D', 'docs', 'demo', 'sample4', 'thumb.webp'));
+    expect(jobs.map(j => j.sample)).toEqual(ORDER);
+    expect(jobs[0].out).toBe(join('D', 'docs', 'demo', ORDER[0], 'thumb.webp'));
     expect(THUMB_FILE).toBe('thumb.webp'); expect([THUMB_W, THUMB_H]).toEqual([640, 360]);
-    expect(thumbJobs(EVENT_DATASETS, 'docs', ['sample5']).map(j => j.sample)).toEqual(['sample5']);
-    expect(() => thumbJobs(EVENT_DATASETS, 'docs', ['sample9'])).toThrow(/unknown dataset/);
+    expect(thumbJobs(EVENT_DATASETS, 'docs', [ORDER.at(-1)]).map(j => j.sample)).toEqual([ORDER.at(-1)]);
+    expect(() => thumbJobs(EVENT_DATASETS, 'docs', ['no-such-sample'])).toThrow(/unknown dataset/);
   });
   it('the card page looks for the same file name (event-launcher-core.js eventCards: thumbFile)', async () => {
     const { eventCards } = await import('../../docs/event-launcher-core.js');

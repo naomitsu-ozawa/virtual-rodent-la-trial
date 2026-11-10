@@ -1,6 +1,6 @@
-import { rebinHist, niceStep, huToX, windowFor, HIST_MIN, HIST_MAX } from './histogram.js?v=20261109-build703';
-import { PLOT_OV, PLOT_OV_SCALE, AXIS_GRAB, AUTO_BTN, END_LABEL_Y, DRAG_REDRAW_MS, axisTarget, localToPxX, localToPxY, dragWindow, PANEL_W, PANEL_H, PLOT, LEGEND, STATUS_Y, TITLE_Y, X_TICK_Y, X_AXIS_Y, Y_AXIS_X, PROG_PX, PROG_W_M, boardHeightM, pxToLocalX, pxToLocalY, columnsFor, barFraction, countLabel, yTicks, STACK_ORDER, stackColumn, legendItems, legendLayout, titleText, yAxisText, progressText, shouldRedraw } from './vr-histogram-layout.js?v=20261109-build703';
-import { registerVrSelfCheck } from './vr-self-check.js?v=20261109-build703';
+import { rebinHist, niceStep, huToX, windowFor, tickText, fmtAxisValue, axisWidth, HU_AXIS } from './histogram.js?v=20261110-build708';
+import { PLOT_OV, PLOT_OV_SCALE, AXIS_GRAB, AUTO_BTN, END_LABEL_Y, DRAG_REDRAW_MS, MAX_COLUMNS, axisTarget, localToPxX, localToPxY, dragWindow, PANEL_W, PANEL_H, PLOT, LEGEND, STATUS_Y, TITLE_Y, X_TICK_Y, X_AXIS_Y, Y_AXIS_X, PROG_PX, PROG_W_M, boardHeightM, pxToLocalX, pxToLocalY, columnsFor, barFraction, countLabel, yTicks, STACK_ORDER, stackColumn, legendItems, legendLayout, titleText, yAxisText, progressText, shouldRedraw } from './vr-histogram-layout.js?v=20261110-build708';
+import { registerVrSelfCheck } from './vr-self-check.js?v=20261110-build708';
 
 // VR self-check scenario: the frame rate while the histogram pass runs. env.histogram (vr-view.js) =
 // { isOpen(), open(), close(), forceCompute(), busy() }. The board is opened and the pass is started again each time it finishes, so it runs during
@@ -55,7 +55,7 @@ export function createVrHistogramPanel(THREE, opts) {
     ptex.needsUpdate = true;
   };
   const rd = { dirty: false, now: 0, lastDraw: 0 }; // the argument of shouldRedraw, reused every frame
-  let open = false, dirty = false, lastDraw = -1e9, drawCount = 0, shownWin = null;
+  let open = false, dirty = false, lastDraw = -1e9, drawCount = 0, shownWin = null, shownAxis = HU_AXIS; // shownAxis: the axis of the data drawn last (the drag rounds and clamps on it)
   // the highlight quads of the grab zones (x axis ends) and the 「自動」 button: opacity only, never a redraw
   const pxW = px => px / PANEL_W * widthM, pxH = py => py / PANEL_H * boardHeightM(widthM);
   const quad = (x0, y0, w0, h0) => { // clipped to the board, so the right end's zone (it reaches past PANEL_W) never hangs off the edge
@@ -78,13 +78,13 @@ export function createVrHistogramPanel(THREE, opts) {
   // reused by the plot drawing (no allocation per redraw apart from the tick / value strings): the rebinned columns per label, a column's parts,
   // the label colours, the count ticks and the shown window
   const binPool = [], bins = [], part = new Float64Array(STACK_ORDER.length), colors = new Array(STACK_ORDER.length), ticks = [], shownArr = [0, 0];
-  const MAX_COLS = columnsFor(HIST_MIN, HIST_MAX);
+  const MAX_COLS = MAX_COLUMNS; // the most columns any window has (the same for every axis: every histogram has the same number of bins)
   // the plot part (inside PLOT_OV) on context c in board px (the caller sets the transform): axes, HU ticks, count ticks, the x axis title, the
   // stacked bars and the end values. Returns nothing; reads view.hists.
   const drawPlot = (c, view, lo, hi) => {
-    const cols = columnsFor(lo, hi), hs = view.hists;
+    const axis = view.res?.axis || HU_AXIS, cols = columnsFor(lo, hi, axis), hs = view.hists; // axis: the CT axis, or the data's own range (MRI, 8-bit, slope-scaled)
     bins.length = hs.length;
-    for (let l = 0; l < hs.length; l++) { if (!hs[l]) { bins[l] = null; continue; } if (!binPool[l]) binPool[l] = new Float64Array(MAX_COLS); bins[l] = rebinHist(hs[l], lo, hi, cols, binPool[l]); }
+    for (let l = 0; l < hs.length; l++) { if (!hs[l]) { bins[l] = null; continue; } if (!binPool[l]) binPool[l] = new Float64Array(MAX_COLS); bins[l] = rebinHist(hs[l], lo, hi, cols, binPool[l], axis); }
     let ymax = 1;
     for (let k = 0; k < cols; k++) { let t = 0; for (let l = 0; l < bins.length; l++) if (bins[l]) t += bins[l][k]; if (t > ymax) ymax = t; }
     const log = !!opts.log();
@@ -92,11 +92,11 @@ export function createVrHistogramPanel(THREE, opts) {
     c.strokeStyle = '#8aa0b0'; c.fillStyle = '#9fb3c3'; c.lineWidth = 2; c.globalAlpha = 0.5;
     c.beginPath(); c.moveTo(PLOT.x, PLOT.y); c.lineTo(PLOT.x, PLOT.y + PLOT.h); c.lineTo(PLOT.x + PLOT.w, PLOT.y + PLOT.h); c.stroke();
     c.globalAlpha = 1; c.font = '22px system-ui,sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
-    const step = niceStep(hi - lo, 8);
-    for (let hu = Math.ceil(lo / step) * step; hu <= hi; hu += step) {
-      const x = PLOT.x + huToX(hu, lo, hi, PLOT.w);
+    const step = niceStep(hi - lo, 8, axis), minSpan = axisWidth(axis);
+    for (let k = Math.ceil(lo / step - 1e-9), hu; (hu = k * step) <= hi + step * 1e-9; k++) {
+      const x = PLOT.x + huToX(hu, lo, hi, PLOT.w, minSpan);
       c.globalAlpha = 0.18; c.beginPath(); c.moveTo(x, PLOT.y); c.lineTo(x, PLOT.y + PLOT.h); c.stroke();
-      c.globalAlpha = 0.95; c.fillText(String(hu), x, X_TICK_Y);
+      c.globalAlpha = 0.95; c.fillText(tickText(hu, step), x, X_TICK_Y);
     }
     c.textAlign = 'right';
     yTicks(ymax, log, ticks);
@@ -117,7 +117,7 @@ export function createVrHistogramPanel(THREE, opts) {
     }
     // the window's ends under the axis ends (the grab targets)
     c.font = 'bold 22px system-ui,sans-serif'; c.fillStyle = '#ffd27a';
-    c.textAlign = 'left'; c.fillText('◀ ' + lo, PLOT.x - 40, END_LABEL_Y); c.textAlign = 'right'; c.fillText(hi + ' ▶', PLOT.x + PLOT.w + 20, END_LABEL_Y);
+    c.textAlign = 'left'; c.fillText('◀ ' + fmtAxisValue(lo, axis), PLOT.x - 40, END_LABEL_Y); c.textAlign = 'right'; c.fillText(fmtAxisValue(hi, axis) + ' ▶', PLOT.x + PLOT.w + 20, END_LABEL_Y);
     c.textAlign = 'left';
   };
   // the overlay while dragging: the drag window, ~DRAG_REDRAW_MS apart (update)
@@ -125,7 +125,7 @@ export function createVrHistogramPanel(THREE, opts) {
     ovCount++; lastOv = now; ovPending = false;
     const view = getView(), s = PLOT_OV_SCALE;
     octx.setTransform(1, 0, 0, 1, 0, 0); octx.clearRect(0, 0, oc.width, oc.height);
-    if (view.ready) { octx.setTransform(s, 0, 0, s, -PLOT_OV.x * s, -PLOT_OV.y * s); drawPlot(octx, view, dragWin[0], dragWin[1]); shownArr[0] = dragWin[0]; shownArr[1] = dragWin[1]; shownWin = shownArr; }
+    if (view.ready) { shownAxis = view.res?.axis || HU_AXIS; octx.setTransform(s, 0, 0, s, -PLOT_OV.x * s, -PLOT_OV.y * s); drawPlot(octx, view, dragWin[0], dragWin[1]); shownArr[0] = dragWin[0]; shownArr[1] = dragWin[1]; shownWin = shownArr; }
     otex.needsUpdate = true; ov.visible = true;
   };
 
@@ -139,6 +139,7 @@ export function createVrHistogramPanel(THREE, opts) {
     const status = view.message || (view.busy && !view.ready ? L.busy : '');
     if (!drag) ov.visible = false; else ovPending = true; // dragging: the plot part is the overlay's (drawn in the same update)
     if (!view.ready) { shownWin = null; ctx.font = '24px system-ui,sans-serif'; ctx.fillStyle = '#ffd27a'; ctx.fillText(status || L.empty, 24, PLOT.y + 40, W - 48); tex.needsUpdate = true; return; }
+    shownAxis = view.res?.axis || HU_AXIS;
     if (drag) { shownArr[0] = dragWin[0]; shownArr[1] = dragWin[1]; shownWin = shownArr; } else { shownWin = windowFor(view.res, view.range); drawPlot(ctx, view, shownWin[0], shownWin[1]); }
     // the y axis title 「ボクセル数」 (「（対数）」 in log) turned up the left side (outside the overlay)
     ctx.globalAlpha = 1; ctx.fillStyle = '#c9d6e0'; ctx.font = 'bold 24px system-ui,sans-serif'; ctx.textAlign = 'center';
@@ -178,11 +179,11 @@ export function createVrHistogramPanel(THREE, opts) {
     // grab an end at board x (metres); false when nothing is shown
     startAxisDrag(end, x) {
       if (!shownWin || (end !== 'lo' && end !== 'hi')) return false;
-      drag = { end, lo: shownWin[0], hi: shownWin[1], px: localToPxX(x, widthM) }; dragWin[0] = drag.lo; dragWin[1] = drag.hi; dragDirty = false; blankPending = true; showLit(); return true;
+      drag = { end, lo: shownWin[0], hi: shownWin[1], px: localToPxX(x, widthM), axis: shownAxis }; dragWin[0] = drag.lo; dragWin[1] = drag.hi; dragDirty = false; blankPending = true; showLit(); return true;
     },
     // the laser's board x while the trigger is held (it may leave the board: the caller intersects the board plane); no allocation
     moveAxisDrag(x) {
-      if (!drag) return; const a = dragWin[0], b = dragWin[1]; dragWindow(drag.end, drag, localToPxX(x, widthM), dragWin);
+      if (!drag) return; const a = dragWin[0], b = dragWin[1]; dragWindow(drag.end, drag, localToPxX(x, widthM), dragWin, drag.axis);
       if (a !== dragWin[0] || b !== dragWin[1]) dragDirty = true;
     },
     // release: the window to commit ([lo, hi], a new array) or null; the board shows the committed range on the next change

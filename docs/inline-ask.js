@@ -1,11 +1,10 @@
-import { tr } from './i18n.js?v=20261109-build703';
+import { tr } from './i18n.js?v=20261110-build708';
 
 export const ARM_MS = 4000, NOTE_MS = 3500;
-const workspace = () => document.documentElement.classList.contains('vrl-ipad-ui');
 
 export function askInline(text, { host = null, okKey = 'askApply', cancelKey = 'askCancel', tab = 'data' } = {}) {
   const target = host || document.querySelector('[data-ipad-drawer-section="data"]');
-  if (!workspace() || !target) return Promise.resolve(globalThis.confirm ? globalThis.confirm(text) : false);
+  if (!target) return Promise.resolve(globalThis.confirm ? globalThis.confirm(text) : false);
   if (!host && tab) document.dispatchEvent(new CustomEvent('vrl-ipad-settings-tab', { detail: { tab } }));
   return new Promise(resolve => {
     const box = document.createElement('div'); box.className = 'ws-ask'; box.setAttribute('role', 'group');

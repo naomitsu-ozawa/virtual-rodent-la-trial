@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { createSwapGuard, runDataSwap, createUploadQueue, createSettleGate, createFrameGapMonitor, swapPlan, SWAP_STAGES, SETTLE_TIMEOUT_MS, LOAD_TIMEOUT_MS, withTimeout, saveShouldWait } from '../../docs/vr-data-switch.js';
 import { frameOrTimer } from '../../docs/utils.js';
 import { levelSwitchItems, simpleMenuLayout, SIMPLE_MENU, EVENT_LEVELS } from '../../docs/event-mode.js';
+import { OTHER_IDS } from '../helpers/demo-lists.js';
 
 // switching the data inside a running VR session. The pieces (docs/vr-data-switch.js) are pure; vr-view.js (a WebXR file, not run in node) wires them, checked on its source.
 
@@ -230,14 +231,14 @@ describe('the data / level buttons (event-mode.js)', () => {
   it('one per level, the open data lit, the armed one marked; labels carry the level number (the default list also has the datasets that are not levels (marmoset, Zika virus), by their plain names)', () => {
     const items = levelSwitchItems(name, 'sample3', 'lv2', EVENT_LEVELS);
     expect(items.map(i => i.id)).toEqual(EVENT_LEVELS.map(l => l.id));
-    expect(levelSwitchItems(name, 'sample3', 'lv2').map(i => i.id)).toEqual([...EVENT_LEVELS.map(l => l.id), 'sample5', 'sample6']);
+    expect(levelSwitchItems(name, 'sample3', 'lv2').map(i => i.id)).toEqual([...EVENT_LEVELS.map(l => l.id), ...OTHER_IDS]); // then every dataset that is not a level, in the order of docs/demo/samples.json
     expect(items.find(i => i.sample === 'sample3')).toMatchObject({ on: true, armed: false });
     expect(items.find(i => i.id === 'lv2')).toMatchObject({ on: false, armed: true });
     expect(items[0].label).toBe('Lv0 ' + EVENT_LEVELS[0].nameKey);
     expect(levelSwitchItems(name, null).some(i => i.on || i.armed)).toBe(false);
   });
   it('the かんたん menu layout has the row above the bottom row only when asked, and the results list gives it the room', () => {
-    const base = { segments: [], sectionOn: false, sliceOpacity: 0.6, trigger: { show: false }, results: Array.from({ length: 12 }, (_, i) => ({ hex: '#fff', name: 'r' + i, text: 'x' })), total: '1', text: new Proxy({}, { get: (_, k) => String(k) }) };
+    const base = { segments: [], sectionOn: false, sliceOpacity: 0.6, trigger: { show: false }, results: Array.from({ length: 40 }, (_, i) => ({ hex: '#fff', name: 'r' + i, text: 'x' })), total: '1', text: new Proxy({}, { get: (_, k) => String(k) }) };
     const without = simpleMenuLayout(base);
     expect(without.some(w => w.id?.startsWith('level:'))).toBe(false);
     const levels = { items: levelSwitchItems(name, 'sample1', 'lv1', EVENT_LEVELS), busy: false, hint: 'hint', text: { title: 'データ', again: 'もう一度' } };
@@ -326,7 +327,7 @@ describe('vr-view.js: the data of the session can be replaced (static wiring)', 
   });
   it('releases the old data: the uniforms stop pointing at the textures first, then every GPU texture is disposed and every CPU reference dropped', () => {
     const rel = src.slice(src.indexOf('const releaseSessionData=()=>{'), src.indexOf('const slicedTexture='));
-    expect(rel.indexOf("for(const k of ['vol','bricks','sliceVol','clsTex','cls4Tex','distTex','editTex','regionTex'])unifs[k].value=dummyEdit")).toBeGreaterThan(0);
+    expect(rel.indexOf("for(const k of ['vol','bricks','sliceVol','clsTex','cls4Tex','distTex','editTex','regionTex','childTex'])unifs[k].value=dummyEdit")).toBeGreaterThan(0);
     expect(rel.indexOf('volTex?.dispose()')).toBeGreaterThan(rel.indexOf('unifs[k].value=dummyEdit'));
     for (const s of ['uploadQueue.clear()', 'disposeExtra()', 'editTex?.dispose()', 'regionTex?.dispose()', 'comboTs.forEach(t=>{t.rb?.dispose();t.rb=null})', 'for(const t of swapMade)t.dispose()', 'P=null;vd=null;cbSliceIdx=null', 'gpu=null']) expect(rel, s).toContain(s);
     const unb = src.slice(src.indexOf('const unbindData=()=>{'), src.indexOf('const releaseSessionData=()=>{'));
@@ -349,9 +350,11 @@ describe('vr-view.js: the data of the session can be replaced (static wiring)', 
     expect(src).toContain('material.uniforms.sliceVol.value=fullReady&&full.v?full.v:dummyEdit'); // the 256 grid is never the source of the cross-sections
   });
   it('shader defines are NOT made unconditional: one program set per (analysis results present), compiled before it is shown; the variants of four stored segments too', () => {
-    expect(src).toContain("const k=Pn.region?.data?'R':'-'");
-    expect(src).toContain("makeVolumeBase(volumeDefines(k==='R'),unifs)");
-    expect(src).toContain('const volumeDefines=region=>({...(VR_MEDIUMP?{VRL_MEDIUMP:\'\'}:{}),...(region?{VRL_REGIONS:\'\'}:{})});');
+    // the program set is one per (analysis results present, child segments present): '-' / 'R' as before, 'C' / 'RC' only for data that has child segments (setKeyOf); a data without them never compiles the child code
+    expect(src).toContain("const k=setKeyOf(Pn)");
+    expect(src).toContain("makeVolumeBase(definesOfKey(k),unifs)");
+    expect(src).toContain("const setKeyOf=Pn=>(Pn.region?.data?'R':'')+(Pn.child?.list?.length?'C':'')||'-'");
+    expect(src).toContain("const volumeDefines=(region,children)=>({...(VR_MEDIUMP?{VRL_MEDIUMP:''}:{}),...(region?{VRL_REGIONS:''}:{}),...(children?{VRL_CHILDREN:''}:{})});");
     expect(src).toContain('(P4(Pn)?[...VARIANT_KEYS,...VARIANT_KEYS4]:VARIANT_KEYS).filter(k=>!st.compiled.has(k))');
     expect(src).toContain('await compileVariantPrograms(renderer,keys.map(k=>st.variants[k]),keys.map(k=>st.rays[k]),[],()=>!!running)');
     // the other sets are compiled on the page (before the session) where compiling would block the main thread (no KHR_parallel_shader_compile); with it the session compiles on demand
@@ -359,7 +362,7 @@ describe('vr-view.js: the data of the session can be replaced (static wiring)', 
     expect(src).toContain('const shouldPrecompileSets=(r,settings)=>settings?.precompileSets!==false&&!parallelCompile(r);');
     const gpuFn = src.slice(src.indexOf('export async function prepareVrGpu('), src.indexOf('export function disposeGpuPrepared()'));
     expect(gpuFn).toContain('if(shouldPrecompileSets(renderer,settings)){'); expect(gpuFn).toContain('assets.compiledAll=true;');
-    expect(gpuFn).toContain('const set=regions===own?vars:materialVariants(makeVolumeBase(volumeDefines(regions),u))');
+    expect(gpuFn).toContain('const set=k===own?vars:materialVariants(makeVolumeBase(definesOfKey(k),u))'); // the set keys '-' / 'R' / 'C' / 'RC' (setKeyOf)
     expect(src).toContain('compiled:new Set(allCompiled?[...VARIANT_KEYS,...VARIANT_KEYS4]:[])');
     expect(src).toContain('gpuWarm=gpu?[...gpu.warm,...(gpu.warmMore||[])]:[]'); expect(src).toContain('(g.warmMore||[]).forEach(m=>m.dispose())');
     // prepareVrGpu compiles through the same helper
@@ -369,8 +372,8 @@ describe('vr-view.js: the data of the session can be replaced (static wiring)', 
     const ins = src.slice(src.indexOf('const install=(Pn,assets,first)=>{'), src.indexOf('const unbindData=()=>{'));
     for (const s of ['histP=P;histFor=null;histRun()', 'vrFp=activeSeries?datasetFingerprint(activeSeries):null', "evLabels=TRIGGER_AT_START==='label';initialVrModes()", 'cbScan=createSegScan();cbSliceIdx=sliceIndex(vd)',
       'u.halfExt.value.set(...vd.halfExt);u.calib.value.set(...vd.calibration)', 'compMaterial.uniforms.halfExt.value.set(...vd.halfExt)', 'holder.add(mesh);baseStep=vd.step;applyQuality();placePending=true']) expect(ins, s).toContain(s);
-    // placePending -> bringVolumeFront: Lv0 starts at x4, every other data at x1 (vr-real-scale.js)
-    expect(src).toContain('globalThis.__vrlOpenSample===TUT_SAMPLE?lv0HolderScale(realLongMm(),baseScale):startHolderScale(realLongMm(),baseScale)');
+    // placePending -> bringVolumeFront: the start magnification is the open dataset's sample.json vrInitialScale (Lv0 bone: 4), x1 without one (vr-real-scale.js)
+    expect(src).toContain('startHolderScale(realLongMm(),baseScale,vrInitialScaleOf(globalThis.__vrlOpenSample))');
     const rs = src.slice(src.indexOf('const resetForNewData=()=>{'), src.indexOf('const refreshEvBoard'));
     for (const s of ['resetEventViewSettings(settings);saveSettings(settings)', 'for(const k of Object.keys(segMode))delete segMode[k]', 'vrWindow.c=+wc.value||0', 'ui.tab=10']) expect(rs, s).toContain(s);
     expect(src).toContain('resetForNewData();swapPlace=true;\n     {const t=performance.now();install(Pn,assets,false);ownNote(\'install\',t)}');

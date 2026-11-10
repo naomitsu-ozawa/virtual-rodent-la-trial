@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { VOLUME_FWD, MENU_OFFSET, HELP_OFFSET, HIST_OFFSET, HIST_WIDTH, MENU_WIDTH, HELP_WIDTH, HELP_RES, EV_OFFSET, EV_WIDTH, EV_RES, HU_PANEL_OFFSET, FOLLOW_ANGLE, FOLLOW_DIST, BOARD_DIST, BOARD_YAW_DEG, boardDistance, placeFromHead, volumeFromHead } from '../../docs/vr-layout.js';
+import { VOLUME_FWD, MENU_OFFSET, HELP_OFFSET, HIST_OFFSET, HIST_WIDTH, MENU_WIDTH, HELP_WIDTH, HELP_RES, EV_OFFSET, EV_WIDTH, EV_RES, HU_PANEL_OFFSET, FOLLOW_ANGLE, FOLLOW_DIST, BOARD_DIST, BOARD_YAW_DEG, boardDistance, placeFromHead, volumeFromHead, MENU_CANVAS, MENU_BOTTOM_DOWN, menuHeightM } from '../../docs/vr-layout.js';
 import { levelBoardH, PAGE_H, TAB_H } from '../../docs/tutorial-vr.js';
 
 import { PANEL_W, PANEL_H } from '../../docs/vr-histogram-layout.js';
@@ -19,7 +19,7 @@ describe('default VR/AR layout', () => {
     const m = placeFromHead(head, fwd, left, MENU_OFFSET); expect(m.x).toBeCloseTo(1 - MENU_OFFSET.left); expect(m.y).toBeCloseTo(1.6 - MENU_OFFSET.down);
   });
   it('board physical size: the menu as before, the help board 1.4 times, its canvas finer by as much (same texels per metre, not more)', () => {
-    expect(MENU_WIDTH).toBe(0.5); expect(HELP_WIDTH).toBe(0.45);
+    expect(MENU_WIDTH).toBe(0.6); expect(HELP_WIDTH).toBe(0.45);
     expect(HELP_RES).toBeCloseTo(HELP_WIDTH / 0.32, 1); expect(Math.round(820 * HELP_RES)).toBeLessThanOrEqual(1152); // 1148 px wide: the 1280 px slide pictures are not drawn larger than they are
     expect(EV_WIDTH).toBeGreaterThanOrEqual(HELP_WIDTH); expect(EV_RES).toBeCloseTo(1280 / 820, 6); // the mission board is larger than the help board, drawn at the slide's own 1280 px
   });
@@ -107,7 +107,7 @@ describe('the help board with the caption band', () => {
   });
 });
 describe('slice fill (slice tab row + shader guards, static)', () => {
-  const v = readFileSync('docs/vr-view.js', 'utf8'), MENU_H = 1180, y0 = 270;
+  const v = readFileSync('docs/vr-view.js', 'utf8'), MENU_H = 1400, y0 = 270;
   it('the fill row sits below the air-floor slider (y0+520..+592) and its help line (y0+618, centred, 24 px), inside the menu', () => {
     expect(v).toContain('choice(y0+650,L.ctSh,');
     expect(v).toContain('btn(800,y0+520,70,'); expect(v).toContain('label(X,y0+618,L.airHelp');
@@ -149,9 +149,9 @@ describe('slice fill (slice tab row + shader guards, static)', () => {
   });
   it('shader: the contrast spreads the gamma value about the middle of its range, clamped to 0.05..1; exactly 1 returns the gamma value unchanged; only inside ctLumHU', () => {
     expect(v).toContain('uniform float ctShadeContrast;');
-    expect(v).toContain(' float g=1.0/max(ctShadeBright,0.1),l=pow(mix(CT_SHADE_MIN,1.0,clamp((hu-a.x)/max(min(a.y-a.x,CT_SHADE_SPAN),1.0),0.0,1.0)),g);');
+    expect(v).toContain(' float g=1.0/max(ctShadeBright,0.1),l=pow(mix(CT_SHADE_MIN,1.0,t),g);');
     expect(v).toContain(' if(ctShadeContrast==1.0)return l;'); expect(v).toContain(' float p=0.5*(pow(CT_SHADE_MIN,g)+1.0);return clamp(p+(l-p)*ctShadeContrast,0.05,1.0);');
-    const sh = v.slice(0, v.indexOf('bool editAllows(')); expect(sh.match(/ctShadeContrast/g).length).toBe(7); // the comment above ctLumHU, the uniform and its comment, and the two uses in ctLumHU
+    const sh = v.slice(0, v.indexOf('bool editAllows(')); expect(sh.match(/ctShadeContrast/g).length).toBe(5); // the comment above ctLumHU, the uniform and its comment, and the two uses in ctLumHU
     const lum = (t, b, c) => { const g = 1 / b, l = Math.pow(0.35 + 0.65 * t, g); if (c === 1) return l; const p = 0.5 * (Math.pow(0.35, g) + 1); return Math.min(1, Math.max(0.05, p + (l - p) * c)); };
     for (const b of [0.5, 1, 1.3, 2]) for (let i = 0; i <= 10; i++) { const t = i / 10; expect(lum(t, b, 1)).toBe(Math.pow(0.35 + 0.65 * t, 1 / b)); }
     for (const b of [1, 1.3, 2]) { const span = c => lum(1, b, c) - lum(0, b, c); expect(span(1.5)).toBeGreaterThan(span(1)); expect(span(2)).toBeGreaterThan(span(1.5)); expect(span(0.5)).toBeLessThan(span(1)); }
@@ -160,7 +160,7 @@ describe('slice fill (slice tab row + shader guards, static)', () => {
   });
   it('shader: the brightness is a gamma on the CT factor (pow(lum,1/b)): 1 at the top whatever b is, identity at 100 %, only inside ctLumHU (so only CT shading uses it)', () => {
     expect(v).toContain('uniform float ctShadeBright;'); expect(v.match(/ctShadeBright/g).length).toBeGreaterThanOrEqual(2);
-    expect(v).toContain(' float g=1.0/max(ctShadeBright,0.1),l=pow(mix(CT_SHADE_MIN,1.0,clamp((hu-a.x)/max(min(a.y-a.x,CT_SHADE_SPAN),1.0),0.0,1.0)),g);'); // the gamma value l (the contrast step after it returns l itself at 100 %)
+    expect(v).toContain(' float g=1.0/max(ctShadeBright,0.1),l=pow(mix(CT_SHADE_MIN,1.0,t),g);'); // the gamma value l (the contrast step after it returns l itself at 100 %)
     const lum = (t, b) => Math.pow(0.35 + 0.65 * t, 1 / b); // the same formula in JS
     for (const b of [0.5, 1, 1.3, 2]) { expect(lum(1, b)).toBe(1); expect(lum(0, b)).toBeGreaterThan(0); }
     for (let i = 0; i <= 9; i++) { const t = i / 10; expect(lum(t, 1)).toBeCloseTo(0.35 + 0.65 * t, 12); expect(lum(t, 1.3)).toBeGreaterThan(lum(t, 1)); expect(lum(t, 2)).toBeGreaterThan(lum(t, 1.3)); expect(lum(t, 1.3)).toBeLessThanOrEqual(1); }
@@ -171,9 +171,9 @@ describe('slice fill (slice tab row + shader guards, static)', () => {
     expect(v).toContain('labelHide:LABEL_HIDE_DEFAULT,ctShade:1,'); expect(v).toContain('ctShade:{value:1}'); expect(v).toContain('sliceSegOnly:{value:0}');
   });
   it('shader: the CT factor is used by the two slice branches only; surface hits and caps keep the flat colour; 陰影なし (diag 3) is flat', () => {
-    expect(v.match(/ctLumHU\(/g)).toHaveLength(2); expect(v.match(/ctLumTint\(/g)).toHaveLength(2); // ctLumHU = the definition + the 0 % branch (window based); ctLumTint = the definition + the above-0 % tint (the formula, unchanged)
+    expect(v.match(/ctLumHU\(/g)).toHaveLength(3); expect(v).not.toContain('ctLumTint'); // ctLumHU = the definition + the 0 % branch + the above-0 % tint (one rule: the segment's own shading range; the old ctLumTint with the fixed 1500 span is removed)
     expect(v).toContain('vec4(regionColor(p,segC[si].rgb,si)*ctLumHU(hu,si),ctShade>0.5?SEG_ALPHA:sliceTint)'); // 0 %: CT shading at the fixed opacity, solid at the tint
-    expect(v).toContain('vec4(mix(vec3(g),regionColor(p,segC[si].rgb,si)*ctLumTint(hu,si),sliceTint),a)'); // above 0 %: the tint colour carries the CT value (factor 1 when solid = the old slice)
+    expect(v).toContain('vec4(mix(vec3(g),regionColor(p,segC[si].rgb,si)*ctLumHU(hu,si),sliceTint),a)'); // above 0 %: the tint colour carries the CT value (factor 1 when solid = the old slice)
     expect(v).not.toContain('segHitColor'); expect(v).not.toContain('CT_SHADE_DEPTH');
     expect(v.match(/lit=regionColor\(hp\+dir\*\(0\.75\*voxelMin\),segC\[idx\]\.rgb,idx\)\*diffuse\+vec3\(spec\)/g)).toHaveLength(4);
     expect(v.match(/lit=mix\(regionColor\(cp,segC\[ci\]\.rgb,ci\),vec3\(1\.0\),0\.22\)\*diffuse/g)).toHaveLength(2);
@@ -207,5 +207,32 @@ describe('sliceDrawState (what the slice draws)', () => {
     expect(sliceDrawState({ ...on, on: false })).toEqual({ opacity: 0, segOnly: 0 }); expect(sliceDrawState({ ...on, on: false, clear: true, opacity: 0 })).toEqual({ opacity: 0, segOnly: 0 });
     expect(sliceDrawState({ ...on, opacity: 0, ctShade: 0, tint: 0 })).toEqual({ opacity: 0, segOnly: 0 }); expect(sliceDrawState({ ...on, clear: true, ctShade: 0, tint: 0 })).toEqual({ opacity: 0, segOnly: 0 });
     expect(sliceDrawState({ ...on, opacity: 0, ctShade: 1, tint: 0 })).toEqual({ opacity: 1, segOnly: 1 });
+  });
+});
+
+// the menu board is 1024 x 1400 px and 0.6 m wide; its lower edge keeps the place of the old board (0.5 m wide, 1180 px), it grows upward
+describe('menu board', () => {
+  const W = MENU_WIDTH, H = menuHeightM(), c = [MENU_OFFSET.fwd, MENU_OFFSET.left, -MENU_OFFSET.down]; // head frame: fwd, left, up (metres)
+  // the board faces the head as vr-view.js does (Object3D.lookAt(head): +z to the head, y up), then the four corners seen from the head: yaw to the left, pitch up (degrees)
+  const world = [-c[1], c[2], -c[0]], sub = (a, b) => a.map((v, i) => v - b[i]), cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]], norm = a => a.map(v => v / Math.hypot(...a));
+  const z = norm(sub([0, 0, 0], world)), x = norm(cross([0, 1, 0], z)), y = cross(z, x);
+  const corner = (su, sv) => { const p = world.map((v, i) => v - x[i] * su * W / 2 + y[i] * sv * H / 2); return { yaw: Math.atan2(-p[0], -p[2]) * 180 / Math.PI, pitch: Math.atan2(p[1], Math.hypot(p[0], p[2])) * 180 / Math.PI }; };
+  const cs = [corner(-1, 1), corner(1, 1), corner(-1, -1), corner(1, -1)];
+  it('canvas 1024 x 1400, 0.6 m wide, 0.82 m high (the aspect is kept: texels per metre are those of the 1024 px width)', () => {
+    expect(MENU_CANVAS).toEqual({ W: 1024, H: 1400 }); expect(MENU_WIDTH).toBe(0.6); expect(H).toBeCloseTo(0.6 * 1400 / 1024, 9);
+    const v = readFileSync('docs/vr-view.js', 'utf8'); expect(v).toContain('const MENU_W=MENU_CANVAS.W,MENU_H=MENU_CANVAS.H;');
+  });
+  it('the lower edge is where the old board\'s was (0.488 m below the eyes: 0.2 + 0.5 * 1180 / 1024 / 2), the board grew upward only', () => {
+    expect(MENU_BOTTOM_DOWN).toBeCloseTo(0.2 + 0.5 * (1180 / 1024) / 2, 9);
+    expect(MENU_OFFSET.down + H / 2).toBeCloseTo(MENU_BOTTOM_DOWN, 3); // (the offset is rounded to 0.1 mm)
+    expect(MENU_OFFSET.down + H / 2).toBeCloseTo(0.2 + 0.5 * (1180 / 1024) / 2, 3);
+    expect(MENU_OFFSET.down).toBeLessThan(0.2); expect(H / 2 - MENU_OFFSET.down).toBeGreaterThan(0.3); // the top edge is about 0.33 m above the eyes
+  });
+  it('seen from the default head position the top, bottom and inner edges are inside the Quest 3 view (about 96 deg high, 110 deg wide: 48 / 55 deg from the line of sight)', () => {
+    const top = Math.max(...cs.map(p => p.pitch)), bottom = Math.min(...cs.map(p => p.pitch)), inner = Math.min(...cs.map(p => p.yaw)), outer = Math.max(...cs.map(p => p.yaw));
+    expect(top).toBeGreaterThan(15); expect(top).toBeLessThan(48 - 10); // about 18.6 deg up
+    expect(bottom).toBeLessThan(-20); expect(bottom).toBeGreaterThan(-(48 - 10)); // about 28 deg down
+    expect(inner).toBeGreaterThan(28); expect(inner).toBeLessThan(55 - 15); // about 31 deg to the left: well inside the view's edge; the board is read by turning the head
+    expect(outer).toBeLessThan(75);
   });
 });

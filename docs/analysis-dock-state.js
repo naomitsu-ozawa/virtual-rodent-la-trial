@@ -21,8 +21,7 @@ const W_DEF = 380;
 // the result cards the dock holds (ids of the existing DOM; a VR panel can list the same cards and read the same result models)
 export const ANALYSIS_CARDS = [
   { id: 'hist', boxId: 'seg-hist-result', toggleId: 'seg-hist-toggle', titleKey: 'segHist' },
-  { id: 'line', boxId: 'line-profile-result', toggleId: 'line-profile-toggle', titleKey: 'lineProfile' },
-  { id: 'crop', boxId: 'crop-export-panel', toggleId: 'crop-export-toggle', titleKey: 'cropTitle' } // (absent from the DOM when CROP_EXPORT_UI_ENABLED is false)
+  { id: 'line', boxId: 'line-profile-result', toggleId: 'line-profile-toggle', titleKey: 'lineProfile' }
 ];
 
 const num = (x, lo, hi, def) => (x !== null && x !== '' && Number.isFinite(+x) ? Math.min(hi, Math.max(lo, Math.round(+x))) : def);

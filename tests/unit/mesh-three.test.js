@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.webgpu.js';
+import * as THREE from 'three/webgpu';
 import { describeMeshes, meshesFromEntry } from '../../docs/mesh-three.js';
 import { packMeshes, unpackMeshes } from '../../docs/mesh-pack.js';
 

@@ -1,6 +1,6 @@
 # Virtual Rodent Lab — 体験版
 
-マウス・実験動物のmicro-CT画像を、ブラウザだけで観察できる教育用の体験版です。同梱の練習データ4種類を使って、断面表示、3D表示、セグメンテーション、画像フィルター、体積計測などの操作を試せます。**VRヘッドセットを使えば、CT画像を目の前の空間に立体で浮かべて観察することもできます（VR / AR）。** 診断用のソフトウェアではありません。
+マウス・実験動物のmicro-CT画像を、ブラウザだけで観察できる教育用の体験版です。同梱の練習データを使って、断面表示、3D表示、セグメンテーション、画像フィルター、体積計測などの操作を試せます。**VRヘッドセットを使えば、CT画像を目の前の空間に立体で浮かべて観察することもできます（VR / AR）。** 診断用のソフトウェアではありません。
 
 **公開サイト: https://naomitsu-ozawa.github.io/virtual-rodent-la-trial/**
 
@@ -9,10 +9,20 @@
 ## 練習データの開き方
 
 1. 画面の「データ」パネル（上部のツールバーにもあります）にある「練習データ」ボタンを押します。
-2. 4種類から1つ選びます: ラット腹部 / マウス腹部 / マウス頭部 / 骨梁（それぞれ約260〜270MB）。
+2. 一覧から1つ選びます（同梱のデータは下の「同梱の練習データ」を参照）。
 3. 読み込みが終わると、3面の断面（Axial / Coronal / Sagittal）と3D表示が現れます。初回はダウンロードに時間がかかります。2回目以降は端末内のキャッシュを使います。
 
 練習データはすべて、このサイトに同梱されたものです。
+
+### 同梱の練習データ
+
+- ラット腹部（{mb}）
+- マウス腹部（{mb}）
+- マウス頭部（{mb}）
+- 骨梁（{mb}）
+- マーモセット脳 MRI（50 µm）
+- ジカウイルス EMD-8116
+- マウス後足 microCT（{mb}）
 
 ## VR / AR で観察する
 
@@ -40,7 +50,6 @@ VRヘッドセットのブラウザでこのサイトを開くと、CT画像を�
 - 組織セグメント（骨・軟部組織・脂肪・肺など）の表示、色・不透明度・CT値範囲の調整、後処理（Opening / Closing / 小さい塊の除去 / 穴埋め）
 - 非破壊の画像フィルター（Spike / Hole補正、NLM、Anisotropic Diffusion、Gaussian、Median、Sigmoid、Bilateral、TV、Unsharp）
 - 体積解析（mm³ / µL）、囲み選択、切断、断面ビュー
-- STL書き出しと、立方体の切り出し（DICOMとして書き出し）
 - VR / AR表示（VRヘッドセットのみ。上の「VR / AR で観察する」を参照）
 - 日本語 / 英語の切り替え、6種類のカラーテーマ
 
@@ -72,17 +81,27 @@ npm test                 # 構文・ビルド番号の整合・循環チェッ�
 
 ## English
 
-Virtual Rodent Lab (trial) is an educational, browser-only viewer for small-animal micro-CT. It ships with four bundled practice datasets so you can try multiplanar views, 3D rendering, segmentation, non-destructive filters and volume measurements. **With a VR headset you can also place the CT volume in the space in front of you (VR / AR).** It is not a diagnostic tool.
+Virtual Rodent Lab (trial) is an educational, browser-only viewer for small-animal micro-CT. It ships with bundled practice datasets so you can try multiplanar views, 3D rendering, segmentation, non-destructive filters and volume measurements. **With a VR headset you can also place the CT volume in the space in front of you (VR / AR).** It is not a diagnostic tool.
 
 **Site: https://naomitsu-ozawa.github.io/virtual-rodent-la-trial/**
 
 ### Opening the practice data
 
 1. Press **Practice data** in the Data panel (also in the top toolbar).
-2. Choose one of the four sets: rat abdomen, mouse abdomen, mouse head, or trabecular bone (about 260-270 MB each).
+2. Choose one from the list (the bundled sets are listed under "Bundled practice data" below).
 3. When loading finishes, the three MPR planes and the 3D view appear. The first download takes a while; later visits use the on-device cache.
 
 All practice data is bundled with this site.
+
+#### Bundled practice data
+
+- Rat abdomen ({mb})
+- Mouse abdomen ({mb})
+- Mouse head ({mb})
+- Trabecular bone ({mb})
+- Marmoset brain MRI (50 µm)
+- Zika virus EMD-8116
+- Mouse hindpaw micro-CT ({mb})
 
 ### Viewing in VR / AR
 
@@ -105,7 +124,6 @@ The VR / AR buttons appear only in browsers that support VR / AR (not on a PC or
 - Tissue segments (bone, soft tissue, fat, lung, ...) with color, opacity and CT range; Opening / Closing / small-component removal / hole filling
 - Non-destructive filters (Spike / Hole, NLM, Anisotropic Diffusion, Gaussian, Median, Sigmoid, Bilateral, TV, Unsharp)
 - Volume analysis (mm³ / µL), lasso selection, cutting, section view
-- STL export and cube crop export (as DICOM)
 - VR / AR (VR headsets only, see above), Japanese / English UI, six color themes
 
 ### Browser requirements

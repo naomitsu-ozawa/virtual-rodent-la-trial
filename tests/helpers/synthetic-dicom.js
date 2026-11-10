@@ -1,5 +1,6 @@
 // Minimal Explicit VR Little Endian DICOM writer for tests. Produces valid
 // Part 10 files (preamble + DICM + meta group) that dicom-parser can read.
+import { deflateRawSync } from 'node:zlib';
 const LONG_VRS = new Set(['OB', 'OW', 'OF', 'SQ', 'UT', 'UN']);
 const enc = new TextEncoder();
 
@@ -36,8 +37,11 @@ export function makeCtSlice({
   pixelSpacing = [0.1, 0.1], position = [0, 0, 0], orientation = null, thickness = 0.1,
   instance = 1, slope = 1, intercept = -1024, windowCenter = 40, windowWidth = 400,
   pixels = null, extra = [],
+  // compressed / deflated files (tests, fixtures): transferSyntax = the file's transfer syntax; encapsulated = [Uint8Array per frame] written as an
+  // encapsulated Pixel Data (empty basic offset table, one fragment per frame); deflate = the data set after the file meta group is raw-deflated
+  transferSyntax = '1.2.840.10008.1.2.1', encapsulated = null, deflate = false, photometric = 'MONOCHROME2', samples = 1,
 } = {}) {
-  const meta = [['00020010', 'UI', '1.2.840.10008.1.2.1']];
+  const meta = [['00020010', 'UI', transferSyntax]];
   const body = [
     ['00080060', 'CS', modality],
     ['0008103E', 'LO', description],
@@ -47,8 +51,8 @@ export function makeCtSlice({
     ['00200013', 'IS', instance],
     ['00200032', 'DS', position.join('\\')],
     ...(orientation ? [['00200037', 'DS', orientation.join('\\')]] : []),
-    ['00280002', 'US', 1],
-    ['00280004', 'CS', 'MONOCHROME2'],
+    ['00280002', 'US', samples],
+    ['00280004', 'CS', photometric],
     ['00280010', 'US', rows],
     ['00280011', 'US', columns],
     ['00280030', 'DS', pixelSpacing.join('\\')],
@@ -59,13 +63,24 @@ export function makeCtSlice({
     ['00281051', 'DS', windowWidth],
     ['00281052', 'DS', intercept],
     ['00281053', 'DS', slope],
-    ['7FE00010', 'OW', pixels ?? new Int16Array(rows * columns)],
+    ...(encapsulated ? [] : [['7FE00010', 'OW', pixels ?? new Int16Array(rows * columns)]]),
     ...extra, // optional additional elements [tag, vr, value]; the whole body is written in ascending tag order
   ].sort((a, b) => parseInt(a[0], 16) - parseInt(b[0], 16));
   const metaBytes = concat(meta.flatMap(e => element(...e)));
   const groupLen = concat(element('00020000', 'UL', metaBytes.length));
   const preamble = new Uint8Array(132); preamble.set(enc.encode('DICM'), 128);
-  return concat([preamble, groupLen, metaBytes, ...body.flatMap(e => element(...e))]);
+  let bodyBytes = concat([...body.flatMap(e => element(...e)), ...(encapsulated ? [encapsulatedPixelData(encapsulated)] : [])]);
+  if (deflate) bodyBytes = new Uint8Array(deflateRawSync(bodyBytes));
+  return concat([preamble, groupLen, metaBytes, bodyBytes]);
+}
+
+// (7FE0,0010) OB with undefined length: an empty basic offset table item, one item per frame (padded to even length), the sequence delimiter
+function encapsulatedPixelData(frames) {
+  const item = (tag, bytes) => { const b = new Uint8Array(8 + bytes.length), dv = new DataView(b.buffer); dv.setUint16(0, 0xfffe, true); dv.setUint16(2, tag, true); dv.setUint32(4, bytes.length, true); b.set(bytes, 8); return b; };
+  const head = new Uint8Array(12), dv = new DataView(head.buffer);
+  dv.setUint16(0, 0x7fe0, true); dv.setUint16(2, 0x0010, true); head[4] = 0x4f; head[5] = 0x42; dv.setUint32(8, 0xffffffff, true);
+  const padded = frames.map(f => { if (f.length % 2 === 0) return f; const p = new Uint8Array(f.length + 1); p.set(f); return p; });
+  return concat([head, item(0xe000, new Uint8Array(0)), ...padded.map(f => item(0xe000, f)), item(0xe0dd, new Uint8Array(0))]);
 }
 
 export const asFile = (bytes, name = 'slice.dcm') => new File([bytes], name);
