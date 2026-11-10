@@ -8,11 +8,18 @@
 export const VOLUME_FWD = 0.65, VOLUME_DOWN = 0.12;
 // the menu (left) and the help board (right) sit farther out to the sides: seen only when the head turns, yet with the head straight their inner
 // edges just peek in at the edge of the view (Quest 3: about 110 deg across, 55 deg each side). Both centres 50 deg out at 0.9 m (horizontal; was 60 deg: too wide); the boards face the
-// head, so the inner edge is 50 - atan(half width / 0.9): menu (0.5 m) 34.5 deg, help (0.45 m) 36 deg (inside the view's 55 deg edge by about 19-20 deg: a board is in view from the side of the eye, not just peeking).
+// head, so the inner edge is 50 - atan(half width / 0.9): menu (0.5 m;: 0.6 m, inner edge about 31-32 deg) 34.5 deg, help (0.45 m) 36 deg (inside the view's 55 deg edge by about 19-20 deg: a board is in view from the side of the eye, not just peeking).
 // (were 0.78 ahead / 0.45 aside = 30 deg, inner edges at 14.5 / 20 deg.) The help board is 2 cm lower than the menu so its top stays under the histogram board.
 export const BOARD_DIST = 0.9, BOARD_YAW_DEG = 50; // 50 deg (was 60: too wide a turn); inner edges 60 -> 50: menu (0.5 m) 34.5 deg, help (0.45 m) 36 deg
 export const aside = (deg, down, d = BOARD_DIST) => ({ fwd: +(d * Math.cos(deg * Math.PI / 180)).toFixed(4), left: +(d * Math.sin(deg * Math.PI / 180)).toFixed(4), down });
-export const MENU_OFFSET = aside(BOARD_YAW_DEG, 0.2);
+// the menu board is taller and wider: canvas 1024 x 1400 (was 1180), 0.6 m wide (was 0.5 m, so text and buttons look 1.2 times larger; the height 0.6 * 1400 / 1024 = 0.82 m follows
+// from the aspect). The BOTTOM edge keeps its place (MENU_BOTTOM_DOWN = 0.2 + 0.5 * 1180 / 1024 / 2 = 0.488 m below the eyes, what the old board had), the board grows upward: the centre is
+// MENU_BOTTOM_DOWN - height / 2 below the eyes (0.078 m), the top edge about 0.33 m above them.
+export const MENU_CANVAS = { W: 1024, H: 1400 };
+export const MENU_WIDTH = 0.6;
+export const MENU_BOTTOM_DOWN = 0.2 + 0.5 * 1180 / 1024 / 2;
+export const menuHeightM = (w = MENU_WIDTH) => w * MENU_CANVAS.H / MENU_CANVAS.W;
+export const MENU_OFFSET = aside(BOARD_YAW_DEG, +(MENU_BOTTOM_DOWN - menuHeightM() / 2).toFixed(4));
 export const HELP_OFFSET = aside(-BOARD_YAW_DEG, 0.254); // 0.22 -> 0.254: the board is 7 cm taller now (the caption under the slide), its top edge stays where it was
 // the angle (head yaw, from the board's own direction) and the distance beyond which a board in 追従 (follow) mode glides back to its place: larger than the boards'
 // the boards' 50 deg (65 deg = 50 + 15), so turning the head to read a board (or the one on the other side) does not send it away (was 0.6 rad = 34 deg and a 0.45 m chord, which a 50 deg turn exceeds)
@@ -24,11 +31,11 @@ export const FOLLOW_ANGLE = 65 * Math.PI / 180, FOLLOW_DIST = 0.45;
 export const HU_PANEL_OFFSET = { fwd: 0.80, left: 0, down: -0.16 };
 // board widths in metres.: the help board 1.4 times larger (0.32 -> 0.45 m; the slide pictures were too small to read). Its canvas keeps its 820 px
 // layout and is drawn at HELP_RES times the pixels (makeMenu res), so the texels per metre stay as before (2560 / m): 1148 x 885 px, about 4 MB (+ mipmaps).
-export const MENU_WIDTH = 0.5, HELP_WIDTH = 0.45, HELP_RES = 1.4;
+export const HELP_WIDTH = 0.45, HELP_RES = 1.4; // MENU_WIDTH: above
 // the HU histogram board sits above the help board (front-right, mirrored from the menu) and is 0.46 m wide.
 export const HIST_OFFSET = { fwd: 0.78, left: -0.45, down: -0.1 };
 export const HIST_WIDTH = 0.46;
-// the 体験会 mission board (own board, no longer part of the help board): upper LEFT, above the menu (the menu's top edge is about 9 cm above eye level) and clear
+// the 体験会 mission board (own board, no longer part of the help board): upper LEFT, above the menu (the menu's top edge was about 9 cm above eye level;: about 33 cm, the board is taller) and clear
 // of the volume (centre, low), the HU live panel (centre, 16 cm above eye level, 0.15 m either side) and the help board (right, below eye level) / histogram board (right, above).
 // 0.45 m left + 0.25 m up at 0.78 m ahead = about 30 deg to the left and 18 deg up; same width as the help board so the text keeps its size; placed once, grip moves it, 正面に戻す puts it back.
 // with the menu, 50 deg to the left (0.9 m), 0.25 m up: its bottom edge (0.45 m wide, 16:9 slide: 0.25 m high) is 3.5 cm above the menu's top edge

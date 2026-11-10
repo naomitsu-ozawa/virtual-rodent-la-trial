@@ -18,6 +18,17 @@ function refOld(items, sourceDims, dims) {
   return { data: colors.length ? data : null, ids: colors.length ? ids : null, colors, segs, list };
 }
 
+// VR_PREP_VERSION 7: after both passes, ids grows ONE voxel into its 6 face neighbours (only voxels still 0; the largest id among the neighbours as they were before the growth = the later result wins;
+// the colour index `data` is not grown). refGrow is that rule written the plain way (a copy, then every 0 voxel looks at the copy), the reference for the in-place one-pass code.
+function refGrow(ids, dims) {
+  const [w, h, d] = dims, src = ids.slice(), out = ids.slice();
+  for (let z = 0; z < d; z++) for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const o = (z * h + y) * w + x; if (src[o]) continue; let m = 0;
+    for (const [dx, dy, dz] of [[-1, 0, 0], [1, 0, 0], [0, -1, 0], [0, 1, 0], [0, 0, -1], [0, 0, 1]]) { const X = x + dx, Y = y + dy, Z = z + dz; if (X < 0 || Y < 0 || Z < 0 || X >= w || Y >= h || Z >= d) continue; m = Math.max(m, src[(Z * h + Y) * w + X]); }
+    out[o] = m;
+  }
+  return out;
+}
 // source runs ([y, x0, x1] triples per z) of the voxels where pred(x, y, z)
 function runsOf(dims, pred) {
   const [w, h, d] = dims, out = new Array(d);
@@ -74,27 +85,66 @@ describe('buildRegionIndexOf on a reduced grid: no holes in a thin result', () =
       const one = runsOf(s, (x, y, z) => x === s[0] - 1 && y === s[1] - 1 && z === s[2] - 1), r1 = buildRegionIndexOf([item(one, 1)], s, t);
       const [x0, x1] = blockOf(s[0] - 1, s[0], t[0]), [y0, y1] = blockOf(s[1] - 1, s[1], t[1]), [z0, z1] = blockOf(s[2] - 1, s[2], t[2]);
       expect(x1).toBe(t[0] - 1);
+      const seed = (x, y, z) => (x >= x0 && x <= x1 && y >= y0 && y <= y1 && z >= z0 && z <= z1) || (x === t[0] - 1 && y === t[1] - 1 && z === t[2] - 1);
       for (let z = 0; z < t[2]; z++) for (let y = 0; y < t[1]; y++) for (let x = 0; x < t[0]; x++) {
-        const inBlock = x >= x0 && x <= x1 && y >= y0 && y <= y1 && z >= z0 && z <= z1, nearest = x === t[0] - 1 && y === t[1] - 1 && z === t[2] - 1;
-        if (inBlock || nearest) continue; expect(r1.ids[(z * t[1] + y) * t[0] + x]).toBe(0);
+        // the block / nearest voxel and (VR_PREP_VERSION 7) their face neighbours may be painted; everything else stays 0
+        if (seed(x, y, z) || seed(x - 1, y, z) || seed(x + 1, y, z) || seed(x, y - 1, z) || seed(x, y + 1, z) || seed(x, y, z - 1) || seed(x, y, z + 1)) continue; expect(r1.ids[(z * t[1] + y) * t[0] + x]).toBe(0);
       }
     }
   });
   it('2:1 is the 2x2x2 block: source voxel (x, y, z) fills coarse voxel (x >> 1, y >> 1, z >> 1)', () => {
     const one = runsOf(sd, (x, y, z) => x === 7 && y === 9 && z === 11), now = buildRegionIndexOf([item(one, 1)], sd, dims);
-    let count = 0, at = -1; for (let i = 0; i < now.ids.length; i++) if (now.ids[i]) { count++; at = i; }
-    // the nearest voxel of the coarse voxel (3, 4, 5) is (round(3*39/19), ...) = (6, 8, 10) in the source, so only the block pass can paint it
-    expect(count).toBe(1); expect(at).toBe((5 * dims[1] + 4) * dims[0] + 3);
+    let count = 0, inData = 0, at = -1; for (let i = 0; i < now.ids.length; i++) { if (now.ids[i]) count++; if (now.data[i]) { inData++; at = i; } }
+    // the nearest voxel of the coarse voxel (3, 4, 5) is (round(3*39/19), ...) = (6, 8, 10) in the source, so only the block pass can paint it; ids then grows into its 6 face neighbours (7 voxels), data stays 1 voxel
+    expect(inData).toBe(1); expect(at).toBe((5 * dims[1] + 4) * dims[0] + 3); expect(count).toBe(7); eq(now.ids, refGrow(now.data, dims));
   });
 });
 
-describe('buildRegionIndexOf on the same grid is unchanged', () => {
-  it('byte-identical to the function (ids, data, colours, segs, list), also for empty and null runs', () => {
+describe('buildRegionIndexOf on the same grid', () => {
+  it('= the function, then ids grown by one voxel (data, colours, segs, list byte-identical), also for empty and null runs', () => {
     const dims = [37, 29, 23], mk = (i, p) => item(runsOf(dims, p), 0x100 + (i % 5), i);
     const items = [mk(0, (x, y, z) => (x + y + z) % 7 === 0), mk(1, (x, y, z) => x === y), mk(2, (x, y, z) => z > 20 || x < 2), { ...item(null, 3, 3) }, mk(4, () => false)];
     const a = buildRegionIndexOf(items, dims, dims), b = refOld(items, dims, dims);
-    eq(a.ids, b.ids); eq(a.data, b.data); expect(a.colors).toEqual(b.colors); expect(a.segs).toEqual(b.segs); expect(a.list).toEqual(b.list);
+    eq(a.ids, refGrow(b.ids, dims)); eq(a.data, b.data); expect(a.colors).toEqual(b.colors); expect(a.segs).toEqual(b.segs); expect(a.list).toEqual(b.list);
     expect(buildRegionIndexOf([], dims, dims)).toEqual({ data: null, colors: [], segs: [], list: [] });
+  });
+});
+
+describe('buildRegionIndexOf grows ids by one voxel (VR_PREP_VERSION 7)', () => {
+  const dims = [9, 8, 7], at = (x, y, z) => (z * dims[1] + y) * dims[0] + x, one = (X, Y, Z) => runsOf(dims, (x, y, z) => x === X && y === Y && z === Z);
+  it('one voxel grows into exactly its 6 face neighbours: no diagonal, no second step; at a corner only the neighbours inside the grid', () => {
+    const r = buildRegionIndexOf([item(one(4, 4, 3), 0xaa0000)], dims, dims);
+    const on = []; for (let z = 0; z < dims[2]; z++) for (let y = 0; y < dims[1]; y++) for (let x = 0; x < dims[0]; x++) if (r.ids[at(x, y, z)]) on.push([x, y, z].join());
+    expect(on.sort()).toEqual(['4,4,3', '3,4,3', '5,4,3', '4,3,3', '4,5,3', '4,4,2', '4,4,4'].sort());
+    expect(r.ids[at(5, 5, 3)]).toBe(0); expect(r.ids[at(6, 4, 3)]).toBe(0); // diagonal / two steps away
+    const c = buildRegionIndexOf([item(one(0, 0, 0), 0xaa0000)], dims, dims); let n = 0; for (const v of c.ids) if (v) n++;
+    expect(n).toBe(4); expect(c.ids[at(1, 0, 0)]).toBe(1); expect(c.ids[at(0, 1, 0)]).toBe(1); expect(c.ids[at(0, 0, 1)]).toBe(1);
+  });
+  it('a painted voxel is never changed, and the colour index (data, the label histogram) is not grown', () => {
+    // results 1 and 2 touch (x = 3 | x = 4): neither eats the other; the grown voxels have data 0
+    const items = [item(runsOf(dims, (x, y, z) => x === 3 && y >= 2 && y <= 5), 0x110000, 0), item(runsOf(dims, (x, y, z) => x === 4 && y >= 2 && y <= 5), 0x220000, 1)];
+    const r = buildRegionIndexOf(items, dims, dims), b = refOld(items, dims, dims);
+    for (let i = 0; i < b.ids.length; i++) if (b.ids[i]) expect(r.ids[i]).toBe(b.ids[i]);
+    eq(r.data, b.data);
+    expect(r.ids[at(2, 3, 3)]).toBe(1); expect(r.ids[at(5, 3, 3)]).toBe(2); expect(r.data[at(2, 3, 3)]).toBe(0); expect(r.data[at(5, 3, 3)]).toBe(0);
+  });
+  it('a gap voxel between two results takes the LATER result in the list, whichever side it is on (not the scan order)', () => {
+    const L = runsOf(dims, (x, y, z) => x === 2 && y === 4 && z === 3), R = runsOf(dims, (x, y, z) => x === 4 && y === 4 && z === 3), gap = at(3, 4, 3);
+    const lr = buildRegionIndexOf([item(L, 0x110000, 0), item(R, 0x220000, 1)], dims, dims), rl = buildRegionIndexOf([item(R, 0x220000, 0), item(L, 0x110000, 1)], dims, dims);
+    expect(lr.ids[gap]).toBe(2); expect(lr.list[1].color).toBe(0x220000); // R is later: R's id
+    expect(rl.ids[gap]).toBe(2); expect(rl.list[1].color).toBe(0x110000); // L is later: L's id
+    // the same along z and y (neighbours read from the slices before / after and the rows above / below)
+    const Z0 = runsOf(dims, (x, y, z) => x === 4 && y === 4 && z === 1), Z1 = runsOf(dims, (x, y, z) => x === 4 && y === 4 && z === 3);
+    expect(buildRegionIndexOf([item(Z0, 1, 0), item(Z1, 2, 1)], dims, dims).ids[at(4, 4, 2)]).toBe(2); expect(buildRegionIndexOf([item(Z1, 2, 0), item(Z0, 1, 1)], dims, dims).ids[at(4, 4, 2)]).toBe(2);
+    const Y0 = runsOf(dims, (x, y, z) => x === 4 && y === 1 && z === 3), Y1 = runsOf(dims, (x, y, z) => x === 4 && y === 3 && z === 3);
+    expect(buildRegionIndexOf([item(Y0, 1, 0), item(Y1, 2, 1)], dims, dims).ids[at(4, 2, 3)]).toBe(2); expect(buildRegionIndexOf([item(Y1, 2, 0), item(Y0, 1, 1)], dims, dims).ids[at(4, 2, 3)]).toBe(2);
+  });
+  it('on a reduced grid the growth comes after both passes (= refGrow of the index without it)', () => {
+    const sd = [40, 32, 24], rd = [20, 16, 12], items = [item(runsOf(sd, (x, y) => x + y === 30), 0xff0000, 0), item(runsOf(sd, (x, y, z) => x >= 4 && x < 14 && y >= 4 && y < 14 && z >= 2 && z < 12), 0x00ff00, 1)];
+    const r = buildRegionIndexOf(items, sd, rd);
+    // data has every voxel of the two passes (each result has a colour of its own here), so the index before the growth is data mapped back to the ids
+    const before = r.data.map(v => v);
+    eq(r.ids, refGrow(before, rd));
   });
 });
 

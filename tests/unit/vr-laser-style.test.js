@@ -54,7 +54,7 @@ describe('laser object per style', () => {
 
 describe('表示 tab rows with the laser row (static)', () => {
   it('rows are 80 px apart (72 px tall) from the first row to the home row, below the four segment rows and inside the menu', () => {
-    const MENU_H = 1180, yb = MENU_H - 110, rows = [480, 400, 320, 240, 160, 80].map(k => yb - k);
+    const MENU_H = 1400, yb = MENU_H - 110, rows = [480, 400, 320, 240, 160, 80].map(k => yb - k);
     for (const k of [480, 400, 240, 160, 80]) expect(src).toMatch(new RegExp(`yb-${k}[,);]`));
     expect(src).toContain('viewTabScaleLayout(yb,MENU_W,X)'); // the row at yb-320 (拡大率 + 実寸) comes from vr-real-scale.js viewTabScaleLayout (tests/unit/vr-scale-slider.test.js)
     expect(rows[0]).toBeGreaterThanOrEqual(270 + 3 * 76 + 72);

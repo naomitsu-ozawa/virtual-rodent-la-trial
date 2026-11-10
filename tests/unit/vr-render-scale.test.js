@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { eyeMetrics, capFromPpv, nextCap, foveaRect, outsideFovea, foveaWorth, qualityText, PPV_CENTER, PPV_FAR, CAP_MIN, CAP_QUANT, CAP_HYST, FOVEA_HALF, FOVEA_K } from '../../docs/vr-render-scale.js';
+import { eyeMetrics, capFromPpv, capFromBudget, nextCap, N_MAX, foveaRect, outsideFovea, foveaWorth, qualityText, PPV_CENTER, PPV_FAR, CAP_MIN, CAP_QUANT, CAP_HYST, FOVEA_HALF, FOVEA_K } from '../../docs/vr-render-scale.js';
 
 // column-major 4x4 like THREE.Matrix4.elements
 const I = () => [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
@@ -83,6 +83,46 @@ describe('capFromPpv / nextCap', () => {
     expect(nextCap(q, q - CAP_QUANT)).toBe(q); // head bob: no change
     expect(nextCap(q, q - CAP_HYST - CAP_QUANT)).toBeLessThan(q);
     expect(nextCap(0.5, 1)).toBe(1); expect(nextCap(1, 0.01)).toBe(CAP_MIN);
+  });
+});
+
+// ray budget: both eyes together about N_MAX rays per frame; cap = min(capFromPpv, capFromBudget)
+describe('capFromBudget', () => {
+  const QW = 2064, QH = 2208, QUEST = 2 * QW * QH; // Quest 3, one eye 2064 x 2208, both eyes: 9.1 M px
+  it('N_MAX is 1 M rays per frame', () => { expect(N_MAX).toBe(1000000); });
+  it('a full screen on Quest 3 (both eyes) gives sqrt(1e6 / 9.1e6) = 0.33', () => {
+    expect(capFromBudget(QUEST)).toBeCloseTo(Math.sqrt(1e6 / QUEST), 12); expect(capFromBudget(QUEST)).toBeCloseTo(0.331, 3);
+    expect(nextCap(1, capFromBudget(QUEST))).toBeCloseTo(11 / 32, 12); // applied: quantised up to 0.344
+  });
+  it('about a tenth of the screen (far away): the budget does not bite, the cap stays what capFromPpv gave', () => {
+    const tenth = 0.1 * QUEST; // 0.91 M px < N_MAX
+    expect(capFromBudget(tenth)).toBe(1);
+    expect(capFromBudget(N_MAX)).toBe(1); expect(capFromBudget(0)).toBe(1); expect(capFromBudget(NaN)).toBe(1);
+    expect(Math.min(0.8, capFromBudget(tenth))).toBe(0.8);
+  });
+  it('rays = cover x cap^2 stay at N_MAX whenever it bites; shrinks with the covered area', () => {
+    for (const k of [0.15, 0.3, 0.5, 1]) { const c = capFromBudget(k * QUEST); expect(k * QUEST * c * c).toBeCloseTo(N_MAX, 3); }
+    expect(capFromBudget(0.5 * QUEST)).toBeGreaterThan(capFromBudget(QUEST));
+  });
+  it('never below CAP_MIN', () => { expect(capFromBudget(1e12)).toBe(CAP_MIN); expect(capFromBudget(5e7, 1e6)).toBeCloseTo(Math.sqrt(0.02), 12); });
+  it('the eye inside the box counts as the whole viewport (eyeMetrics cover), both eyes: 0.33', () => {
+    const e = eyeMetrics(model(0.15, 0, 0, -0.05), HALF, DIMS, I(), P90, QW, QH, {}); expect(e.inside).toBe(true); expect(e.cover).toBe(QW * QH);
+    expect(capFromBudget(2 * e.cover)).toBeCloseTo(0.331, 3);
+  });
+  it('30 cm at arm\'s length (0.66 m) and close-up on Quest 3 numbers: the budget caps the close-up only', () => {
+    const P = persp(1, 1, 1, 1), at = (longM, depth) => eyeMetrics(model(longM / 3.3, 0, 0, -depth), [1.65, 0.6875, 0.6875], [256, 107, 107], I(), P, QW, QH, {});
+    const far = at(0.30, 0.66), close = at(0.30, 0.15);
+    const cf = Math.min(capFromPpv(far.ppvCenter, far.ppvFar), capFromBudget(2 * far.cover)), cc = Math.min(capFromPpv(close.ppvCenter, close.ppvFar), capFromBudget(2 * close.cover));
+    expect(cf).toBeGreaterThan(cc); expect(cc).toBeLessThanOrEqual(capFromBudget(2 * close.cover) + 1e-12); expect(2 * close.cover * cc * cc).toBeLessThanOrEqual(N_MAX * 1.0001);
+  });
+  it('head bob around the 0.9 path boundary: the applied cap does not move on a +-1 % cover jitter (nextCap hysteresis)', () => {
+    // cover where the budget cap is about 0.9: 1e6 / 0.81 = 1.235 M px
+    let cap = 1, changes = 0, prev = null;
+    for (let i = 0; i < 400; i++) {
+      const cover = 1.235e6 * (1 + 0.01 * Math.sin(i * 0.9) + 0.005 * Math.sin(i * 2.3));
+      cap = nextCap(cap, capFromBudget(cover)); if (prev !== null && cap !== prev) changes++; prev = cap;
+    }
+    expect(changes).toBeLessThanOrEqual(2);
   });
 });
 

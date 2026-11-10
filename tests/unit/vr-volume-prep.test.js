@@ -68,6 +68,15 @@ function refRegionIndex(regions, slotKeys, sourceDims, dims) { // regions: [{col
       if (hit) { ids[o] = p.id; if (p.k >= 0) data[o] = p.k + 1; }
     }
   }
+  // VR_PREP_VERSION 7 (on every grid): ids (not data) grows one voxel: a voxel still 0 takes the largest id among its 6 face neighbours as they were before this step (the later result wins)
+  if (colors.length) {
+    const before = ids.slice();
+    for (let z = 0; z < d; z++) for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const o = (z * h + y) * w + x; if (before[o]) continue;
+      const n = [x > 0 ? before[o - 1] : 0, x < w - 1 ? before[o + 1] : 0, y > 0 ? before[o - w] : 0, y < h - 1 ? before[o + w] : 0, z > 0 ? before[o - w * h] : 0, z < d - 1 ? before[o + w * h] : 0];
+      ids[o] = Math.max(...n);
+    }
+  }
   return { data: colors.length ? data : null, ids: colors.length ? ids : null, colors, segs, list };
 }
 // runs of a blob-ish mask: per z slice [y, x0, x1] triples (Uint32Array like the run builders'), a different shape per seed

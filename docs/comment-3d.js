@@ -11,24 +11,24 @@
 // view's cut plane included; refreshed at most about 10 times a second while the view moves and once more when it stops
 // (comment-3d-hidden.js). Until the bytes are ready, or when no segment is shown / no source data is in memory, every point is exposed.
 import * as THREE from './vendor/three@0.186.0/build/three.webgpu.js';
-import { sceneState, volume, activeSeries, volumeAnalysisMode, analysisEditTool, sectionViewOpen, sectionViewPlane, analysisRegions } from './state.js?v=20261110-build707';
-import { tr } from './i18n.js?v=20261110-build707';
-import { datasetFingerprint } from './project-file.js?v=20261110-build707';
-import { voxelToLocal3D } from './crosshair.js?v=20261110-build707';
-import { pointColor, darkFill, inkOn } from './point-colors.js?v=20261110-build707';
-import { getComments, onCommentsChange, commentMatchesSeries, commentTarget, getMarkersShown, onMarkersShownChange } from './comments.js?v=20261110-build707';
-import { getMeasurements, setLabelOffset, onMeasurementsChange, measurementMm, measureLabel, seriesSpacing, spacingLevel, getMeasureStart, onMeasureStartChange, createLongPress } from './measurements.js?v=20261110-build707';
-import { openPointMenu, endMeasureAt, cancelMeasureUi } from './point-menu.js?v=20261110-build707';
-import { request3DRender } from './scene3d.js?v=20261110-build707';
-import { gpuVolumeTarget } from './gpu-volume-data.js?v=20261110-build707';
-import { analysisRegionShown, segmentState, segmentEditState, SEGMENT_PRESET_ORDER, gpuSegmentOrder } from './segments.js?v=20261110-build707';
-import { sectionLocalPoint, sectionLocalNormal } from './section-view.js?v=20261110-build707';
-import { planeLabelPlacement, clampLabelCenter, stepDelta, createFocusTracker, LINE_SAMPLES, probeKey, labelPart, lineSamplePoints, lineAlphas, lineStopOffsets, createIdMaker } from './measure-label.js?v=20261110-build707';
-import { planeRelations, boxHalfExtent, clipSegmentNear } from './comment-3d-section.js?v=20261110-build707';
-import { computeHiddenIds, shownChannels, sectionPlaneLocal, createHiddenThrottle } from './comment-3d-hidden.js?v=20261110-build707';
-import { regionCustomName, regionChipTitle } from './region-name.js?v=20261110-build707'; // the shared region name rule (name, else ID <atlas id>), as the VR cards
-import { judgeLabelPlace, labelDisplay, thinOverlaps, putAttr, putStyle } from './comment-3d-label-occlusion.js?v=20261110-build707'; // occlusion of the analysis labels (behind = hidden, embedded = translucent, pushed out, overlaps thinned)
-import { setRegionLabelOffset, onAnalysisLabelsChange, leaderVisible, labelLocal, offsetForLocal, rectEdgePoint, pcVoxelStep } from './analysis-label.js?v=20261110-build707';
+import { sceneState, volume, activeSeries, volumeAnalysisMode, analysisEditTool, sectionViewOpen, sectionViewPlane, analysisRegions } from './state.js?v=20261110-build708';
+import { tr } from './i18n.js?v=20261110-build708';
+import { datasetFingerprint } from './project-file.js?v=20261110-build708';
+import { voxelToLocal3D } from './crosshair.js?v=20261110-build708';
+import { pointColor, darkFill, inkOn } from './point-colors.js?v=20261110-build708';
+import { getComments, onCommentsChange, commentMatchesSeries, commentTarget, getMarkersShown, onMarkersShownChange } from './comments.js?v=20261110-build708';
+import { getMeasurements, setLabelOffset, onMeasurementsChange, measurementMm, measureLabel, seriesSpacing, spacingLevel, getMeasureStart, onMeasureStartChange, createLongPress } from './measurements.js?v=20261110-build708';
+import { openPointMenu, endMeasureAt, cancelMeasureUi } from './point-menu.js?v=20261110-build708';
+import { request3DRender } from './scene3d.js?v=20261110-build708';
+import { gpuVolumeTarget } from './gpu-volume-data.js?v=20261110-build708';
+import { analysisRegionShown, segmentState, segmentEditState, SEGMENT_PRESET_ORDER, gpuSegmentOrder } from './segments.js?v=20261110-build708';
+import { sectionLocalPoint, sectionLocalNormal } from './section-view.js?v=20261110-build708';
+import { planeLabelPlacement, clampLabelCenter, stepDelta, createFocusTracker, LINE_SAMPLES, probeKey, labelPart, lineSamplePoints, lineAlphas, lineStopOffsets, createIdMaker } from './measure-label.js?v=20261110-build708';
+import { planeRelations, boxHalfExtent, clipSegmentNear } from './comment-3d-section.js?v=20261110-build708';
+import { computeHiddenIds, shownChannels, sectionPlaneLocal, createHiddenThrottle } from './comment-3d-hidden.js?v=20261110-build708';
+import { regionCustomName, regionChipTitle } from './region-name.js?v=20261110-build708'; // the shared region name rule (name, else ID <atlas id>), as the VR cards
+import { judgeLabelPlace, labelDisplay, thinOverlaps, putAttr, putStyle } from './comment-3d-label-occlusion.js?v=20261110-build708'; // occlusion of the analysis labels (behind = hidden, embedded = translucent, pushed out, overlaps thinned)
+import { setRegionLabelOffset, onAnalysisLabelsChange, leaderVisible, labelLocal, offsetForLocal, rectEdgePoint, pcVoxelStep } from './analysis-label.js?v=20261110-build708';
 
 
 // analysis result labels (analysis-label.js, region.label): a chip (colour, number, segments, volume) at its anchor, MOVABLE by a drag (mouse / pen / touch) in the camera-facing plane through the label's
@@ -73,7 +73,7 @@ function refreshHidden(obj,camera,pts,plane){
  if(!anyShown||!pts.length){const had=hiddenIds.size>0;hiddenIds=new Set();if(lastPrep){lastPrep=null;refreshSoon()}return had}
  if(vrModFailed)return false; // the builder could not be loaded: every point stays exposed
  if(!vrMod){ // the classification builder lives in vr-view.js: loaded once, on the first need; until then the previous judgement stays
-  if(!vrModLoading){vrModLoading=true;import('./vr-view.js?v=20261110-build707').then(m=>{vrMod=m;throttle.reset();refreshSoon()},()=>{vrModFailed=true;if(hiddenIds.size){hiddenIds=new Set();refreshSoon()}})}
+  if(!vrModLoading){vrModLoading=true;import('./vr-view.js?v=20261110-build708').then(m=>{vrMod=m;throttle.reset();refreshSoon()},()=>{vrModFailed=true;if(hiddenIds.size){hiddenIds=new Set();refreshSoon()}})}
   return false;
  }
  const prep=vrMod.hiddenClsFor(()=>{throttle.reset();refreshSoon()});
@@ -112,7 +112,15 @@ const measEls=new Map(); // measurement id -> {line,label,text}
 // keys 'M:<measurement id>' / 'A:<region id>' (distance labels and analysis labels share the tracker)
 const alEls=new Map(); // region id -> {label,leader,dot,...}
 const litEntry=key=>key==null?null:key.startsWith('A:')?alEls.get(+key.slice(2)):measEls.get(key.slice(2));
-const labelFocus=createFocusTracker((n,p)=>{for(const [key,on] of [[p,false],[n,true]]){const e=litEntry(key);if(e){e.label.classList.toggle('is-lit',on);e.leader.classList.toggle('is-lit',on);e.dot?.classList.toggle('is-lit',on)}}refreshSoon()}); // a lit card always stays: the overlap thinning is redone
+const labelFocus=createFocusTracker((n,p)=>{for(const [key,on] of [[p,false],[n,true]]){const e=litEntry(key);if(e){e.label.classList.toggle('is-lit',on);e.leader.classList.toggle('is-lit',on);e.dot?.classList.toggle('is-lit',on)}}syncHoverFocus();refreshSoon()}); // a lit card always stays: the overlap thinning is redone
+// the result under the mouse (its label is lit) gets the volume's temporary focus (webgl-volume.js setHoverFocus: only the look-up table's focus bit, the page's selection stays). Synced when the lit label changes and after every redraw,
+// so it is released when the mouse leaves, the label disappears (hidden result, label removed), or the 3D view is closed (no entry left).
+let hoverFocusRuns=null;
+function syncHoverFocus(){
+ const k=labelFocus.get(),r=k&&k.startsWith('A:')&&alEls.has(+k.slice(2))?regionOf(+k.slice(2)):null,runs=r&&shownRegion(r)&&r.label?r.runsBySlice:null,mv=sceneState?.medicalVolume;
+ if(runs===hoverFocusRuns&&(runs||!mv?.hoverRuns))return;
+ hoverFocusRuns=runs;try{mv?.setHoverFocus?.(runs)}catch(e){console.warn(e)}
+}
 let hintEl=null;
 // object-space change per voxel along i / j / k in this view (voxelToLocal3D: the longest side is 3.3 units)
 function voxelStep3d(dims,spacing){const[sx,sy,sz]=spacing||[1,1,1],k=3.3/Math.max(dims.columns*sx,dims.rows*sy,dims.slices*sz,1);return[sx*k,-sy*k,sz*k]}
@@ -340,6 +348,7 @@ export function updateComment3dMarkers(){
   drawAnalysisLabels(obj,camera,W,H,als,keepA,dims);
  }
  pruneMeasures(keepM);pruneAnalysisLabels(keepA);
+ syncHoverFocus();
  if(!list.length&&!als.length){clearTimeout(hiddenTimer);hiddenTimer=0}
  for(const [id,m] of [...els])if(!keep.has(id)){m.el.remove();m.line?.remove();els.delete(id)}
  if(bubbleId!=null)placeBubble();

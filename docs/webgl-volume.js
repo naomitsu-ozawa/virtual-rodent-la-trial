@@ -1,11 +1,11 @@
 import * as THREE from './vendor/three@0.186.0/build/three.module.js';
-import { volumeTexturePlan, reduceSliceArea, packedRgSlice, packCtSlice } from './medical-volume.js?v=20261110-build707';
-import { computeBricksOf, buildEditMaskOf, buildRegionIndexOf, buildChildIndexOf, BRICK } from './vr-volume-prep.js?v=20261110-build707';
-import { gpuRunsForTexture } from './gpu-runs.js?v=20261110-build707';
-import { MATERIALS, materialKey, materialVec } from './lighting.js?v=20261110-build707';
-import { MAX_SECTION_PLANES } from './vr-section-frame.js?v=20261110-build707';
-import { SHADE_BRIGHT_DEFAULT, SHADE_CONTRAST_DEFAULT, brightOf, contrastOf } from './cap-shade.js?v=20261110-build707';
-import { pickRay } from './webgl-volume-pick.js?v=20261110-build707';
+import { volumeTexturePlan, reduceSliceArea, packedRgSlice, packCtSlice } from './medical-volume.js?v=20261110-build708';
+import { computeBricksOf, buildEditMaskOf, buildRegionIndexOf, buildChildIndexOf, BRICK } from './vr-volume-prep.js?v=20261110-build708';
+import { gpuRunsForTexture } from './gpu-runs.js?v=20261110-build708';
+import { MATERIALS, materialKey, materialVec } from './lighting.js?v=20261110-build708';
+import { MAX_SECTION_PLANES } from './vr-section-frame.js?v=20261110-build708';
+import { SHADE_BRIGHT_DEFAULT, SHADE_CONTRAST_DEFAULT, brightOf, contrastOf } from './cap-shade.js?v=20261110-build708';
+import { pickRay } from './webgl-volume-pick.js?v=20261110-build708';
 
 export const WEBGL_VOLUME_DEFAULT = true;
 export const webglVolumeEnabled = (search = typeof location !== 'undefined' ? location.search : '', m = /[?&]webglvolume=(\d)(&|$)/.exec(search || '')) => (m ? m[1] !== '0' : WEBGL_VOLUME_DEFAULT); // one line: the public gate reads a URL key from the line that reads location.search
@@ -298,8 +298,17 @@ export class WebGlVolumeRenderer {
     this.regionsArgs = v && regions?.length ? { regions, v, textureSignature: textureSignature || null } : null;
     this.applyRegions();
   }
+  // A temporary focus for the result whose label the mouse is on (comment-3d.js): `runs` = that result's runsBySlice (the identity of the region passed to setAnalysisRuns), null = none. It only ORs into the focus bit of the table
+  // (the page's own selection, region.focused, is never touched: releasing it gives the page's selection back). Rewrites the 4 KB table only when it changes; never rebuilds the index while a cut preview is shown (applied later).
+  setHoverFocus(runs) {
+    runs = runs || null;
+    if (runs === this.hoverRuns) return;
+    this.hoverRuns = runs;
+    if (this.uniforms && this.regionTexture && !this.previewRuns) this.applyRegions();
+  }
   regionItems() {
-    const items = (this.regionsArgs?.regions || []).map(r => ({ color: r.color, focused: !!r.focused, shown: r.shown !== false, segMask: (r.segments || []).reduce((m, i) => (i >= 0 && i < 4 ? m | (1 << i) : m), 0), runsBySlice: r.runs, mm3: 0, segmentKeys: [], rid: 0 }));
+    const hv = this.hoverRuns;
+    const items = (this.regionsArgs?.regions || []).map(r => ({ color: r.color, focused: !!r.focused || (!!hv && r.runs === hv), shown: r.shown !== false, segMask: (r.segments || []).reduce((m, i) => (i >= 0 && i < 4 ? m | (1 << i) : m), 0), runsBySlice: r.runs, mm3: 0, segmentKeys: [], rid: 0 }));
     const pv = this.previewRuns;
     if (pv) items.push({ color: PREVIEW_COLOR, focused: true, shown: true, segMask: 1 << pv.slot, runsBySlice: pv.runs, mm3: 0, segmentKeys: [], rid: 0 });
     return items;

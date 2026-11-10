@@ -10,6 +10,7 @@
 export const PPV_CENTER = 1.3;
 export const PPV_FAR = 1.0;        // ... and at the farthest corner of the box: never fewer than one pixel per voxel
 export const CAP_MIN = 0.1;        // the cap never goes below this (the volume would need > 13 px per voxel at the centre)
+export const N_MAX = 1000000;      // ray budget, both eyes together, rays per frame (screen pixels x scale^2); about 1M rays: set from the Quest 3 max-size close-up, tune on the device
 export const CAP_QUANT = 1 / 32;   // the cap moves in steps of 1/32 (rounded up: detail first)
 export const CAP_HYST = 2 / 32;    // ... and only drops once the new value is this far below (head bob does not make it flicker)
 export const NEAR_DEPTH = 0.02;    // m: depths below this count as "at the eye" (the box reaches past the near plane)
@@ -67,6 +68,14 @@ export function capFromPpv(ppvCenter, ppvFar) {
   if (!(ppvCenter > 0) || !(ppvFar > 0)) return 1;
   const need = Math.max(PPV_CENTER / ppvCenter, PPV_FAR / ppvFar);
   return Math.min(1, Math.max(CAP_MIN, need));
+}
+
+// the raw cap (0..1] from the ray budget. coverPixels = the pixels the volume covers at scale 1, both eyes summed (eyeMetrics cover, the whole
+// viewport for an eye inside the box). The rays per frame are about coverPixels x cap^2, so cap = sqrt(nMax / coverPixels): never above 1 (a small or
+// far volume is not touched), never below CAP_MIN. The caller takes min(capFromPpv result, this): one more input to the cap, nothing else changes.
+export function capFromBudget(coverPixels, nMax = N_MAX) {
+  if (!(coverPixels > 0) || !(nMax > 0)) return 1;
+  return Math.min(1, Math.max(CAP_MIN, Math.sqrt(nMax / coverPixels)));
 }
 
 // the cap that is applied: quantised up to CAP_QUANT; a rise is taken at once (more detail), a drop only beyond CAP_HYST (no flicker with head bob)

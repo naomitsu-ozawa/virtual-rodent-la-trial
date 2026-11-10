@@ -238,7 +238,7 @@ describe('the data / level buttons (event-mode.js)', () => {
     expect(levelSwitchItems(name, null).some(i => i.on || i.armed)).toBe(false);
   });
   it('the かんたん menu layout has the row above the bottom row only when asked, and the results list gives it the room', () => {
-    const base = { segments: [], sectionOn: false, sliceOpacity: 0.6, trigger: { show: false }, results: Array.from({ length: 12 }, (_, i) => ({ hex: '#fff', name: 'r' + i, text: 'x' })), total: '1', text: new Proxy({}, { get: (_, k) => String(k) }) };
+    const base = { segments: [], sectionOn: false, sliceOpacity: 0.6, trigger: { show: false }, results: Array.from({ length: 40 }, (_, i) => ({ hex: '#fff', name: 'r' + i, text: 'x' })), total: '1', text: new Proxy({}, { get: (_, k) => String(k) }) };
     const without = simpleMenuLayout(base);
     expect(without.some(w => w.id?.startsWith('level:'))).toBe(false);
     const levels = { items: levelSwitchItems(name, 'sample1', 'lv1', EVENT_LEVELS), busy: false, hint: 'hint', text: { title: 'データ', again: 'もう一度' } };

@@ -1,83 +1,84 @@
-import { effectiveFlag } from './debug-flags.js?v=20261110-build707';
+import { effectiveFlag } from './debug-flags.js?v=20261110-build708';
 import * as THREE from './vendor/three@0.186.0/build/three.module.js';
-import { volumeTexturePlan, reduceSliceArea, packedRgSlice, packCtSlice, gpuRunsForTexture } from './medical-volume.js?v=20261110-build707';
-import { ensureSegmentBaseRuns } from './segment-runs.js?v=20261110-build707';
-import { gpuVolumeTarget, gpuVolumeEditDescriptors, volumeCache, volumeCacheBudget, volumeCacheBudgetInfo } from './gpu-volume-data.js?v=20261110-build707';
-import { pruneOtherFilterSettings } from './gpu-volume-cache.js?v=20261110-build707';
-import { packEntry, storeEntry, loadEntry, pruneSiblings, removeOldBuilds, storeStatus, noteStore, partsOf, keyOfParts, explainMiss, isStandardOpen, copyPackedSlice } from './vr-prep-cache.js?v=20261110-build707';
-import { vrStateSignature } from './vr-data-key.js?v=20261110-build707'; // the state of the page now, to tell whether a practice level is still in its standard state //: the finished VR data is kept on the device (vr-prep-cache.js)
-import { SEGMENT_PRESET_ORDER, gpuSegmentOrder, segmentHasProcessedMask, segmentState, segmentEditState, segmentSourceSignature, segmentShadeRange, segmentShadeSpan, setSegmentShadeEnd, resetSegmentShadeRange, shadeDataRange, applyShadeAutoHistograms, onShadeAutoChange } from './segments.js?v=20261110-build707'; import { segmentById, childRenderEntries, onChildRenderChange, setChildLook } from './segments.js?v=20261110-build707'; import { setShadeAutoPageHeld } from './segments.js?v=20261110-build707';
-import { sceneState, analysisRegions, activeSeries } from './state.js?v=20261110-build707';
-import { datasetFingerprint } from './project-file.js?v=20261110-build707';
-import { HAND_PICK_TOL, sectionRayHit, recordVrPoint, resolveTriggerTarget, volumeGripAllowed, pressDragSection, createTriggerPress, dragShouldStart, DRAG_RECORD, sectionFollowStart, sectionFollowStep, sectionWristTurn, snapPlaneCenterIntoBox, rayLocalPlaneX, squareBandContains, squareContains, createHoverPulse, qMul, qInv, qRot, qAngleDeg, clampPlaneCenter, HAPTIC, normalizePointMode, surfaceVoxelFromHit, voxelToLocal, voxelSize, createStickGate, deleteSelected, createUndoStack, applyUndo, pointIsHidden } from './vr-point.js?v=20261110-build707';
-import { createVrPointMarkers, createSurfaceCursor } from './vr-point-markers.js?v=20261110-build707';
-import { buildClsData } from './point-cls.js?v=20261110-build707';
-import { createHiddenClsManager } from './hidden-cls-state.js?v=20261110-build707';
-import { onDatasetChange } from './dataset-reset.js?v=20261110-build707';
-import { shadeRangeStep, shadeValueAt, shadePosOf, createShadeAutoScheduler } from './cap-shade.js?v=20261110-build707'; // the per-segment shading range (slider positions <-> data values);: the scheduler of the auto range
-import { STEP_PRESS, stepClamp, createStepHold } from './value-step.js?v=20261110-build707'; // ＋ / − of the data-value sliders: 10 per press, hold repeats and speeds up to 100
-import { formatCtValue } from './utils.js?v=20261110-build707';
-import { createHoldTracker, createHoldRing, HOLD_RING_RADIUS, HOLD_RING_MIN_DIST } from './vr-hold-ring.js?v=20261110-build707';
-import { WHEEL_ITEMS, DEFAULT_WHEEL, normalizeWheelItems, migrateWheelSectionFlip, setWheelItem, moveWheelItem, clearWheelItem, createRingMenu, createWheelStick, createButtonPress } from './vr-ring.js?v=20261110-build707';
-import { getComments, onCommentsChange, commentMatchesSeries, removeComment, restoreComment, updateCommentPosition, updateCommentText, updateCommentColor } from './comments.js?v=20261110-build707';
-import { POINT_PALETTE, pointColor, normalizeColor } from './point-colors.js?v=20261110-build707';
-import { combineClassificationDistance, fourthChannelBytes } from './distance-field.js?v=20261110-build707';
-export { WebGlVolumeRenderer, webglVolumeEnabled } from './webgl-volume.js?v=20261110-build707'; // the page's WebGL volume (no WebGPU) is handed to app.js through this module's existing lazy load
-import { BRICK as PREP_BRICK, computeBricksOf, halveData, buildEditMaskOf, buildChildIndexOf, createVolumePrep } from './vr-volume-prep.js?v=20261110-build707'; // the heavy pure steps of the preparation (bricks, the 256 copy, classification, distance field) run in a worker
-import { createSwapGuard, runDataSwap, createUploadQueue, createSettleGate, createFrameGapMonitor, swapPlan, SWAP_STAGES, SETTLE_TIMEOUT_MS, LOAD_TIMEOUT_MS, CACHE_READ_TIMEOUT_MS, VR_STORE_FLUSH_MS, saveShouldWait, withTimeout } from './vr-data-switch.js?v=20261110-build707'; // switching the data inside a running session
-import { classifiedAt, marchClassificationHitInfo } from './vr-pick.js?v=20261110-build707'; import { unionRunArrays, subtractRunArrays } from './run-length.js?v=20261110-build707';
-import { createSkipState, skipGrid } from './vr-skip-occupancy.js?v=20261110-build707'; // the creep-skip occupancy bits of the combined texture (VR max-zoom cost)
-import { createComboRebuild } from './vr-combo-rebuild.js?v=20261110-build707'; // the combined texture rebuilt off the frame when the shown segments change
-import { setBusySlot, reportBusyProgress } from './progress-modal.js?v=20261110-build707';
-import { tr } from './i18n.js?v=20261110-build707';
-import { regionCustomName, regionChipTitle } from './region-name.js?v=20261110-build707'; // the shared region name rule (name, else ID <atlas id>)
+import { volumeTexturePlan, reduceSliceArea, packedRgSlice, packCtSlice, gpuRunsForTexture } from './medical-volume.js?v=20261110-build708';
+import { ensureSegmentBaseRuns } from './segment-runs.js?v=20261110-build708';
+import { gpuVolumeTarget, gpuVolumeEditDescriptors, volumeCache, volumeCacheBudget, volumeCacheBudgetInfo } from './gpu-volume-data.js?v=20261110-build708';
+import { pruneOtherFilterSettings } from './gpu-volume-cache.js?v=20261110-build708';
+import { packEntry, storeEntry, loadEntry, pruneSiblings, removeOldBuilds, storeStatus, noteStore, partsOf, keyOfParts, explainMiss, isStandardOpen, copyPackedSlice } from './vr-prep-cache.js?v=20261110-build708';
+import { vrStateSignature } from './vr-data-key.js?v=20261110-build708'; // the state of the page now, to tell whether a practice level is still in its standard state //: the finished VR data is kept on the device (vr-prep-cache.js)
+import { SEGMENT_PRESET_ORDER, gpuSegmentOrder, segmentHasProcessedMask, segmentState, segmentEditState, segmentSourceSignature, segmentShadeRange, segmentShadeSpan, setSegmentShadeEnd, resetSegmentShadeRange, shadeDataRange, applyShadeAutoHistograms, onShadeAutoChange } from './segments.js?v=20261110-build708'; import { segmentById, childRenderEntries, onChildRenderChange, setChildLook } from './segments.js?v=20261110-build708'; import { setShadeAutoPageHeld } from './segments.js?v=20261110-build708';
+import { sceneState, analysisRegions, activeSeries } from './state.js?v=20261110-build708';
+import { datasetFingerprint } from './project-file.js?v=20261110-build708';
+import { HAND_PICK_TOL, sectionRayHit, recordVrPoint, resolveTriggerTarget, volumeGripAllowed, pressDragSection, createTriggerPress, dragShouldStart, DRAG_RECORD, sectionFollowStart, sectionFollowStep, sectionWristTurn, snapPlaneCenterIntoBox, rayLocalPlaneX, squareBandContains, squareContains, createHoverPulse, qMul, qInv, qRot, qAngleDeg, clampPlaneCenter, HAPTIC, normalizePointMode, surfaceVoxelFromHit, voxelToLocal, voxelSize, createStickGate, deleteSelected, createUndoStack, applyUndo, pointIsHidden } from './vr-point.js?v=20261110-build708';
+import { createVrPointMarkers, createSurfaceCursor } from './vr-point-markers.js?v=20261110-build708';
+import { buildClsData } from './point-cls.js?v=20261110-build708';
+import { createHiddenClsManager } from './hidden-cls-state.js?v=20261110-build708';
+import { onDatasetChange } from './dataset-reset.js?v=20261110-build708';
+import { shadeRangeStep, shadeValueAt, shadePosOf, createShadeAutoScheduler } from './cap-shade.js?v=20261110-build708'; // the per-segment shading range (slider positions <-> data values);: the scheduler of the auto range
+import { STEP_PRESS, stepClamp, createStepHold } from './value-step.js?v=20261110-build708'; // ＋ / − of the data-value sliders: 10 per press, hold repeats and speeds up to 100
+import { formatCtValue } from './utils.js?v=20261110-build708';
+import { createHoldTracker, createHoldRing, HOLD_RING_RADIUS, HOLD_RING_MIN_DIST } from './vr-hold-ring.js?v=20261110-build708';
+import { WHEEL_ITEMS, DEFAULT_WHEEL, normalizeWheelItems, migrateWheelSectionFlip, setWheelItem, moveWheelItem, clearWheelItem, createRingMenu, createWheelStick, createButtonPress } from './vr-ring.js?v=20261110-build708';
+import { getComments, onCommentsChange, commentMatchesSeries, removeComment, restoreComment, updateCommentPosition, updateCommentText, updateCommentColor } from './comments.js?v=20261110-build708';
+import { POINT_PALETTE, pointColor, normalizeColor } from './point-colors.js?v=20261110-build708';
+import { combineClassificationDistance, fourthChannelBytes } from './distance-field.js?v=20261110-build708';
+export { WebGlVolumeRenderer, webglVolumeEnabled } from './webgl-volume.js?v=20261110-build708'; // the page's WebGL volume (no WebGPU) is handed to app.js through this module's existing lazy load
+import { BRICK as PREP_BRICK, computeBricksOf, halveData, buildEditMaskOf, buildChildIndexOf, createVolumePrep } from './vr-volume-prep.js?v=20261110-build708'; // the heavy pure steps of the preparation (bricks, the 256 copy, classification, distance field) run in a worker
+import { createSwapGuard, runDataSwap, createUploadQueue, createSettleGate, createFrameGapMonitor, swapPlan, SWAP_STAGES, SETTLE_TIMEOUT_MS, LOAD_TIMEOUT_MS, CACHE_READ_TIMEOUT_MS, VR_STORE_FLUSH_MS, saveShouldWait, withTimeout } from './vr-data-switch.js?v=20261110-build708'; // switching the data inside a running session
+import { classifiedAt, marchClassificationHitInfo } from './vr-pick.js?v=20261110-build708'; import { unionRunArrays, subtractRunArrays } from './run-length.js?v=20261110-build708';
+import { createSkipState, skipGrid } from './vr-skip-occupancy.js?v=20261110-build708'; // the creep-skip occupancy bits of the combined texture (VR max-zoom cost)
+import { createComboRebuild } from './vr-combo-rebuild.js?v=20261110-build708'; // the combined texture rebuilt off the frame when the shown segments change
+import { setBusySlot, reportBusyProgress } from './progress-modal.js?v=20261110-build708';
+import { tr } from './i18n.js?v=20261110-build708';
+import { regionCustomName, regionChipTitle } from './region-name.js?v=20261110-build708'; // the shared region name rule (name, else ID <atlas id>)
 // ONE name rule for a result in every list (the 3D chip, the VR tree rows, the VR 解析 tab, the かんたん menu): "<number>. <name | ID <atlasId> | the segment names joined with +>" (region-name.js regionChipTitle)
 const vrChipTitle=r=>{const g=analysisRegions.find(x=>x.id===r.rid);return g?regionChipTitle(g,tr):r.rid+'. '+r.segmentKeys.map(k=>tr(k)||k).join('+')};
-import { wrapMenuText, stackMenuRows } from './vr-menu-text.js?v=20261110-build707';
-import { activeEventLevel, levelForSample, chooseEventLevel, levelSwitchItems, EVENT_LEVELS, EVENT_DATASETS, datasetForSample, datasetLabel, eventModeOn, missionLines, simpleMenuSegments, triggerModeRow, triggerMode, TRIGGER_AT_START, resetPress, resetArmed, RESET_ARM_MS, simpleMenuLayout, SIMPLE_MENU, sliceOpacityValue, sliceDrawState } from './event-mode.js?v=20261110-build707'; // 体験会モード - the chosen level's mission on the help board, the かんたん menu
-import { VIEW_TOGGLE_ID, VIEW_TOGGLE_BUTTON, SECTION_DELETE_ID, createViewToggle, createDoublePress, ringIdsFor } from './vr-view-toggle.js?v=20261110-build707';
-import { vrSpacingNote, vrVolumeText } from './vr-spacing-note.js?v=20261110-build707';
-import { NORM_LONG, physicalExtentsMm, longestMm, realMagnification, realHolderScale, startHolderScale, tutorialHolderScale, smallForTutorial, TUT_VOLUME_FWD, TUT_VOLUME_DOWN, magnificationText, createScaleTag, clampScale, pinchScale, scaleLimits, oversizeNote, planeFrameLocalScale, planeTagLocalScale, scaleLineText, scalePosOf, posToScale, viewTabScaleLayout } from './vr-real-scale.js?v=20261110-build707';
-import { createAutoQuality, autoFloor, STEP_LEVELS, marchStep } from './vr-auto-quality.js?v=20261110-build707';
-import { createVrHuLine } from './vr-hu-line.js?v=20261110-build707';
-import { huMenuTexts, voxelFromHits } from './vr-hu-line-core.js?v=20261110-build707';
-import { setHuLineDeferred } from './hu-line-model.js?v=20261110-build707';
-import { createVrMeasure, LABEL_LIT_SCALE } from './vr-measure.js?v=20261110-build707';
-import { resetUserState } from './event-fresh.js?v=20261110-build707'; // 最初から in the tutorial (practice data only, see tutorial-ui.js resetTutorialAll)
-import { tutorialModeOn, createTutorialVr, createSlideViewer, panelTabs, TAB_H, PAGE_H, layoutLevelSlide, levelBoardH, menuAnnotation, menuTargetRect } from './tutorial-vr.js?v=20261110-build707'; // チュートリアル on the help board (only made when tutorialMode is on);: the read-only guide, the level slide, the menu pointer
-import { levelSlide, createSlideImages } from './tutorial-slides.js?v=20261110-build707'; // the 体験会 level slides (ev board: the slide's picture)
-import { vrInitialScaleOf } from './sample-registry.js?v=20261110-build707';
-import { TUT_SAMPLE } from './tutorial-data.js?v=20261110-build707'; // the live tutorial runs on its practice data only
-import { emit, scaleChanged, poseMoved } from './tutorial-signal.js?v=20261110-build707'; // tutorial: one-line signals at the action sites (no-op without a listener)
-import { horizAngleDeg } from './tutorial-orient.js?v=20261110-build707'; // the tutorial's entry guidance (look right / left): head turn toward a board
-import { createControllerHints, createEdgeArrow, createBoardArrow, boardSide, edgeArrowShown } from './tutorial-3d.js?v=20261110-build707'; // the tutorial's 3D guides (controller button, edge arrow, arrow over the menu)
-import { MAX_SECTION_PLANES, nextPlaneColor, frameDepthTest, ARROW_LEN, ARROW_FLASH_MS, arrowFade, arrowShown, tagBehindTissue, sectionPage, pageOfPlane, SECTION_ROWS_PER_PAGE, FLING_UNDO_MS, FLING_DEBUG_MS, createVelocityTracker, flingDecision, frameOutOfView, outOfViewNow, createOutOfViewTracker, outOfViewRelease, flingDebugLines, capVelocity, flyStep, makeSectionSnapshot, restorePlan, createSectionUndo, undoButtonPlace } from './vr-section-frame.js?v=20261110-build707';
-import { createUndoButton } from './vr-undo-button.js?v=20261110-build707';
-import { createFlingDebugTag } from './vr-fling-debug.js?v=20261110-build707';
-import { EMPTY_PINCH, isHand, wristScrollGain, wristScrollSign, wristScrollKeep, NEAR_KINDS, boxDist, centeredBoxDist, squareOutlineDist, pickNearGrab, HAND_RAY_MODES, normalizeHandRay } from './vr-hand.js?v=20261110-build707'; // hand tracking (Quest 3): pure helpers
-import { createHandInput, HAND_LABEL_MOVE_M } from './vr-hand-view.js?v=20261110-build707'; // the hand's ray, wrist menu, fingertips
-import { LABEL_HIDE_DEFAULT, normalizeLabelHide, gpuOcclusionActive, depthVoxelSize, boardVisible, GHOST_ALPHA, EMBEDDED_ALPHA, occludedPass, pinMaterialState } from './vr-depth.js?v=20261110-build707';
-import { pushOut, createLabelThinner, setLeaderIfMoved, createFaceCache, clippedAt, rayCovered } from './vr-label-occlusion.js?v=20261110-build707';
-import { brickOccupancy, writeBrickOccupancy } from './vr-brick-occupancy.js?v=20261110-build707';
-import { createProbeGate } from './measure-label.js?v=20261110-build707';
-import { sliceIndex, sliceRange, boxFromRange, createSegScan, segScanStart, segScanStep, segsSubset, segsFromUniforms, contentKeyChanged, KEY_LEN } from './vr-content-box.js?v=20261110-build707'; // the proxy box = the box of what can be drawn
-import { regionVisible, setRegionVisible, onRegionVisibleChange } from './region-visibility.js?v=20261110-build707';
-import { buildSegmentTree, pageTreeLines, ellipsize } from './segment-tree.js?v=20261110-build707';
-import { setRegionLabel, setRegionLabelOffset, voxelFromLocalVr, clampVoxel, labelLocal, offsetForLocal, vrVoxelStep, rectEdgePoint, leaderVisible, labelSegmentsShown } from './analysis-label.js?v=20261110-build707';
-import { createVrSelfCheck, selfCheckTexts } from './vr-self-check.js?v=20261110-build707'; // 詳細 > 自己診断 (automated frame-time scenarios)
-import { createScaleGuard, createFlapGuard, variantFallback } from './vr-flicker-guard.js?v=20261110-build707'; // flicker safety guard
-import { eyeMetrics, capFromPpv, nextCap, foveaRect, outsideFovea, foveaWorth, qualityText, FOVEA_K, CAP_MIN } from './vr-render-scale.js?v=20261110-build707'; // data-resolution render scale + offscreen foveation
-import { getMeasureStart, startMeasure, cancelMeasure, pickMeasureEnd, onMeasureStartChange, removeMeasurement, restoreMeasurements, measurementsOfPoint, seriesSpacing } from './measurements.js?v=20261110-build707';
-import { APP_BUILD } from './version.js?v=20261110-build707';
-import { wc, ww } from './ui-shell.js?v=20261110-build707';
-import { VOLUME_FWD, VOLUME_DOWN, MENU_OFFSET, HELP_OFFSET, HU_PANEL_OFFSET, EV_OFFSET, EV_WIDTH, EV_RES, MENU_WIDTH, HELP_WIDTH, HELP_RES, HIST_OFFSET, HIST_WIDTH, FOLLOW_ANGLE, FOLLOW_DIST } from './vr-layout.js?v=20261110-build707';
-import { onHistogramChange, getHistogramRange, getHistogramLog, setHistogramLog, setHistogramRange } from './histogram-ui.js?v=20261110-build707';
-import { createVrLabelHistogram, UNLABELED_COLOR, labelSlot, labelRegion } from './vr-label-histogram.js?v=20261110-build707';
-import { rangeRes } from './vr-histogram-layout.js?v=20261110-build707';
-import { dataAxis } from './segments.js?v=20261110-build707'; // the histogram axis of the data (histogram.js axisFor + the series' value step)
-import { getHuMode, setHuMode, HU_MODE_FILTERED, HU_MODE_RAW } from './effective-hu.js?v=20261110-build707';
-import { createVrHistogramPanel } from './vr-histogram-panel.js?v=20261110-build707';
-import { lightingGLSL, lightingVertexGLSL, materialVec, MATERIALS, materialKey } from './lighting.js?v=20261110-build707'; // one lighting model for the desktop volume, this VR / AR volume and the 3D-view meshes
+import { wrapMenuText, stackMenuRows } from './vr-menu-text.js?v=20261110-build708';
+import { activeEventLevel, levelForSample, chooseEventLevel, levelSwitchItems, EVENT_LEVELS, EVENT_DATASETS, datasetForSample, datasetLabel, eventModeOn, missionLines, simpleMenuSegments, triggerModeRow, triggerMode, TRIGGER_AT_START, resetPress, resetArmed, RESET_ARM_MS, simpleMenuLayout, SIMPLE_MENU, sliceOpacityValue, sliceDrawState, sliderHitTest, sliderGrabOffset, sliderValueAt, KNOB_GRAB_PX } from './event-mode.js?v=20261110-build708'; // 体験会モード - the chosen level's mission on the help board, the かんたん menu
+import { VIEW_TOGGLE_ID, VIEW_TOGGLE_BUTTON, SECTION_DELETE_ID, createViewToggle, createDoublePress, ringIdsFor } from './vr-view-toggle.js?v=20261110-build708';
+import { vrSpacingNote, vrVolumeText } from './vr-spacing-note.js?v=20261110-build708';
+import { NORM_LONG, physicalExtentsMm, longestMm, realMagnification, realHolderScale, startHolderScale, tutorialHolderScale, smallForTutorial, TUT_VOLUME_FWD, TUT_VOLUME_DOWN, magnificationText, createScaleTag, clampScale, pinchScale, scaleLimits, oversizeNote, planeFrameLocalScale, planeTagLocalScale, scaleLineText, scalePosOf, posToScale, scaleStep, viewTabScaleLayout } from './vr-real-scale.js?v=20261110-build708';
+import { createAutoQuality, autoFloor, STEP_LEVELS, marchStep } from './vr-auto-quality.js?v=20261110-build708';
+import { createVrHuLine } from './vr-hu-line.js?v=20261110-build708';
+import { huMenuTexts, voxelFromHits } from './vr-hu-line-core.js?v=20261110-build708';
+import { setHuLineDeferred } from './hu-line-model.js?v=20261110-build708';
+import { createVrMeasure, LABEL_LIT_SCALE } from './vr-measure.js?v=20261110-build708';
+import { resetUserState } from './event-fresh.js?v=20261110-build708'; // 最初から in the tutorial (practice data only, see tutorial-ui.js resetTutorialAll)
+import { tutorialModeOn, createTutorialVr, createSlideViewer, panelTabs, TAB_H, PAGE_H, layoutLevelSlide, levelBoardH, menuAnnotation, menuTargetRect } from './tutorial-vr.js?v=20261110-build708'; // チュートリアル on the help board (only made when tutorialMode is on);: the read-only guide, the level slide, the menu pointer
+import { levelSlide, createSlideImages } from './tutorial-slides.js?v=20261110-build708'; // the 体験会 level slides (ev board: the slide's picture)
+import { vrInitialScaleOf } from './sample-registry.js?v=20261110-build708';
+import { TUT_SAMPLE } from './tutorial-data.js?v=20261110-build708'; // the live tutorial runs on its practice data only
+import { emit, scaleChanged, poseMoved } from './tutorial-signal.js?v=20261110-build708'; // tutorial: one-line signals at the action sites (no-op without a listener)
+import { horizAngleDeg } from './tutorial-orient.js?v=20261110-build708'; // the tutorial's entry guidance (look right / left): head turn toward a board
+import { createControllerHints, createEdgeArrow, createBoardArrow, boardSide, edgeArrowShown } from './tutorial-3d.js?v=20261110-build708'; // the tutorial's 3D guides (controller button, edge arrow, arrow over the menu)
+import { MAX_SECTION_PLANES, nextPlaneColor, frameDepthTest, ARROW_LEN, ARROW_FLASH_MS, arrowFade, arrowShown, tagBehindTissue, sectionPage, pageOfPlane, SECTION_ROWS_PER_PAGE, FLING_UNDO_MS, FLING_DEBUG_MS, createVelocityTracker, flingDecision, frameOutOfView, outOfViewNow, createOutOfViewTracker, outOfViewRelease, flingDebugLines, capVelocity, flyStep, makeSectionSnapshot, restorePlan, createSectionUndo, undoButtonPlace } from './vr-section-frame.js?v=20261110-build708';
+import { createUndoButton } from './vr-undo-button.js?v=20261110-build708';
+import { createFlingDebugTag } from './vr-fling-debug.js?v=20261110-build708';
+import { EMPTY_PINCH, isHand, wristScrollGain, wristScrollSign, wristScrollKeep, NEAR_KINDS, boxDist, centeredBoxDist, squareOutlineDist, pickNearGrab, HAND_RAY_MODES, normalizeHandRay } from './vr-hand.js?v=20261110-build708'; // hand tracking (Quest 3): pure helpers
+import { createHandInput, HAND_LABEL_MOVE_M } from './vr-hand-view.js?v=20261110-build708'; // the hand's ray, wrist menu, fingertips
+import { LABEL_HIDE_DEFAULT, normalizeLabelHide, gpuOcclusionActive, depthVoxelSize, boardVisible, GHOST_ALPHA, EMBEDDED_ALPHA, occludedPass, pinMaterialState } from './vr-depth.js?v=20261110-build708';
+import { highlightColor, highlightIndex, createHighlightTracker } from './region-highlight.js?v=20261110-build708';
+import { pushOut, createLabelThinner, setLeaderIfMoved, createFaceCache, clippedAt, rayCovered } from './vr-label-occlusion.js?v=20261110-build708';
+import { brickOccupancy, writeBrickOccupancy } from './vr-brick-occupancy.js?v=20261110-build708';
+import { createProbeGate } from './measure-label.js?v=20261110-build708';
+import { sliceIndex, sliceRange, boxFromRange, createSegScan, segScanStart, segScanStep, segsSubset, segsFromUniforms, contentKeyChanged, KEY_LEN } from './vr-content-box.js?v=20261110-build708'; // the proxy box = the box of what can be drawn
+import { regionVisible, setRegionVisible, onRegionVisibleChange } from './region-visibility.js?v=20261110-build708';
+import { buildSegmentTree, pageTreeLines, ellipsize } from './segment-tree.js?v=20261110-build708';
+import { setRegionLabel, setRegionLabelOffset, voxelFromLocalVr, clampVoxel, labelLocal, offsetForLocal, vrVoxelStep, rectEdgePoint, leaderVisible, labelSegmentsShown } from './analysis-label.js?v=20261110-build708';
+import { createVrSelfCheck, selfCheckTexts } from './vr-self-check.js?v=20261110-build708'; // 詳細 > 自己診断 (automated frame-time scenarios)
+import { createScaleGuard, createFlapGuard, variantFallback } from './vr-flicker-guard.js?v=20261110-build708'; // flicker safety guard
+import { eyeMetrics, capFromPpv, capFromBudget, nextCap, foveaRect, outsideFovea, foveaWorth, qualityText, FOVEA_K, CAP_MIN } from './vr-render-scale.js?v=20261110-build708'; // data-resolution render scale + offscreen foveation
+import { getMeasureStart, startMeasure, cancelMeasure, pickMeasureEnd, onMeasureStartChange, removeMeasurement, restoreMeasurements, measurementsOfPoint, seriesSpacing } from './measurements.js?v=20261110-build708';
+import { APP_BUILD } from './version.js?v=20261110-build708';
+import { wc, ww } from './ui-shell.js?v=20261110-build708';
+import { VOLUME_FWD, VOLUME_DOWN, MENU_OFFSET, HELP_OFFSET, HU_PANEL_OFFSET, EV_OFFSET, EV_WIDTH, EV_RES, MENU_WIDTH, MENU_CANVAS, HELP_WIDTH, HELP_RES, HIST_OFFSET, HIST_WIDTH, FOLLOW_ANGLE, FOLLOW_DIST } from './vr-layout.js?v=20261110-build708';
+import { onHistogramChange, getHistogramRange, getHistogramLog, setHistogramLog, setHistogramRange } from './histogram-ui.js?v=20261110-build708';
+import { createVrLabelHistogram, UNLABELED_COLOR, labelSlot, labelRegion } from './vr-label-histogram.js?v=20261110-build708';
+import { rangeRes } from './vr-histogram-layout.js?v=20261110-build708';
+import { dataAxis } from './segments.js?v=20261110-build708'; // the histogram axis of the data (histogram.js axisFor + the series' value step)
+import { getHuMode, setHuMode, HU_MODE_FILTERED, HU_MODE_RAW } from './effective-hu.js?v=20261110-build708';
+import { createVrHistogramPanel } from './vr-histogram-panel.js?v=20261110-build708';
+import { lightingGLSL, lightingVertexGLSL, materialVec, MATERIALS, materialKey } from './lighting.js?v=20261110-build708'; // one lighting model for the desktop volume, this VR / AR volume and the 3D-view meshes
 
 const BG=new THREE.Color(0.035,0.045,0.05);
 const BRICK=PREP_BRICK;
@@ -1057,12 +1058,12 @@ function makeBackground(){
 // button or drags a slider while held.: canvas size and width in
 // metres are parameters (the left-hand section panel uses a small one).
 // res = canvas pixels per layout pixel (the help / ev boards: HELP_RES): the widgets keep their W x H layout, the canvas is drawn res times finer
-const MENU_W=1024,MENU_H=1180;
+const MENU_W=MENU_CANVAS.W,MENU_H=MENU_CANVAS.H; // 1024 x 1400 px (was 1180), 0.6 m wide (was 0.5): vr-layout.js
 function makeMenu(W=MENU_W,H=MENU_H,widthM=0.5,res=1){
  const canvas=document.createElement('canvas');canvas.width=Math.round(W*res);canvas.height=Math.round(H*res);
  const ctx=canvas.getContext('2d'),tex=new THREE.CanvasTexture(canvas);tex.colorSpace=THREE.SRGBColorSpace;
  const mesh=new THREE.Mesh(new THREE.PlaneGeometry(widthM,widthM*H/W),new THREE.MeshBasicMaterial({map:tex,transparent:true,toneMapped:false}));
- let widgets=[],hover=-1,draw=()=>[],dirty=true;
+ let widgets=[],hover=-1,draw=()=>[],dirty=true,grabOff=0;
  const render=()=>{
   ctx.setTransform(res,0,0,res,0,0);ctx.clearRect(0,0,W,H);ctx.fillStyle='rgba(14,20,27,.94)';ctx.beginPath();ctx.roundRect(0,0,W,H,30);ctx.fill();
   ctx.textBaseline='middle';
@@ -1070,7 +1071,8 @@ function makeMenu(W=MENU_W,H=MENU_H,widthM=0.5,res=1){
    if(w.type==='draw'){ctx.save();try{w.draw(ctx)}catch(e){console.warn('[menu] draw widget',e)}ctx.restore();ctx.textBaseline='middle';return} // a widget that draws itself (the slide pictures and the tutorial's marks / pointers: tutorial-vr.js, tutorial-marks.js)
    if(w.type==='label'){ctx.fillStyle=w.color||'#cfe3f0';ctx.font=(w.bold?'bold ':'')+(w.size||30)+'px system-ui,sans-serif';ctx.textAlign='left';
     if(w.lines){w.lines.forEach((ln,k)=>ctx.fillText(ln,w.x,w.y+k*w.lh));return}
-    ctx.fillText(w.text,w.x,w.y);return}
+    ctx.fillText(w.text,w.x,w.y,w.maxW);return}
+   if(w.type==='hit'){if(i===hover){ctx.fillStyle='rgba(255,255,255,.10)';ctx.beginPath();ctx.roundRect(w.x-6,w.y,w.w+12,w.h,12);ctx.fill()}return} // an invisible hit area (a results row): only a hover tint
    if(w.type==='slider'){
     const dis=!!w.disabled; // a disabled slider (the locked 拡大率) is drawn dim, like a disabled button
     ctx.fillStyle=dis?'#1a2129':'#26313b';ctx.beginPath();ctx.roundRect(w.x,w.y+w.h/2-10,w.w,20,10);ctx.fill();
@@ -1094,11 +1096,13 @@ function makeMenu(W=MENU_W,H=MENU_H,widthM=0.5,res=1){
   flush(){if(dirty)render()},
   measure(text,size=30,bold=false){ctx.font=(bold?'bold ':'')+size+'px system-ui,sans-serif';return ctx.measureText(String(text)).width}, // text width in canvas px, for wrapping before the layout
   onDraw(f){draw=f},
-  hit(uv){const p=at(uv);return widgets.findIndex(w=>(w.action||w.set)&&!w.disabled&&p.x>=w.x-(w.type==='slider'?26:0)&&p.x<=w.x+w.w+(w.type==='slider'?26:0)&&p.y>=w.y&&p.y<=w.y+w.h)},
+  hit(uv){const p=at(uv);return widgets.findIndex(w=>(w.action||w.set)&&!w.disabled&&(w.type==='slider'?sliderHitTest(p,w):p.x>=w.x&&p.x<=w.x+w.w&&p.y>=w.y&&p.y<=w.y+w.h))}, // a slider with knob (the 拡大率) is hit only near its knob (event-mode.js sliderHitTest); the others as before
   widget(i){return widgets[i]},
   setHover(i){if(i!==hover){hover=i;dirty=true}},
   press(i){const w=widgets[i];if(!w?.action)return false;w.action();widgets=draw();dirty=true;return true},
-  drag(i,uv){const w=widgets[i];if(!w?.set)return;const v=Math.min(1,Math.max(0,(at(uv).x-w.x)/w.w));w.set(v);widgets=draw();dirty=true},
+  // a drag of a knob-only slider keeps the offset between the press and the knob's centre (beginDrag returns true: nothing is set at the press itself, so the value cannot jump); the others set the value under the laser as before
+  beginDrag(i,uv){const w=widgets[i];grabOff=w?.set&&w.knob>0?sliderGrabOffset(at(uv).x,w):0;return !!w?.set&&w.knob>0},
+  drag(i,uv){const w=widgets[i];if(!w?.set)return;w.set(sliderValueAt(at(uv).x,w,grabOff));widgets=draw();dirty=true},
   dispose(){tex.dispose();mesh.geometry.dispose();mesh.material.dispose()}};
 }
 // small tag on the left controller while the menu is closed (open it by
@@ -1379,7 +1383,7 @@ const ownBuffer=a=>a.byteOffset===0&&a.byteLength===a.buffer.byteLength?a.buffer
 // level (the real keys need the page's state; the prefetched entries are used only when the page's own keys come out the same). Every key is made of hashed parts (partsOf), so a miss can say what changed.
 // The keys no longer contain the build number (a new build keeps the entries); the 'build' tag in an entry's info is kept for diagnostics only. Version 3: the key format changed, so the entries of version 2 are cleaned up.
 // tests/unit/vr-prep-version-guard.test.js fails when the generating sources change without this number being bumped.
-const VR_PREP_VERSION=6;
+const VR_PREP_VERSION=7;
 let vrCacheNotify=null; // the session sets it: the 詳細 tab redraws when a store makes progress
 const vrCacheState={last:null,cap:null}; // last: what the latest preparation did with the cache (cinfo); cap: the storage numbers (refreshVrCapacity)
 async function vrCacheContext(maxDim){
@@ -1810,13 +1814,19 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
   let rh=0;for(let i=0;i<L.length;i++)rh=(Math.imul(rh,31)+(regionShownVr(L[i].rid)?2:1))|0;c.gen=visGen;c.list=L;c.n=L.length;c.an=analysisRegions.length;return c.val=rh};
  const regionLut=new THREE.DataTexture(new Float32Array(256*4),256,1,THREE.RGBAFormat,THREE.FloatType),lutColor=new THREE.Color();
  regionLut.minFilter=regionLut.magFilter=THREE.NearestFilter;regionLut.generateMipmaps=false;regionLut.needsUpdate=true;
+ let highlightRid=0; // the region id the laser highlights (region-highlight.js); set by setRegionHighlight only when it changes
  const refreshRegionLut=()=>{
   const slotKeys=gpuSegmentOrder(),a=regionLut.image.data;a.fill(0);
+  // region-highlight.js: the result the laser is on (highlightRid, 0 = none) moves toward white, every other one back toward its segment's colour; only rgb, never the alpha (segment bits / hidden). highlightRid 0 = the plain table.
+  const hlEntries=regionList.map(e=>({rid:e.rid,shown:regionShownVr(e.rid)})),hlAt=highlightIndex(hlEntries,highlightRid),hlRgb=[0,0,0],hlBase=[0,0,0];
   regionList.forEach((e,i)=>{const o=(i+1)*4;if(o+3>=a.length)return;lutColor.setHex(e.color);a[o]=lutColor.r;a[o+1]=lutColor.g;a[o+2]=lutColor.b;
-   a[o+3]=regionShownVr(e.rid)?(typeof e.segMask==='number'?e.segMask:(e.segmentKeys||[]).reduce((m,key)=>{const sl=slotKeys.indexOf(key);return sl>=0?m|(1<<sl):m},0)):0});
+   a[o+3]=regionShownVr(e.rid)?(typeof e.segMask==='number'?e.segMask:(e.segmentKeys||[]).reduce((m,key)=>{const sl=slotKeys.indexOf(key);return sl>=0?m|(1<<sl):m},0)):0;
+   if(hlAt>=0){hlRgb[0]=a[o];hlRgb[1]=a[o+1];hlRgb[2]=a[o+2];const m=a[o+3]|0,sl=m?31-Math.clz32(m&-m):-1,sg=sl>=0?segmentState[slotKeys[sl]]:null;let base=null;if(sg?.color){lutColor.set(sg.color);hlBase[0]=lutColor.r;hlBase[1]=lutColor.g;hlBase[2]=lutColor.b;base=hlBase}
+    const c=highlightColor(hlRgb,base,i===hlAt?'on':'other');a[o]=c[0];a[o+1]=c[1];a[o+2]=c[2]}});
   regionLut.needsUpdate=true;if(material)material.uniforms.regionLut.value=regionLut;
  };
 
+ const hlTracker=createHighlightTracker(),setRegionHighlight=rid=>{rid=rid|0;if(rid===highlightRid)return;highlightRid=rid;if(running&&material){try{refreshRegionLut()}catch(e){console.warn(e)}}}; // the table (4 KB) is rewritten only when the highlighted result changes, never per frame
  // the child segments' look-up table (childLut, 256 x 3; entry j + 1 = childList[j]). Row 0: colour + the parent's slot bit (0 while hidden); row 1: lower, upper (the child's own shading range: the user's, else the auto value, else the
  // parent's min..max), flat mask (VR mode 簡易), hidden mask (HIDDEN = INVISIBLE: the shader keeps marching). Only these 8 KB are rewritten (texture object, index texture and data key unchanged): no preparation on a toggle.
  // A child deleted since the preparation has no row (no effect). Nothing happens in a session without child segments.
@@ -2055,6 +2065,8 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
  const scaleSlide=pos=>{const lm=realLongMm();if(scaleLimits(lm).locked)return;const s=clampScale(posToScale(pos,lm),lm);holder.scale.setScalar(s);if(twoHand){twoHand.s0=s;twoHand.d0=Math.max(handDist(),1e-3)}};
  // what the slider shows now: knob position, value text (the scale tag's: 「×N（実寸比）」, nothing when the size is unknown) and the locked state (text = the 実寸 button's 「実寸にできません（30cm超）」)
  let scaleMenuKey='',scaleMenuAt=0; // the menu is redrawn when the scale changes elsewhere (pinch, 実寸, 正面に戻す, data switch), at most every 90 ms
+ const scaleNudge=(dir,steps=1)=>{const lm=realLongMm();if(scaleLimits(lm).locked)return;const s=scaleStep(holder.scale.x,dir,lm,steps);holder.scale.setScalar(s);if(twoHand){twoHand.s0=s;twoHand.d0=Math.max(handDist(),1e-3)}}; // the − / ＋ of the 拡大率: ×1/1.1, ×1.1 per press (held: one step per repeat of value-step.js), clamped to the limits; locked: nothing. Re-bases a running pinch like scaleSlide
+ const scaleHold=dir=>({action:()=>scaleNudge(dir),hold:()=>scaleNudge(dir)});
  const scaleView=()=>{const lm=realLongMm(),lim=scaleLimits(lm),m=realMagnification(holder.scale.x,lm);return{pos:scalePosOf(holder.scale.x,lm),text:lim.locked?L.realSizeNo:magnificationText(m,language),locked:lim.locked}};
  let wheelOwner=null,pw=null; // pw = {c,id,mode}: mode 'main' (move / delete / colour / distance) or 'color' (the palette ring)
  // EVERY hand's laser stops on the whole dark disc of an open ring (items and blank space alike); slot = the item under the ray or null (blank).
@@ -2370,7 +2382,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
   for(const pl of [...planes])removePlane(pl);section.on=false;section.selected=null;ui.secPage=0;ui.secSeen=null;for(const f of flying)disposePlane(f.pl);flying.length=0;secUndo.clear();undoBtn.hide();
   undo.clear();vpSel=null;cancelMeasure();
   huLine.setArmed(false,true);huLine.clear();setHistOpen(false);hist.invalidate();
-  evLabels=TRIGGER_AT_START==='label';vrWindow.c=+wc.value||0;vrWindow.w=Math.max(1,+ww.value||1);ui.anPage=0;
+  evLabels=TRIGGER_AT_START==='label';vrWindow.c=+wc.value||0;vrWindow.w=Math.max(1,+ww.value||1);ui.anPage=0;ui.resPage=0;
   for(const x of controllers)x.userData.hideFrames=false;ui.sliceClear=false;sliceToast.until=0;sliceToast.mesh.visible=false;resetEventViewSettings(settings);saveSettings(settings);if(menuHeld){scene.attach(menu.mesh);menuHeld=null}if(helpHeld){scene.attach(help.mesh);helpHeld=null}if(evHeld){scene.attach(ev.mesh);evHeld=null}
   initialVrModes();bringVolumeFront();ui.open=true;menu.mesh.visible=true;ui.tab=10;placeMenuNow();placeHelpNow();placeHuNow();
   flashMsg(tr('evResetDone'),3500);return req.detail.done;
@@ -2770,7 +2782,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    if(isHand(c.userData.source)&&(!e.handPinch||handIn.grabbing(c)||handIn.fistLike(c)))return; // a pinch the system sees inside a fist (the thumb on the index), or while the hand is closing into one, is not a trigger.: a hand presses only with the pinch of vr-hand-view.js (handPinch), never with the system's select itself
    endDrag(c);
    const bd=boardHits(c),h=bd.menu;
-   if(h){const i=menu.hit(h.uv);if(i<0)return;const w=menu.widget(i);if(w.set){dragging={c,i};menu.drag(i,h.uv)}else{menu.press(i);if(w.hold){const st=createStepHold();st.press(performance.now());c.userData.menuHold={i,st}}}pulse(c);return} // a ＋ / − of a data-value slider (hold: set by the menu) repeats while it is held (value-step.js)
+   if(h){const i=menu.hit(h.uv);if(i<0)return;const w=menu.widget(i);if(w.set){dragging={c,i};if(!menu.beginDrag(i,h.uv))menu.drag(i,h.uv)}else{menu.press(i);if(w.hold){const st=createStepHold();st.press(performance.now());c.userData.menuHold={i,st}}}pulse(c);return} // a ＋ / − of a data-value slider (hold: set by the menu) repeats while it is held (value-step.js)
    if(bd.wheel&&bd.wheel.slot!==null){confirmWheel(bd.wheel.slot,c);return}
    if(bd.pwheel&&bd.pwheel.slot!==null){confirmPoint(bd.pwheel.slot,c);return}
    if(bd.undoBtn){restoreSection(c);return} // 「元に戻す」 after a section was deleted
@@ -3180,11 +3192,15 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    regionList.forEach((r,i)=>{acts['result:'+i]=()=>{const reg=regionById(r.rid);if(reg)setRegionVisible(reg,!regionVisible(reg))}}); // the colour chip of a result row shows / hides it (the page's flag; a uniform in VR)
    for(const key of keys)acts['seg:'+key]=v=>{emit('seg-toggle');const was=segMode[key]|0;segMode[key]=v?(was===2?0:was):2;if(v&&was===2)emit('seg-show');else if(!v&&was!==2)emit('seg-hide')}; // seg-hide / seg-show = the tissue really went hidden / shown (tutorial ステップ4)
    const simple=simpleMenuLayout({segments:keys.map(k=>({key:k,name:tr(k),color:segmentState[k].color,on:segMode[k]!==2})),sectionOn:section.on,sliceOpacity:settings.sliceOpacity,scale:scaleView(),trigger:{show:triggerModeRow(hasRes),label:evLabelOn()},
-    results:regionList.map(r=>({hex:'#'+r.color.toString(16).padStart(6,'0'),name:vrChipTitle(r),text:vrVolumeText(r.mm3,sn),on:regionShownVr(r.rid)})),total:(sn?sn.mark+' ':'')+regionList.reduce((a,r)=>a+(regionShownVr(r.rid)?r.mm3:0),0).toFixed(2)+' mm³',resetArmed:resetArmed(ui.resetUntil||0,performance.now()),levels:(eventModeOn()||(tutLive&&!tutEnded))&&practiceOpen()?{items:levelSwitchItems(tr,globalThis.__vrlOpenSample,levelForSample(swapArmedId())?.id??null,EVENT_LEVELS),busy:ui.swapBusy,hint:swapArmedId()?L.dataHint+levelNameOf(swapArmedId()):'',text:{title:L.dataT,again:L.dataAgain}}:null, // 元に戻す is always pressable: with nothing to undo it only says so (undoLast)
-    text:{show:tr('evShow'),hide:tr('evHide'),section:L.sec,sliceOpacity:L.sl,scale:L.scaleL,trigger:tr('evMode'),trigPoint:tr('evModePoint'),trigLabel:tr('evModeAnalysis'),trigHintPoint:tr('evModeHintPoint'),trigHintLabel:tr('evModeHintAnalysis'),results:L.anT,total:L.anTotal,noSeg:L.noSeg,home:L.home,undo:L.ptUndo,reset:tr('evReset'),resetAgain:tr('evResetAgain'),all:tr('evAllSettings'),exit:tr(mode==='ar'?'evExitAr':'evExitVr')}});
+    page:ui.resPage|0,results:regionList.map(r=>({hex:'#'+r.color.toString(16).padStart(6,'0'),name:vrChipTitle(r),text:vrVolumeText(r.mm3,sn),on:regionShownVr(r.rid)})),total:(sn?sn.mark+' ':'')+regionList.reduce((a,r)=>a+(regionShownVr(r.rid)?r.mm3:0),0).toFixed(2)+' mm³',resetArmed:resetArmed(ui.resetUntil||0,performance.now()),levels:(eventModeOn()||(tutLive&&!tutEnded))&&practiceOpen()?{items:levelSwitchItems(tr,globalThis.__vrlOpenSample,levelForSample(swapArmedId())?.id??null,EVENT_LEVELS),busy:ui.swapBusy,hint:swapArmedId()?L.dataHint+levelNameOf(swapArmedId()):'',text:{title:L.dataT,again:L.dataAgain}}:null, // 元に戻す is always pressable: with nothing to undo it only says so (undoLast)
+    text:{show:tr('evShow'),hide:tr('evHide'),section:L.sec,sliceOpacity:L.sl,scale:L.scaleL,trigger:tr('evMode'),trigPoint:tr('evModePoint'),trigLabel:tr('evModeAnalysis'),trigHintPoint:tr('evModeHintPoint'),trigHintLabel:tr('evModeHintAnalysis'),results:L.anT,total:L.anTotal,page:L.anPage,noSeg:L.noSeg,home:L.home,undo:L.ptUndo,reset:tr('evReset'),resetAgain:tr('evResetAgain'),all:tr('evAllSettings'),exit:tr(mode==='ar'?'evExitAr':'evExitVr')}});
    for(const it of simple){
     if(it.type==='label')label(it.x,it.y,it.text,{bold:it.bold,size:it.size,color:it.color});
     else if(it.id==='scale')w.push({...it,set:scaleSlide}); // 拡大率
+    else if(it.id==='scale:minus')w.push({...it,...scaleHold(-1)}); // × 1 / 1.1 (hold: repeats)
+    else if(it.id==='scale:plus')w.push({...it,...scaleHold(1)}); // × 1.1
+    else if(it.type==='hit')w.push({...it,action:()=>acts[it.target]?.()}); // a results row (the whole row) = its colour chip
+    else if(it.id==='results:prev'||it.id==='results:next')w.push({...it,action:()=>{ui.resPage=it.page}}); // ◀ ▶ of the results list
     else if(it.type==='slider')w.push({...it,set:v=>{ui.sliceClear=false;settings.sliceOpacity=sliceOpacityValue(v);emit('slice-opacity')}}); // the full menu's slider widget (drag: trigger or pinch; saved on release), same setting as the スライス tab
     else{const m=/^(.+):(show|hide)$/.exec(it.id),action=m?()=>acts[m[1]]?.(m[2]==='show'):()=>acts[it.id]?.();w.push({...it,action})}
    }
@@ -3227,7 +3243,9 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    {const hy=yb-480;btn(X,hy,230,L.hist,hist.isOpen,()=>setHistOpen(!hist.isOpen),{size:28}); // the board counts the VR data itself (フィルター後 / 元の値 no longer apply to it)
     const lg=getHistogramLog();btn(X+242,hy,130,L.histLin,!lg,()=>{setHistogramLog(false);hist.invalidate()},{size:26});btn(X+382,hy,130,L.histLog,lg,()=>{setHistogramLog(true);hist.invalidate()},{size:26})}
    btn(vs.wheel.x,vs.wheel.y,vs.wheel.w,L.wheelEdit,false,()=>{ui.tab=7;menu.refresh()},{size:28}); // on the ヒストグラム row (right of 線形 / 対数) to make room for the 拡大率 row
-   {const lk=scaleLimits(realLongMm()).locked,sv=scaleView();label(vs.label.x,vs.label.y,L.scaleL);w.push({type:'slider',x:vs.slider.x,y:vs.slider.y,w:vs.slider.w,h:vs.slider.h,value:sv.pos,text:sv.text,textMax:vs.slider.textMax,set:scaleSlide,...(lk?{disabled:true}:{})});
+   {const lk=scaleLimits(realLongMm()).locked,sv=scaleView();label(vs.label.x,vs.label.y,L.scaleL);label(vs.text.x,vs.text.y,sv.text,{size:24,maxW:vs.text.maxW,color:lk?'#6b7885':'#cfe3f0'});w.push({type:'slider',x:vs.slider.x,y:vs.slider.y,w:vs.slider.w,h:vs.slider.h,value:sv.pos,text:'',knob:KNOB_GRAB_PX,set:scaleSlide,...(lk?{disabled:true}:{})});
+    btn(vs.minus.x,vs.minus.y,vs.minus.w,'−',false,scaleHold(-1).action,{size:44,hold:scaleHold(-1).hold,...(lk?{disabled:true}:{})});btn(vs.plus.x,vs.plus.y,vs.plus.w,'＋',false,scaleHold(1).action,{size:44,hold:scaleHold(1).hold,...(lk?{disabled:true}:{})}); // − / ＋ at the slider's ends
+
     btn(vs.real.x,vs.real.y,vs.real.w,lk?L.realSizeNo:L.realSize,false,()=>setRealSize(),{size:lk?22:28,disabled:lk})}
    choice(yb-240,L.menuPos,[{label:L.follow,value:0},{label:L.fixed,value:1}],settings.menuMode,v=>{settings.menuMode=v;saveSettings(settings)});
    // with hands the two controller lines give way to the hand laser's choice (標準 / 指差し) (the device setting handRay, also in 設定 > 描画 on the page); with controllers: the lines as before
@@ -3636,6 +3654,10 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
   {snFrame=undefined;const on=labelMode()&&!diagAn.noLabels;if(on||pins.size||analysisRegions.some(r=>r.label))readHead();anBenchTick();
    for(const c of controllers){const hit=on?c.userData.volHit:null,hrid=hit&&hit.id?regionList[hit.id-1]?.rid:null;if(hit&&!(hrid&&pins.has(hrid))){const lb=hoverLabelOf(c);drawLabel(lb,hit,true);lb.anchor.copy(hit.local);placeLabel(lb)}else hideLabel(c.userData.hoverLabel)}
    pinLit.clear();pinHeld.clear();for(const x of controllers){const r=x.userData.res;if(r&&r.kind==='mlabel'&&r.ref?.pin)pinLit.add(r.ref.id);const ld=x.userData.lblDrag;if(ld?.pin&&x.userData.press){pinLit.add(ld.id);if(ld.moved&&!ld.done)pinHeld.add(ld.id)}}
+   {const hh=[],pinOk=analysisOn();for(const x of controllers){const r=x.userData.res,ld=x.userData.lblDrag;let pin=0;if(pinOk){if(r&&r.kind==='mlabel'&&r.ref?.pin)pin=r.ref.id;if(ld?.pin&&x.userData.press)pin=ld.id} // the pinned card the laser is on / holds (priority over the volume); only in the analysis state
+     const hit=on?x.userData.volHit:null,hrid=hit&&hit.id?regionList[hit.id-1]?.rid:null,hover=hrid||0; // the shown result under the laser on the volume (pinned or not: the card may not be shown for a pinned one, the result still lights)
+     hh.push({key:x,pin,hover})}
+    setRegionHighlight(hlTracker.update(hh,true))}
    syncPins();{const occ=occlusionGpu();if(occ&&pins.size){embedInputs(performance.now());embBudget=EMB_PER_FRAME}for(const lb of pins.values()){lb.lit=pinLit.has(lb.rid);embedLabel(lb,occ,pinHeld.has(lb.rid));placeLabel(lb)}thinPins(occ);for(const lb of pins.values())pinOcclusion(lb,lb.lit)}}
   // thumbstick scroll: the selected plane along its own normal, same world speed fixed in the scaled holder or held
   const sp=section.selected;
@@ -3713,7 +3735,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
      eyeMetrics(mesh.matrixWorld.elements,rsHalf,rsDims,sub.matrixWorldInverse.elements,sub.projectionMatrix.elements,v.z,v.w,rsEye,rsBox); // on the content box
      cov+=rsEye.cover;if(rsEye.cover>0){raw=Math.max(raw,capFromPpv(rsEye.ppvCenter,rsEye.ppvFar));ppv=Math.min(ppv,rsEye.ppvCenter);ppvFar=Math.min(ppvFar,rsEye.ppvFar)}
      foveaRect(rsEye.cx,rsEye.cy,v.z,v.w,rsFov[i]);outF+=outsideFovea(rsEye,rsFov[i]);rsFov[i][0]+=v.x;rsFov[i][2]+=v.x;rsFov[i][1]+=v.y;rsFov[i][3]+=v.y}
-    rs.cover=cov;rs.outside=outF;if(cov>0){rs.cap=nextCap(rs.cap,raw);rs.ppv=ppv;rs.ppvFar=ppvFar} // nothing covered: keep the last cap
+    rs.cover=cov;rs.outside=outF;if(cov>0){raw=Math.min(raw,capFromBudget(cov));rs.cap=nextCap(rs.cap,raw);rs.ppv=ppv;rs.ppvFar=ppvFar} // nothing covered: keep the last cap
     rs.split=cams.length>1?cams[1].viewport.x:1e9;
    }
    if(bench.active||anBench.active)rs.cap=1; // benchmarks measure the resolutions they set
@@ -4051,7 +4073,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    undo.clear();vpSel=null;cancelMeasure();for(const [rid,lb] of pins)dropPin(rid,lb);
    huLine.setArmed(false,true);huLine.clear();setHistOpen(false);labelHist.reset();hist.invalidate();shadeAuto.reset();shadeHist.reset();
    vrHalfExt=null;vrDims=null;vrFp=null;vrSpacing=null;volPick=null;regionList=[];histP=null;childList=[];histFor=null;cls4On=false;cbGrid=null;
-   for(const x of controllers)x.userData.hideFrames=false;ui.sliceClear=false;sliceToast.until=0;sliceToast.mesh.visible=false;ui.anPage=0;ui.resetUntil=0;
+   for(const x of controllers)x.userData.hideFrames=false;ui.sliceClear=false;sliceToast.until=0;sliceToast.mesh.visible=false;ui.anPage=0;ui.resPage=0;ui.resetUntil=0;
   };
   // the old data's GPU textures and CPU arrays: the uniforms stop pointing at them first (three.js would upload a disposed texture again the next time it is bound), then they are disposed and every reference is dropped
   // the page-prepared warm-up materials (they keep the compiled programs alive) share the first data's uniforms, which point at its textures, and a texture holds the CPU array

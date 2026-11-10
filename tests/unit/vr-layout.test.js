@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { VOLUME_FWD, MENU_OFFSET, HELP_OFFSET, HIST_OFFSET, HIST_WIDTH, MENU_WIDTH, HELP_WIDTH, HELP_RES, EV_OFFSET, EV_WIDTH, EV_RES, HU_PANEL_OFFSET, FOLLOW_ANGLE, FOLLOW_DIST, BOARD_DIST, BOARD_YAW_DEG, boardDistance, placeFromHead, volumeFromHead } from '../../docs/vr-layout.js';
+import { VOLUME_FWD, MENU_OFFSET, HELP_OFFSET, HIST_OFFSET, HIST_WIDTH, MENU_WIDTH, HELP_WIDTH, HELP_RES, EV_OFFSET, EV_WIDTH, EV_RES, HU_PANEL_OFFSET, FOLLOW_ANGLE, FOLLOW_DIST, BOARD_DIST, BOARD_YAW_DEG, boardDistance, placeFromHead, volumeFromHead, MENU_CANVAS, MENU_BOTTOM_DOWN, menuHeightM } from '../../docs/vr-layout.js';
 import { levelBoardH, PAGE_H, TAB_H } from '../../docs/tutorial-vr.js';
 
 import { PANEL_W, PANEL_H } from '../../docs/vr-histogram-layout.js';
@@ -19,7 +19,7 @@ describe('default VR/AR layout', () => {
     const m = placeFromHead(head, fwd, left, MENU_OFFSET); expect(m.x).toBeCloseTo(1 - MENU_OFFSET.left); expect(m.y).toBeCloseTo(1.6 - MENU_OFFSET.down);
   });
   it('board physical size: the menu as before, the help board 1.4 times, its canvas finer by as much (same texels per metre, not more)', () => {
-    expect(MENU_WIDTH).toBe(0.5); expect(HELP_WIDTH).toBe(0.45);
+    expect(MENU_WIDTH).toBe(0.6); expect(HELP_WIDTH).toBe(0.45);
     expect(HELP_RES).toBeCloseTo(HELP_WIDTH / 0.32, 1); expect(Math.round(820 * HELP_RES)).toBeLessThanOrEqual(1152); // 1148 px wide: the 1280 px slide pictures are not drawn larger than they are
     expect(EV_WIDTH).toBeGreaterThanOrEqual(HELP_WIDTH); expect(EV_RES).toBeCloseTo(1280 / 820, 6); // the mission board is larger than the help board, drawn at the slide's own 1280 px
   });
@@ -107,7 +107,7 @@ describe('the help board with the caption band', () => {
   });
 });
 describe('slice fill (slice tab row + shader guards, static)', () => {
-  const v = readFileSync('docs/vr-view.js', 'utf8'), MENU_H = 1180, y0 = 270;
+  const v = readFileSync('docs/vr-view.js', 'utf8'), MENU_H = 1400, y0 = 270;
   it('the fill row sits below the air-floor slider (y0+520..+592) and its help line (y0+618, centred, 24 px), inside the menu', () => {
     expect(v).toContain('choice(y0+650,L.ctSh,');
     expect(v).toContain('btn(800,y0+520,70,'); expect(v).toContain('label(X,y0+618,L.airHelp');
@@ -207,5 +207,32 @@ describe('sliceDrawState (what the slice draws)', () => {
     expect(sliceDrawState({ ...on, on: false })).toEqual({ opacity: 0, segOnly: 0 }); expect(sliceDrawState({ ...on, on: false, clear: true, opacity: 0 })).toEqual({ opacity: 0, segOnly: 0 });
     expect(sliceDrawState({ ...on, opacity: 0, ctShade: 0, tint: 0 })).toEqual({ opacity: 0, segOnly: 0 }); expect(sliceDrawState({ ...on, clear: true, ctShade: 0, tint: 0 })).toEqual({ opacity: 0, segOnly: 0 });
     expect(sliceDrawState({ ...on, opacity: 0, ctShade: 1, tint: 0 })).toEqual({ opacity: 1, segOnly: 1 });
+  });
+});
+
+// the menu board is 1024 x 1400 px and 0.6 m wide; its lower edge keeps the place of the old board (0.5 m wide, 1180 px), it grows upward
+describe('menu board', () => {
+  const W = MENU_WIDTH, H = menuHeightM(), c = [MENU_OFFSET.fwd, MENU_OFFSET.left, -MENU_OFFSET.down]; // head frame: fwd, left, up (metres)
+  // the board faces the head as vr-view.js does (Object3D.lookAt(head): +z to the head, y up), then the four corners seen from the head: yaw to the left, pitch up (degrees)
+  const world = [-c[1], c[2], -c[0]], sub = (a, b) => a.map((v, i) => v - b[i]), cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]], norm = a => a.map(v => v / Math.hypot(...a));
+  const z = norm(sub([0, 0, 0], world)), x = norm(cross([0, 1, 0], z)), y = cross(z, x);
+  const corner = (su, sv) => { const p = world.map((v, i) => v - x[i] * su * W / 2 + y[i] * sv * H / 2); return { yaw: Math.atan2(-p[0], -p[2]) * 180 / Math.PI, pitch: Math.atan2(p[1], Math.hypot(p[0], p[2])) * 180 / Math.PI }; };
+  const cs = [corner(-1, 1), corner(1, 1), corner(-1, -1), corner(1, -1)];
+  it('canvas 1024 x 1400, 0.6 m wide, 0.82 m high (the aspect is kept: texels per metre are those of the 1024 px width)', () => {
+    expect(MENU_CANVAS).toEqual({ W: 1024, H: 1400 }); expect(MENU_WIDTH).toBe(0.6); expect(H).toBeCloseTo(0.6 * 1400 / 1024, 9);
+    const v = readFileSync('docs/vr-view.js', 'utf8'); expect(v).toContain('const MENU_W=MENU_CANVAS.W,MENU_H=MENU_CANVAS.H;');
+  });
+  it('the lower edge is where the old board\'s was (0.488 m below the eyes: 0.2 + 0.5 * 1180 / 1024 / 2), the board grew upward only', () => {
+    expect(MENU_BOTTOM_DOWN).toBeCloseTo(0.2 + 0.5 * (1180 / 1024) / 2, 9);
+    expect(MENU_OFFSET.down + H / 2).toBeCloseTo(MENU_BOTTOM_DOWN, 3); // (the offset is rounded to 0.1 mm)
+    expect(MENU_OFFSET.down + H / 2).toBeCloseTo(0.2 + 0.5 * (1180 / 1024) / 2, 3);
+    expect(MENU_OFFSET.down).toBeLessThan(0.2); expect(H / 2 - MENU_OFFSET.down).toBeGreaterThan(0.3); // the top edge is about 0.33 m above the eyes
+  });
+  it('seen from the default head position the top, bottom and inner edges are inside the Quest 3 view (about 96 deg high, 110 deg wide: 48 / 55 deg from the line of sight)', () => {
+    const top = Math.max(...cs.map(p => p.pitch)), bottom = Math.min(...cs.map(p => p.pitch)), inner = Math.min(...cs.map(p => p.yaw)), outer = Math.max(...cs.map(p => p.yaw));
+    expect(top).toBeGreaterThan(15); expect(top).toBeLessThan(48 - 10); // about 18.6 deg up
+    expect(bottom).toBeLessThan(-20); expect(bottom).toBeGreaterThan(-(48 - 10)); // about 28 deg down
+    expect(inner).toBeGreaterThan(28); expect(inner).toBeLessThan(55 - 15); // about 31 deg to the left: well inside the view's edge; the board is read by turning the head
+    expect(outer).toBeLessThan(75);
   });
 });

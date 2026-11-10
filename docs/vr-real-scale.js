@@ -97,15 +97,30 @@ export function posToScale(pos, longMm) {
 export const magToPos = (mag, longMm) => (longMm > 0 ? scalePosOf(mag * realScaleOf(longMm), longMm) : 0);
 export const posToMag = (pos, longMm) => (longMm > 0 ? realMagnification(posToScale(pos, longMm), longMm) : 0);
 
+// the － / ＋ buttons at the ends of the 拡大率 slider: one press multiplies the scale by 1 / SCALE_STEP or SCALE_STEP (a constant step on the log track), clamped to the
+// limits of scaleLimits (real size .. 30 cm longest side); locked data does not move. Holding repeats (vr-view.js, value-step.js timing: starts after 0.4 s, then one step every 0.1 s).
+export const SCALE_STEP = 1.1;
+export function scaleStep(s, dir, longMm, steps = 1) { // steps: how many 1.1 steps at once (1 for a press and for every repeat of a hold)
+  const l = scaleLimits(longMm);
+  if (l.locked || !(s > 0)) return clampScale(s, longMm);
+  const n = Math.max(1, Math.round(+steps || 1)), d = dir < 0 ? -1 : 1;
+  return clampScale(s * Math.pow(SCALE_STEP, d * n), longMm);
+}
+
 // the 表示 tab's row of the VR full menu (1024 px board, rows 80 px apart, the bottom row at yb): 拡大率 label + slider + the 実寸 button on one row (yb - 320), and the
 // 「よく使う（リング）を設定」 button on the histogram row (yb - 480) beside its 線形 / 対数 buttons (which end at x = X + 512): the row below the 実寸 button is full, so no row is added.
-// Pure so that the coordinates are tested. textMax = the width the slider's value text may use (it shrinks to it, up to the 実寸 button).
+// Pure so that the coordinates are tested. text.maxW = the width the value text may use (it shrinks to it).
 export function viewTabScaleLayout(yb, W = 1024, X = 40) {
-  const H = 72, real = { x: W - X - 290, y: yb - 320, w: 290, h: H }, sx = 170, sw = 230;
+  // － / ＋ buttons at both ends of the slider. The row: the name (拡大率) with the value text under it (24 px, up to textMax wide: it shrinks to it), － (X + 270, 64 wide), the slider track (knob radius 26: it clears
+  // both buttons by 14 px), ＋, the 実寸 button (280 wide, at the right edge). The value text is no longer at the slider's right (the ＋ is there).
+  const H = 72, real = { x: W - X - 280, y: yb - 320, w: 280, h: H }, mw = 64, mx = X + 270, sx = mx + mw + 40, sw = 170, px = sx + sw + 40;
   return {
     wheel: { x: X + 530, y: yb - 480, w: W - X - (X + 530), h: H },
-    label: { x: X, y: yb - 320 + 36 },
-    slider: { x: sx, y: yb - 320, w: sw, h: H, textX: sx + sw + 30, textMax: real.x - 12 - (sx + sw + 30) },
+    label: { x: X, y: yb - 320 + 26 },
+    text: { x: X, y: yb - 320 + 62, maxW: mx - 20 - X },
+    minus: { x: mx, y: yb - 320, w: mw, h: H },
+    slider: { x: sx, y: yb - 320, w: sw, h: H },
+    plus: { x: px, y: yb - 320, w: mw, h: H },
     real,
   };
 }

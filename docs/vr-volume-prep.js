@@ -10,10 +10,10 @@
 //                     distance field, the combined texture's bytes for the shown mask, brick occupancy of the mask-only segments)
 // The worker is a Blob made from this site's own functions (the same way as vr-combo-rebuild.js); the data goes in and comes back by
 // transfer (no second copy of a 512 MB array is ever held). Without a Worker (tests) the same job runs on the calling thread.
-import { buildClsData } from './point-cls.js?v=20261110-build707';
-import { chamferDistanceBytes, combineClassificationDistance, fourthChannelBytes } from './distance-field.js?v=20261110-build707';
-import { brickOccupancy, cellRange } from './vr-brick-occupancy.js?v=20261110-build707';
-import { gpuRunsForTexture, gpuRunRowMapToSlice, gpuLowerBound, gpuUpperBound, gpuDilateRuns } from './gpu-runs.js?v=20261110-build707';
+import { buildClsData } from './point-cls.js?v=20261110-build708';
+import { chamferDistanceBytes, combineClassificationDistance, fourthChannelBytes } from './distance-field.js?v=20261110-build708';
+import { brickOccupancy, cellRange } from './vr-brick-occupancy.js?v=20261110-build708';
+import { gpuRunsForTexture, gpuRunRowMapToSlice, gpuLowerBound, gpuUpperBound, gpuDilateRuns } from './gpu-runs.js?v=20261110-build708';
 
 export const BRICK = 8;
 
@@ -96,6 +96,34 @@ export function buildRegionIndexOf(items, sourceDims, dims) {
           if (rec[i] >= sh) continue; const y0 = lo(rec[i], sh, h), y1 = hi(rec[i], sh, h), xa = Math.min(rec[i + 1], sw - 1), xb = Math.min(rec[i + 2], sw - 1); if (xb < xa) continue;
           const x0 = lo(xa, sw, w), x1 = hi(xb, sw, w);
           for (let tz = z0; tz <= z1; tz++) for (let ty = y0; ty <= y1; ty++) { const o = (tz * h + ty) * w; for (let x = x0; x <= x1; x++) if (hole[o + x]) { ids[o + x] = p.id; if (p.k >= 0) data[o + x] = p.k + 1; } }
+        }
+      }
+    }
+  }
+  // VR_PREP_VERSION 7 (one-voxel growth): the shader reads the result's colour NEAREST at 0.75 x the SMALLEST voxel side behind the surface hit; the 0.5 iso-surface of hard-edged data lies inside the AIR
+  // voxel's cell, and on anisotropic data (sample7: x / y voxels twice the z one) that read point often stays there: index 0 = the base colour, grey streaks along the voxel grid on obliquely seen surfaces.
+  // So ids (only ids: the colour index `data`, which the label histogram counts, is NOT grown) is grown by ONE voxel into its 6 face neighbours, on every grid: a voxel still 0 takes the LARGEST id among
+  // its face neighbours as they were before this pass (largest id = the latest result in the list = the rule of the passes above: a later result wins); a voxel that already has an id is never changed,
+  // and a grown voxel never grows further. One pass, in place; the original ids of slices z - 1 and z are kept in two slice buffers (2 * w * h bytes), so neighbours are read as they were before the pass.
+  // rowAny (d * h bytes, from the ids before the growth): a row whose own row and four neighbouring rows are all 0 cannot grow and is skipped (most of the grid is air).
+  if (colors.length) {
+    const wh = w * h, rowAny = new Uint8Array(d * h); let prev = new Uint8Array(wh), cur = new Uint8Array(wh);
+    for (let r = 0, o = 0; r < d * h; r++, o += w) for (let x = 0; x < w; x++) if (ids[o + x]) { rowAny[r] = 1; break; }
+    for (let z = 0; z < d; z++) {
+      const t = prev; prev = cur; cur = t; const base = z * wh; cur.set(ids.subarray(base, base + wh)); // prev = slice z - 1 (original), cur = slice z (original); slice z + 1 is not written yet
+      for (let y = 0; y < h; y++) {
+        const r = z * h + y; if (!rowAny[r] && !(y > 0 && rowAny[r - 1]) && !(y < h - 1 && rowAny[r + 1]) && !(z > 0 && rowAny[r - h]) && !(z < d - 1 && rowAny[r + h])) continue;
+        const ro = y * w;
+        for (let x = 0; x < w; x++) {
+          const i = ro + x; if (cur[i]) continue;
+          let m = 0, v;
+          if (x > 0 && (v = cur[i - 1]) > m) m = v;
+          if (x < w - 1 && (v = cur[i + 1]) > m) m = v;
+          if (y > 0 && (v = cur[i - w]) > m) m = v;
+          if (y < h - 1 && (v = cur[i + w]) > m) m = v;
+          if (z > 0 && (v = prev[i]) > m) m = v;
+          if (z < d - 1 && (v = ids[base + wh + i]) > m) m = v;
+          if (m) ids[base + i] = m;
         }
       }
     }
