@@ -188,7 +188,7 @@ describe('the tutorial placement of the volume', () => {
     expect(MAX_LONG_M / (NORM_LONG * tutorialHolderScale(bone, MAG))).toBeGreaterThan(1.15); // the room above it is more than the 15 % of the step
     expect(NORM_LONG * tutorialHolderScale(0, MAG)).toBeCloseTo(TUT_LONG_M, 6); expect(TUT_LONG_M).toBe(0.1); // unknown size
     expect(NORM_LONG * tutorialHolderScale(500, MAG)).toBeCloseTo(0.30, 6); // oversize data: fitted to 0.30 m (locked) as always
-    expect(NORM_LONG * startHolderScale(bone, DEFAULT_SCALE)).toBeCloseTo(0.0256, 6); // the normal start: real size, 2.56 cm
+    expect(NORM_LONG * startHolderScale(bone, DEFAULT_SCALE)).toBeCloseTo(0.05, 6); // the normal start: real size 2.56 cm is under 5 cm, so it starts at 5 cm (MIN_START_LONG_M)
   });
   it('0.65 m ahead like the normal start, a quarter metre below the eyes (chest; the normal start is 0.12 m)', () => {
     expect(TUT_VOLUME_FWD).toBe(0.65); expect(TUT_VOLUME_DOWN).toBe(0.25); expect(TUT_VOLUME_DOWN).toBeGreaterThan(0.12);

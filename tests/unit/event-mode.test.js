@@ -186,7 +186,7 @@ describe('the かんたん menu: slice-opacity slider (generic: every dataset, n
   it('vr-view.js draws it with the full menu\'s slider widget and the full menu\'s setting (saved on release like any slider), and the hand help names the sliders', () => {
     const src = readFileSync(new URL('../../docs/vr-view.js', import.meta.url), 'utf8');
     expect(src).toContain("else if(it.type==='slider')w.push({...it,set:v=>{ui.sliceClear=false;settings.sliceOpacity=sliceOpacityValue(v);emit('slice-opacity')}});"); // + the tutorial signal
-    expect(src).toContain('sliceOpacity:settings.sliceOpacity,trigger:');
+    expect(src).toContain('sliceOpacity:settings.sliceOpacity,scale:scaleView(),trigger:'); // + the 拡大率 row
     expect(src).toContain('sliceOpacity:L.sl,');
     expect(src).toContain('ui.sliceClear=false;settings.sliceOpacity=Math.round(v*20)/20'); // the スライス tab's slider: same steps, and it also cancels the transparent toggle
     const hand = readFileSync(new URL('../../docs/vr-hand.js', import.meta.url), 'utf8');
