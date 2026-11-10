@@ -46,29 +46,19 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       # The practice data (docs/demo, hundreds of MB) is NOT copied into previews: every preview
-      # would add it to gh-pages and the published site would exceed the 1 GB Pages limit.
-      # The preview app reads it from the main site's /demo/ instead (docs/sample-config.js flag,
-      # set to true in the copy below). Exception: a PR that changes a file under docs/demo other than
-      # sample.json keeps docs/demo in its preview (flag stays false), so new or edited sample data
-      # can be tested before it reaches main. A PR that changes only sample.json files stays small
-      # (the app reads the main site's /demo/ for those too). docs/ itself is never modified; only the copy is.
+      # would add it to gh-pages and the published site would exceed the size limit of Pages.
+      # The preview app always reads it from the main site's /demo/ instead (docs/sample-config.js
+      # flag, set to true in the copy below), whatever the PR changes. docs/ itself is never
+      # modified; only the copy is.
       - name: Prepare preview site
         if: github.event.action != 'closed'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR: ${{ github.event.pull_request.number }}
         run: |
           site="$RUNNER_TEMP/preview-site"
-          if gh api --paginate "repos/${{ github.repository }}/pulls/$PR/files" --jq '.[].filename' | grep '^docs/demo/' | grep -qv '/sample\.json$'; then
-            echo "PR changes docs/demo files other than sample.json: keeping it in the preview"
-            cp -a docs "$site"
-          else
-            echo "docs/demo unchanged (or only sample.json): preview reads practice data from the site root"
-            mkdir -p "$site"
-            tar -C docs --exclude=./demo -cf - . | tar -C "$site" -xf -
-            sed -i 's/DEMO_FROM_SITE_ROOT=false/DEMO_FROM_SITE_ROOT=true/' "$site/sample-config.js"
-            grep -q 'DEMO_FROM_SITE_ROOT=true' "$site/sample-config.js"
-          fi
+          echo "preview reads practice data from the site root (docs/demo is not copied)"
+          mkdir -p "$site"
+          tar -C docs --exclude=./demo -cf - . | tar -C "$site" -xf -
+          sed -i 's/DEMO_FROM_SITE_ROOT=false/DEMO_FROM_SITE_ROOT=true/' "$site/sample-config.js"
+          grep -q 'DEMO_FROM_SITE_ROOT=true' "$site/sample-config.js"
           du -sh "$site"
       - uses: rossjrw/pr-preview-action@v1.8.1
         with:
