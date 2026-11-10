@@ -1,11 +1,11 @@
 import * as THREE from './vendor/three@0.186.0/build/three.module.js';
-import { volumeTexturePlan, reduceSliceArea, packedRgSlice, packCtSlice } from './medical-volume.js?v=20261109-build704';
-import { computeBricksOf, buildEditMaskOf, buildRegionIndexOf, BRICK } from './vr-volume-prep.js?v=20261109-build704';
-import { gpuRunsForTexture } from './gpu-runs.js?v=20261109-build704';
-import { MATERIALS, materialKey, materialVec } from './lighting.js?v=20261109-build704';
-import { MAX_SECTION_PLANES } from './vr-section-frame.js?v=20261109-build704';
-import { SHADE_BRIGHT_DEFAULT, SHADE_CONTRAST_DEFAULT, brightOf, contrastOf } from './cap-shade.js?v=20261109-build704';
-import { pickRay } from './webgl-volume-pick.js?v=20261109-build704';
+import { volumeTexturePlan, reduceSliceArea, packedRgSlice, packCtSlice } from './medical-volume.js?v=20261110-build705';
+import { computeBricksOf, buildEditMaskOf, buildRegionIndexOf, buildChildIndexOf, BRICK } from './vr-volume-prep.js?v=20261110-build705';
+import { gpuRunsForTexture } from './gpu-runs.js?v=20261110-build705';
+import { MATERIALS, materialKey, materialVec } from './lighting.js?v=20261110-build705';
+import { MAX_SECTION_PLANES } from './vr-section-frame.js?v=20261110-build705';
+import { SHADE_BRIGHT_DEFAULT, SHADE_CONTRAST_DEFAULT, brightOf, contrastOf } from './cap-shade.js?v=20261110-build705';
+import { pickRay } from './webgl-volume-pick.js?v=20261110-build705';
 
 export const WEBGL_VOLUME_DEFAULT = true;
 export const webglVolumeEnabled = (search = typeof location !== 'undefined' ? location.search : '', m = /[?&]webglvolume=(\d)(&|$)/.exec(search || '')) => (m ? m[1] !== '0' : WEBGL_VOLUME_DEFAULT); // one line: the public gate reads a URL key from the line that reads location.search
@@ -45,12 +45,20 @@ void main(){\n gl_FragDepth=gl_FragCoord.z;` },
   // which planes show their slice image (a cutting plane whose image is hidden still clips and draws the cap)
   { name: 'plane-slice', find: 'if(crossT[i]>=t-1e-5&&crossT[i]<=endT+1e-5){sliceT[nSlice]=crossT[i];nSlice++;}', put: 'if(((planeSlice>>i)&1)==1&&crossT[i]>=t-1e-5&&crossT[i]<=endT+1e-5){sliceT[nSlice]=crossT[i];nSlice++;}' },
 ];
-export function patchFragmentShader(src) {
+// the additions for a session WITH child segments (the shader is then compiled with VRL_CHILDREN, vr-view.js block A / A2): applied only then, so the shader of a session without child segments is the same text as ever.
+// The page's surface colour goes through the child's colour (childBase) as the VR's regionColor macro does, and the cut-face shading through the child's own range (ctLumAt).
+export const CHILD_SHADER_PATCHES = [
+  { name: 'child-region-lit', find: ' return base*diffuse+vec3(spec);\n}', put: ' return childBase(p,base,s)*diffuse+vec3(spec);\n}' },
+  { name: 'child-cap-shade', find: 'float capShadeF(vec3 cp,int s){return capShade>0.5?ctLumHU(huAt(texCoord(cp)),s):1.0;}', put: 'float capShadeF(vec3 cp,int s){return capShade>0.5?ctLumAt(cp,huAt(texCoord(cp)),s):1.0;}' },
+];
+export function patchFragmentShader(src, { children = false } = {}) {
   let out = src;
-  for (const p of SHADER_PATCHES) {
+  const apply = list => { for (const p of list) {
     if (!out.includes(p.find)) throw new Error('webgl-volume: shader anchor "' + p.name + '" not found in the VR fragment shader (vr-view.js changed it)');
     out = p.all ? out.split(p.find).join(p.put) : out.replace(p.find, () => p.put);
-  }
+  } };
+  apply(SHADER_PATCHES);
+  if (children) apply(CHILD_SHADER_PATCHES);
   return out;
 }
 
@@ -96,6 +104,34 @@ export function planeState(mpr = {}, dims, halfExt) {
   };
 }
 
+// ---- child segments (pure, unit-tested) ----
+// the entries of the page's render hand-off (segments.js childRenderEntries) that the shader can draw: with a mask, voxels, and a parent that has a GPU slot (a child recolours its parent's surface)
+export const childItemsOfEntries = entries => (entries || []).filter(e => e && e.runs && !(e.voxels === 0) && Number.isFinite(+e.parentSlot) && +e.parentSlot >= 0 && +e.parentSlot <= 3)
+  .map(e => ({ key: e.key, segMask: 1 << (+e.parentSlot | 0), runsBySlice: e.runs, hash: e.hash ?? e.voxels ?? 0 }));
+// the parent slot bits of the prepared list follow the entries' current ones (key by key); the index texture and its signature are not touched
+export function syncChildListMasks(list, items) {
+  const m = new Map((items || []).map(i => [i.key, i.segMask | 0]));
+  for (const e of list || []) if (m.has(e.key)) e.segMask = m.get(e.key);
+  return list;
+}
+const rangeOk = r => !!r && Number.isFinite(+r.lower) && Number.isFinite(+r.upper) && +r.upper > +r.lower;
+// the shading range of a child: its own (the user's), else the app-resolved one for its key (section.shade.ranges: the automatic range of this frame wins over the one handed over earlier, as in the WebGPU volume), else the one handed over (entry.shadeRange), else 0..1
+export const childShadeOf = (e, range = null) => { const r = rangeOk(e.shade) ? e.shade : rangeOk(range) ? range : rangeOk(e.shadeRange) ? e.shadeRange : null; return r ? [+r.lower, +r.upper] : [0, 1]; };
+// vr-view.js refreshChildLut: the 256 x 3 RGBA32F table (row stride 256 * 4), entry j + 1 = list[j]. Row 0: colour + the parent's slot bit (0 while hidden); row 1: lower, upper, flat mask (the page has no simple mode: 0), hidden mask;
+// row 2: the child's material (ambient, spec, shininess) + opacity. A child hidden = its own shown flag off (entry.shown, else entry.visible). A child deleted since (no entry) has no row.
+export function fillChildLut(a, list, entries, rgbOf, materialsOf) {
+  const R = 256 * 4, byKey = new Map((entries || []).map(x => [x.key, x]));
+  a.fill(0);
+  list.forEach((e, j) => {
+    const idx = j + 1, en = idx < 256 ? byKey.get(e.key) : null; if (!en) return;
+    const o = idx * 4, m = e.segMask | 0, hid = (en.shown === undefined ? en.visible : en.shown) === false, [lo, hi] = childShadeOf(en), rgb = rgbOf(en.color), mt = materialsOf(en.material);
+    a[o] = rgb[0]; a[o + 1] = rgb[1]; a[o + 2] = rgb[2]; a[o + 3] = hid ? 0 : m;
+    a[2 * R + o] = mt.ambient; a[2 * R + o + 1] = mt.spec; a[2 * R + o + 2] = mt.shininess; a[2 * R + o + 3] = Number.isFinite(+en.opacity) ? Math.min(1, Math.max(0, +en.opacity)) : 1;
+    a[R + o] = lo; a[R + o + 1] = Math.max(hi, lo + 1e-3); a[R + o + 2] = 0; a[R + o + 3] = hid ? m : 0;
+  });
+  return a;
+}
+
 const dummyTexture = () => { const t = new THREE.Data3DTexture(new Uint8Array(4), 1, 1, 1); t.format = THREE.RGBAFormat; t.type = THREE.UnsignedByteType; t.needsUpdate = true; return t; };
 const skipDummyTexture = () => { const t = new THREE.Data3DTexture(new Uint32Array(2), 1, 1, 1); t.format = THREE.RGIntegerFormat; t.type = THREE.UnsignedIntType; t.internalFormat = 'RG32UI'; t.minFilter = t.magFilter = THREE.NearestFilter; t.generateMipmaps = false; t.unpackAlignment = 1; t.needsUpdate = true; return t; };
 
@@ -107,6 +143,7 @@ export class WebGlVolumeRenderer {
     this.active = false; this.texture = null; this.seriesId = null; this.dataSignature = ''; this.planSignature = ''; this.textureDims = [1, 1, 1]; this.textureBytes = 0; this.reducedVolume = false;
     this.lastCacheHit = false; this.analysisOverlaySignature = ''; this.volume = null; this.dataGeneration = 0; this.interactive = false; this.interactionTier = 0;
     this.halfExtents = [1, 1, 1]; this.step = 0.002; this.calibration = { slope: 1, intercept: 0, signedBias: 0 };
+    this.childArgs = null; this.childSignature = ''; this.childTexture = null; this.childTexSignature = ''; this.childList = []; this.childLutTexture = null; this.hasChildren = false; this.materialChild = null; this.materialRegionsChild = null; this.makeMaterial = null;
     this.cpu = null; this.edit = null; this.regions = null; this.editArgs = null; this.previewRuns = null; this.mesh = null; this.material = null; this.materialRegions = null;
     this.vrModule = vr || null; this.dummy = dummyTexture(); this.skipDummy = skipDummyTexture();
     this.regionLut = new THREE.DataTexture(new Float32Array(256 * 4), 256, 1, THREE.RGBAFormat, THREE.FloatType); this.regionLut.minFilter = this.regionLut.magFilter = THREE.NearestFilter; this.regionLut.generateMipmaps = false; this.regionLut.needsUpdate = true;
@@ -170,7 +207,7 @@ export class WebGlVolumeRenderer {
     this.planSignature = planSignature; this.dataSignature = dataSignature; this.seriesId = s.id;
     this.ensureMaterial(); this.bindData();
     for (const t of old) t?.dispose();
-    this.applyEdits(); this.applyRegions(true);
+    this.applyEdits(); this.applyRegions(true); this.applyChildren();
     this.onStatus(plan.reduced ? 'WEBGL VOLUME RESIDENT · REDUCED' : 'WEBGL VOLUME RESIDENT');
     this.onRedraw();
   }
@@ -193,9 +230,10 @@ export class WebGlVolumeRenderer {
     const { vertexShader, fragmentShader } = this.vrModule;
     this.uniforms = this.uniformSet();
     const fragment = patchFragmentShader(fragmentShader);
-    const make = defines => { const m = new THREE.ShaderMaterial({ glslVersion: THREE.GLSL3, vertexShader, fragmentShader: fragment, side: THREE.BackSide, toneMapped: false, uniforms: this.uniforms, defines });
+    const make = (defines, frag = fragment) => { const m = new THREE.ShaderMaterial({ glslVersion: THREE.GLSL3, vertexShader, fragmentShader: frag, side: THREE.BackSide, toneMapped: false, uniforms: this.uniforms, defines });
       m.transparent = false; m.depthWrite = false; m.blending = THREE.CustomBlending; m.blendSrc = THREE.OneFactor; m.blendDst = THREE.OneMinusSrcAlphaFactor; return m; };
     this.material = make({}); this.materialRegions = make({ VRL_REGIONS: '' });
+    this.makeMaterial = make; // the two programs with VRL_CHILDREN are made when the first child segment arrives (childMaterial)
     this.mesh = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 2), this.material);
     this.mesh.frustumCulled = false; this.mesh.renderOrder = -10; this.mesh.raycast = () => {}; this.mesh.name = 'webgl_volume'; this.mesh.visible = false;
   }
@@ -285,8 +323,70 @@ export class WebGlVolumeRenderer {
     this.regionLut.needsUpdate = true; u.regionLut.value = this.regionLut;
     u.regionTex.value = this.regionTexture || this.dummy;
     this.hasRegions = !!this.regionTexture;
-    if (this.mesh) this.mesh.material = this.hasRegions ? this.materialRegions : this.material;
+    if (this.mesh) this.mesh.material = this.pickMaterial();
     this.onRedraw();
+  }
+  // ---- child segments ----
+  // the program for the current results / child segments state: with no child segment exactly the two of before
+  pickMaterial() { return this.hasChildren ? this.childMaterial(this.hasRegions) : this.hasRegions ? this.materialRegions : this.material; }
+  childMaterial(regions) {
+    if (!this.materialChild) {
+      const fragment = patchFragmentShader(this.vrModule.fragmentShader, { children: true });
+      this.materialChild = this.makeMaterial({ VRL_CHILDREN: '' }, fragment); this.materialRegionsChild = this.makeMaterial({ VRL_CHILDREN: '', VRL_REGIONS: '' }, fragment);
+    }
+    return regions ? this.materialRegionsChild : this.materialChild;
+  }
+  // entries = childRenderEntries() (segments.js), v = the source volume, signature: changes when anything of the entries changes (the page's syncChildSegmentsToVolume, also called by the WebGPU volume's setChildSegments)
+  setChildSegments(entries, v, signature = '') {
+    if (signature && signature === this.childSignature) return;
+    this.childSignature = signature;
+    this.childArgs = v && entries?.length ? { entries, v } : null;
+    this.applyChildren();
+  }
+  clearChildSegments() { this.childSignature = ''; this.childArgs = null; this.applyChildren(); }
+  applyChildren() {
+    if (!this.childArgs && !this.childTexture) return; // no child segments and none before: nothing at all (the usual data)
+    if (!this.uniforms) return;
+    const u = this.uniforms, a = this.childArgs, items = a && this.texture ? childItemsOfEntries(a.entries) : [];
+    if (!items.length) {
+      const old = this.childTexture; this.childTexture = null; this.childTexSignature = ''; this.childList = [];
+      if (u.childTex) { u.childTex.value = this.dummy; u.childLut.value = this.dummy; }
+      old?.dispose();
+      if (this.hasChildren) { this.hasChildren = false; if (this.mesh) this.mesh.material = this.pickMaterial(); this.onRedraw(); }
+      return;
+    }
+    const dims = maskDims(this.textureDims), texSig = this.textureDims.join('x') + '|' + this.seriesId + '|' + this.dataGeneration + '|' + items.map(i => i.key + ':' + i.hash).join(',');
+    if (!(this.childTexture && this.childTexSignature === texSig)) {
+      const built = buildChildIndexOf(items, [a.v.columns, a.v.rows, a.v.slices], dims), old = this.childTexture;
+      this.childTexture = null; this.childTexSignature = ''; this.childList = built?.list || [];
+      if (built?.ids) {
+        if (built.dropped) console.warn('WebGL volume: ' + built.dropped + ' child segment(s) past the 255th are not drawn.');
+        const t = new THREE.Data3DTexture(built.ids, ...dims); t.format = THREE.RedFormat; t.type = THREE.UnsignedByteType; t.minFilter = t.magFilter = THREE.NearestFilter; t.unpackAlignment = 1; t.generateMipmaps = false; t.needsUpdate = true;
+        this.childTexture = t; this.childTexSignature = texSig;
+      }
+      old?.dispose();
+    }
+    if (!this.childTexture) { this.childList = []; this.hasChildren = false; if (u.childTex) { u.childTex.value = this.dummy; u.childLut.value = this.dummy; } if (this.mesh) this.mesh.material = this.pickMaterial(); this.onRedraw(); return; }
+    syncChildListMasks(this.childList, items); // a reused index texture: the parents' slots may have moved since (the index does not depend on them), the table follows
+    if (!this.childLutTexture) { const t = new THREE.DataTexture(new Float32Array(256 * 12), 256, 3, THREE.RGBAFormat, THREE.FloatType); t.minFilter = t.magFilter = THREE.NearestFilter; t.generateMipmaps = false; this.childLutTexture = t; }
+    if (!u.childTex) { u.childTex = { value: this.dummy }; u.childLut = { value: this.dummy }; } // the uniforms exist only once a child segment does
+    fillChildLut(this.childLutTexture.image.data, this.childList, a.entries, c => { this.color.set(c); return [this.color.r, this.color.g, this.color.b]; }, m => MATERIALS[materialKey(m)]);
+    this.childLutTexture.needsUpdate = true;
+    u.childTex.value = this.childTexture; u.childLut.value = this.childLutTexture;
+    this.hasChildren = true;
+    if (this.mesh) this.mesh.material = this.pickMaterial();
+    this.onRedraw();
+  }
+  // the cut-face shading range of a child without one of its own is the one the app resolves per key (section.shade.ranges); row 1 is rewritten only when one changed (as medical-volume.js refreshChildShade)
+  refreshChildShade(ranges) {
+    const a = this.childArgs, lut = this.childLutTexture; if (!this.hasChildren || !a || !lut) return;
+    const R = 256 * 4, d = lut.image.data, byKey = new Map(a.entries.map(x => [x.key, x])); let dirty = false;
+    this.childList.forEach((e, j) => {
+      const en = byKey.get(e.key), o = (j + 1) * 4; if (!en || j + 1 >= 256) return;
+      const [lo, hi0] = childShadeOf(en, ranges?.[e.key]), hi = Math.max(hi0, lo + 1e-3);
+      if (d[R + o] !== lo || d[R + o + 1] !== hi) { d[R + o] = lo; d[R + o + 1] = hi; dirty = true; }
+    });
+    if (dirty) lut.needsUpdate = true;
   }
   // ---- state the page reads ----
   hasResident() { return false; } // MPR planes come from the MPR cache (CPU), not from this texture
@@ -303,12 +403,13 @@ export class WebGlVolumeRenderer {
     this.dataGeneration++; this.setActive(false);
     if (this.mesh?.parent) this.mesh.parent.remove(this.mesh);
     for (const t of [this.texture, this.bricksTexture, this.editTexture, this.regionTexture]) t?.dispose();
+    this.childTexture?.dispose(); this.childTexture = null; this.childTexSignature = ''; this.childArgs = null; this.childSignature = ''; this.childList = []; this.hasChildren = false;
     this.texture = this.bricksTexture = this.editTexture = this.regionTexture = null; this.cpu = null; this.edit = null; this.hasRegions = false;
     this.seriesId = null; this.dataSignature = ''; this.planSignature = ''; this.volume = null; this.textureDims = [1, 1, 1]; this.textureBytes = 0; this.reducedVolume = false;
     this.editArgs = null; this.previewRuns = null; this.regionsArgs = null; this.regionIndexed = 0; this.regionTexSignature = null; this.analysisOverlaySignature = '';
-    if (this.uniforms) { this.uniforms.vol.value = this.uniforms.sliceVol.value = this.uniforms.bricks.value = null; this.uniforms.editTex.value = this.uniforms.regionTex.value = this.dummy; this.uniforms.editMask.value = this.uniforms.editMaskOnly.value = 0; if (this.mesh) this.mesh.material = this.material; }
+    if (this.uniforms) { this.uniforms.vol.value = this.uniforms.sliceVol.value = this.uniforms.bricks.value = null; this.uniforms.editTex.value = this.uniforms.regionTex.value = this.dummy; this.uniforms.editMask.value = this.uniforms.editMaskOnly.value = 0; if (this.uniforms.childTex) { this.uniforms.childTex.value = this.uniforms.childLut.value = this.dummy; } if (this.mesh) this.mesh.material = this.material; }
   }
-  destroy() { this.resetData(); this.mesh?.geometry?.dispose(); this.material?.dispose(); this.materialRegions?.dispose(); this.dummy.dispose(); this.skipDummy.dispose(); this.regionLut.dispose(); }
+  destroy() { this.resetData(); this.mesh?.geometry?.dispose(); this.material?.dispose(); this.materialRegions?.dispose(); this.materialChild?.dispose(); this.materialRegionsChild?.dispose(); this.childLutTexture?.dispose(); this.dummy.dispose(); this.skipDummy.dispose(); this.regionLut.dispose(); }
   // ---- one frame: the uniforms; the page then calls renderer.render(scene, camera) ----
   render(camera, obj, segmentState, segmentOrder, mpr = {}) {
     if (!this.active || !this.texture || !this.mesh || !obj) return;
@@ -333,6 +434,7 @@ export class WebGlVolumeRenderer {
     const sh = mpr.section?.shade || {}, shadeOn = ps.shade;
     u.capShade.value = shadeOn ? 1 : 0; u.ctShade.value = shadeOn ? 1 : 0;
     u.ctShadeBright.value = brightOf(sh.bright ?? SHADE_BRIGHT_DEFAULT); u.ctShadeContrast.value = contrastOf(sh.contrast ?? SHADE_CONTRAST_DEFAULT);
+    if (this.hasChildren) this.refreshChildShade(sh.ranges);
     for (let s = 0; s < 4; s++) { const r = sh.ranges?.[segmentOrder[s]]; if (r && Number.isFinite(r.lower) && Number.isFinite(r.upper)) u.ctShadeRange.value[s].set(r.lower, r.upper); else u.ctShadeRange.value[s].set(0, 1); }
   }
   // ---- pick (CPU) ----

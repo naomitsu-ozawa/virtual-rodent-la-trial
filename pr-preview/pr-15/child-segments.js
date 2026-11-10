@@ -4,9 +4,9 @@
 //        opacity, material, shade ({lower, upper} | null = auto), hash (of the runs: the device cache key of the parent), shadeAuto? (never saved)}.
 // The child's voxels belong to it: the parent segment is built WITHOUT them (segments.js: the child keys are among the parent's "sources", the voxel takers that are subtracted), so hiding a child makes its voxels
 // invisible instead of showing the parent's surface there. Pure data + project (de)serialisation, no DOM, no three.js: unit-tested (tests/unit/child-segments.test.js).
-import { childSegments, setChildSegments, setNextChildSegmentId, incNextChildSegmentId } from './state.js?v=20261109-build704';
-import { childSegApplyLook, childSegLookToProject, childSegColorCss, childSegNormalizeName, isChildKey } from './segment-look.js?v=20261109-build704';
-import { analysisRunsVoxelCount, unionAnalysisRuns, intersectRunArrays } from './run-length.js?v=20261109-build704';
+import { childSegments, setChildSegments, setNextChildSegmentId, incNextChildSegmentId } from './state.js?v=20261110-build705';
+import { childSegApplyLook, childSegLookToProject, childSegColorCss, childSegNormalizeName, isChildKey } from './segment-look.js?v=20261110-build705';
+import { analysisRunsVoxelCount, unionAnalysisRuns, intersectRunArrays } from './run-length.js?v=20261110-build705';
 // the parents a child can hang under = the preset keys (segments.js SEGMENT_PRESET_ORDER; asserted equal in the unit test: segments.js imports this module, so it cannot be imported here)
 export const CHILD_PARENT_KEYS = ['bone', 'soft', 'fat', 'lung', 'contrast'];
 // at most this many child segments (the GPU volume's index texture is r8uint: 0 = none, 1..255 = the child); more are refused by the button and left out of a project that has more
@@ -45,6 +45,13 @@ export function addChildSegment(src) {
 export function removeChildSegment(key) {
   const i = childSegments.findIndex(c => c.key === key); if (i < 0) return null;
   return childSegments.splice(i, 1)[0];
+}
+// the child's mask was edited (3D edit: segments.js segmentEditsChanged): the new final runs replace it; the voxel count and the hash (the cache key of the parent and of every renderer) follow. The listeners get kind 'edit'.
+export function setChildRuns(key, runsBySlice) {
+  const c = childByKey(key); if (!c || !Array.isArray(runsBySlice)) return null;
+  c.runsBySlice = runsBySlice; c.voxels = analysisRunsVoxelCount(runsBySlice); c.hash = childRunsHash(runsBySlice);
+  emitChildSegChange('edit', key, ['mask']);
+  return c;
 }
 export function clearChildSegments() { const old = childSegments.slice(); setChildSegments([]); setNextChildSegmentId(1); return old; }
 

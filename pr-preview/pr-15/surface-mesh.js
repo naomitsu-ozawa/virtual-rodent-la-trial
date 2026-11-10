@@ -1,16 +1,16 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { indexedGeometryFromTrianglePositions, makeSource3DCoordinates, makeVolume3DCoordinates, Float32FaceBuilder, appendAnalysisRunBoundaryFaces } from './mesh-geometry.js?v=20261109-build704';
+import { indexedGeometryFromTrianglePositions, makeSource3DCoordinates, makeVolume3DCoordinates, Float32FaceBuilder, appendAnalysisRunBoundaryFaces } from './mesh-geometry.js?v=20261110-build705';
 import * as THREE from './vendor/three@0.186.0/build/three.webgpu.js';
-import { createSurfaceMaterial } from './mesh-material.js?v=20261109-build704';
-import { list, surfaceSmoothStrength } from './ui-shell.js?v=20261109-build704';
-import { segmentState, segmentEditState, segmentById } from './segments.js?v=20261109-build704';
-import { isChildKey } from './segment-look.js?v=20261109-build704';
-import { surfaceSmoothingActive } from './settings.js?v=20261109-build704';
-import { frameYield } from './utils.js?v=20261109-build704';
-import { constrainedSmoothPositions, constrainedSmoothSchedule } from './constrained-smooth.js?v=20261109-build704';
-import { smoothChunkHalo, createSeamLinker, OrderedChunkSmoother } from './smooth-chunks.js?v=20261109-build704';
-import { smoothMethod } from './smooth-workers.js?v=20261109-build704';
+import { createSurfaceMaterial } from './mesh-material.js?v=20261110-build705';
+import { list, surfaceSmoothStrength } from './ui-shell.js?v=20261110-build705';
+import { segmentState, segmentEditState, segmentById } from './segments.js?v=20261110-build705';
+import { isChildKey } from './segment-look.js?v=20261110-build705';
+import { surfaceSmoothingActive } from './settings.js?v=20261110-build705';
+import { frameYield } from './utils.js?v=20261110-build705';
+import { constrainedSmoothPositions, constrainedSmoothSchedule } from './constrained-smooth.js?v=20261110-build705';
+import { smoothChunkHalo, createSeamLinker, OrderedChunkSmoother } from './smooth-chunks.js?v=20261110-build705';
+import { smoothMethod } from './smooth-workers.js?v=20261110-build705';
 // ignoreCut: runs that are not the segment itself (an analysis region), so the
 // segment's raw cut faces do not apply
 // slices of the neighbouring chunks smoothed with a chunk: smoothChunkHalo
