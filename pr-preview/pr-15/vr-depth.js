@@ -10,6 +10,8 @@ export const normalizeLabelHide = v => (v === 0 || v === '0' || v === false) ? L
 export const gpuOcclusionActive = (setting, caps) => normalizeLabelHide(setting) === LABEL_HIDE_REAL && !!caps && !caps.logarithmicDepthBuffer && !caps.reversedDepthBuffer;
 
 export const GHOST_ALPHA = 0.15;
+// a pinned result label whose base point is inside shown tissue and cannot be pushed out (vr-label-occlusion.js): card + leader opacity, drawn without a depth test
+export const EMBEDDED_ALPHA = 0.45;
 // which pass an object gets: true = depth tested + a ghost (GreaterDepth, GHOST_ALPHA) child; false = drawn on top without a depth test and without a ghost.
 // occlusion = gpuOcclusionActive(); lit = the object is operable right now (laser on it, grabbed, selected, being moved) and must stay fully visible.
 export const occludedPass = (occlusion, lit) => !!occlusion && !lit;
@@ -47,3 +49,9 @@ export function perspectiveDepth(zEye, near, far) {
 // hit = the raycaster hit of one board ({distance}) or null; tissueDistance = the volume surface hit distance along the same ray (world metres; null / undefined = none). true = the board is visible there.
 // (The rings are drawn without a depth test, so they are not subject to this rule.)
 export const boardVisible = (hit, tissueDistance) => !!hit && !(tissueDistance != null && tissueDistance < hit.distance);
+
+// the material state of a pinned result label (card + leader) from the setting and the card's state (vr-view.js pinOcclusion):
+// gpu = gpuOcclusionActive(); lit = the laser on it / held; trans = embedded in shown tissue and not pushed out (vr-label-occlusion.js).
+// depthTest false = drawn on top. Old mode (no GPU occlusion): on top, opaque (card 1, leader 0.9: the values drawLabel gives a pinned card). One shared object per state (no allocation per frame).
+const PIN_ON_TOP = Object.freeze({ depthTest: false, card: 1, line: 0.9 }), PIN_HIDDEN = Object.freeze({ depthTest: true, card: 1, line: 0.9 }), PIN_EMBEDDED = Object.freeze({ depthTest: false, card: EMBEDDED_ALPHA, line: EMBEDDED_ALPHA });
+export const pinMaterialState = (gpu, lit, trans) => !gpu || lit ? PIN_ON_TOP : trans ? PIN_EMBEDDED : PIN_HIDDEN;

@@ -4,8 +4,9 @@
 //  - openAndPrepare: the order after a card press (open the data, wait until the page is quiet, wait for the standard-open record, prepare the VR data)
 //  - waitForStandardOpen: the bounded wait for the record standard-open.js sets (so the prepared entry is marked standard)
 //  - createInflight: a run that is already in flight is shared, never started twice
-import { EVENT_DATASETS } from './event-mode.js?v=20261110-build705';
-import { sampleCredit } from './sample-registry.js?v=20261110-build705';
+import { EVENT_DATASETS } from './event-mode.js?v=20261110-build706';
+import { sampleCredit } from './sample-registry.js?v=20261110-build706';
+import { isSampleId } from './sample-sets.js?v=20261110-build706';
 
 // One card per dataset of the list. thumb = where the 16:9 picture would be (docs/demo/<sample>/thumb.webp; the page shows an empty frame when the file is not there).
 // credit = the credit of the dataset when its sample.json has one (credit / license / changes / terms), else null - the datasets without one show no license line.
@@ -47,7 +48,7 @@ export async function openAndPrepare({ open, settle, standard = async () => {}, 
 // after the page settled. The prepared VR data is marked standard only if the record is there when it is stored, so the preparation waits for it: no event exists for it, therefore a poll every pollMs (sleeping, not busy),
 // at most timeoutMs (default 10 s: the gate needs 1.2 s of a quiet page + one 200 ms poll). Not a practice dataset (no record is ever made) -> returns at once. Returns true when the record of `sample` is there; false after
 // the bound or when stop() says the run is stale (the preparation then goes on as it did before: the entry just is not standard).
-export const isPracticeSample = id => typeof id === 'string' && /^sample\d+$/.test(id);
+export const isPracticeSample = isSampleId; // the ONE folder name rule (sample-sets.js)
 export async function waitForStandardOpen({ sample, read, stop = () => false, timeoutMs = 10000, pollMs = 100, sleep = ms => new Promise(r => setTimeout(r, ms)) }) {
   if (!isPracticeSample(sample)) return false;
   const has = () => { try { return read()?.id === sample; } catch { return false; } };

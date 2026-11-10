@@ -1038,8 +1038,10 @@ html.vrl-ipad-ui .point-menu-btn{min-height:44px;min-width:64px;font-size:15px}
 .comment-lines-3d .analysis-leader-3d.is-lit{stroke:#ffe27a!important;stroke-opacity:1;stroke-width:2}
 .comment-lines-3d .analysis-anchor-3d{stroke:#fff;stroke-width:1;stroke-opacity:.9}
 .analysis-label-3d,.analysis-leader-3d{transition:opacity .15s}
-.analysis-label-3d.is-behind,.analysis-leader-3d.is-behind{opacity:.3}
-.analysis-label-3d.is-behind.is-lit,.analysis-label-3d.is-behind.is-dragging,.analysis-leader-3d.is-behind.is-lit{opacity:1}
+/* behind a volume = hidden completely (label, leader, anchor dot; a card being dragged stays); embedded in shown tissue and not pushed out = translucent; under a nearer overlapping card = hidden (a lit one always shows) */
+.analysis-label-3d.is-behind:not(.is-lit):not(.is-dragging),.analysis-leader-3d.is-behind:not(.is-lit),.comment-lines-3d .analysis-anchor-3d.is-behind:not(.is-lit){visibility:hidden}
+.analysis-label-3d.is-faint:not(.is-lit):not(.is-dragging),.analysis-leader-3d.is-faint:not(.is-lit),.comment-lines-3d .analysis-anchor-3d.is-faint:not(.is-lit){opacity:.45}
+.analysis-label-3d.is-overlapped:not(.is-lit):not(.is-dragging),.analysis-leader-3d.is-overlapped:not(.is-lit),.comment-lines-3d .analysis-anchor-3d.is-overlapped:not(.is-lit){visibility:hidden}
 @media (prefers-reduced-motion:reduce){.analysis-label-3d,.analysis-leader-3d{transition:none}}
 .analysis-label-actions{display:flex;flex-wrap:wrap;gap:6px}
 .analysis-label-actions button{min-height:32px;border:1px solid rgb(var(--ui-b3));border-radius:7px;background:rgb(var(--ui-s2));color:rgb(var(--ui-t2));padding:5px 8px;font-size:10px;font-weight:750;cursor:pointer;pointer-events:auto}
