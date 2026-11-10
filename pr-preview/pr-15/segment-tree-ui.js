@@ -1,13 +1,13 @@
 // The controls of one CHILD SEGMENT (a segment added under a preset card in the tree,; ported from the tree-segments work d99f5414 segment-tree-ui.js, applied to child segments only): the SAME controls as a preset segment card, built from the same pieces so that they look and behave the same:
 // opacity slider (the card's .segment-range row), display mode (the card's .segment-material-row select, lighting.js MATERIALS), cut-face shading range (lower / upper sliders with − / ＋ and 「自動に戻す」, the section panel's
 // controls, section-shade.js). Everything reads / writes the ONE segment interface (segments.js segmentById / setChildLook / setSegmentShadeEnd), so VR and the browser stay one state.
-import { segmentById, setChildLook, segmentShadeRange, segmentShadeSpan, setSegmentShadeEnd, resetSegmentShadeRange, shadeDataRange, onShadeAutoChange, onChildSegLookChange } from './segments.js?v=20261110-build706';
-import { CHILD_SEG_MATERIALS, CHILD_SEG_NAME_MAX } from './segment-look.js?v=20261110-build706';
-import { childByKey } from './child-segments.js?v=20261110-build706';
-import { shadeRangeStep, shadeValueAt, shadePosOf } from './cap-shade.js?v=20261110-build706';
-import { wireStepButton, stepClamp } from './value-step.js?v=20261110-build706';
-import { formatCtValue } from './utils.js?v=20261110-build706';
-import { tr } from './i18n.js?v=20261110-build706';
+import { segmentById, setChildLook, segmentShadeRange, segmentShadeSpan, setSegmentShadeEnd, resetSegmentShadeRange, shadeDataRange, onShadeAutoChange, onChildSegLookChange } from './segments.js?v=20261110-build707';
+import { CHILD_SEG_MATERIALS, CHILD_SEG_NAME_MAX } from './segment-look.js?v=20261110-build707';
+import { childByKey } from './child-segments.js?v=20261110-build707';
+import { shadeRangeStep, shadeValueAt, shadePosOf } from './cap-shade.js?v=20261110-build707';
+import { wireStepButton, stepClamp } from './value-step.js?v=20261110-build707';
+import { formatCtValue } from './utils.js?v=20261110-build707';
+import { tr } from './i18n.js?v=20261110-build707';
 
 const MATERIAL_LABEL = { standard: 'matStandard', solid: 'matSolid', plaster: 'matPlaster', plastic: 'matPlastic' };
 // the actions the page injects (app.js: deleteChild(key)), so that this module imports nothing of the 3D code

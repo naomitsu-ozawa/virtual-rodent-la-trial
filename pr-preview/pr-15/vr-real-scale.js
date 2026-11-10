@@ -51,12 +51,12 @@ export function realHolderScale(longMm) {
   return clampScale(realScaleOf(longMm), longMm);
 }
 
-export const MIN_START_LONG_M = 0.02;
+export const MIN_START_LONG_M = 0.05;
 export function startHolderScale(longMm, fallbackScale, mag = 1) {
   const r = realHolderScale(longMm); // null: unknown physical size or oversize data -> the fit, whatever the magnification
   if (r) {
     let s = r * (mag > 0 ? mag : 1);
-    if (longMm < 20) s = Math.max(s, MIN_START_LONG_M / NORM_LONG);
+    if (longMm < 50) s = Math.max(s, MIN_START_LONG_M / NORM_LONG);
     return clampScale(s, longMm);
   }
   return clampScale(fallbackScale, longMm);
@@ -75,6 +75,39 @@ export function pinchScale(s0, d0, d, longMm) {
   const l = scaleLimits(longMm);
   if (l.locked) return l.max;
   return clampScale(s0 * d / Math.max(d0, 1e-3), longMm);
+}
+
+// slider position (0..1) <-> holder scale, logarithmic between the limits of scaleLimits (left end = the lower limit = real size,
+// right end = the upper limit = 0.30 m longest side; unknown size: FALLBACK_MIN..FALLBACK_MAX). Locked (oversize) data has no range: position 0 / the locked scale.
+// The ends are returned exactly (no exp / log round trip), everything in between is clamped into the limits.
+export function scalePosOf(s, longMm) {
+  const l = scaleLimits(longMm);
+  if (l.locked || !(l.max > l.min) || !(s > 0)) return 0;
+  return Math.min(1, Math.max(0, Math.log(s / l.min) / Math.log(l.max / l.min)));
+}
+export function posToScale(pos, longMm) {
+  const l = scaleLimits(longMm);
+  if (l.locked) return l.max;
+  const p = Math.min(1, Math.max(0, +pos || 0));
+  if (p <= 0) return l.min;
+  if (p >= 1) return l.max;
+  return clampScale(l.min * Math.pow(l.max / l.min, p), longMm);
+}
+// the same in the shown unit, the real-size magnification (known physical size only; 0 / 0 without one)
+export const magToPos = (mag, longMm) => (longMm > 0 ? scalePosOf(mag * realScaleOf(longMm), longMm) : 0);
+export const posToMag = (pos, longMm) => (longMm > 0 ? realMagnification(posToScale(pos, longMm), longMm) : 0);
+
+// the 表示 tab's row of the VR full menu (1024 px board, rows 80 px apart, the bottom row at yb): 拡大率 label + slider + the 実寸 button on one row (yb - 320), and the
+// 「よく使う（リング）を設定」 button on the histogram row (yb - 480) beside its 線形 / 対数 buttons (which end at x = X + 512): the row below the 実寸 button is full, so no row is added.
+// Pure so that the coordinates are tested. textMax = the width the slider's value text may use (it shrinks to it, up to the 実寸 button).
+export function viewTabScaleLayout(yb, W = 1024, X = 40) {
+  const H = 72, real = { x: W - X - 290, y: yb - 320, w: 290, h: H }, sx = 170, sw = 230;
+  return {
+    wheel: { x: X + 530, y: yb - 480, w: W - X - (X + 530), h: H },
+    label: { x: X, y: yb - 320 + 36 },
+    slider: { x: sx, y: yb - 320, w: sw, h: H, textX: sx + sw + 30, textMax: real.x - 12 - (sx + sw + 30) },
+    real,
+  };
 }
 
 // the section frame (outline, grab band, number tag, glow) is UI, not volume: it is a child of the holder, so it used to grow with the zoom

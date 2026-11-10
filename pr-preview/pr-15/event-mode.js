@@ -2,7 +2,7 @@
 // Four levels, each one of the bundled practice datasets (docs/demo/sampleN, the same set ids as the practice-data chooser);
 // texts are i18n keys (i18n.js). The switch is settings.eventMode (app-settings.js, per device, default off); the chosen
 // level lives only in this page (a reload starts with none chosen) and follows whichever practice dataset was opened last.
-import { registry, sampleKey } from './sample-registry.js?v=20261110-build706';
+import { registry, sampleKey } from './sample-registry.js?v=20261110-build707';
 export const EVENT_HINT_KEYS={section:'evHintSection',move:'evHintMove',toggle:'evHintToggle',mark:'evHintMark',distance:'evHintDistance'};
 // the levels, the other datasets and each dataset's starting segments are no longer tables here: they come from the registry (sample-registry.js), built from the sample.json
 // of every docs/demo/sampleN folder. Order: Lv0..Lv3 by the level field, then the datasets without a level by folder number. Names / missions are i18n keys the registry adds (sampleKey).
@@ -98,6 +98,10 @@ export function simpleMenuLayout(o){
  const so=sliceOpacityValue(o.sliceOpacity??SLICE_OPACITY_DEFAULT);
  label('sliceOpacity:name',X,y+40,t.sliceOpacity,{color:'#cfe3f0',bold:true,size:34});
  w.push({type:'slider',id:'sliceOpacity',x:440,y,w:330,h:M.BTN_H,value:so,text:Math.round(so*100)+'%'});y+=M.ROW;
+ // 拡大率 (o.scale = {pos 0..1 (log, vr-real-scale.js scalePosOf), text (「×N（実寸比）」, '' when the size is unknown; the locked note when locked), locked}): the volume's scale, under the slice-opacity row.
+ // Left end = real size, right end = the upper limit. Locked data (longest side over 30 cm): the slider is disabled. Without o.scale the row is not drawn.
+ if(o.scale){label('scale:name',X,y+40,t.scale,{color:'#cfe3f0',bold:true,size:34});
+  w.push({type:'slider',id:'scale',x:440,y,w:260,h:M.BTN_H,value:Math.min(1,Math.max(0,+o.scale.pos||0)),text:o.scale.text||'',...(o.scale.locked?{disabled:true}:{})});y+=M.ROW}
  if(o.trigger?.show){
   // the trigger switch: the lit button is what the trigger does now, the line below says it in words
   const lab=!!o.trigger.label;
