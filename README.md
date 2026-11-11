@@ -16,6 +16,14 @@
 
 ### 同梱の練習データ
 
+- アグーチ頭蓋: アグーチ（Dasyprocta agouti）頭蓋 microCT・骨ラベル14クラス付き（{mb}）
+- コアリクイ頭蓋: コアリクイ（Tamandua sp.）頭蓋 microCT・骨ラベル15クラス付き（{mb}）
+- イエネコ頭蓋: イエネコ（Felis catus）頭蓋 microCT・骨ラベル15クラス付き（{mb}）
+- ニワトリ胚の心臓（正常）: ニワトリ胚心臓の microCT・正常（対照）個体（{mb}）
+- ニワトリ胚の心臓（ファロー四徴症モデル）: ニワトリ胚心臓の microCT・ファロー四徴症モデル個体（{mb}）
+- イヌ前肢CT・骨ラベル4クラス付き（名称なし、約9MB）（{mb}）
+- マウス全身 microCT・臓器ラベル付き（{mb}）
+- ラット脳 MRI アトラス（SIGMA）: Wistarラット脳の ex vivo MRI（T2*・90µm）テンプレート。解剖アトラスの222領域を名前なしの子セグメントとして収録（{mb}）
 - ラット腹部（{mb}）
 - マウス腹部（{mb}）
 - マウス頭部（{mb}）
@@ -95,6 +103,14 @@ All practice data is bundled with this site.
 
 #### Bundled practice data
 
+- Agouti skull: Agouti (Dasyprocta agouti) skull micro-CT with 14 labelled bone classes ({mb})
+- Anteater skull: Anteater (Tamandua sp.) skull micro-CT with 15 labelled bone classes ({mb})
+- Cat skull: Domestic cat (Felis catus) skull micro-CT with 15 labelled bone classes ({mb})
+- Chick embryo heart (control): Micro-CT of a chick embryo heart, control ({mb})
+- Chick embryo heart (tetralogy of Fallot model): Micro-CT of a chick embryo heart, tetralogy of Fallot model ({mb})
+- Dog forelimb CT with four bone label classes, unnamed ({mb})
+- Mouse whole body: Mouse whole-body micro-CT with organ labels ({mb})
+- Rat brain MRI atlas (SIGMA): Ex vivo MRI (T2*, 90 um) template of a Wistar rat brain (SIGMA). The 222 atlas regions are included as unnamed child segments ({mb})
 - Rat abdomen ({mb})
 - Mouse abdomen ({mb})
 - Mouse head ({mb})

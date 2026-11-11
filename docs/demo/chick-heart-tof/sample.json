@@ -1,0 +1,36 @@
+{
+  "name": {
+    "ja": "ニワトリ胚の心臓（ファロー四徴症モデル）",
+    "en": "Chick embryo heart (tetralogy of Fallot model)"
+  },
+  "level": null,
+  "description": {
+    "ja": "ニワトリ胚心臓の microCT・ファロー四徴症モデル個体（{mb}）",
+    "en": "Micro-CT of a chick embryo heart, tetralogy of Fallot model ({mb})"
+  },
+  "credit": {
+    "name": "Rugonyi Lab, Oregon Health & Science University",
+    "url": "https://doi.org/10.5061/dryad.hdr7sqvg5",
+    "dataUrl": "https://doi.org/10.5061/dryad.hdr7sqvg5"
+  },
+  "license": {
+    "name": "CC0 1.0",
+    "url": "https://creativecommons.org/publicdomain/zero/1.0/"
+  },
+  "changes": {
+    "ja": "元の Rigaku .VOX 形式データ（512×512×512・0.020mm等方）から心臓を含む範囲を切り出して DICOM に変換。出典にセグメンテーションは含まれないため、心臓壁が拾える初期の閾値セグメント（軟部組織プリセット、格納値 3500〜15774）を設定したのみで、内部構造の切り分けは行っていない。正常（対照）個体のデータセットと対になる。本アプリで3D再構成",
+    "en": "Cropped to the heart and converted from the original Rigaku .VOX volume (512x512x512, 0.020 mm isotropic) to DICOM. The source ships no segmentation, so only an initial threshold segment that captures the heart wall is set (soft-tissue preset, stored values 3500-15774); the internal structures are deliberately left undivided. Pairs with the control (normal) heart dataset. 3D reconstruction and rendering in this app"
+  },
+  "size": {
+    "dims": [
+      464,
+      272,
+      503
+    ],
+    "megabytes": 128.2
+  },
+  "terms": {
+    "ja": "CC0（パブリックドメイン提供）として公開されており、出典表示なしでも利用・改変できます。",
+    "en": "Released under CC0 (public domain dedication); you may use and adapt it for any purpose, with or without attribution."
+  }
+}

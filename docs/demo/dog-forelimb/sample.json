@@ -1,0 +1,36 @@
+{
+  "name": {
+    "ja": "イヌ前肢",
+    "en": "Dog forelimb"
+  },
+  "description": {
+    "ja": "イヌ前肢CT・骨ラベル4クラス付き（名称なし、約9MB）（{mb}）",
+    "en": "Dog forelimb CT with four bone label classes, unnamed ({mb})"
+  },
+  "credit": {
+    "name": "He, Yichen et al. (SPROUT paper data)",
+    "url": "https://zenodo.org/records/24047383",
+    "dataUrl": "https://zenodo.org/records/24047383"
+  },
+  "license": {
+    "name": "CC BY 4.0",
+    "url": "https://creativecommons.org/licenses/by/4.0/"
+  },
+  "terms": {
+    "ja": "出典を表示すれば、営利・非営利を問わず利用・改変できます。",
+    "en": "You may use and adapt it for any purpose, including commercial use, with attribution."
+  },
+  "level": null,
+  "changes": {
+    "ja": "元の8-bit TIFFスタック（個体228420、ダックスフント）からDICOMに変換、骨ラベル4クラスを骨セグメントのマスクとして登録、子セグメントで4クラスを個別登録（名称なし＝学習者が自分で同定して名前を付ける形式、親セグメントの表示は子の差し引きで0になる）、本アプリで3D再構成",
+    "en": "Converted from the original 8-bit TIFF stacks (specimen 228420, Dachshund) to DICOM; the four bone label classes registered as the bone segment mask and, individually as child segments without names (learners identify and name the bones themselves; the parent segment's own display is fully subtracted by its children); 3D reconstruction and rendering in this app"
+  },
+  "size": {
+    "dims": [
+      116,
+      226,
+      151
+    ],
+    "megabytes": 8.3
+  }
+}

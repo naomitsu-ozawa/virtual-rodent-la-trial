@@ -1,0 +1,36 @@
+{
+  "changes": {
+    "en": "converted from the original TIFF stacks (micro-CT 1042x577x749, 0.09 mm isotropic) to DICOM: the skull spans the whole scan grid, so no crop was applied; downsampled by block averaging (z x3, y x2, x x2) to 348 slices x 289 x 375; the 15 labelled bone classes present in the source are registered as unnamed child segments under the bone segment (colour-coded only, no names - identifying each bone is the learning task), so the bone segment's own display is fully subtracted by its children; 3D reconstruction and rendering in this app",
+    "ja": "元のTIFFスタック（micro-CT 1042×577×749、0.09mm等方）からDICOMに変換：頭蓋がスキャン全域に及ぶためクロップなし。ブロック平均で間引き（z×3・y×2・x×2）して348枚×289×375に。出典ラベルの15クラスは骨セグメントの下位に名称なしの子セグメントとして色分けのみで登録（各骨の同定は学習者の課題）。親セグメントの表示は子の差し引きで0になる。本アプリで3D再構成"
+  },
+  "credit": {
+    "dataUrl": "https://zenodo.org/records/24047383",
+    "name": "He, Yichen — SPROUT dataset (University of Sheffield / Natural History Museum, London)",
+    "url": "https://zenodo.org/records/24047383"
+  },
+  "description": {
+    "en": "Domestic cat (Felis catus) skull micro-CT with 15 labelled bone classes ({mb})",
+    "ja": "イエネコ（Felis catus）頭蓋 microCT・骨ラベル15クラス付き（{mb}）"
+  },
+  "level": null,
+  "license": {
+    "name": "CC BY 4.0",
+    "url": "https://creativecommons.org/licenses/by/4.0/"
+  },
+  "name": {
+    "en": "Cat skull",
+    "ja": "イエネコ頭蓋"
+  },
+  "terms": {
+    "en": "You may use and adapt it for any purpose, including commercial use, with attribution.",
+    "ja": "出典を表示すれば、営利・非営利を問わず利用・改変できます。"
+  },
+  "size": {
+    "dims": [
+      375,
+      289,
+      348
+    ],
+    "megabytes": 76.3
+  }
+}
