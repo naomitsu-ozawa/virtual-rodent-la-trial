@@ -419,7 +419,7 @@ describe('static wiring', () => {
   });
   it('the かんたん menu: tab 10 hides the tab bar, rows come from the loaded data (no level), すべての設定 opens the full menu, かんたん comes back (event mode only)', () => {
     const src = read('vr-view.js');
-    expect(src).toContain('if(ui.tab!==10){const tw=(MENU_W-2*X)/L.tabs.length,TAB_IDS=[0,1,2,3,4,5,6,9,11];'); // the 9th tab is データ (11)
+    expect(src).toContain('if(ui.tab!==10){const TAB_IDS=[0,1,2,3,4,5,6,9,11],tabIx=L.tabs.map((_,i)=>i).filter(i=>TAB_IDS[i]!==11||levelSwitchOn()),tw=(MENU_W-2*X)/tabIx.length;'); // the 9th tab is データ (11);: only while the open data has a level
     expect(src).toContain("if(evMenu&&ui.tab!==10)btn(560,18,200,tr('evSimple'),false,()=>{ui.tab=10},{size:28});");
     const block = src.match(/if\(ui\.tab===10\)\{[\s\S]*?\}else if\(ui\.tab===0\)\{/)[0];
     expect(block).toContain('keys=simpleMenuSegments(act)');

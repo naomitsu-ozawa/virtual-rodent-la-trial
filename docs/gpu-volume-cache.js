@@ -7,7 +7,7 @@
 //
 // IndexedDB layout: 'entries' {key, bytes, slices, bytesPerSlice, info,
 // complete, created, lastUsed}; 'slices' keyed [key, index] -> Uint8Array.
-import { protectedKeys } from './vr-prep-cache.js?v=20261111-build713';
+import { protectedKeys } from './vr-prep-cache.js?v=20261111-build714';
 const DB_NAME='vrl-gpu-volume-cache',DB_VERSION=1,FORMAT=1;
 
 export async function cacheKey(parts){

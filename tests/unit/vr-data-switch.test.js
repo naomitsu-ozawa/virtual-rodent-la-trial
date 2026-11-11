@@ -285,8 +285,8 @@ describe('vr-view.js: the data of the session can be replaced (static wiring)', 
     expect(src).toContain("fail:e=>{console.error('VR data switch failed',e);ui.swapFailed=true;ui.flash='';ui.flashUntil=0;");
     expect(src).toContain('ui.swapBusy=true;ui.swapFailed=false;');
     expect(src).toContain('const pressReset=()=>{\n  if(ui.swapBusy)return;');
-    expect(src).toContain("const practiceOpen=()=>!!globalThis.__vrlOpenSample");
-    expect(src).toContain('if(!practiceOpen()&&!ui.swapBusy)label(X,y0+150,L.dataOwn');
+    expect(src).toContain("const levelSwitchOn=()=>sampleHasLevel(globalThis.__vrlOpenSample)");
+    expect(src).not.toContain('L.dataOwn,{size'); // own data / a dataset without a level gets no データ tab at all, so the explanation line is not drawn any more
     expect(src).toContain('catch(e){if(running)throw e}'); // a compile that ends with the session is not an error
     expect(src).toContain('function abortVrPrepare(){'); expect(src).toContain("if(prep.disposed)throw new Error('VR preparation cancelled')");
   });
@@ -379,19 +379,19 @@ describe('vr-view.js: the data of the session can be replaced (static wiring)', 
     expect(src).toContain('resetForNewData();swapPlace=true;\n     {const t=performance.now();install(Pn,assets,false);ownNote(\'install\',t)}');
   });
   it('the data / level buttons: arm, then switch; none while a switch runs; the same data does nothing; the menus have the row / the tab', () => {
-    const sp = src.slice(src.indexOf('const swapPress=setId=>{'), src.indexOf('const swapPress=setId=>{') + 420);
-    expect(sp).toContain('if(ui.swapBusy||!setId)return;'); expect(sp).toContain('setId===globalThis.__vrlOpenSample&&!(ui.swapFailed||!P||!mesh)');
+    const sp = src.slice(src.indexOf('const swapPress=setId=>{'), src.indexOf('const swapPress=setId=>{') + 520);
+    expect(sp).toContain('if(ui.swapBusy||!setId||!canSwitchData(globalThis.__vrlOpenSample,setId))return;'); expect(sp).toContain('setId===globalThis.__vrlOpenSample&&!(ui.swapFailed||!P||!mesh)');
     expect(sp).toContain('resetPress(swapArmedId()===setId?ui.swapArm.until:0,performance.now())');
     expect(sp).toContain('if(r.fire){ui.swapArm=null;void swapData(setId)}');
     expect(src).toContain('if(!running||ui.swapBusy)return false;');
     expect(src).toContain("acts['level:'+l.id]=()=>swapPress(l.sample)");
-    expect(src).toContain('levels:(eventModeOn()||(tutLive&&!tutEnded))&&practiceOpen()?{items:levelSwitchItems(tr,globalThis.__vrlOpenSample');
+    expect(src).toContain('levels:(eventModeOn()||(tutLive&&!tutEnded))&&levelSwitchOn()?{items:levelSwitchItems(tr,globalThis.__vrlOpenSample');
     expect(src).toContain('}else if(ui.tab===11){');
     expect(src).toContain("tabs:['表示','断面','スライス','画質','詳細','解析','位置','HU線','データ']");
   });
   it('the データ row of the かんたん menu is also there during the live tutorial (event mode off), and only for practice data; event mode keeps showing it', () => {
-    expect(src).toContain('(eventModeOn()||(tutLive&&!tutEnded))&&practiceOpen()');
-    expect(src).not.toContain('levels:eventModeOn()&&practiceOpen()'); // the old, event-mode-only condition is gone
+    expect(src).toContain('(eventModeOn()||(tutLive&&!tutEnded))&&levelSwitchOn()');
+    expect(src).not.toContain('levels:eventModeOn()&&levelSwitchOn()'); // the old, event-mode-only condition is gone
     expect(src).toContain('const evMenu=eventModeOn()||tutLive;'); // the かんたん menu (where the row is drawn) is already the live tutorial's menu
   });
   it('the session end cancels a running switch, empties the queue, and disposes what the switch made (the program sets too)', () => {
