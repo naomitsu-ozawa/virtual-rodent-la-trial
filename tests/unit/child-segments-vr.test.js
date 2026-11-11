@@ -61,7 +61,7 @@ describe('the VR shader keeps child segments out of every session without them',
   });
   it('the existing anchors of the no-WebGPU branch are unchanged (the child code is in new delimited blocks)', () => {
     for (const a of [
-      'VRL_MP vec3 lit=regionColor(hp+dir*(0.75*voxelMin),segC[idx].rgb,idx)*diffuse+vec3(spec);',
+      'VRL_MP vec3 vrlC=regionColor(hp+dir*(0.75*voxelMin),segC[idx].rgb,idx);VRL_MP vec3 lit=vrlC*diffuse+vec3(spec);', // the plain expression kept, the colour named for vrlReal
       'VRL_MP vec3 lit=mix(regionColor(cp,segC[ci].rgb,ci),vec3(1.0),0.22)*diffuse;',
       'clamp(segA[ci].z,0.03,1.0)', 'uniform int capOn;', 'void main(){\n gl_FragDepth=gl_FragCoord.z;', 'float ctLumHU(float hu,int s){',
       'vec3 regionColor(vec3 p,vec3 base,int s){\n int i=int(texture(regionTex,clamp(texCoord(p),vec3(0.0),vec3(0.999999))).r*255.0+0.5);',
@@ -77,7 +77,7 @@ describe('the VR shader keeps child segments out of every session without them',
     // draws with exactly the programs it always had. If this fails the shader text of a child-free session changed: justify it, or move the change under VRL_CHILDREN.
     const t = shaderTemplate(src), V = [[], ['VRL_NO_GENERAL', 'VRL_OPAQUE'], ['VRL_NO_GENERAL', 'VRL_NO_EVENTS', 'VRL_OPAQUE']], h = createHash('sha256');
     for (const med of [0, 1]) for (const reg of [0, 1]) for (const cls4 of [0, 1]) for (const v of V) h.update(preprocess(t, new Set([...v, ...(med ? ['VRL_MEDIUMP'] : []), ...(reg ? ['VRL_REGIONS'] : []), ...(cls4 ? ['VRL_CLS4'] : [])])) + '\n--\n');
-    expect(h.digest('hex').slice(0, 24)).toBe('99b3d323903608d46716468a');
+    expect(h.digest('hex').slice(0, 24)).toBe('31e3332fb4d77e1868f6bf71'); // tissue look setting (9 kinds in the one vrlReal chain, the cut-face look for kinds 1..3 only: w < 3.5); before it: gloss trial (cut face / slice of skin / muscle / fat lit like the surface): sliceLook (a branch on segM[si].w, runs only at a slice or cap pixel, not per ray or sample), sliceColor takes the ray (rd, ro), the cap line adds vrlRealCut; vrlRealG / vrlRealCut are new helpers in lighting.js (no per-pixel cost when unused).: the lit line names the colour (vrlC) and the hit's normal / depth / keep (vrlN / vrlD / vrlK); skin / muscle / fat add vrlReal (a branch on segM[idx].w, 0 for the plain presets)
   });
 });
 

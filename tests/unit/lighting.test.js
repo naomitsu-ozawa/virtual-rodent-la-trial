@@ -167,7 +167,10 @@ describe('every view uses the shared lighting (static)', () => {
     expect(src).not.toMatch(OLD);
     const wgsl = volumeShader();
     expect(wgsl).toContain('fn vrlShade(');
-    expect(wgsl).toMatch(/let shade=vrlShade\(select\(n,-inward,later\),viewDir,u\.camRightTan\.xyz\*[\d.]+\+u\.camUpAspect\.xyz\*[\d.]+,vrlDepth01\(hi,u\.camOrigin\.xyz,u\.halfStep\.xyz\),select\(0\.0,1\.0,later\),u\.segMat\[u32\(idx\)\]\.xyz\);/);
+    // the light offset / normal / depth / keep are named once (vrlLO, vrlN, vrlD, vrlK), shared by vrlShade (plain model) and vrlReal (skin / muscle / fat, only where the slot's kind is above 0)
+    expect(wgsl).toMatch(/let vrlLO=u\.camRightTan\.xyz\*[\d.]+\+u\.camUpAspect\.xyz\*[\d.]+;let vrlN=select\(n,-inward,later\);let vrlD=vrlDepth01\(hi,u\.camOrigin\.xyz,u\.halfStep\.xyz\);let vrlK=select\(0\.0,1\.0,later\);\n\s*let shade=vrlShade\(vrlN,viewDir,vrlLO,vrlD,vrlK,u\.segMat\[u32\(idx\)\]\.xyz\);/);
+    expect(wgsl).toContain('fn vrlReal(');
+    expect(wgsl).toContain('if(u.segMat[u32(idx)].w>0.5){lit=vrlReal(col,vrlN,viewDir,vrlLO,vrlD,vrlK,u.segMat[u32(idx)]);}');
     expect(wgsl).toContain('segMat:array<vec4<f32>,4>,\n capShade:vec4<f32>,\n capRange:array<vec4<f32>,2>\n};'); // segMat appended at the END of the struct (the pick shader's struct is a prefix of it);: capShade after it;: capRange after that
     expect(wgsl).toContain('let later=acc.a>0.0;');
     // n itself is not flipped; the outward normal of a later hit is -inward, so inward must be defined before the shading
@@ -184,7 +187,9 @@ describe('every view uses the shared lighting (static)', () => {
     expect(src).toContain('in vec3 vLightOff;');
     expect(src).not.toMatch(OLD);
     // 4 surface hits (tight loop opaque / semi-transparent, the post-loop hit of the opaque variant, the general loop) + 2 cut faces
-    expect(src.match(/vrlShade\(later\?\(gHuMean<0\.5\*\(segA\[idx\]\.x\+segA\[idx\]\.y\)\?-n:n\):n,viewDir,vLightOff,vrlDepth01\(hi,o,halfExt\),later\?1\.0:0\.0,segM\[idx\]\.xyz\)/g)).toHaveLength(4);
+    // the normal / depth / keep of a surface hit are named (vrlN, vrlD, vrlK) so that vrlReal (skin / muscle / fat, segM[idx].w > 0.5) takes the very same ones
+    expect(src.match(/vec3 vrlN=later\?\(gHuMean<0\.5\*\(segA\[idx\]\.x\+segA\[idx\]\.y\)\?-n:n\):n;VRL_MP float vrlD=vrlDepth01\(hi,o,halfExt\);VRL_MP float vrlK=later\?1\.0:0\.0;VRL_MP vec2 shade=vrlShade\(vrlN,viewDir,vLightOff,vrlD,vrlK,segM\[idx\]\.xyz\)/g)).toHaveLength(4);
+    expect(src.match(/if\(segM\[idx\]\.w>0\.5\)lit=vrlReal\(vrlC,vrlN,viewDir,vLightOff,vrlD,vrlK,segM\[idx\]\);/g)).toHaveLength(4);
     expect(src.match(/vrlShade\(n,viewDir,vLightOff,vrlDepth01\(capAt,o,halfExt\),0\.0,segM\[ci\]\.xyz\)/g)).toHaveLength(2);
     expect(src).toContain('uniform vec4 segM[4];');
     expect(src.match(/vrlShade\(/g)).toHaveLength(6); // every call site passes the segment's material
@@ -242,9 +247,10 @@ describe('the mesh material (WebGPU node material and WebGL fallback)', () => {
     const out = L.patchStandardFragment(THREEcore.ShaderLib.standard.fragmentShader);
     expect(out).toContain('uniform vec2 vrlMeshDepth;');
     expect(out).toContain('vec2 vrlShade(');
-    expect(out).toContain('uniform vec3 vrlMeshMat;');
-    expect(out).toMatch(/vrlShade\(normal,vrlV,vec3\(0\.3,0\.5,0\.0\),vrlDepthD\(length\(vViewPosition\),vrlMeshDepth\.x,vrlMeshDepth\.y\),0\.0,vrlMeshMat\)/);
-    expect(out).toContain('outgoingLight=pow(max(diffuseColor.rgb*vrlS.x+vec3(vrlS.y),0.0),vec3(2.2))+totalEmissiveRadiance;');
+    expect(out).toContain('uniform vec4 vrlMeshMat;'); // the 4th component = the kind (0 plain, 1..3 skin / muscle / fat)
+    expect(out).toMatch(/vrlShade\(normal,vrlV,vec3\(0\.3,0\.5,0\.0\),vrlDepthD\(length\(vViewPosition\),vrlMeshDepth\.x,vrlMeshDepth\.y\),0\.0,vrlMeshMat\.xyz\)/);
+    expect(out).toContain('vec3 vrlReal(');
+    expect(out).toContain('outgoingLight=pow(max(vrlMeshMat.w>0.5?vrlReal(diffuseColor.rgb,normal,vrlV,vec3(0.3,0.5,0.0),vrlDepthD(length(vViewPosition),vrlMeshDepth.x,vrlMeshDepth.y),0.0,vrlMeshMat):diffuseColor.rgb*vrlS.x+vec3(vrlS.y),0.0),vec3(2.2))+totalEmissiveRadiance;');
     expect(out.indexOf('outgoingLight=pow(')).toBeLessThan(out.indexOf('#include <opaque_fragment>'));
     expect(() => L.patchStandardFragment('void main(){}')).toThrow();
   });
@@ -275,8 +281,10 @@ describe('segment material presets', () => {
     expect(L.MATERIALS.standard).toEqual({ ambient: L.AMBIENT, spec: L.SPEC, shininess: L.SHININESS });
     expect(L.materialVec('standard')).toEqual([L.AMBIENT, L.SPEC, L.SHININESS, 0]);
   });
-  it('has the four presets; an unknown or missing key is standard', () => {
-    expect(L.MATERIAL_KEYS).toEqual(['standard', 'solid', 'plaster', 'plastic']);
+  it('has the seven presets; an unknown or missing key is standard', () => {
+    expect(L.MATERIAL_KEYS).toEqual(['standard', 'solid', 'plaster', 'plastic', 'skin', 'muscle', 'fat']);
+    expect(L.MATERIAL_KEYS.slice(0, 4).map(k => L.materialVec(k)[3])).toEqual([0, 0, 0, 0]); // the four plain ones: kind 0 (the model of before)
+    expect(L.MATERIAL_KEYS.slice(4).map(k => L.materialVec(k)[3])).toEqual([1, 2, 3]);
     for (const k of [undefined, null, '', 'glass', 'toString', '__proto__', 42]) {
       expect(L.materialKey(k)).toBe('standard');
       expect(L.materialVec(k)).toEqual(L.materialVec('standard'));
@@ -302,6 +310,38 @@ describe('segment material presets', () => {
     // a face-on surface is lit fully whatever the preset (diffuse = 1 at n = l)
     for (const k of L.MATERIAL_KEYS) expect(L.shadePoint(l, VIEW, OFF, 0, false, L.MATERIALS[k]).diffuse).toBeCloseTo(1, 12);
   });
+  it('realTone (the JS twin of vrlReal): soft wrap, red in the shade, rim, wet double highlight, warm bounce light from below; the plain four are untouched', () => {
+    const col = [0.8, 0.8, 0.8], n = norm([0.2, 0.4, 1]), at = (k, nn = n, v = VIEW, keep = false, depth = 0) => L.realTone(col, nn, v, OFF, depth, keep, L.MATERIALS[k].ambient, L.MATERIALS[k].kind);
+    for (const k of ['skin', 'muscle', 'fat']) {
+      const lit = at(k); expect(lit.every(Number.isFinite)).toBe(true); expect(Math.min(...lit)).toBeGreaterThan(0);
+      // a surface turned away from the light (n.l < 0) is still lit by the wrap and drifts red: R > G > B on a grey colour
+      const l = norm([VIEW[0] + OFF[0], VIEW[1] + OFF[1], VIEW[2] + OFF[2]]), away = norm([-l[0] + 0.0, -l[1], 0.3]), sh = at(k, away);
+      expect(sh[0]).toBeGreaterThan(sh[1]); expect(sh[1]).toBeGreaterThan(sh[2]);
+      // the shaded side keeps light (wrap > 0): the edge is soft, not black
+      const plainAway = L.shadePoint(away, VIEW, OFF, 0, false, L.MATERIALS.standard).diffuse * 0.8;
+      expect(sh[0]).toBeGreaterThan(plainAway * 0.9);
+      // fresnel rim: a grazing view is brighter than the plain wrap alone would make it (rim adds light), and a hit behind a translucent layer (keep) has none
+      const graze = norm([1, 0.05, 0.02]);
+      expect(at(k, graze)[0]).toBeGreaterThan(at(k, graze, VIEW, true)[0]);
+      // depth cue: the far side is dimmer
+      expect(at(k, n, VIEW, false, 1)[0]).toBeLessThan(at(k, n, VIEW, false, 0)[0]);
+      // deterministic and symmetric in the view: a back-facing normal is turned to the viewer unless keep
+      expect(at(k, n.map(x => -x))).toEqual(at(k));
+    }
+    // at the peak of the highlight muscle (the strongest of the three, but softer since gloss trial) is much brighter than skin; off the peak it falls quickly
+    const l = norm([VIEW[0] + OFF[0], VIEW[1] + OFF[1], VIEW[2] + OFF[2]]), h = norm([l[0] + VIEW[0], l[1] + VIEW[1], l[2] + VIEW[2]]);
+    expect(at('muscle', h)[1]).toBeGreaterThan(at('skin', h)[1]);
+    expect(at('muscle', h)[1] - at('muscle', norm([h[0] + 0.3, h[1], h[2]]))[1]).toBeGreaterThan(0.05);
+    // warm bounce: the ground colour is warmer than the sky one for every kind (the underside of a surface is redder than the top)
+    for (const k of [1, 2, 3]) { expect(L.REAL[k].ground[0] / L.REAL[k].ground[2]).toBeGreaterThan(L.REAL[k].sky[0] / L.REAL[k].sky[2]); expect(L.REAL[k].wrap[0]).toBeLessThan(L.REAL[k].wrap[2]); }
+  });
+  it('generated shader helpers: vrlReal exists in GLSL and WGSL with the same constants as REAL; vrlShade (the plain model) is textually what it was', () => {
+    for (const [src, fn] of [[L.lightingGLSL(), 'vec3 vrlReal('], [L.lightingWGSL(), 'fn vrlReal(']]) {
+      expect(src).toContain(fn);
+      for (const k of [1, 2, 3]) { const P = L.REAL[k]; expect(src).toContain(String(P.rim)); expect(src).toContain(P.wrap.map(x => (Number.isInteger(x) ? x.toFixed(1) : String(x))).join(',')); }
+    }
+    expect(L.lightingGLSL()).toContain('vec2 vrlShade(vec3 n,vec3 viewDir,vec3 lightOff,float depth01,float keep,vec3 mat){\n if(keep<0.5&&dot(n,viewDir)<0.0)n=-n;\n vec3 l=normalize(viewDir+lightOff);\n float fade=1.0-0.2*depth01;\n return vec2((mat.x+(1.0-mat.x)*max(dot(n,l),0.0))*fade,pow(max(dot(n,normalize(l+viewDir)),0.0),mat.z)*mat.y*fade);\n}');
+  });
   it('the segment state carries a material, standard by default, and the project save / load keeps it (old projects: standard)', () => {
     const seg = read('segments.js');
     expect(seg.match(/material:'standard'/g)).toHaveLength(5);
@@ -311,7 +351,7 @@ describe('segment material presets', () => {
     expect(dl.indexOf("materialKey(g?.material)")).toBeLessThan(dl.indexOf('if(!g)continue;'));
     const ui = read('ui-shell.js');
     for (const k of ['bone', 'soft', 'fat', 'lung', 'contrast']) expect(ui).toContain(`data-seg-material="${k}"`);
-    expect(ui.match(/<option value="(standard|solid|plaster|plastic)" data-i18n="mat\w+">/g)).toHaveLength(20);
+    expect(ui.match(/<option value="(standard|solid|plaster|plastic|skin|muscle|fat)" data-i18n="mat\w+">/g)).toHaveLength(35); // 5 cards x 7 presets
     expect(read('app.js')).toMatch(/material\.onchange=\(\)=>\{const k=materialKey\(material\.value\);material\.value=k;segmentState\[key\]\.material=k;setSegmentMeshMaterial\(key,k\);request3DRender\(\)\};/);
   });
   it('round-trips through a project archive', async () => {
@@ -329,16 +369,21 @@ describe('segment material presets', () => {
     const m = M.createSurfaceMaterial({ color: '#f3f0e8' }, 'bone'), other = M.createSurfaceMaterial({ color: '#f3f0e8' }, 'soft');
     const sh = () => ({ uniforms: {}, fragmentShader: THREEcore.ShaderLib.standard.fragmentShader });
     const a = sh(), b = sh(); m.onBeforeCompile(a); other.onBeforeCompile(b);
-    expect(a.uniforms.vrlMeshMat.value.toArray()).toEqual([L.AMBIENT, L.SPEC, L.SHININESS]);
+    expect(a.uniforms.vrlMeshMat.value.toArray()).toEqual([L.AMBIENT, L.SPEC, L.SHININESS, 0]);
     M.setSegmentMeshMaterial('bone', 'plastic');
-    expect(a.uniforms.vrlMeshMat.value.toArray()).toEqual(L.materialVec('plastic').slice(0, 3));
-    expect(b.uniforms.vrlMeshMat.value.toArray()).toEqual([L.AMBIENT, L.SPEC, L.SHININESS]); // another segment is not touched
+    expect(a.uniforms.vrlMeshMat.value.toArray()).toEqual(L.materialVec('plastic'));
+    globalThis.__vrlSettings = { get: k => (k === 'tissueLook' ? 'gloss' : undefined) }; // the look 艶と断面 (the default look 標準 sends kind 0 for every preset)
+    M.setSegmentMeshMaterial('bone', 'skin'); // the kind rides in the 4th component
+    expect(a.uniforms.vrlMeshMat.value.toArray()).toEqual(L.materialVec('skin')); expect(a.uniforms.vrlMeshMat.value.w).toBe(1);
+    delete globalThis.__vrlSettings;
+    expect(b.uniforms.vrlMeshMat.value.toArray()).toEqual([L.AMBIENT, L.SPEC, L.SHININESS, 0]); // another segment is not touched
     M.setSegmentMeshMaterial('bone', 'nonsense');
-    expect(a.uniforms.vrlMeshMat.value.toArray()).toEqual([L.AMBIENT, L.SPEC, L.SHININESS]);
+    expect(a.uniforms.vrlMeshMat.value.toArray()).toEqual([L.AMBIENT, L.SPEC, L.SHININESS, 0]);
     M.setMeshMaterialBackend('WEBGPU');
     const g1 = M.createSurfaceMaterial({ color: '#fff' }, 'fat'), g2 = M.createSurfaceMaterial({ color: '#fff' }, 'fat'), g3 = M.createSurfaceMaterial({ color: '#fff' }, 'lung');
     expect(g1.colorNode).toBe(g2.colorNode); // one node per segment
     expect(g1.colorNode).not.toBe(g3.colorNode);
-    expect(L.meshColorNode(THREE.TSL, { center: THREE.TSL.uniform(5), radius: THREE.TSL.uniform(2) }, THREE.TSL.uniform(new THREE.Vector3(0.24, 0.5, 60))).isNode).toBe(true);
+    expect(L.meshColorNode(THREE.TSL, { center: THREE.TSL.uniform(5), radius: THREE.TSL.uniform(2) }, THREE.TSL.uniform(new THREE.Vector4(0.24, 0.5, 60, 0))).isNode).toBe(true);
+    expect(L.meshColorNode(THREE.TSL, { center: THREE.TSL.uniform(5), radius: THREE.TSL.uniform(2) }, THREE.TSL.uniform(new THREE.Vector4(...L.materialVec('muscle')))).isNode).toBe(true);
   });
 });

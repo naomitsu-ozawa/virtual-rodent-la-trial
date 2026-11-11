@@ -26,6 +26,7 @@ export const SETTINGS_DEFAULTS={
  tutorialMode:false,  // チュートリアル (設定 > 外観): the 2D panel (tutorial-ui.js) + the VR help board carousel (tutorial-vr.js); only the settings switch turns it on; coexists with eventMode
  tutorialVoice:'F1',   // the tutorial's spoken guide: 'F1' (女性の声) / 'M1' (男性の声,: chosen in the dialog after 「チュートリアルを始める」) / 'off' (音声なし) (tutorial-audio.js reads it)
  handRay:'standard',    // the hand's laser in VR (hand tracking only): 'standard' (標準: the system's ray as it is) / 'point' (指差し: only while pointing, along the index finger); 設定 > 描画 and the VR menu's 表示 tab
+ tissueLook:'standard', // 質感の色味 (設定 > 描画, and the VR menu's 画質 tab): how skin / muscle / fat segments are drawn: 'standard' (標準: the plain model of the other presets, the app as it was) / 'trial' (試作: the first try, 32bab049) / 'weak' (弱い版: 3e5e45fd) / 'gloss' (艶と断面: soft highlight, the cut face lit too); lighting.js TISSUE_LOOKS, read where a segment's material goes to a shader
  gpuPreference:'auto'  // GPU for WebGPU: 'auto' (as before) / 'high-performance' / 'low-power'; honoured only on Linux / Windows (gpu-preference.js), applies after a reload
 };
 // pixel budgets (MP) per interaction tier / at rest; 'max' = no budget
@@ -36,6 +37,7 @@ let values={...SETTINGS_DEFAULTS};
 try{const raw=globalThis.localStorage?.getItem(KEY);if(raw)values={...values,...JSON.parse(raw)}}catch{}
 // the hand laser's modes are 'standard' / 'point' (vr-hand.js HAND_RAY_MODES); a value stored by-638 ('home' ホーム方式) or 634-636 ('between' 指先, 'wrist' 手のひら) or anything else reads as 'standard'
 if(!['standard','point'].includes(values.handRay))values.handRay='standard';
+if(!['standard','trial','weak','gloss'].includes(values.tissueLook))values.tissueLook='standard'; // same list as lighting.js TISSUE_LOOKS (this module imports nothing)
 export const TUTORIAL_VOICES=Object.freeze(['F1','M1','off']);
 // pure; applied to the stored values at load and on every set()
 export function sanitizeTutorialSettings(v){

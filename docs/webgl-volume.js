@@ -1,11 +1,11 @@
 import * as THREE from './vendor/three@0.186.0/build/three.module.js';
-import { volumeTexturePlan, reduceSliceArea, packedRgSlice, packCtSlice } from './medical-volume.js?v=20261111-build712';
-import { computeBricksOf, buildEditMaskOf, buildRegionIndexOf, buildChildIndexOf, BRICK } from './vr-volume-prep.js?v=20261111-build712';
-import { gpuRunsForTexture } from './gpu-runs.js?v=20261111-build712';
-import { MATERIALS, materialKey, materialVec } from './lighting.js?v=20261111-build712';
-import { MAX_SECTION_PLANES } from './vr-section-frame.js?v=20261111-build712';
-import { SHADE_BRIGHT_DEFAULT, SHADE_CONTRAST_DEFAULT, brightOf, contrastOf } from './cap-shade.js?v=20261111-build712';
-import { pickRay } from './webgl-volume-pick.js?v=20261111-build712';
+import { volumeTexturePlan, reduceSliceArea, packedRgSlice, packCtSlice } from './medical-volume.js?v=20261111-build713';
+import { computeBricksOf, buildEditMaskOf, buildRegionIndexOf, buildChildIndexOf, BRICK } from './vr-volume-prep.js?v=20261111-build713';
+import { gpuRunsForTexture } from './gpu-runs.js?v=20261111-build713';
+import { MATERIALS, materialKey, materialVec, materialVecNow, materialKind } from './lighting.js?v=20261111-build713';
+import { MAX_SECTION_PLANES } from './vr-section-frame.js?v=20261111-build713';
+import { SHADE_BRIGHT_DEFAULT, SHADE_CONTRAST_DEFAULT, brightOf, contrastOf } from './cap-shade.js?v=20261111-build713';
+import { pickRay } from './webgl-volume-pick.js?v=20261111-build713';
 
 export const WEBGL_VOLUME_DEFAULT = true;
 export const webglVolumeEnabled = (search = typeof location !== 'undefined' ? location.search : '', m = /[?&]webglvolume=(\d)(&|$)/.exec(search || '')) => (m ? m[1] !== '0' : WEBGL_VOLUME_DEFAULT); // one line: the public gate reads a URL key from the line that reads location.search
@@ -24,21 +24,22 @@ export const SHADER_PATCHES = [
   { name: 'uniforms', find: 'uniform int capOn;', put: 'uniform int capOn;\nuniform float capAlpha;\nuniform float capHatch;\nuniform float capShade;\nuniform int planeSlice;' },
   // a surface hit coloured by an analysis result: exactly the VR shader's regionColor (the result's own colour through the look-up table regionLut, 0 = the result is hidden, the segment colour shows)
   // x the diffuse light; a FOCUSED result (the page's selection, bit 4 of the table's alpha) is 18 % brighter, as in the WebGPU volume. No result there: the segment colour as before
-  { name: 'region-lit', find: 'VRL_MP vec3 lit=regionColor(hp+dir*(0.75*voxelMin),segC[idx].rgb,idx)*diffuse+vec3(spec);', put: 'VRL_MP vec3 lit=regionLit(hp+dir*(0.75*voxelMin),segC[idx].rgb,idx,diffuse,spec);', all: true },
+  { name: 'region-lit', find: 'VRL_MP vec3 vrlC=regionColor(hp+dir*(0.75*voxelMin),segC[idx].rgb,idx);VRL_MP vec3 lit=vrlC*diffuse+vec3(spec);if(segM[idx].w>0.5)lit=vrlReal(vrlC,vrlN,viewDir,vLightOff,vrlD,vrlK,segM[idx]);', put: 'VRL_MP vec3 lit=regionLit(hp+dir*(0.75*voxelMin),segC[idx].rgb,idx,diffuse,spec,vrlN,viewDir,vrlD,vrlK,segM[idx]);', all: true },
   // the cut face: opacity (section cap opacity), hatching and the CT shading of the segment colour (cap-shade.js, ctLumHU through the segment's own range), as the WebGPU volume's cap
   { name: 'cap-alpha', find: 'clamp(segA[ci].z,0.03,1.0)', put: '(clamp(segA[ci].z,0.03,1.0)*capAlpha)', all: true },
-  { name: 'cap-lit', find: 'VRL_MP vec3 lit=mix(regionColor(cp,segC[ci].rgb,ci),vec3(1.0),0.22)*diffuse;', put: 'VRL_MP vec3 lit=mix(regionColor(cp,segC[ci].rgb,ci),vec3(1.0),0.22)*diffuse*capHatchF(cp,capPlane)*capShadeF(cp,ci);', all: true },
+  { name: 'cap-lit', find: 'VRL_MP vec3 lit=mix(regionColor(cp,segC[ci].rgb,ci),vec3(1.0),0.22)*diffuse;if(segM[ci].w>0.5&&segM[ci].w<3.5)lit=vrlRealCut(mix(regionColor(cp,segC[ci].rgb,ci),vec3(1.0),0.22),n,viewDir,vLightOff,vrlDepth01(capAt,o,halfExt),segM[ci]);', put: 'VRL_MP vec3 lit=mix(regionColor(cp,segC[ci].rgb,ci),vec3(1.0),0.22)*diffuse;if(segM[ci].w>0.5&&segM[ci].w<3.5)lit=vrlRealCut(mix(regionColor(cp,segC[ci].rgb,ci),vec3(1.0),0.22),n,viewDir,vLightOff,vrlDepth01(capAt,o,halfExt),segM[ci]);lit*=capHatchF(cp,capPlane)*capShadeF(cp,ci);', all: true },
   { name: 'cap-functions', find: 'void main(){\n gl_FragDepth=gl_FragCoord.z;', put: `float capHatchF(vec3 cp,int pl){
  if(capHatch<0.5)return 1.0;
  vec3 tc=texCoord(cp);vec3 n=abs(cutPlanes[pl].xyz);vec2 uv=n.z>0.5?tc.xy:(n.y>0.5?tc.xz:tc.yz);
  return abs(fract((uv.x+uv.y)*${CAP_HATCH_FREQ}.0)-0.5)<0.14?0.26:1.0;
 }
 float capShadeF(vec3 cp,int s){return capShade>0.5?ctLumHU(huAt(texCoord(cp)),s):1.0;}
-vec3 regionLit(vec3 p,vec3 base,int s,float diffuse,float spec){
+vec3 regionLit(vec3 p,vec3 base,int s,float diffuse,float spec,vec3 rn,vec3 rv,float rd,float rk,vec4 rm){
 #ifdef VRL_REGIONS
  int i=int(texture(regionTex,clamp(texCoord(p),vec3(0.0),vec3(0.999999))).r*255.0+0.5);
  if(i>=1){vec4 e=texelFetch(regionLut,ivec2(i,0),0);int m=int(e.a+0.5);if(((m>>s)&1)==1)return e.rgb*diffuse*(((m>>4)&1)==1?1.18:1.0)+vec3(spec);}
 #endif
+ if(rm.w>0.5)return vrlReal(base,rn,rv,vLightOff,rd,rk,rm);
  return base*diffuse+vec3(spec);
 }
 void main(){\n gl_FragDepth=gl_FragCoord.z;` },
@@ -48,7 +49,7 @@ void main(){\n gl_FragDepth=gl_FragCoord.z;` },
 // the additions for a session WITH child segments (the shader is then compiled with VRL_CHILDREN, vr-view.js block A / A2): applied only then, so the shader of a session without child segments is the same text as ever.
 // The page's surface colour goes through the child's colour (childBase) as the VR's regionColor macro does, and the cut-face shading through the child's own range (ctLumAt).
 export const CHILD_SHADER_PATCHES = [
-  { name: 'child-region-lit', find: ' return base*diffuse+vec3(spec);\n}', put: ' return childBase(p,base,s)*diffuse+vec3(spec);\n}' },
+  { name: 'child-region-lit', find: ' if(rm.w>0.5)return vrlReal(base,rn,rv,vLightOff,rd,rk,rm);\n return base*diffuse+vec3(spec);\n}', put: ' vec3 cb=childBase(p,base,s);\n if(rm.w>0.5)return vrlReal(cb,rn,rv,vLightOff,rd,rk,rm);\n return cb*diffuse+vec3(spec);\n}' },
   { name: 'child-cap-shade', find: 'float capShadeF(vec3 cp,int s){return capShade>0.5?ctLumHU(huAt(texCoord(cp)),s):1.0;}', put: 'float capShadeF(vec3 cp,int s){return capShade>0.5?ctLumAt(cp,huAt(texCoord(cp)),s):1.0;}' },
 ];
 export function patchFragmentShader(src, { children = false } = {}) {
@@ -126,7 +127,7 @@ export function applyChildFocus(a, list, key, gain = CHILD_FOCUS_GAIN) {
   a[o] *= gain; a[o + 1] *= gain; a[o + 2] *= gain; return true;
 }
 // vr-view.js refreshChildLut: the 256 x 3 RGBA32F table (row stride 256 * 4), entry j + 1 = list[j]. Row 0: colour + the parent's slot bit (0 while hidden); row 1: lower, upper, flat mask (the page has no simple mode: 0), hidden mask;
-// row 2: the child's material (ambient, spec, shininess) + opacity. A child hidden = its own shown flag off (entry.shown, else entry.visible). A child deleted since (no entry) has no row.
+// row 2: the child's material (ambient, spec, shininess) + opacity + 2 * kind. A child hidden = its own shown flag off (entry.shown, else entry.visible). A child deleted since (no entry) has no row.
 export function fillChildLut(a, list, entries, rgbOf, materialsOf) {
   const R = 256 * 4, byKey = new Map((entries || []).map(x => [x.key, x]));
   a.fill(0);
@@ -134,7 +135,7 @@ export function fillChildLut(a, list, entries, rgbOf, materialsOf) {
     const idx = j + 1, en = idx < 256 ? byKey.get(e.key) : null; if (!en) return;
     const o = idx * 4, m = e.segMask | 0, hid = (en.shown === undefined ? en.visible : en.shown) === false, [lo, hi] = childShadeOf(en), rgb = rgbOf(en.color), mt = materialsOf(en.material);
     a[o] = rgb[0]; a[o + 1] = rgb[1]; a[o + 2] = rgb[2]; a[o + 3] = hid ? 0 : m;
-    a[2 * R + o] = mt.ambient; a[2 * R + o + 1] = mt.spec; a[2 * R + o + 2] = mt.shininess; a[2 * R + o + 3] = Number.isFinite(+en.opacity) ? Math.min(1, Math.max(0, +en.opacity)) : 1;
+    a[2 * R + o] = mt.ambient; a[2 * R + o + 1] = mt.spec; a[2 * R + o + 2] = mt.shininess; a[2 * R + o + 3] = (Number.isFinite(+en.opacity) ? Math.min(1, Math.max(0, +en.opacity)) : 1) + 2 * materialKind(mt); // opacity + 2 * kind
     a[R + o] = lo; a[R + o + 1] = Math.max(hi, lo + 1e-3); a[R + o + 2] = 0; a[R + o + 3] = hid ? m : 0;
   });
   return a;
@@ -224,7 +225,7 @@ export class WebGlVolumeRenderer {
     const V3 = (...a) => new THREE.Vector3(...a), V4 = (...a) => new THREE.Vector4(...a), four = f => [0, 1, 2, 3].map(f);
     return {
       vol: { value: null }, bricks: { value: null }, halfExt: { value: V3(1, 1, 1) }, boxC: { value: V3() }, boxH: { value: V3() }, boxEntry: { value: 0 }, texDims: { value: V3(1, 1, 1) }, brickDims: { value: V3(1, 1, 1) },
-      stepSize: { value: 0.002 }, diag: { value: 0 }, calib: { value: V3(1, 0, 0) }, segA: { value: four(() => V4()) }, segC: { value: four(() => V4()) }, segM: { value: four(() => V4(...materialVec('standard'))) },
+      stepSize: { value: 0.002 }, diag: { value: 0 }, calib: { value: V3(1, 0, 0) }, segA: { value: four(() => V4()) }, segC: { value: four(() => V4()) }, segM: { value: four(() => V4(...materialVecNow('standard'))) },
       ctShade: { value: 0 }, ctShadeBright: { value: SHADE_BRIGHT_DEFAULT }, ctShadeContrast: { value: SHADE_CONTRAST_DEFAULT }, ctShadeRange: { value: four(() => new THREE.Vector2(0, 1)) }, sliceSegOnly: { value: 0 },
       cutPlanes: { value: Array.from({ length: MAX_SECTION_PLANES }, () => V4(0, 0, 1, 0)) }, planeCount: { value: 0 }, planeCut: { value: 0 }, planeSlice: { value: 0 }, capOn: { value: 0 }, capAlpha: { value: 0.85 }, capHatch: { value: 0 }, capShade: { value: 0 },
       sliceTint: { value: 0 }, sliceOpacity: { value: 0 }, sliceWindow: { value: new THREE.Vector2(0, 1) }, sliceAir: { value: SLICE_AIR }, sliceVol: { value: null },
@@ -450,7 +451,7 @@ export class WebGlVolumeRenderer {
       const key = segmentOrder[s], seg = segmentState[key], enabled = seg?.active && seg?.enabled ? 1 : 0;
       u.segA.value[s].set(seg?.min || 0, seg?.max || 0, seg?.opacity ?? 1, enabled);
       this.color.set(seg?.color || '#ffffff'); u.segC.value[s].set(this.color.r, this.color.g, this.color.b, 0);
-      const m = MATERIALS[materialKey(seg?.material)]; u.segM.value[s].set(m.ambient, m.spec, m.shininess, 0);
+      const m = MATERIALS[materialKey(seg?.material)]; u.segM.value[s].set(m.ambient, m.spec, m.shininess, materialKind(m));
     }
     const ps = planeState(mpr, this.textureDims, this.halfExtents);
     ps.planes.forEach((p, i) => u.cutPlanes.value[i].set(p[0], p[1], p[2], p[3]));

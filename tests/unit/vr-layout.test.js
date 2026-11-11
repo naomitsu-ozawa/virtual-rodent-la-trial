@@ -175,7 +175,7 @@ describe('slice fill (slice tab row + shader guards, static)', () => {
     expect(v).toContain('vec4(regionColor(p,segC[si].rgb,si)*ctLumHU(hu,si),ctShade>0.5?SEG_ALPHA:sliceTint)'); // 0 %: CT shading at the fixed opacity, solid at the tint
     expect(v).toContain('vec4(mix(vec3(g),regionColor(p,segC[si].rgb,si)*ctLumHU(hu,si),sliceTint),a)'); // above 0 %: the tint colour carries the CT value (factor 1 when solid = the old slice)
     expect(v).not.toContain('segHitColor'); expect(v).not.toContain('CT_SHADE_DEPTH');
-    expect(v.match(/lit=regionColor\(hp\+dir\*\(0\.75\*voxelMin\),segC\[idx\]\.rgb,idx\)\*diffuse\+vec3\(spec\)/g)).toHaveLength(4);
+    expect(v.match(/vrlC=regionColor\(hp\+dir\*\(0\.75\*voxelMin\),segC\[idx\]\.rgb,idx\);VRL_MP vec3 lit=vrlC\*diffuse\+vec3\(spec\)/g)).toHaveLength(4); // the colour is named (vrlC) so that vrlReal takes it
     expect(v.match(/lit=mix\(regionColor\(cp,segC\[ci\]\.rgb,ci\),vec3\(1\.0\),0\.22\)\*diffuse/g)).toHaveLength(2);
     expect(v).toContain('if(ctShade<0.5||diag==3||segC[s].w>0.5)return 1.0;');
   });

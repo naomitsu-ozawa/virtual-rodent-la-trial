@@ -12,20 +12,20 @@
 //   same events as the slider itself (input while moving, change on release), so the segment code runs exactly as for a slider.
 // -: the VR board counts the VR data itself (vr-label-histogram.js) and reads only the display range and the scale from here; the VR
 //   consumer / texture pass of-566 (acquireHistogram, getHistogramView, ...) is gone.
-import { volume, current3DVolume, currentLanguage } from './state.js?v=20261111-build712';
-import { segmentState, segmentNeedsVoxelMask, segmentEditGen, segmentSourceSignature, setShadeAutoSource, shadeDataRange, dataAxis, shownSegmentKeys, segmentById } from './segments.js?v=20261111-build712';
-import { isChildKey } from './segment-look.js?v=20261111-build712';
-import { childByKey } from './child-segments.js?v=20261111-build712';
-import { getFinalSegmentRuns } from './segment-runs.js?v=20261111-build712';
-import { sourceFilterStages, sourceFilterSignature } from './source-filters.js?v=20261111-build712';
-import { getHuMode, effectiveHuSignature, huModeToggle, segmentNeedsRuns, HU_MODE_FILTERED } from './effective-hu.js?v=20261111-build712';
-import { readEffectiveSlice, rawHuVolume, filtersActive } from './effective-hu-source.js?v=20261111-build712';
-import { segmentRunsCacheKey } from './segment-cache-key.js?v=20261111-build712';
-import { setCtSliderRange, ctSliderFullBounds, segmentControl } from './segment-ui.js?v=20261111-build712';
-import { createShadeHist, binShadeValues, binShadeRuns, shadeHistCount } from './cap-shade.js?v=20261111-build712';
-import { tr } from './i18n.js?v=20261111-build712';
-import { frameYield } from './utils.js?v=20261111-build712';
-import { createHist, binValues, binRuns, scaleHist, histInRange, rebinHist, histExtent, histStats, voxelsToMm3, huToX, xToHu, nearestLine, niceStep, windowFor, clampWindow, zoomWindow, normalizeRange, HU_AXIS, axisKey, axisDecimals, axisWidth, fmtAxisValue, windowBins, tickText } from './histogram.js?v=20261111-build712';
+import { volume, current3DVolume, currentLanguage } from './state.js?v=20261111-build713';
+import { segmentState, segmentNeedsVoxelMask, segmentEditGen, segmentSourceSignature, setShadeAutoSource, shadeDataRange, dataAxis, shownSegmentKeys, segmentById } from './segments.js?v=20261111-build713';
+import { isChildKey } from './segment-look.js?v=20261111-build713';
+import { childByKey } from './child-segments.js?v=20261111-build713';
+import { getFinalSegmentRuns } from './segment-runs.js?v=20261111-build713';
+import { sourceFilterStages, sourceFilterSignature } from './source-filters.js?v=20261111-build713';
+import { getHuMode, effectiveHuSignature, huModeToggle, segmentNeedsRuns, HU_MODE_FILTERED } from './effective-hu.js?v=20261111-build713';
+import { readEffectiveSlice, rawHuVolume, filtersActive } from './effective-hu-source.js?v=20261111-build713';
+import { segmentRunsCacheKey } from './segment-cache-key.js?v=20261111-build713';
+import { setCtSliderRange, ctSliderFullBounds, segmentControl } from './segment-ui.js?v=20261111-build713';
+import { createShadeHist, binShadeValues, binShadeRuns, shadeHistCount } from './cap-shade.js?v=20261111-build713';
+import { tr } from './i18n.js?v=20261111-build713';
+import { frameYield } from './utils.js?v=20261111-build713';
+import { createHist, binValues, binRuns, scaleHist, histInRange, rebinHist, histExtent, histStats, voxelsToMm3, huToX, xToHu, nearestLine, niceStep, windowFor, clampWindow, zoomWindow, normalizeRange, HU_AXIS, axisKey, axisDecimals, axisWidth, fmtAxisValue, windowBins, tickText } from './histogram.js?v=20261111-build713';
 const MAX_RETRIES = 6, POLL_MS = 400, DRAFT_MIN_SLICES = 240, DRAFT_SLICES = 80, CACHE_MAX = 24, CHART_H = 150, GRAB_PX = 6, PAD = { l: 34, r: 8, t: 14, b: 20 };
 const RANGE_KEY = 'vrl-hist-range-v1';
 // the axis of the data open now (histogram.js axisFor): the CT axis (1-HU bins, as always) for CT-like data, else equal bins over the data's own range (MRI 0..65535, 8-bit, slope-scaled values)

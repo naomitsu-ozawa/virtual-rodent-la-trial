@@ -1,16 +1,16 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { analysisFocusedRegionId, sceneState, threeRenderMode, analysisEditTargetKey, analysisEditTool, setAnalysisEditTool, analysisEditTargetMode, analysisCutApplying, analysisPendingCut, setAnalysisEditTargetMode, setAnalysisEditTargetKey, currentLanguage, current3DVolume, volume, cutResultPreviewTimer, incCutResultPreviewRevision, setCutResultPreviewTimer, cutResultPreviewRevision, sourceVolume, analysisRegions, childSegments } from './state.js?v=20261111-build712';
-import { SEGMENT_PRESET_ORDER, gpuSegmentOrder, segmentState, segmentEditState, segmentEditActive, segmentById, shownSegmentKeys } from './segments.js?v=20261111-build712';
-import { isChildKey } from './segment-look.js?v=20261111-build712';
-import { childByKey } from './child-segments.js?v=20261111-build712';
-import { analysisNavigateButton, analysisSelectRegionButton, analysisLassoButton, analysisLassoDeselectButton, analysisDeselectAll, analysisEditDeselectAll, analysisCutButton, analysisLineCutButton, analysisEditRemoveSelected, analysisRemoveSelected, analysisKeepSelected, analysisUndo, analysisRedo, analysisResetEdit, analysisEditTargetSelect, threeEditStatus, analysisCutWidth, analysisCutDepth, analysisCutYaw, analysisCutPitch, analysisCutApply, analysisCutCancel, analysisCutConfirm, analysisCutOffset, threeEditHelp, viewport, state, analysisCutWidthValue, analysisCutDepthValue, analysisCutYawValue, analysisCutPitchValue, analysisCutOffsetValue } from './ui-shell.js?v=20261111-build712';
-import { tr } from './i18n.js?v=20261111-build712';
-import { dispose, buildEditableRunsGroup } from './surface-mesh.js?v=20261111-build712';
-import { request3DRender } from './scene3d.js?v=20261111-build712';
+import { analysisFocusedRegionId, sceneState, threeRenderMode, analysisEditTargetKey, analysisEditTool, setAnalysisEditTool, analysisEditTargetMode, analysisCutApplying, analysisPendingCut, setAnalysisEditTargetMode, setAnalysisEditTargetKey, currentLanguage, current3DVolume, volume, cutResultPreviewTimer, incCutResultPreviewRevision, setCutResultPreviewTimer, cutResultPreviewRevision, sourceVolume, analysisRegions, childSegments } from './state.js?v=20261111-build713';
+import { SEGMENT_PRESET_ORDER, gpuSegmentOrder, segmentState, segmentEditState, segmentEditActive, segmentById, shownSegmentKeys } from './segments.js?v=20261111-build713';
+import { isChildKey } from './segment-look.js?v=20261111-build713';
+import { childByKey } from './child-segments.js?v=20261111-build713';
+import { analysisNavigateButton, analysisSelectRegionButton, analysisLassoButton, analysisLassoDeselectButton, analysisDeselectAll, analysisEditDeselectAll, analysisCutButton, analysisLineCutButton, analysisEditRemoveSelected, analysisRemoveSelected, analysisKeepSelected, analysisUndo, analysisRedo, analysisResetEdit, analysisEditTargetSelect, threeEditStatus, analysisCutWidth, analysisCutDepth, analysisCutYaw, analysisCutPitch, analysisCutApply, analysisCutCancel, analysisCutConfirm, analysisCutOffset, threeEditHelp, viewport, state, analysisCutWidthValue, analysisCutDepthValue, analysisCutYawValue, analysisCutPitchValue, analysisCutOffsetValue } from './ui-shell.js?v=20261111-build713';
+import { tr } from './i18n.js?v=20261111-build713';
+import { dispose, buildEditableRunsGroup } from './surface-mesh.js?v=20261111-build713';
+import { request3DRender } from './scene3d.js?v=20261111-build713';
 import * as THREE from './vendor/three@0.186.0/build/three.webgpu.js';
-import { getFinalSegmentRuns } from './segment-runs.js?v=20261111-build712';
-import { intersectRunArrays, rowsToRunSlice } from './run-length.js?v=20261111-build712';
+import { getFinalSegmentRuns } from './segment-runs.js?v=20261111-build713';
+import { intersectRunArrays, rowsToRunSlice } from './run-length.js?v=20261111-build713';
 export function analysisRegionById(id){return analysisRegions.find(r=>r.id===id)||null}
 export function configureCutControlRanges(v=current3DVolume||volume){
  if(!v||!analysisCutWidth)return;

@@ -1,4 +1,4 @@
-import { tr } from './i18n.js?v=20261111-build712';
+import { tr } from './i18n.js?v=20261111-build713';
 
 export const ARM_MS = 4000, NOTE_MS = 3500;
 

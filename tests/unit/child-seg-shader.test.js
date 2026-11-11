@@ -22,6 +22,7 @@ describe('child segment shaders (docs/medical-volume.js)', () => {
   it('a child look-up entry: colour + parent slot in row 0, shading range / opacity + 2 x material / hidden in row 1', () => {
     const f = new Float32Array(1), u = new Uint32Array(f.buffer), bits = x => { f[0] = x; return u[0]; };
     expect(childLutWords({ color: '#102030', opacity: 0.5, material: 'plastic', shade: { lower: 100, upper: 700 }, visible: true, parentSlot: 2 })).toEqual([0x10, 0x20, 0x30, 2, bits(100), bits(700), bits(0.5 + 2 * 3), 0]);
+    expect(childLutWords({ color: 0, opacity: 0.25, material: 'skin', parentSlot: 0 })[6]).toBe(bits(0.25 + 2 * 4)); expect(childLutWords({ color: 0, opacity: 1, material: 'fat', parentSlot: 0 })[6]).toBe(bits(1 + 2 * 6)); // index 4 / 6 (seven presets, was two bits)
     expect(childLutWords({ color: 0xff0000, visible: false, parentSlot: 0 }, { lower: 1, upper: 9 })).toEqual([255, 0, 0, 0, bits(1), bits(9), bits(1), 1]); // default opacity 1 / material standard; the app range when the child has none
     expect(childLutWords({ color: 0, shade: { lower: 5, upper: 5 } }).slice(4, 6)).toEqual([0, 0]); // no usable range: upper <= lower = the parent slot's range
   });
@@ -36,6 +37,6 @@ describe('child segment shaders (docs/medical-volume.js)', () => {
   it('a hidden child hides only inside its own parent slot: childHiddenAt(s, tc) compares the table\'s slot, and no module-level array is indexed by a variable', () => {
     const v = volumeShaderChild(), p = volumePickShaderChild();
     for (const t of [v, p]) { expect(t).toContain('fn childHiddenAt(s:u32,tc:vec3<f32>)->bool{'); expect(t).toContain('chRow0(i).w==s&&chRow1(i).w!=0u'); expect(t.match(/childHiddenAt\((?!s:u32)(?!s,)(?!u32\()/g)).toBeNull(); }
-    expect(v).not.toContain('CH_MAT'); expect(v).toContain('fn chMatOf(k:u32)->vec3<f32>{\n var t=array');
+    expect(v).not.toContain('CH_MAT'); expect(v).toContain('fn chMatOf(k:u32)->vec4<f32>{\n var t=array'); // vec4 (ambient, spec, shininess, kind), one row per preset (7)
   });
 });

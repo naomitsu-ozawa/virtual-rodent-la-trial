@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 const v = readFileSync(new URL('../../docs/vr-view.js', import.meta.url), 'utf8');
 describe('stick click short press with no section toggles the labels (VR, stickShort 1)', () => {
   it('no section at all: labels; otherwise the slice toggle as before; the hold stays the frames', () => {
-    expect(v).toContain("if(ev==='short'&&!planes.length){if((settings.stickShort|0)===1)toggleLabelsHidden(c);else toggleRegionColor(c)}");
+    expect(v).toContain("if(ev==='short'&&(!planes.length||!section.on)){if((settings.stickShort|0)===1)toggleLabelsHidden(c);else toggleRegionColor(c)}");
     expect(v).toContain("else if(ev==='short')toggleSliceClear(c);");
     expect(v).toContain("else if(ev==='long')toggleFramesHidden(c);");
   });
