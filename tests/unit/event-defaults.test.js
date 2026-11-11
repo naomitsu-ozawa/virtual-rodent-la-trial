@@ -125,8 +125,8 @@ describe('slice transparent toggle on the thumbstick click', () => {
     expect(src).toContain('sliceToast.dispose();');
   });
   it('the 操作方法 board lists it (basic and with a section; ja and en), 7 lines fit the board at the new pitch', () => {
-    expect(src.match(/'スティック押し：短く＝スライス透明\/\/長押し＝枠を隠す／戻す'/g)?.length ?? src.split("'スティック押し：短く＝スライス透明（断面がないときはラベルの表示／非表示）／長押し＝枠を隠す／戻す'").length - 1).toBe(2);
-    expect(src.split("'Stick click: short = slice clear (no section: show / hide labels), hold = hide / show frames'").length - 1).toBe(2);
+    expect(src.match(/'スティック押し：短く＝スライス透明\/\/長押し＝枠を隠す／戻す'/g)?.length ?? src.split("'スティック押し：短く＝スライス透明（断面がないときは領域の色またはラベルの表示／非表示。解析タブで選択）／長押し＝枠を隠す／戻す'").length - 1).toBe(2);
+    expect(src.split("'Stick click: short = slice clear (no section: show / hide region colours or labels; choose in the Analysis tab), hold = hide / show frames'").length - 1).toBe(2);
     expect(src).toContain('const HELP_LINE_PITCH=66;');
     expect(140 + 6 * 66 + 15).toBeLessThanOrEqual(560); // the last line's centre + half the 30 px text, inside the 560 px board (no mission)
   });

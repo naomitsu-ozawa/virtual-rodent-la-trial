@@ -4,9 +4,9 @@
 //  - openAndPrepare: the order after a card press (open the data, wait until the page is quiet, wait for the standard-open record, prepare the VR data)
 //  - waitForStandardOpen: the bounded wait for the record standard-open.js sets (so the prepared entry is marked standard)
 //  - createInflight: a run that is already in flight is shared, never started twice
-import { EVENT_DATASETS } from './event-mode.js?v=20261110-build710';
-import { sampleCredit } from './sample-registry.js?v=20261110-build710';
-import { isSampleId } from './sample-sets.js?v=20261110-build710';
+import { EVENT_DATASETS } from './event-mode.js?v=20261110-build711';
+import { sampleCredit } from './sample-registry.js?v=20261110-build711';
+import { isSampleId } from './sample-sets.js?v=20261110-build711';
 
 // One card per dataset of the list. thumb = where the 16:9 picture would be (docs/demo/<sample>/thumb.webp; the page shows an empty frame when the file is not there).
 // credit = the credit of the dataset when its sample.json has one (credit / license / changes / terms), else null - the datasets without one show no license line.
