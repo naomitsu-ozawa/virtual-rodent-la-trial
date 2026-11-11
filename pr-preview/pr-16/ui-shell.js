@@ -1,6 +1,6 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { registry, sampleKey } from './sample-registry.js?v=20261111-build717';
+import { registry, sampleKey } from './sample-registry.js?v=20261111-build718';
 // the practice-data chooser's buttons come from the registry (sample-registry.js): the datasets with a level in folder order (sample1, sample2, ...), then 「その他」 and the datasets without a level, also in folder order.
 // The text of a button is the dataset's description (ja here; applyLanguage switches it by its data-i18n key). No datasets (the list could not be read) = no buttons.
 const escHtml=t=>String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
