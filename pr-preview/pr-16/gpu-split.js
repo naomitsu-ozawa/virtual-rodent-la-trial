@@ -1,4 +1,4 @@
-import { gpuPlatformOs } from './gpu-preference.js?v=20261111-build714';
+import { gpuPlatformOs } from './gpu-preference.js?v=20261111-build715';
 
 // 'nvidia' | 'intel' | 'amd' | 'apple' | 'software' | 'other' | '' (unknown). `parts` are the strings that name the GPU:
 // adapter.info.vendor / architecture / device / description, or the WebGL UNMASKED_VENDOR / UNMASKED_RENDERER.

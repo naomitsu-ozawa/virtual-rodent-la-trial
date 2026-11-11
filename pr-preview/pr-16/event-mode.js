@@ -2,7 +2,7 @@
 // Four levels, each one of the bundled practice datasets (docs/demo/sampleN, the same set ids as the practice-data chooser);
 // texts are i18n keys (i18n.js). The switch is settings.eventMode (app-settings.js, per device, default off); the chosen
 // level lives only in this page (a reload starts with none chosen) and follows whichever practice dataset was opened last.
-import { registry, sampleKey } from './sample-registry.js?v=20261111-build714';
+import { registry, sampleKey } from './sample-registry.js?v=20261111-build715';
 export const EVENT_HINT_KEYS={section:'evHintSection',move:'evHintMove',toggle:'evHintToggle',mark:'evHintMark',distance:'evHintDistance'};
 // the levels, the other datasets and each dataset's starting segments are no longer tables here: they come from the registry (sample-registry.js), built from the sample.json
 // of every docs/demo/sampleN folder. Order: Lv0..Lv3 by the level field, then the datasets without a level by folder number. Names / missions are i18n keys the registry adds (sampleKey).
@@ -61,6 +61,7 @@ export const activeEventLevel=api=>eventModeOn(api)?chosenEventLevel():null;
 // the help board). Its contents come from the loaded dataset: one 表示 / 非表示 row per shown segment (active and enabled; at most MAX_SEG_ROWS, the
 // rest is counted), 断面, the trigger switch (only when the dataset has analysis results), the analysis results as a read-only list, and the bottom row.
 export const MAX_SEG_ROWS=6;
+export const KID_MIN_ROWS=4; // the かんたん menu: the least rows the child segments' list gets when the results are listed too
 // the segment rows: the shown segments (active and enabled, in the order given), capped
 export const simpleMenuSegments=shownKeys=>[...(shownKeys||[])].slice(0,MAX_SEG_ROWS);
 // What the trigger does is ONE of two exclusive modes, switched on the board (never both):
@@ -139,11 +140,12 @@ export function simpleMenuLayout(o){
   btn('trigger:point',440,y,250,t.trigPoint,!lab,{size:32,color:!lab?'#cfe3f0':undefined});btn('trigger:label',710,y,250,t.trigLabel,lab,{size:32,color:lab?'#cfe3f0':undefined});
   label('trigger:hint',X,y+M.BTN_H+22,lab?t.trigHintLabel:t.trigHintPoint,{size:24,color:'#ffd27a'});y+=M.TRIG_ROW;
  }
- const res=o.results||[],listEnd=o.levels?M.LEVEL_Y-M.ROW/2:M.BOTTOM;
+ const res=o.results||[],kids=o.kids||[],listEnd=o.levels?M.LEVEL_Y-M.ROW/2:M.BOTTOM;
+ const kidReserve=kids.length&&res.length?56+54+M.LIST_ROW*Math.min(kids.length,KID_MIN_ROWS):0,resEnd=listEnd-kidReserve;let resBottom=y; // resBottom: where the results block ends (the children's list starts there)
  if(res.length){
   label('results',X,y+30,t.results,{bold:true,size:28});
   // the whole row is the hit area of its show / hide switch (same action as the colour chip: id 'result:<i>:row', target 'result:<i>'); with more results than rows, ◀ ▶ and 「ページ n/N」 sit right of the total
-  const top=y+56,cap=Math.max(0,Math.floor((listEnd-24-30-top)/M.LIST_ROW)),pg=resultPaging(res.length,o.page,cap),shown=res.slice(pg.start,pg.start+pg.count);
+  const top=y+56,cap=Math.max(0,Math.floor((resEnd-24-30-top)/M.LIST_ROW)),pg=resultPaging(res.length,o.page,cap),shown=res.slice(pg.start,pg.start+pg.count);
   shown.forEach((r,k)=>{const i=pg.start+k,ry=top+k*M.LIST_ROW;
    const on=r.on!==false; // the chip is the result's show / hide switch (lit = shown)
    w.push({type:'hit',id:'result:'+i+':row',target:'result:'+i,x:X,y:ry,w:M.W-2*X,h:M.LIST_ROW,on});
@@ -151,10 +153,26 @@ export function simpleMenuLayout(o){
    label('result:'+i+':name',X+76,ry+30,r.name,{size:28,bold:true,color:on?r.hex:'#6b7885'});label('result:'+i+':vol',X+520,ry+30,r.text,{size:28})});
   const more=res.length-shown.length,py=top+shown.length*M.LIST_ROW;
   label('total',X,py+26,t.total+' '+o.total+' · '+res.length+(more>0&&pg.pages<2?'  (… +'+more+')':''),{size:24,color:'#9fb3c3'});
+  resBottom=py+54;
   if(pg.pages>1){
    w.push({type:'button',id:'results:prev',page:pg.page-1,x:560,y:py+2,w:96,h:50,label:'◀',on:false,size:28,disabled:pg.page<=0});
    w.push({type:'button',id:'results:next',page:pg.page+1,x:666,y:py+2,w:96,h:50,label:'▶',on:false,size:28,disabled:pg.page>=pg.pages-1});
    label('results:page',778,py+28,(t.page||'')+' '+(pg.page+1)+'/'+pg.pages,{size:26,color:'#9fb3c3'});
+  }
+ }
+ if(kids.length){
+  const ky=res.length?resBottom:y,top=ky+56,cap=Math.max(0,Math.floor((listEnd-24-30-top)/M.LIST_ROW)),pg=resultPaging(kids.length,o.kidPage,cap),shown=kids.slice(pg.start,pg.start+pg.count);
+  label('kids',X,ky+30,t.kids||'',{bold:true,size:28});
+  shown.forEach((k,j)=>{const i=pg.start+j,ry=top+j*M.LIST_ROW,on=k.on!==false;
+   w.push({type:'hit',id:'kid:'+i+':row',target:'kid:'+i,x:X,y:ry,w:M.W-2*X,h:M.LIST_ROW,on});
+   w.push({type:'button',id:'kid:'+i,x:X,y:ry,w:56,h:40,label:'',on,color:k.hex});
+   label('kid:'+i+':name',X+76,ry+30,k.name,{size:28,bold:true,color:on?k.hex:'#6b7885'})});
+  const py=top+shown.length*M.LIST_ROW;
+  label('kids:count',X,py+26,String(kids.length),{size:24,color:'#9fb3c3'});
+  if(pg.pages>1){
+   w.push({type:'button',id:'kids:prev',page:pg.page-1,x:560,y:py+2,w:96,h:50,label:'◀',on:false,size:28,disabled:pg.page<=0});
+   w.push({type:'button',id:'kids:next',page:pg.page+1,x:666,y:py+2,w:96,h:50,label:'▶',on:false,size:28,disabled:pg.page>=pg.pages-1});
+   label('kids:page',778,py+28,(t.page||'')+' '+(pg.page+1)+'/'+pg.pages,{size:26,color:'#9fb3c3'});
   }
  }
  if(o.levels){
