@@ -430,8 +430,8 @@ describe('static wiring', () => {
     expect(src).toContain("const acts={section:v=>setSection(v),'trigger:point':()=>{evLabels=false},'trigger:label':()=>{evLabels=true;emit('trigger-label')},undo:()=>{undoLast()},home:goHome,reset:pressReset,all:()=>{ui.tab=0},exit:()=>session.end()};");
     expect(src).toContain("exit:tr(mode==='ar'?'evExitAr':'evExitVr')");
     expect(src).toContain("btn(MENU_W-X-260,yb,260,L.exit,true,()=>session.end(),{color:'#b33'})"); // the full menu's own exit, unchanged
-    // who decides what the trigger does: label mode only when the switch says so AND the data has results (or the 解析 tab is open, as before)
-    expect(src).toContain("const evLabelOn=()=>evMenu&&triggerMode(evLabels,regionList.length>0)==='label';");
+    // who decides what the trigger does: label mode only when the switch says so AND the data has results or child segments (or the 解析 tab is open, as before)
+    expect(src).toContain("const evLabelOn=()=>evMenu&&triggerMode(evLabels,labelTargets(regionList.length,childList.length))==='label';"); // results OR child segments
     expect(src).toContain('const labelMode=()=>(ui.open&&ui.tab===5)||!section.on||evLabelOn();');
     expect(src).toContain('analysis:analysisOn(),canDrag:');
     // evLabels is only ever switched from the かんたん menu (declared once, reset when the session's data arrives, the two switch buttons, and 最初の状態に戻す)

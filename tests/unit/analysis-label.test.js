@@ -172,14 +172,14 @@ describe('wiring (static): fixes', () => {
     const vr = read('vr-view.js');
     expect(vr).toContain("if(ld0?.pin&&pr.res.kind==='mlabel'){if(rel==='tap'&&!ld0.moved&&!ld0.done)"); expect(vr).toContain('setRegionLabel(reg,null);pulse(c,0.2)');
     expect(vr).toContain('if(analysisOn()&&pins.size)mlb=nearerLabel('); expect(vr).toContain('tagBehindTissue(occlusionGpu(),mlb.distance,vh.distance,occEps))mlb=null');
-    expect(vr).toContain("cardPlain(ctx,l.text,l.x,l.y,l.maxWidth)"); expect(vr).toContain("cardLayout((i,t)=>measureText(i?FT2:FT1,t),{text:t1,x:x0},{text:t2,x:x0})"); expect(vr).toContain("t1=r?vrChipTitle(r):seg"); expect(vr).toContain("label(X+76,y+34,vrChipTitle(r),"); // the same \"N. name\" text through vrChipTitle
+    expect(vr).toContain("cardPlain(ctx,l.text,l.x,l.y,l.maxWidth)"); expect(vr).toContain("cardLayout((i,t)=>measureText(i?FT2:FT1,t),{text:t1,x:x0},{text:t2,x:x0})"); expect(vr).toContain("t1=r?vrChipTitle(r):kc?childLabelTitle(kc,tr):seg"); expect(vr).toContain("label(X+76,y+34,vrChipTitle(r),"); // the same \"N. name\" text through vrChipTitle
     expect(vr).toContain('lb.m.position.y+=labelRise(lb);'); expect(vr).toContain('const labelRise=lb=>labelScale()*0.045+'); // the unlit size: the card does not move when lit
     expect(vr).toContain('const ridIndex=()=>'); expect(vr).toContain('spacingNoteF'); expect(vr).not.toContain('[...pins]'); expect(vr).not.toContain('hit:tmpPh.clone()');
     expect(vr).toContain('ld.done=true');
   });
   it('PC / project: the chip number is the region id; the surface anchor; merge and split keep the label; a second finger cannot rotate during a label drag', () => {
     const d3 = read('comment-3d.js'), ops = read('analysis-ops.js'), res = read('analysis-results.js');
-    expect(d3).toContain('e.t1.textContent=regionChipTitle(r,tr);'); /* the number is r.id (region-name.js regionChipTitle) */ expect(d3).toContain('if(labelDragging){'); expect(d3).toContain('labelDragging=true;');
+    expect(d3).toContain('e.t1.textContent=labelChipTitle(r,tr);'); /* the number is r.id (region-name.js regionChipTitle; child-labels.js labelChipTitle, which gives a result exactly that) */ expect(d3).toContain('if(labelDragging){'); expect(d3).toContain('labelDragging=true;');
     expect(res).toContain('surfaceAnchor({contains:(i,j,k)=>analysisRunsContain(region.runsBySlice,i,j,k)');
     expect(ops).toContain('selected.find(r=>r.label)?.label'); expect(ops).toContain('split.label=r.label;delete r.label');
   });
@@ -232,7 +232,7 @@ describe('a result label follows its segments (VR)', () => {
   it('the PC 3D view already hides labels of unticked segments (analysisRegionShown)', () => {
     const c3 = readFileSync(new URL('../../docs/comment-3d.js', import.meta.url), 'utf8');
     expect(c3).toContain('r.label&&shownRegion(r)');
-    expect(c3).toContain('analysisRegionShown(r)&&');
+    expect(c3).toContain('analysisRegionShown(r)'); // a child's label follows the child's own shown rule (r.child?...:analysisRegionShown(r))
   });
 });
 

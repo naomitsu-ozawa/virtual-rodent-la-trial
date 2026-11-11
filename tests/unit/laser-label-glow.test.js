@@ -52,7 +52,7 @@ describe('vr-view.js wiring', () => {
   const block = vr.slice(vr.indexOf('pinGlow.clear();'), vr.indexOf('   {const occ=occlusionGpu();if(occ&&pins.size)'));
   it('the glow set is rebuilt every frame from each controller (a cleared Set: no stale state across frames)', () => {
     expect(block).toContain('pinGlow.clear();for(const x of controllers)');
-    expect(block).toContain("glowRid(on,x.visible!==false,e?e.rid:0,rs?.kind==='mlabel'||(u.lblDrag&&u.press)||wheelOwner===x||pw?.c===x)");
+    expect(block).toContain("blocked=rs?.kind==='mlabel'||(u.lblDrag&&u.press)||wheelOwner===x||pw?.c===x;for(const rid of u.hrids){const g=glowRid(on,x.visible!==false,rid,blocked)");
   });
   it('the cards: glow = not lit by the card rule, from the set; the face is the lit face (white outline), the card is the lit size, the leader gets the bone colour', () => {
     expect(vr).toContain('lb.glow=!pinLit.has(lb.rid)&&pinGlow.has(lb.rid)');
@@ -145,9 +145,9 @@ describe('comment-3d.js wiring (PC)', () => {
     expect(pc).toContain("window.addEventListener('blur',boneHoverOff)");
   });
   it('the card is lit with the existing .is-lit look (labelFocus unchanged: no volume focus from the bone hover); the card of the bone under the mouse is kept in the overlap thinning even when judged behind the tissue', () => {
-    expect(pc).toContain('const isLitKey=key=>key!=null&&(labelFocus.get()===key||boneKey()===key)');
-    expect(pc).toContain("(e.disp!=='hide'||r.id===bg)");
-    expect(pc).toContain('keep:lit===\'A:\'+r.id||r.id===bg');
-    expect(pc).toContain('if(bg&&(!alEls.has(bg)||!boneGate()))boneGlow.clear()');
+    expect(pc).toContain("const isLitKey=key=>key!=null&&(labelFocus.get()===key||(!!boneGlow.get()&&'A:'+boneGlow.get()===key)||(!!childBoneGlow.get()&&'A:'+childBoneGlow.get()===key))");
+    expect(pc).toContain("(e.disp!=='hide'||r.id===bg||r.id===bgc)");
+    expect(pc).toContain('keep:lit===\'A:\'+r.id||r.id===bg||r.id===bgc');
+    expect(pc).toContain('if(bg&&(!alEls.has(bg)||!boneGate()))boneGlow.clear();if(bgc&&(!alEls.has(bgc)||!boneGate()))childBoneGlow.clear()');
   });
 });
