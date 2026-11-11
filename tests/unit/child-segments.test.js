@@ -146,7 +146,7 @@ describe('segments.js: segmentById / allSegmentKeys (one interface for the prese
     S.segmentState.bone.opacity = 0.4; S.segmentState.bone.material = 'plaster'; S.segmentState.contrast.material = 'plastic';
     expect(S.segmentById(a.key)).toMatchObject({ opacity: 0.4, material: 'plaster' }); expect(S.segmentById(b.key)).toMatchObject({ opacity: 1, material: 'plastic' });
     expect(S.childRenderEntries().map(e => [e.opacity, e.material])).toEqual([[0.4, 'plaster'], [1, 'plastic']]);
-    S.segmentState.bone.material = 'skin'; expect(S.childRenderEntries()[0].material).toBe('skin'); expect(S.segmentById(a.key).material).toBe('skin'); // a material of the lighting.js MATERIALS the old child list did not know too
+    S.segmentState.bone.material = 'plastic'; expect(S.childRenderEntries()[0].material).toBe('plastic'); expect(S.segmentById(a.key).material).toBe('plastic'); // a material of the lighting.js MATERIALS the old child list did not know too
     S.notifyChildrenOfParentLook('bone', ['material']); off();
     expect(seen).toEqual([[a.key, ['material']]]);
     S.segmentState.bone.opacity = 1; S.segmentState.bone.material = 'standard'; S.segmentState.contrast.material = 'standard';

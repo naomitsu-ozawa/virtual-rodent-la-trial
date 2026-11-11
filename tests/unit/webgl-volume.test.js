@@ -30,7 +30,7 @@ describe('the VR shader patched for the page', () => {
     expect(out).toContain('texelFetch(regionLut,ivec2(i,0),0)');
     expect(out).toContain('e.rgb*diffuse*(((m>>4)&1)==1?1.18:1.0)+vec3(spec)');
     expect(out).not.toContain('regionSeg'); expect(out).not.toContain('regionC['); // the old per-colour tables are gone
-    expect(out).not.toContain('vrlC*diffuse+vec3(spec)'); // every surface hit goes through regionLit
+    expect(out).not.toContain('regionColor(hp+dir*(0.75*voxelMin),segC[idx].rgb,idx)*diffuse+vec3(spec)'); // every surface hit goes through regionLit
     expect(out.split('regionLit(hp+dir').length - 1).toBeGreaterThanOrEqual(3);
   });
   it('leaves the VR shader itself alone (the patched copy is a copy)', () => {
@@ -51,7 +51,7 @@ describe('child segments in the page volume', () => {
     expect(patchFragmentShader(fragmentShader, { children: false })).toBe(base); // no child segment: the same text as before
     expect(base).not.toContain('childBase(p,base,s)*diffuse'); expect(base).not.toContain('ctLumAt(cp');
     const kids = patchFragmentShader(fragmentShader, { children: true });
-    expect(kids).toContain('return cb*diffuse+vec3(spec);'); expect(kids).toContain('vrlReal(cb,'); expect(kids).toContain('ctLumAt(cp,huAt(texCoord(cp)),s)');
+    expect(kids).toContain('return childBase(p,base,s)*diffuse+vec3(spec);'); expect(kids).toContain('ctLumAt(cp,huAt(texCoord(cp)),s)');
     expect(kids.length).toBeGreaterThan(base.length);
   });
   it('the VR shader has the child block the page relies on (uniforms childTex / childLut, childBase, ctLumAt)', () => {
@@ -89,12 +89,6 @@ describe('child segments in the page volume', () => {
     expect(a[8 + 3]).toBe(0); expect(a[R + 8 + 3]).toBe(1); // child 2 hidden: no slot bit in row 0, its hidden mask in row 1
     expect(a[2 * R + 8 + 3]).toBe(1); // opacity clamped
     expect([...a.slice(12, 16)]).toEqual([0, 0, 0, 0]); // a child without an entry has no row
-    // the material's kind (skin / muscle / fat = 1..3) rides in row 2's 4th value as opacity + 2 * kind (the shader splits it with floor(w * 0.5)); the plain presets add 0
-    const b = new Float32Array(256 * 12);
-    globalThis.__vrlSettings = { get: k => (k === 'tissueLook' ? 'gloss' : undefined) }; // the look 艶と断面: kind 3 stays 3 (the default look 標準 draws every preset with kind 0, see lighting.test.js)
-    fillChildLut(b, [{ key: 'a', segMask: 1 }], [{ key: 'a', color: 'red', shown: true, opacity: 0.5 }], rgbOf, () => ({ ambient: 0.3, spec: 0.1, shininess: 9, kind: 3 }));
-    delete globalThis.__vrlSettings;
-    expect(b[2 * R + 7]).toBe(6.5); expect(Math.floor(b[2 * R + 7] * 0.5)).toBe(3); expect(b[2 * R + 7] - 2 * Math.floor(b[2 * R + 7] * 0.5)).toBe(0.5);
   });
 });
 

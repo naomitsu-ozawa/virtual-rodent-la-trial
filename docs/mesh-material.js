@@ -6,31 +6,24 @@
 // each segment's material preset (lighting.js MATERIALS) is a uniform shared by every mesh of that segment (one per segment key), so
 // changing the preset (setSegmentMeshMaterial) updates the meshes in place, no rebuild; meshes without a segment key use the standard material.
 import * as THREE from './vendor/three@0.186.0/build/three.webgpu.js';
-import { meshColorNode, patchStandardFragment, boxRadius, materialVecNow, tissueLookNow } from './lighting.js?v=20261111-build715';
+import { meshColorNode, patchStandardFragment, boxRadius, materialVec } from './lighting.js?v=20261111-build716';
 
 const TSL = THREE.TSL; // the TSL namespace of the webgpu build (three/tsl itself imports a bare specifier the app has no import map for)
 let backend = 'WEBGPU';
 // the depth cue's two numbers, shared by every mesh material: distance of the eye to the volume's centre, bounding radius of the volume (updateMeshDepth)
 const depth = { center: TSL.uniform(5.2), radius: TSL.uniform(2.86) };
 const glDepth = { value: new THREE.Vector2(5.2, 2.86) };
-const matOf = new Map(); // segment key ('' = none) -> { node: vec4 TSL uniform (ambient, spec, shininess, kind), gl: { value: Vector4 }, colorNode }
+const matOf = new Map(); // segment key ('' = none) -> { node: vec4 TSL uniform (ambient, spec, shininess, spare), gl: { value: Vector4 }, colorNode }
 function segmentMat(key = '') {
   let m = matOf.get(key);
-  if (!m) { const v = materialVecNow('standard'); m = { node: TSL.uniform(new THREE.Vector4(v[0], v[1], v[2], v[3])), gl: { value: new THREE.Vector4(v[0], v[1], v[2], v[3]) }, colorNode: null }; matOf.set(key, m); }
+  if (!m) { const v = materialVec('standard'); m = { node: TSL.uniform(new THREE.Vector4(v[0], v[1], v[2], v[3])), gl: { value: new THREE.Vector4(v[0], v[1], v[2], v[3]) }, colorNode: null }; matOf.set(key, m); }
   return m;
 }
 // the material preset of a segment's meshes (a MATERIALS key; unknown -> standard)
 export function setSegmentMeshMaterial(key, preset) {
-  presetOf.set(key, preset);
-  const v = materialVecNow(preset), m = segmentMat(key);
+  const v = materialVec(preset), m = segmentMat(key);
   m.node.value.set(v[0], v[1], v[2], v[3]); m.gl.value.set(v[0], v[1], v[2], v[3]);
 }
-// 設定 > 描画 > 質感の色味 changed: every segment's meshes take the kind of the chosen look (the preset itself is unchanged); the 3D view is redrawn by the page
-const presetOf = new Map();
-export function refreshMeshLooks() {
-  for (const [key, preset] of presetOf) { const v = materialVecNow(preset), m = segmentMat(key); m.node.value.set(v[0], v[1], v[2], v[3]); m.gl.value.set(v[0], v[1], v[2], v[3]); }
-}
-try { globalThis.addEventListener?.('vrl-settings', e => { if (e?.detail?.key === 'tissueLook') refreshMeshLooks(); }); } catch { /* no window (a unit test) */ }
 
 // 'WEBGPU' (node materials) or 'WEBGL' (the fallback renderer): set once when the renderer of the 3D view exists, before any mesh is built
 export function setMeshMaterialBackend(name) { backend = name === 'WEBGL' ? 'WEBGL' : 'WEBGPU'; }

@@ -1,7 +1,7 @@
 // The analysis regions as a TREE under their parent segment (the browser segment cards and the VR segment menu): pure data builders, no DOM, no three.js, unit-tested
 // (tests/unit/segment-tree.test.js). A region hangs under the first of its segments that the tree knows (a merged region of bone + fat is under bone, listed once);
 // the order of a segment's children is the order of the analysis list. A row = what the view draws: colour, display name, shown flag, focus.
-import { regionVisible } from './region-visibility.js?v=20261111-build715';
+import { regionVisible } from './region-visibility.js?v=20261111-build716';
 export const TREE_COLLAPSE_OVER=8; // the browser's tree starts collapsed when a segment has more regions than this
 export const treeDefaultExpanded=count=>count<=TREE_COLLAPSE_OVER;
 // the segment a region is listed under, or null (no segment of it is in the tree: such a region stays only in the analysis list)

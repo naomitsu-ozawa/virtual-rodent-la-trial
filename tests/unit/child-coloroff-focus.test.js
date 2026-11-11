@@ -28,15 +28,15 @@ describe('colour off: the child stops standing out, the shape stays', () => {
     const c = mk(); expect(c.colorOff).toBe(false); expect(mk({ colorOff: true }).colorOff).toBe(true); expect(mk({ colorOff: 'yes' }).colorOff).toBe(false);
   });
   it('turning it off: the voxels are drawn in the parent colour; turning it on brings the own colour back (the material is always the parent\'s: a child inherits)', () => {
-    showBone(); S.segmentState.bone.color = '#abcdef'; S.segmentState.bone.material = 'skin';
+    showBone(); S.segmentState.bone.color = '#abcdef'; S.segmentState.bone.material = 'plastic';
     const c = mk();
-    expect(S.childRenderEntries()[0]).toMatchObject({ color: '#ff0000', material: 'skin', colorOff: false });
+    expect(S.childRenderEntries()[0]).toMatchObject({ color: '#ff0000', material: 'plastic', colorOff: false });
     expect(S.setChildLook(c.key, { colorOff: true })).toBe(true);
-    expect(S.childRenderEntries()[0]).toMatchObject({ color: '#abcdef', material: 'skin', colorOff: true });
-    expect(S.childDrawLook(c.key)).toEqual({ color: '#abcdef', material: 'skin' });
+    expect(S.childRenderEntries()[0]).toMatchObject({ color: '#abcdef', material: 'plastic', colorOff: true });
+    expect(S.childDrawLook(c.key)).toEqual({ color: '#abcdef', material: 'plastic' });
     expect(S.setChildLook(c.key, { colorOff: true })).toBe(false); // no change, no event
     expect(S.setChildLook(c.key, { colorOff: false })).toBe(true);
-    expect(S.childRenderEntries()[0]).toMatchObject({ color: '#ff0000', material: 'skin', colorOff: false });
+    expect(S.childRenderEntries()[0]).toMatchObject({ color: '#ff0000', material: 'plastic', colorOff: false });
   });
   it('the child follows its parent when the parent colour / material changes; the child own colour is kept (swatch, picker)', () => {
     showBone(); const c = mk(); S.setChildLook(c.key, { colorOff: true });
