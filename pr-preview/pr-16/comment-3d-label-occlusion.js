@@ -4,13 +4,14 @@
 //  (1) BEHIND a volume (judged with vr-point.js pointIsHidden, in comment-3d.js): the label, its leader and its anchor dot are hidden completely.
 //  (2) EMBEDDED: the place of the card (the anchor, or the anchor + the stored label.offset) lies INSIDE the tissue that is shown now.
 //      Tissue = a voxel of a shown segment (classification channel >= 128, vr-pick.js classifiedAt, the VR rule) on the side every cutting
-//      plane of the section view keeps (n.p - w >= 0). Judged only when the anchor, the offset, the shown segments or the section plane change.
+//      plane of the section view keeps (n.p - w >= 0). Judged only when the anchor, the offset, the shown segments or the section plane change
 //  (3) PUSH OUT: an embedded card is moved out of the tissue. From the card's place we march in 26 directions (6 axes, 12 edges, 8 corners) in
 //      half-voxel steps up to LABEL_PUSH_MAX (object space; the long side of the box is 3.3); the direction that leaves the tissue first wins
 //      (axes first on a tie) and the card goes LABEL_PUSH_MARGIN_VOX voxels beyond that surface point. The leader still starts at the anchor.
 //      A card that could be pushed out is shown normally (rule 1 applies to its new place); one that could not stays embedded = translucent.
+//      for a card at its limited place the same march is analysis-label.js pushWithinLimit, which takes only a free place whose leader is within the limit; none = translucent.
 //  (4) OVERLAP: of the cards that overlap on the screen only the nearest stays; a lit (hovered / dragged) card always stays.
-import { classifiedAt } from './vr-pick.js?v=20261110-build710';
+import { classifiedAt } from './vr-pick.js?v=20261110-build711';
 
 export const LABEL_PUSH_MAX = 0.8; // how far (object space) a card may be pushed out of the tissue; beyond it the card stays embedded (translucent)
 export const LABEL_PUSH_MARGIN_VOX = 1.5; // how far beyond the surface (in voxels of the classification grid) the pushed card is put

@@ -11,25 +11,25 @@
 // view's cut plane included; refreshed at most about 10 times a second while the view moves and once more when it stops
 // (comment-3d-hidden.js). Until the bytes are ready, or when no segment is shown / no source data is in memory, every point is exposed.
 import * as THREE from './vendor/three@0.186.0/build/three.webgpu.js';
-import { sceneState, volume, activeSeries, volumeAnalysisMode, analysisEditTool, sectionViewOpen, sectionViewPlane, analysisRegions, threeRenderMode } from './state.js?v=20261110-build710';
-import { tr } from './i18n.js?v=20261110-build710';
-import { datasetFingerprint } from './project-file.js?v=20261110-build710';
-import { voxelToLocal3D } from './crosshair.js?v=20261110-build710';
-import { pointColor, darkFill, inkOn } from './point-colors.js?v=20261110-build710';
-import { getComments, onCommentsChange, commentMatchesSeries, commentTarget, getMarkersShown, onMarkersShownChange } from './comments.js?v=20261110-build710';
-import { getMeasurements, setLabelOffset, onMeasurementsChange, measurementMm, measureLabel, seriesSpacing, spacingLevel, getMeasureStart, onMeasureStartChange, createLongPress } from './measurements.js?v=20261110-build710';
-import { openPointMenu, endMeasureAt, cancelMeasureUi } from './point-menu.js?v=20261110-build710';
-import { request3DRender } from './scene3d.js?v=20261110-build710';
-import { gpuVolumeTarget } from './gpu-volume-data.js?v=20261110-build710';
-import { analysisRegionShown, segmentState, segmentEditState, SEGMENT_PRESET_ORDER, gpuSegmentOrder } from './segments.js?v=20261110-build710';
-import { sectionLocalPoint, sectionLocalNormal } from './section-view.js?v=20261110-build710';
-import { planeLabelPlacement, clampLabelCenter, stepDelta, createFocusTracker, LINE_SAMPLES, probeKey, labelPart, lineSamplePoints, lineAlphas, lineStopOffsets, createIdMaker } from './measure-label.js?v=20261110-build710';
-import { planeRelations, boxHalfExtent, clipSegmentNear } from './comment-3d-section.js?v=20261110-build710';
-import { computeHiddenIds, shownChannels, sectionPlaneLocal, createHiddenThrottle } from './comment-3d-hidden.js?v=20261110-build710';
-import { regionCustomName, regionChipTitle } from './region-name.js?v=20261110-build710'; // the shared region name rule (name, else ID <atlas id>), as the VR cards
-import { judgeLabelPlace, labelDisplay, thinOverlaps, putAttr, putStyle } from './comment-3d-label-occlusion.js?v=20261110-build710'; // occlusion of the analysis labels (behind = hidden, embedded = translucent, pushed out, overlaps thinned)
-import { setRegionLabelOffset, onAnalysisLabelsChange, leaderVisible, labelLocal, offsetForLocal, rectEdgePoint, pcVoxelStep, createBoneGlow, boneHoverPickable, glowRegionOf } from './analysis-label.js?v=20261110-build710';
-import { analysisRunsContain } from './run-length.js?v=20261110-build710';
+import { sceneState, volume, activeSeries, volumeAnalysisMode, analysisEditTool, sectionViewOpen, sectionViewPlane, analysisRegions, threeRenderMode } from './state.js?v=20261110-build711';
+import { tr } from './i18n.js?v=20261110-build711';
+import { datasetFingerprint } from './project-file.js?v=20261110-build711';
+import { voxelToLocal3D } from './crosshair.js?v=20261110-build711';
+import { pointColor, darkFill, inkOn } from './point-colors.js?v=20261110-build711';
+import { getComments, onCommentsChange, commentMatchesSeries, commentTarget, getMarkersShown, onMarkersShownChange } from './comments.js?v=20261110-build711';
+import { getMeasurements, setLabelOffset, onMeasurementsChange, measurementMm, measureLabel, seriesSpacing, spacingLevel, getMeasureStart, onMeasureStartChange, createLongPress } from './measurements.js?v=20261110-build711';
+import { openPointMenu, endMeasureAt, cancelMeasureUi } from './point-menu.js?v=20261110-build711';
+import { request3DRender } from './scene3d.js?v=20261110-build711';
+import { gpuVolumeTarget } from './gpu-volume-data.js?v=20261110-build711';
+import { analysisRegionShown, segmentState, segmentEditState, SEGMENT_PRESET_ORDER, gpuSegmentOrder } from './segments.js?v=20261110-build711';
+import { sectionLocalPoint, sectionLocalNormal } from './section-view.js?v=20261110-build711';
+import { planeLabelPlacement, clampLabelCenter, stepDelta, createFocusTracker, LINE_SAMPLES, probeKey, labelPart, lineSamplePoints, lineAlphas, lineStopOffsets, createIdMaker } from './measure-label.js?v=20261110-build711';
+import { planeRelations, boxHalfExtent, clipSegmentNear } from './comment-3d-section.js?v=20261110-build711';
+import { computeHiddenIds, shownChannels, sectionPlaneLocal, createHiddenThrottle } from './comment-3d-hidden.js?v=20261110-build711';
+import { regionCustomName, regionChipTitle } from './region-name.js?v=20261110-build711'; // the shared region name rule (name, else ID <atlas id>), as the VR cards
+import { judgeLabelPlace, tissueAt, PUSH_DIRS, LABEL_PUSH_MAX, LABEL_PUSH_MARGIN_VOX, labelDisplay, thinOverlaps, putAttr, putStyle } from './comment-3d-label-occlusion.js?v=20261110-build711'; // occlusion of the analysis labels (behind = hidden, embedded = translucent, pushed out, overlaps thinned)
+import { setRegionLabelOffset, onAnalysisLabelsChange, leaderVisible, labelLocal, offsetForLocal, rectEdgePoint, pcVoxelStep, createBoneGlow, boneHoverPickable, glowRegionOf, pcLeaderLimit, pcLengthFactor, pcDrawnLength, pcDragUncap, pushWithinLimit, PC_REF_DISTANCE } from './analysis-label.js?v=20261110-build711';
+import { analysisRunsContain } from './run-length.js?v=20261110-build711';
 
 
 // analysis result labels (analysis-label.js, region.label): a chip (colour, number, segments, volume) at its anchor, MOVABLE by a drag (mouse / pen / touch) in the camera-facing plane through the label's
@@ -38,7 +38,7 @@ let host=null,layer=null,bubble=null,bubbleId=null,bubbleTimer=0;
 let rels=new Map(),relSig='',svg=null,cuesOn=false;
 let hiddenIds=new Set(),hiddenSig='',hiddenTimer=0,vrMod=null,vrModLoading=false,vrModFailed=false;
 const throttle=createHiddenThrottle();
-let lastPrep=null,placeCtx='',clsSeq=0;const places=new Map(),clsIds=new WeakMap(); // the classification bytes of the last judgement; per analysis label {key,base,embedded,push}
+let lastPrep=null,placeCtx='',clsSeq=0;const places=new Map(),clsIds=new WeakMap(); // the classification bytes of the last judgement; per analysis label its places (updateLabelPlaces)
 const els=new Map(); // comment id -> {el,x,y,vis,no}
 const v3=new THREE.Vector3(),c3=new THREE.Vector3(),eye3=new THREE.Vector3(),p3=new THREE.Vector3(),q3=new THREE.Vector3();
 
@@ -67,14 +67,14 @@ function hiddenSignature(obj,camera,ids,plane,fp){
 }
 const refreshSoon=()=>request3DRender();
 // frees the classification bytes (series change, markers hidden): the next judgement builds them again
-function releaseHidden(){lastPrep=null;placeCtx='';places.clear();clearTimeout(hiddenTimer);hiddenTimer=0;hiddenIds=new Set();hiddenSig='';throttle.reset();vrMod?.releaseHiddenCls?.()}
+function releaseHidden(){lastPrep=null;placeCtx='';places.clear();clearTimeout(capTimer);capTimer=0;clearTimeout(hiddenTimer);hiddenTimer=0;hiddenIds=new Set();hiddenSig='';throttle.reset();vrMod?.releaseHiddenCls?.()}
 // the throttled judgement: returns true when the hidden set changed
 function refreshHidden(obj,camera,pts,plane){
  const anyShown=SEGMENT_PRESET_ORDER.some(k=>segmentState[k]?.active&&segmentState[k]?.enabled);
  if(!anyShown||!pts.length){const had=hiddenIds.size>0;hiddenIds=new Set();if(lastPrep){lastPrep=null;refreshSoon()}return had}
  if(vrModFailed)return false; // the builder could not be loaded: every point stays exposed
  if(!vrMod){ // the classification builder lives in vr-view.js: loaded once, on the first need; until then the previous judgement stays
-  if(!vrModLoading){vrModLoading=true;import('./vr-view.js?v=20261110-build710').then(m=>{vrMod=m;throttle.reset();refreshSoon()},()=>{vrModFailed=true;if(hiddenIds.size){hiddenIds=new Set();refreshSoon()}})}
+  if(!vrModLoading){vrModLoading=true;import('./vr-view.js?v=20261110-build711').then(m=>{vrMod=m;throttle.reset();refreshSoon()},()=>{vrModFailed=true;if(hiddenIds.size){hiddenIds=new Set();refreshSoon()}})}
   return false;
  }
  const prep=vrMod.hiddenClsFor(()=>{throttle.reset();refreshSoon()});
@@ -172,27 +172,76 @@ function drawMeasures(obj,camera,W,H,pts,keep,dims){
 const shownRegion=r=>analysisRegionShown(r)&&!!r.runsBySlice&&r.voxels>0;
 const regionCss=c=>'#'+((Number(c)>>>0)&0xffffff).toString(16).padStart(6,'0');
 function analysisLabelRegions(){return analysisRegions.filter(r=>r.label&&shownRegion(r))}
-// where each analysis label's card is judged, in object space. The judgement of "embedded" (the card's place lies inside the tissue shown now) and the push out of the
-// tissue are redone per label only when its anchor / offset change, and for all labels when the shown segments, the classification bytes, the section plane or the volume change
-// (not with the camera). base = the anchor, or the anchor + the stored label.offset (an offset is respected: only a card that still lies in the tissue is pushed).
-function updateLabelPlaces(regs,dims,plane){
+// where each analysis label's card is drawn, in object space (places: region id -> pl). Two judgements of "embedded" (the card's place lies inside the tissue shown now) and of
+// the push out of the tissue, and one length limit:
+//  (1) the place of the initial display, pl.v0 = anchor -> the anchor + the stored label.offset, or where that card is pushed out of the tissue (judgeLabelPlace). As:
+//      redone per label only when its anchor / offset change, and for all labels when the shown segments, the classification bytes, the section plane or the volume change. Never
+//      with the camera. The label's limit T (px) is the line this place draws at the initial display (pcLeaderLimit: the camera PC_REF_DISTANCE in front, not panned, scale 1, the
+//      turn and the view's height as they are now; the window's width is not read).
+//  (2) every frame: k = pcLengthFactor (one formula per label) puts the card's edge at most T beyond the anchor. k = 1 (zoomed out / as at the start / the anchor under the card): the card is at the place of (1), the place computes (708 then held it inside the view; that hold is gone, drawAnalysisLabels).
+//      A line under the card (the anchor is under its own card) is cut at T when it is drawn (drawAnalysisLabels), so no drawn line is longer than T.
+//  (3) k < 1 (enlarged / panned past the limit): the card is at anchor + k * v0. That place can lie in the tissue, so it is judged again, but ONLY WHEN THE VIEW HAS STOPPED
+//      (LABEL_SETTLE_MS without a camera / object / view size change; a timer asks for one more frame, only when a limited card waits for its judgement), never while it moves. An embedded card is pushed out only to a free place whose
+//      line is within T (analysis-label.js pushWithinLimit: the march of pushOutOfTissue plus that condition); when there is none it stays at the limited place, translucent. While the view moves, the pushed place of the last judgement is kept
+//      and goes through pcLengthFactor too, so no frame draws a line longer than T (its translucent / hidden look can be one stop late).
+// capViews sets the two camera-space matrices of the object once per frame (and before a drag step): now (capMv) and at the initial display (capMr).
+const LABEL_SETTLE_MS=150;
+const capMv=new THREE.Matrix4(),capMr=new THREE.Matrix4(),capV=new THREE.Vector3(),capLast=new Float64Array(18);let capFx=0,capFy=0,capSeq=0,capAt=0,capTimer=0;
+function capViews(obj,camera,W,H,now=-1){
+ capMv.multiplyMatrices(camera.matrixWorldInverse,obj.matrixWorld);capMr.extractRotation(capMv);capMr.setPosition(0,0,-PC_REF_DISTANCE);const pe=camera.projectionMatrix.elements;capFx=W/2*pe[0];capFy=H/2*pe[5];
+ if(now<0)return; // a drag step: the matrices only
+ const m=capMv.elements;let moved=capLast[16]!==capFx||capLast[17]!==capFy;for(let i=0;i<16&&!moved;i++)moved=capLast[i]!==m[i];
+ if(moved){capLast.set(m);capLast[16]=capFx;capLast[17]=capFy;capSeq++;capAt=now} // the view moved: the judgement (3) waits until it has stood still for LABEL_SETTLE_MS
+}
+const camPt=(m,p)=>{capV.set(p.x,p.y,p.z).applyMatrix4(m);return{x:capV.x,y:capV.y,z:capV.z}};
+function camPair(m,al,dl){const a=camPt(m,al),c=camPt(m,{x:al.x+dl.x,y:al.y+dl.y,z:al.z+dl.z});return[a,{x:c.x-a.x,y:c.y-a.y,z:c.z-a.z}]} // the anchor and the displacement dl (object space) in camera space
+// a drag under the limit: P = the pointer's point at the depth of the card as drawn (object space). -> the place to store (object space) whose limited card is drawn at the pointer
+// (analysis-label.js pcDragUncap). The card keeps its depth whenever an offset exists for it; a card deeper than its anchor that is dragged further than such an offset can draw
+// is brought nearer the anchor's depth along the pointer's line of sight, just as far as needed (the place on the screen is the pointer's either way; the stored offset is then less deep).
+const capEye=new THREE.Vector3();
+function labelDragPlace(al,P,w,h,obj,camera){
+ if(!(capFx>0&&capFy>0))return P;
+ capEye.setFromMatrixPosition(camera.matrixWorld);obj.worldToLocal(capEye);
+ const za=-camPt(capMv,al).z,zp=-camPt(capMv,P).z,lamA=zp>1e-9&&za>0?za/zp:1,ex=capEye.x,ey=capEye.y,ez=capEye.z; // the point of the pointer's line of sight at the anchor's depth: the eye + lamA * (P - the eye)
+ const view=t=>{const lam=lamA+(1-lamA)*t,ul={x:ex+lam*(P.x-ex)-al.x,y:ey+lam*(P.y-ey)-al.y,z:ez+lam*(P.z-ez)-al.z},[a,u]=camPair(capMv,al,ul),[ar,ur]=camPair(capMr,al,ul);return{a,u,ar,ur,ul}};
+ const r=pcDragUncap(view,capFx,capFy,{hw:w/2,hh:h/2}),ul=view(r.t).ul;
+ return{x:al.x+ul.x*r.s,y:al.y+ul.y*r.s,z:al.z+ul.z*r.s};
+}
+function updateLabelPlaces(regs,dims,plane,now){
  const prep=lastPrep,chs=prep?.cls?shownChannels(prep.cls,segmentState,gpuSegmentOrder()):[];
  let cid=0;if(prep?.cls){cid=clsIds.get(prep.cls);if(!cid){cid=++clsSeq;clsIds.set(prep.cls,cid)}}
  const ctx=cid+'|'+chs.join()+'|'+(plane?[plane.x,plane.y,plane.z,plane.w].join(','):'')+'|'+dims.columns+','+dims.rows+','+dims.slices+'|'+(volume.spacing||[1,1,1]).join(',');
  if(ctx!==placeCtx){placeCtx=ctx;places.clear()}
- const step=pcVoxelStep(dims,volume.spacing),can=!!prep?.cls&&chs.length>0,live=new Set();
+ const step0=pcVoxelStep(dims,volume.spacing),can=!!prep?.cls&&chs.length>0,live=new Set(),settled=now-capAt>=LABEL_SETTLE_MS,capOk=capFx>0&&capFy>0;let waiting=false;
  for(const r of regs){
   live.add(r.id);const lab=r.label,o=lab.offset,key=lab.anchor.i+','+lab.anchor.j+','+lab.anchor.k+'|'+(o?o.i+','+o.j+','+o.k:'');
-  if(places.get(r.id)?.key===key)continue;
-  const base=labelLocal(voxelToLocal3D(lab.anchor,dims,volume.spacing),o,step),j=can?judgeLabelPlace(base,prep,chs,plane):{embedded:false,push:null};
-  places.set(r.id,{key,base,embedded:j.embedded,push:j.push});
+  let pl=places.get(r.id);
+  if(pl?.key!==key){ // (1) the place of the initial display
+   const al=voxelToLocal3D(lab.anchor,dims,volume.spacing),base=labelLocal(al,o,step0),j=can?judgeLabelPlace(base,prep,chs,plane):{embedded:false,push:null},p0=j.push||base,v0={x:p0.x-al.x,y:p0.y-al.y,z:p0.z-al.z};
+   pl={key,al,p0,v0,moved:Math.hypot(v0.x,v0.y,v0.z)>1e-12,emb0:j.embedded,push0:!!j.push,j1:null,place:p0,embedded:j.embedded,pushed:!!j.push,T:Infinity};places.set(r.id,pl);
+  }
+  if(!pl.moved||!capOk){pl.place=pl.p0;pl.embedded=pl.emb0;pl.pushed=pl.push0;pl.j1=null;pl.T=Infinity;continue} // the default place at the anchor: nothing to limit
+  const al=pl.al,ce=alEls.get(r.id),hw=(ce?.w||90)/2,hh=(ce?.h||16)/2,[a,d]=camPair(capMv,al,pl.v0),[ar,dr]=camPair(capMr,al,pl.v0),T=pcLeaderLimit(ar,dr,capFx,capFy,{hw,hh}),k=pcLengthFactor(a,d,T,capFx,capFy,hw,hh); // (2)
+  pl.T=T;
+  if(k>=1){pl.place=pl.p0;pl.embedded=pl.emb0;pl.pushed=pl.push0;pl.j1=null;continue}
+  const base={x:al.x+pl.v0.x*k,y:al.y+pl.v0.y*k,z:al.z+pl.v0.z*k};
+  const fresh=pl.j1&&pl.j1.seq===capSeq&&pl.j1.hw===hw&&pl.j1.hh===hh; // judged in this very view, with the card's size as drawn
+  if(can&&settled&&!fresh){ // (3) the view stands still: is the limited place in the tissue, and is there a free place within the limit?
+   let v=null,emb=false;
+   if(tissueAt(base,prep,chs,plane)){emb=true;const vm=Math.min(2*prep.halfExt[0]/prep.dims[0],2*prep.halfExt[1]/prep.dims[1],2*prep.halfExt[2]/prep.dims[2]); // the smallest classification voxel edge, the march's unit (as pushOutOfTissue)
+    const q=pushWithinLimit(base,pt=>tissueAt(pt,prep,chs,plane),PUSH_DIRS,{step:vm/2,margin:LABEL_PUSH_MARGIN_VOX*vm,maxDist:LABEL_PUSH_MAX,accept:pt=>{const c=camPt(capMv,pt);return pcDrawnLength(a,{x:c.x-a.x,y:c.y-a.y,z:c.z-a.z},1,capFx,capFy,hw,hh,T)<=T+1e-6}});if(q)v={x:q.point.x-al.x,y:q.point.y-al.y,z:q.point.z-al.z}}
+   pl.j1={seq:capSeq,hw,hh,v,embedded:emb};
+  }else if(can&&!fresh)waiting=true;
+  if(pl.j1?.v){const v=pl.j1.v,[,dv]=camPair(capMv,al,v),kv=pcLengthFactor(a,dv,T,capFx,capFy,hw,hh);pl.place={x:al.x+v.x*kv,y:al.y+v.y*kv,z:al.z+v.z*kv};pl.embedded=true;pl.pushed=true} // a pushed place, limited again in this frame's view
+  else{pl.place=base;pl.embedded=!!pl.j1?.embedded;pl.pushed=pl.j1?false:pl.push0} // the limited place itself: translucent when the last judgement found it in the tissue with no free place within the limit; never judged while limited (the view is moving) = drawn as a card in the open until the view stops
  }
+ clearTimeout(capTimer);capTimer=waiting?setTimeout(refreshSoon,Math.max(0,LABEL_SETTLE_MS-(now-capAt))+20):0; // one more frame once the view has stopped, for the judgement (3)
  for(const id of [...places.keys()])if(!live.has(id))places.delete(id);
 }
 // the places of ALL shown labels' cards (object space), judged hidden-behind-tissue with the points; an embedded card that could not be pushed out is not judged (it is drawn translucent)
 function analysisProbes(regs){
  const out=[];
- for(const r of regs){const pl=places.get(r.id);if(!pl||(pl.embedded&&!pl.push))continue;out.push({id:'A|'+r.id,local:pl.push||pl.base})}
+ for(const r of regs){const pl=places.get(r.id);if(!pl||(pl.embedded&&!pl.pushed))continue;out.push({id:'A|'+r.id,local:pl.place})}
  return out;
 }
 // DOM writes only when the value changed (a frame in which nothing moved writes nothing: the camera / the labels / the display are unchanged); the last written value sits on the element
@@ -200,7 +249,7 @@ function putHidden(el,v){if(el.hidden!==v)el.hidden=v}
 function drawAnalysisLabels(obj,camera,W,H,regs,keep,dims){
  if(!regs.length)return;
  ensureSvg();putAttr(svg,'width',W);putAttr(svg,'height',H);
- const step=pcVoxelStep(dims,volume.spacing),warn=spacingLevel(activeSeries)==='warn'; // the chip's number is the result's number in the panel (analysisRegionName: the region id)
+ const step0=pcVoxelStep(dims,volume.spacing),warn=spacingLevel(activeSeries)==='warn'; // the chip's number is the result's number in the panel (analysisRegionName: the region id)
  for(const r of regs){
   keep.add(r.id);let e=alEls.get(r.id);
   if(!e){
@@ -219,20 +268,24 @@ function drawAnalysisLabels(obj,camera,W,H,regs,keep,dims){
    if(warn)e.label.title=tr('measureWarn');
    e.label.hidden=false;e.w=e.label.offsetWidth||90;e.h=e.label.offsetHeight||16;
   }
-  const lab=r.label,al=voxelToLocal3D(lab.anchor,dims,volume.spacing),pl=places.get(r.id),pushed=!!pl?.push,moved=leaderVisible(lab)||pushed; // a card pushed out of the tissue gets a leader to its anchor too
+  const lab=r.label,al=voxelToLocal3D(lab.anchor,dims,volume.spacing),pl=places.get(r.id),pushed=!!pl?.pushed,moved=pl?pl.moved:leaderVisible(lab); // a card pushed out of the tissue gets a leader to its anchor too
   v3.set(al.x,al.y,al.z).applyMatrix4(obj.matrixWorld).project(camera);
   const ax=(v3.x+1)/2*W,ay=(1-v3.y)/2*H,az=v3.z,aOk=az>-1&&az<1&&Number.isFinite(ax)&&Number.isFinite(ay);
   let lx=ax,ly=ay-(e.h/2+10),lz=az,lOk=aOk; // default: just above its anchor, on the screen
-  if(moved){ // where the user left it (anchor + offset, voxel units), or where it was pushed to (out of the tissue)
-   const p=pushed?pl.push:labelLocal(al,lab.offset,step);v3.set(p.x,p.y,p.z).applyMatrix4(obj.matrixWorld).project(camera);
+  if(moved){ // where the user left it (anchor + offset, voxel units), or where it was pushed to (out of the tissue);: within the leader's length limit (updateLabelPlaces)
+   const p=pl?pl.place:labelLocal(al,lab.offset,step0);v3.set(p.x,p.y,p.z).applyMatrix4(obj.matrixWorld).project(camera);
    lx=(v3.x+1)/2*W;ly=(1-v3.y)/2*H;lz=v3.z;lOk=lz>-1&&lz<1&&Number.isFinite(lx)&&Number.isFinite(ly);
   }
   if(!lOk){e.disp='off';putHidden(e.label,true);putStyle(e.leader,'display','none');putStyle(e.dot,'display','none');e.ctx=null;continue}
-  const c=clampLabelCenter(lx,ly,{w:e.w,h:e.h,x0:0,y0:0,iw:W,ih:H}); // shown inside the view (the stored offset is untouched)
-  e.sx=c.x;e.sy=c.y;e.ctx={ml:al,step,ndcZ:lz}; // what a drag works from: the anchor (object space) and the depth of the label
+  const c={x:lx,y:ly}; // the card is drawn where its place is seen and is NOT held inside the view: a card that does not fit is cut by the view's edge (like the model) and comes into sight with a pan / zoom out. Holding it in made its line longer on a pan (analysis-label.js THE RULE)
+  e.sx=c.x;e.sy=c.y;e.ctx={ml:al,step:step0,ndcZ:lz,cap:true}; // what a drag works from: the anchor (object space), the stored size's step (the cap is solved back on the drag) and the depth of the label
   putHidden(e.label,false);putStyle(e.label,'transform','translate('+c.x.toFixed(1)+'px,'+c.y.toFixed(1)+'px) translate(-50%,-50%)');
   if(aOk){putAttr(e.dot,'cx',ax.toFixed(1));putAttr(e.dot,'cy',ay.toFixed(1));putStyle(e.dot,'display','')}else putStyle(e.dot,'display','none');
-  if(moved&&aOk){const ed=rectEdgePoint(ax-c.x,ay-c.y,e.w/2,e.h/2);putAttr(e.leader,'x1',ax.toFixed(1));putAttr(e.leader,'y1',ay.toFixed(1));putAttr(e.leader,'x2',(c.x+ed.x).toFixed(1));putAttr(e.leader,'y2',(c.y+ed.y).toFixed(1));putStyle(e.leader,'display','')}
+  // the line: anchor -> the card's edge facing it (rectEdgePoint), as.: when the anchor is under its own card that line (it runs under the card, from the anchor to the
+  // edge) is cut at the label's limit T, because it grows when the model is drawn smaller; outside the card the line is within T by the card's place (updateLabelPlaces)
+  if(moved&&aOk){const ed=rectEdgePoint(ax-c.x,ay-c.y,e.w/2,e.h/2);let x2=c.x+ed.x,y2=c.y+ed.y;
+   if(Math.abs(ax-c.x)<=e.w/2&&Math.abs(ay-c.y)<=e.h/2){const T=pl?pl.T:Infinity,len=Math.hypot(x2-ax,y2-ay);if(len>T){x2=ax+(x2-ax)*T/len;y2=ay+(y2-ay)*T/len}}
+   putAttr(e.leader,'x1',ax.toFixed(1));putAttr(e.leader,'y1',ay.toFixed(1));putAttr(e.leader,'x2',x2.toFixed(1));putAttr(e.leader,'y2',y2.toFixed(1));putStyle(e.leader,'display','')}
   else putStyle(e.leader,'display','none');
   e.z=lz;e.disp=labelDisplay({embedded:!!pl?.embedded,pushed,behind:hiddenIds.has('A|'+r.id),dragging:e.label.classList.contains('is-dragging')});
  }
@@ -338,7 +391,7 @@ export function updateComment3dMarkers(){
   // hidden behind tissue: judged at most ~10 times a second (the positions above follow every frame), plus once more after the view stops
   const plane=sectionViewOpen&&sectionViewPlane?sectionPlaneLocal(sectionLocalPoint(),sectionLocalNormal()):null;
   // the distances' probes (line samples, a dragged label) are judged in the same pass; their places are part of the signature (a moved point / label is judged again)
-  updateLabelPlaces(als,dims,plane);
+  {const t=performance.now();capViews(obj,camera,W,H,t);updateLabelPlaces(als,dims,plane,t)}
   const probes=measureProbes(pts,dims).concat(analysisProbes(als)),judged=probes.length?pts.concat(probes):pts;
   const sig=hiddenSignature(obj,camera,pts.map(p=>p.id).concat(probes.map(p=>p.id+'@'+p.local.x.toFixed(3)+','+p.local.y.toFixed(3)+','+p.local.z.toFixed(3))),plane,fp),now=performance.now(),st=throttle.step(now,sig!==hiddenSig);
   clearTimeout(hiddenTimer);hiddenTimer=0;
@@ -436,7 +489,9 @@ function installLabelDrag(nearestDot,gate){
    const{obj,camera}=sceneState,W=host.clientWidth,H=host.clientHeight;if(!obj||!camera)return;
    obj.updateMatrixWorld(true);camera.updateMatrixWorld(true);
    v3.set((m.clientX-r.left-dx)/W*2-1,1-(m.clientY-r.top-dy)/H*2,e.ctx.ndcZ).unproject(camera);obj.worldToLocal(v3); // the screen point, in the plane facing the camera at the label's depth
-   setOff(offsetForLocal(e.ctx.ml,{x:v3.x,y:v3.y,z:v3.z},e.ctx.step));
+   let px=v3.x,py=v3.y,pz=v3.z;
+   if(e.ctx.cap){capViews(obj,camera,W,H);const q=labelDragPlace(e.ctx.ml,{x:px,y:py,z:pz},e.w,e.h,obj,camera);px=q.x;py=q.y;pz=q.z} // the offset whose limited place is the pointer's (labelDragPlace)
+   setOff(offsetForLocal(e.ctx.ml,{x:px,y:py,z:pz},e.ctx.step));
   };
   const up=m=>{if(m.pointerId!==pid)return;labelDragging=false;e.label.classList.remove('is-dragging');labelFocus.drag(null);document.removeEventListener('pointermove',move,true);document.removeEventListener('pointerup',up,true);document.removeEventListener('pointercancel',up,true)};
   document.addEventListener('pointermove',move,true);document.addEventListener('pointerup',up,true);document.addEventListener('pointercancel',up,true);
