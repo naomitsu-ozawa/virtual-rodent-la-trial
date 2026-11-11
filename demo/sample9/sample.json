@@ -1,0 +1,36 @@
+{
+  "changes": {
+    "en": "cropped to one inner ear (rat C, ear C1) and converted from the original NRRD/NIfTI data to DICOM; temporal bone, stapes and inner-ear labels registered as segment masks; in build 708 each structure is also registered individually as a child segment (under bone: temporal bone 3,389,699 and stapes 3,509; under contrast: bony labyrinth 455,858, cochlear nerve + spiral ganglion 9,857, cochlear nerve 20,538), so each parent segment's own display is fully subtracted by its children; 3D reconstruction and rendering in this app",
+    "ja": "元の NRRD/NIfTI 形式データから片側の内耳（個体CのC1）を切り出して DICOM に変換、側頭骨・あぶみ骨と内耳ラベルをセグメントのマスクとして登録、build 708 の子セグメントで各構造を個別登録（骨の子：側頭骨3,389,699／あぶみ骨3,509、造影領域の子：骨迷路455,858／蝸牛神経・ラセン神経節9,857／蝸牛神経20,538。親セグメントの表示は子の差し引きで0になる）、本アプリで3D再構成"
+  },
+  "credit": {
+    "dataUrl": "https://zenodo.org/records/14866967",
+    "name": "Cossellu / Vivado / Batti / Gantar / Pizzala / Perin, University of Pavia",
+    "url": "https://zenodo.org/records/14866967"
+  },
+  "description": {
+    "ja": "ラット内耳 microCT・側頭骨と内耳ラベル付き（{mb}）",
+    "en": "Rat inner-ear micro-CT with temporal-bone and inner-ear labels ({mb})"
+  },
+  "level": null,
+  "license": {
+    "name": "CC BY 4.0",
+    "url": "https://creativecommons.org/licenses/by/4.0/"
+  },
+  "name": {
+    "en": "Rat inner ear",
+    "ja": "ラット内耳"
+  },
+  "terms": {
+    "en": "You may use and adapt it for any purpose, including commercial use, with attribution.",
+    "ja": "出典を表示すれば、営利・非営利を問わず利用・改変できます。"
+  },
+  "size": {
+    "dims": [
+      312,
+      349,
+      417
+    ],
+    "megabytes": 91.3
+  }
+}

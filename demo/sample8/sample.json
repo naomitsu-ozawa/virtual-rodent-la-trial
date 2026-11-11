@@ -1,0 +1,32 @@
+{
+  "changes": {
+    "en": "cropped to the body and converted from the original Analyze format to DICOM; organ and tumor labels registered as segment masks (bone / lung+trachea / organs+tumor); in build 708 the organs and tumor are also registered individually as child segments (9 under contrast: heart, bladder, kidneys, stomach, muscle, spleen, liver, intestine, tumor in red #ff3838; 2 under lung: lung, trachea), so each parent segment's own display is fully subtracted by its children; 3D reconstruction and rendering in this app",
+    "ja": "元の Analyze 形式データから体部を切り出して DICOM に変換、臓器＋腫瘍ラベルをセグメントのマスクとして登録（骨／肺＋気管／臓器＋腫瘍の3セグメント）、build 708 の子セグメントで臓器・腫瘍を個別登録（造影領域の子9件：心臓10,646／膀胱1,309／腎臓16,913／胃3,540／筋肉3,960／脾臓7,947／肝臓73,719／腸77,988／腫瘍7,525（赤 #ff3838）、肺の子2件：肺27,055／気管271。親セグメントの表示は子の差し引きで0になる）、本アプリで3D再構成"
+  },
+  "credit": {
+    "dataUrl": "https://springernature.figshare.com/articles/dataset/Contrast-enhanced_CTscans_with_manual_organ_segmentation/7058618",
+    "name": "Rosenhain / Magnuska / Yamoah / Rawashdeh / Kiessling / Gremse, RWTH Aachen University",
+    "url": "https://springernature.figshare.com/articles/dataset/Contrast-enhanced_CTscans_with_manual_organ_segmentation/7058618"
+  },
+  "description": {
+    "ja": "マウス全身 microCT（造影剤あり）・臓器＋腫瘍ラベル付き（{mb}）",
+    "en": "Mouse whole-body contrast-enhanced micro-CT with organ and tumor labels ({mb})"
+  },
+  "level": null,
+  "license": {
+    "name": "CC0 1.0",
+    "url": "https://creativecommons.org/publicdomain/zero/1.0/"
+  },
+  "name": {
+    "en": "Mouse whole body, contrast-enhanced (tumor)",
+    "ja": "マウス全身・造影（腫瘍）"
+  },
+  "size": {
+    "dims": [
+      124,
+      76,
+      242
+    ],
+    "megabytes": 4.8
+  }
+}
