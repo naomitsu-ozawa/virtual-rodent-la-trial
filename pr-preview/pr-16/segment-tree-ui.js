@@ -1,17 +1,17 @@
 // The controls of one CHILD SEGMENT (a segment added under a preset card in the tree,; ported from the tree-segments work d99f5414 segment-tree-ui.js, applied to child segments only): the SAME controls as a preset segment card, built from the same pieces so that they look and behave the same:
 // opacity slider (the card's .segment-range row), display mode (the card's .segment-material-row select, lighting.js MATERIALS), cut-face shading range (lower / upper sliders with − / ＋ and 「自動に戻す」, the section panel's
 // controls, section-shade.js). Everything reads / writes the ONE segment interface (segments.js segmentById / setChildLook / setSegmentShadeEnd), so VR and the browser stay one state.
-import { segmentById, setChildLook, segmentShadeRange, segmentShadeSpan, setSegmentShadeEnd, resetSegmentShadeRange, shadeDataRange, onShadeAutoChange, onChildSegLookChange } from './segments.js?v=20261111-build712';
-import { CHILD_SEG_MATERIALS, CHILD_SEG_NAME_MAX } from './segment-look.js?v=20261111-build712';
-import { childByKey } from './child-segments.js?v=20261111-build712';
-import { childLabelItem } from './child-labels.js?v=20261111-build712';
-import { setRegionLabelOffset, hasOffset, onAnalysisLabelsChange } from './analysis-label.js?v=20261111-build712';
-import { shadeRangeStep, shadeValueAt, shadePosOf } from './cap-shade.js?v=20261111-build712';
-import { wireStepButton, stepClamp } from './value-step.js?v=20261111-build712';
-import { formatCtValue } from './utils.js?v=20261111-build712';
-import { tr } from './i18n.js?v=20261111-build712';
+import { segmentById, setChildLook, segmentShadeRange, segmentShadeSpan, setSegmentShadeEnd, resetSegmentShadeRange, shadeDataRange, onShadeAutoChange, onChildSegLookChange } from './segments.js?v=20261111-build713';
+import { CHILD_SEG_MATERIALS, CHILD_SEG_NAME_MAX } from './segment-look.js?v=20261111-build713';
+import { childByKey } from './child-segments.js?v=20261111-build713';
+import { childLabelItem } from './child-labels.js?v=20261111-build713';
+import { setRegionLabelOffset, hasOffset, onAnalysisLabelsChange } from './analysis-label.js?v=20261111-build713';
+import { shadeRangeStep, shadeValueAt, shadePosOf } from './cap-shade.js?v=20261111-build713';
+import { wireStepButton, stepClamp } from './value-step.js?v=20261111-build713';
+import { formatCtValue } from './utils.js?v=20261111-build713';
+import { tr } from './i18n.js?v=20261111-build713';
 
-const MATERIAL_LABEL = { standard: 'matStandard', solid: 'matSolid', plaster: 'matPlaster', plastic: 'matPlastic' };
+const MATERIAL_LABEL = { standard: 'matStandard', solid: 'matSolid', plaster: 'matPlaster', plastic: 'matPlastic', skin: 'matSkin', muscle: 'matMuscle', fat: 'matFat' };
 // the actions the page injects (app.js: deleteChild(key)), so that this module imports nothing of the 3D code
 let actions = { deleteChild: null };
 export const setSegmentTreeActions = a => { actions = { ...actions, ...a }; };

@@ -4,10 +4,10 @@
 //        opacity, material, shade ({lower, upper} | null = auto), hash (of the runs: the device cache key of the parent), label? (the pinned 3D name label {anchor, offset?} in voxel units, analysis-label.js; none = not pinned; child-labels.js), shadeAuto? (never saved)}.
 // The child's voxels belong to it: the parent segment is built WITHOUT them (segments.js: the child keys are among the parent's "sources", the voxel takers that are subtracted), so hiding a child makes its voxels
 // invisible instead of showing the parent's surface there. Pure data + project (de)serialisation, no DOM, no three.js: unit-tested (tests/unit/child-segments.test.js).
-import { childSegments, setChildSegments, setNextChildSegmentId, incNextChildSegmentId } from './state.js?v=20261111-build712';
-import { childSegApplyLook, childSegLookToProject, childSegColorCss, childSegNormalizeName, isChildKey } from './segment-look.js?v=20261111-build712';
-import { analysisRunsVoxelCount, unionAnalysisRuns, intersectRunArrays } from './run-length.js?v=20261111-build712';
-import { normalizeAnalysisLabel, labelForProject } from './analysis-label.js?v=20261111-build712';
+import { childSegments, setChildSegments, setNextChildSegmentId, incNextChildSegmentId } from './state.js?v=20261111-build713';
+import { childSegApplyLook, childSegLookToProject, childSegColorCss, childSegNormalizeName, isChildKey } from './segment-look.js?v=20261111-build713';
+import { analysisRunsVoxelCount, unionAnalysisRuns, intersectRunArrays } from './run-length.js?v=20261111-build713';
+import { normalizeAnalysisLabel, labelForProject } from './analysis-label.js?v=20261111-build713';
 // the parents a child can hang under = the preset keys (segments.js SEGMENT_PRESET_ORDER; asserted equal in the unit test: segments.js imports this module, so it cannot be imported here)
 export const CHILD_PARENT_KEYS = ['bone', 'soft', 'fat', 'lung', 'contrast'];
 // at most this many child segments (the GPU volume's index texture is r8uint: 0 = none, 1..255 = the child); more are refused by the button and left out of a project that has more

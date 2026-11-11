@@ -1,13 +1,13 @@
 import * as THREE from './vendor/three@0.186.0/build/three.webgpu.js';
 import dicomParser from './vendor/dicom-parser@1.8.21/index.js';
-import { canvasBackground3dUnit } from './canvas-theme.js?v=20261111-build712';
-import { lightOffsetExpr, lightingWGSL, MATERIALS, materialKey } from './lighting.js?v=20261111-build712';
-import { EDIT_MASK_MAX_BYTES, editMaskInfoWord, editMaskLayout, editMaskPlanes, fillEditMaskWords, sameU32 } from './edit-mask-texture.js?v=20261111-build712';
-import { loadStats } from './load-stats.js?v=20261111-build712'; // what the load did, for the VR switch report
-import { frameOrTimer } from './utils.js?v=20261111-build712'; // rAF or a timer (the window rAF stands still during a WebXR session)
-import { SHADE_BRIGHT_DEFAULT, SHADE_CONTRAST_DEFAULT, brightOf, contrastOf } from './cap-shade.js?v=20261111-build712'; // the cut face's shading when the slice image is hidden (same maths as the WGSL capShadeLum below;: per-segment range)
-import { storedLayout, storedValue } from './stored-bits.js?v=20261111-build712';
-import { gpuRunsForTexture } from './gpu-runs.js?v=20261111-build712'; // the run-mapping functions moved to their own module (the VR preparation worker is made from them)
+import { canvasBackground3dUnit } from './canvas-theme.js?v=20261111-build713';
+import { lightOffsetExpr, lightingWGSL, MATERIALS, materialKey, materialKind } from './lighting.js?v=20261111-build713';
+import { EDIT_MASK_MAX_BYTES, editMaskInfoWord, editMaskLayout, editMaskPlanes, fillEditMaskWords, sameU32 } from './edit-mask-texture.js?v=20261111-build713';
+import { loadStats } from './load-stats.js?v=20261111-build713'; // what the load did, for the VR switch report
+import { frameOrTimer } from './utils.js?v=20261111-build713'; // rAF or a timer (the window rAF stands still during a WebXR session)
+import { SHADE_BRIGHT_DEFAULT, SHADE_CONTRAST_DEFAULT, brightOf, contrastOf } from './cap-shade.js?v=20261111-build713'; // the cut face's shading when the slice image is hidden (same maths as the WGSL capShadeLum below;: per-segment range)
+import { storedLayout, storedValue } from './stored-bits.js?v=20261111-build713';
+import { gpuRunsForTexture } from './gpu-runs.js?v=20261111-build713'; // the run-mapping functions moved to their own module (the VR preparation worker is made from them)
 export { gpuRunsForTexture };
 
 const UNCOMPRESSED_TS=new Set(['1.2.840.10008.1.2','1.2.840.10008.1.2.1','1.2.840.10008.1.2.2']);
@@ -517,6 +517,11 @@ ${lightingWGSL()}
       let ov=analysisOverlayAt(ctc);
       if(ov!=0u){capColor=mix(vec3<f32>(f32((ov>>16u)&255u),f32((ov>>8u)&255u),f32(ov&255u))/255.0,vec3<f32>(1.0),0.22);}
      }
+     // gloss trial: the cut face of a tissue-look segment (skin / muscle / fat: segMat.w > 0.5) is lit like its surface: the plane's normal (volume axes), turned to the viewer, no rim, the highlight at CUT_GLOSS of the surface's (vrlRealCut); the CT shading in capColor stays
+     if(u.segMat[u32(capIndex)].w>0.5&&u.segMat[u32(capIndex)].w<3.5){
+      var capN=vec3<f32>(0.0,0.0,1.0);if(u.section.x>1.5&&u.section.x<2.5){capN=vec3<f32>(0.0,1.0,0.0);}if(u.section.x>=2.5){capN=vec3<f32>(1.0,0.0,0.0);}
+      capColor=vrlRealCut(capColor,capN,-dir,${lightOffsetExpr('u.camRightTan.xyz','u.camUpAspect.xyz')},vrlDepth01(capT,u.camOrigin.xyz,u.halfStep.xyz),u.segMat[u32(capIndex)]);
+     }
      if(u.sectionCap.z>0.5){
       var huv=vec2<f32>(ctc.x,ctc.y);
       if(u.section.x>1.5&&u.section.x<2.5){huv=vec2<f32>(ctc.x,ctc.z);}
@@ -587,7 +592,8 @@ ${lightingWGSL()}
      // faces away gets only the ambient floor. n itself is not changed (inward and the cut normal below use it).
      let viewDir=normalize(u.camOrigin.xyz-hp);
      let later=acc.a>0.0;
-     let shade=vrlShade(select(n,-inward,later),viewDir,${lightOffsetExpr('u.camRightTan.xyz','u.camUpAspect.xyz')},vrlDepth01(hi,u.camOrigin.xyz,u.halfStep.xyz),select(0.0,1.0,later),u.segMat[u32(idx)].xyz);
+     let vrlLO=${lightOffsetExpr('u.camRightTan.xyz','u.camUpAspect.xyz')};let vrlN=select(n,-inward,later);let vrlD=vrlDepth01(hi,u.camOrigin.xyz,u.halfStep.xyz);let vrlK=select(0.0,1.0,later);
+     let shade=vrlShade(vrlN,viewDir,vrlLO,vrlD,vrlK,u.segMat[u32(idx)].xyz);
      let diffuse=shade.x;let spec=shade.y;
      // regions only on the segments that have one (mask word at the colour table start); with the index texture the lookup needs no inside-voxel search
      let anyRegion=analysisOverlay[0]!=0u&&(analysisOverlay[analysisOverlay[0]]&(1u<<u32(idx)))!=0u;
@@ -596,6 +602,7 @@ ${lightingWGSL()}
      var col=u.segments[u32(idx)*2u+1u].rgb;
      var alpha=clamp(a.z,0.03,1.0);
      var lit=col*diffuse+vec3<f32>(spec);
+     if(u.segMat[u32(idx)].w>0.5){lit=vrlReal(col,vrlN,viewDir,vrlLO,vrlD,vrlK,u.segMat[u32(idx)]);}
      var overlay=0u;if(anyRegion&&!isCutPreview){overlay=analysisOverlayAt(tcv);}
      if(overlay!=0u){
       col=vec3<f32>(f32((overlay>>16u)&255u),f32((overlay>>8u)&255u),f32(overlay&255u))/255.0;
@@ -791,7 +798,7 @@ const patchOnce = (src, anchor, replacement) => {
  if (i < 0 || src.indexOf(anchor, i + 1) >= 0) throw new Error('child shader patch: anchor not found exactly once: ' + anchor.slice(0, 80));
  return src.slice(0, i) + replacement + src.slice(i + anchor.length);
 };
-const MATERIAL_KEYS_4 = Object.keys(MATERIALS).slice(0, 4);
+const MATERIAL_KEYS_ALL = Object.keys(MATERIALS); // every preset (the plain four + skin / muscle / fat); the index rides in the opacity word as op + 2 * index
 const slotOfChild = e => (Number.isFinite(+e.parentSlot) && +e.parentSlot >= 0 && +e.parentSlot <= 3 ? +e.parentSlot | 0 : -1); // -1: the parent has no GPU slot
 const f32bits = new DataView(new ArrayBuffer(4));
 const bitsOf = x => { f32bits.setFloat32(0, x, true); return f32bits.getUint32(0, true); };
@@ -801,7 +808,7 @@ export function childLutWords(e, range = null) {
  let c = e.color; if (typeof c === 'string') c = parseInt(c.replace('#', ''), 16);
  const rgb = (Number.isFinite(+c) ? +c : 0xffffff) & 0xffffff, ok = r => r && Number.isFinite(+r.lower) && Number.isFinite(+r.upper) && +r.upper > +r.lower;
  const sh = ok(e.shade) ? e.shade : ok(range) ? range : null;
- const mat = Math.max(0, MATERIAL_KEYS_4.indexOf(materialKey(e.material))), op = Number.isFinite(+e.opacity) ? Math.max(0, Math.min(1, +e.opacity)) : 1;
+ const mat = Math.max(0, MATERIAL_KEYS_ALL.indexOf(materialKey(e.material))), op = Number.isFinite(+e.opacity) ? Math.max(0, Math.min(1, +e.opacity)) : 1;
  const slot = slotOfChild(e);
  return [(rgb >> 16) & 255, (rgb >> 8) & 255, rgb & 255, slot < 0 ? 255 : slot, bitsOf(sh ? +sh.lower : 0), bitsOf(sh ? +sh.upper : 0), bitsOf(op + 2 * mat), e.visible === false ? 1 : 0];
 }
@@ -825,9 +832,9 @@ fn childHiddenAt(s:u32,tc:vec3<f32>)->bool{
 }
 `;
 const CHILD_WGSL_MAIN = `
-fn chMatOf(k:u32)->vec3<f32>{
- var t=array<vec3<f32>,4>(${MATERIAL_KEYS_4.map(k => { const m = MATERIALS[k]; return `vec3<f32>(${[m.ambient, m.spec, m.shininess].map(x => Number.isInteger(x) ? x.toFixed(1) : String(x)).join(',')})`; }).join(',')});
- return t[k&3u];
+fn chMatOf(k:u32)->vec4<f32>{
+ var t=array<vec4<f32>,${MATERIAL_KEYS_ALL.length}>(${MATERIAL_KEYS_ALL.map(k => { const m = MATERIALS[k]; return `vec4<f32>(${[m.ambient, m.spec, m.shininess, materialKind(m)].map(x => Number.isInteger(x) ? x.toFixed(1) : String(x)).join(',')})`; }).join(',')});
+ return t[min(k,${MATERIAL_KEYS_ALL.length - 1}u)];
 }
 fn capShadeLumR(hv:f32,lo:f32,hi:f32)->f32{
  let t=clamp((hv-lo)/max(hi-lo,0.001),0.0,1.0);
@@ -863,13 +870,14 @@ export function volumeShaderChild() {
      }else if(u.capShade.x>0.5){capColor*=capShadeLum(huAt(ctc),capIndex);}`);
  // the surface hit: the child's material (before the shading), colour and opacity
  s = patchOnce(s, 'let later=acc.a>0.0;', `let later=acc.a>0.0;
-     var chI=0u;var chMat=u.segMat[u32(idx)].xyz;
+     var chI=0u;var chMat=u.segMat[u32(idx)];
      if(((u32(u.capShade.w)>>u32(idx))&1u)!=0u){
       chI=childIdxAt(insideVoxelTc(tc,dir,inward,u32(idx)));
       if(chI!=0u&&chRow0(chI).w!=u32(idx)){chI=0u;}
       if(chI!=0u){chMat=chMatOf(u32(floor(bitcast<f32>(chRow1(chI).z)*0.5)));}
      }`);
- s = patchOnce(s, 'select(0.0,1.0,later),u.segMat[u32(idx)].xyz);', 'select(0.0,1.0,later),chMat);');
+ s = patchOnce(s, 'let shade=vrlShade(vrlN,viewDir,vrlLO,vrlD,vrlK,u.segMat[u32(idx)].xyz);', 'let shade=vrlShade(vrlN,viewDir,vrlLO,vrlD,vrlK,chMat.xyz);');
+ s = patchOnce(s, 'if(u.segMat[u32(idx)].w>0.5){lit=vrlReal(col,vrlN,viewDir,vrlLO,vrlD,vrlK,u.segMat[u32(idx)]);}', 'if(chMat.w>0.5){lit=vrlReal(col,vrlN,viewDir,vrlLO,vrlD,vrlK,chMat);}');
  s = patchOnce(s, 'var alpha=clamp(a.z,0.03,1.0);', `var alpha=clamp(a.z,0.03,1.0);
      if(chI!=0u){let r1=chRow1(chI);col=childRgb(chRow0(chI));let oz=bitcast<f32>(r1.z);alpha=clamp(oz-2.0*floor(oz*0.5),0.03,1.0);if(r1.w!=0u){alpha=0.0;}}`);
  // a hidden child leaves a cut, not an HU iso-surface; no uniform-brick jump over it
@@ -1678,7 +1686,7 @@ struct O{@builtin(position) p:vec4<f32>,@location(0) uv:vec2<f32>};
   put(21,this.textureDims[0],this.textureDims[1],this.textureDims[2],globalThis.__vrlSettings?.interpLevel?.()??1);
   const bg=canvasBackground3dUnit();put(22,bg[0],bg[1],bg[2],1); // the 3D background follows the theme; no re-upload of the volume
   // the material preset of each segment slot (lighting.js MATERIALS: ambient, spec, shininess), appended after background (segMat)
-  for(let s=0;s<4;s++){const m=MATERIALS[materialKey(segmentState[segmentOrder[s]]?.material)];put(23+s,m.ambient,m.spec,m.shininess,0)}
+  for(let s=0;s<4;s++){const m=MATERIALS[materialKey(segmentState[segmentOrder[s]]?.material)];put(23+s,m.ambient,m.spec,m.shininess,materialKind(m))}
   // the cut face's shading (slot 27): on while the slice image is hidden, the fill is CT濃淡 and the cap is drawn (section.shade, from app.js), brightness / contrast as VR / AR (cap-shade.js)
   {const sh=section.shade||{};put(27,sh.on&&section.capEnabled?1:0,brightOf(sh.bright??SHADE_BRIGHT_DEFAULT),contrastOf(sh.contrast??SHADE_CONTRAST_DEFAULT),0)
    // slots 28 / 29 = each segment slot's shading range (lower, upper) = section.shade.ranges[key] (sectionShadeParams, from segments.js segmentShadeRange); a slot without a segment: 0, 1

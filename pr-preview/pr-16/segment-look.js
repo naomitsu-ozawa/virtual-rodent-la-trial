@@ -3,7 +3,7 @@
 // computed from the segment's own voxels). They are saved on each child segment entry of the project file (project.treeSegments; no project version bump: an old file has none and gets the defaults).
 // Ported from the tree-segments work docs/region-look.js (d99f5414), renamed: it is applied to CHILD SEGMENTS only, never to analysis regions.
 const finite = v => typeof v === 'number' && Number.isFinite(v);
-export const CHILD_SEG_MATERIALS = ['standard', 'solid', 'plaster', 'plastic']; // the keys of lighting.js MATERIALS (kept here so that this module stays import-free)
+export const CHILD_SEG_MATERIALS = ['standard', 'solid', 'plaster', 'plastic', 'skin', 'muscle', 'fat']; // the keys of lighting.js MATERIALS (kept here so that this module stays import-free)
 export const CHILD_SEG_OPACITY_DEFAULT = 1, CHILD_SEG_MATERIAL_DEFAULT = 'standard';
 export function childSegNormalizeOpacity(v) {
   if (v == null || v === '') return CHILD_SEG_OPACITY_DEFAULT;

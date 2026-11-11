@@ -2,18 +2,18 @@
 // A child segment is drawn as a run surface of its own (surface-mesh.js buildEditableRunsGroup on its mask, its own colour / opacity / material), added to the scene beside the presets' surfaces; the parent preset is built WITHOUT the
 // child's voxels (segments.js: the child keys are among the parent's sources), so hiding a child (group.visible = false) leaves those voxels EMPTY instead of showing the parent's surface there.
 // Nothing here runs for data without child segments (every entry point returns at once when the list is empty).
-import { childSegments, analysisRegions, sceneState, threeRenderMode, current3DVolume, volume, sourceVolume, currentLanguage } from './state.js?v=20261111-build712';
-import { restoreChildSegments, clearChildSegments, removeChildSegment, childByKey, emitChildSegChange, onChildSegChange, addChildSegmentFromRegions, CHILD_SEG_MAX } from './child-segments.js?v=20261111-build712';
-import { getFinalSegmentRuns } from './segment-runs.js?v=20261111-build712';
-import { segmentExclusive, segmentById, childRenderEntries, gpuSegmentSignature, requestChildShadeAuto, onChildSegLookChange, setChildLook, registerChildEditState, unregisterChildEditState } from './segments.js?v=20261111-build712';
-import { childSegLookOf } from './segment-look.js?v=20261111-build712';
-import { buildEditableRunsGroup, dispose } from './surface-mesh.js?v=20261111-build712';
-import { setSegmentMeshMaterial } from './mesh-material.js?v=20261111-build712';
-import { childSurfaceHooks, inCurrentScene, applySectionClippingMaterials } from './surface-build.js?v=20261111-build712';
-import { request3DRender } from './scene3d.js?v=20261111-build712';
-import { makeSource3DCoordinates, makeVolume3DCoordinates } from './mesh-geometry.js?v=20261111-build712';
-import { footer } from './ui-shell.js?v=20261111-build712';
-import { tr } from './i18n.js?v=20261111-build712';
+import { childSegments, analysisRegions, sceneState, threeRenderMode, current3DVolume, volume, sourceVolume, currentLanguage } from './state.js?v=20261111-build713';
+import { restoreChildSegments, clearChildSegments, removeChildSegment, childByKey, emitChildSegChange, onChildSegChange, addChildSegmentFromRegions, CHILD_SEG_MAX } from './child-segments.js?v=20261111-build713';
+import { getFinalSegmentRuns } from './segment-runs.js?v=20261111-build713';
+import { segmentExclusive, segmentById, childRenderEntries, gpuSegmentSignature, requestChildShadeAuto, onChildSegLookChange, setChildLook, registerChildEditState, unregisterChildEditState } from './segments.js?v=20261111-build713';
+import { childSegLookOf } from './segment-look.js?v=20261111-build713';
+import { buildEditableRunsGroup, dispose } from './surface-mesh.js?v=20261111-build713';
+import { setSegmentMeshMaterial } from './mesh-material.js?v=20261111-build713';
+import { childSurfaceHooks, inCurrentScene, applySectionClippingMaterials } from './surface-build.js?v=20261111-build713';
+import { request3DRender } from './scene3d.js?v=20261111-build713';
+import { makeSource3DCoordinates, makeVolume3DCoordinates } from './mesh-geometry.js?v=20261111-build713';
+import { footer } from './ui-shell.js?v=20261111-build713';
+import { tr } from './i18n.js?v=20261111-build713';
 
 const groups = new Map(); // child key -> { group, hash }
 const listeners = new Set();
