@@ -11,25 +11,27 @@
 // view's cut plane included; refreshed at most about 10 times a second while the view moves and once more when it stops
 // (comment-3d-hidden.js). Until the bytes are ready, or when no segment is shown / no source data is in memory, every point is exposed.
 import * as THREE from './vendor/three@0.186.0/build/three.webgpu.js';
-import { sceneState, volume, activeSeries, volumeAnalysisMode, analysisEditTool, sectionViewOpen, sectionViewPlane, analysisRegions, threeRenderMode } from './state.js?v=20261110-build711';
-import { tr } from './i18n.js?v=20261110-build711';
-import { datasetFingerprint } from './project-file.js?v=20261110-build711';
-import { voxelToLocal3D } from './crosshair.js?v=20261110-build711';
-import { pointColor, darkFill, inkOn } from './point-colors.js?v=20261110-build711';
-import { getComments, onCommentsChange, commentMatchesSeries, commentTarget, getMarkersShown, onMarkersShownChange } from './comments.js?v=20261110-build711';
-import { getMeasurements, setLabelOffset, onMeasurementsChange, measurementMm, measureLabel, seriesSpacing, spacingLevel, getMeasureStart, onMeasureStartChange, createLongPress } from './measurements.js?v=20261110-build711';
-import { openPointMenu, endMeasureAt, cancelMeasureUi } from './point-menu.js?v=20261110-build711';
-import { request3DRender } from './scene3d.js?v=20261110-build711';
-import { gpuVolumeTarget } from './gpu-volume-data.js?v=20261110-build711';
-import { analysisRegionShown, segmentState, segmentEditState, SEGMENT_PRESET_ORDER, gpuSegmentOrder } from './segments.js?v=20261110-build711';
-import { sectionLocalPoint, sectionLocalNormal } from './section-view.js?v=20261110-build711';
-import { planeLabelPlacement, clampLabelCenter, stepDelta, createFocusTracker, LINE_SAMPLES, probeKey, labelPart, lineSamplePoints, lineAlphas, lineStopOffsets, createIdMaker } from './measure-label.js?v=20261110-build711';
-import { planeRelations, boxHalfExtent, clipSegmentNear } from './comment-3d-section.js?v=20261110-build711';
-import { computeHiddenIds, shownChannels, sectionPlaneLocal, createHiddenThrottle } from './comment-3d-hidden.js?v=20261110-build711';
-import { regionCustomName, regionChipTitle } from './region-name.js?v=20261110-build711'; // the shared region name rule (name, else ID <atlas id>), as the VR cards
-import { judgeLabelPlace, tissueAt, PUSH_DIRS, LABEL_PUSH_MAX, LABEL_PUSH_MARGIN_VOX, labelDisplay, thinOverlaps, putAttr, putStyle } from './comment-3d-label-occlusion.js?v=20261110-build711'; // occlusion of the analysis labels (behind = hidden, embedded = translucent, pushed out, overlaps thinned)
-import { setRegionLabelOffset, onAnalysisLabelsChange, leaderVisible, labelLocal, offsetForLocal, rectEdgePoint, pcVoxelStep, createBoneGlow, boneHoverPickable, glowRegionOf, pcLeaderLimit, pcLengthFactor, pcDrawnLength, pcDragUncap, pushWithinLimit, PC_REF_DISTANCE } from './analysis-label.js?v=20261110-build711';
-import { analysisRunsContain } from './run-length.js?v=20261110-build711';
+import { sceneState, volume, activeSeries, volumeAnalysisMode, analysisEditTool, sectionViewOpen, sectionViewPlane, analysisRegions, threeRenderMode } from './state.js?v=20261111-build712';
+import { tr } from './i18n.js?v=20261111-build712';
+import { datasetFingerprint } from './project-file.js?v=20261111-build712';
+import { voxelToLocal3D } from './crosshair.js?v=20261111-build712';
+import { pointColor, darkFill, inkOn } from './point-colors.js?v=20261111-build712';
+import { getComments, onCommentsChange, commentMatchesSeries, commentTarget, getMarkersShown, onMarkersShownChange } from './comments.js?v=20261111-build712';
+import { getMeasurements, setLabelOffset, onMeasurementsChange, measurementMm, measureLabel, seriesSpacing, spacingLevel, getMeasureStart, onMeasureStartChange, createLongPress } from './measurements.js?v=20261111-build712';
+import { openPointMenu, endMeasureAt, cancelMeasureUi } from './point-menu.js?v=20261111-build712';
+import { request3DRender } from './scene3d.js?v=20261111-build712';
+import { gpuVolumeTarget } from './gpu-volume-data.js?v=20261111-build712';
+import { analysisRegionShown, segmentState, segmentEditState, SEGMENT_PRESET_ORDER, gpuSegmentOrder, segmentById } from './segments.js?v=20261111-build712';
+import { sectionLocalPoint, sectionLocalNormal } from './section-view.js?v=20261111-build712';
+import { planeLabelPlacement, clampLabelCenter, stepDelta, createFocusTracker, LINE_SAMPLES, probeKey, labelPart, lineSamplePoints, lineAlphas, lineStopOffsets, createIdMaker } from './measure-label.js?v=20261111-build712';
+import { planeRelations, boxHalfExtent, clipSegmentNear } from './comment-3d-section.js?v=20261111-build712';
+import { computeHiddenIds, shownChannels, sectionPlaneLocal, createHiddenThrottle } from './comment-3d-hidden.js?v=20261111-build712';
+import { regionCustomName, regionChipTitle } from './region-name.js?v=20261111-build712'; // the shared region name rule (name, else ID <atlas id>), as the VR cards
+import { judgeLabelPlace, tissueAt, PUSH_DIRS, LABEL_PUSH_MAX, LABEL_PUSH_MARGIN_VOX, labelDisplay, thinOverlaps, putAttr, putStyle } from './comment-3d-label-occlusion.js?v=20261111-build712'; // occlusion of the analysis labels (behind = hidden, embedded = translucent, pushed out, overlaps thinned)
+import { childLabelItems, childLabelItemById, labelChipTitle, labelVolumeText } from './child-labels.js?v=20261111-build712'; // a child segment's name label is drawn / dragged by the code of the analysis labels (it has the shape of a region)
+import { onChildSegChange } from './child-segments.js?v=20261111-build712';
+import { setRegionLabelOffset, onAnalysisLabelsChange, leaderVisible, labelLocal, offsetForLocal, rectEdgePoint, pcVoxelStep, createBoneGlow, boneHoverPickable, glowPairOf, pcLeaderLimit, pcLengthFactor, pcDrawnLength, pcDragUncap, pushWithinLimit, PC_REF_DISTANCE } from './analysis-label.js?v=20261111-build712';
+import { analysisRunsContain } from './run-length.js?v=20261111-build712';
 
 
 // analysis result labels (analysis-label.js, region.label): a chip (colour, number, segments, volume) at its anchor, MOVABLE by a drag (mouse / pen / touch) in the camera-facing plane through the label's
@@ -74,7 +76,7 @@ function refreshHidden(obj,camera,pts,plane){
  if(!anyShown||!pts.length){const had=hiddenIds.size>0;hiddenIds=new Set();if(lastPrep){lastPrep=null;refreshSoon()}return had}
  if(vrModFailed)return false; // the builder could not be loaded: every point stays exposed
  if(!vrMod){ // the classification builder lives in vr-view.js: loaded once, on the first need; until then the previous judgement stays
-  if(!vrModLoading){vrModLoading=true;import('./vr-view.js?v=20261110-build711').then(m=>{vrMod=m;throttle.reset();refreshSoon()},()=>{vrModFailed=true;if(hiddenIds.size){hiddenIds=new Set();refreshSoon()}})}
+  if(!vrModLoading){vrModLoading=true;import('./vr-view.js?v=20261111-build712').then(m=>{vrMod=m;throttle.reset();refreshSoon()},()=>{vrModFailed=true;if(hiddenIds.size){hiddenIds=new Set();refreshSoon()}})}
   return false;
  }
  const prep=vrMod.hiddenClsFor(()=>{throttle.reset();refreshSoon()});
@@ -114,18 +116,18 @@ const measEls=new Map(); // measurement id -> {line,label,text}
 const alEls=new Map(); // region id -> {label,leader,dot,...}
 const litEntry=key=>key==null?null:key.startsWith('A:')?alEls.get(+key.slice(2)):measEls.get(key.slice(2));
 // a card is lit by the label hover / drag (labelFocus) OR by the mouse resting on its bone (boneGlow, below): litKey = either
-const boneKey=()=>{const id=boneGlow.get();return id?'A:'+id:null};
-const isLitKey=key=>key!=null&&(labelFocus.get()===key||boneKey()===key);
+const isLitKey=key=>key!=null&&(labelFocus.get()===key||(!!boneGlow.get()&&'A:'+boneGlow.get()===key)||(!!childBoneGlow.get()&&'A:'+childBoneGlow.get()===key)); // OVERLAP: a result and a child under the mouse both light (two trackers: results / child segments)
 const setLitClass=key=>{const e=litEntry(key);if(e){const on=isLitKey(key);e.label.classList.toggle('is-lit',on);e.leader.classList.toggle('is-lit',on);e.dot?.classList.toggle('is-lit',on)}};
 const labelFocus=createFocusTracker((n,p)=>{setLitClass(p);setLitClass(n);syncHoverFocus();refreshSoon()});
-const boneGlow=createBoneGlow((n,p)=>{if(p)setLitClass('A:'+p);if(n)setLitClass('A:'+n);refreshSoon()}); // only when the glowing result changes (no volume focus: the bone itself is not touched) // a lit card always stays: the overlap thinning is redone
+const litChange=(n,p)=>{if(p)setLitClass('A:'+p);if(n)setLitClass('A:'+n);refreshSoon()};
+const boneGlow=createBoneGlow(litChange),childBoneGlow=createBoneGlow(litChange); // only when the glowing result changes (no volume focus: the bone itself is not touched) // a lit card always stays: the overlap thinning is redone
 // the result under the mouse (its label is lit) gets the volume's temporary focus (webgl-volume.js setHoverFocus: only the look-up table's focus bit, the page's selection stays). Synced when the lit label changes and after every redraw,
 // so it is released when the mouse leaves, the label disappears (hidden result, label removed), or the 3D view is closed (no entry left).
-let hoverFocusRuns=null;
+let hoverFocusRuns=null,hoverFocusChild='';
 function syncHoverFocus(){
- const k=labelFocus.get(),r=k&&k.startsWith('A:')&&alEls.has(+k.slice(2))?regionOf(+k.slice(2)):null,runs=r&&shownRegion(r)&&r.label?r.runsBySlice:null,mv=sceneState?.medicalVolume;
- if(runs===hoverFocusRuns&&(runs||!mv?.hoverRuns))return;
- hoverFocusRuns=runs;try{mv?.setHoverFocus?.(runs)}catch(e){console.warn(e)}
+ const k=labelFocus.get(),r=k&&k.startsWith('A:')&&alEls.has(+k.slice(2))?regionOf(+k.slice(2)):null,on=!!r&&shownRegion(r)&&!!r.label,runs=on&&!r.child?r.runsBySlice:null,ck=on&&r.child?r.key:'',mv=sceneState?.medicalVolume; // a child segment's card lights ITS body the same way (setHoverChildFocus: its row of the child table, a result is not touched)
+ if(!(runs===hoverFocusRuns&&(runs||!mv?.hoverRuns))){hoverFocusRuns=runs;try{mv?.setHoverFocus?.(runs)}catch(e){console.warn(e)}}
+ if(!(ck===hoverFocusChild&&(ck||!mv?.hoverChild))){hoverFocusChild=ck;try{mv?.setHoverChildFocus?.(ck)}catch(e){console.warn(e)}}
 }
 let hintEl=null;
 // object-space change per voxel along i / j / k in this view (voxelToLocal3D: the longest side is 3.3 units)
@@ -169,9 +171,9 @@ function drawMeasures(obj,camera,W,H,pts,keep,dims){
  }
 }
 // ---- analysis result labels ----
-const shownRegion=r=>analysisRegionShown(r)&&!!r.runsBySlice&&r.voxels>0;
+const shownRegion=r=>(r.child?!!segmentById(r.key)?.enabled:analysisRegionShown(r))&&!!r.runsBySlice&&r.voxels>0; // a child's label is shown while the child is (its own flag and its parent's: segments.js segmentById)
 const regionCss=c=>'#'+((Number(c)>>>0)&0xffffff).toString(16).padStart(6,'0');
-function analysisLabelRegions(){return analysisRegions.filter(r=>r.label&&shownRegion(r))}
+function analysisLabelRegions(){const out=analysisRegions.filter(r=>r.label&&shownRegion(r));for(const it of childLabelItems())if(shownRegion(it))out.push(it);return out} // + the child segments' name labels (negative ids)
 // where each analysis label's card is drawn, in object space (places: region id -> pl). Two judgements of "embedded" (the card's place lies inside the tissue shown now) and of
 // the push out of the tissue, and one length limit:
 //  (1) the place of the initial display, pl.v0 = anchor -> the anchor + the stored label.offset, or where that card is pushed out of the tissue (judgeLabelPlace). As:
@@ -260,11 +262,11 @@ function drawAnalysisLabels(obj,camera,W,H,regs,keep,dims){
    if(isLitKey('A:'+r.id)){label.classList.add('is-lit');leader.classList.add('is-lit')}
    e={label,leader,dot,sw,t1,t2,sig:'',w:90,h:16,sx:0,sy:0,ctx:null,lh:false,disp:'off',z:0,st:'',over:false};alEls.set(r.id,e);
   }
-  const sig=r.id+'|'+(r.segmentKeys||[]).join()+'|'+r.mm3+'|'+r.color+'|'+(warn?1:0)+'|'+tr('analysisRegion')+'|'+regionCustomName(r); // a rename (or atlas ID) redraws the chip
+  const sig=r.id+'|'+(r.segmentKeys||[]).join()+'|'+r.mm3+'|'+r.color+'|'+(warn?1:0)+'|'+tr('analysisRegion')+'|'+regionCustomName(r)+(r.child?'|'+labelChipTitle(r,tr):''); // a rename (or atlas ID) redraws the chip
   if(e.sig!==sig){
    e.sig=sig;const col=regionCss(r.color);
    e.sw.style.background=col;e.label.style.borderColor=col;e.leader.style.stroke=col;e.dot.style.fill=col;
-   e.t1.textContent=regionChipTitle(r,tr);e.t2.textContent=(warn?'⚠ ':'')+(+r.mm3).toFixed(2)+' mm³';
+   e.t1.textContent=labelChipTitle(r,tr);e.t2.textContent=(warn?'⚠ ':'')+labelVolumeText(r.mm3);
    if(warn)e.label.title=tr('measureWarn');
    e.label.hidden=false;e.w=e.label.offsetWidth||90;e.h=e.label.offsetHeight||16;
   }
@@ -290,8 +292,8 @@ function drawAnalysisLabels(obj,camera,W,H,regs,keep,dims){
   e.z=lz;e.disp=labelDisplay({embedded:!!pl?.embedded,pushed,behind:hiddenIds.has('A|'+r.id),dragging:e.label.classList.contains('is-dragging')});
  }
  // of the cards that overlap on the screen only the nearest stays (the lit one always); hidden-behind cards take no room
- const lit=labelFocus.get(),bg=boneGlow.get(),items=[];
- for(const r of regs){const e=alEls.get(r.id);if(e&&e.ctx&&e.disp!=='off'&&(e.disp!=='hide'||r.id===bg)&&!e.label.hidden)items.push({id:r.id,x:e.sx,y:e.sy,w:e.w,h:e.h,z:e.z,keep:lit==='A:'+r.id||r.id===bg})} // the card of the bone under the mouse always stays (even one judged behind the tissue), nearer cards that overlap it give way
+ const lit=labelFocus.get(),bg=boneGlow.get(),bgc=childBoneGlow.get(),items=[];
+ for(const r of regs){const e=alEls.get(r.id);if(e&&e.ctx&&e.disp!=='off'&&(e.disp!=='hide'||r.id===bg||r.id===bgc)&&!e.label.hidden)items.push({id:r.id,x:e.sx,y:e.sy,w:e.w,h:e.h,z:e.z,keep:lit==='A:'+r.id||r.id===bg||r.id===bgc})} // the card of the bone under the mouse always stays (even one judged behind the tissue), nearer cards that overlap it give way
  const over=thinOverlaps(items);
  for(const r of regs){const e=alEls.get(r.id);if(e)setAlState(e,e.disp,over.has(r.id))}
 }
@@ -408,7 +410,7 @@ export function updateComment3dMarkers(){
  }
  pruneMeasures(keepM);pruneAnalysisLabels(keepA);
  syncHoverFocus();
- {const bg=boneGlow.get();if(bg&&(!alEls.has(bg)||!boneGate()))boneGlow.clear()} // the glowing result lost its card (hidden / deleted / label removed) or the mode changed: out
+ {const bg=boneGlow.get(),bgc=childBoneGlow.get();if(bg&&(!alEls.has(bg)||!boneGate()))boneGlow.clear();if(bgc&&(!alEls.has(bgc)||!boneGate()))childBoneGlow.clear()} // the glowing result lost its card (hidden / deleted / label removed) or the mode changed: out
  if(!list.length&&!als.length){clearTimeout(hiddenTimer);hiddenTimer=0}
  for(const [id,m] of [...els])if(!keep.has(id)){m.el.remove();m.line?.remove();els.delete(id)}
  if(bubbleId!=null)placeBubble();
@@ -431,7 +433,7 @@ function labelAt(x,y){
 }
 // the analysis labels can be moved in the analysis mode too (a press on a label wins over the analysis click), but not while an edit tool owns the pointer
 const analysisGate=()=>analysisEditTool==='select';
-const regionOf=id=>analysisRegions.find(r=>r.id===id)||null;
+const regionOf=id=>childLabelItemById(id)||analysisRegions.find(r=>r.id===id)||null; // a negative id is a child segment's label
 let labelDragging=false; // while a label is dragged every other pointerdown on the canvas (a second finger) is stopped at the capture phase, so it cannot rotate / pan the camera
 // ---- the mouse resting on a bone lights that result's card (like the VR laser) ----
 // The bone is found with the volume pick a click already uses (medicalVolume.pick: GPU compute, or the CPU march of the WebGL volume), the voxel -> result by the shown labelled results' runs (the click-to-select rule).
@@ -441,17 +443,17 @@ const boneGate=()=>analysisEditTool==='select'&&threeRenderMode==='volume'&&!!sc
 const bonePick={x:0,y:0,timer:0,at:0,busy:false,again:false,live:false};
 function bonePickRun(){
  bonePick.timer=0;if(!bonePick.live||bonePick.busy||!boneGate())return;
- const s=sceneState,mv=s.medicalVolume,regs=analysisLabelRegions();if(!regs.length||!s.obj||!s.camera){boneGlow.clear();return}
- const tok=boneGlow.ticket();bonePick.busy=true;bonePick.at=performance.now();
+ const s=sceneState,mv=s.medicalVolume,regs=analysisLabelRegions();if(!regs.length||!s.obj||!s.camera){boneGlow.clear();childBoneGlow.clear();return}
+ const tok=boneGlow.ticket(),tokC=childBoneGlow.ticket();bonePick.busy=true;bonePick.at=performance.now();
  let p;try{p=mv.pick(bonePick.x,bonePick.y,s.camera,s.obj,segmentState,gpuSegmentOrder())}catch(e){p=Promise.reject(e)}
- Promise.resolve(p).then(hit=>boneGlow.settle(tok,glowRegionOf(analysisLabelRegions(),hit,(r,x,y,z)=>analysisRunsContain(r.runsBySlice,x,y,z))),()=>boneGlow.settle(tok,0)).finally(()=>{bonePick.busy=false;if(bonePick.again){bonePick.again=false;bonePickSchedule()}});
+ Promise.resolve(p).then(hit=>{const g=glowPairOf(analysisLabelRegions(),hit,(r,x,y,z)=>analysisRunsContain(r.runsBySlice,x,y,z));boneGlow.settle(tok,g[0]);childBoneGlow.settle(tokC,g[1])},()=>{boneGlow.settle(tok,0);childBoneGlow.settle(tokC,0)}).finally(()=>{bonePick.busy=false;if(bonePick.again){bonePick.again=false;bonePickSchedule()}});
 }
 function bonePickSchedule(){
  clearTimeout(bonePick.timer);if(!bonePick.live)return;
  if(bonePick.busy){bonePick.again=true;return} // one pick at a time; the newest position is asked for when it returns
  const wait=performance.now()-bonePick.at>=200?0:80;bonePick.timer=setTimeout(bonePickRun,wait);
 }
-function boneHoverOff(){bonePick.live=false;bonePick.again=false;clearTimeout(bonePick.timer);bonePick.timer=0;boneGlow.clear()}
+function boneHoverOff(){bonePick.live=false;bonePick.again=false;clearTimeout(bonePick.timer);bonePick.timer=0;boneGlow.clear();childBoneGlow.clear()}
 function installBoneHover(){
  // capture phase: the dock / menus stop their own pointer events, so only the capture on the host sees every move over the view (target != the canvas = off the bone)
  host.addEventListener('pointermove',ev=>{
@@ -462,7 +464,7 @@ function installBoneHover(){
   bonePick.x=ev.clientX;bonePick.y=ev.clientY;bonePick.live=true;bonePickSchedule();
  },true);
  host.addEventListener('pointerleave',boneHoverOff);host.addEventListener('pointerdown',boneHoverOff,true);host.addEventListener('pointercancel',boneHoverOff);
- host.addEventListener('wheel',()=>{if(bonePick.live){boneGlow.ticket();bonePickSchedule()}},{passive:true}); // the view zooms under a resting mouse: the old answer is stale, ask again
+ host.addEventListener('wheel',()=>{if(bonePick.live){boneGlow.ticket();childBoneGlow.ticket();bonePickSchedule()}},{passive:true}); // the view zooms under a resting mouse: the old answer is stale, ask again
  window.addEventListener('blur',boneHoverOff);document.addEventListener('keydown',e=>{if(e.key==='Escape')boneHoverOff()});
 }
 function installLabelDrag(nearestDot,gate){
@@ -536,6 +538,6 @@ export function installComment3d(viewportEl){
  host=viewportEl;layer=document.createElement('div');layer.className='comment-layer-3d';layer.setAttribute('aria-hidden','false');host.appendChild(layer);
  installTap();installBoneHover();
  const again=()=>{request3DRender()};
- onCommentsChange(again);onMeasurementsChange(again);onAnalysisLabelsChange(again);onMeasureStartChange(again);onMarkersShownChange(()=>{closeBubble3d();if(!getMarkersShown())releaseHidden();again()});
+ onCommentsChange(again);onMeasurementsChange(again);onAnalysisLabelsChange(again);onChildSegChange(again);onMeasureStartChange(again);onMarkersShownChange(()=>{closeBubble3d();if(!getMarkersShown())releaseHidden();again()});
  document.addEventListener('vrl-serieschange',()=>{releaseHidden();again()});
 }

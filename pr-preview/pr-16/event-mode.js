@@ -2,7 +2,7 @@
 // Four levels, each one of the bundled practice datasets (docs/demo/sampleN, the same set ids as the practice-data chooser);
 // texts are i18n keys (i18n.js). The switch is settings.eventMode (app-settings.js, per device, default off); the chosen
 // level lives only in this page (a reload starts with none chosen) and follows whichever practice dataset was opened last.
-import { registry, sampleKey } from './sample-registry.js?v=20261110-build711';
+import { registry, sampleKey } from './sample-registry.js?v=20261111-build712';
 export const EVENT_HINT_KEYS={section:'evHintSection',move:'evHintMove',toggle:'evHintToggle',mark:'evHintMark',distance:'evHintDistance'};
 // the levels, the other datasets and each dataset's starting segments are no longer tables here: they come from the registry (sample-registry.js), built from the sample.json
 // of every docs/demo/sampleN folder. Order: Lv0..Lv3 by the level field, then the datasets without a level by folder number. Names / missions are i18n keys the registry adds (sampleKey).
@@ -60,9 +60,11 @@ export const simpleMenuSegments=shownKeys=>[...(shownKeys||[])].slice(0,MAX_SEG_
 // What the trigger does is ONE of two exclusive modes, switched on the board (never both):
 //  'point' = a short press records a point (印) where the laser meets the surface / the section (vr-view.js, vrPointMode decides where);
 //  'label' = the laser on an analysed region shows its label and the trigger pins / unpins it (as in the 解析 tab).
-// The switch exists only when the dataset has analysis results (a label needs a result); without them the trigger is always 'point'.
+// The switch exists only when the dataset has something to label: analysis results OR child segments (a child segment has its own name label); without them the trigger is always 'point'.
 // The start is always 'point', for every dataset: it is the one every mission can use (Lv3 marks and measures) and it never swallows a press;
 // a visitor who wants the labels presses 解析モード once, and the board says what the trigger does now.
+// how many things a label can be pinned on: the analysis results + the child segments; the switch (triggerModeRow / triggerMode) exists when this is not 0
+export const labelTargets=(results,children)=>(results|0)+(children|0);
 export const triggerModeRow=hasResults=>!!hasResults;
 export const TRIGGER_AT_START='point';
 export const triggerMode=(labelsOn,hasResults)=>hasResults&&labelsOn?'label':'point';

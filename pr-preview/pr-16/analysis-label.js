@@ -6,7 +6,7 @@
 //   offset : where the user left the label, as the vector from the anchor in VOXEL units (the same convention as a distance label's labelOffset in measurements.js), so it does not
 //            depend on the model's move / rotation / scale and is the same in VR and on the PC. No offset = the view's default placement (beside the anchor, facing the viewer).
 // A leader line joins a moved label to its anchor (leaderVisible).
-import { stepDelta, offsetFromDelta } from './measure-label.js?v=20261110-build711';
+import { stepDelta, offsetFromDelta } from './measure-label.js?v=20261111-build712';
 
 export const ANALYSIS_LABEL_MAX=1e4; // |component| limit (voxels): anything beyond is a corrupt file, dropped
 const num=(x)=>typeof x==='number'&&Number.isFinite(x)&&Math.abs(x)<=ANALYSIS_LABEL_MAX;
@@ -60,21 +60,22 @@ export function clampVoxel(v,dims){
 const listeners=new Set();
 export const onAnalysisLabelsChange=cb=>{listeners.add(cb);return()=>listeners.delete(cb)};
 export const emitAnalysisLabelsChange=info=>{for(const cb of [...listeners])cb(info)};
-// pin / replace the label of a region at an anchor (voxel units); keeps an existing offset only when keepOffset. false when the region is missing / the anchor is invalid.
+const ownerOf=r=>r.labelOwner||r;
 export function setRegionLabel(region,label){
  if(!region)return false;
- if(label==null){if(!region.label)return true;delete region.label;emitAnalysisLabelsChange({id:region.id});return true}
+ const o=ownerOf(region);
+ if(label==null){if(!o.label)return true;delete o.label;emitAnalysisLabelsChange({id:region.id});return true}
  const l=normalizeAnalysisLabel(label);if(!l)return false;
- if(sameLabel(region.label,l))return true;
- region.label=l;emitAnalysisLabelsChange({id:region.id});return true;
+ if(sameLabel(o.label,l))return true;
+ o.label=l;emitAnalysisLabelsChange({id:region.id});return true;
 }
 // move the label (offset in voxel units from the anchor) or null = the default place; an unchanged value is not a change. labelOnly: only the place changed (a redraw, no re-judgement of anything else)
 export function setRegionLabelOffset(region,offset){
  if(!region?.label)return false;
- const next=withOffset(region.label,offset);if(!next)return false;
- if(sameLabel(region.label,next))return true;
- const toggled=leaderVisible(region.label)!==leaderVisible(next);
- region.label=next;emitAnalysisLabelsChange({id:region.id,labelOnly:true,moveToggled:toggled}); // moveToggled: moved <-> default changed (a button state follows it)
+ const o=ownerOf(region),next=withOffset(o.label,offset);if(!next)return false;
+ if(sameLabel(o.label,next))return true;
+ const toggled=leaderVisible(o.label)!==leaderVisible(next);
+ o.label=next;emitAnalysisLabelsChange({id:region.id,labelOnly:true,moveToggled:toggled}); // moveToggled: moved <-> default changed (a button state follows it)
  return true;
 }
 // the label of a region for the project file (a clean copy) / for a snapshot, or undefined
@@ -96,6 +97,8 @@ export function createBoneGlow(onChange){
 export const boneHoverPickable=({touch,buttons,onCanvas,overLabel,gate,labelled})=>!touch&&!buttons&&!!onCanvas&&!overLabel&&!!gate&&!!labelled;
 // the shown result with a label that owns a picked voxel (the pick's segment key must be one of the result's segments, as the click-to-select rule); regions = [{id,segmentKeys,label}] in the shown order
 export const glowRegionOf=(regions,picked,runsContain)=>{if(!picked)return 0;const r=regions.find(q=>q.label&&q.segmentKeys?.includes(picked.key)&&runsContain(q,picked.x,picked.y,picked.z));return r?r.id:0};
+// OVERLAP: the shown labelled results and the shown labelled children (r.child) are looked at SEPARATELY, so a voxel a result and a child cover lights both cards (the result's id, the child's id; 0 = none each)
+export const glowPairOf=(regions,picked,runsContain)=>[glowRegionOf(regions.filter(r=>!r.child),picked,runsContain),glowRegionOf(regions.filter(r=>r.child),picked,runsContain)];
 
 // ---- the views' per-voxel steps ----
 // VR: object-space change per voxel along i / j / k (vr-point.js voxelToLocal); PC 3D: crosshair.js voxelToLocal3D (the longest side is 3.3 units)

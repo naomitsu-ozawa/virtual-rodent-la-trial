@@ -1,18 +1,23 @@
 // The controls of one CHILD SEGMENT (a segment added under a preset card in the tree,; ported from the tree-segments work d99f5414 segment-tree-ui.js, applied to child segments only): the SAME controls as a preset segment card, built from the same pieces so that they look and behave the same:
 // opacity slider (the card's .segment-range row), display mode (the card's .segment-material-row select, lighting.js MATERIALS), cut-face shading range (lower / upper sliders with − / ＋ and 「自動に戻す」, the section panel's
 // controls, section-shade.js). Everything reads / writes the ONE segment interface (segments.js segmentById / setChildLook / setSegmentShadeEnd), so VR and the browser stay one state.
-import { segmentById, setChildLook, segmentShadeRange, segmentShadeSpan, setSegmentShadeEnd, resetSegmentShadeRange, shadeDataRange, onShadeAutoChange, onChildSegLookChange } from './segments.js?v=20261110-build711';
-import { CHILD_SEG_MATERIALS, CHILD_SEG_NAME_MAX } from './segment-look.js?v=20261110-build711';
-import { childByKey } from './child-segments.js?v=20261110-build711';
-import { shadeRangeStep, shadeValueAt, shadePosOf } from './cap-shade.js?v=20261110-build711';
-import { wireStepButton, stepClamp } from './value-step.js?v=20261110-build711';
-import { formatCtValue } from './utils.js?v=20261110-build711';
-import { tr } from './i18n.js?v=20261110-build711';
+import { segmentById, setChildLook, segmentShadeRange, segmentShadeSpan, setSegmentShadeEnd, resetSegmentShadeRange, shadeDataRange, onShadeAutoChange, onChildSegLookChange } from './segments.js?v=20261111-build712';
+import { CHILD_SEG_MATERIALS, CHILD_SEG_NAME_MAX } from './segment-look.js?v=20261111-build712';
+import { childByKey } from './child-segments.js?v=20261111-build712';
+import { childLabelItem } from './child-labels.js?v=20261111-build712';
+import { setRegionLabelOffset, hasOffset, onAnalysisLabelsChange } from './analysis-label.js?v=20261111-build712';
+import { shadeRangeStep, shadeValueAt, shadePosOf } from './cap-shade.js?v=20261111-build712';
+import { wireStepButton, stepClamp } from './value-step.js?v=20261111-build712';
+import { formatCtValue } from './utils.js?v=20261111-build712';
+import { tr } from './i18n.js?v=20261111-build712';
 
 const MATERIAL_LABEL = { standard: 'matStandard', solid: 'matSolid', plaster: 'matPlaster', plastic: 'matPlastic' };
 // the actions the page injects (app.js: deleteChild(key)), so that this module imports nothing of the 3D code
 let actions = { deleteChild: null };
 export const setSegmentTreeActions = a => { actions = { ...actions, ...a }; };
+// the 3D name label of a child (pin on the surface the 3D camera sees / unpin: the page's analysis-results.js toggleAnalysisLabel, injected so that this module imports no 3D code)
+let labelPin = null;
+export const setChildLabelPin = fn => { labelPin = fn; };
 
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 const i18n = (e, key) => { e.dataset.i18n = key; e.textContent = tr(key); return e; };
@@ -27,6 +32,11 @@ export function buildSegmentLookControls(key) {
   nameRow.append(i18n(el('span'), 'regionNameLabel'), nameIn);
   const colorIn = el('input'); colorIn.type = 'color'; colorIn.className = 'segment-color'; colorIn.dataset.childColor = key; colorIn.oninput = () => setChildLook(key, { color: colorIn.value });
   nameRow.append(colorIn); box.append(nameRow);
+  // the name label on the 3D view and in VR: pin / unpin it, put it back at its default place after it was moved (a drag on the 3D view / in VR moves it; the label is saved with the project)
+  const lbRow = el('div', 'analysis-label-actions'); lbRow.dataset.childLabelRow = key;
+  const pin = el('button', 'analysis-label-pin'); pin.type = 'button'; pin.dataset.childLabelPin = key;
+  pin.onclick = () => { const c = childByKey(key); if (c && labelPin) labelPin(childLabelItem(c)); syncSegmentLookControls(box); };
+  lbRow.append(pin); box.append(lbRow);
   const row = (labelKey, out, input) => { const l = el('label', 'segment-range'); l.append(i18n(el('span'), labelKey), out, input); return l; };
   // opacity: the card's slider (0..1, step 0.05)
   const opOut = el('output'); opOut.dataset.childOpacityOut = key;
@@ -70,6 +80,13 @@ export function syncSegmentLookControls(box) {
   const op = box.querySelector('[data-child-opacity]'); put(op, g.opacity);
   const opOut = box.querySelector('[data-child-opacity-out]'); if (opOut) opOut.value = String(Math.round(g.opacity * 100)) + '%';
   const mat = box.querySelector('[data-child-material]'); if (mat) mat.value = g.material;
+  {const c = childByKey(key), it = c ? childLabelItem(c) : null, pin = box.querySelector('[data-child-label-pin]'), rs = box.querySelector('[data-child-label-reset]');
+   if (pin) { const k = it?.label ? 'analysisLabelUnpin' : 'analysisLabelPin'; pin.dataset.i18n = k; pin.textContent = tr(k); } // data-i18n: a language switch re-words it (the key follows the pinned state)
+   const lbRow = box.querySelector('[data-child-label-row]'), has = !!(it?.label && hasOffset(it.label));
+   if (lbRow && has !== !!rs) { // the put-back button exists only while the label was moved (as the analysis card's)
+     if (has) { const b = i18n(el('button', 'analysis-label-reset'), 'analysisLabelReset'); b.type = 'button'; b.dataset.childLabelReset = key; b.onclick = () => { const c2 = childByKey(key); if (c2) setRegionLabelOffset(childLabelItem(c2), null); syncSegmentLookControls(box); }; lbRow.append(b); }
+     else rs.remove();
+   }}
   const nm = box.querySelector('[data-child-name]'), co = box.querySelector('[data-child-color]'); put(nm, childByKey(key)?.name || ''); put(co, g.color);
   const data = shadeDataRange(), r = data ? segmentShadeRange(key, data) : null, span = data ? segmentShadeSpan(key, data) : null, st = shadeRangeStep(span);
   for (const which of ['lower', 'upper']) {
@@ -84,3 +101,4 @@ const syncAll = () => { for (const box of document.querySelectorAll('[data-child
 // the auto range arrives / a look changes elsewhere (the cut-face panel, VR, a project): the open controls follow
 onShadeAutoChange(syncAll);
 onChildSegLookChange(syncAll);
+onAnalysisLabelsChange(syncAll); // a name label pinned / unpinned / moved on the 3D view or in VR: the buttons follow

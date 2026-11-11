@@ -1,12 +1,13 @@
 // CHILD SEGMENTS: the segments a user adds under a preset segment in the tree (e.g. 34 bones under 骨, organs under 造影領域). A child segment is a REAL segment: it has every feature a preset card has
 // (name, colour, show / hide, opacity, material, cut-face shading range, STL, section analysis, histogram, save / load); it is NOT an analysis region (analysis-ops.js regions are a separate list with their own meaning).
 // Data: {id, key:'s<id>', name (custom, '' = default), parentKey (a preset), runsBySlice (the mask, the analysis run format: triples y, x0, x1 per slice), voxels, color ('#rrggbb'), visible,
-//        opacity, material, shade ({lower, upper} | null = auto), hash (of the runs: the device cache key of the parent), shadeAuto? (never saved)}.
+//        opacity, material, shade ({lower, upper} | null = auto), hash (of the runs: the device cache key of the parent), label? (the pinned 3D name label {anchor, offset?} in voxel units, analysis-label.js; none = not pinned; child-labels.js), shadeAuto? (never saved)}.
 // The child's voxels belong to it: the parent segment is built WITHOUT them (segments.js: the child keys are among the parent's "sources", the voxel takers that are subtracted), so hiding a child makes its voxels
 // invisible instead of showing the parent's surface there. Pure data + project (de)serialisation, no DOM, no three.js: unit-tested (tests/unit/child-segments.test.js).
-import { childSegments, setChildSegments, setNextChildSegmentId, incNextChildSegmentId } from './state.js?v=20261110-build711';
-import { childSegApplyLook, childSegLookToProject, childSegColorCss, childSegNormalizeName, isChildKey } from './segment-look.js?v=20261110-build711';
-import { analysisRunsVoxelCount, unionAnalysisRuns, intersectRunArrays } from './run-length.js?v=20261110-build711';
+import { childSegments, setChildSegments, setNextChildSegmentId, incNextChildSegmentId } from './state.js?v=20261111-build712';
+import { childSegApplyLook, childSegLookToProject, childSegColorCss, childSegNormalizeName, isChildKey } from './segment-look.js?v=20261111-build712';
+import { analysisRunsVoxelCount, unionAnalysisRuns, intersectRunArrays } from './run-length.js?v=20261111-build712';
+import { normalizeAnalysisLabel, labelForProject } from './analysis-label.js?v=20261111-build712';
 // the parents a child can hang under = the preset keys (segments.js SEGMENT_PRESET_ORDER; asserted equal in the unit test: segments.js imports this module, so it cannot be imported here)
 export const CHILD_PARENT_KEYS = ['bone', 'soft', 'fat', 'lung', 'contrast'];
 // at most this many child segments (the GPU volume's index texture is r8uint: 0 = none, 1..255 = the child); more are refused by the button and left out of a project that has more
@@ -36,6 +37,7 @@ export function makeChildSegment(src) {
   const voxels = analysisRunsVoxelCount(src.runsBySlice); if (!voxels) return null;
   const id = src.id ?? incNextChildSegmentId(false);
   const c = { id, key: 's' + id, name: childSegNormalizeName(src.name), parentKey: src.parentKey, runsBySlice: src.runsBySlice, voxels, color: childSegColorCss(src.color), visible: src.visible !== false, hash: childRunsHash(src.runsBySlice) };
+  const lb = normalizeAnalysisLabel(src.label); if (lb) c.label = lb; // the pinned name label (a project file: untrusted, cleaned)
   return childSegApplyLook(c, src);
 }
 export function addChildSegment(src) {
@@ -70,19 +72,20 @@ export function addChildSegmentFromRegions(parentKey, regions, slices, parentRun
   return addChildSegment({ name: '', parentKey, runsBySlice, color: nextChildSegColor() });
 }
 
-// ---- project file: project.treeSegments = [{name?, parentKey, color, visible, opacity, material, shade, runs: <path of the run file>}] ----
+// ---- project file: project.treeSegments = [{name?, parentKey, color, visible, opacity, material, shade, label?: {anchor, offset?}, runs: <path of the run file>}] ----
 // the entries of the list without the runs (data-load.js writes each run file and puts its path in `runs`)
 export function childSegmentsForProject() {
   return childSegments.filter(c => c.runsBySlice && c.voxels > 0).map(c => {
     const e = { parentKey: c.parentKey, color: c.color, visible: c.visible !== false, ...childSegLookToProject(c) };
     if (c.name) e.name = c.name;
+    const lb = labelForProject(c); if (lb) e.label = lb; // the pinned name label (no label = not pinned: an older project file has none)
     return { entry: e, runsBySlice: c.runsBySlice };
   });
 }
 // an entry (and its decoded runs) -> the data of a child segment (makeChildSegment's src)
 export function childSrcFromEntry(e, runsBySlice) {
   if (!e || typeof e !== 'object') return null;
-  return { name: e.name, parentKey: e.parentKey, runsBySlice, color: e.color, visible: e.visible !== false, opacity: e.opacity, material: e.material, shade: e.shade };
+  return { name: e.name, parentKey: e.parentKey, runsBySlice, color: e.color, visible: e.visible !== false, opacity: e.opacity, material: e.material, shade: e.shade, label: e.label };
 }
 // replace the list with the children of a project (a project without treeSegments leaves none); returns the made children
 export function restoreChildSegments(srcs) {

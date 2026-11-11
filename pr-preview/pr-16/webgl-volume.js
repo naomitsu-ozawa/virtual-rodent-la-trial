@@ -1,11 +1,11 @@
 import * as THREE from './vendor/three@0.186.0/build/three.module.js';
-import { volumeTexturePlan, reduceSliceArea, packedRgSlice, packCtSlice } from './medical-volume.js?v=20261110-build711';
-import { computeBricksOf, buildEditMaskOf, buildRegionIndexOf, buildChildIndexOf, BRICK } from './vr-volume-prep.js?v=20261110-build711';
-import { gpuRunsForTexture } from './gpu-runs.js?v=20261110-build711';
-import { MATERIALS, materialKey, materialVec } from './lighting.js?v=20261110-build711';
-import { MAX_SECTION_PLANES } from './vr-section-frame.js?v=20261110-build711';
-import { SHADE_BRIGHT_DEFAULT, SHADE_CONTRAST_DEFAULT, brightOf, contrastOf } from './cap-shade.js?v=20261110-build711';
-import { pickRay } from './webgl-volume-pick.js?v=20261110-build711';
+import { volumeTexturePlan, reduceSliceArea, packedRgSlice, packCtSlice } from './medical-volume.js?v=20261111-build712';
+import { computeBricksOf, buildEditMaskOf, buildRegionIndexOf, buildChildIndexOf, BRICK } from './vr-volume-prep.js?v=20261111-build712';
+import { gpuRunsForTexture } from './gpu-runs.js?v=20261111-build712';
+import { MATERIALS, materialKey, materialVec } from './lighting.js?v=20261111-build712';
+import { MAX_SECTION_PLANES } from './vr-section-frame.js?v=20261111-build712';
+import { SHADE_BRIGHT_DEFAULT, SHADE_CONTRAST_DEFAULT, brightOf, contrastOf } from './cap-shade.js?v=20261111-build712';
+import { pickRay } from './webgl-volume-pick.js?v=20261111-build712';
 
 export const WEBGL_VOLUME_DEFAULT = true;
 export const webglVolumeEnabled = (search = typeof location !== 'undefined' ? location.search : '', m = /[?&]webglvolume=(\d)(&|$)/.exec(search || '')) => (m ? m[1] !== '0' : WEBGL_VOLUME_DEFAULT); // one line: the public gate reads a URL key from the line that reads location.search
@@ -117,6 +117,14 @@ export function syncChildListMasks(list, items) {
 const rangeOk = r => !!r && Number.isFinite(+r.lower) && Number.isFinite(+r.upper) && +r.upper > +r.lower;
 // the shading range of a child: its own (the user's), else the app-resolved one for its key (section.shade.ranges: the automatic range of this frame wins over the one handed over earlier, as in the WebGPU volume), else the one handed over (entry.shadeRange), else 0..1
 export const childShadeOf = (e, range = null) => { const r = rangeOk(e.shade) ? e.shade : rangeOk(range) ? range : rangeOk(e.shadeRange) ? e.shadeRange : null; return r ? [+r.lower, +r.upper] : [0, 1]; };
+// the PC's focus of a child (the mouse on its name card): its table colour x 1.18, the same 18 % a FOCUSED result gets in the shader ((m >> 4) & 1: rgb x 1.18), so a lit child and a lit result look alike. Only row 0's rgb of that child's
+// texel (list order, entry j + 1) is scaled; alpha (the slot bits) and every other row stay. -> true when a texel changed.
+export const CHILD_FOCUS_GAIN = 1.18;
+export function applyChildFocus(a, list, key, gain = CHILD_FOCUS_GAIN) {
+  const j = key ? (list || []).findIndex(e => e.key === key) : -1, o = (j + 1) * 4;
+  if (j < 0 || j + 1 >= 256 || !(a[o + 3] > 0)) return false; // not prepared, past the 255th, or hidden (alpha 0): nothing to light
+  a[o] *= gain; a[o + 1] *= gain; a[o + 2] *= gain; return true;
+}
 // vr-view.js refreshChildLut: the 256 x 3 RGBA32F table (row stride 256 * 4), entry j + 1 = list[j]. Row 0: colour + the parent's slot bit (0 while hidden); row 1: lower, upper, flat mask (the page has no simple mode: 0), hidden mask;
 // row 2: the child's material (ambient, spec, shininess) + opacity. A child hidden = its own shown flag off (entry.shown, else entry.visible). A child deleted since (no entry) has no row.
 export function fillChildLut(a, list, entries, rgbOf, materialsOf) {
@@ -306,6 +314,14 @@ export class WebGlVolumeRenderer {
     this.hoverRuns = runs;
     if (this.uniforms && this.regionTexture && !this.previewRuns) this.applyRegions();
   }
+  // The same for a CHILD segment (comment-3d.js: the mouse on a child's name card): key = the child's key, '' = none. Only its own row-0 colour in the child table is scaled (applyChildFocus); the page's data is never touched.
+  // Rewrites the table (8 KB) only when it changes; nothing at all while the view has no child segments.
+  setHoverChildFocus(key) {
+    key = key || '';
+    if (key === (this.hoverChild || '')) return;
+    this.hoverChild = key;
+    if (this.uniforms && this.childArgs && this.childTexture) this.applyChildren();
+  }
   regionItems() {
     const hv = this.hoverRuns;
     const items = (this.regionsArgs?.regions || []).map(r => ({ color: r.color, focused: !!r.focused || (!!hv && r.runs === hv), shown: r.shown !== false, segMask: (r.segments || []).reduce((m, i) => (i >= 0 && i < 4 ? m | (1 << i) : m), 0), runsBySlice: r.runs, mm3: 0, segmentKeys: [], rid: 0 }));
@@ -380,6 +396,7 @@ export class WebGlVolumeRenderer {
     if (!this.childLutTexture) { const t = new THREE.DataTexture(new Float32Array(256 * 12), 256, 3, THREE.RGBAFormat, THREE.FloatType); t.minFilter = t.magFilter = THREE.NearestFilter; t.generateMipmaps = false; this.childLutTexture = t; }
     if (!u.childTex) { u.childTex = { value: this.dummy }; u.childLut = { value: this.dummy }; } // the uniforms exist only once a child segment does
     fillChildLut(this.childLutTexture.image.data, this.childList, a.entries, c => { this.color.set(c); return [this.color.r, this.color.g, this.color.b]; }, m => MATERIALS[materialKey(m)]);
+    if (this.hoverChild) applyChildFocus(this.childLutTexture.image.data, this.childList, this.hoverChild); // the child whose card the mouse is on stays lit through a table rewrite
     this.childLutTexture.needsUpdate = true;
     u.childTex.value = this.childTexture; u.childLut.value = this.childLutTexture;
     this.hasChildren = true;
