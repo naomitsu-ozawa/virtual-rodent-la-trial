@@ -42,9 +42,10 @@ describe('spec: name / colour / show-hide / opacity / material of a child', () =
     S.setChildLook(c.key, { visible: false }); let e = S.childRenderEntries()[0]; expect([S.segmentById(c.key).enabled, e.visible, e.shown]).toEqual([false, false, false]); expect(S.shownSegmentKeys()).not.toContain(c.key);
     S.setChildLook(c.key, { visible: true }); S.segmentState.bone.enabled = false; e = S.childRenderEntries()[0]; expect([e.visible, e.shown]).toEqual([false, true]); // the parent hidden hides the child
   });
-  it('opacity (0..1) and material (the presets\' MATERIALS only)', () => {
-    const c = mkChild(); S.setChildLook(c.key, { opacity: 0.4, material: 'plastic' }); let e = S.childRenderEntries()[0]; expect([e.opacity, e.material]).toEqual([0.4, 'plastic']);
-    S.setChildLook(c.key, { opacity: 7, material: 'nonsense' }); e = S.childRenderEntries()[0]; expect([e.opacity, e.material]).toEqual([1, 'standard']);
+  it('opacity and material are the PARENT\'s (a child inherits); setChildLook ignores them', () => {
+    const c = mkChild(); S.segmentState.bone.opacity = 0.4; S.segmentState.bone.material = 'plastic'; let e = S.childRenderEntries()[0]; expect([e.opacity, e.material]).toEqual([0.4, 'plastic']);
+    expect(S.setChildLook(c.key, { opacity: 0.9, material: 'solid' })).toBe(false); e = S.childRenderEntries()[0]; expect([e.opacity, e.material]).toEqual([0.4, 'plastic']);
+    S.segmentState.bone.opacity = 1; S.segmentState.bone.material = 'standard'; e = S.childRenderEntries()[0]; expect([e.opacity, e.material]).toEqual([1, 'standard']);
   });
 });
 
@@ -80,11 +81,11 @@ describe('spec: section analysis (the PC cut face of the 3D view) with a child',
     for (const i of CHILD_PX) expect(px[i][3]).toBe(0);
     for (const i of BONE_PX) expect(px[i][3]).toBeGreaterThan(0);
   });
-  it('the child\'s opacity scales its cut face', () => {
-    ST.setVolume(vol()); showBone(); const c = mkChild(); const a1 = paint()[5][3]; S.setChildLook(c.key, { opacity: 0.4 }); const a2 = paint()[5][3];
+  it('the parent\'s opacity scales the child\'s cut face (the child has none of its own)', () => {
+    ST.setVolume(vol()); showBone(); mkChild(); const a1 = paint()[5][3]; S.segmentState.bone.opacity = 0.4; const a2 = paint()[5][3]; S.segmentState.bone.opacity = 1;
     expect(a2).toBeLessThan(a1); expect(a2).toBeGreaterThan(0);
   });
-  it('slice image hidden + CT shading: the brightness follows the value through the CHILD\'s own range (a narrow range makes the same value brighter)', () => {
+  it('slice image hidden + CT shading: the brightness follows the value through the range of the child\'s PARENT (the child has none of its own; set here through the child key) (a narrow range makes the same value brighter)', () => {
     const v = vol(); ST.setVolume(v); showBone(); const c = mkChild(); ST.setSectionShadeMode(1);
     S.setSegmentShadeEnd(c.key, 'lower', 0); S.setSegmentShadeEnd(c.key, 'upper', 1000); const wide = paint({ image: false })[5][0];
     S.setSegmentShadeEnd(c.key, 'lower', 0); S.setSegmentShadeEnd(c.key, 'upper', 520); const narrow = paint({ image: false })[5][0];
@@ -101,11 +102,11 @@ describe('spec: section analysis (the PC cut face of the 3D view) with a child',
 });
 
 describe('spec: histogram of a child', () => {
-  it('counts the values of the child\'s own voxels only (not its parent\'s other voxels); the auto cut-face range comes from them', async () => {
+  it('counts the values of the child\'s own voxels only (not its parent\'s other voxels); the cut-face range is the parent\'s, not counted from them', async () => {
     const v = vol(100); const idx = (x, y, z) => x + D * (y + D * z); v.data[idx(1, 1, 1)] = 700; v.data[idx(2, 1, 1)] = 900; ST.setVolume(v); showBone();
     const c = mkChild(); const out = await HU.computeSegmentHistograms([c.key], () => false);
     expect(out && out[c.key]).toBeTruthy(); const h = out[c.key], total = Array.from(h).reduce((a, b) => a + b, 0); expect(total).toBe(2);
-    S.applyShadeAutoHistograms(out); const r = S.segmentShadeRange(c.key); expect(r.lower).toBeGreaterThanOrEqual(600); expect(r.upper).toBeLessThanOrEqual(1000);
+    S.applyShadeAutoHistograms(out); expect(S.segmentShadeRange(c.key)).toEqual(S.segmentShadeRange('bone'));
   });
   it('the histogram panel lists a child by its name and colour, with its own runs', () => {
     const h = src('histogram-ui.js'); expect(h).toContain("const nameOf = key => isChildKey(key) ? (segmentById(key)?.name || key)"); expect(h).toContain('for (const k of childKeys) runs[k] = childByKey(k).runsBySlice;');
@@ -113,11 +114,12 @@ describe('spec: histogram of a child', () => {
 });
 
 describe('spec: save / load of a child', () => {
-  it('every field (name, colour, visible, opacity, material, shade, pinned label with its moved place, the mask) survives a project round trip; the parent comes back without the child\'s voxels', () => {
+  it('every field of the child (name, colour, visible, pinned label with its moved place, the mask; no opacity / material / shade: the parent\'s are used) survives a project round trip; the parent comes back without the child\'s voxels', () => {
     ST.setVolume(vol()); const c = mkChild({ opacity: 0.5, material: 'plaster', shade: { lower: 10, upper: 800 }, visible: false, label: { anchor: { i: 1, j: 1, k: 1 }, offset: { i: 2, j: 0, k: 1 } } });
     const saved = C.childSegmentsForProject(); expect(saved.length).toBe(1);
     const srcs = saved.map(s => C.childSrcFromEntry(JSON.parse(JSON.stringify(s.entry)), s.runsBySlice)); const { made } = C.restoreChildSegments(srcs); expect(made.length).toBe(1);
-    const k = made[0]; expect(S.segmentById(k.key)).toMatchObject({ name: 'Femur', color: '#ff0000', visible: false, opacity: 0.5, material: 'plaster', shade: { lower: 10, upper: 800 }, parentKey: 'bone' });
+    const k = made[0]; expect(S.segmentById(k.key)).toMatchObject({ name: 'Femur', color: '#ff0000', visible: false, opacity: 1, material: 'standard', shade: null, parentKey: 'bone' });
+    expect(JSON.stringify(saved[0].entry)).not.toMatch(/opacity|material|shade/);
     expect(k.label).toEqual({ anchor: { i: 1, j: 1, k: 1 }, offset: { i: 2, j: 0, k: 1 } }); expect(k.voxels).toBe(c.voxels); expect([...k.runsBySlice[1]]).toEqual([1, 1, 2]);
     expect(S.segmentSourcesOf('bone')).toContain(k.key);
   });
@@ -204,7 +206,7 @@ describe('a child card follows its colour / volume; the pin button follows the l
 
 describe('spec table: what is stated, what is not', () => {
   it('VR: where a result covers a child\'s voxel the laser reads BOTH (the child is looked up with or without a result; two overlapping results keep the later one)', () => {
-    const v = src('vr-view.js'); expect(v).toContain("if(ch?.ids&&childList.length&&ch.dims.join()===vp.dims.join())childKey=childKeyAtHit(");
+    const v = src('vr-view.js'); expect(v).toContain("if(ch?.ids&&childList.length&&ch.dims.join()===vp.dims.join())childKey=childKeyAtHit("); // where a result covers a child both get a card (hitLabelRids); the result is first
     expect(src('vr-volume-prep.js')).toContain('a later result wins where two overlap');
   });
 });

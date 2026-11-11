@@ -49,8 +49,8 @@ describe('stick click short press with no section: the regions\' colours (stickS
     expect(v).toContain("stkT:'Stick click (no section)',stkV:['Region colours','Labels']");
     expect(v).toContain('settings.stickShort=v;saveSettings(settings)');
   });
-  it('the 体験会 reset and the data switch put regionColorOff back (and rewrite the table)', () => {
-    const re = /labelsHidden=false;if\(regionColorOff\)\{regionColorOff=false;try\{refreshRegionLut\(\)\}catch\(e\)\{console\.warn\(e\)\}\}/g;
+  it('the 体験会 reset and the data switch put regionColorOff back (and rewrite the tables of the results and of the child segments)', () => {
+    const re = /labelsHidden=false;if\(regionColorOff\)\{regionColorOff=false;try\{refreshRegionLut\(\);refreshChildLut\(\)\}catch\(e\)\{console\.warn\(e\)\}\}/g;
     expect(v.match(re).length).toBe(2);
   });
 });

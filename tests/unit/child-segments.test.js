@@ -1,10 +1,9 @@
 import { describe, it, expect, beforeAll, afterEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import {
-  childSegNormalizeOpacity, childSegNormalizeMaterial, childSegNormalizeShade, childSegLookOf, childSegApplyLook, childSegLookToProject, childSegLookIsDefault, isChildKey, childSegColorCss, CHILD_SEG_MATERIALS,
+  isChildKey, childSegColorCss,
 } from '../../docs/segment-look.js';
 import { createShadeHist, binShadeRuns, autoShadeRange, dataRangeOf } from '../../docs/cap-shade.js';
-import { MATERIAL_KEYS } from '../../docs/lighting.js';
 import { installDomStub, importApp } from '../helpers/dom-stub.js';
 
 // a segment added under a preset in the tree is a REAL segment with every feature of a preset card. One interface for the presets and the children (segments.js segmentById /
@@ -18,28 +17,7 @@ const DATA = dataRangeOf(-1000, 3000);
 const runs = (n = 1, z = 0) => { const r = Array.from({ length: 4 }, () => null); r[z] = [1, 2, 2 + n]; return r; }; // n+1 voxels in one row of one slice
 const mk = (extra = {}) => C.addChildSegment({ name: 'Femur', parentKey: 'bone', runsBySlice: runs(3), color: 0xff00cc, ...extra });
 
-describe('segment-look.js: the look of a child segment', () => {
-  it('defaults: opacity 1, material standard, shade null (auto)', () => {
-    expect(childSegLookOf({})).toEqual({ opacity: 1, material: 'standard', shade: null });
-    expect(childSegLookOf(null)).toEqual({ opacity: 1, material: 'standard', shade: null });
-    expect(childSegLookIsDefault({})).toBe(true);
-  });
-  it('the material keys are the lighting.js MATERIALS (the preset card\'s display modes)', () => { expect([...CHILD_SEG_MATERIALS].sort()).toEqual([...MATERIAL_KEYS].sort()); });
-  it('opacity is clamped to 0..1, a non-number is the default; a material that does not exist is standard', () => {
-    expect([childSegNormalizeOpacity(0.4), childSegNormalizeOpacity(2), childSegNormalizeOpacity(-1), childSegNormalizeOpacity('x'), childSegNormalizeOpacity(null), childSegNormalizeOpacity(0)]).toEqual([0.4, 1, 0, 1, 1, 0]);
-    expect([childSegNormalizeMaterial('plaster'), childSegNormalizeMaterial('nope'), childSegNormalizeMaterial(undefined)]).toEqual(['plaster', 'standard', 'standard']);
-  });
-  it('shade: {lower, upper} or the project spelling {min, max}; ordered; anything else is null (auto)', () => {
-    expect(childSegNormalizeShade({ lower: 10, upper: 90 })).toEqual({ lower: 10, upper: 90 });
-    expect(childSegNormalizeShade({ min: 90, max: 10 })).toEqual({ lower: 10, upper: 90 });
-    for (const bad of [null, undefined, {}, { lower: 1 }, { lower: 'a', upper: 2 }, 5, { min: null, max: 3 }]) expect(childSegNormalizeShade(bad)).toBeNull();
-  });
-  it('save -> load round trip of every look field', () => {
-    const r = childSegApplyLook({}, { opacity: 0.35, material: 'plastic', shade: { lower: -50, upper: 400 } });
-    const entry = JSON.parse(JSON.stringify(childSegLookToProject(r)));
-    expect(entry).toEqual({ opacity: 0.35, material: 'plastic', shade: { min: -50, max: 400 } });
-    expect(childSegLookOf(entry)).toEqual({ opacity: 0.35, material: 'plastic', shade: { lower: -50, upper: 400 } });
-  });
+describe('segment-look.js: the helpers of a child segment', () => {
   it('key / colour helpers: a child key is s<id>, a region key r<id> or a preset key is not; colours become #rrggbb', () => {
     expect([isChildKey('s12'), isChildKey('bone'), isChildKey('r12'), isChildKey('s'), isChildKey(7), isChildKey('s1a')]).toEqual([true, false, false, false, false, false]);
     expect([childSegColorCss(0xff00cc), childSegColorCss('#AABBCC'), childSegColorCss(0x0000ff), childSegColorCss(undefined)]).toEqual(['#ff00cc', '#aabbcc', '#0000ff', '#00d8ff']);
@@ -48,9 +26,10 @@ describe('segment-look.js: the look of a child segment', () => {
 
 describe('child-segments.js: the data of a child segment', () => {
   it('the parents are the presets of segments.js', () => { expect(C.CHILD_PARENT_KEYS).toEqual(S.SEGMENT_PRESET_ORDER); });
-  it('a child has key s<id>, a name (custom), its parent, mask, voxel count, colour, visible, default look', () => {
+  it('a child has key s<id>, a name (custom), its parent, mask, voxel count, colour, visible (no opacity / material / shade of its own)', () => {
     const c = mk();
-    expect(c).toMatchObject({ key: 's' + c.id, name: 'Femur', parentKey: 'bone', voxels: 4, color: '#ff00cc', visible: true, opacity: 1, material: 'standard', shade: null });
+    expect(c).toMatchObject({ key: 's' + c.id, name: 'Femur', parentKey: 'bone', voxels: 4, color: '#ff00cc', visible: true });
+    expect(c).not.toHaveProperty('opacity'); expect(c).not.toHaveProperty('material'); expect(c).not.toHaveProperty('shade'); // a child inherits them from its parent
     expect(c.hash).toMatch(/^[0-9a-f]+$/);
     expect(C.childByKey(c.key)).toBe(c); expect(C.childrenOf('bone')).toEqual([c]); expect(C.childKeysOf('contrast')).toEqual([]);
   });
@@ -90,21 +69,29 @@ describe('a child segment can hang under ANY preset (nothing assumes bone)', () 
 });
 
 describe('project file: project.treeSegments (the only source of child segments)', () => {
-  it('save: one entry per child with name, parentKey, colour, visible, opacity, material, shade {min, max} | null, atlasId; the run mask is kept for the loader', () => {
-    const a = mk({ opacity: 0.4, material: 'plaster', shade: { lower: 5, upper: 50 }, visible: false }), b = mk({ name: '', color: '#112233', parentKey: 'contrast' });
+  it('save: one entry per child with name, parentKey, colour, visible (NO opacity / material / shade: the parent\'s are used); the run mask is kept for the loader', () => {
+    const a = mk({ opacity: 0.4, material: 'plaster', shade: { lower: 5, upper: 50 }, visible: false }), b = mk({ name: '', color: '#112233', parentKey: 'contrast' }); // the three look fields given here are ignored
     const out = C.childSegmentsForProject();
     expect(out.map(o => o.entry)).toEqual([
-      { parentKey: 'bone', color: '#ff00cc', visible: false, opacity: 0.4, material: 'plaster', shade: { min: 5, max: 50 }, name: 'Femur' },
-      { parentKey: 'contrast', color: '#112233', visible: true, opacity: 1, material: 'standard', shade: null },
+      { parentKey: 'bone', color: '#ff00cc', visible: false, colorOff: false, name: 'Femur' },
+      { parentKey: 'contrast', color: '#112233', visible: true, colorOff: false },
     ]);
     expect(out[0].runsBySlice).toBe(a.runsBySlice); expect(out[1].runsBySlice).toBe(b.runsBySlice);
+  });
+  it('an old project file whose child entry holds opacity / material / shade: they are ignored on load (the child uses its parent\'s)', () => {
+    S.segmentState.bone.opacity = 0.7; S.segmentState.bone.material = 'plastic';
+    const e = { parentKey: 'bone', color: '#ff00cc', visible: true, opacity: 0.2, material: 'solid', shade: { min: 5, max: 50 } };
+    const { made } = C.restoreChildSegments([C.childSrcFromEntry(e, runs(3))]);
+    expect(made[0]).not.toHaveProperty('opacity'); expect(made[0]).not.toHaveProperty('material'); expect(made[0]).not.toHaveProperty('shade');
+    expect(S.segmentById(made[0].key)).toMatchObject({ opacity: 0.7, material: 'plastic', shade: null });
+    S.segmentState.bone.opacity = 1; S.segmentState.bone.material = 'standard';
   });
   it('save -> load round-trips every field', () => {
     mk({ opacity: 0.4, material: 'plastic', shade: { lower: 5, upper: 50 }, visible: false }); mk({ name: 'Tibia', color: '#112233', parentKey: 'contrast', opacity: 0.9 });
     const saved = C.childSegmentsForProject(), json = JSON.parse(JSON.stringify(saved.map(o => o.entry)));
-    const before = ST.childSegments.map(c => ({ name: c.name, parentKey: c.parentKey, color: c.color, visible: c.visible, opacity: c.opacity, material: c.material, shade: c.shade, voxels: c.voxels }));
+    const before = ST.childSegments.map(c => ({ name: c.name, parentKey: c.parentKey, color: c.color, visible: c.visible, voxels: c.voxels }));
     const { made } = C.restoreChildSegments(json.map((e, i) => C.childSrcFromEntry(e, saved[i].runsBySlice)));
-    expect(made.map(c => ({ name: c.name, parentKey: c.parentKey, color: c.color, visible: c.visible, opacity: c.opacity, material: c.material, shade: c.shade, voxels: c.voxels }))).toEqual(before);
+    expect(made.map(c => ({ name: c.name, parentKey: c.parentKey, color: c.color, visible: c.visible, voxels: c.voxels }))).toEqual(before);
     expect(ST.childSegments.map(c => c.key)).toEqual(['s1', 's2']); // the list was replaced, ids restart
   });
   it('an old project without treeSegments and without atlas entries leaves no child', () => {
@@ -144,42 +131,64 @@ describe('segments.js: segmentById / allSegmentKeys (one interface for the prese
     expect(S.shownSegmentKeys()).toEqual([]);
     S.segmentState.bone.enabled = true; expect(S.shownSegmentKeys()).toEqual(['bone', a.key]);
   });
-  it('setChildLook: opacity / material / shade / visible are normalised, a change is announced once with the fields that changed, a no-op is not', () => {
+  it('setChildLook: name / colour / visible only; a change is announced once with the fields that changed, a no-op is not; opacity / material / shade are not a child\'s (ignored)', () => {
     const c = mk(); const seen = []; const off = S.onChildSegLookChange((x, ch) => seen.push([x.key, ch]));
-    expect(S.setChildLook(c.key, { opacity: 0.25 })).toBe(true); expect(S.setChildLook(c.key, { opacity: 0.25 })).toBe(false);
-    expect(S.setChildLook(c.key, { material: 'solid', shade: { lower: 3, upper: 1 } })).toBe(true);
-    expect(S.setChildLook(c.key, { material: 'bogus', visible: false })).toBe(true);
-    expect(S.setChildLook('s99', { opacity: 0 })).toBe(false); off();
-    expect(seen).toEqual([[c.key, ['opacity']], [c.key, ['material', 'shade']], [c.key, ['material', 'visible']]]);
-    expect(childSegLookOf(c)).toEqual({ opacity: 0.25, material: 'standard', shade: { lower: 1, upper: 3 } }); expect(c.visible).toBe(false);
+    expect(S.setChildLook(c.key, { visible: false })).toBe(true); expect(S.setChildLook(c.key, { visible: false })).toBe(false);
+    expect(S.setChildLook(c.key, { opacity: 0.25, material: 'solid', shade: { lower: 3, upper: 1 } })).toBe(false);
+    expect(S.setChildLook('s99', { visible: true })).toBe(false); off();
+    expect(seen).toEqual([[c.key, ['visible']]]);
+    expect(c).not.toHaveProperty('opacity'); expect(c).not.toHaveProperty('material'); expect(c).not.toHaveProperty('shade'); expect(c.visible).toBe(false);
+  });
+  it('(child = inherits): the child\'s opacity / material / shade are the PARENT\'s at every moment; a change of the parent is announced to its children only', () => {
+    S.segmentState.bone.active = true; S.segmentState.contrast.active = true;
+    const a = mk(), b = mk({ parentKey: 'contrast' }), seen = []; const off = S.onChildSegLookChange((x, ch) => seen.push([x.key, ch]));
+    expect(S.segmentById(a.key)).toMatchObject({ opacity: 1, material: 'standard', shade: null });
+    S.segmentState.bone.opacity = 0.4; S.segmentState.bone.material = 'plaster'; S.segmentState.contrast.material = 'plastic';
+    expect(S.segmentById(a.key)).toMatchObject({ opacity: 0.4, material: 'plaster' }); expect(S.segmentById(b.key)).toMatchObject({ opacity: 1, material: 'plastic' });
+    expect(S.childRenderEntries().map(e => [e.opacity, e.material])).toEqual([[0.4, 'plaster'], [1, 'plastic']]);
+    S.segmentState.bone.material = 'skin'; expect(S.childRenderEntries()[0].material).toBe('skin'); expect(S.segmentById(a.key).material).toBe('skin'); // a material of the lighting.js MATERIALS the old child list did not know too
+    S.notifyChildrenOfParentLook('bone', ['material']); off();
+    expect(seen).toEqual([[a.key, ['material']]]);
+    S.segmentState.bone.opacity = 1; S.segmentState.bone.material = 'standard'; S.segmentState.contrast.material = 'standard';
   });
 });
 
-describe('the cut-face shading range of a child (the same functions as the presets)', () => {
-  it('before the auto value is ready: the parent\'s min / max cut to the data; a manual end keeps both ends; reset goes back to auto; the presets\' map is untouched', () => {
+describe('(child = inherits): the PC row and the renderers', () => {
+  it('the tree row of a child has no opacity / material / shading-range control (an analysis region row has none)', () => {
+    const t = src('segment-tree-ui.js'); for (const w of ['data-child-opacity', 'childOpacity', 'data-child-material', 'childMaterial', 'data-child-shade', 'childShade', 'segMaterial', "'opacity'", "'shadeRange'"]) expect(t).not.toContain(w);
+    for (const w of ['childName', 'childColor', 'childLabelPin', 'childStl', 'childDelete']) expect(t).toContain('dataset.' + w);
+  });
+  it('the 3D meshes take the parent\'s material / opacity (segmentById), and the parent\'s material / opacity controls tell the children', () => {
+    const u = src('child-segments-ui.js'); expect(u).not.toContain('childSegLookOf'); expect(u.match(/setSegmentMeshMaterial\(c\.key, segmentById\(c\.key\)\?\.material \|\| 'standard'\)/g)).toHaveLength(1); expect(u.match(/setSegmentMeshMaterial\(c\.key, childDrawLook\(c\)\.material\)/g)).toHaveLength(2); // childDrawLook's material is always the parent's (segments.js)
+    const a = src('app.js'); expect(a).toContain("notifyChildrenOfParentLook(key,['opacity'])"); expect(a).toContain("notifyChildrenOfParentLook(key,['material'])");
+  });
+});
+
+describe('the cut-face shading range of a child (the PARENT\'s range, like an analysis region)', () => {
+  it('a child\'s range is its parent\'s: the same value, span, manual end and reset; a change through the child key moves the parent and tells the children', () => {
     S.segmentState.bone.active = true; S.segmentState.bone.min = 100; S.segmentState.bone.max = 5000;
     const c = mk(), k = c.key;
-    expect(S.segmentShadeRange(k, DATA)).toEqual({ lower: 100, upper: 3000, touched: false });
+    expect(S.segmentShadeRange(k, DATA)).toEqual(S.segmentShadeRange('bone', DATA)); expect(S.segmentShadeRange(k, DATA)).toEqual({ lower: 100, upper: 3000, touched: false });
     const seen = []; const off = S.onChildSegLookChange((x, ch) => seen.push(ch.join()));
-    expect(S.setSegmentShadeEnd(k, 'lower', 400, DATA)).toEqual({ lower: 400, upper: 3000, touched: true });
-    expect(c.shade).toEqual({ lower: 400, upper: 3000 }); expect(S.segmentShadeRanges[k]).toBeUndefined();
-    S.setSegmentShadeEnd(k, 'upper', 200, DATA); expect(S.segmentShadeRange(k, DATA)).toMatchObject({ lower: 400, upper: 400 });
-    S.resetSegmentShadeRange(k); expect(S.segmentShadeRange(k, DATA).touched).toBe(false); expect(c.shade).toBeNull();
+    expect(S.setSegmentShadeEnd('bone', 'lower', 400, DATA)).toEqual({ lower: 400, upper: 3000, touched: true });
+    expect(S.segmentShadeRange(k, DATA)).toEqual({ lower: 400, upper: 3000, touched: true }); expect(S.segmentById(k).shade).toEqual({ lower: 400, upper: 3000 });
+    expect(c).not.toHaveProperty('shade'); expect(S.segmentShadeRanges[k]).toBeUndefined();
+    S.setSegmentShadeEnd(k, 'upper', 200, DATA); expect(S.segmentShadeRange('bone', DATA)).toMatchObject({ lower: 400, upper: 400 });
+    S.resetSegmentShadeRange(k); expect(S.segmentShadeRange(k, DATA).touched).toBe(false); expect(S.segmentShadeRange('bone', DATA).touched).toBe(false); expect(S.segmentShadeRanges.bone).toBeUndefined();
     off(); expect(seen).toEqual(['shade', 'shade', 'shade']);
   });
-  it('the auto range comes from the child\'s own runs (binShadeRuns -> autoShadeRange), per child', () => {
-    S.segmentState.bone.active = true;
-    const a = mk({ runsBySlice: [[0, 0, 31]] }), b = mk({ runsBySlice: [[0, 32, 63]] });
+  it('the auto range of the parent (not the child\'s own runs) is what the child shows, per parent', () => {
+    S.segmentState.bone.active = true; S.segmentState.contrast.active = true;
+    const a = mk({ runsBySlice: [[0, 0, 31]] }), b = mk({ parentKey: 'contrast', runsBySlice: [[0, 32, 63]] });
     const w = 64, values = Float64Array.from({ length: w }, (_, i) => -1000 + i * 60);
     const hist = r => binShadeRuns(createShadeHist(), values, r, w, DATA.min, DATA.max);
     const h1 = hist(a.runsBySlice[0]), h2 = hist(b.runsBySlice[0]);
-    S.applyShadeAutoHistograms({ [a.key]: h1, [b.key]: h2, contrast: null }, DATA);
+    S.applyShadeAutoHistograms({ bone: h1, contrast: h2, [a.key]: h2 }, DATA); // a histogram given for the child key itself is not used by the child's range
     const ra = S.segmentShadeRange(a.key, DATA), rb = S.segmentShadeRange(b.key, DATA);
-    expect(ra.touched).toBe(false); expect(ra.upper).toBeLessThan(rb.lower + 1); expect(ra.lower).toBeLessThan(ra.upper);
+    expect(ra).toEqual(S.segmentShadeRange('bone', DATA)); expect(rb).toEqual(S.segmentShadeRange('contrast', DATA));
     expect(ra.lower).toBe(Math.min(autoShadeRange(h1, DATA).lower, autoShadeRange(h1, DATA).upper));
-    expect(S.segmentShadeSpan(a.key, DATA).max).toBeLessThan(S.segmentShadeSpan(b.key, DATA).max);
-    S.setSegmentShadeEnd(a.key, 'lower', 0, DATA); S.applyShadeAutoHistograms({ [a.key]: null }, DATA); expect(S.segmentShadeRange(a.key, DATA).touched).toBe(true);
-    expect(S.segmentShadeRange(b.key, DATA).touched).toBe(false);
+    expect(S.segmentShadeSpan(a.key, DATA)).toEqual(S.segmentShadeSpan('bone', DATA)); expect(S.segmentShadeSpan(b.key, DATA)).toEqual(S.segmentShadeSpan('contrast', DATA));
+    S.setSegmentShadeEnd(a.key, 'lower', 0, DATA); expect(S.segmentShadeRange(a.key, DATA).touched).toBe(true); expect(S.segmentShadeRange(b.key, DATA).touched).toBe(false);
   });
   it('an auto range of a child that is gone is ignored; the auto value is announced', () => {
     expect(S.setSegmentShadeAuto('s404', { lower: 1, upper: 2, span: { min: 0, max: 3 } })).toBe(false);
@@ -191,19 +200,21 @@ describe('the cut-face shading range of a child (the same functions as the prese
 
 describe('the render hand-off: childRenderEntries() and the change event', () => {
   it('no child: an empty list', () => { expect(S.childRenderEntries()).toEqual([]); });
-  it('one entry per child with key, runs, colour, opacity, material, shade, shadeRange, visible (drawn now), shown, parentKey, parentSlot', () => {
+  it('one entry per child with key, runs, colour, colorOff, opacity, material, shade, shadeRange, visible (drawn now), shown, parentKey, parentSlot', () => {
     S.segmentState.bone.active = true; S.segmentState.bone.enabled = true; S.segmentState.contrast.active = true; S.segmentState.contrast.enabled = false;
-    const a = mk({ opacity: 0.4, material: 'plaster', shade: { lower: 5, upper: 50 }, color: '#112233' }), b = mk({ parentKey: 'contrast', visible: false });
+    S.segmentState.bone.opacity = 0.4; S.segmentState.bone.material = 'plaster'; S.segmentShadeRanges.bone = { lower: 5, upper: 50 }; // the PARENT's look: a child uses it
+    const a = mk({ color: '#112233' }), b = mk({ parentKey: 'contrast', visible: false });
     const e = S.childRenderEntries();
-    expect(e.map(x => Object.keys(x).sort())).toEqual(Array(2).fill(['color', 'hash', 'key', 'material', 'opacity', 'parentKey', 'parentSlot', 'runs', 'shade', 'shadeRange', 'shown', 'visible', 'voxels']));
+    expect(e.map(x => Object.keys(x).sort())).toEqual(Array(2).fill(['color', 'colorOff', 'hash', 'key', 'material', 'opacity', 'parentKey', 'parentSlot', 'runs', 'shade', 'shadeRange', 'shown', 'visible', 'voxels']));
     expect(e[0]).toMatchObject({ key: a.key, runs: a.runsBySlice, color: '#112233', opacity: 0.4, material: 'plaster', shade: { lower: 5, upper: 50 }, shadeRange: { lower: 5, upper: 50 }, visible: true, shown: true, parentKey: 'bone', parentSlot: S.gpuSegmentOrder().indexOf('bone'), hash: a.hash, voxels: 4 });
     expect(e[1]).toMatchObject({ key: b.key, visible: false, shown: false, parentKey: 'contrast' });
     S.segmentState.bone.enabled = false; expect(S.childRenderEntries()[0]).toMatchObject({ visible: false, shown: true }); // a child shown with a hidden parent is not drawn
+    S.segmentState.bone.opacity = 1; S.segmentState.bone.material = 'standard';
   });
   it('the change event: a look change and a list change reach onChildRenderChange', () => {
     const c = mk(), seen = []; const off = S.onChildRenderChange(ev => seen.push(ev));
-    S.setChildLook(c.key, { opacity: 0.3 }); C.emitChildSegChange('list'); off();
-    expect(seen).toEqual([{ kind: 'look', key: c.key, changed: ['opacity'] }, { kind: 'list', key: null, changed: [] }]);
+    S.setChildLook(c.key, { visible: false }); C.emitChildSegChange('list'); off();
+    expect(seen).toEqual([{ kind: 'look', key: c.key, changed: ['visible'] }, { kind: 'list', key: null, changed: [] }]);
   });
 });
 
@@ -216,8 +227,8 @@ describe('separation: the analysis regions are never touched by a child segment'
     const regs = regionList(); ST.setAnalysisRegions(regs);
     const before = JSON.stringify(ST.analysisRegions); S.segmentState.bone.active = true; S.segmentState.contrast.active = true;
     const a = mk({ parentKey: 'bone', name: 'Femur' }), b = mk({ parentKey: 'contrast', name: 'Kidney' });
-    S.setChildLook(a.key, { opacity: 0.2, material: 'solid', shade: { lower: 1, upper: 9 }, visible: false, color: '#010203', name: 'F2' }); S.setChildLook(b.key, { visible: true });
-    S.setSegmentShadeEnd(a.key, 'lower', 3, DATA); S.resetSegmentShadeRange(a.key); S.applyShadeAutoHistograms({ [a.key]: null }, DATA);
+    S.setChildLook(a.key, { visible: false, color: '#010203', name: 'F2' }); S.setChildLook(b.key, { visible: true });
+    S.setSegmentShadeEnd(a.key, 'lower', 3, DATA); S.resetSegmentShadeRange(a.key); S.applyShadeAutoHistograms({ [a.key]: null }, DATA); // (a child key moves its PARENT's range: the regions are still untouched)
     S.segmentById(a.key); S.allSegmentKeys(); S.shownSegmentKeys(); S.childRenderEntries();
     const saved = C.childSegmentsForProject(); C.restoreChildSegments(saved.map(o => C.childSrcFromEntry(JSON.parse(JSON.stringify(o.entry)), o.runsBySlice)));
     C.removeChildSegment(ST.childSegments[0].key); C.clearChildSegments();
@@ -241,7 +252,7 @@ describe('a child is made ONLY by the user (「子セグメントを追加」): 
     const r = reg(1, [new Uint32Array([1, 2, 4]), null, new Uint32Array([0, 0, 1])], { name: 'Left tibia', atlasId: 2200 }), regs = [r]; ST.setAnalysisRegions(regs);
     const before = JSON.stringify(ST.analysisRegions.map(x => ({ ...x, runsBySlice: x.runsBySlice.map(a => (a ? Array.from(a) : a)) })));
     const c = C.addChildSegmentFromRegions('fat', [r], 3);
-    expect(c).toMatchObject({ parentKey: 'fat', name: '', voxels: 5, visible: true, opacity: 1, material: 'standard', shade: null }); expect('atlasId' in c).toBe(false);
+    expect(c).toMatchObject({ parentKey: 'fat', name: '', voxels: 5, visible: true }); expect('atlasId' in c).toBe(false);
     expect(c.runsBySlice[0]).not.toBe(r.runsBySlice[0]); expect(Array.from(c.runsBySlice[0])).toEqual([1, 2, 4]); // a copy
     expect(JSON.stringify(ST.analysisRegions.map(x => ({ ...x, runsBySlice: x.runsBySlice.map(a => (a ? Array.from(a) : a)) })))).toBe(before);
     expect(ST.analysisRegions).toBe(regs); expect(ST.childSegments).toEqual([c]);

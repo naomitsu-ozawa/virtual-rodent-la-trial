@@ -18,8 +18,8 @@
     "url": "https://creativecommons.org/licenses/by/4.0/"
   },
   "changes": {
-    "ja": "元の DICOM から片足分を切り出して面内を半分に縮小、骨ラベルを解析領域に変換して骨の名称ラベルを付与、本アプリで3D再構成",
-    "en": "cropped to one hindpaw and downsampled in-plane by half from the original DICOM; bone labels converted to analysis regions with a name label for each bone; 3D reconstruction and rendering in this app"
+    "ja": "元の DICOM から片足分を切り出して面内を半分に縮小、骨ラベルを解析領域に変換して骨の名称を付与、本アプリで3D再構成",
+    "en": "cropped to one hindpaw and downsampled in-plane by half from the original DICOM; bone labels converted to analysis regions with a name for each bone; 3D reconstruction and rendering in this app"
   },
   "terms": {
     "ja": "出典を表示すれば、営利・非営利を問わず利用・改変できます。",

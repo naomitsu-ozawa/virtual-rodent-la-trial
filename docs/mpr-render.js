@@ -1,18 +1,19 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { wc, ww, planes, footer, state, wcVal, wwVal } from './ui-shell.js?v=20261111-build714';
-import { SEGMENT_PRESET_ORDER, allSegmentKeys, segmentById, activeMprSegments, mprSegmentAlpha, analysisRegionShown, segmentEditActive, segmentState, segmentHasProcessedMask, getProcessedSegmentMask, segmentEditState } from './segments.js?v=20261111-build714';
-import { volume, volumeAnalysisMode, analysisRegions, childSegments, analysisFocusedRegionId, sectionViewPlane, memoryGpuPreviewActive, sourceVolume, setMemoryGpuPreviewActive, sceneState, incSourceMprWarmupToken, sourceMprWarmupPlane, setSourceMprWarmupPlane, residentGpuUploadSeriesId, sourceMprWarmupToken, setCrosshairSlice , sectionViewOpen, threeRenderMode} from './state.js?v=20261111-build714';
-import { analysisRunsContain, runsPlaneMask } from './run-length.js?v=20261111-build714';
-import { mpr3DVisibility, refreshMpr3DPlaneTexture, setSectionCapColors, updateMpr3DPlanePositions, syncMpr3DSliceSliders, mpr3DOrthoSliding, pushCachedMpr3DPlane, mpr3DPreviewCache, mpr3DPreviewSignature, paintMpr3DCacheSliceFast, ensureMpr3DPreviewCache } from './mpr3d-overlay.js?v=20261111-build714';
-import { updateSectionClipPlaneWorld, rebindWebGpuSectionClipGroup, updateSectionViewUi } from './section-view.js?v=20261111-build714';
-import { request3DRender } from './scene3d.js?v=20261111-build714';
-import { planeRenderRevision, sourceFilterStages, getFilteredMemoryPlaneValues, getFilteredSourcePlaneValues, getCachedSourceSlice, sourceFilterSignature, sourceFilterCacheGet, memoryFilterPreviewGet, currentFilterSignature } from './source-filters.js?v=20261111-build714';
-import { cachedSagittalDisplayPlane, cachedSourceMprPlane } from './volume-io.js?v=20261111-build714';
-import { sourceOrthogonalCacheGet, residentGpuMprAvailable, buildSourceOrthogonalPlane } from './mpr-orthogonal.js?v=20261111-build714';
-import { hexRgb, formatCtValue, frameYield } from './utils.js?v=20261111-build714';
+import { wc, ww, planes, footer, state, wcVal, wwVal } from './ui-shell.js?v=20261111-build715';
+import { SEGMENT_PRESET_ORDER, allSegmentKeys, segmentById, childDrawLook, activeMprSegments, mprSegmentAlpha, analysisRegionShown, segmentEditActive, segmentState, segmentHasProcessedMask, getProcessedSegmentMask, segmentEditState } from './segments.js?v=20261111-build715';
+import { volume, volumeAnalysisMode, analysisRegions, childSegments, analysisFocusedRegionId, sectionViewPlane, memoryGpuPreviewActive, sourceVolume, setMemoryGpuPreviewActive, sceneState, incSourceMprWarmupToken, sourceMprWarmupPlane, setSourceMprWarmupPlane, residentGpuUploadSeriesId, sourceMprWarmupToken, setCrosshairSlice , sectionViewOpen, threeRenderMode} from './state.js?v=20261111-build715';
+import { analysisRunsContain, runsPlaneMask } from './run-length.js?v=20261111-build715';
+import { getFocusedChildKey, childByKey } from './child-segments.js?v=20261111-build715';
+import { mpr3DVisibility, refreshMpr3DPlaneTexture, setSectionCapColors, updateMpr3DPlanePositions, syncMpr3DSliceSliders, mpr3DOrthoSliding, pushCachedMpr3DPlane, mpr3DPreviewCache, mpr3DPreviewSignature, paintMpr3DCacheSliceFast, ensureMpr3DPreviewCache } from './mpr3d-overlay.js?v=20261111-build715';
+import { updateSectionClipPlaneWorld, rebindWebGpuSectionClipGroup, updateSectionViewUi } from './section-view.js?v=20261111-build715';
+import { request3DRender } from './scene3d.js?v=20261111-build715';
+import { planeRenderRevision, sourceFilterStages, getFilteredMemoryPlaneValues, getFilteredSourcePlaneValues, getCachedSourceSlice, sourceFilterSignature, sourceFilterCacheGet, memoryFilterPreviewGet, currentFilterSignature } from './source-filters.js?v=20261111-build715';
+import { cachedSagittalDisplayPlane, cachedSourceMprPlane } from './volume-io.js?v=20261111-build715';
+import { sourceOrthogonalCacheGet, residentGpuMprAvailable, buildSourceOrthogonalPlane } from './mpr-orthogonal.js?v=20261111-build715';
+import { hexRgb, formatCtValue, frameYield } from './utils.js?v=20261111-build715';
 import * as THREE from './vendor/three@0.186.0/build/three.webgpu.js';
-import { latestOnlyRunner } from './latest-runner.js?v=20261111-build714';
+import { latestOnlyRunner } from './latest-runner.js?v=20261111-build715';
 export function analysisColorCss(color){return '#'+Number(color??0x00d8ff).toString(16).padStart(6,'0')}
 function resultPlaneLayers(p,idx,full){
  const out=[];if(!volume)return out;
@@ -70,29 +71,42 @@ function paintSectionFaceSliding(p,idx){
 // own colour at its own opacity. [] (no work at all) while there is no child segment.
 function childPlaneLayers(p,idx,full){
  const out=[];if(!childSegments.length||!volume)return out;
- for(const c of childSegments){const g=segmentById(c.key);if(!g?.enabled||!c.runsBySlice)continue;const rgb=hexRgb(c.color);
+ for(const c of childSegments){const g=segmentById(c.key);if(!g?.enabled||!c.runsBySlice)continue;const rgb=hexRgb(childDrawLook(c).color);
   out.push({key:c.key,parentKey:c.parentKey,rgb,opacity:g.opacity,runs:c.runsBySlice,mask:full?runsPlaneMask(c.runsBySlice,p,idx,volume.columns,volume.rows,volume.slices):null})}
  return out;
 }
 function childLayerAt(layers,i,ix,iy,iz){let c=null;for(const L of layers)if(L.mask?L.mask[i]===1:analysisRunsContain(L.runs,ix,iy,iz))c=L;return c}
 function resultRgbAt(layers,key,i,ix,iy,iz){let c=null;for(const L of layers){if(!L.keys.includes(key))continue;if(L.mask?L.mask[i]===1:analysisRunsContain(L.runs,ix,iy,iz))c=L.rgb}return c}
+// the outline of a mask (runsBySlice) on one 2D plane, in the colour css (the frame of the focused analysis region / child segment)
+function strokeRunsOutline(ctx,p,idx,runsBySlice,d,css){
+ ctx.fillStyle='rgba(0,0,0,0)';ctx.strokeStyle=css;ctx.lineWidth=2;
+ if(p==='axial'){
+  const rec=runsBySlice?.[idx];if(!rec)return;
+  for(let i=0;i<rec.length;i+=3){const y=rec[i],x0=rec[i+1],x1=rec[i+2];ctx.strokeRect(x0-.5,y-.5,x1-x0+1,1)}
+ }else if(p==='coronal'){
+  for(let z=0;z<d;z++){const rec=runsBySlice?.[z];if(!rec)continue;const py=d-1-z;for(let i=0;i<rec.length;i+=3)if(rec[i]===idx){ctx.strokeRect(rec[i+1]-.5,py-.5,rec[i+2]-rec[i+1]+1,1)}}
+ }else{
+  for(let z=0;z<d;z++){const rec=runsBySlice?.[z];if(!rec)continue;const py=d-1-z;for(let i=0;i<rec.length;i+=3)if(idx>=rec[i+1]&&idx<=rec[i+2]){const y=rec[i];ctx.strokeRect(y-.5,py-.5,1,1)}}
+ }
+}
+// the focused child segment (child-segments.js getFocusedChildKey) while it is drawn (shown, its parent shown): its mask's frame in the child's own colour, like the focused analysis region's
+function focusedChildForFrame(){
+ if(!childSegments.length)return null;
+ const k=analysisFocusedRegionId==null?getFocusedChildKey():null;if(!k)return null; // a focused analysis region takes the frame (one focus at a time)
+ const c=childByKey(k);return c?.runsBySlice&&segmentById(k)?.enabled?c:null;
+}
 export function drawAnalysisOverlay(p,idx,ctx){
- if(!volumeAnalysisMode||!analysisRegions.length||!ctx)return;
+ if(!volumeAnalysisMode||!ctx)return;
+ const kid=focusedChildForFrame();
+ if(!analysisRegions.length&&!kid)return;
  const d=volume?.slices||0;
  ctx.save();
  for(const region of analysisRegions){
   if(!analysisRegionShown(region))continue;
   const css=analysisColorCss(region.color),focused=region.id===analysisFocusedRegionId;
-  if(!focused)continue;ctx.fillStyle='rgba(0,0,0,0)';ctx.strokeStyle=css;ctx.lineWidth=2;
-  if(p==='axial'){
-   const rec=region.runsBySlice?.[idx];if(!rec)continue;
-   for(let i=0;i<rec.length;i+=3){const y=rec[i],x0=rec[i+1],x1=rec[i+2];ctx.strokeRect(x0-.5,y-.5,x1-x0+1,1)}
-  }else if(p==='coronal'){
-   for(let z=0;z<d;z++){const rec=region.runsBySlice?.[z];if(!rec)continue;const py=d-1-z;for(let i=0;i<rec.length;i+=3)if(rec[i]===idx){ctx.strokeRect(rec[i+1]-.5,py-.5,rec[i+2]-rec[i+1]+1,1)}}
-  }else{
-   for(let z=0;z<d;z++){const rec=region.runsBySlice?.[z];if(!rec)continue;const py=d-1-z;for(let i=0;i<rec.length;i+=3)if(idx>=rec[i+1]&&idx<=rec[i+2]){const y=rec[i];ctx.strokeRect(y-.5,py-.5,1,1)}}
-  }
+  if(!focused)continue;strokeRunsOutline(ctx,p,idx,region.runsBySlice,d,css);
  }
+ if(kid)strokeRunsOutline(ctx,p,idx,kid.runsBySlice,d,kid.color);
  ctx.restore();
 }
 export const planeRenderTimers={axial:null,coronal:null,sagittal:null};

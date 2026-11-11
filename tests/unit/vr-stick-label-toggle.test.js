@@ -9,6 +9,6 @@ describe('stick click short press with no section toggles the labels (VR, stickS
   });
   it('labelsHidden hides every card in placeLabel (after the segment-hidden check) and the session reset clears it', () => {
     expect(v).toMatch(/if\(lb\.hid\)\{[^\n]*\n\s*if\(labelsHidden\)\{lb\.m\.visible=false;lb\.line\.visible=false;return\}/);
-    expect(v.match(/labelsHidden=false;if\(regionColorOff\)\{regionColorOff=false;try\{refreshRegionLut\(\)\}catch\(e\)\{console\.warn\(e\)\}\}ui\.sliceClear=false;/g).length).toBe(2);
+    expect(v.match(/labelsHidden=false;if\(regionColorOff\)\{regionColorOff=false;try\{refreshRegionLut\(\);refreshChildLut\(\)\}catch\(e\)\{console\.warn\(e\)\}\}ui\.sliceClear=false;/g).length).toBe(2);
   });
 });

@@ -352,7 +352,7 @@ describe('segment material presets', () => {
     const ui = read('ui-shell.js');
     for (const k of ['bone', 'soft', 'fat', 'lung', 'contrast']) expect(ui).toContain(`data-seg-material="${k}"`);
     expect(ui.match(/<option value="(standard|solid|plaster|plastic|skin|muscle|fat)" data-i18n="mat\w+">/g)).toHaveLength(35); // 5 cards x 7 presets
-    expect(read('app.js')).toMatch(/material\.onchange=\(\)=>\{const k=materialKey\(material\.value\);material\.value=k;segmentState\[key\]\.material=k;setSegmentMeshMaterial\(key,k\);request3DRender\(\)\};/);
+    expect(read('app.js')).toMatch(/material\.onchange=\(\)=>\{const k=materialKey\(material\.value\);material\.value=k;segmentState\[key\]\.material=k;setSegmentMeshMaterial\(key,k\);syncColorOffChildren\(key\);request3DRender\(\)\};/);
   });
   it('round-trips through a project archive', async () => {
     const { packProject, unpackProject } = await import('../../docs/project-file.js');
