@@ -1,0 +1,36 @@
+{
+  "changes": {
+    "en": "converted from the original TIFF stacks (micro-CT 1145x703x652, 0.12 mm isotropic) to DICOM: cropped to the skull and downsampled along the slice direction (x3 block averaging) to 354 slices x 366 x 335; the 15 labelled bone classes present in the source are registered as unnamed child segments under the bone segment (colour-coded only, no names - identifying each bone is the learning task), so the bone segment's own display is fully subtracted by its children; 3D reconstruction and rendering in this app",
+    "ja": "元のTIFFスタック（micro-CT 1145×703×652、0.12mm等方）からDICOMに変換：頭蓋にクロップし、スライス方向に×3ブロック平均で間引いて354枚×366×335に。出典ラベルの15クラスは骨セグメントの下位に名称なしの子セグメントとして色分けのみで登録（各骨の同定は学習者の課題）。親セグメントの表示は子の差し引きで0になる。本アプリで3D再構成"
+  },
+  "credit": {
+    "dataUrl": "https://zenodo.org/records/24047383",
+    "name": "He, Yichen — SPROUT dataset (University of Sheffield / Natural History Museum, London)",
+    "url": "https://zenodo.org/records/24047383"
+  },
+  "description": {
+    "en": "Anteater (Tamandua sp.) skull micro-CT with 15 labelled bone classes ({mb})",
+    "ja": "コアリクイ（Tamandua sp.）頭蓋 microCT・骨ラベル15クラス付き（{mb}）"
+  },
+  "level": null,
+  "license": {
+    "name": "CC BY 4.0",
+    "url": "https://creativecommons.org/licenses/by/4.0/"
+  },
+  "name": {
+    "en": "Anteater skull",
+    "ja": "コアリクイ頭蓋"
+  },
+  "terms": {
+    "en": "You may use and adapt it for any purpose, including commercial use, with attribution.",
+    "ja": "出典を表示すれば、営利・非営利を問わず利用・改変できます。"
+  },
+  "size": {
+    "dims": [
+      335,
+      366,
+      354
+    ],
+    "megabytes": 87.8
+  }
+}

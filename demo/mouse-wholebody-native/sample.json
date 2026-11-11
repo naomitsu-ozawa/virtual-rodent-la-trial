@@ -1,0 +1,36 @@
+{
+  "name": {
+    "ja": "マウス全身",
+    "en": "Mouse whole body"
+  },
+  "level": null,
+  "description": {
+    "ja": "マウス全身 microCT・臓器ラベル付き（{mb}）",
+    "en": "Mouse whole-body micro-CT with organ labels ({mb})"
+  },
+  "credit": {
+    "name": "Rosenhain / Magnuska / Yamoah / Rawashdeh / Kiessling / Gremse, RWTH Aachen University",
+    "url": "https://springernature.figshare.com/articles/dataset/Native_CTscans_with_manual_organ_segmentation/7058615",
+    "dataUrl": "https://springernature.figshare.com/articles/dataset/Native_CTscans_with_manual_organ_segmentation/7058615"
+  },
+  "license": {
+    "name": "CC0 1.0",
+    "url": "https://creativecommons.org/publicdomain/zero/1.0/"
+  },
+  "changes": {
+    "ja": "元の Analyze 形式データから体部を切り出して DICOM に変換、付属の臓器セグメンテーションをそのままセグメントとして登録（骨＝骨ラベル、肺＝肺＋気管ラベル、臓器類は造影セグメントに合体）、さらに心臓・膀胱・腎臓・胃・筋肉・脾臓・肝臓・腸と肺・気管を子セグメントとして個別に登録、本アプリで3D再構成",
+    "en": "cropped to the body and converted from the original Analyze format to DICOM; the bundled organ segmentations registered as-is as segment masks (bone label on the bone segment, lung + trachea labels on the lung segment, all organ labels combined on the contrast segment); the heart, bladder, kidneys, stomach, muscle, spleen, liver and intestine, plus lung and trachea, also registered individually as child segments; 3D reconstruction and rendering in this app"
+  },
+  "size": {
+    "dims": [
+      127,
+      86,
+      200
+    ],
+    "megabytes": 4.8
+  },
+  "terms": {
+    "ja": "CC0（パブリックドメイン提供）として公開されており、出典表示なしでも利用・改変できます。",
+    "en": "Released under CC0 (public domain dedication); you may use and adapt it for any purpose, with or without attribution."
+  }
+}

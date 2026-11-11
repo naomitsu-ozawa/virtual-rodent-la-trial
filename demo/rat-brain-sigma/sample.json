@@ -1,0 +1,36 @@
+{
+  "changes": {
+    "en": "This is MRI (ex vivo T2*), not CT, converted to DICOM. Values are the original signal linearly scaled to 0-4095 using the 0.5-99.5 percentiles inside the brain mask; they are not HU. Template and atlas were verified to align voxel-by-voxel (the 1 mm affine-origin difference is a header notation difference). All 222 atlas regions are registered as child segments under the soft-tissue preset, deliberately without region names so learners identify the structures themselves. 3D reconstruction and rendering in this app",
+    "ja": "CTではなくMRI（ex vivo T2*）のデータをDICOM化したもの。信号値は元の信号を脳マスク内の百分位（0.5〜99.5%）で 0〜4095 に線形スケーリングした値で、HUではない。テンプレートとアトラスはボクセル単位で位置が一致することを実測で確認（affine原点の1mm差はヘッダ表記差）。アトラスの全222領域を「軟部組織」プリセット配下の子セグメントとして登録したが、学習用に領域名は付けていない（自分で構造を見分けて名前を付ける形式）。本アプリで3D再構成"
+  },
+  "credit": {
+    "dataUrl": "https://doi.org/10.5281/zenodo.7829128",
+    "name": "Barrière et al. (SIGMA consortium)",
+    "url": "https://doi.org/10.5281/zenodo.7829128"
+  },
+  "description": {
+    "en": "Ex vivo MRI (T2*, 90 um) template of a Wistar rat brain (SIGMA). The 222 atlas regions are included as unnamed child segments ({mb})",
+    "ja": "Wistarラット脳の ex vivo MRI（T2*・90µm）テンプレート。解剖アトラスの222領域を名前なしの子セグメントとして収録（{mb}）"
+  },
+  "level": null,
+  "license": {
+    "name": "CC BY 4.0",
+    "url": "https://creativecommons.org/licenses/by/4.0/"
+  },
+  "name": {
+    "en": "Rat brain MRI atlas (SIGMA)",
+    "ja": "ラット脳 MRI アトラス（SIGMA）"
+  },
+  "size": {
+    "dims": [
+      260,
+      342,
+      184
+    ],
+    "megabytes": 32.9
+  },
+  "terms": {
+    "ja": "出典を表示すれば、営利・非営利を問わず利用・改変できます。",
+    "en": "You may use and adapt it for any purpose, including commercial use, with attribution."
+  }
+}
