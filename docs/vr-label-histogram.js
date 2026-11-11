@@ -1,5 +1,5 @@
-import { HIST_MIN, HIST_BINS, HU_AXIS } from './histogram.js?v=20261111-build716';
-import { accToHist, createAcc, textureU16 } from './histogram-texture.js?v=20261111-build716';
+import { HIST_MIN, HIST_BINS, HU_AXIS } from './histogram.js?v=20261111-build717';
+import { accToHist, createAcc, textureU16 } from './histogram-texture.js?v=20261111-build717';
 
 export const SLOTS = 4, REGION_COLORS = 14, LABELS = 1 + SLOTS + REGION_COLORS, UNLABELED = 0;
 export const UNLABELED_COLOR = '#8c969c';

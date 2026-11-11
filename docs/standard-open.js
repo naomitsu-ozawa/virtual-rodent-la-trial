@@ -1,10 +1,10 @@
 // in 体験会モード a practice level that has finished opening from its built-in project is in its STANDARD state; this module records that state (vr-data-key.js vrStateSignature) once the page is quiet,
 // so that the VR preparation can tell, by any route (the level chosen on the page and then VR entered, a data switch in VR, ...), whether the finished VR data it is about to make is the standard one
 // (and so protected from eviction, vr-prep-cache.js protectedKeys). A change of the state afterwards (segment settings, edits, filters, analysis results) makes the record not match. Nothing is built here.
-import { createSettleGate } from './vr-data-switch.js?v=20261111-build716';
-import { vrStateSignature } from './vr-data-key.js?v=20261111-build716';
-import { eventModeOn } from './event-mode.js?v=20261111-build716';
-import { isSampleId } from './sample-sets.js?v=20261111-build716';
+import { createSettleGate } from './vr-data-switch.js?v=20261111-build717';
+import { vrStateSignature } from './vr-data-key.js?v=20261111-build717';
+import { eventModeOn } from './event-mode.js?v=20261111-build717';
+import { isSampleId } from './sample-sets.js?v=20261111-build717';
 
 let token = 0;
 const OPEN_SETTLE_MS = 10 * 60 * 1000; // the load of a big level on a slow device can take minutes; waiting costs nothing (a poll every 200 ms), and a level that never settles is simply not recorded
