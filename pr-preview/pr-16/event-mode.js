@@ -2,7 +2,7 @@
 // Four levels, each one of the bundled practice datasets (docs/demo/sampleN, the same set ids as the practice-data chooser);
 // texts are i18n keys (i18n.js). The switch is settings.eventMode (app-settings.js, per device, default off); the chosen
 // level lives only in this page (a reload starts with none chosen) and follows whichever practice dataset was opened last.
-import { registry, sampleKey } from './sample-registry.js?v=20261111-build713';
+import { registry, sampleKey } from './sample-registry.js?v=20261111-build714';
 export const EVENT_HINT_KEYS={section:'evHintSection',move:'evHintMove',toggle:'evHintToggle',mark:'evHintMark',distance:'evHintDistance'};
 // the levels, the other datasets and each dataset's starting segments are no longer tables here: they come from the registry (sample-registry.js), built from the sample.json
 // of every docs/demo/sampleN folder. Order: Lv0..Lv3 by the level field, then the datasets without a level by folder number. Names / missions are i18n keys the registry adds (sampleKey).
@@ -43,6 +43,12 @@ export const levelForSample=sample=>EVENT_LEVELS.find(l=>l.sample===sample)||nul
 export function levelSwitchItems(nameOf,openSample,armedId=null,levels=EVENT_DATASETS){
  return levels.map(l=>({id:l.id,sample:l.sample,label:datasetLabel(l,nameOf),on:l.sample===openSample,armed:armedId===l.id}));
 }
+// The data switch INSIDE a VR / AR session (the かんたん menu's row, the full menu's データ tab, the press itself) exists only while the data in view is a practice dataset that HAS a level
+// (sample.json level 0-3: EVENT_LEVELS), and it switches only to datasets that have a level. A dataset without a level, or the visitor's own data (openSample null), is shown alone: no row, no tab, no switch.
+// Decided from what the visitor has open (the sample's level), never from a count or from whether something is loaded. Pure.
+export const sampleHasLevel=(sample,levels=EVENT_LEVELS)=>sample!=null&&levels.some(l=>l.sample===sample);
+export const levelSwitchTargets=(openSample,levels=EVENT_LEVELS)=>sampleHasLevel(openSample,levels)?levels:[];
+export const canSwitchData=(openSample,targetSample,levels=EVENT_LEVELS)=>sampleHasLevel(openSample,levels)&&sampleHasLevel(targetSample,levels);
 let chosen=null;
 // id of a level, or null / unknown = none chosen
 export function chooseEventLevel(id){chosen=levelById(id)?.id??null;return chosen}
