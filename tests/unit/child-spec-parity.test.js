@@ -143,7 +143,7 @@ describe('VR: the card of a pinned child lights under the laser like a result\'s
   });
   it('vr-view.js: the hover card skip and the glow both read hitLabelRid; pinned child cards are drawn with pinGlow like results; the unused fitText is gone', () => {
     const v = src('vr-view.js');
-    expect(v).toContain('hoverCards(c,hit,hitLabelRids(hit,regionList,childByKey,u.hrids||(u.hrids=[])))'); expect(v).toContain('for(const rid of u.hrids){const g=glowRid(on,x.visible!==false,rid,blocked)');
+    expect(v).toContain('hoverCards(c,hit,ph?u.hrids:hitLabelRids(hit,regionList,childByKey,u.hrids||(u.hrids=[])))'); expect(v).toContain('for(const rid of u.hrids){const g=glowRid(on,x.visible!==false,rid,blocked)');
     expect(v).toContain("drawLabel(lb,{id:0,key:'',childKey:reg.key},false,pinLit.has(reg.id)||pinGlow.has(reg.id));"); expect(v).toContain('lb.glow=!pinLit.has(lb.rid)&&pinGlow.has(lb.rid)');
     expect(v).toContain('const e=lb.rid<0?childLabelItemById(lb.rid):regionList['); expect(v).not.toContain('fitText');
   });

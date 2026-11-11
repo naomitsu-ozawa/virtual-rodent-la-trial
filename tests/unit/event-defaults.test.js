@@ -187,7 +187,7 @@ describe('thumbstick click: short press vs hold (FRAME_HIDE_MS)', () => {
     expect(src).toContain('pl.glow.visible=gc!==undefined&&!fHide;pl.glass.visible=glassBy.has(pl)&&!fHide;pl.frameLine.visible=!fHide;pl.handle.visible=!fHide;');
     expect(src).toContain('pl.arrow.visible=arrowShown(settings.cut,pl.cut,pl.aOp)&&!fHide;');
     expect(src).toContain('const vis=section.on&&!fHide?planes.filter(p=>!draggedBy(p,c)):[];');
-    expect(src).toContain('canDrag:anyOk&&!fHide&&(surfaceActive()||labelMode()||!vh)');
+    expect(src).toContain('canDrag:anyOk&&!fHide&&(surfaceActive()||labelMode()||!vx)');
     expect(src).toContain('if(section.on&&vrHalfExt&&!framesHidden()){');
     expect(src).toContain('const framesHidden=()=>controllers.some(x=>x.userData.hideFrames&&(!!x.userData.source?.gamepad||isHand(x.userData.source)))'.replace('const ', '')); // a disconnected controller / hand never leaves the frames hidden
     expect(src).not.toMatch(/fHide[^;\n]*(cutPlanes|planeCount|planeCut)/); // the cut uniforms do not look at it

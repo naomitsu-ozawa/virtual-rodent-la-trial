@@ -171,8 +171,8 @@ describe('wiring (static): fixes', () => {
   it('VR: a tap on a pinned card unpins, cards are hit-testable only in the analysis tab and not through tissue, same numbers as the panel, no flicker, scratch objects', () => {
     const vr = read('vr-view.js');
     expect(vr).toContain("if(ld0?.pin&&pr.res.kind==='mlabel'){if(rel==='tap'&&!ld0.moved&&!ld0.done)"); expect(vr).toContain('setRegionLabel(reg,null);pulse(c,0.2)');
-    expect(vr).toContain('if(analysisOn()&&pins.size)mlb=nearerLabel('); expect(vr).toContain('tagBehindTissue(occlusionGpu(),mlb.distance,vh.distance,occEps))mlb=null');
-    expect(vr).toContain("cardPlain(ctx,l.text,l.x,l.y,l.maxWidth)"); expect(vr).toContain("cardLayout((i,t)=>measureText(i?FT2:FT1,t),{text:t1,x:x0},{text:t2,x:x0})"); expect(vr).toContain("t1=r?vrChipTitle(r):kc?childLabelTitle(kc,tr):seg"); expect(vr).toContain("label(X+76,y+34,vrChipTitle(r),"); // the same \"N. name\" text through vrChipTitle
+    expect(vr).toContain('if(analysisOn()&&(pins.size||px.cards().size))mlb=nearerLabel('); expect(vr).toContain('tagBehindTissue(occlusionGpu(),mlb.distance,vx.distance,occEps))mlb=null');
+    expect(vr).toContain("cardPlain(ctx,l.text,l.x,l.y,l.maxWidth)"); expect(vr).toContain("cardLayout((i,t)=>measureText(i?FT2:FT1,t),{text:t1,x:x0},{text:t2,x:x0})"); expect(vr).toContain("t1=r?(r.title||vrChipTitle(r)):kc?childLabelTitle(kc,tr):seg"); expect(vr).toContain("label(X+76,y+34,vrChipTitle(r),"); // the same \"N. name\" text through vrChipTitle
     expect(vr).toContain('lb.m.position.y+=labelRise(lb);'); expect(vr).toContain('const labelRise=lb=>labelScale()*0.045+'); // the unlit size: the card does not move when lit
     expect(vr).toContain('const ridIndex=()=>'); expect(vr).toContain('spacingNoteF'); expect(vr).not.toContain('[...pins]'); expect(vr).not.toContain('hit:tmpPh.clone()');
     expect(vr).toContain('ld.done=true');
@@ -192,7 +192,7 @@ describe('wiring (static): VR pins and the PC chips use the shared region.label'
     expect(vr).toContain('const syncPins=()=>'); expect(vr).toContain('for(const lb of pins.values()){lb.lit=pinLit.has(lb.rid);embedLabel(lb,occ,pinHeld.has(lb.rid));placeLabel(lb)}thinPins(occ);for(const lb of pins.values())pinOcclusion(lb,lb.lit||lb.glow)');
     expect(vr).toContain('mlb=nearerLabel(mlb,pickPin('); expect(vr).toContain('if(ld.pin){'); expect(vr).toContain('resetPin(c)');
     expect(vr).toContain('pinMaterialState(occlusionGpu(),lit,lb.trans)');
-    expect(vr).toContain('rid:r.id');
+    expect(read('vr-prep-inputs.js')).toContain('rid: r.id'); // stage 1 of the sample pairs: regionItemsOf moved to vr-prep-inputs.js (over the input object)
     const ops = read('analysis-ops.js'); expect(ops).toContain('label:labelForProject(r)'); expect(ops).toContain('normalizeAnalysisLabel(e.label)');
     expect(read('data-load.js')).toContain('label:normalizeAnalysisLabel(e.label)||undefined');
   });

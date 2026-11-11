@@ -2,7 +2,7 @@
 // Four levels, each one of the bundled practice datasets (docs/demo/sampleN, the same set ids as the practice-data chooser);
 // texts are i18n keys (i18n.js). The switch is settings.eventMode (app-settings.js, per device, default off); the chosen
 // level lives only in this page (a reload starts with none chosen) and follows whichever practice dataset was opened last.
-import { registry, sampleKey } from './sample-registry.js?v=20261111-build717';
+import { registry, sampleKey } from './sample-registry.js?v=20261111-build718';
 export const EVENT_HINT_KEYS={section:'evHintSection',move:'evHintMove',toggle:'evHintToggle',mark:'evHintMark',distance:'evHintDistance'};
 // the levels, the other datasets and each dataset's starting segments are no longer tables here: they come from the registry (sample-registry.js), built from the sample.json
 // of every docs/demo/sampleN folder. Order: Lv0..Lv3 by the level field, then the datasets without a level by folder number. Names / missions are i18n keys the registry adds (sampleKey).
@@ -82,6 +82,7 @@ export const SIMPLE_MENU=Object.freeze({W:1024,H:1400,X:40,STATUS:140,TOP:180,RO
 // There is no title line and no level text; the board's status line sits at STATUS and the rows start at TOP.
 // o: {segments:[{key,name,color,on}], sectionOn, sliceOpacity (0..1, the slider's value; default SLICE_OPACITY_DEFAULT), trigger:{show,label}, results:[{hex,name,text}], total, resetArmed, text:{...},
 //     page (0-based, the results list's page: rounded into range), text.page ('ページ' / 'Page'),
+//     pair?: {label, on, busy}
 //     levels?: {items:[{id,label,on,armed}], busy, hint, text:{title,again}}}
 // The slice-opacity slider row (always there, for every dataset: it only shows once a section is) sits under the 断面 row; its steps are 5 % (sliceOpacityValue).
 export const SLICE_OPACITY_DEFAULT=0.6;
@@ -140,7 +141,10 @@ export function simpleMenuLayout(o){
   btn('trigger:point',440,y,250,t.trigPoint,!lab,{size:32,color:!lab?'#cfe3f0':undefined});btn('trigger:label',710,y,250,t.trigLabel,lab,{size:32,color:lab?'#cfe3f0':undefined});
   label('trigger:hint',X,y+M.BTN_H+22,lab?t.trigHintLabel:t.trigHintPoint,{size:24,color:'#ffd27a'});y+=M.TRIG_ROW;
  }
- const res=o.results||[],kids=o.kids||[],listEnd=o.levels?M.LEVEL_Y-M.ROW/2:M.BOTTOM;
+ // o.pair = {label, on, busy}: ONE wide button (id 'pair:toggle') that places the partner of the open dataset beside it / takes it away ('<partner name>と並べる' / '並べるのをやめる'; the texts come from the caller). It sits where the
+ // level row sits (above the bottom row); with the level row too it sits just above that one. Without o.pair the board is exactly the one of before.
+ const pairY=o.pair?(o.levels?M.LEVEL_Y-M.ROW-30:M.LEVEL_Y):0,listEnd=o.pair?pairY-M.ROW/2:o.levels?M.LEVEL_Y-M.ROW/2:M.BOTTOM;
+ const res=o.results||[],kids=o.kids||[];
  const kidReserve=kids.length&&res.length?56+54+M.LIST_ROW*Math.min(kids.length,KID_MIN_ROWS):0,resEnd=listEnd-kidReserve;let resBottom=y; // resBottom: where the results block ends (the children's list starts there)
  if(res.length){
   label('results',X,y+30,t.results,{bold:true,size:28});
@@ -175,6 +179,7 @@ export function simpleMenuLayout(o){
    label('kids:page',778,py+28,(t.page||'')+' '+(pg.page+1)+'/'+pg.pages,{size:26,color:'#9fb3c3'});
   }
  }
+ if(o.pair)btn('pair:toggle',X,pairY,M.W-2*X,o.pair.label,!!o.pair.on,{size:28,disabled:!!o.pair.busy,...(o.pair.on?{color:'#2d6cdf'}:{})});
  if(o.levels){
   const lv=o.levels,n=lv.items.length,gap=10,x0=270,bw=Math.floor((M.W-X-x0-(n-1)*gap)/Math.max(1,n));
   label('levels:name',X,M.LEVEL_Y+40,lv.text.title,{color:'#cfe3f0',bold:true,size:34});

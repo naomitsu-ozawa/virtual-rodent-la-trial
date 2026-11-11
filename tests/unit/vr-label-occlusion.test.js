@@ -310,7 +310,7 @@ describe('weight: leader upload only when an end moved; label faces cached (LRU)
   it('vr-view.js wiring: hover cards share a 16-face cache, a pinned card has its own (2), faces are disposed; the leaders go through setLeaderIfMoved', () => {
     expect(src).toContain('createFaceCache(16,faceDispose,'); expect(src).toContain('createFaceCache(2,faceDispose,'); expect(src).toContain('const faceDispose=f=>f.tex.dispose();');
     expect(src).toContain('let face=lb.cache.get(ck);'); expect(src).toContain('lb.cache.clear();lb.spare?.tex.dispose();');
-    expect((src.match(/setLeaderIfMoved\(lb\.line\.geometry\.attributes\.position,/g) || []).length).toBe(2);
+    expect((src.match(/setLeaderIfMoved\(lb\.line\.geometry\.attributes\.position,/g) || []).length).toBe(4); // placeLabel's two + (stage 3) placePairLabel's two (the partner's name cards)
     const placeLabel = src.slice(src.indexOf('const placeLabel=lb=>{'), src.indexOf('const hideLabel=')); expect(placeLabel).not.toContain('needsUpdate=true');
     expect(src).toContain("if(r&&faint)emit('label-show');"); // the tutorial signal still fires on every change of the hover card, cached or drawn
   });

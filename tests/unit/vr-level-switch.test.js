@@ -76,8 +76,8 @@ describe('vr-view.js wiring (a WebXR file, checked on its source like the rest o
     expect(src).toContain('const levelSwitchOn=()=>sampleHasLevel(globalThis.__vrlOpenSample);');
     expect(src).toContain('if(ui.swapBusy||!setId||!canSwitchData(globalThis.__vrlOpenSample,setId))return;'); // swapPress: the one place every entry ends in (level:<id> actions, the tab's buttons)
     expect(src).toContain('(eventModeOn()||(tutLive&&!tutEnded))&&levelSwitchOn()?{items:levelSwitchItems('); // the かんたん menu's row
-    expect(src).toContain("filter(i=>TAB_IDS[i]!==11||levelSwitchOn())"); // the tab bar: no データ tab
-    expect(src).toContain('if(ui.tab===11&&!levelSwitchOn())ui.tab=0;'); // and never an open one
+    expect(src).toContain("filter(i=>TAB_IDS[i]!==11||levelSwitchOn()||pairRowOn())"); // the tab bar: no データ tab (a dataset with no level and no partner; stage 3: a dataset with a partner has the tab for its pair row only)
+    expect(src).toContain('if(ui.tab===11&&!(levelSwitchOn()||pairRowOn()))ui.tab=0;'); // and never an open one
     expect(src).toContain('const dsList=levelSwitchTargets(globalThis.__vrlOpenSample);'); // the tab's rows: levels only
   });
   it('swapData is called from swapPress only (no other way in), the old own-data line and the dataset-wide list are gone', () => {

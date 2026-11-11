@@ -307,7 +307,7 @@ describe('vr-view.js: the data of the session can be replaced (static wiring)', 
   });
   it('the finished VR data is cached on the device: read before it is computed, stored in the background, listed as VR用データ, cancelled with the data', () => {
     const rd = f => readFileSync(new URL('../../docs/' + f, import.meta.url), 'utf8');
-    for (const t of ['async function vrCacheContext(', 'loadEntry(vc.cache,key,{isCancelled', "cinfo.volume='hit'", "cinfo.derived='hit'", 'scheduleVrCacheStore(vc,Pn,keyD,hashD,cinfo,cgen,aliasId,fresh)', 'const cancelled=()=>prepareGen!==gen', 'writeBrickOccupancy(vd.bricks,occFull)', "kind:'vr-volume'", "kind:'vr-derived'", 'pruneSiblings(vc.cache,info,t.key)', 'vc.cache.prune(budget,{keep:t.key})', "['data',keepBody?vd.data:null]", 'startVrPrefetch(id)', 'pf.keyV===vc.keyV', 'pf.keyD===keyD', "document.dispatchEvent(new CustomEvent('vrl-sample-key'", 'explainMiss(vc.cache']) expect(src, t).toContain(t);
+    for (const t of ['async function vrCacheContext(', 'loadEntry(vc.cache,key,{isCancelled', "cinfo.volume='hit'", "cinfo.derived='hit'", 'scheduleVrCacheStore(vc,Pn,keyD,hashD,cinfo,cgen,aliasId,fresh,dropped)', 'const cancelled=()=>prepareGen!==gen', 'writeBrickOccupancy(vd.bricks,occFull)', "kind:'vr-volume'", "kind:'vr-derived'", 'pruneSiblings(vc.cache,info,t.key)', 'vc.cache.prune(budget,{keep:t.key})', "['data',keepBody?vd.data:null]", 'startVrPrefetch(id)', 'pf.keyV===vc.keyV', 'pf.keyD===keyD', "document.dispatchEvent(new CustomEvent('vrl-sample-key'", 'explainMiss(vc.cache']) expect(src, t).toContain(t);
     expect(src).toContain('prepInfo:{worker:prep.stats.worker>0&&prep.stats.local===0,jobs:prep.stats,cache:cinfo}');
     // the 512 body is part of the volume entry: a hit does not read the page's 3D volume back (buildVolumeData only runs on a miss); the entries a switch read ahead are used only when the page's own keys agree
     expect(src).toContain("source:'cache'"); expect(src.indexOf('V&&vrVolumeEntryOk(V,meta.dims)')).toBeLessThan(src.indexOf('vd=await buildVolumeData('));
@@ -407,18 +407,18 @@ describe('vr-view.js: the data of the session can be replaced (static wiring)', 
     expect(src).toContain('prepInfo:{worker:prep.stats.worker>0&&prep.stats.local===0,jobs:prep.stats,cache:cinfo}');
   });
   it('the prepared data is built in the worker and the slices are read with a yield every few ms inside a session', () => {
-    const p = src.slice(src.indexOf('export async function prepareVrData('), src.indexOf('// classification bytes for the 3D position-comment markers'));
-    for (const s of ['createVolumePrep()', 'prep.volume({', 'prep.cls({', 'noBricks:true,sliceMs', 'finally{prep.dispose();if(activePrep===prep)activePrep=null}']) expect(p, s).toContain(s);
+    const p = src.slice(src.indexOf('export async function prepareVrData('), src.indexOf('// classification bytes for the 3D position-comment markers')); // stage 1 of the sample pairs: prepareVrData (the page's wrapper) + prepareVrDataFrom (the preparation over inp), one after the other
+    for (const s of ['createVolumePrep()', 'prep.volume({', 'prep.cls({', 'noBricks:true,sliceMs', 'finally{prep.dispose();if(track&&activePrep===prep)activePrep=null}']) expect(p, s).toContain(s);
     expect(p).not.toContain('buildDistanceBytes(');
     // the processing mask and the analysis index are made in the worker too (they were 0.2-0.6 s of main thread each): the page only collects the runs
-    expect(p).toContain('editDescs:ed?ed.descs:[]'); expect(p).toContain('const regionItems=ed?regionItemsOf():[]'); expect(p).toContain('regionItems,order,state');
+    expect(p).toContain('editDescs:ed?ed.descs:[]'); expect(p).toContain('const regionItems=ed?regionItemsOf(inp):[]'); expect(p).toContain('regionItems,order,state');
     expect(p).not.toContain('buildEditMask('); expect(p).not.toContain('buildRegionIndex(');
-    expect(src).toContain('function buildEditMask(dims){const e=editDescsOf();return e?buildEditMaskOf(e.descs,e.sourceDims,dims):{activeMask:0,data:null}}'); // the 3D markers' hidden test keeps the synchronous call
+    expect(src).toContain('function buildEditMask(dims){const e=editDescsOf(pageInputs);return e?buildEditMaskOf(e.descs,e.sourceDims,dims):{activeMask:0,data:null}}'); // the 3D markers' hidden test keeps the synchronous call
     expect(src).toContain('const yieldMain=()=>globalThis.scheduler?.yield?globalThis.scheduler.yield():new Promise(r=>setTimeout(r,0));');
     expect(src).toContain('sliceMs>0?performance.now()-sliceAt>=sliceMs||z===td-1:(z&15)===15||z===td-1');
   });
   it('the cross-sections always use the full grid: an entry without a 512 body gets it from the page\'s 3D volume, the page is loaded on every switch, and a stalled cache read falls back to computing', () => {
-    for (const t of ['let body=V.arrays.data||null,loadBody=null;', 'if(!body){', 'const bd=await buildVolumeData(maxTexture3D()', 'vd={data:body,dims:meta.dims,']) expect(src, t).toContain(t);
+    for (const t of ['let body=V.arrays.data||null,loadBody=null;', 'if(!body){', 'const bd=await buildVolumeData(inp,maxDim', 'vd={data:body,dims:meta.dims,']) expect(src, t).toContain(t);
     expect(src).toContain('material.uniforms.sliceVol.value=fullReady&&full.v?full.v:dummyEdit'); // the 256 grid is never the source of the cross-sections
     expect(src).toContain("document.dispatchEvent(new CustomEvent('vrl-event-sample',{detail}))"); expect(src).not.toMatch(/deferLoad|releasePageFor|loadDeferredPage|vrSnap/);
     expect(src).toContain("withTimeout(prefetch.ready,CACHE_READ_TIMEOUT_MS,'read ahead')"); expect(src).toContain("if(activeSwapPf)activeSwapPf.cancelled=true;emit('session-end')");

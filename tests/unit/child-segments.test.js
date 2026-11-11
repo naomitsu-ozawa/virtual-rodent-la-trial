@@ -156,7 +156,7 @@ describe('segments.js: segmentById / allSegmentKeys (one interface for the prese
 describe('(child = inherits): the PC row and the renderers', () => {
   it('the tree row of a child has no opacity / material / shading-range control (an analysis region row has none)', () => {
     const t = src('segment-tree-ui.js'); for (const w of ['data-child-opacity', 'childOpacity', 'data-child-material', 'childMaterial', 'data-child-shade', 'childShade', 'segMaterial', "'opacity'", "'shadeRange'"]) expect(t).not.toContain(w);
-    for (const w of ['childName', 'childColor', 'childLabelPin', 'childStl', 'childDelete']) expect(t).toContain('dataset.' + w);
+    for (const w of ['childName', 'childColor', 'childLabelPin', 'childDelete']) expect(t).toContain('dataset.' + w);
   });
   it('the 3D meshes take the parent\'s material / opacity (segmentById), and the parent\'s material / opacity controls tell the children', () => {
     const u = src('child-segments-ui.js'); expect(u).not.toContain('childSegLookOf'); expect(u.match(/setSegmentMeshMaterial\(c\.key, segmentById\(c\.key\)\?\.material \|\| 'standard'\)/g)).toHaveLength(1); expect(u.match(/setSegmentMeshMaterial\(c\.key, childDrawLook\(c\)\.material\)/g)).toHaveLength(2); // childDrawLook's material is always the parent's (segments.js)
