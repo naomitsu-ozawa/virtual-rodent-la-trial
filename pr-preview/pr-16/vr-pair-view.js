@@ -30,7 +30,7 @@ export const PAIR_UNIFORMS = {
   // worked out every frame from the primary's state: the partner's OWN sections (planes in its object space + their clip bits: each dataset has its own sections, vr-view.js planeOwnerPair), the march step, and the per-slot segment values
   frame: ['cutPlanes', 'planeCut', 'stepSize', 'segA', 'segC', 'segM', 'ctShadeRange'],
   // the partner's own data (textures, grid, calibration, the combined classification state, the analysis index); never touched by the primary
-  own: ['vol', 'bricks', 'halfExt', 'boxC', 'boxH', 'boxEntry', 'texDims', 'brickDims', 'calib', 'regionTex', 'regionLut', 'regionAnyHidden', 'childTex', 'childLut', 'sliceVol', 'useCls', 'clsTex', 'cls4Tex', 'useSkip', 'skipTex', 'clsChan', 'editMask', 'editMaskOnly', 'editTex', 'useDist', 'distInCls', 'distTex', 'voxelMin', 'voxelSize'],
+  own: ['vol', 'bricks', 'halfExt', 'boxC', 'boxH', 'boxEntry', 'texDims', 'brickDims', 'calib', 'regionTex', 'regionLut', 'regionAnyHidden', 'childTex', 'childLut', 'childAnyHidden', 'sliceVol', 'useCls', 'clsTex', 'cls4Tex', 'useSkip', 'skipTex', 'clsChan', 'editMask', 'editMaskOnly', 'editTex', 'useDist', 'distInCls', 'distTex', 'voxelMin', 'voxelSize'],
 };
 
 // an earlier change: whether the partner's result card is shown. The SHAPE rule of a partner result is the one it is DRAWN and PICKED by (vr-view.js pairRegionLut / pairHit): the matching primary result's region.hidden (p);

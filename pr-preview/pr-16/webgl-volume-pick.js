@@ -83,7 +83,7 @@ export function hiddenTestOf(layers) {
   return (s, tc) => {
     for (const l of L) {
       const [w, h, d] = l.dims, x = Math.min(Math.floor(clamp01(tc[0]) * w), w - 1), y = Math.min(Math.floor(clamp01(tc[1]) * h), h - 1), z = Math.min(Math.floor(clamp01(tc[2]) * d), d - 1);
-      const id = l.ids[(z * h + y) * w + x];
+      const id = l.ids[((z * h + y) * w + x) * (l.stride || 1) + (l.off || 0)]; // stride / off: an RG index array (2, 1 = its G byte)
       if (id && ((l.slotsOf(id) >> s) & 1)) return true;
     }
     return false;

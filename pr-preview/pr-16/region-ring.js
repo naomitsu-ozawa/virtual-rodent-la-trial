@@ -1,4 +1,4 @@
-import { regionVisible, regionHidden } from './region-visibility.js?v=20261112-build723';
+import { regionVisible, regionHidden } from './region-visibility.js?v=20261112-build726';
 
 // the ids of the items (the same in the one-target and the two-target ring, so one confirm handles both)
 export const RING_ITEM_IDS = Object.freeze(['rcolor', 'rshape', 'ccolor', 'cshape']);

@@ -10,10 +10,10 @@
 //                     distance field, the combined texture's bytes for the shown mask, brick occupancy of the mask-only segments)
 // The worker is a Blob made from this site's own functions (the same way as vr-combo-rebuild.js); the data goes in and comes back by
 // transfer (no second copy of a 512 MB array is ever held). Without a Worker (tests) the same job runs on the calling thread.
-import { buildClsData } from './point-cls.js?v=20261112-build723';
-import { chamferDistanceBytes, combineClassificationDistance, fourthChannelBytes } from './distance-field.js?v=20261112-build723';
-import { brickOccupancy, cellRange } from './vr-brick-occupancy.js?v=20261112-build723';
-import { gpuRunsForTexture, gpuRunRowMapToSlice, gpuLowerBound, gpuUpperBound, gpuDilateRuns } from './gpu-runs.js?v=20261112-build723';
+import { buildClsData } from './point-cls.js?v=20261112-build726';
+import { chamferDistanceBytes, combineClassificationDistance, fourthChannelBytes } from './distance-field.js?v=20261112-build726';
+import { brickOccupancy, cellRange } from './vr-brick-occupancy.js?v=20261112-build726';
+import { gpuRunsForTexture, gpuRunRowMapToSlice, gpuLowerBound, gpuUpperBound, gpuDilateRuns, gpuOwnerOrder, gpuOwnerSlices } from './gpu-runs.js?v=20261112-build726';
 
 export const BRICK = 8;
 
@@ -61,6 +61,20 @@ export function buildEditMaskOf(descs, sourceDims, dims) {
   return { activeMask, maskOnly, data };
 }
 
+export function hideIndexOf(srcRuns, sourceDims, dims) {
+  const w = dims[0], h = dims[1], d = dims[2], sw = sourceDims[0], sh = sourceDims[1], sd = sourceDims[2], wh = w * h, own = new Uint8Array(wh * d), items = srcRuns.slice(0, 255);
+  const same = w === sw && h === sh && d === sd, finer = w > sw || h > sh || d > sd;
+  if (same || finer) {
+    for (const k of gpuOwnerOrder(items, sourceDims)) { // the last painted owns a voxel
+      const runs = same ? items[k] : gpuRunsForTexture(items[k], sourceDims, dims, { dilate: 0 }); if (!runs) continue;
+      for (let z = 0; z < d && z < runs.length; z++) { const rec = runs[z]; if (!rec || !rec.length) continue; for (let i = 0; i < rec.length; i += 3) { if (rec[i] >= h) continue; const o = (z * h + rec[i]) * w; own.fill(k + 1, o + rec[i + 1], o + Math.min(rec[i + 2], w - 1) + 1); } }
+    }
+    return own;
+  }
+  gpuOwnerSlices(items, sourceDims, dims, (z, sl) => { own.set(sl, z * wh); }); // ids <= 255: the Uint16 slice fits
+  return own;
+}
+
 // the analysis results on the grid: item = {color, segMask: bit s = the result belongs to GPU slot s, runsBySlice, mm3, segmentKeys, rid}. Colour index per voxel
 // (0 none, 1..14 = the distinct colours in list order, at most 14; a later result wins where two overlap), the result's id (list position + 1, up to 255) per voxel, the colours, the
 // slot bits per colour and the list. Self-contained (it is also the worker's source).
@@ -100,6 +114,8 @@ export function buildRegionIndexOf(items, sourceDims, dims) {
       }
     }
   }
+  // (VR_PREP_VERSION 8, 9): the hide index (hideIndexOf, above: an overlap goes to the item with fewer voxels, a reduced grid counts the source owners), from the source runs on every grid
+  const hide = !colors.length ? null : hideIndexOf(items.slice(0, list.length).map(r => r.runsBySlice || null), sourceDims, dims);
   // VR_PREP_VERSION 7 (one-voxel growth): the shader reads the result's colour NEAREST at 0.75 x the SMALLEST voxel side behind the surface hit; the 0.5 iso-surface of hard-edged data lies inside the AIR
   // voxel's cell, and on anisotropic data (sample7: x / y voxels twice the z one) that read point often stays there: index 0 = the base colour, grey streaks along the voxel grid on obliquely seen surfaces.
   // So ids (only ids: the colour index `data`, which the label histogram counts, is NOT grown) is grown by ONE voxel into its 6 face neighbours, on every grid: a voxel still 0 takes the LARGEST id among
@@ -128,7 +144,21 @@ export function buildRegionIndexOf(items, sourceDims, dims) {
       }
     }
   }
-  return { data: colors.length ? data : null, ids: colors.length ? ids : null, colors, segs, list };
+  return { data: colors.length ? data : null, ids: colors.length ? ids : null, hide, colors, segs, list }; // hide: the index the hidden-result test reads (the texture's G channel, the picks), ids: the colour / label index (R)
+}
+
+// an earlier change: the bytes of an RG8 index texture: R = the colour index (ids), G = the hide index (hide; absent: ids, the old rule). The VR / PC WebGL shader reads regionColor / childIdAt from R and the hidden tests from G.
+export function rgIndexBytes(ids, hide) {
+  const n = ids.length, out = new Uint8Array(n * 2), g = hide && hide.length === n ? hide : ids;
+  for (let i = 0, o = 0; i < n; i++, o += 2) { out[o] = ids[i]; out[o + 1] = g[i]; }
+  return out;
+}
+// (VR_PREP_VERSION 9): an index as the ONE array that is kept: rg (rgIndexBytes: rg[2 i] = R, the colour index, rg[2 i + 1] = G, the hide index), what the texture is made of and what the picks read
+// (two bytes apart); ids and hide are not kept beside it (the returned object has no such fields). Made once, where the index is built (the worker, the child rebuild, the PC WebGL volume). Self-contained.
+export function packIndexRg(idx) {
+  if (!idx) return idx;
+  const { ids, hide, ...rest } = idx;
+  return { ...rest, rg: ids ? rgIndexBytes(ids, hide) : null };
 }
 
 // the CHILD SEGMENTS of the tree on the grid, in an index of their own (never the results' ids): items = [{key, segMask (bit s = the parent's GPU slot), runsBySlice}] -> {ids: 1..N per voxel (a later child wins where
@@ -144,7 +174,9 @@ export function buildChildIndexOf(items, sourceDims, dims) {
     for (let z = 0; z < d; z++) { const rec = runs ? runs[z] : null; if (!rec || !rec.length) continue; for (let i = 0; i < rec.length; i += 3) { const o = (z * h + rec[i]) * w; ids.fill(id, o + rec[i + 1], o + rec[i + 2] + 1); } }
     list.push({ key: r.key, segMask: r.segMask | 0, hash: r.hash || '' });
   }
-  return { dims, ids, list, dropped: Math.max(0, items.length - list.length) }; // dropped: children past the 255th (the look-up table has 255 rows): the caller warns, never silently
+  // an earlier change: the hide index (hideIndexOf: never dilated; an overlap goes to the child with fewer voxels) beside the colour / material index ids (dilated on a reduced grid as before); the hidden-child test reads it (the texture's G channel, the picks)
+  const hide = hideIndexOf(items.slice(0, list.length).map(r => r.runsBySlice || null), sourceDims, dims);
+  return { dims, ids, hide, list, dropped: Math.max(0, items.length - list.length) }; // dropped: children past the 255th (the look-up table has 255 rows): the caller warns, never silently
 }
 
 // distance-field.js buildDistanceBytes without the yields (it runs in the worker); progress(done, total) between channels
@@ -181,8 +213,8 @@ export function prepRun(m, post) {
       const src = new Uint8Array(m.src), warnings = [];
       let em; try { em = buildEditMaskOf(m.editDescs, m.editSourceDims, m.dims); } catch (e) { em = { activeMask: 0, maskOnly: 0, data: null }; warnings.push('processing mask: ' + String((e && e.message) || e)); }
       const edit = { data: em.data, dims: m.dims, active: em.activeMask, maskOnly: em.maskOnly };
-      let region; try { region = buildRegionIndexOf(m.regionItems, m.editSourceDims, m.dims); } catch (e) { region = { data: null, colors: [], segs: [], list: [] }; warnings.push('analysis index: ' + String((e && e.message) || e)); }
-      let child = null; try { child = buildChildIndexOf(m.childItems, m.editSourceDims, m.dims); } catch (e) { warnings.push('child index: ' + String((e && e.message) || e)); }
+      let region; try { region = packIndexRg(buildRegionIndexOf(m.regionItems, m.editSourceDims, m.dims)); } catch (e) { region = { data: null, rg: null, colors: [], segs: [], list: [] }; warnings.push('analysis index: ' + String((e && e.message) || e)); }
+      let child = null; try { child = packIndexRg(buildChildIndexOf(m.childItems, m.editSourceDims, m.dims)); } catch (e) { warnings.push('child index: ' + String((e && e.message) || e)); } // an earlier change: each index as its one RG array (packIndexRg)
       const cls = buildClsData({ dims: m.dims, data: src }, m.calib, edit, m.state, m.order);
       let dist = null, combo = null, cls4 = null;
       if (cls) {
@@ -192,15 +224,15 @@ export function prepRun(m, post) {
         if (four) cls4 = fourthChannelBytes(cls);
       }
       const occFull = brickOccupancy(edit, m.brickDimsFull), occHalf = m.brickDimsHalf ? brickOccupancy(edit, m.brickDimsHalf) : null;
-      const tr = [m.src], bufs = [cls?.data, dist?.data, combo, cls4, occFull, occHalf, em.data, region.data, region.ids, child?.ids];
-      for (const a of bufs) if (a) tr.push(a.buffer);
+      const tr = [m.src], bufs = [cls?.data, dist?.data, combo, cls4, occFull, occHalf, em.data, region.data, region.rg, child?.rg];
+      for (const a of bufs) if (a && !tr.includes(a.buffer)) tr.push(a.buffer);
       post({ t: 'cls', id: m.id, cls, dist, combo, cls4, occFull, occHalf, src: m.src, edit: { data: em.data, active: em.activeMask, maskOnly: em.maskOnly }, region, ...(child ? { child } : {}), warnings }, tr);
     } else post({ t: 'error', id: m.id, message: 'unknown job ' + m.t }, []);
   } catch (e) { post({ t: 'error', id: m.id, message: String((e && e.message) || e) }, []); }
 }
 
 const SEGMENT_ORDER_SRC = "const SEGMENT_ORDER=['bone','soft','fat','lung'];const INF=0x3fffffff;";
-export const prepWorkerSource = () => [SEGMENT_ORDER_SRC, computeBricksOf, halveData, buildClsData, chamferDistanceBytes, combineClassificationDistance, fourthChannelBytes, cellRange, brickOccupancy, gpuRunRowMapToSlice, gpuLowerBound, gpuUpperBound, gpuDilateRuns, gpuRunsForTexture, buildEditMaskOf, buildRegionIndexOf, buildChildIndexOf, buildDistanceBytesSync, prepRun]
+export const prepWorkerSource = () => [SEGMENT_ORDER_SRC, computeBricksOf, halveData, buildClsData, chamferDistanceBytes, combineClassificationDistance, fourthChannelBytes, cellRange, brickOccupancy, gpuRunRowMapToSlice, gpuLowerBound, gpuUpperBound, gpuDilateRuns, gpuRunsForTexture, gpuOwnerOrder, gpuOwnerSlices, buildEditMaskOf, hideIndexOf, buildRegionIndexOf, rgIndexBytes, packIndexRg, buildChildIndexOf, buildDistanceBytesSync, prepRun]
   .map(f => typeof f === 'string' ? f : f.toString()).join('\n') + '\nself.onmessage=e=>prepRun(e.data,(msg,tr)=>self.postMessage(msg,tr));';
 const blobWorker = () => {
   if (typeof Worker === 'undefined' || typeof Blob === 'undefined' || typeof URL === 'undefined' || !URL.createObjectURL) return null;
