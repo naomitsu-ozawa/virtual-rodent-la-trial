@@ -2,9 +2,9 @@
 // feeds it the points, the camera and the classification bytes. The RULE is VR's, not a copy: vr-point.js pointIsHidden (march half a voxel at a
 // time from the point towards the eye; a voxel of a shown segment (>= 128) on the kept side of every cutting plane before the eye = hidden;
 // the point's own voxel is skipped; segment opacity ignored; nothing shown = exposed). On PC the eye is the camera position.
-import { pointIsHidden } from './vr-point.js?v=20261112-build723';
-import { regionHidden, regionLutAlpha, hiddenRegionVoxelOf } from './region-visibility.js?v=20261112-build723';
-import { buildRegionIndexOf } from './vr-volume-prep.js?v=20261112-build723';
+import { pointIsHidden } from './vr-point.js?v=20261112-build726';
+import { regionHidden, regionLutAlpha, hiddenRegionVoxelOf } from './region-visibility.js?v=20261112-build726';
+import { buildRegionIndexOf } from './vr-volume-prep.js?v=20261112-build726';
 
 export const HIDDEN_INTERVAL_MS=100; // while the view moves the judgement is refreshed about 10 times a second, never every frame
 
@@ -35,9 +35,9 @@ export function hiddenRegionSkipOf(prep,regions,order,sourceDims){
  if(!prep?.cls||!prep.dims||!sourceDims)return null;
  const all=indexed(regions);if(!all.some(regionHidden))return null;
  const slots=order||[],items=all.map(r=>({color:Number(r.color??0x00d8ff),segMask:(r.segmentKeys||[]).reduce((m,k)=>{const sl=slots.indexOf(k);return sl>=0&&sl<4?m|(1<<sl):m},0),runsBySlice:r.runsBySlice,mm3:0,segmentKeys:[...(r.segmentKeys||[])],rid:r.id}));
- const idx=buildRegionIndexOf(items,sourceDims,prep.dims);if(!idx.ids)return null;
+ const idx=buildRegionIndexOf(items,sourceDims,prep.dims);if(!idx.ids)return null; // an earlier change: the skip reads the HIDE index (idx.hide: never grown, the shader's G channel), as VR's
  const lut=new Float32Array(4*(idx.list.length+1));idx.list.forEach((e,i)=>{const r=all.find(x=>x.id===e.rid);if(r&&regionHidden(r))lut[4*(i+1)+3]=regionLutAlpha(e.segMask,{hidden:true})});
- return hiddenRegionVoxelOf(idx.ids,prep.dims,lut,prep.cls.chan);
+ return hiddenRegionVoxelOf(idx.hide||idx.ids,prep.dims,lut,prep.cls.chan);
 }
 // prep + the skip of the hidden results, as one object ({cls,dims,halfExt,skip}; the same prep when nothing is hidden). Cached on (the bytes, the signature, the source grid), so a frame in which nothing changed builds nothing.
 let skipCache={cls:null,sig:'',dimsKey:'',prep:null};

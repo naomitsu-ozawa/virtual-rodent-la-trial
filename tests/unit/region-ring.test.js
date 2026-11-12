@@ -152,9 +152,10 @@ describe('an earlier change: regionAnyHidden gates every regionHiddenAt read of 
   it('declared with the results\' table, 1 until a table is written, set from the table just written (the partner: its own), a partner uniform of its own', () => {
     expect(v).toContain('uniform int regionAnyHidden;');
     expect(v).toContain('int regionVis(vec3 p,int si){if(si<0||regionAnyHidden==0)return si;return regionHiddenAt(texCoord(p),si)?-1:si;}');
-    expect(v.match(/regionHiddenAt\(/g).length).toBe(1 + 1 + 3); // the definition, regionVis, and the three loops' hit tests
+    expect(v.match(/regionHiddenAt\(/g).length).toBe(1 + 1 + 3 + 1); // the definition, regionVis, the three loops' hit tests, and hideAt (an earlier change: read only on a ray that passed a hidden part; gated the same way)
+    expect(v).toContain(' if(regionAnyHidden!=0&&regionHiddenAt(tc,s))return true;');
     expect(v.match(/if\(!passH&&regionAnyHidden!=0\)passH=regionHiddenAt\(/g)).toHaveLength(3);
-    expect(v).toContain('regionLut:{value:null},regionAnyHidden:{value:1},childTex');
+    expect(v).toContain('regionLut:{value:null},regionAnyHidden:{value:1},childAnyHidden:{value:0},childTex'); // an earlier change: childAnyHidden beside it (0: no child hidden until the child table is written)
     expect(v).toContain('if(regionLutHiddenSlots(a[i*4+3])){any=1;break}if(material)material.uniforms.regionAnyHidden.value=any}');
     expect(v).toContain('if(regionLutHiddenSlots(a[i*4+3])){any=1;break}pt.u.regionAnyHidden.value=any}');
     const pair = readFileSync(new URL('../../docs/vr-pair-view.js', import.meta.url), 'utf8');

@@ -21,7 +21,7 @@ describe('PC position comments: a hidden shape is see-through, a colour-off one 
   it('the wall is a result whose SHAPE is hidden: nothing hides the point', () => { expect(hiddenBy([region(1, 8, 9, { hidden: true })])).toBe(false); });
   it('a hidden result that covers only a part of the wall: the drawn rest still hides (a drawn result next to a hidden one occludes)', () => {
     expect(hiddenBy([region(1, 8, 8, { hidden: true }), region(2, 9, 9)])).toBe(true);
-    expect(hiddenBy([region(1, 8, 8, { hidden: true })])).toBe(false); // x = 9 belongs to no result, but the index grows a result by one voxel (VR's rule, buildRegionIndexOf), so it is skipped with it
+    expect(hiddenBy([region(1, 8, 8, { hidden: true })])).toBe(true);
     expect(hiddenBy([region(1, 8, 9, { hidden: true }), region(2, 9, 9)])).toBe(true); // a later, drawn result wins where they overlap
   });
   it('a hidden result on other segments only does not hide the wall of this slot', () => {

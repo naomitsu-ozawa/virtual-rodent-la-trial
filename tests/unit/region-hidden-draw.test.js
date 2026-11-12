@@ -256,3 +256,44 @@ describe('follow-up (coordinator): the PC volume picks and the VR HU histogram t
     expect(labelAt(0, c, 1, picks, new Uint8Array([200]), regSegs)).toBe(0); // the marker: unlabeled
   });
 });
+
+describe('2D: a yolk inside a hidden white keeps its shape (mpr-render.js resultPlaneLayers / resultRgbAt)', () => {
+  const white = (o = {}) => ({ id: 1, runsBySlice: [new Uint32Array([0, 0, 7])], segmentKeys: ['soft'], color: 0x00ff00, visible: true, hidden: true, ...o });
+  const yolk = (o = {}) => ({ id: 2, runsBySlice: [new Uint32Array([0, 3, 4])], segmentKeys: ['soft'], color: 0x0000ff, visible: false, hidden: false, ...o });
+  const paint = regions => {
+    ST.setVolume({ columns: 8, rows: 1, slices: 1, spacing: [1, 1, 1], data: new Float32Array(8) });
+    const seg = S.segmentState.soft; seg.active = true; seg.enabled = true; seg.min = -1000; seg.max = 1000; seg.color = '#ff0000'; seg.opacity = 1;
+    ST.setAnalysisRegions(regions);
+    const img = { data: new Uint8ClampedArray(32) }, ctx = { createImageData: () => img, putImageData() {}, getContext() {} };
+    M.mprPaintCache.axial = null;
+    M.paintSourcePlane({ canvas: { width: 8, height: 1, getContext: () => ctx, parentElement: null } }, [8, 1], new Float32Array(8), 'axial', 0);
+    return [...Array(8).keys()].map(i => [...img.data.slice(4 * i, 4 * i + 3)]);
+  };
+  it('(7) [white (hidden), yolk (colour off)] in either order: the yolk\'s voxels are NOT hidden (the segment colour), the white\'s own voxels are (grey); the yolk shown: its colour', () => {
+    const none = paint([]); // the segment's own colour everywhere
+    for (const order of [r => r, r => r.slice().reverse()]) {
+      const px = paint(order([white(), yolk()]));
+      for (const x of [3, 4]) expect(px[x]).toEqual(none[x]);
+      for (const x of [0, 2, 5, 7]) expect(px[x]).toEqual([0, 0, 0]);
+      const shown = paint(order([white(), yolk({ visible: true })]));
+      for (const x of [3, 4]) { expect(shown[x][0]).toBe(0); expect(shown[x][2]).toBeGreaterThan(0); } // the yolk's blue (blended at the segment's opacity)
+      const yh = paint(order([white({ hidden: false, visible: false }), yolk({ hidden: true })])); // the yolk hidden: only its voxels
+      for (const x of [3, 4]) expect(yh[x]).toEqual([0, 0, 0]); for (const x of [0, 7]) expect(yh[x]).toEqual(none[x]);
+    }
+  });
+  it('resultRgbAt: HIDDEN_SHAPE only where the result that owns the voxel (fewest voxels, equal: later) is hidden on that segment; nothing hidden: the layers of before (shown ones only)', () => {
+    ST.setVolume({ columns: 8, rows: 1, slices: 1, spacing: [1, 1, 1], data: new Float32Array(8) });
+    const seg = S.segmentState.soft; seg.active = true; seg.enabled = true;
+    for (const regs of [[white(), yolk()], [yolk(), white()]]) {
+      ST.setAnalysisRegions(regs);
+      const L = M.resultPlaneLayers('axial', 0, true, true);
+      expect(L.hid).toBe(true); expect(L).toHaveLength(2);
+      expect(M.resultRgbAt(L, 'soft', 3, 3, 0, 0)).toBeNull(); expect(M.resultRgbAt(L, 'soft', 0, 0, 0, 0)).toBe(M.HIDDEN_SHAPE);
+      expect(M.resultRgbAt(L, 'bone', 0, 0, 0, 0)).toBeNull(); // another segment: not hidden by it
+    }
+    ST.setAnalysisRegions([white({ hidden: false }), yolk()]);
+    const L0 = M.resultPlaneLayers('axial', 0, true, true); expect(L0.hid).toBeUndefined(); expect(L0).toHaveLength(1); // the colour-off yolk is no layer while nothing is hidden (as before)
+    expect(M.resultRgbAt(L0, 'soft', 3, 3, 0, 0)).toEqual([0, 255, 0]);
+    expect(M.resultPlaneLayers('axial', 0, true)).toHaveLength(1); // the mesh section face never asks for hidden ones
+  });
+});

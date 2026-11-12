@@ -206,7 +206,7 @@ describe('a child card follows its colour / volume; the pin button follows the l
 
 describe('spec table: what is stated, what is not', () => {
   it('VR: where a result covers a child\'s voxel the laser reads BOTH (the child is looked up with or without a result; two overlapping results keep the later one)', () => {
-    const v = src('vr-view.js'); expect(v).toContain("if(ch?.ids&&childList.length&&ch.dims.join()===vp.dims.join())childKey=childKeyAtHit("); // where a result covers a child both get a card (hitLabelRids); the result is first
+    const v = src('vr-view.js'); expect(v).toContain("if(ch?.rg&&childList.length&&ch.dims.join()===vp.dims.join()){"); expect(v).toContain("childKey=childKeyAtHit(ch.rg,childList,k2+off,si)"); // an earlier change: the one RG index array // where a result covers a child both get a card (hitLabelRids); the result is first
     expect(src('vr-volume-prep.js')).toContain('a later result wins where two overlap');
   });
 });

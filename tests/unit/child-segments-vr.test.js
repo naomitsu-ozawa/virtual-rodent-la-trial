@@ -47,7 +47,7 @@ describe('buildChildIndexOf', () => {
     const base = { t: 'cls', id: 1, src: new Uint8Array(n * 2).buffer, dims, calib: [1, -1024, 0], editDescs: [], editSourceDims: dims, regionItems: [], order: ['bone', 'soft', 'fat', 'lung'], state: {}, brickDimsFull: [3, 2, 2], brickDimsHalf: null, mask: -1 };
     prepRun({ ...base }, m => sent.push(m)); expect(sent[0].child).toBeUndefined();
     sent.length = 0; prepRun({ ...base, src: new Uint8Array(n * 2).buffer, childItems: [kid('s1', box(2, 4))] }, m => sent.push(m));
-    expect(sent[0].child?.list).toEqual([{ key: 's1', segMask: 1, hash: '' }]); expect(sent[0].child.ids.length).toBe(n);
+    expect(sent[0].child?.list).toEqual([{ key: 's1', segMask: 1, hash: '' }]); expect(sent[0].child.rg.length).toBe(2 * n); expect(sent[0].child.ids).toBeUndefined(); // an earlier change: the one RG array (packIndexRg)
   });
 });
 
@@ -77,7 +77,7 @@ describe('the VR shader keeps child segments out of every session without them',
     // draws with exactly the programs it always had. If this fails the shader text of a child-free session changed: justify it, or move the change under VRL_CHILDREN.
     const t = shaderTemplate(src), V = [[], ['VRL_NO_GENERAL', 'VRL_OPAQUE'], ['VRL_NO_GENERAL', 'VRL_NO_EVENTS', 'VRL_OPAQUE']], h = createHash('sha256');
     for (const med of [0, 1]) for (const reg of [0, 1]) for (const cls4 of [0, 1]) for (const v of V) h.update(preprocess(t, new Set([...v, ...(med ? ['VRL_MEDIUMP'] : []), ...(reg ? ['VRL_REGIONS'] : []), ...(cls4 ? ['VRL_CLS4'] : [])])) + '\n--\n');
-    expect(h.digest('hex').slice(0, 24)).toBe('8df122bbe60f9065c4e78846');
+    expect(h.digest('hex').slice(0, 24)).toBe('38489677902097d63e0703c5');
   });
 });
 
@@ -127,7 +127,7 @@ describe('child segments added / removed while the session runs (static: the ses
   const src = readFileSync(new URL('../../docs/vr-view.js', import.meta.url), 'utf8');
   const fn = src.slice(src.indexOf('syncChildSegments=()=>{\n   if(!running'), src.indexOf('  // binds the prepared data Pn'));
   it('compares the page\'s list with the prepared one, then: index, compile what is new, upload in slices, one synchronous bind; nothing else is rebuilt', () => {
-    const order = ['if(have===want)return', 'buildChildIndexOf(', 'await compileSet(Pn,st)', "slicedTexture(k,child.ids", 'await uploadQueue.whenDone(k)', 'P.child=child;childList=', 'adoptSet(st)', 'material.uniforms.childTex.value=', 'refreshChildLut()', 'old?.dispose()'];
+    const order = ['if(have===want)return', 'buildChildIndexOf(', 'await compileSet(Pn,st)', "slicedTexture(k,child.rg", 'await uploadQueue.whenDone(k)', 'P.child=child;childList=', 'adoptSet(st)', 'material.uniforms.childTex.value=', 'refreshChildLut()', 'old?.dispose()'];
     let at = -1; for (const o of order) { const i = fn.indexOf(o, at + 1); expect(i, o).toBeGreaterThan(at); at = i; }
     for (const forbidden of ['prepareVrData(', 'releaseSessionData', 'unbindData', 'install(', 'volTex', 'regionTex', 'editTex']) expect(fn, forbidden).not.toContain(forbidden);
   });

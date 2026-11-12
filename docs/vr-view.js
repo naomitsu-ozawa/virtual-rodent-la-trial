@@ -1,98 +1,98 @@
-import { effectiveFlag } from './debug-flags.js?v=20261112-build723';
+import { effectiveFlag } from './debug-flags.js?v=20261112-build726';
 import * as THREE from './vendor/three@0.186.0/build/three.module.js';
-import { reduceSliceArea, packedRgSlice, packCtSlice, gpuRunsForTexture } from './medical-volume.js?v=20261112-build723';
-import { ensureSegmentBaseRuns } from './segment-runs.js?v=20261112-build723';
-import { gpuVolumeTarget, gpuVolumeEditDescriptors, volumeCache, volumeCacheBudget, volumeCacheBudgetInfo } from './gpu-volume-data.js?v=20261112-build723';
-import { pruneOtherFilterSettings } from './gpu-volume-cache.js?v=20261112-build723';
-import { packEntry, storeEntry, loadEntry, pruneSiblings, removeOldBuilds, storeStatus, noteStore, partsOf, keyOfParts, explainMiss, isStandardOpen, copyPackedSlice } from './vr-prep-cache.js?v=20261112-build723';
-import { vrStateSignature } from './vr-data-key.js?v=20261112-build723'; // the state of the page now, to tell whether a practice level is still in its standard state //: the finished VR data is kept on the device (vr-prep-cache.js)
-import { SEGMENT_PRESET_ORDER, gpuSegmentOrder, segmentHasProcessedMask, segmentState, segmentEditState, segmentSourceSignature, segmentShadeRange, segmentShadeSpan, setSegmentShadeEnd, resetSegmentShadeRange, shadeDataRange, applyShadeAutoHistograms, onShadeAutoChange } from './segments.js?v=20261112-build723'; import { segmentById, childRenderEntries, onChildRenderChange, setChildLook } from './segments.js?v=20261112-build723'; import { setShadeAutoPageHeld } from './segments.js?v=20261112-build723';
-import { sceneState, analysisRegions, activeSeries } from './state.js?v=20261112-build723';
-import { datasetFingerprint, unpackProject } from './project-file.js?v=20261112-build723';
-import { PAIR_UNIFORMS, pairUniforms, pairShapeShown, pairOffsetX, pairBoxHas, pairSectionOwnerIn, planeNearerPartner, grabTargetOf, pairGrabPlan, PLANE_PARK_W, pairShownMask, pairHeldMask, pairSlotShown, createAtlasIndex, atlasPrimary } from './vr-pair-view.js?v=20261112-build723'; // stage 2 of the sample pairs: the partner volume drawn beside the primary (the rules; the GPU side is the `pair` block of startVrView)
-import { partnerInputs, unitsPerMmOfSeries, resultRepresentativeVoxel } from './vr-pair-data.js?v=20261112-build723';
-import { findSamplePartners, loadSamplePartnerFiles, loadSamplePartnerProject, loadSamplePairs } from './data-load.js?v=20261112-build723';
-import { samplePartners } from './sample-sets.js?v=20261112-build723';
-import { analysisRunsContain } from './run-length.js?v=20261112-build723';
-import { createPairStore, isPairId } from './vr-pair-store.js?v=20261112-build723'; // stage 3: the partner's own points / distances
-import { loadPartnerName, practiceSeriesName } from './sample-registry.js?v=20261112-build723'; // the sample pair row of the menu (stage 3): which partner the open dataset has (sample-pairs.json) and its name (the partner's sample.json)
-import { parseFiles, groupSeries } from './dicom.js?v=20261112-build723';
-import { HAND_PICK_TOL, sectionRayHit, recordVrPoint, resolveTriggerTarget, volumeGripAllowed, pressDragSection, createTriggerPress, dragShouldStart, DRAG_RECORD, sectionFollowStart, sectionFollowStep, sectionWristTurn, snapPlaneCenterIntoBox, rayLocalPlaneX, squareBandContains, squareContains, createHoverPulse, qMul, qInv, qRot, qAngleDeg, clampPlaneCenter, HAPTIC, normalizePointMode, surfaceVoxelFromHit, voxelToLocal, voxelSize, createStickGate, deleteSelected, createUndoStack, applyUndo, pointIsHidden } from './vr-point.js?v=20261112-build723';
-import { createVrPointMarkers, createSurfaceCursor } from './vr-point-markers.js?v=20261112-build723';
-import { createAnchorDots, createLegMesh, dotBehindCard, ANCHOR_DOT_DIAMETER_M } from './vr-anchor-dots.js?v=20261112-build723'; // the dot at the foot of a pinned label's leader
-import { buildClsData } from './point-cls.js?v=20261112-build723';
-import { createHiddenClsManager } from './hidden-cls-state.js?v=20261112-build723';
-import { onDatasetChange } from './dataset-reset.js?v=20261112-build723';
-import { shadeRangeStep, shadeValueAt, shadePosOf, createShadeAutoScheduler } from './cap-shade.js?v=20261112-build723'; // the per-segment shading range (slider positions <-> data values);: the scheduler of the auto range
-import { STEP_PRESS, stepClamp, createStepHold } from './value-step.js?v=20261112-build723'; // ＋ / − of the data-value sliders: 10 per press, hold repeats and speeds up to 100
-import { formatCtValue } from './utils.js?v=20261112-build723';
-import { createHoldTracker, createHoldRing, HOLD_RING_RADIUS, HOLD_RING_MIN_DIST } from './vr-hold-ring.js?v=20261112-build723';
-import { WHEEL_ITEMS, DEFAULT_WHEEL, normalizeWheelItems, migrateWheelSectionFlip, setWheelItem, moveWheelItem, clearWheelItem, createRingMenu, createWheelStick, createButtonPress } from './vr-ring.js?v=20261112-build723';
-import { getComments, getMarkersShown, onCommentsChange, commentMatchesSeries, removeComment, restoreComment, updateCommentPosition, updateCommentText, updateCommentColor } from './comments.js?v=20261112-build723';
-import { POINT_PALETTE, pointColor, normalizeColor } from './point-colors.js?v=20261112-build723';
-import { combineClassificationDistance, fourthChannelBytes } from './distance-field.js?v=20261112-build723';
-export { WebGlVolumeRenderer, webglVolumeEnabled } from './webgl-volume.js?v=20261112-build723'; // the page's WebGL volume (no WebGPU) is handed to app.js through this module's existing lazy load
-import { BRICK as PREP_BRICK, computeBricksOf, halveData, buildEditMaskOf, buildChildIndexOf, createVolumePrep } from './vr-volume-prep.js?v=20261112-build723'; // the heavy pure steps of the preparation (bricks, the 256 copy, classification, distance field) run in a worker
-import { createSwapGuard, runDataSwap, createUploadQueue, createSettleGate, createFrameGapMonitor, swapPlan, SWAP_STAGES, SETTLE_TIMEOUT_MS, LOAD_TIMEOUT_MS, CACHE_READ_TIMEOUT_MS, VR_STORE_FLUSH_MS, saveShouldWait, withTimeout } from './vr-data-switch.js?v=20261112-build723'; // switching the data inside a running session
-import { classifiedAt, marchClassificationHitInfo } from './vr-pick.js?v=20261112-build723';
-import { VR_TARGET_SIDE, volumeMeta, editDescsOf, regionItemsOf, childItemsOf, classifyStateOf, shownMask as shownMaskOf, shownRegions as shownRegionsOf, shownChildren as shownChildrenOf } from './vr-prep-inputs.js?v=20261112-build723'; // stage 1 of the sample pairs: what the preparation reads is ONE object (inp); the page's own is pageInputs below
-import { createSkipState, skipGrid } from './vr-skip-occupancy.js?v=20261112-build723'; // the creep-skip occupancy bits of the combined texture (VR max-zoom cost)
-import { createComboRebuild } from './vr-combo-rebuild.js?v=20261112-build723'; // the combined texture rebuilt off the frame when the shown segments change
-import { setBusySlot, reportBusyProgress } from './progress-modal.js?v=20261112-build723';
-import { tr } from './i18n.js?v=20261112-build723';
-import { regionCustomName, regionChipTitle } from './region-name.js?v=20261112-build723'; // the shared region name rule (name, else ID <atlas id>)
+import { reduceSliceArea, packedRgSlice, packCtSlice, gpuRunsForTexture } from './medical-volume.js?v=20261112-build726';
+import { ensureSegmentBaseRuns } from './segment-runs.js?v=20261112-build726';
+import { gpuVolumeTarget, gpuVolumeEditDescriptors, volumeCache, volumeCacheBudget, volumeCacheBudgetInfo } from './gpu-volume-data.js?v=20261112-build726';
+import { pruneOtherFilterSettings } from './gpu-volume-cache.js?v=20261112-build726';
+import { packEntry, storeEntry, loadEntry, pruneSiblings, removeOldBuilds, storeStatus, noteStore, partsOf, keyOfParts, explainMiss, isStandardOpen, copyPackedSlice } from './vr-prep-cache.js?v=20261112-build726';
+import { vrStateSignature } from './vr-data-key.js?v=20261112-build726'; // the state of the page now, to tell whether a practice level is still in its standard state //: the finished VR data is kept on the device (vr-prep-cache.js)
+import { SEGMENT_PRESET_ORDER, gpuSegmentOrder, segmentHasProcessedMask, segmentState, segmentEditState, segmentSourceSignature, segmentShadeRange, segmentShadeSpan, setSegmentShadeEnd, resetSegmentShadeRange, shadeDataRange, applyShadeAutoHistograms, onShadeAutoChange } from './segments.js?v=20261112-build726'; import { segmentById, childRenderEntries, onChildRenderChange, setChildLook } from './segments.js?v=20261112-build726'; import { setShadeAutoPageHeld } from './segments.js?v=20261112-build726';
+import { sceneState, analysisRegions, activeSeries } from './state.js?v=20261112-build726';
+import { datasetFingerprint, unpackProject } from './project-file.js?v=20261112-build726';
+import { PAIR_UNIFORMS, pairUniforms, pairShapeShown, pairOffsetX, pairBoxHas, pairSectionOwnerIn, planeNearerPartner, grabTargetOf, pairGrabPlan, PLANE_PARK_W, pairShownMask, pairHeldMask, pairSlotShown, createAtlasIndex, atlasPrimary } from './vr-pair-view.js?v=20261112-build726'; // stage 2 of the sample pairs: the partner volume drawn beside the primary (the rules; the GPU side is the `pair` block of startVrView)
+import { partnerInputs, unitsPerMmOfSeries, resultRepresentativeVoxel } from './vr-pair-data.js?v=20261112-build726';
+import { findSamplePartners, loadSamplePartnerFiles, loadSamplePartnerProject, loadSamplePairs } from './data-load.js?v=20261112-build726';
+import { samplePartners } from './sample-sets.js?v=20261112-build726';
+import { analysisRunsContain } from './run-length.js?v=20261112-build726';
+import { createPairStore, isPairId } from './vr-pair-store.js?v=20261112-build726'; // stage 3: the partner's own points / distances
+import { loadPartnerName, practiceSeriesName } from './sample-registry.js?v=20261112-build726'; // the sample pair row of the menu (stage 3): which partner the open dataset has (sample-pairs.json) and its name (the partner's sample.json)
+import { parseFiles, groupSeries } from './dicom.js?v=20261112-build726';
+import { HAND_PICK_TOL, sectionRayHit, recordVrPoint, resolveTriggerTarget, volumeGripAllowed, pressDragSection, createTriggerPress, dragShouldStart, DRAG_RECORD, sectionFollowStart, sectionFollowStep, sectionWristTurn, snapPlaneCenterIntoBox, rayLocalPlaneX, squareBandContains, squareContains, createHoverPulse, qMul, qInv, qRot, qAngleDeg, clampPlaneCenter, HAPTIC, normalizePointMode, surfaceVoxelFromHit, voxelToLocal, voxelSize, createStickGate, deleteSelected, createUndoStack, applyUndo, pointIsHidden } from './vr-point.js?v=20261112-build726';
+import { createVrPointMarkers, createSurfaceCursor } from './vr-point-markers.js?v=20261112-build726';
+import { createAnchorDots, createLegMesh, dotBehindCard, ANCHOR_DOT_DIAMETER_M } from './vr-anchor-dots.js?v=20261112-build726'; // the dot at the foot of a pinned label's leader
+import { buildClsData } from './point-cls.js?v=20261112-build726';
+import { createHiddenClsManager } from './hidden-cls-state.js?v=20261112-build726';
+import { onDatasetChange } from './dataset-reset.js?v=20261112-build726';
+import { shadeRangeStep, shadeValueAt, shadePosOf, createShadeAutoScheduler } from './cap-shade.js?v=20261112-build726'; // the per-segment shading range (slider positions <-> data values);: the scheduler of the auto range
+import { STEP_PRESS, stepClamp, createStepHold } from './value-step.js?v=20261112-build726'; // ＋ / − of the data-value sliders: 10 per press, hold repeats and speeds up to 100
+import { formatCtValue } from './utils.js?v=20261112-build726';
+import { createHoldTracker, createHoldRing, HOLD_RING_RADIUS, HOLD_RING_MIN_DIST } from './vr-hold-ring.js?v=20261112-build726';
+import { WHEEL_ITEMS, DEFAULT_WHEEL, normalizeWheelItems, migrateWheelSectionFlip, setWheelItem, moveWheelItem, clearWheelItem, createRingMenu, createWheelStick, createButtonPress } from './vr-ring.js?v=20261112-build726';
+import { getComments, getMarkersShown, onCommentsChange, commentMatchesSeries, removeComment, restoreComment, updateCommentPosition, updateCommentText, updateCommentColor } from './comments.js?v=20261112-build726';
+import { POINT_PALETTE, pointColor, normalizeColor } from './point-colors.js?v=20261112-build726';
+import { combineClassificationDistance, fourthChannelBytes } from './distance-field.js?v=20261112-build726';
+export { WebGlVolumeRenderer, webglVolumeEnabled } from './webgl-volume.js?v=20261112-build726'; // the page's WebGL volume (no WebGPU) is handed to app.js through this module's existing lazy load
+import { BRICK as PREP_BRICK, computeBricksOf, halveData, buildEditMaskOf, buildChildIndexOf, packIndexRg, createVolumePrep } from './vr-volume-prep.js?v=20261112-build726'; // the heavy pure steps of the preparation (bricks, the 256 copy, classification, distance field) run in a worker
+import { createSwapGuard, runDataSwap, createUploadQueue, createSettleGate, createFrameGapMonitor, swapPlan, SWAP_STAGES, SETTLE_TIMEOUT_MS, LOAD_TIMEOUT_MS, CACHE_READ_TIMEOUT_MS, VR_STORE_FLUSH_MS, saveShouldWait, withTimeout } from './vr-data-switch.js?v=20261112-build726'; // switching the data inside a running session
+import { classifiedAt, marchClassificationHitInfo } from './vr-pick.js?v=20261112-build726';
+import { VR_TARGET_SIDE, volumeMeta, editDescsOf, regionItemsOf, childItemsOf, classifyStateOf, shownMask as shownMaskOf, shownRegions as shownRegionsOf, shownChildren as shownChildrenOf } from './vr-prep-inputs.js?v=20261112-build726'; // stage 1 of the sample pairs: what the preparation reads is ONE object (inp); the page's own is pageInputs below
+import { createSkipState, skipGrid } from './vr-skip-occupancy.js?v=20261112-build726'; // the creep-skip occupancy bits of the combined texture (VR max-zoom cost)
+import { createComboRebuild } from './vr-combo-rebuild.js?v=20261112-build726'; // the combined texture rebuilt off the frame when the shown segments change
+import { setBusySlot, reportBusyProgress } from './progress-modal.js?v=20261112-build726';
+import { tr } from './i18n.js?v=20261112-build726';
+import { regionCustomName, regionChipTitle } from './region-name.js?v=20261112-build726'; // the shared region name rule (name, else ID <atlas id>)
 // ONE name rule for a result in every list (the 3D chip, the VR tree rows, the VR 解析 tab, the かんたん menu): "<number>. <name | ID <atlasId> | the segment names joined with +>" (region-name.js regionChipTitle)
 const vrChipTitle=r=>{const g=analysisRegions.find(x=>x.id===r.rid);return g?regionChipTitle(g,tr):r.rid+'. '+r.segmentKeys.map(k=>tr(k)||k).join('+')};
-import { wrapMenuText, stackMenuRows } from './vr-menu-text.js?v=20261112-build723';
-import { activeEventLevel, levelForSample, chooseEventLevel, levelSwitchItems, sampleHasLevel, levelSwitchTargets, canSwitchData, EVENT_LEVELS, datasetForSample, datasetLabel, eventModeOn, missionLines, simpleMenuSegments, triggerModeRow, labelTargets, triggerMode, TRIGGER_AT_START, resetPress, resetArmed, RESET_ARM_MS, simpleMenuLayout, SIMPLE_MENU, sliceOpacityValue, sliceDrawState, sliderHitTest, sliderGrabOffset, sliderValueAt, KNOB_GRAB_PX } from './event-mode.js?v=20261112-build723'; // 体験会モード - the chosen level's mission on the help board, the かんたん menu
-import { VIEW_TOGGLE_ID, VIEW_TOGGLE_BUTTON, SECTION_DELETE_ID, createViewToggle, createDoublePress, ringIdsFor } from './vr-view-toggle.js?v=20261112-build723';
-import { vrSpacingNote, vrVolumeText } from './vr-spacing-note.js?v=20261112-build723';
-import { NORM_LONG, physicalExtentsMm, longestMm, realMagnification, realHolderScale, startHolderScale, tutorialHolderScale, smallForTutorial, TUT_VOLUME_FWD, TUT_VOLUME_DOWN, magnificationText, createScaleTag, clampScale, pinchScale, scaleLimits, oversizeNote, planeFrameLocalScale, planeTagLocalScale, scaleLineText, scalePosOf, posToScale, scaleStep, viewTabScaleLayout } from './vr-real-scale.js?v=20261112-build723';
-import { createAutoQuality, autoFloor, STEP_LEVELS, marchStep } from './vr-auto-quality.js?v=20261112-build723';
-import { createVrHuLine } from './vr-hu-line.js?v=20261112-build723';
-import { huMenuTexts, voxelFromHits } from './vr-hu-line-core.js?v=20261112-build723';
-import { setHuLineDeferred } from './hu-line-model.js?v=20261112-build723';
-import { createVrMeasure, LABEL_LIT_SCALE } from './vr-measure.js?v=20261112-build723';
-import { resetUserState } from './event-fresh.js?v=20261112-build723'; // 最初から in the tutorial (practice data only, see tutorial-ui.js resetTutorialAll)
-import { tutorialModeOn, createTutorialVr, createSlideViewer, panelTabs, TAB_H, PAGE_H, layoutLevelSlide, levelBoardH, menuAnnotation, menuTargetRect } from './tutorial-vr.js?v=20261112-build723'; // チュートリアル on the help board (only made when tutorialMode is on);: the read-only guide, the level slide, the menu pointer
-import { levelSlide, createSlideImages } from './tutorial-slides.js?v=20261112-build723'; // the 体験会 level slides (ev board: the slide's picture)
-import { vrInitialScaleOf } from './sample-registry.js?v=20261112-build723';
-import { TUT_SAMPLE } from './tutorial-data.js?v=20261112-build723'; // the live tutorial runs on its practice data only
-import { emit, scaleChanged, poseMoved } from './tutorial-signal.js?v=20261112-build723'; // tutorial: one-line signals at the action sites (no-op without a listener)
-import { horizAngleDeg } from './tutorial-orient.js?v=20261112-build723'; // the tutorial's entry guidance (look right / left): head turn toward a board
-import { createControllerHints, createEdgeArrow, createBoardArrow, boardSide, edgeArrowShown } from './tutorial-3d.js?v=20261112-build723'; // the tutorial's 3D guides (controller button, edge arrow, arrow over the menu)
-import { MAX_SECTION_PLANES, nextPlaneColor, frameDepthTest, ARROW_LEN, ARROW_FLASH_MS, arrowFade, arrowShown, tagBehindTissue, sectionPage, pageOfPlane, SECTION_ROWS_PER_PAGE, FLING_UNDO_MS, FLING_DEBUG_MS, createVelocityTracker, flingDecision, frameOutOfView, outOfViewNow, createOutOfViewTracker, outOfViewRelease, flingDebugLines, capVelocity, flyStep, makeSectionSnapshot, restorePlan, createSectionUndo, undoButtonPlace } from './vr-section-frame.js?v=20261112-build723';
-import { createUndoButton } from './vr-undo-button.js?v=20261112-build723';
-import { createFlingDebugTag } from './vr-fling-debug.js?v=20261112-build723';
-import { EMPTY_PINCH, isHand, wristScrollGain, wristScrollSign, wristScrollKeep, NEAR_KINDS, boxDist, centeredBoxDist, squareOutlineDist, pickNearGrab, HAND_RAY_MODES, normalizeHandRay } from './vr-hand.js?v=20261112-build723'; // hand tracking (Quest 3): pure helpers
-import { createHandInput, HAND_LABEL_MOVE_M } from './vr-hand-view.js?v=20261112-build723'; // the hand's ray, wrist menu, fingertips
-import { LABEL_HIDE_DEFAULT, normalizeLabelHide, gpuOcclusionActive, depthVoxelSize, boardVisible, GHOST_ALPHA, EMBEDDED_ALPHA, occludedPass, pinMaterialState } from './vr-depth.js?v=20261112-build723';
-import { highlightColor, highlightIndex, createHighlightTracker, anyLit } from './region-highlight.js?v=20261112-build723';
-import { pinLine, pinPlaceLimited, pinPulledIntoTissue, pinDue, pinJudge, createScaleSettle, createLabelThinner, setLeaderIfMoved, createFaceCache, clippedAt, rayCovered, CARD_W0, CARD_H0, cardLayout, cardHalfW, cardHalfH } from './vr-label-occlusion.js?v=20261112-build723';
-import { brickOccupancy, writeBrickOccupancy } from './vr-brick-occupancy.js?v=20261112-build723';
-import { createProbeGate } from './measure-label.js?v=20261112-build723';
-import { sliceIndex, sliceRange, boxFromRange, createSegScan, segScanStart, segScanStep, segsSubset, segsFromUniforms, contentKeyChanged, KEY_LEN, createContentBox } from './vr-content-box.js?v=20261112-build723'; // the proxy box = the box of what can be drawn
-import { regionVisible, setRegionVisible, onRegionVisibleChange, regionHidden, setRegionHidden, onRegionHiddenChange, regionLutAlpha, regionLutHiddenSlots, hiddenRegionVoxelOf, anyHiddenVoxel } from './region-visibility.js?v=20261112-build723';
-import { buildSegmentTree, pageTreeLines, ellipsize } from './segment-tree.js?v=20261112-build723';
-import { setRegionLabel, setRegionLabelOffset, withOffset, surfaceAnchor, voxelFromLocalVr, clampVoxel, labelLocal, offsetForLocal, vrVoxelStep, rectEdgePoint, leaderVisible, labelSegmentsShown, glowRid, keepLengthFactor, scaledStep, normalizeLabelOverlap, thinActive, LABEL_OVERLAP_MODES } from './analysis-label.js?v=20261112-build723';
-import { childLabelItem, childLabelItems, childLabelItemById, hasChildLabels, childLabelTitle, childVolumeMm3, childKeyAtHit, hitLabelRids, labelToggle, pairShifts } from './child-labels.js?v=20261112-build723'; // a child segment's name label (hover card, pinned card) is the analysis label's, kept on the child
-import { childByKey } from './child-segments.js?v=20261112-build723';
-import { hiddenShapeCount, showAllHiddenShapes } from './segments.js?v=20261112-build723'; // stage 3: 「すべて表示（隠 N）」 of the かんたん menu
-import { ringState, regionRingItems, regionRingName, applyRingItem, ringTargetOf } from './region-ring.js?v=20261112-build723'; // stage 3: the long-press ring of a region / a child
-import { createVrSelfCheck, selfCheckTexts } from './vr-self-check.js?v=20261112-build723'; // 詳細 > 自己診断 (automated frame-time scenarios)
-import { createScaleGuard, createFlapGuard, variantFallback } from './vr-flicker-guard.js?v=20261112-build723'; // flicker safety guard
-import { eyeMetrics, capFromPpv, capFromBudget, nextCap, foveaRect, outsideFovea, foveaWorth, qualityText, FOVEA_K, CAP_MIN, addVolumeEye, boxCoversView, pairComposites } from './vr-render-scale.js?v=20261112-build723'; // data-resolution render scale + offscreen foveation
-import { getMeasureStart, startMeasure, cancelMeasure, pickMeasureEnd, onMeasureStartChange, removeMeasurement, restoreMeasurements, measurementsOfPoint, seriesSpacing } from './measurements.js?v=20261112-build723';
-import { APP_BUILD } from './version.js?v=20261112-build723';
-import { wc, ww } from './ui-shell.js?v=20261112-build723';
-import { VOLUME_FWD, VOLUME_DOWN, MENU_OFFSET, HELP_OFFSET, HU_PANEL_OFFSET, EV_OFFSET, EV_WIDTH, EV_RES, MENU_WIDTH, MENU_CANVAS, HELP_WIDTH, HELP_RES, HIST_OFFSET, HIST_WIDTH, FOLLOW_ANGLE, FOLLOW_DIST } from './vr-layout.js?v=20261112-build723';
-import { onHistogramChange, getHistogramRange, getHistogramLog, setHistogramLog, setHistogramRange } from './histogram-ui.js?v=20261112-build723';
-import { createVrLabelHistogram, UNLABELED_COLOR, labelSlot, labelRegion } from './vr-label-histogram.js?v=20261112-build723';
-import { rangeRes } from './vr-histogram-layout.js?v=20261112-build723';
-import { dataAxis } from './segments.js?v=20261112-build723'; // the histogram axis of the data (histogram.js axisFor + the series' value step)
-import { getHuMode, setHuMode, HU_MODE_FILTERED, HU_MODE_RAW } from './effective-hu.js?v=20261112-build723';
-import { createVrHistogramPanel } from './vr-histogram-panel.js?v=20261112-build723';
-import { lightingGLSL, lightingVertexGLSL, materialVec, MATERIALS, materialKey } from './lighting.js?v=20261112-build723'; // one lighting model for the desktop volume, this VR / AR volume and the 3D-view meshes
+import { wrapMenuText, stackMenuRows } from './vr-menu-text.js?v=20261112-build726';
+import { activeEventLevel, levelForSample, chooseEventLevel, levelSwitchItems, sampleHasLevel, levelSwitchTargets, canSwitchData, EVENT_LEVELS, datasetForSample, datasetLabel, eventModeOn, missionLines, simpleMenuSegments, triggerModeRow, labelTargets, triggerMode, TRIGGER_AT_START, resetPress, resetArmed, RESET_ARM_MS, simpleMenuLayout, SIMPLE_MENU, sliceOpacityValue, sliceDrawState, sliderHitTest, sliderGrabOffset, sliderValueAt, KNOB_GRAB_PX } from './event-mode.js?v=20261112-build726'; // 体験会モード - the chosen level's mission on the help board, the かんたん menu
+import { VIEW_TOGGLE_ID, VIEW_TOGGLE_BUTTON, SECTION_DELETE_ID, createViewToggle, createDoublePress, ringIdsFor } from './vr-view-toggle.js?v=20261112-build726';
+import { vrSpacingNote, vrVolumeText } from './vr-spacing-note.js?v=20261112-build726';
+import { NORM_LONG, physicalExtentsMm, longestMm, realMagnification, realHolderScale, startHolderScale, tutorialHolderScale, smallForTutorial, TUT_VOLUME_FWD, TUT_VOLUME_DOWN, magnificationText, createScaleTag, clampScale, pinchScale, scaleLimits, oversizeNote, planeFrameLocalScale, planeTagLocalScale, scaleLineText, scalePosOf, posToScale, scaleStep, viewTabScaleLayout } from './vr-real-scale.js?v=20261112-build726';
+import { createAutoQuality, autoFloor, STEP_LEVELS, marchStep } from './vr-auto-quality.js?v=20261112-build726';
+import { createVrHuLine } from './vr-hu-line.js?v=20261112-build726';
+import { huMenuTexts, voxelFromHits } from './vr-hu-line-core.js?v=20261112-build726';
+import { setHuLineDeferred } from './hu-line-model.js?v=20261112-build726';
+import { createVrMeasure, LABEL_LIT_SCALE } from './vr-measure.js?v=20261112-build726';
+import { resetUserState } from './event-fresh.js?v=20261112-build726'; // 最初から in the tutorial (practice data only, see tutorial-ui.js resetTutorialAll)
+import { tutorialModeOn, createTutorialVr, createSlideViewer, panelTabs, TAB_H, PAGE_H, layoutLevelSlide, levelBoardH, menuAnnotation, menuTargetRect } from './tutorial-vr.js?v=20261112-build726'; // チュートリアル on the help board (only made when tutorialMode is on);: the read-only guide, the level slide, the menu pointer
+import { levelSlide, createSlideImages } from './tutorial-slides.js?v=20261112-build726'; // the 体験会 level slides (ev board: the slide's picture)
+import { vrInitialScaleOf } from './sample-registry.js?v=20261112-build726';
+import { TUT_SAMPLE } from './tutorial-data.js?v=20261112-build726'; // the live tutorial runs on its practice data only
+import { emit, scaleChanged, poseMoved } from './tutorial-signal.js?v=20261112-build726'; // tutorial: one-line signals at the action sites (no-op without a listener)
+import { horizAngleDeg } from './tutorial-orient.js?v=20261112-build726'; // the tutorial's entry guidance (look right / left): head turn toward a board
+import { createControllerHints, createEdgeArrow, createBoardArrow, boardSide, edgeArrowShown } from './tutorial-3d.js?v=20261112-build726'; // the tutorial's 3D guides (controller button, edge arrow, arrow over the menu)
+import { MAX_SECTION_PLANES, nextPlaneColor, frameDepthTest, ARROW_LEN, ARROW_FLASH_MS, arrowFade, arrowShown, tagBehindTissue, sectionPage, pageOfPlane, SECTION_ROWS_PER_PAGE, FLING_UNDO_MS, FLING_DEBUG_MS, createVelocityTracker, flingDecision, frameOutOfView, outOfViewNow, createOutOfViewTracker, outOfViewRelease, flingDebugLines, capVelocity, flyStep, makeSectionSnapshot, restorePlan, createSectionUndo, undoButtonPlace } from './vr-section-frame.js?v=20261112-build726';
+import { createUndoButton } from './vr-undo-button.js?v=20261112-build726';
+import { createFlingDebugTag } from './vr-fling-debug.js?v=20261112-build726';
+import { EMPTY_PINCH, isHand, wristScrollGain, wristScrollSign, wristScrollKeep, NEAR_KINDS, boxDist, centeredBoxDist, squareOutlineDist, pickNearGrab, HAND_RAY_MODES, normalizeHandRay } from './vr-hand.js?v=20261112-build726'; // hand tracking (Quest 3): pure helpers
+import { createHandInput, HAND_LABEL_MOVE_M } from './vr-hand-view.js?v=20261112-build726'; // the hand's ray, wrist menu, fingertips
+import { LABEL_HIDE_DEFAULT, normalizeLabelHide, gpuOcclusionActive, depthVoxelSize, boardVisible, GHOST_ALPHA, EMBEDDED_ALPHA, occludedPass, pinMaterialState } from './vr-depth.js?v=20261112-build726';
+import { highlightColor, highlightIndex, createHighlightTracker, anyLit } from './region-highlight.js?v=20261112-build726';
+import { pinLine, pinPlaceLimited, pinPulledIntoTissue, pinDue, pinJudge, createScaleSettle, createLabelThinner, setLeaderIfMoved, createFaceCache, clippedAt, rayCovered, CARD_W0, CARD_H0, cardLayout, cardHalfW, cardHalfH } from './vr-label-occlusion.js?v=20261112-build726';
+import { brickOccupancy, writeBrickOccupancy } from './vr-brick-occupancy.js?v=20261112-build726';
+import { createProbeGate } from './measure-label.js?v=20261112-build726';
+import { sliceIndex, sliceRange, boxFromRange, createSegScan, segScanStart, segScanStep, segsSubset, segsFromUniforms, contentKeyChanged, KEY_LEN, createContentBox } from './vr-content-box.js?v=20261112-build726'; // the proxy box = the box of what can be drawn
+import { regionVisible, setRegionVisible, onRegionVisibleChange, regionHidden, setRegionHidden, onRegionHiddenChange, regionLutAlpha, regionLutHiddenSlots, hiddenRegionVoxelOf, anyHiddenVoxel } from './region-visibility.js?v=20261112-build726';
+import { buildSegmentTree, pageTreeLines, ellipsize } from './segment-tree.js?v=20261112-build726';
+import { setRegionLabel, setRegionLabelOffset, withOffset, surfaceAnchor, voxelFromLocalVr, clampVoxel, labelLocal, offsetForLocal, vrVoxelStep, rectEdgePoint, leaderVisible, labelSegmentsShown, glowRid, keepLengthFactor, scaledStep, normalizeLabelOverlap, thinActive, LABEL_OVERLAP_MODES } from './analysis-label.js?v=20261112-build726';
+import { childLabelItem, childLabelItems, childLabelItemById, hasChildLabels, childLabelTitle, childVolumeMm3, childKeyAtHit, hitLabelRids, labelToggle, pairShifts } from './child-labels.js?v=20261112-build726'; // a child segment's name label (hover card, pinned card) is the analysis label's, kept on the child
+import { childByKey } from './child-segments.js?v=20261112-build726';
+import { hiddenShapeCount, showAllHiddenShapes } from './segments.js?v=20261112-build726'; // stage 3: 「すべて表示（隠 N）」 of the かんたん menu
+import { ringState, regionRingItems, regionRingName, applyRingItem, ringTargetOf } from './region-ring.js?v=20261112-build726'; // stage 3: the long-press ring of a region / a child
+import { createVrSelfCheck, selfCheckTexts } from './vr-self-check.js?v=20261112-build726'; // 詳細 > 自己診断 (automated frame-time scenarios)
+import { createScaleGuard, createFlapGuard, variantFallback } from './vr-flicker-guard.js?v=20261112-build726'; // flicker safety guard
+import { eyeMetrics, capFromPpv, capFromBudget, nextCap, foveaRect, outsideFovea, foveaWorth, qualityText, FOVEA_K, CAP_MIN, addVolumeEye, boxCoversView, pairComposites } from './vr-render-scale.js?v=20261112-build726'; // data-resolution render scale + offscreen foveation
+import { getMeasureStart, startMeasure, cancelMeasure, pickMeasureEnd, onMeasureStartChange, removeMeasurement, restoreMeasurements, measurementsOfPoint, seriesSpacing } from './measurements.js?v=20261112-build726';
+import { APP_BUILD } from './version.js?v=20261112-build726';
+import { wc, ww } from './ui-shell.js?v=20261112-build726';
+import { VOLUME_FWD, VOLUME_DOWN, MENU_OFFSET, HELP_OFFSET, HU_PANEL_OFFSET, EV_OFFSET, EV_WIDTH, EV_RES, MENU_WIDTH, MENU_CANVAS, HELP_WIDTH, HELP_RES, HIST_OFFSET, HIST_WIDTH, FOLLOW_ANGLE, FOLLOW_DIST } from './vr-layout.js?v=20261112-build726';
+import { onHistogramChange, getHistogramRange, getHistogramLog, setHistogramLog, setHistogramRange } from './histogram-ui.js?v=20261112-build726';
+import { createVrLabelHistogram, UNLABELED_COLOR, labelSlot, labelRegion } from './vr-label-histogram.js?v=20261112-build726';
+import { rangeRes } from './vr-histogram-layout.js?v=20261112-build726';
+import { dataAxis } from './segments.js?v=20261112-build726'; // the histogram axis of the data (histogram.js axisFor + the series' value step)
+import { getHuMode, setHuMode, HU_MODE_FILTERED, HU_MODE_RAW } from './effective-hu.js?v=20261112-build726';
+import { createVrHistogramPanel } from './vr-histogram-panel.js?v=20261112-build726';
+import { lightingGLSL, lightingVertexGLSL, materialVec, MATERIALS, materialKey } from './lighting.js?v=20261112-build726'; // one lighting model for the desktop volume, this VR / AR volume and the 3D-view meshes
 
 const BG=new THREE.Color(0.035,0.045,0.05);
 const BRICK=PREP_BRICK;
@@ -251,10 +251,11 @@ vec3 regionColor(vec3 p,vec3 base,int s){
  int i=int(texture(regionTex,clamp(texCoord(p),vec3(0.0),vec3(0.999999))).r*255.0+0.5);
  if(i<1)return base;
  vec4 e=texelFetch(regionLut,ivec2(i,0),0);
+ if(regionAnyHidden!=0&&((int(e.a+0.5)>>(8+s))&1)==1){int j=int(texture(regionTex,clamp(texCoord(p),vec3(0.0),vec3(0.999999))).g*255.0+0.5);if(j<1||j==i)return base;e=texelFetch(regionLut,ivec2(j,0),0);} // an earlier change: the colour index's result is HIDDEN here (its index is grown / nearest on a reduced grid): the voxel is drawn as the hide index's own result
  return ((int(e.a+0.5)>>s)&1)==1?e.rgb:base;
 }
 bool regionHiddenAt(vec3 tc,int s){
- int i=int(texture(regionTex,clamp(tc,vec3(0.0),vec3(0.999999))).r*255.0+0.5);
+ int i=int(texture(regionTex,clamp(tc,vec3(0.0),vec3(0.999999))).g*255.0+0.5);
  if(i<1)return false;
  return ((int(texelFetch(regionLut,ivec2(i,0),0).a+0.5)>>(8+s))&1)==1;
 }
@@ -271,11 +272,14 @@ vec3 regionColor(vec3 p,vec3 base,int s){return base;}
 uniform VRL_MP sampler3D childTex;
 uniform highp sampler2D childLut;
 int childIdAt(vec3 tc){return int(texture(childTex,clamp(tc,vec3(0.0),vec3(0.999999))).r*255.0+0.5);}
+int childHideIdAt(vec3 tc){return int(texture(childTex,clamp(tc,vec3(0.0),vec3(0.999999))).g*255.0+0.5);} // an earlier change: the hide index (G), see childHiddenAt
+uniform int childAnyHidden; // an earlier change: 1 = at least one child segment is hidden (as regionAnyHidden): only then is the per-sample hidden test of the loops read (hideAnyOn)
 vec4 childRow(vec3 tc){int i=childIdAt(tc);return i<1?vec4(0.0):texelFetch(childLut,ivec2(i,1),0);}
 vec3 childBase(vec3 p,vec3 base,int s){
  int i=childIdAt(texCoord(p));
  if(i<1)return base;
  vec4 e=texelFetch(childLut,ivec2(i,0),0);
+ if(((int(e.a+0.5)>>s)&1)==0&&((int(texelFetch(childLut,ivec2(i,1),0).a+0.5)>>s)&1)==1){int j=childHideIdAt(texCoord(p));if(j<1||j==i)return base;e=texelFetch(childLut,ivec2(j,0),0);} // an earlier change: the colour index's child is HIDDEN here (dilated on a reduced grid): the voxel is drawn as the hide index's own child
  return ((int(e.a+0.5)>>s)&1)==1?e.rgb:base;
 }
 vec3 regionColorC(vec3 p,vec3 base,int s){return regionColor(p,childBase(p,base,s),s);}
@@ -292,12 +296,21 @@ void childLook(int ci,int s){
  if(ci>0&&((int(texelFetch(childLut,ivec2(ci,0),0).a+0.5)>>s)&1)==1){vec4 m=texelFetch(childLut,ivec2(ci,2),0);segAC[s].z=m.w;segMC[s]=vec4(m.xyz,0.0);}
  else{segAC[s].z=uSegA(s).z;segMC[s]=uSegM(s);}
 }
-// a HIDDEN child (row 1 hiddenMask, bit s) hides its voxels, without exception: a hidden segment is invisible and not counted
-bool childHiddenAt(vec3 tc,int s,vec4 e){
- if(((int(e.a+0.5)>>s)&1)==0)return false;
- return true;
+// a HIDDEN child (row 1 hiddenMask, bit s) hides its voxels, without exception: a hidden segment is invisible and not counted. an earlier change: which child a voxel belongs to for HIDING is the texture's G channel
+// (the hide index, vr-volume-prep.js hideIndexOf: not dilated, so a hidden child does not take a voxel layer of its neighbours); R (childIdAt) stays the colour / material / flat-mode index
+bool childHiddenAt(vec3 tc,int s){
+ int i=childHideIdAt(tc);
+ if(i<1)return false;
+ return ((int(texelFetch(childLut,ivec2(i,1),0).a+0.5)>>s)&1)==1;
 }
-int childVis(vec3 p,int si){if(si<0)return si;vec3 tc=texCoord(p);return childHiddenAt(tc,si,childRow(tc))?-1:si;}
+int childVis(vec3 p,int si){if(si<0)return si;return childHiddenAt(texCoord(p),si)?-1:si;}
+// an earlier change: the child whose look (material / opacity) a cut face or a slice pixel takes on slot s: the colour index's (R), but where that child is HIDDEN on s (R is dilated on a reduced grid) the hide index's own (G),
+// 0 = none (the segment's own look) when that is the same child: the rule of childBase's colour. Nothing hidden: R, as before.
+int childLookIdAt(vec3 tc,int s){
+ int i=childIdAt(tc);
+ if(i>=1&&((int(texelFetch(childLut,ivec2(i,0),0).a+0.5)>>s)&1)==0&&((int(texelFetch(childLut,ivec2(i,1),0).a+0.5)>>s)&1)==1){int j=childHideIdAt(tc);return j==i?0:j;}
+ return i;
+}
 #endif
 // ==== end of CHILD SEGMENTS block A ====
 // an earlier change: VRL_HIDE = something can be hidden (a child segment or a result): the loops' "a hit on a hidden voxel is no hit" code is compiled with it. Made here from the two data defines (no new program set).
@@ -308,6 +321,38 @@ int childVis(vec3 p,int si){if(si<0)return si;vec3 tc=texCoord(p);return childHi
 #ifndef VRL_HIDE
 #define VRL_HIDE
 #endif
+#endif
+#ifdef VRL_HIDE
+bool hideAnyOn(){ // something is hidden (a uniform each: no texture read)
+#ifdef VRL_REGIONS
+ if(regionAnyHidden!=0)return true;
+#endif
+#ifdef VRL_CHILDREN
+ if(childAnyHidden!=0)return true;
+#endif
+ return false;
+}
+bool hideAt(vec3 tc,int s){
+#ifdef VRL_CHILDREN
+ if(childHiddenAt(tc,s))return true;
+#endif
+#ifdef VRL_REGIONS
+ if(regionAnyHidden!=0&&regionHiddenAt(tc,s))return true;
+#endif
+ return false;
+}
+vec3 hideGrad(vec3 tc,int s){
+#ifdef VRL_CHILDREN
+ vec3 d=1.0/max(vec3(textureSize(childTex,0)),vec3(1.0));
+#else
+ vec3 d=1.0/max(vec3(textureSize(regionTex,0)),vec3(1.0));
+#endif
+ float gx=(hideAt(tc+vec3(d.x,0.0,0.0),s)?1.0:0.0)-(hideAt(tc-vec3(d.x,0.0,0.0),s)?1.0:0.0);
+ float gy=(hideAt(tc+vec3(0.0,d.y,0.0),s)?1.0:0.0)-(hideAt(tc-vec3(0.0,d.y,0.0),s)?1.0:0.0);
+ float gz=(hideAt(tc+vec3(0.0,0.0,d.z),s)?1.0:0.0)-(hideAt(tc-vec3(0.0,0.0,d.z),s)?1.0:0.0);
+ vec3 voxel=2.0*halfExt*d;
+ return vec3(gx/max(voxel.x,1e-6),-gy/max(voxel.y,1e-6),gz/max(voxel.z,1e-6));
+}
 #endif
 float huAt(vec3 tc0){
  vec3 tc=clamp(tc0,vec3(0.0),vec3(0.999999));
@@ -437,7 +482,7 @@ float sliceGray(vec3 p){
 // gloss trial: the slice fill (slice opacity 0 %) of a tissue-look segment (segM.w > 0.5: skin / muscle / fat) is lit like its surface: the plane's normal (the plane under p: the cutPlanes entry p lies on), turned to the viewer, no rim, the highlight at CUT_GLOSS of the surface's (lighting.js vrlRealCut). col already has the CT shading in it and keeps it. Any other segment gets col back untouched.
 vec3 sliceLook(vec3 p,vec3 col,int si,vec3 rd,vec3 ro){
 #ifdef VRL_CHILDREN
- childLook(childIdAt(texCoord(p)),si);
+ childLook(childLookIdAt(texCoord(p),si),si); // an earlier change: as the colour (childLookIdAt)
 #endif
  vec4 m=segM[si];
  if(m.w<0.5||m.w>3.5)return col; // 0 = plain, 4..9 = the older looks (lighting.js REAL_WEAK / REAL_TRIAL): no cut-face look
@@ -560,6 +605,15 @@ void main(){
  // brickEnd = t where the current non-empty brick is left; the
  // brick min/max is fetched once per brick instead of once per sample
  float brickEnd=-1.0;int uniformSeg=-1;bool prevValid=false;float prevF=0.0;float lastDd=99.0;float distInc=ceil(1.5*ceil(step/max(voxelMin,1e-6)));
+#ifdef VRL_HIDE
+ // an earlier change: prevHid = the previous sample was inside a segment but in a HIDDEN part of it (passH). From such a sample no distance-field jump is taken (the field is the distance to the SEGMENT's
+ // surface: it does not see the border between the hidden part and its neighbour, so a jump landed deep inside the neighbour or past a thin one: holes / hollows), and the hit right after it is the
+ // cut the hidden part leaves: searched with "inside = in the segment and not hidden" and lit by the hidden part's border (hideGrad), like the box face (faceT). Nothing hidden: never set.
+ bool prevHid=false;
+ // the FIRST sample in a hidden part (a hidden cap point, the eye inside the box): no jump from it either, as from a sample after a hidden one. Tested once per ray, before the loops, and only while
+ // something is hidden (was a test in each loop on every sample, with an extra fetch of the fourth segment's bytes)
+ if(hideAnyOn()){vec3 tcS=tcO+tcD*t;int si=segmentIndexAt(tcS);if(si>=0&&hideAt(tcS,si))prevHid=true;}
+#endif
 #ifndef VRL_NO_GENERAL
  if(distInCls>0&&useCls>0&&diag!=4){
 #else
@@ -573,6 +627,9 @@ void main(){
   // inside the divergent march; semi-transparent hits are handled inline as before. Same arithmetic, same order.
   bool prevSkip=false;highp ivec3 skBlk=ivec3(-1);highp uvec2 skBits=uvec2(0u); // prevF of the last skipped sample is fetched only when a hit needs it (prevSkip)
   int hitIdx=-1;float hitLo=0.0;float hitHi=0.0;float hitF0=0.0;float hitF1=0.0;bool hitIso=false;bool hitSimple=false;int hitNb=6;
+#ifdef VRL_HIDE
+  bool hitHid=false; // an earlier change: the deferred hit came right after a hidden sample (prevHid at the hit)
+#endif
   // per-ray constant: enabled channels as a mask (1 enabled, 0 not)
   // one-hot channel selectors per segment (no dynamic indexing of fv[c] / clsChan[s] inside the march); off = 1e9 for a disabled segment
   VRL_MP vec4 sel0=vec4(0.0),sel1=vec4(0.0),sel2=vec4(0.0),sel3=vec4(0.0);VRL_MP float off0=VRL_SEG_OFF,off1=VRL_SEG_OFF,off2=VRL_SEG_OFF,off3=VRL_SEG_OFF;
@@ -599,7 +656,11 @@ void main(){
      if(sb!=skBlk){skBlk=sb;skBits=texelFetch(skipTex,sb,0).rg;}
      highp ivec3 sl=sc&3;highp int sbit=sl.x+(sl.y<<2)+(sl.z<<4);
      highp uint sw=sbit<32?skBits.x:skBits.y;
+#ifdef VRL_HIDE
+     if(((sw>>uint(sbit&31))&1u)!=0u){prevValid=true;prevSkip=true;lastIndex=-1;prevHid=false;previousT=t;t+=step;continue;}
+#else
      if(((sw>>uint(sbit&31))&1u)!=0u){prevValid=true;prevSkip=true;lastIndex=-1;previousT=t;t+=step;continue;}
+#endif
     }
    }
 #endif
@@ -609,6 +670,9 @@ void main(){
     qf.a=texture(cls4Tex,clamp(tcO+tcD*t,vec3(0.0),vec3(0.999999))).r;
 #endif
     VRL_MP vec4 qfc=qf-0.5;if(max(max(dot(qfc,sel0)-off0,dot(qfc,sel1)-off1),max(dot(qfc,sel2)-off2,dot(qfc,sel3)-off3))>=0.0)dd=0.0;} // the entry sample on a box face inside a segment: no jump (faceT)
+#ifdef VRL_HIDE
+   if(prevHid)dd=0.0; // an earlier change: no jump from a hidden part (prevHid, see there; also the first sample when it is in one)
+#endif
    // a jump is never shorter than a normal step
    if(dd>=2.7){float nextJ=max(t+(dd-1.8)*voxelMin,t+step);jumpLen+=nextJ-t;previousT=nextJ-step*0.05;prevValid=false;t=nextJ;continue;}
 #ifdef VRL_CLS4
@@ -618,6 +682,9 @@ void main(){
    int idx=-1;VRL_MP float curF=-1.0;
    if(f0>=0.0){idx=0;curF=f0;}else if(f1>=0.0){idx=1;curF=f1;}else if(f2>=0.0){idx=2;curF=f2;}else if(f3>=0.0){idx=3;curF=f3;}
    gQ=q;
+#ifdef VRL_HIDE
+   bool hidNow=false; // an earlier change: this sample is in a hidden part (-> prevHid of the next one)
+#endif
    if(idx!=lastIndex){
 #ifdef VRL_HIDE
     bool passH=false; // a hit on a HIDDEN child segment is no hit: the ray goes on (lastIndex stays -1, so the next sample inside the segment is a candidate again)
@@ -632,16 +699,20 @@ void main(){
 #endif
      float lo=previousT;float hi=t;bool simple=diag==3||segC[idx].w>0.5;
 #ifdef VRL_CHILDREN
-     {int chI=childIdAt(tcO+tcD*t);vec4 chE=chI<1?vec4(0.0):texelFetch(childLut,ivec2(chI,1),0);passH=childHiddenAt(tcO+tcD*t,idx,chE);if(((int(chE.b+0.5)>>idx)&1)==1)simple=true;childLook(chI,idx);}
+     {int chI=childIdAt(tcO+tcD*t);vec4 chE=chI<1?vec4(0.0):texelFetch(childLut,ivec2(chI,1),0);passH=childHiddenAt(tcO+tcD*t,idx);if(!passH&&((int(chE.a+0.5)>>idx)&1)==1){chI=childHideIdAt(tcO+tcD*t);chE=chI<1?vec4(0.0):texelFetch(childLut,ivec2(chI,1),0);}if(((int(chE.b+0.5)>>idx)&1)==1)simple=true;childLook(chI,idx);}
 #endif
 #ifdef VRL_REGIONS
      if(!passH&&regionAnyHidden!=0)passH=regionHiddenAt(tcO+tcD*t,idx); // an earlier change: a hit on a HIDDEN result is no hit either (same rule as a hidden child)
+#endif
+#ifdef VRL_HIDE
+     hidNow=passH;
 #endif
      VRL_MP float f1=curF;bool iso=refine==1&&((editMask>>idx)&1)==0&&prevValid&&prevF<0.0;
      int nb=prevValid?6:2; // right after a jump the bracket is ~0.05 step wide: two bisections are enough (was six)
 #ifdef VRL_OPAQUE
      // segments are always opaque (alpha 1): every hit ends the ray and is searched and shaded after the loop
 #ifdef VRL_HIDE
+     hitHid=prevHid; // (read only when this sample is the hit)
      if(!passH)
 #endif
      {hitIdx=idx;hitLo=lo;hitHi=hi;hitF0=prevF;hitF1=f1;hitIso=iso;hitSimple=simple;hitNb=nb;lastIndex=idx;break;}
@@ -650,6 +721,9 @@ void main(){
      if(!passH){
 #endif
      VRL_MP float alpha=clamp(segA[idx].z,0.03,1.0);
+#ifdef VRL_HIDE
+     hitHid=prevHid; // (read only when the hit below is deferred)
+#endif
      if((1.0-acc.a)*alpha+acc.a>ACC_STOP&&!simple){hitIdx=idx;hitLo=lo;hitHi=hi;hitF0=prevF;hitF1=f1;hitIso=iso;hitNb=nb;lastIndex=idx;break;}
      int cIdx=clsChan[idx];
      if(!simple&&iso){float f0=prevF;
@@ -667,9 +741,16 @@ void main(){
 #endif
       bool inside=qm[cIdx]>=0.5;
        for(int s=0;s<4;s++){if(s>=idx)break;int c=clsChan[s];if(c>=0&&segA[s].w>0.5&&qm[c]>=0.5)inside=false;}
+#ifdef VRL_HIDE
+       if(inside&&prevHid&&hideAt(tcO+tcD*mid,idx))inside=false; // an earlier change: after a hidden part the surface is where the shown part starts
+#endif
        if(inside)hi=mid;else lo=mid;}
      vec3 hp=o+dir*hi;vec3 tc=texCoord(hp);
+#ifdef VRL_HIDE
+     bool face=!simple&&hi<=faceEnd;vec3 hn=prevHid&&!simple&&!face?hideGrad(tc,idx):vec3(0.0);bool hcut=dot(hn,hn)>0.0;vec3 n=simple?-dir:(face?entryFaceNormal(o,dir):(hcut?normalize(hn):gradientAt(tc)));face=face||hcut; // an earlier change: the cut a hidden part leaves is lit by its border (a zero border gradient: the gradient as before), as the box face (not flipped)
+#else
      bool face=!simple&&hi<=faceEnd;vec3 n=simple?-dir:(face?entryFaceNormal(o,dir):gradientAt(tc));
+#endif
      vec3 viewDir=normalize(o-hp);bool later=acc.a>0.0&&!simple&&!face;VRL_MP vec2 shade=vrlShade(later?(gHuMean<0.5*(segA[idx].x+segA[idx].y)?-n:n):n,viewDir,vLightOff,vrlDepth01(hi,o,halfExt),later?1.0:0.0,segM[idx].xyz);VRL_MP float diffuse=shade.x;VRL_MP float spec=shade.y;
      VRL_MP vec3 lit=regionColor(hp+dir*(0.75*voxelMin),segC[idx].rgb,idx)*diffuse+vec3(spec);
      VRL_MP float contribution=(1.0-acc.a)*alpha;acc=vec4(acc.rgb+lit*contribution,acc.a+contribution);depthMark(hi,contribution);
@@ -684,6 +765,14 @@ void main(){
     lastIndex=idx;
 #endif
    }
+#ifdef VRL_HIDE
+#ifndef VRL_OPAQUE
+   // an earlier change: a see-through segment: the ray goes on inside it after a hit (idx == lastIndex). A hidden part met there is left like one met from outside (lastIndex -1, prevHid), so the shown part after it
+   // is a hit again: the far cut face. Read only while something is hidden (hideAnyOn); nothing hidden: never.
+   else if(idx>=0&&hideAnyOn()&&hideAt(tcO+tcD*t,idx)){lastIndex=-1;hidNow=true;}
+#endif
+   prevHid=hidNow;
+#endif
    prevSkip=false;prevValid=true;prevF=idx>=0?curF:max(max(f0,f1),max(f2,f3));
    previousT=t;t+=step;
   }
@@ -704,7 +793,7 @@ void main(){
 #endif
 #ifdef VRL_CHILDREN
     ci=childVis(cp,ci); // child segments, block C: no cut face on a hidden child
-    if(ci>=0)childLook(childIdAt(texCoord(cp)),ci); // and the cut face has the child's opacity / material
+    if(ci>=0)childLook(childLookIdAt(texCoord(cp),ci),ci); // and the cut face has the child's opacity / material (an earlier change: of the child the colour takes, childLookIdAt)
 #endif
     if(ci>=0){
      vec3 n=cutPlanes[capPlane].xyz;vec3 viewDir=-dir;
@@ -724,7 +813,11 @@ void main(){
      if(sb!=skBlk){skBlk=sb;skBits=texelFetch(skipTex,sb,0).rg;}
      highp ivec3 sl=sc&3;highp int sbit=sl.x+(sl.y<<2)+(sl.z<<4);
      highp uint sw=sbit<32?skBits.x:skBits.y;
+#ifdef VRL_HIDE
+     if(((sw>>uint(sbit&31))&1u)!=0u){prevValid=true;prevSkip=true;lastIndex=-1;prevHid=false;previousT=t;t+=step;continue;}
+#else
      if(((sw>>uint(sbit&31))&1u)!=0u){prevValid=true;prevSkip=true;lastIndex=-1;previousT=t;t+=step;continue;}
+#endif
     }
    }
 #endif
@@ -734,6 +827,9 @@ void main(){
     qf.a=texture(cls4Tex,clamp(tcO+tcD*t,vec3(0.0),vec3(0.999999))).r;
 #endif
     VRL_MP vec4 qfc=qf-0.5;if(max(max(dot(qfc,sel0)-off0,dot(qfc,sel1)-off1),max(dot(qfc,sel2)-off2,dot(qfc,sel3)-off3))>=0.0)dd=0.0;} // the entry sample on a box face inside a segment: no jump (faceT)
+#ifdef VRL_HIDE
+   if(prevHid)dd=0.0; // an earlier change: no jump from a hidden part (prevHid, see there; also the first sample when it is in one)
+#endif
    // a jump is never shorter than a normal step
    if(dd>=2.7){float nextJ=max(t+(dd-1.8)*voxelMin,t+step);jumpLen+=nextJ-t;previousT=nextJ-step*0.05;prevValid=false;t=nextJ;continue;}
 #ifdef VRL_CLS4
@@ -743,6 +839,9 @@ void main(){
    int idx=-1;VRL_MP float curF=-1.0;
    if(f0>=0.0){idx=0;curF=f0;}else if(f1>=0.0){idx=1;curF=f1;}else if(f2>=0.0){idx=2;curF=f2;}else if(f3>=0.0){idx=3;curF=f3;}
    gQ=q;
+#ifdef VRL_HIDE
+   bool hidNow=false; // an earlier change: this sample is in a hidden part (-> prevHid of the next one)
+#endif
    if(idx!=lastIndex){
 #ifdef VRL_HIDE
     bool passH=false; // a hit on a HIDDEN child segment is no hit: the ray goes on (lastIndex stays -1, so the next sample inside the segment is a candidate again)
@@ -757,16 +856,20 @@ void main(){
 #endif
      float lo=previousT;float hi=t;bool simple=diag==3||segC[idx].w>0.5;
 #ifdef VRL_CHILDREN
-     {int chI=childIdAt(tcO+tcD*t);vec4 chE=chI<1?vec4(0.0):texelFetch(childLut,ivec2(chI,1),0);passH=childHiddenAt(tcO+tcD*t,idx,chE);if(((int(chE.b+0.5)>>idx)&1)==1)simple=true;childLook(chI,idx);}
+     {int chI=childIdAt(tcO+tcD*t);vec4 chE=chI<1?vec4(0.0):texelFetch(childLut,ivec2(chI,1),0);passH=childHiddenAt(tcO+tcD*t,idx);if(!passH&&((int(chE.a+0.5)>>idx)&1)==1){chI=childHideIdAt(tcO+tcD*t);chE=chI<1?vec4(0.0):texelFetch(childLut,ivec2(chI,1),0);}if(((int(chE.b+0.5)>>idx)&1)==1)simple=true;childLook(chI,idx);}
 #endif
 #ifdef VRL_REGIONS
      if(!passH&&regionAnyHidden!=0)passH=regionHiddenAt(tcO+tcD*t,idx); // an earlier change: a hit on a HIDDEN result is no hit either (same rule as a hidden child)
+#endif
+#ifdef VRL_HIDE
+     hidNow=passH;
 #endif
      VRL_MP float f1=curF;bool iso=refine==1&&((editMask>>idx)&1)==0&&prevValid&&prevF<0.0;
      int nb=prevValid?6:2; // right after a jump the bracket is ~0.05 step wide: two bisections are enough (was six)
 #ifdef VRL_OPAQUE
      // segments are always opaque (alpha 1): every hit ends the ray and is searched and shaded after the loop
 #ifdef VRL_HIDE
+     hitHid=prevHid; // (read only when this sample is the hit)
      if(!passH)
 #endif
      {hitIdx=idx;hitLo=lo;hitHi=hi;hitF0=prevF;hitF1=f1;hitIso=iso;hitSimple=simple;hitNb=nb;lastIndex=idx;break;}
@@ -775,6 +878,9 @@ void main(){
      if(!passH){
 #endif
      VRL_MP float alpha=clamp(segA[idx].z,0.03,1.0);
+#ifdef VRL_HIDE
+     hitHid=prevHid; // (read only when the hit below is deferred)
+#endif
      if((1.0-acc.a)*alpha+acc.a>ACC_STOP&&!simple){hitIdx=idx;hitLo=lo;hitHi=hi;hitF0=prevF;hitF1=f1;hitIso=iso;hitNb=nb;lastIndex=idx;break;}
      int cIdx=clsChan[idx];
      if(!simple&&iso){float f0=prevF;
@@ -792,9 +898,16 @@ void main(){
 #endif
       bool inside=qm[cIdx]>=0.5;
        for(int s=0;s<4;s++){if(s>=idx)break;int c=clsChan[s];if(c>=0&&segA[s].w>0.5&&qm[c]>=0.5)inside=false;}
+#ifdef VRL_HIDE
+       if(inside&&prevHid&&hideAt(tcO+tcD*mid,idx))inside=false; // an earlier change: after a hidden part the surface is where the shown part starts
+#endif
        if(inside)hi=mid;else lo=mid;}
      vec3 hp=o+dir*hi;vec3 tc=texCoord(hp);
+#ifdef VRL_HIDE
+     bool face=!simple&&hi<=faceEnd;vec3 hn=prevHid&&!simple&&!face?hideGrad(tc,idx):vec3(0.0);bool hcut=dot(hn,hn)>0.0;vec3 n=simple?-dir:(face?entryFaceNormal(o,dir):(hcut?normalize(hn):gradientAt(tc)));face=face||hcut; // an earlier change: the cut a hidden part leaves is lit by its border (a zero border gradient: the gradient as before), as the box face (not flipped)
+#else
      bool face=!simple&&hi<=faceEnd;vec3 n=simple?-dir:(face?entryFaceNormal(o,dir):gradientAt(tc));
+#endif
      vec3 viewDir=normalize(o-hp);bool later=acc.a>0.0&&!simple&&!face;VRL_MP vec2 shade=vrlShade(later?(gHuMean<0.5*(segA[idx].x+segA[idx].y)?-n:n):n,viewDir,vLightOff,vrlDepth01(hi,o,halfExt),later?1.0:0.0,segM[idx].xyz);VRL_MP float diffuse=shade.x;VRL_MP float spec=shade.y;
      VRL_MP vec3 lit=regionColor(hp+dir*(0.75*voxelMin),segC[idx].rgb,idx)*diffuse+vec3(spec);
      VRL_MP float contribution=(1.0-acc.a)*alpha;acc=vec4(acc.rgb+lit*contribution,acc.a+contribution);depthMark(hi,contribution);
@@ -809,6 +922,14 @@ void main(){
     lastIndex=idx;
 #endif
    }
+#ifdef VRL_HIDE
+#ifndef VRL_OPAQUE
+   // an earlier change: a see-through segment: the ray goes on inside it after a hit (idx == lastIndex). A hidden part met there is left like one met from outside (lastIndex -1, prevHid), so the shown part after it
+   // is a hit again: the far cut face. Read only while something is hidden (hideAnyOn); nothing hidden: never.
+   else if(idx>=0&&hideAnyOn()&&hideAt(tcO+tcD*t,idx)){lastIndex=-1;hidNow=true;}
+#endif
+   prevHid=hidNow;
+#endif
    prevSkip=false;prevValid=true;prevF=idx>=0?curF:max(max(f0,f1),max(f2,f3));
    previousT=t;t+=step;
   }
@@ -832,9 +953,16 @@ void main(){
 #endif
       bool inside=qm[cIdx]>=0.5;
      for(int s=0;s<4;s++){if(s>=idx)break;int c=clsChan[s];if(c>=0&&segA[s].w>0.5&&qm[c]>=0.5)inside=false;}
+#ifdef VRL_HIDE
+     if(inside&&hitHid&&hideAt(tcO+tcD*mid,idx))inside=false; // an earlier change: after a hidden part the surface is where the shown part starts
+#endif
      if(inside)hi=mid;else lo=mid;}
    vec3 hp=o+dir*hi;vec3 tc=texCoord(hp);
+#ifdef VRL_HIDE
+   bool face=!hitSimple&&hi<=faceEnd;vec3 hn=hitHid&&!hitSimple&&!face?hideGrad(tc,idx):vec3(0.0);bool hcut=dot(hn,hn)>0.0;vec3 n=hitSimple?-dir:(face?entryFaceNormal(o,dir):(hcut?normalize(hn):gradientAt(tc)));face=face||hcut; // an earlier change: as in the loop
+#else
    bool face=!hitSimple&&hi<=faceEnd;vec3 n=hitSimple?-dir:(face?entryFaceNormal(o,dir):gradientAt(tc));
+#endif
    vec3 viewDir=normalize(o-hp);bool later=acc.a>0.0&&!hitSimple&&!face;VRL_MP vec2 shade=vrlShade(later?(gHuMean<0.5*(segA[idx].x+segA[idx].y)?-n:n):n,viewDir,vLightOff,vrlDepth01(hi,o,halfExt),later?1.0:0.0,segM[idx].xyz);VRL_MP float diffuse=shade.x;VRL_MP float spec=shade.y;
    VRL_MP float alpha=clamp(segA[idx].z,0.03,1.0);
    VRL_MP vec3 lit=regionColor(hp+dir*(0.75*voxelMin),segC[idx].rgb,idx)*diffuse+vec3(spec);
@@ -859,7 +987,7 @@ void main(){
 #endif
 #ifdef VRL_CHILDREN
     ci=childVis(cp,ci); // child segments, block C: no cut face on a hidden child
-    if(ci>=0)childLook(childIdAt(texCoord(cp)),ci); // and the cut face has the child's opacity / material
+    if(ci>=0)childLook(childLookIdAt(texCoord(cp),ci),ci); // and the cut face has the child's opacity / material (an earlier change: of the child the colour takes, childLookIdAt)
 #endif
    if(ci>=0){
     vec3 n=cutPlanes[capPlane].xyz;vec3 viewDir=-dir;
@@ -870,6 +998,9 @@ void main(){
   }
   vec3 p=o+dir*t;vec3 tc0=texCoord(p);
   bool haveQ=false;vec4 qHere=vec4(0.0);
+#ifdef VRL_HIDE
+  bool hidNow=false; // an earlier change: this sample is in a hidden part (-> prevHid of the next one)
+#endif
   if(distInCls>0&&useCls>0&&diag!=4){
    // one fetch serves the jump test (alpha) and the classification below. The alpha is filtered
    // trilinearly: every corner value is a lower bound of the distance to the seeds and the distance is
@@ -880,6 +1011,9 @@ void main(){
     qf.a=texture(cls4Tex,clamp(tc0,vec3(0.0),vec3(0.999999))).r;
 #endif
     if(segmentIndexFromQ(qf)>=0)dd=0.0;} // no jump at the entry sample on a box face inside a segment (faceT)
+#ifdef VRL_HIDE
+   if(prevHid)dd=0.0; // an earlier change: no jump from a hidden part (prevHid; also the first sample when it is in one)
+#endif
    if(dd>=2.7){float nextJ=t+(dd-1.8)*voxelMin;jumpLen+=nextJ-t;previousT=nextJ-step*0.05;prevValid=false;t=nextJ;continue;}
 #ifdef VRL_CLS4
    qHere.a=texture(cls4Tex,clamp(tc0,vec3(0.0),vec3(0.999999))).r;
@@ -891,6 +1025,9 @@ void main(){
    // skipped; the bound grows by distInc per skipped step (steps longer than a voxel: more). Same jumps, same image.
    if(lastDd>=1.0){float dd=distAt(tc0);lastDd=dd;
     if(dd>=3.0&&t<=faceT&&segmentIndexAt(tc0)>=0)dd=0.0; // no jump at the entry sample on a box face inside a segment (faceT)
+#ifdef VRL_HIDE
+    if(prevHid)dd=0.0; // an earlier change: no jump from a hidden part (prevHid; also the first sample when it is in one)
+#endif
     if(dd>=3.0){float nextJ=t+(dd-2.0)*voxelMin;jumpLen+=nextJ-t;previousT=nextJ-step*0.05;prevValid=false;t=nextJ;lastDd=99.0;continue;}
    }else{lastDd+=distInc;}
   }
@@ -898,7 +1035,11 @@ void main(){
   if(!canSample){int bc=brickClass(tc0);canSample=bc>0;uniformSeg=bc>=2?bc-2:-1;if(canSample)brickEnd=t+brickExit(tc0,dir);}
   float nextT=t+step;
   if(!canSample){brickEnd=-1.0;prevValid=false;nextT=t+max(brickExit(tc0,dir)+step*0.05,step);lastIndex=-1;}
+#ifdef VRL_HIDE
+  else if(diag!=4&&uniformSeg>=0&&uniformSeg==lastIndex&&brickEnd>t+step&&!hideAnyOn()){ // an earlier change: while something is hidden a uniform brick is sampled (a hidden part in it must be seen)
+#else
   else if(diag!=4&&uniformSeg>=0&&uniformSeg==lastIndex&&brickEnd>t+step){
+#endif
    // inside a uniform brick of the segment the ray is already in: nothing changes until it is left
    nextT=brickEnd+step*0.05;previousT=max(t,brickEnd-step*0.05);prevValid=false;t=nextT;continue;
   }
@@ -912,10 +1053,13 @@ void main(){
     if(idx>=0){
      float lo=previousT;float hi=t;bool simple=diag==3||segC[idx].w>0.5;
 #ifdef VRL_CHILDREN
-     {int chI=childIdAt(tc0);vec4 chE=chI<1?vec4(0.0):texelFetch(childLut,ivec2(chI,1),0);passH=childHiddenAt(tc0,idx,chE);if(((int(chE.b+0.5)>>idx)&1)==1)simple=true;childLook(chI,idx);}
+     {int chI=childIdAt(tc0);vec4 chE=chI<1?vec4(0.0):texelFetch(childLut,ivec2(chI,1),0);passH=childHiddenAt(tc0,idx);if(!passH&&((int(chE.a+0.5)>>idx)&1)==1){chI=childHideIdAt(tc0);chE=chI<1?vec4(0.0):texelFetch(childLut,ivec2(chI,1),0);}if(((int(chE.b+0.5)>>idx)&1)==1)simple=true;childLook(chI,idx);}
 #endif
 #ifdef VRL_REGIONS
      if(!passH&&regionAnyHidden!=0)passH=regionHiddenAt(tc0,idx); // an earlier change: a hidden result, as a hidden child
+#endif
+#ifdef VRL_HIDE
+     hidNow=passH;
 #endif
 #ifdef VRL_HIDE
      if(!passH){
@@ -927,9 +1071,17 @@ void main(){
      if(!simple&&iso){float f0=prevF;
       for(int r=0;r<3;r++){float mid=(lo+hi)*0.5;if(r<2&&abs(f1-f0)>1e-6)mid=clamp(lo+(hi-lo)*(-f0/(f1-f0)),lo+(hi-lo)*0.02,hi-(hi-lo)*0.02);
        bool inside=segmentIndexAt(texCoord(o+dir*mid))==idx;float fm=segValue(idx);if(inside){hi=mid;f1=fm;}else{lo=mid;f0=fm;}}}
+#ifdef VRL_HIDE
+     else if(!simple)for(int r=0;r<6;r++){float mid=(lo+hi)*0.5;vec3 tm=texCoord(o+dir*mid);if(segmentIndexAt(tm)==idx&&!(prevHid&&hideAt(tm,idx)))hi=mid;else lo=mid;} // an earlier change: after a hidden part the surface is where the shown part starts
+#else
      else if(!simple)for(int r=0;r<6;r++){float mid=(lo+hi)*0.5;if(segmentIndexAt(texCoord(o+dir*mid))==idx)hi=mid;else lo=mid;}
+#endif
      vec3 hp=o+dir*hi;vec3 tc=texCoord(hp);
+#ifdef VRL_HIDE
+     bool face=!simple&&hi<=faceEnd;vec3 hn=prevHid&&!simple&&!face?hideGrad(tc,idx):vec3(0.0);bool hcut=dot(hn,hn)>0.0;vec3 n=simple?-dir:(face?entryFaceNormal(o,dir):(hcut?normalize(hn):gradientAt(tc)));face=face||hcut; // an earlier change: the cut a hidden part leaves is lit by its border (a zero border gradient: the gradient as before), as the box face (not flipped)
+#else
      bool face=!simple&&hi<=faceEnd;vec3 n=simple?-dir:(face?entryFaceNormal(o,dir):gradientAt(tc));
+#endif
      vec3 viewDir=normalize(o-hp);bool later=acc.a>0.0&&!simple&&!face;VRL_MP vec2 shade=vrlShade(later?(gHuMean<0.5*(segA[idx].x+segA[idx].y)?-n:n):n,viewDir,vLightOff,vrlDepth01(hi,o,halfExt),later?1.0:0.0,segM[idx].xyz);VRL_MP float diffuse=shade.x;VRL_MP float spec=shade.y;
      VRL_MP float alpha=clamp(segA[idx].z,0.03,1.0);
      VRL_MP vec3 lit=regionColor(hp+dir*(0.75*voxelMin),segC[idx].rgb,idx)*diffuse+vec3(spec);
@@ -944,10 +1096,16 @@ void main(){
     lastIndex=idx;
 #endif
    }
+#ifdef VRL_HIDE
+   else if(idx>=0&&hideAnyOn()&&hideAt(tc0,idx)){lastIndex=-1;hidNow=true;} // an earlier change: a hidden part inside the segment the ray is in (see the tight loop)
+#endif
    // outside value for the next segment's search: the largest segment value
    // at this sample when no segment holds it (kept negative), else its own
    prevValid=true;prevF=idx>=0?curF:maxSegValue();
   }
+#ifdef VRL_HIDE
+  prevHid=hidNow;
+#endif
   previousT=t;t=nextT;
  }
 #else
@@ -1253,10 +1411,10 @@ const makeVolumeTextures=d=>{
  b.minFilter=b.magFilter=THREE.NearestFilter;b.unpackAlignment=1;b.needsUpdate=true;
  return{v,b,dims:d.dims,brickDims:d.brickDims,src:d.data,cls:null,dist:null,combo:null,cls4:null,comboMask:-1};
 };
-const makeRegionTexture=P=>{const g=P.region;if(!g?.data||!g.ids)return null;const t=new THREE.Data3DTexture(g.ids,...g.dims); // the GPU reads the per-result index (ids), not the per-colour one (data, kept for the histogram pass)
- t.format=THREE.RedFormat;t.type=THREE.UnsignedByteType;t.minFilter=t.magFilter=THREE.NearestFilter;t.unpackAlignment=1;t.needsUpdate=true;return t};
-const makeChildTexture=P=>{const g=P.child;if(!g?.ids)return null;const t=new THREE.Data3DTexture(g.ids,...g.dims); // the child segments' own index (0 none, 1..N = child j + 1), nearest, the same grid as the results' index
- t.format=THREE.RedFormat;t.type=THREE.UnsignedByteType;t.minFilter=t.magFilter=THREE.NearestFilter;t.unpackAlignment=1;t.needsUpdate=true;return t};
+const makeRegionTexture=P=>{const g=P.region;if(!g?.data||!g.rg)return null;const t=new THREE.Data3DTexture(g.rg,...g.dims); // the GPU reads the per-result index (ids), not the per-colour one (data, kept for the histogram pass); an earlier change: RG8 (g.rg: R = ids, G = the hide index; the one array kept)
+ t.format=THREE.RGFormat;t.type=THREE.UnsignedByteType;t.minFilter=t.magFilter=THREE.NearestFilter;t.unpackAlignment=1;t.needsUpdate=true;return t};
+const makeChildTexture=P=>{const g=P.child;if(!g?.rg)return null;const t=new THREE.Data3DTexture(g.rg,...g.dims); // the child segments' own index (0 none, 1..N = child j + 1), nearest, the same grid as the results' index; an earlier change: RG8, G = the hide index
+ t.format=THREE.RGFormat;t.type=THREE.UnsignedByteType;t.minFilter=t.magFilter=THREE.NearestFilter;t.unpackAlignment=1;t.needsUpdate=true;return t};
 const makeEditTexture=P=>{if(!P.edit.data)return null;const e=new THREE.Data3DTexture(P.edit.data,...P.edit.dims);e.format=THREE.RGBAFormat;e.type=THREE.UnsignedByteType;e.unpackAlignment=1;return e};
 const makeComboTexture=(data,dims)=>{const x=new THREE.Data3DTexture(data,...dims);x.format=THREE.RGBAFormat;x.type=THREE.UnsignedByteType;x.minFilter=x.magFilter=THREE.LinearFilter;x.unpackAlignment=1;x.needsUpdate=true;return x};
 // the fourth stored segment's classification bytes (R8, trilinear like the combined texture)
@@ -1290,7 +1448,7 @@ const rayMaterialOf=m=>{const r=m.clone();r.uniforms=m.uniforms;r.defines={...m.
 const rayVariantsOf=vars=>Object.fromEntries(Object.entries(vars).map(([k,m])=>[k,rayMaterialOf(m)]));
 const volumeUniforms=(vd,full,settings)=>({vol:{value:full.v},bricks:{value:full.b},halfExt:{value:new THREE.Vector3(...vd.halfExt)},boxC:{value:new THREE.Vector3()},boxH:{value:new THREE.Vector3()},boxEntry:{value:0},texDims:{value:new THREE.Vector3(...vd.dims)},brickDims:{value:new THREE.Vector3(...vd.brickDims)},
  stepSize:{value:vd.step},diag:{value:0},calib:{value:new THREE.Vector3(...vd.calibration)},segA:{value:[0,1,2,3].map(()=>new THREE.Vector4())},segC:{value:[0,1,2,3].map(()=>new THREE.Vector4())},ctShade:{value:1},ctShadeBright:{value:1.8},ctShadeContrast:{value:1.7},ctShadeRange:{value:[0,1,2,3].map(()=>new THREE.Vector2(0,1))},sliceSegOnly:{value:0},segM:{value:[0,1,2,3].map(()=>new THREE.Vector4(...materialVec('standard')))},
- cutPlanes:{value:Array.from({length:MAX_SECTION_PLANES},()=>new THREE.Vector4(0,0,1,0))},planeCount:{value:0},planeCut:{value:0},capOn:{value:1},sliceTint:{value:0.45},sliceOpacity:{value:0},sliceWindow:{value:new THREE.Vector2(0,1)},sliceAir:{value:-600},regionTex:{value:null},regionLut:{value:null},regionAnyHidden:{value:1},childTex:{value:null},childLut:{value:null},sliceVol:{value:full.v},refine:{value:settings.refine|0},useCls:{value:0},clsTex:{value:null},cls4Tex:{value:null},useSkip:{value:0},skipTex:{value:skipDummy()},clsChan:{value:new THREE.Vector4(-1,-1,-1,-1)},editMask:{value:0},editMaskOnly:{value:0},editTex:{value:null},useDist:{value:0},distInCls:{value:0},distTex:{value:null},voxelMin:{value:1},voxelSize:{value:new THREE.Vector3(1,1,1)}});
+ cutPlanes:{value:Array.from({length:MAX_SECTION_PLANES},()=>new THREE.Vector4(0,0,1,0))},planeCount:{value:0},planeCut:{value:0},capOn:{value:1},sliceTint:{value:0.45},sliceOpacity:{value:0},sliceWindow:{value:new THREE.Vector2(0,1)},sliceAir:{value:-600},regionTex:{value:null},regionLut:{value:null},regionAnyHidden:{value:1},childAnyHidden:{value:0},childTex:{value:null},childLut:{value:null},sliceVol:{value:full.v},refine:{value:settings.refine|0},useCls:{value:0},clsTex:{value:null},cls4Tex:{value:null},useSkip:{value:0},skipTex:{value:skipDummy()},clsChan:{value:new THREE.Vector4(-1,-1,-1,-1)},editMask:{value:0},editMaskOnly:{value:0},editTex:{value:null},useDist:{value:0},distInCls:{value:0},distTex:{value:null},voxelMin:{value:1},voxelSize:{value:new THREE.Vector3(1,1,1)}});
 // ---- GPU preparation before the session ----
 // The renderer (an XR-compatible context), the textures of the grid in use, the
 // combined classification + field texture for the shown segments, the edit mask
@@ -1362,7 +1520,7 @@ export async function prepareVrGpu(P,mode='vr',settings=loadSettings()){
   times.upload=performance.now()-t0;const t1=performance.now();
   // compile every program the session can use: the three volume variants, their offscreen (no blending) copies and the composite
   const u=volumeUniforms(vd,full,settings),dummy=new THREE.Data3DTexture(new Uint8Array(4),1,1,1);dummy.format=THREE.RGBAFormat;dummy.needsUpdate=true;
-  u.clsTex.value=dummy;u.cls4Tex.value=dummy;u.editTex.value=dummy;u.distTex.value=dummy;u.regionTex.value=dummy;u.childTex.value=dummy;u.childLut.value=dummyLut();
+  u.clsTex.value=dummy;u.cls4Tex.value=dummy;u.editTex.value=dummy;u.distTex.value=dummy;u.regionTex.value=dummy;u.childTex.value=dummy;u.childLut.value=dummyLut();u.childAnyHidden.value=0;
   const base=new THREE.ShaderMaterial({glslVersion:THREE.GLSL3,vertexShader,fragmentShader,side:THREE.BackSide,toneMapped:false,uniforms:u,defines:definesOfKey(setKeyOf(P))});
   base.transparent=false;base.depthWrite=true;base.blending=THREE.CustomBlending;base.blendSrc=THREE.OneFactor;base.blendDst=THREE.OneMinusSrcAlphaFactor;
   const vars=materialVariants(base),keys=four?[...VARIANT_KEYS,...VARIANT_KEYS4]:VARIANT_KEYS;
@@ -1440,7 +1598,7 @@ const ownBuffer=a=>a.byteOffset===0&&a.byteLength===a.buffer.byteLength?a.buffer
 // level (the real keys need the page's state; the prefetched entries are used only when the page's own keys come out the same). Every key is made of hashed parts (partsOf), so a miss can say what changed.
 // The keys no longer contain the build number (a new build keeps the entries); the 'build' tag in an entry's info is kept for diagnostics only. Version 3: the key format changed, so the entries of version 2 are cleaned up.
 // tests/unit/vr-prep-version-guard.test.js fails when the generating sources change without this number being bumped.
-const VR_PREP_VERSION=7;
+const VR_PREP_VERSION=10; // an earlier change: 8 = the analysis / child indexes carry the hide index (vr-volume-prep.js hideIndexOf); the entries of 7 have none; 9 = each index is ONE RG array (regionRg / childRg: R colour, G hide) and an overlap goes to the item with fewer voxels; 10 = on a reduced grid a grid voxel goes to the item with fewer voxels among those with any voxel in it (no plurality)
 let vrCacheNotify=null; // the session sets it: the 詳細 tab redraws when a store makes progress
 const vrCacheState={last:null,cap:null}; // last: what the latest preparation did with the cache (cinfo); cap: the storage numbers (refreshVrCapacity)
 async function vrCacheContext(inp,maxDim){
@@ -1496,10 +1654,10 @@ const vrVolumeEntryOk=(V,dims)=>{try{const m=V.meta,a=V.arrays;if(m.dims.join()!
  if(m.half&&(!a.halfData||a.halfData.length!==prod(m.half.dims)*2||!a.halfBricks||a.halfBricks.length!==prod(m.half.brickDims)*4))return false;return true}catch{return false}};
 const vrDerivedEntryOk=(D,small)=>{try{const m=D.meta,a=D.arrays,n=prod(small.dims);if(m.dims.join()!==small.dims.join())return false;
  if(m.cls&&(!a.clsData||a.clsData.length!==n*m.cls.C))return false;if(m.dist&&(!m.cls||!a.distData||a.distData.length!==n*m.dist.C))return false;
- if(m.edit.hasData&&(!a.editData||a.editData.length!==n*4))return false;if(m.combo&&(!a.combo||a.combo.length!==n*4))return false;return true}catch{return false}};
+ if(m.edit.hasData&&(!a.editData||a.editData.length!==n*4))return false;if((a.regionRg&&a.regionRg.length!==n*2)||(a.childRg&&a.childRg.length!==n*2))return false;if(m.combo&&(!a.combo||a.combo.length!==n*4))return false;return true}catch{return false}};
 const vrDerivedFromEntry=(D,small)=>{const m=D.meta,a=D.arrays;
  return{edit:{dims:small.dims,data:a.editData||null,active:m.edit.active|0,maskOnly:m.edit.maskOnly|0},cls:m.cls?{data:a.clsData,C:m.cls.C,chan:m.cls.chan}:null,dist:m.dist?{data:a.distData,C:m.dist.C,chan:m.dist.chan}:null,
-  region:{dims:small.dims,data:a.regionData||null,ids:a.regionIds||null,colors:m.region.colors,segs:m.region.segs,list:m.region.list},child:m.child&&a.childIds?{dims:small.dims,ids:a.childIds,list:m.child.list}:null,combo:m.combo?{data:a.combo,mask:m.combo.mask,dims:m.combo.dims}:null,cls4:a.cls4||null,occFull:a.occFull||null,occHalf:a.occHalf||null}};
+  region:{dims:small.dims,data:a.regionData||null,rg:a.regionRg||null,colors:m.region.colors,segs:m.region.segs,list:m.region.list},child:m.child&&a.childRg?{dims:small.dims,rg:a.childRg,list:m.child.list}:null,combo:m.combo?{data:a.combo,mask:m.combo.mask,dims:m.combo.dims}:null,cls4:a.cls4||null,occFull:a.occFull||null,occHalf:a.occHalf||null}};
 // what the 詳細 tab / the prepare panel say about the cache (plain words; the numbers come from vrCacheState and storeStatus)
 const VR_PART_NAMES={ja:{dataset:'データ',filter:'フィルター',plan:'グリッド',brick:'ブリック',side:'解像度',prep:'処理版',build:'ビルド',v:'体積',dims:'サイズ',order:'セグメント順',state:'セグメント範囲',mask:'表示セグメント',calib:'校正',edit:'加工マスク',region:'解析領域',bricks:'ブリック'},
  en:{dataset:'data',filter:'filter',plan:'grid',brick:'bricks',side:'resolution',prep:'prep version',build:'build',v:'volume',dims:'size',order:'segment order',state:'segment ranges',mask:'shown segments',calib:'calibration',edit:'processing mask',region:'analysis results',bricks:'bricks'}};
@@ -1554,7 +1712,7 @@ function scheduleVrCacheStore(vc,P,keyD,hashD,cinfo,gen,aliasId,fresh,dropped=nu
  const tasks=[];
  const keepBody=!P.half; // the body of the entry: the one grid of a data without a 256 copy; beside a 256 copy no 512 body is stored (the cross-sections' 512 grid comes from the page's own cached 3D volume)
  if(cinfo.derived==='miss'&&keyD)tasks.push({kind:'vr-derived',key:keyD,parts:hashD,meta:{dims:(P.half||P.vd).dims,edit:{hasData:!!P.edit.data,active:P.edit.active|0,maskOnly:P.edit.maskOnly|0},cls:P.cls?{C:P.cls.C,chan:P.cls.chan}:null,dist:P.dist?{C:P.dist.C,chan:P.dist.chan}:null,
-  region:{colors:P.region.colors,segs:P.region.segs,list:P.region.list},...(P.child?{child:{list:P.child.list}}:{}),combo:P.combo?{mask:P.combo.mask,dims:P.combo.dims}:null},arrays:[['editData',P.edit.data],['clsData',P.cls?.data],['distData',P.dist?.data],['regionData',P.region.data],['regionIds',P.region.ids],['childIds',P.child?.ids],['combo',P.combo?.data],['cls4',P.cls4],['occFull',P.occFull],['occHalf',P.occHalf]]});
+  region:{colors:P.region.colors,segs:P.region.segs,list:P.region.list},...(P.child?{child:{list:P.child.list}}:{}),combo:P.combo?{mask:P.combo.mask,dims:P.combo.dims}:null},arrays:[['editData',P.edit.data],['clsData',P.cls?.data],['distData',P.dist?.data],['regionData',P.region.data],['regionRg',P.region.rg],['childRg',P.child?.rg],['combo',P.combo?.data],['cls4',P.cls4],['occFull',P.occFull],['occHalf',P.occHalf]]});
  if(cinfo.volume==='miss'){const vd=P.vd,h=P.half;tasks.push({kind:'vr-volume',key:vc.keyV,parts:vc.hashes,meta:{dims:vd.dims,brickDims:vd.brickDims,half:h?{dims:h.dims,brickDims:h.brickDims}:null},arrays:[['data',keepBody?vd.data:null],['bricks',vd.bricks],['halfData',h?.data],['halfBricks',h?.bricks]]})}
  for(const t of tasks)noteStore(t.key,{kind:t.kind,state:'saving',written:0,total:1,bytes:0});
  const run=async()=>{
@@ -1953,7 +2111,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
   const c=highlightColor(hlRgb2,base,-(childByKey(e.key)?.id||0)===highlightChildRid?'on':'other');a[o]=c[0];a[o+1]=c[1];a[o+2]=c[2]};
  const hlRgb2=[0,0,0],hlBase2=[0,0,0];let childHlLit=false;
  const refreshChildLut=()=>{
-  if(!childList.length){if(material&&material.uniforms.childLut.value!==dummyLut())material.uniforms.childLut.value=dummyLut();return}
+  if(!childList.length){if(material&&material.uniforms.childLut.value!==dummyLut())material.uniforms.childLut.value=dummyLut();if(material)material.uniforms.childAnyHidden.value=0;return}
   childHlLit=highlightChildRid?childHlAt()>=0:false; // only a lit CHILD changes this table (a lit result leaves the children as they were); nothing lit (the usual): no work below
   const a=getChildLut().image.data,R=256*4,ents=new Map(childRenderEntries().map(x=>[x.key,x]));a.fill(0); // the render hand-off (segments.js): colour, shown flag, the shading range in use (the user's, else the auto value, else the parent's min..max)
   childList.forEach((e,j)=>{const idx=j+1,en=idx<256?ents.get(e.key):null;if(!en)return;
@@ -1963,6 +2121,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    {const mt=MATERIALS[materialKey(en.material)];a[2*R+o]=mt.ambient;a[2*R+o+1]=mt.spec;a[2*R+o+2]=mt.shininess;a[2*R+o+3]=Number.isFinite(en.opacity)?Math.min(1,Math.max(0,en.opacity)):1} // row 2: the child's own material and opacity (a hit on it is lit / blended with these, not with its parent's)
    a[R+o]=lo;a[R+o+1]=Math.max(hi,lo+1e-3);a[R+o+2]=!hid&&(segMode[e.key]|0)===1?m:0;a[R+o+3]=hid?m:0});
   {const lut=getChildLut();lut.needsUpdate=true;if(material)material.uniforms.childLut.value=lut}
+  {let any=0;for(let j=1;j<=childList.length&&j<256;j++)if(a[R+j*4+3]>0){any=1;break}if(material)material.uniforms.childAnyHidden.value=any} // an earlier change: from the table just written (the loops' per-sample hidden test runs only while this or regionAnyHidden is 1)
  };
  const msets=new Map(),swapGuard=createSwapGuard(),frameGaps=createFrameGapMonitor(),swapMade=[];
  let swapOwn=null; // the longest synchronous pieces of THIS module's own switch work (ms): what the switch itself holds the main thread for, apart from the page's loading and the platform's waits
@@ -2083,20 +2242,20 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
   for(let i=0;i<4;i++){const a=u.segA.value[i];o[6+2*i]=cls?0:a.x;o[7+2*i]=cls?0:a.y}
   if(childList.length){let rh=regionShownSig();const hs=childHideSig();for(let i=0;i<hs.length;i++)rh=(Math.imul(rh,31)+hs.charCodeAt(i))|0;o[14]=rh} // a child shown / hidden counts again; without children it is exactly the cached regionShownSig below
   else o[14]=regionShownSig()};
- // the colour index the board counts by (P.region.data) without the hidden results' voxels (their ids are looked up in P.region.ids), and the slot bits of the SHOWN results per colour; a copy only while something is hidden
+ // the colour index the board counts by (P.region.data) without the hidden results' voxels (their ids are looked up in P.region.rg, R = every second byte), and the slot bits of the SHOWN results per colour; a copy only while something is hidden
  let histRegCache=null;
  const histRegionOf=P=>{const g=P.region,ch=P.child;
   // the voxels of a HIDDEN child segment are not counted as its segment (they are not drawn): they get the marker 200 + slot in the result index stream (the kernel skips that slot's pick there), without exception
   // them. A copy only while a child is hidden; without children this is the function it always was.
-  const hk=[];if(ch?.ids&&childList.length&&ch.dims.join()===(g?.dims||ch.dims).join()){const a=getChildLut().image.data;for(let j=0;j<childList.length;j++){const m=childList[j].segMask|0;if(a[1024+(j+1)*4+3]>0&&m){const sl=31-Math.clz32(m);hk.push([j+1,200+sl])}}}
+  const hk=[];if(ch?.rg&&childList.length&&ch.dims.join()===(g?.dims||ch.dims).join()){const a=getChildLut().image.data;for(let j=0;j<childList.length;j++){const m=childList[j].segMask|0;if(a[1024+(j+1)*4+3]>0&&m){const sl=31-Math.clz32(m);hk.push([j+1,200+sl])}}}
   if(!g?.data&&!hk.length)return null;
   const list=g?.list||[],colors=g?.colors||[],segs=colors.map(()=>0),hid=[],hr=[],lt=regionLut.image.data;
   // an earlier change: a result whose SHAPE is hidden is counted as a hidden child is: its voxels carry the marker 200 + its slot (the lowest slot of the table's hide bits; a result is one segment's unless merged across segments)
-  list.forEach((e,i)=>{const hs=i+1<256?regionLutHiddenSlots(lt[(i+1)*4+3]):0;if(hs&&g?.ids){hr.push([i+1,200+31-Math.clz32(hs&-hs)]);return}if(!regionShownVr(e.rid)){hid.push(i+1);return}const k=colors.indexOf(e.color);if(k>=0)segs[k]|=e.segMask|0});
+  list.forEach((e,i)=>{const hs=i+1<256?regionLutHiddenSlots(lt[(i+1)*4+3]):0;if(hs&&g?.rg){hr.push([i+1,200+31-Math.clz32(hs&-hs)]);return}if(!regionShownVr(e.rid)){hid.push(i+1);return}const k=colors.indexOf(e.color);if(k>=0)segs[k]|=e.segMask|0});
   if(!hid.length&&!hk.length&&!hr.length)return{data:g.data,dims:g.dims,segs};
-  const dims=g?.dims||ch.dims,key=hid.join()+'|'+hk.map(x=>x[0]).join()+'|'+hr.map(x=>x[0]+':'+x[1]).join();if(!histRegCache||histRegCache.P!==P||histRegCache.key!==key){const d=g?.data?g.data.slice():new Uint8Array(dims[0]*dims[1]*dims[2]),h=new Uint8Array(256);for(const i of hid)h[i]=1;if(g?.ids)for(let i=0;i<d.length;i++)if(h[g.ids[i]])d[i]=0;
-   if(hr.length){const mr=new Uint8Array(256);for(const [id,v] of hr)mr[id]=v;const ids=g.ids;for(let i=0;i<d.length;i++){const v=mr[ids[i]];if(v)d[i]=v}}
-   if(hk.length){const mk=new Uint8Array(256);for(const [id,v] of hk)mk[id]=v;const ids=ch.ids;for(let i=0;i<d.length;i++){const v=mk[ids[i]];if(v)d[i]=v}}histRegCache={P,key,data:d}}
+  const dims=g?.dims||ch.dims,key=hid.join()+'|'+hk.map(x=>x[0]).join()+'|'+hr.map(x=>x[0]+':'+x[1]).join();if(!histRegCache||histRegCache.P!==P||histRegCache.key!==key){const d=g?.data?g.data.slice():new Uint8Array(dims[0]*dims[1]*dims[2]),h=new Uint8Array(256);for(const i of hid)h[i]=1;if(g?.rg){const rg=g.rg;for(let i=0;i<d.length;i++)if(h[rg[2*i]])d[i]=0}
+   if(hr.length){const mr=new Uint8Array(256);for(const [id,v] of hr)mr[id]=v;const rg=g.rg;for(let i=0;i<d.length;i++){const v=mr[rg[2*i]];if(v)d[i]=v}}
+   if(hk.length){const mk=new Uint8Array(256);for(const [id,v] of hk)mk[id]=v;const rg=ch.rg;for(let i=0;i<d.length;i++){const v=mk[rg[2*i]];if(v)d[i]=v}}histRegCache={P,key,data:d}}
   return{data:histRegCache.data,dims,segs,hk:hk.length>0||hr.length>0}}; // hk: a child or a result is hidden (the counting kernel then looks for the marker 200 + slot)
  const histInput=(s=histSig)=>{const P=histP,g=s[2]>0||!P.vd.data?P.half||P.vd:P.vd,v=gpuVolumeTarget(),mask=s[0],dr=shadeDataRange(),ax=dr?dataAxis():null,br=ax&&!ax.hu?{min:ax.min,max:ax.max}:null; // build after 703: data that is not CT-like (MRI 0..65535, 8-bit, slope-scaled) is counted in equal bins over its own range (binRange), CT stays in 1-HU bins
   return{key:P.key+'|'+s.join(',')+(br?'|ax'+br.min+':'+br.max:''),binRange:br,grid:g,shownMask:mask,volDims:v?[v.columns,v.rows,v.slices]:g.dims,
@@ -2634,13 +2793,13 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
  const volumeHit=c=>{if(c)setRay(c);return volumeHitRay()};
  // the laser goes through a HIDDEN child segment (invisible: the shader keeps marching there): null when no child is hidden, else (x,y,z) -> is that voxel inside a hidden child (childLut row 1, hidden mask)
  const childHideSig=()=>{if(!childList.length)return '';const a=getChildLut().image.data;let t='';for(let j=0;j<childList.length;j++)t+=a[1024+(j+1)*4+3]>0?'1':'0';return t+regionList.map(e=>regionShownVr(e.rid)?1:0).join('')}; // which children are hidden (and which results shown): the inputs of the hidden tests
- const hiddenChildVoxel=()=>{const vp=volPick,ch=P?.child;if(!ch?.ids||!childList.length||!vp||ch.dims.join()!==vp.dims.join())return null;const a=getChildLut().image.data;let any=false;for(let j=0;j<childList.length;j++)if(a[1024+(j+1)*4+3]>0){any=true;break}if(!any)return null;
-  // the shader's rule, per hit CHANNEL: a child hides only the slot of its parent (hiddenMask bit of the slot the hit belongs to), without exception
+ const hiddenChildVoxel=()=>{const vp=volPick,ch=P?.child;if(!ch?.rg||!childList.length||!vp||ch.dims.join()!==vp.dims.join())return null;const a=getChildLut().image.data;let any=false;for(let j=0;j<childList.length;j++)if(a[1024+(j+1)*4+3]>0){any=true;break}if(!any)return null;
+  // the shader's rule, per hit CHANNEL: a child hides only the slot of its parent (hiddenMask bit of the slot the hit belongs to), without exception; an earlier change: looked up in the hide index (the shader's G channel)
   const slotOf=new Int8Array(8).fill(-1);vp.cls.chan.forEach((c,sl)=>{if(c>=0&&c<8)slotOf[c]=sl});
-  const w=ch.dims[0],h=ch.dims[1],ids=ch.ids;return(x,y,z,c)=>{const k=x+w*(y+h*z),id=ids[k];if(!id)return false;const sl=slotOf[c];return sl>=0&&((Math.round(a[1024+id*4+3])>>sl)&1)===1}};
+  const w=ch.dims[0],h=ch.dims[1],rg=ch.rg;return(x,y,z,c)=>{const k=x+w*(y+h*z),id=rg[2*k+1];if(!id)return false;const sl=slotOf[c];return sl>=0&&((Math.round(a[1024+id*4+3])>>sl)&1)===1}};
  // an earlier change: the laser / the points / the section tissue go through a HIDDEN result too (the shader's rule: its texel's hide bits, on the slot of the hit channel), the same way as through a hidden child. hiddenVoxel = both
  // (null when nothing is hidden: the march is the one it always was). regionHideSig: which results are hidden (an input of the probe / embedded-card gates)
- const hiddenRegionVoxel=()=>{const vp=volPick;return vp?.ids&&material?hiddenRegionVoxelOf(vp.ids,vp.dims,regionLut.image.data,vp.cls.chan):null};
+ const hiddenRegionVoxel=()=>{const vp=volPick;return vp?.rg&&material?hiddenRegionVoxelOf(vp.rg,vp.dims,regionLut.image.data,vp.cls.chan,2,1):null}; // an earlier change: the hide index (the shader's G channel), not the grown colour index
  const hiddenVoxel=()=>anyHiddenVoxel(hiddenChildVoxel(),hiddenRegionVoxel());
  const regionHideSig=()=>{const a=regionLut.image.data;let t='';for(let i=1;i<=regionList.length&&i<256;i++)t+=regionLutHiddenSlots(a[i*4+3])?'1':'0';return t};
  const volumeHitRay=()=>{
@@ -2650,11 +2809,11 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
   const u=material.uniforms,hi=marchClassificationHitInfo(o,q,vp.halfExt,vp.dims,vp.cls,chs,u.cutPlanes.value,u.planeCount.value,u.planeCut.value,0,Infinity,hiddenVoxel());
   if(!hi)return null;
   // what was hit — the segment (channel → segment) and the result at that voxel (list position, 0 = none)
-  const si=vp.cls.chan.indexOf(hi.ch),[w,h]=vp.dims,id0=vp.ids?vp.ids[hi.x+w*(hi.y+h*hi.z)]:0,id=id0&&!regionCountedVr(regionList[id0-1]?.rid)?0:id0;
+  const si=vp.cls.chan.indexOf(hi.ch),[w,h]=vp.dims,hk=hi.x+w*(hi.y+h*hi.z),idR=vp.rg?vp.rg[2*hk]:0,idG=vp.rg?vp.rg[2*hk+1]:0,id0=idR&&regionHiddenVr(regionList[idR-1]?.rid)&&idG!==idR?idG:idR,id=id0&&!regionCountedVr(regionList[id0-1]?.rid)?0:id0;
   // the hit voxel in the data's grid (surface mode records it; the same march, nothing is marched twice)
   const voxel=vrHalfExt&&vrDims&&surfaceActive()?surfaceVoxelFromHit(hi,o,q,{halfExt:vrHalfExt,dims:vrDims,clsDims:vp.dims}):null;
   // the CHILD segment at that voxel (its own index texture, the same grid; shown ones only: a hidden child is skipped by the march above), also where a result covers it (both get a card: hitLabelRids): its name card, its pin
-  let childKey='';{const ch=P?.child;if(ch?.ids&&childList.length&&ch.dims.join()===vp.dims.join())childKey=childKeyAtHit(ch.ids,childList,hi.x+w*(hi.y+h*hi.z),si)}
+  let childKey='';{const ch=P?.child;if(ch?.rg&&childList.length&&ch.dims.join()===vp.dims.join()){const ca=getChildLut().image.data,k2=2*(hi.x+w*(hi.y+h*hi.z)),cr=ch.rg[k2],off=cr&&si>=0&&((Math.round(ca[1024+cr*4+3])>>si)&1)===1?1:0;childKey=childKeyAtHit(ch.rg,childList,k2+off,si)}} // an earlier change: R (rg[2 k]); a HIDDEN child there: G (rg[2 k + 1]), as the shader's material
   return{distance:hi.t,key:gpuSegmentOrder()[si]||'',id,childKey,voxel,local:new THREE.Vector3(o.x+q.x*hi.t,o.y+q.y*hi.t,o.z+q.z*hi.t)};
  };
  // HU line (vr-hu-line.js): armed from the HU線 tab; the trigger on the volume (or the selected section when no tissue is under the laser) stretches a line, shared with the 2D / 3D views
@@ -4459,10 +4618,10 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
     if(have===want)return;
     childSyncBusy=true;const P0=P,seq=++childSyncSeq;
     try{
-     const v=gpuVolumeTarget(),dims=(P0.half||P0.vd).dims,child=v&&items.length?buildChildIndexOf(items,[v.columns,v.rows,v.slices],dims):null,Pn={...P0,child},st=getSet(Pn);
+     const v=gpuVolumeTarget(),dims=(P0.half||P0.vd).dims,child=v&&items.length?packIndexRg(buildChildIndexOf(items,[v.columns,v.rows,v.slices],dims)):null,Pn={...P0,child},st=getSet(Pn);
      if(child?.dropped)console.warn('VR child segments: '+child.dropped+' child segment(s) beyond the 255th are not drawn in VR');
      await compileSet(Pn,st);
-     let tex=null;if(child){const k='child'+seq;tex=slicedTexture(k,child.ids,child.dims,1,THREE.RedFormat,THREE.UnsignedByteType,THREE.NearestFilter);await uploadQueue.whenDone(k)}
+     let tex=null;if(child){const k='child'+seq;tex=slicedTexture(k,child.rg,child.dims,2,THREE.RGFormat,THREE.UnsignedByteType,THREE.NearestFilter);await uploadQueue.whenDone(k)} // an earlier change: R = colour index, G = hide index
      if(!running||P!==P0){tex?.dispose();return} // the session ended / the data was switched meanwhile: the switch binds its own
      const old=childTex;P.child=child;childList=child?child.list:[];childTex=tex;
      if(st.k!==setKey)adoptSet(st);
@@ -4480,7 +4639,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    vrHalfExt=vd.halfExt;vrDims=activeSeries?{columns:activeSeries.columns,rows:activeSeries.rows,slices:activeSeries.slices.length}:null;vrFp=activeSeries?datasetFingerprint(activeSeries):null;vrSpacing=activeSeries?seriesSpacing(activeSeries):null;cancelMeasure();
    // classification texture from the prepared bytes (only on the ≤256 grid)
    // classification bytes for the laser's volume hit (the ≤256 grid they were built on)
-   volPick=P.cls?{cls:P.cls,dims:(P.half||vd).dims,halfExt:vd.halfExt,ids:P.region?.ids&&P.region.dims.join()===(P.half||vd).dims.join()?P.region.ids:null}:null;regionList=P.region?.list||[];evLabels=TRIGGER_AT_START==='label';initialVrModes(); // the data of this session is known: the trigger starts in point mode again (also when a level / dataset was changed since the page loaded)
+   volPick=P.cls?{cls:P.cls,dims:(P.half||vd).dims,halfExt:vd.halfExt,rg:P.region?.rg&&P.region.dims.join()===(P.half||vd).dims.join()?P.region.rg:null}:null;regionList=P.region?.list||[];evLabels=TRIGGER_AT_START==='label';initialVrModes(); // the data of this session is known: the trigger starts in point mode again (also when a level / dataset was changed since the page loaded)
    cbGrid=null;cbOff=null;cbSegOk=false;cbSl=null;cbAir=NaN;cbDirty=true;cbKey.fill(NaN);cbScan=createSegScan();cbSliceIdx=sliceIndex(vd);
    full=assets.full;half=assets.half;fullReady=assets.fullReady!==false;volTex=full.v;brickTex=full.b;
    childList=P.child?.list||[];four=P4(P);editTex=assets.edit;editActive=P.edit.active;regionTex=assets.region;childTex=assets.child||null;
@@ -4558,8 +4717,8 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    }
    const assets={full:plan.coarse==='half'?gridAsset(vdN,null,null):gt,half:plan.coarse==='half'?gt:null,edit:null,region:null,child:null,fullReady:plan.coarse!=='half'};
    if(Pn.edit.data){const f=(settings.editDiag|0)===1?THREE.NearestFilter:THREE.LinearFilter;assets.edit=slicedTexture(key('edit'),Pn.edit.data,Pn.edit.dims,4,THREE.RGBAFormat,THREE.UnsignedByteType,f);assets.edit.userData.up=true}
-   if(Pn.region?.data&&Pn.region.ids)assets.region=slicedTexture(key('region'),Pn.region.ids,Pn.region.dims,1,THREE.RedFormat,THREE.UnsignedByteType,THREE.NearestFilter);
-   if(Pn.child?.ids)assets.child=slicedTexture(key('child'),Pn.child.ids,Pn.child.dims,1,THREE.RedFormat,THREE.UnsignedByteType,THREE.NearestFilter);
+   if(Pn.region?.data&&Pn.region.rg)assets.region=slicedTexture(key('region'),Pn.region.rg,Pn.region.dims,2,THREE.RGFormat,THREE.UnsignedByteType,THREE.NearestFilter); // an earlier change: R = colour index, G = hide index
+   if(Pn.child?.rg)assets.child=slicedTexture(key('child'),Pn.child.rg,Pn.child.dims,2,THREE.RGFormat,THREE.UnsignedByteType,THREE.NearestFilter);
    syncDone(); // the textures are allocated (initTexture): the synchronous part of the step
    await Promise.all(keys.map(k=>uploadQueue.whenDone(k)));
    return assets;
@@ -4700,7 +4859,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
   // its own store (pt.store, vr-pair-store.js: never the project's); its bone name cards follow the primary's (below). Everything here is reached through `px` (assigned at the end of this block) and is a no-op without a partner.
   const pairChans=pt=>{const mask=pairShownMask(pt.order,pt.cls.chan,pairShownKey),chs=[];for(let i=0;i<4;i++)if(mask>>i&1&&pt.cls.chan[i]>=0)chs.push(pt.cls.chan[i]);return chs};
   const pairLive=()=>{const pt=pair;return pt&&pt.on&&pt.mesh.parent?pt:null};
-  const pairHiddenVoxel=pt=>pt?.vp?.ids&&pt.lut?hiddenRegionVoxelOf(pt.vp.ids,pt.vp.dims,pt.lut.image.data,pt.vp.cls.chan):null; // an earlier change: the partner's hidden results (pairRegionLut's hide bits), skipped as the primary's
+  const pairHiddenVoxel=pt=>pt?.vp?.rg&&pt.lut?hiddenRegionVoxelOf(pt.vp.rg,pt.vp.dims,pt.lut.image.data,pt.vp.cls.chan,2,1):null; // an earlier change: the partner's hidden results (pairRegionLut's hide bits), skipped as the primary's
   // the card of a partner result (the hover chip and the pinned name card): its colour and name are the primary's result of the same bone (atlas ID) when there is one, else its own
   const pairCard=(pt,e,p0)=>{ // p0: the primary's result of the same bone when the caller has it (pairPins), else looked up here
    const reg=e&&pt.regById.get(e.rid);if(!reg)return null;
@@ -4715,7 +4874,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    const vp=pt.vp,o=tmpVo.copy(raycaster.ray.origin),q=tmpVq.copy(o).add(raycaster.ray.direction);pt.mesh.worldToLocal(o);pt.mesh.worldToLocal(q);q.sub(o);
    const u=pt.u,hi=marchClassificationHitInfo(o,q,vp.halfExt,vp.dims,vp.cls,chs,u.cutPlanes.value,u.planeCount.value,u.planeCut.value,0,Infinity,pairHiddenVoxel(pt)); // an earlier change: through a hidden result (the partner's table)
    if(!hi)return null;
-   const si=vp.cls.chan.indexOf(hi.ch),[w,h]=vp.dims,id0=vp.ids?vp.ids[hi.x+w*(hi.y+h*hi.z)]:0,e=id0?pt.regionList[id0-1]:null,pp=e?pairPrimaryOf(pt,e):null,id=e&&(!pp||!regionHidden(pp))?id0:0; // a result the primary hides (its SHAPE) is not picked (as the primary's own; an earlier change stage 3: a colour-off one keeps its card)
+   const si=vp.cls.chan.indexOf(hi.ch),[w,h]=vp.dims,hk=hi.x+w*(hi.y+h*hi.z),idR=vp.rg?vp.rg[2*hk]:0,idG=vp.rg?vp.rg[2*hk+1]:0,hidOf=j=>{const q=j?pt.regionList[j-1]:null,qp=q?pairPrimaryOf(pt,q):null;return !!qp&&regionHidden(qp)},id0=idR&&hidOf(idR)&&idG!==idR?idG:idR,e=id0?pt.regionList[id0-1]:null,pp=e?pairPrimaryOf(pt,e):null,id=e&&(!pp||!regionHidden(pp))?id0:0; // an earlier change: a hidden colour-index result: the hide index's own (as the primary's pick) // a result the primary hides (its SHAPE) is not picked (as the primary's own; an earlier change stage 3: a colour-off one keeps its card)
    const voxel=surfaceActive()?surfaceVoxelFromHit(hi,o,q,{halfExt:vp.halfExt,dims:pt.srcDims,clsDims:vp.dims}):null;
    return{pair:true,distance:hi.t,key:pt.order[si]||'',id,pr:id?pairCard(pt,e):null,childKey:'',voxel,local:new THREE.Vector3(o.x+q.x*hi.t,o.y+q.y*hi.t,o.z+q.z*hi.t)};
   };
@@ -4857,13 +5016,13 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
     if(!cdata){cmask=pairShownMask(order,cls.chan,pairShownKey);cdata=combineClassificationDistance(cls,P2.dist,cmask,null,{four});if(!cdata)throw new Error('the partner classification is empty')}
     const gc=slicedTexture(K('combo'),cdata,dims,4,THREE.RGBAFormat,THREE.UnsignedByteType,THREE.LinearFilter,sink);
     const g4=four?slicedTexture(K('cls4'),P2.cls4||fourthChannelBytes(cls),dims,1,THREE.RedFormat,THREE.UnsignedByteType,THREE.LinearFilter,sink):null;
-    const rg=P2.region?.data&&P2.region.ids?slicedTexture(K('region'),P2.region.ids,P2.region.dims,1,THREE.RedFormat,THREE.UnsignedByteType,THREE.NearestFilter,sink):null;
+    const rg=P2.region?.data&&P2.region.rg?slicedTexture(K('region'),P2.region.rg,P2.region.dims,2,THREE.RGFormat,THREE.UnsignedByteType,THREE.NearestFilter,sink):null; // an earlier change: R = colour index, G = hide index
     if((await Promise.all(keys.map(k=>uploadQueue.whenDone(k)))).includes(false)){if(!live())throw new Error('cancelled');throw new Error('the partner upload did not finish')} // false: the job was dropped (a stop = cancelled, anything else = failed)
     if(!live())throw new Error('cancelled');
     const step=marchStep(vdN.halfExt,dims);
     u2=pairUniforms(volumeUniforms({halfExt:vdN.halfExt,dims,brickDims:grid.brickDims,step,calibration:vdN.calibration},{v:gv,b:gb},settings),unifs);
     u2.sliceVol.value=gv; // the 256 grid serves the partner's cross-sections too (stage 2: no 512 grid for the partner)
-    u2.useCls.value=1;u2.clsChan.value.set(...cls.chan);u2.clsTex.value=gc;u2.cls4Tex.value=g4||dummyEdit;u2.editTex.value=dummyEdit;u2.distTex.value=dummyEdit;u2.childTex.value=dummyEdit;u2.childLut.value=dummyLut();u2.skipTex.value=skipDummy();u2.regionTex.value=rg||dummyEdit;
+    u2.useCls.value=1;u2.clsChan.value.set(...cls.chan);u2.clsTex.value=gc;u2.cls4Tex.value=g4||dummyEdit;u2.editTex.value=dummyEdit;u2.distTex.value=dummyEdit;u2.childTex.value=dummyEdit;u2.childLut.value=dummyLut();u2.childAnyHidden.value=0;u2.skipTex.value=skipDummy();u2.regionTex.value=rg||dummyEdit;
     u2.voxelMin.value=Math.min(2*vdN.halfExt[0]/dims[0],2*vdN.halfExt[1]/dims[1],2*vdN.halfExt[2]/dims[2]);u2.voxelSize.value.set(...depthVoxelSize(vdN.halfExt,dims,[series.columns,series.rows,series.slices.length]));
     lut=new THREE.DataTexture(new Float32Array(256*4),256,1,THREE.RGBAFormat,THREE.FloatType);lut.minFilter=lut.magFilter=THREE.NearestFilter;lut.generateMipmaps=false;lut.needsUpdate=true;u2.regionLut.value=lut;
     // the program set of the partner's data (with / without analysis results; the same programs as the primary's when the defines agree), compiled BEFORE it is shown
@@ -4880,7 +5039,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
     const pt={job,P2,order,cls:{chan:cls.chan},four,u:u2,grid:{bricks:grid.bricks,brickDims:grid.brickDims,dims},cb:createContentBox(),t:{combo:gc,cls4:g4,comboMask:cmask,rb:null,dims,comboSrc:null},cls4On:false,reqMask:-1,mesh:m2,rayMesh:r2,comp,vars,rays,lut,regionList:P2.region?.list||[],atlasOf:new Map((inp.regions||[]).filter(r=>r.atlasId!=null).map(r=>[r.id,r.atlasId])),sink,delta,baseStep:step,segs:inp.segments,colors:inp.segmentColors,on:false,apos:new THREE.Vector3(),aquat:new THREE.Quaternion(),
      // stage 3: the picking / points / name cards of the partner
      fp:datasetFingerprint(series),srcDims:{columns:series.columns,rows:series.rows,slices:series.slices.length},halfExt:vdN.halfExt,spacing:seriesSpacing(series),
-     vp:{cls,dims,halfExt:vdN.halfExt,ids:P2.region?.ids&&P2.region.dims.join()===dims.join()?P2.region.ids:null}, // the classification stays on the CPU for the laser (P2.cls is let go below: the textures hold their own copies)
+     vp:{cls,dims,halfExt:vdN.halfExt,rg:P2.region?.rg&&P2.region.dims.join()===dims.join()?P2.region.rg:null}, // the classification stays on the CPU for the laser (P2.cls is let go below: the textures hold their own copies)
      regs:inp.regions||[],regById:new Map((inp.regions||[]).map(r=>[r.id,r])),entryOf:new Map((P2.region?.list||[]).map(e=>[e.rid,e])),cards:new Map(),pins:new Map(),sess:new Map(),
      store:createPairStore(),markers:null,measure:null,offStore:null,
      outline:(()=>{const bg=new THREE.BoxGeometry(1,1,1),g=new THREE.EdgesGeometry(bg);bg.dispose();const o=new THREE.LineSegments(g,new THREE.LineBasicMaterial({color:0xffffff,transparent:true,depthTest:false,depthWrite:false}));o.renderOrder=2;o.visible=false;o.frustumCulled=false;return o})()}; // the outline of the box a lit section belongs to (pairOutlineFrame): ONE line object, moved between the two boxes

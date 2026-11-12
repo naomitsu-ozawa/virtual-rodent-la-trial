@@ -42,13 +42,13 @@ export function regionLutAlpha(segMask,{shown=true,hidden=false,focused=false}={
 export const regionLutHiddenSlots=a=>(Math.round(+a||0)>>REGION_HIDE_SHIFT)&15;
 // the laser / point tests' skip function for the hidden results (the shader's rule on the CPU): ids = the result index per voxel of the pick grid (1..255, 0 = none; dims = [w, h, d]), lut = the table's
 // Float32Array (texel i at 4 i), chan = the classification channel of each slot (cls.chan). -> null when no result is hidden (nothing to skip), else (x, y, z, c) -> true when the voxel is a hidden result on the slot of channel c
-export function hiddenRegionVoxelOf(ids,dims,lut,chan){
+export function hiddenRegionVoxelOf(ids,dims,lut,chan,st=1,of=0){ // an earlier change: st / of = the index's stride and offset (2, 1: the G byte of an RG index array)
  if(!ids||!dims||!lut)return null;
  let any=false;for(let i=1;i<256&&4*i+3<lut.length;i++)if(regionLutHiddenSlots(lut[4*i+3])){any=true;break}
  if(!any)return null;
  const slotOf=new Int8Array(8).fill(-1);(chan||[]).forEach((c,sl)=>{if(c>=0&&c<8)slotOf[c]=sl});
  const w=dims[0],h=dims[1];
- return(x,y,z,c)=>{const id=ids[x+w*(y+h*z)];if(!id||4*id+3>=lut.length)return false;const sl=slotOf[c];return sl>=0&&((regionLutHiddenSlots(lut[4*id+3])>>sl)&1)===1};
+ return(x,y,z,c)=>{const id=ids[(x+w*(y+h*z))*st+of];if(!id||4*id+3>=lut.length)return false;const sl=slotOf[c];return sl>=0&&((regionLutHiddenSlots(lut[4*id+3])>>sl)&1)===1};
 }
 // two skip functions (a hidden child, a hidden result) as one: null when neither hides anything
 export const anyHiddenVoxel=(a,b)=>a&&b?(x,y,z,c)=>a(x,y,z,c)||b(x,y,z,c):(a||b||null);
