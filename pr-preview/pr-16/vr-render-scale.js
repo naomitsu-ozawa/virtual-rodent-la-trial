@@ -98,6 +98,18 @@ export function outsideFovea(e, r) {
   const ix = Math.max(0, Math.min(e.x1, r[2]) - Math.max(e.x0, r[0])), iy = Math.max(0, Math.min(e.y1, r[3]) - Math.max(e.y0, r[1]));
   return Math.max(0, e.cover - ix * iy);
 }
+// one MORE volume in the same volume pass (the partner of a sample pair). The two ray meshes are drawn into one low-resolution target at one render scale, so the ray
+// budget (N_MAX, "rays per frame") counts both: the covered pixels of the partner's eyes are added to the primary's (acc.cover), its detail need joins the primary's
+// (acc.need: the scale is one for both, every voxel of either keeps its pixel) and its pixels outside the fovea rect join the periphery count (acc.outside).
+// acc = { cover, outside, need } (reused, start from the primary's sums); e = eyeMetrics out of that volume for one eye, rFov = that eye's foveaRect (viewport px). Returns acc.
+// With no partner this is never called: a single volume is computed exactly as before.
+export function addVolumeEye(acc, e, rFov) {
+  acc.cover += e.cover;
+  if (e.cover > 0) acc.need = Math.max(acc.need, capFromPpv(e.ppvCenter, e.ppvFar));
+  acc.outside += outsideFovea(e, rFov);
+  return acc;
+}
+
 // is the offscreen foveation worth its second pass? The periphery pass ray-marches every covered pixel again at (f k)^2, the centre pass only the ones in
 // the rect at f^2: it pays off when more than k^2 of the covered pixels lie outside the rect (switched on above 1.25 k^2, off below 1.05 k^2: no flicker at
 // the threshold). A volume that fits in the rect (max zoom at arm's length) is drawn by the centre pass alone.
