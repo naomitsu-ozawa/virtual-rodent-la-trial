@@ -1,0 +1,26 @@
+Mouse brain and cerebrovasculature, photon-counting micro-CT, DICOM slices in this folder
+
+Attribution:
+  Data by Huang Siyi / Han Xin / Li Zuoyan / Zhou Enze / Wang Shaoyang / Liu Qian / Xie Tianwu
+  "A multi-material photon-counting micro-CT dataset of mouse brain with voxel-wise cerebrovascular annotations", Zenodo record 22092756
+  https://doi.org/10.5281/zenodo.22092756
+
+License:
+  Creative Commons Attribution 4.0 International (CC BY 4.0)
+  https://creativecommons.org/licenses/by/4.0/
+
+Changes made to the original data:
+  - cropped to the head and converted from NIfTI to DICOM; resampled along the slice axis from 670 to 512 slices (spacing 0.02292 mm -> 0.02999 mm)
+  - the bundled vessel mask is registered as the contrast segment, and the intracranial support region minus the vessels as the soft-tissue (brain) segment
+  - 3D reconstruction and rendering in this application
+  - stored values are photon-counting CT processed values, not calibrated Hounsfield units
+
+Terms in short (the license text at the link above is the only binding text):
+  - You may use and adapt the data, commercially or not, if you give appropriate credit.
+  - This license applies to the data in this folder only, not to the rest of this application.
+
+ライセンス表示（日本語）:
+  出典: Huang Siyi / Han Xin / Li Zuoyan / Zhou Enze / Wang Shaoyang / Liu Qian / Xie Tianwu（Zenodo 22092756）
+  ライセンス: CC BY 4.0
+  改変: 頭部範囲への切り出し、NIfTI から DICOM への変換、スライス方向のリサンプル、本アプリで3D再構成
+  出典を表示すれば、営利・非営利を問わず利用・改変できます。
