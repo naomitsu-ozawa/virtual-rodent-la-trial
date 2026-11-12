@@ -1,23 +1,23 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { mark3DStale } from './three-state.js?v=20261112-build721';
-import { $, footer, threeLabel, ctRangeAuto, ctRangeFull, wc, ww, sigmoidCenter, wcVal, wwVal, sigmoidCenterValue, segmentControls, segmentAddSelect, segmentAddButton } from './ui-shell.js?v=20261112-build721';
-import { sceneState, analysisRegions, childSegments, analysisFocusedRegionId, setAnalysisRegions, setAnalysisFocusedRegionId, setNextAnalysisRegionId, setNextAnalysisColorIndex, volume, segmentRenderTimer, incSourceRenderRevision, threeRenderMode, ctRangeMode, ctRangeProfile, setCtRangeMode, sourceVolume } from './state.js?v=20261112-build721';
-import { dispose } from './surface-mesh.js?v=20261112-build721';
-import { request3DRender } from './scene3d.js?v=20261112-build721';
-import { renderAnalysisResults, setAnalysisFocusedRegion, onAnalysisResultsRendered, removeAnalysisRegion } from './analysis-results.js?v=20261112-build721';
-import { setRegionVisible } from './region-visibility.js?v=20261112-build721';
-import { regionChipTitle } from './region-name.js?v=20261112-build721';
-import { buildSegmentTree, treeDefaultExpanded } from './segment-tree.js?v=20261112-build721';
-import { buildSegmentLookControls } from './segment-tree-ui.js?v=20261112-build721';
-import { childDisplayName, getFocusedChildKey, setFocusedChildKey, childVolumeMm3 } from './child-segments.js?v=20261112-build721';
-import { onChildSegmentsChange, addChildSegmentFromSelectedRegions, focusChildSegment } from './child-segments-ui.js?v=20261112-build721';
-import { analysisRegionSegmentsShown, segmentEditState, segmentEditGen, SEGMENT_PRESET_ORDER, segmentState, segmentExclusive, commitExclusiveRanges, gpuSegmentSignature, setChildLook, onChildSegLookChange } from './segments.js?v=20261112-build721';
-import { canEnableSegment } from './segment-slots.js?v=20261112-build721';
-import { tr } from './i18n.js?v=20261112-build721';
-import { niceCtStep, formatCtValue } from './utils.js?v=20261112-build721';
-import { syncGpuVolumeEdits } from './gpu-volume-data.js?v=20261112-build721';
-import { renderAll, analysisColorCss } from './mpr-render.js?v=20261112-build721';
+import { mark3DStale } from './three-state.js?v=20261112-build722';
+import { $, footer, threeLabel, ctRangeAuto, ctRangeFull, wc, ww, sigmoidCenter, wcVal, wwVal, sigmoidCenterValue, segmentControls, segmentAddSelect, segmentAddButton } from './ui-shell.js?v=20261112-build722';
+import { sceneState, analysisRegions, childSegments, analysisFocusedRegionId, setAnalysisRegions, setAnalysisFocusedRegionId, setNextAnalysisRegionId, setNextAnalysisColorIndex, volume, segmentRenderTimer, incSourceRenderRevision, threeRenderMode, ctRangeMode, ctRangeProfile, setCtRangeMode, sourceVolume } from './state.js?v=20261112-build722';
+import { dispose } from './surface-mesh.js?v=20261112-build722';
+import { request3DRender } from './scene3d.js?v=20261112-build722';
+import { renderAnalysisResults, setAnalysisFocusedRegion, onAnalysisResultsRendered, removeAnalysisRegion } from './analysis-results.js?v=20261112-build722';
+import { setRegionVisible } from './region-visibility.js?v=20261112-build722';
+import { regionChipTitle } from './region-name.js?v=20261112-build722';
+import { buildSegmentTree, treeDefaultExpanded } from './segment-tree.js?v=20261112-build722';
+import { buildSegmentLookControls } from './segment-tree-ui.js?v=20261112-build722';
+import { childDisplayName, getFocusedChildKey, setFocusedChildKey, childVolumeMm3 } from './child-segments.js?v=20261112-build722';
+import { onChildSegmentsChange, addChildSegmentFromSelectedRegions, focusChildSegment } from './child-segments-ui.js?v=20261112-build722';
+import { analysisRegionSegmentsShown, segmentEditState, segmentEditGen, SEGMENT_PRESET_ORDER, segmentState, segmentExclusive, commitExclusiveRanges, gpuSegmentSignature, setChildLook, onChildSegLookChange } from './segments.js?v=20261112-build722';
+import { canEnableSegment } from './segment-slots.js?v=20261112-build722';
+import { tr } from './i18n.js?v=20261112-build722';
+import { niceCtStep, formatCtValue } from './utils.js?v=20261112-build722';
+import { syncGpuVolumeEdits } from './gpu-volume-data.js?v=20261112-build722';
+import { renderAll, analysisColorCss } from './mpr-render.js?v=20261112-build722';
 export function installSegmentReorder(onCommit){
  let drag=null;
  const cards=()=>[...segmentControls.querySelectorAll('[data-segment]')];

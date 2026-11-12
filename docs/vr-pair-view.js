@@ -59,3 +59,22 @@ export function pairShownMask(order, chan, isShown) {
 // the shown set as the shader sees it (vr-view.js: the shown segments within the texture's safe mask; a segment just shown appears once its alpha is uploaded; `held` while none of the wanted ones is in it yet)
 export const pairHeldMask = (shown, safe) => (shown && !(shown & safe) ? safe : 0);
 export const pairSlotShown = (held, safe, i, shownHere) => ((held >> i & 1) || ((safe >> i & 1) && shownHere) ? 1 : 0);
+
+export function createAtlasIndex() {
+  let arr = null, builds = 0;
+  const refs = [], ids = [], map = new Map();
+  return {
+    get(list) {
+      let ok = arr === list && refs.length === list.length;
+      for (let i = 0; ok && i < list.length; i++) ok = refs[i] === list[i] && ids[i] === list[i].atlasId;
+      if (!ok) {
+        arr = list; refs.length = 0; ids.length = 0; map.clear(); builds++;
+        for (const r of list) { refs.push(r); ids.push(r.atlasId); if (!map.has(r.atlasId)) map.set(r.atlasId, r); }
+      }
+      return map;
+    },
+    get builds() { return builds; },
+  };
+}
+// the primary's result for atlas ID a (null / undefined: none; NaN: none, as === never matches it)
+export const atlasPrimary = (map, a) => (a == null || a !== a ? null : map.get(a) || null);
