@@ -1,23 +1,24 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { mark3DStale } from './three-state.js?v=20261110-build708';
-import { $, footer, threeLabel, ctRangeAuto, ctRangeFull, wc, ww, sigmoidCenter, wcVal, wwVal, sigmoidCenterValue, segmentControls, segmentAddSelect, segmentAddButton } from './ui-shell.js?v=20261110-build708';
-import { sceneState, analysisRegions, childSegments, analysisFocusedRegionId, setAnalysisRegions, setAnalysisFocusedRegionId, setNextAnalysisRegionId, setNextAnalysisColorIndex, volume, segmentRenderTimer, incSourceRenderRevision, threeRenderMode, ctRangeMode, ctRangeProfile, setCtRangeMode, sourceVolume } from './state.js?v=20261110-build708';
-import { dispose } from './surface-mesh.js?v=20261110-build708';
-import { request3DRender } from './scene3d.js?v=20261110-build708';
-import { renderAnalysisResults, setAnalysisFocusedRegion, onAnalysisResultsRendered, removeAnalysisRegion } from './analysis-results.js?v=20261110-build708';
-import { setRegionVisible } from './region-visibility.js?v=20261110-build708';
-import { regionChipTitle } from './region-name.js?v=20261110-build708';
-import { buildSegmentTree, treeDefaultExpanded } from './segment-tree.js?v=20261110-build708';
-import { buildSegmentLookControls } from './segment-tree-ui.js?v=20261110-build708';
-import { childDisplayName } from './child-segments.js?v=20261110-build708';
-import { onChildSegmentsChange, addChildSegmentFromSelectedRegions } from './child-segments-ui.js?v=20261110-build708';
-import { analysisRegionSegmentsShown, segmentEditState, segmentEditGen, SEGMENT_PRESET_ORDER, segmentState, segmentExclusive, commitExclusiveRanges, gpuSegmentSignature, setChildLook, onChildSegLookChange } from './segments.js?v=20261110-build708';
-import { canEnableSegment } from './segment-slots.js?v=20261110-build708';
-import { tr } from './i18n.js?v=20261110-build708';
-import { niceCtStep, formatCtValue } from './utils.js?v=20261110-build708';
-import { syncGpuVolumeEdits } from './gpu-volume-data.js?v=20261110-build708';
-import { renderAll, analysisColorCss } from './mpr-render.js?v=20261110-build708';
+import { mark3DStale } from './three-state.js?v=20261112-build725';
+import { $, footer, threeLabel, ctRangeAuto, ctRangeFull, wc, ww, sigmoidCenter, wcVal, wwVal, sigmoidCenterValue, segmentControls, segmentAddSelect, segmentAddButton } from './ui-shell.js?v=20261112-build725';
+import { sceneState, analysisRegions, childSegments, analysisFocusedRegionId, setAnalysisRegions, setAnalysisFocusedRegionId, setNextAnalysisRegionId, setNextAnalysisColorIndex, volume, segmentRenderTimer, incSourceRenderRevision, threeRenderMode, ctRangeMode, ctRangeProfile, setCtRangeMode, sourceVolume } from './state.js?v=20261112-build725';
+import { dispose } from './surface-mesh.js?v=20261112-build725';
+import { request3DRender } from './scene3d.js?v=20261112-build725';
+import { renderAnalysisResults, setAnalysisFocusedRegion, onAnalysisResultsRendered, removeAnalysisRegion } from './analysis-results.js?v=20261112-build725';
+import { setRegionVisible, setRegionHidden, regionVisible, regionHidden } from './region-visibility.js?v=20261112-build725';
+import { buildShowToggles } from './region-toggles.js?v=20261112-build725';
+import { regionChipTitle } from './region-name.js?v=20261112-build725';
+import { buildSegmentTree, treeDefaultExpanded } from './segment-tree.js?v=20261112-build725';
+import { buildSegmentLookControls } from './segment-tree-ui.js?v=20261112-build725';
+import { childDisplayName, getFocusedChildKey, setFocusedChildKey, childVolumeMm3 } from './child-segments.js?v=20261112-build725';
+import { onChildSegmentsChange, addChildSegmentFromSelectedRegions, focusChildSegment } from './child-segments-ui.js?v=20261112-build725';
+import { analysisRegionSegmentsShown, segmentEditState, segmentEditGen, SEGMENT_PRESET_ORDER, segmentState, segmentExclusive, commitExclusiveRanges, gpuSegmentSignature, setChildLook, onChildSegLookChange } from './segments.js?v=20261112-build725';
+import { canEnableSegment } from './segment-slots.js?v=20261112-build725';
+import { tr } from './i18n.js?v=20261112-build725';
+import { niceCtStep, formatCtValue } from './utils.js?v=20261112-build725';
+import { syncGpuVolumeEdits } from './gpu-volume-data.js?v=20261112-build725';
+import { renderAll, analysisColorCss } from './mpr-render.js?v=20261112-build725';
 export function installSegmentReorder(onCommit){
  let drag=null;
  const cards=()=>[...segmentControls.querySelectorAll('[data-segment]')];
@@ -76,15 +77,14 @@ export function renderSegmentTree(){
   if(!expanded)continue;
   const list=document.createElement('div');list.className='segment-tree-list';
   for(const r of g.rows){
-   const row=document.createElement('div');row.className='segment-tree-row'+(r.focused?' is-focused':'')+(r.visible?'':' is-off');row.dataset.regionId=String(r.id);
-   row.onclick=e=>{if(e.target.closest('button'))return;setAnalysisFocusedRegion(r.id)};
+   const row=document.createElement('div');row.className='segment-tree-row'+(r.focused?' is-focused':'')+(r.hidden?' is-off':'');row.dataset.regionId=String(r.id); // dimmed only while its SHAPE is hidden (a colour-off row keeps its look)
+   row.onclick=e=>{if(e.target.closest('button'))return;setFocusedChildKey(null);setAnalysisFocusedRegion(r.id)};
    const swatch=document.createElement('span');swatch.className='analysis-region-swatch';swatch.style.background=analysisColorCss(r.color);
    const name=document.createElement('strong');name.className='segment-tree-name';name.textContent=r.name;name.title=r.name;
-   const vis=document.createElement('button');vis.type='button';vis.className='analysis-region-button';vis.dataset.regionVisible=String(r.id);vis.textContent=r.visible?tr('hideRegion'):tr('showRegion');
-   // its segments all unticked: the region is hidden with them (as in the analysis list), so the button rests until a segment is ticked
-   if(!r.canToggle){vis.disabled=true;vis.title=tr('regionSegmentHidden')}
-   vis.onclick=()=>setRegionVisible(analysisRegions.find(x=>x.id===r.id),!r.visible);
-   row.append(swatch,name,vis);list.append(row);
+   // 色 (the colour only: region.visible) and 表示 (the shape: region.hidden), the analysis list's own two toggles. Its segments all unticked: the region is hidden with them (as in the analysis list), so both rest until a segment is ticked
+   const regionOf=()=>analysisRegions.find(x=>x.id===r.id);
+   const toggles=buildShowToggles({colorOn:r.visible,shapeOn:!r.hidden,canToggle:r.canToggle},{color:{attr:['regionVisible',String(r.id)],onClick:()=>{const g=regionOf();if(g)setRegionVisible(g,!regionVisible(g))}},shape:{attr:['regionHidden',String(r.id)],onClick:()=>{const g=regionOf();if(g)setRegionHidden(g,!regionHidden(g))}}});
+   row.append(swatch,name,toggles);list.append(row);
   }
   box.append(list);list.scrollTop=keep;
  }
@@ -111,7 +111,7 @@ export function renderChildTree(){
  syncChildAddButtons();
  const hasAny=childSegments.length>0;
  if(!hasAny&&!segmentControls.querySelector('[data-child-tree]'))return; // no child segment, no box: nothing to do (the usual data)
- const parentShown=c=>{const p=segmentState[c.parentKey];return !!(p?.active&&p?.enabled)};
+ const parentShown=c=>{const p=segmentState[c.parentKey];return !!(p?.active&&p?.enabled)},focusedKey=analysisFocusedRegionId==null?getFocusedChildKey():null; // a focused analysis region takes the focus (one at a time)
  // the rows of the child segments per parent preset (the tree's own rows: the analysis regions' tree code is not used here)
  const byKey=new Map();
  for(const c of childSegments){if(!segmentState[c.parentKey]?.active)continue;if(!byKey.has(c.parentKey))byKey.set(c.parentKey,{key:c.parentKey,count:0,rows:[]});const g=byKey.get(c.parentKey);g.count++;g.rows.push({id:c.id,name:childDisplayName(c,x=>tr('childSegment')+' '+x.id),visible:c.visible!==false,canToggle:parentShown(c)})}
@@ -130,15 +130,20 @@ export function renderChildTree(){
   const list=document.createElement('div');list.className='segment-tree-list';
   for(const r of g.rows){
    const c=childSegments.find(x=>x.id===r.id);if(!c)continue;
-   const row=document.createElement('div');row.className='segment-tree-row'+(r.visible?'':' is-off');row.dataset.childId=String(c.id);row.dataset.childKey=c.key;
+   const row=document.createElement('div');row.className='segment-tree-row'+(c.key===focusedKey?' is-focused':'')+(r.visible?'':' is-off');row.dataset.childId=String(c.id);row.dataset.childKey=c.key;
+   // a click on the row (not on a button or in the opened controls) focuses the child: the 2D slices move to it, its frame is drawn (child-segments-ui.js focusChildSegment), as the analysis regions' rows do
+   row.onclick=e=>{if(e.target.closest('button,input,select,label,.segment-tree-detail'))return;focusChildSegment(c.key)};
    const swatch=document.createElement('span');swatch.className='analysis-region-swatch';swatch.style.background=c.color;
    const name=document.createElement('strong');name.className='segment-tree-name';name.textContent=r.name;name.title=r.name;
-   const vis=document.createElement('button');vis.type='button';vis.className='analysis-region-button';vis.dataset.childVisible=c.key;vis.textContent=r.visible?tr('hideRegion'):tr('showRegion');
-   if(!r.canToggle){vis.disabled=true;vis.title=tr('regionSegmentHidden')} // its parent is unticked: it is hidden with it (the button rests)
-   vis.onclick=()=>setChildLook(c.key,{visible:!(c.visible!==false)});
+   // its volume (the analysis regions' rule: voxels x the voxel size, in mm³); nothing while the volume's voxel size is unknown
+   const mm3=childVolumeMm3(c,volume?.spacing),vol=document.createElement('span');vol.className='segment-tree-volume';vol.dataset.childVolume=c.key;vol.style.cssText='white-space:nowrap;font-variant-numeric:tabular-nums;font-size:11px;opacity:.8';
+   vol.textContent=mm3==null?'':mm3.toFixed(2)+' mm³';vol.title=c.voxels.toLocaleString()+' voxels';
+   // 色 (colour off / on: only the colour goes, the shape stays and is drawn in the parent's colour and material: colorOff, saved with the project) and 表示 (the shape: visible), the two toggles every row has (region-toggles.js; fixed wording, the state is the pressed look).
+   // The row is two lines (swatch + name + ▸, then the volume and the toggles: style.css) so the name keeps the whole first line. Its parent is unticked: it is hidden with it (both rest)
+   const toggles=buildShowToggles({colorOn:c.colorOff!==true,shapeOn:r.visible,canToggle:r.canToggle},{color:{attr:['childColorOff',c.key],onClick:()=>setChildLook(c.key,{colorOff:!(c.colorOff===true)})},shape:{attr:['childVisible',c.key],onClick:()=>setChildLook(c.key,{visible:!(c.visible!==false)})}});
    const open=childDetailOpen.has(c.key),more=document.createElement('button');more.type='button';more.className='analysis-region-button segment-tree-more';more.dataset.childMore=c.key;more.textContent=open?'▾':'▸';more.setAttribute('aria-expanded',String(open));more.title=tr('segmentSettings');more.setAttribute('aria-label',tr('segmentSettings'));
    more.onclick=()=>{if(childDetailOpen.has(c.key))childDetailOpen.delete(c.key);else childDetailOpen.add(c.key);renderChildTree()};
-   row.append(swatch,name,more,vis);
+   row.append(swatch,name,more,vol,toggles);
    if(open)row.append(buildSegmentLookControls(c.key));
    list.append(row);
   }
@@ -146,7 +151,7 @@ export function renderChildTree(){
  }
 }
 onChildSegmentsChange(renderChildTree);
-onChildSegLookChange((c,changed)=>{if(changed.some(k=>k==='visible'||k==='name'||k==='color'||k==='removed'))renderChildTree()});
+onChildSegLookChange((c,changed)=>{if(changed.some(k=>k==='visible'||k==='name'||k==='color'||k==='colorOff'||k==='removed'))renderChildTree()});
 export function renderSegmentPresets(){
  const active=new Set(SEGMENT_PRESET_ORDER.filter(key=>segmentState[key].active));
  // the cards stand in the priority order (top = first), see segment-exclusive.js

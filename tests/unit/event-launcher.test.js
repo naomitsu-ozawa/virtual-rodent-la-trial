@@ -32,7 +32,7 @@ describe('the datasets of the event page: ONE list', () => {
     // the three consumers are written against EVENT_DATASETS, not against a list of their own
     expect(SRC('event-launcher-core.js')).toContain('eventCards(datasets = EVENT_DATASETS');
     expect(SRC('event-prepare-ui.js')).toContain('EVENT_DATASETS.map(d =>');
-    expect(SRC('vr-view.js')).toContain('const dsList=eventModeOn()?EVENT_DATASETS:EVENT_LEVELS;');
+    expect(SRC('vr-view.js')).toContain('const dsList=levelSwitchTargets(globalThis.__vrlOpenSample);'); // the in-VR switch lists only the datasets that have a level (event-mode.js levelSwitchTargets)
     expect(SRC('event-launcher.js')).toContain('eventCards()');
   });
 });
@@ -77,15 +77,15 @@ describe('the in-VR data switch', () => {
     expect(levelSwitchItems(name, o, o).find(i => i.sample === o)).toMatchObject({ on: true, armed: true, label: 'smp.' + o + '.name' });
     expect(levelSwitchItems(name, null, null, EVENT_LEVELS).map(i => i.sample)).toEqual(LEVEL_IDS);
     const vr = SRC('vr-view.js');
-    expect(vr).toContain('levelSwitchItems(tr,globalThis.__vrlOpenSample,datasetForSample(al)?.id??null,dsList)'); // the full menu's データ tab: every dataset ...
-    expect(vr).toContain('const dsList=eventModeOn()?EVENT_DATASETS:EVENT_LEVELS;'); // ... with the event mode on only (off: the four levels, as before)
-    expect(vr).toContain('levelForSample(swapArmedId())?.id??null,EVENT_LEVELS),busy:ui.swapBusy'); // the row of the かんたん menu: unchanged
+    expect(vr).toContain('levelSwitchItems(tr,globalThis.__vrlOpenSample,datasetForSample(al)?.id??null,dsList)'); // the full menu's データ tab: only the levels (a dataset without a level is no target; see vr-level-switch.test.js) ...
+    expect(vr).toContain('const dsList=levelSwitchTargets(globalThis.__vrlOpenSample);'); // ... event mode on or off
+    expect(vr).toContain('levelForSample(swapArmedId())?.id??null,levelSwitchTargets(globalThis.__vrlOpenSample)),busy:ui.swapBusy'); // the row of the かんたん menu: the levels, as before
     expect(vr).toContain('const dEnd=y0+150+dsList.length*96;'); // the lines under the rows follow the number of rows
     expect(vr).toContain('const levelNameOf=id=>{const l=datasetForSample(id);return l?datasetLabel(l,tr):String(id)};');
   });
   it('the existing mechanism is the one used: two presses (resetPress), the swapBusy lock, runDataSwap - nothing new for the marmoset', () => {
     const vr = SRC('vr-view.js');
-    expect(vr).toContain('const swapPress=setId=>{\n  if(ui.swapBusy||!setId)return;');
+    expect(vr).toContain('const swapPress=setId=>{\n  if(ui.swapBusy||!setId||!canSwitchData(globalThis.__vrlOpenSample,setId))return;'); // level data to level data only
     expect(vr).toContain('void swapData(setId)');
     expect(vr).toContain('r=await runDataSwap(env,setId,gen)');
     expect(vr).toContain('chooseEventLevel(lv?lv.id:null)'); // a dataset that is not a level chooses none

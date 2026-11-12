@@ -6,23 +6,23 @@
 // each segment's material preset (lighting.js MATERIALS) is a uniform shared by every mesh of that segment (one per segment key), so
 // changing the preset (setSegmentMeshMaterial) updates the meshes in place, no rebuild; meshes without a segment key use the standard material.
 import * as THREE from './vendor/three@0.186.0/build/three.webgpu.js';
-import { meshColorNode, patchStandardFragment, boxRadius, materialVec } from './lighting.js?v=20261110-build708';
+import { meshColorNode, patchStandardFragment, boxRadius, materialVec } from './lighting.js?v=20261112-build725';
 
 const TSL = THREE.TSL; // the TSL namespace of the webgpu build (three/tsl itself imports a bare specifier the app has no import map for)
 let backend = 'WEBGPU';
 // the depth cue's two numbers, shared by every mesh material: distance of the eye to the volume's centre, bounding radius of the volume (updateMeshDepth)
 const depth = { center: TSL.uniform(5.2), radius: TSL.uniform(2.86) };
 const glDepth = { value: new THREE.Vector2(5.2, 2.86) };
-const matOf = new Map(); // segment key ('' = none) -> { node: vec3 TSL uniform, gl: { value: Vector3 }, colorNode }
+const matOf = new Map(); // segment key ('' = none) -> { node: vec4 TSL uniform (ambient, spec, shininess, spare), gl: { value: Vector4 }, colorNode }
 function segmentMat(key = '') {
   let m = matOf.get(key);
-  if (!m) { const v = materialVec('standard'); m = { node: TSL.uniform(new THREE.Vector3(v[0], v[1], v[2])), gl: { value: new THREE.Vector3(v[0], v[1], v[2]) }, colorNode: null }; matOf.set(key, m); }
+  if (!m) { const v = materialVec('standard'); m = { node: TSL.uniform(new THREE.Vector4(v[0], v[1], v[2], v[3])), gl: { value: new THREE.Vector4(v[0], v[1], v[2], v[3]) }, colorNode: null }; matOf.set(key, m); }
   return m;
 }
 // the material preset of a segment's meshes (a MATERIALS key; unknown -> standard)
 export function setSegmentMeshMaterial(key, preset) {
   const v = materialVec(preset), m = segmentMat(key);
-  m.node.value.set(v[0], v[1], v[2]); m.gl.value.set(v[0], v[1], v[2]);
+  m.node.value.set(v[0], v[1], v[2], v[3]); m.gl.value.set(v[0], v[1], v[2], v[3]);
 }
 
 // 'WEBGPU' (node materials) or 'WEBGL' (the fallback renderer): set once when the renderer of the 3D view exists, before any mesh is built

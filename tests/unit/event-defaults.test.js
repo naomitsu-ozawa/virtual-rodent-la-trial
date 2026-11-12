@@ -125,8 +125,8 @@ describe('slice transparent toggle on the thumbstick click', () => {
     expect(src).toContain('sliceToast.dispose();');
   });
   it('the 操作方法 board lists it (basic and with a section; ja and en), 7 lines fit the board at the new pitch', () => {
-    expect(src.match(/'スティック押し：短く＝スライス透明\/\/長押し＝枠を隠す／戻す'/g)?.length ?? src.split("'スティック押し：短く＝スライス透明／長押し＝枠を隠す／戻す'").length - 1).toBe(2);
-    expect(src.split("'Stick click: short = slice clear, hold = hide / show frames'").length - 1).toBe(2);
+    expect(src.match(/'スティック押し：短く＝スライス透明\/\/長押し＝枠を隠す／戻す'/g)?.length ?? src.split("'スティック押し：短く＝スライス透明（断面がないときは領域の色またはラベルの表示／非表示。解析タブで選択）／長押し＝枠を隠す／戻す'").length - 1).toBe(2);
+    expect(src.split("'Stick click: short = slice clear (no section: show / hide region colours or labels; choose in the Analysis tab), hold = hide / show frames'").length - 1).toBe(2);
     expect(src).toContain('const HELP_LINE_PITCH=66;');
     expect(140 + 6 * 66 + 15).toBeLessThanOrEqual(560); // the last line's centre + half the 30 px text, inside the 560 px board (no mission)
   });
@@ -187,7 +187,7 @@ describe('thumbstick click: short press vs hold (FRAME_HIDE_MS)', () => {
     expect(src).toContain('pl.glow.visible=gc!==undefined&&!fHide;pl.glass.visible=glassBy.has(pl)&&!fHide;pl.frameLine.visible=!fHide;pl.handle.visible=!fHide;');
     expect(src).toContain('pl.arrow.visible=arrowShown(settings.cut,pl.cut,pl.aOp)&&!fHide;');
     expect(src).toContain('const vis=section.on&&!fHide?planes.filter(p=>!draggedBy(p,c)):[];');
-    expect(src).toContain('canDrag:anyOk&&!fHide&&(surfaceActive()||labelMode()||!vh)');
+    expect(src).toContain('canDrag:anyOk&&!fHide&&(surfaceActive()||labelMode()||!vx)');
     expect(src).toContain('if(section.on&&vrHalfExt&&!framesHidden()){');
     expect(src).toContain('const framesHidden=()=>controllers.some(x=>x.userData.hideFrames&&(!!x.userData.source?.gamepad||isHand(x.userData.source)))'.replace('const ', '')); // a disconnected controller / hand never leaves the frames hidden
     expect(src).not.toMatch(/fHide[^;\n]*(cutPlanes|planeCount|planeCut)/); // the cut uniforms do not look at it
