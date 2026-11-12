@@ -1,8 +1,8 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Self-contained: depends only on the imports below (no module state).
-import { morphMask } from './mask-ops.js?v=20261111-build718';
-import { frameYield } from './utils.js?v=20261111-build718';
-import { thinSuppressActive, suppressThinStack } from './thin-suppress.js?v=20261111-build718';
+import { morphMask } from './mask-ops.js?v=20261112-build719';
+import { frameYield } from './utils.js?v=20261112-build719';
+import { thinSuppressActive, suppressThinStack } from './thin-suppress.js?v=20261112-build719';
 export class RunUnionFind{
  constructor(capacity=65536){this.parent=new Uint32Array(capacity);this.size=new Uint32Array(capacity);this.count=0}
  grow(){

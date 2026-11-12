@@ -11,27 +11,28 @@
 // view's cut plane included; refreshed at most about 10 times a second while the view moves and once more when it stops
 // (comment-3d-hidden.js). Until the bytes are ready, or when no segment is shown / no source data is in memory, every point is exposed.
 import * as THREE from './vendor/three@0.186.0/build/three.webgpu.js';
-import { sceneState, volume, activeSeries, volumeAnalysisMode, analysisEditTool, sectionViewOpen, sectionViewPlane, analysisRegions, threeRenderMode } from './state.js?v=20261111-build718';
-import { tr } from './i18n.js?v=20261111-build718';
-import { datasetFingerprint } from './project-file.js?v=20261111-build718';
-import { voxelToLocal3D } from './crosshair.js?v=20261111-build718';
-import { pointColor, darkFill, inkOn } from './point-colors.js?v=20261111-build718';
-import { getComments, onCommentsChange, commentMatchesSeries, commentTarget, getMarkersShown, onMarkersShownChange } from './comments.js?v=20261111-build718';
-import { getMeasurements, setLabelOffset, onMeasurementsChange, measurementMm, measureLabel, seriesSpacing, spacingLevel, getMeasureStart, onMeasureStartChange, createLongPress } from './measurements.js?v=20261111-build718';
-import { openPointMenu, endMeasureAt, cancelMeasureUi } from './point-menu.js?v=20261111-build718';
-import { request3DRender } from './scene3d.js?v=20261111-build718';
-import { gpuVolumeTarget } from './gpu-volume-data.js?v=20261111-build718';
-import { analysisRegionShown, segmentState, segmentEditState, SEGMENT_PRESET_ORDER, gpuSegmentOrder, segmentById } from './segments.js?v=20261111-build718';
-import { sectionLocalPoint, sectionLocalNormal } from './section-view.js?v=20261111-build718';
-import { planeLabelPlacement, clampLabelCenter, stepDelta, createFocusTracker, LINE_SAMPLES, probeKey, labelPart, lineSamplePoints, lineAlphas, lineStopOffsets, createIdMaker } from './measure-label.js?v=20261111-build718';
-import { planeRelations, boxHalfExtent, clipSegmentNear } from './comment-3d-section.js?v=20261111-build718';
-import { computeHiddenIds, shownChannels, sectionPlaneLocal, createHiddenThrottle } from './comment-3d-hidden.js?v=20261111-build718';
-import { regionCustomName, regionChipTitle } from './region-name.js?v=20261111-build718'; // the shared region name rule (name, else ID <atlas id>), as the VR cards
-import { judgeLabelPlace, tissueAt, PUSH_DIRS, LABEL_PUSH_MAX, LABEL_PUSH_MARGIN_VOX, labelDisplay, thinOverlaps, putAttr, putStyle } from './comment-3d-label-occlusion.js?v=20261111-build718'; // occlusion of the analysis labels (behind = hidden, embedded = translucent, pushed out, overlaps thinned)
-import { childLabelItems, childLabelItemById, labelChipTitle, labelVolumeText } from './child-labels.js?v=20261111-build718'; // a child segment's name label is drawn / dragged by the code of the analysis labels (it has the shape of a region)
-import { onChildSegChange } from './child-segments.js?v=20261111-build718';
-import { setRegionLabelOffset, onAnalysisLabelsChange, leaderVisible, labelLocal, offsetForLocal, rectEdgePoint, pcVoxelStep, createBoneGlow, boneHoverPickable, glowPairOf, pcLeaderLimit, pcLengthFactor, pcDrawnLength, pcDragUncap, pushWithinLimit, PC_REF_DISTANCE } from './analysis-label.js?v=20261111-build718';
-import { analysisRunsContain } from './run-length.js?v=20261111-build718';
+import { sceneState, volume, activeSeries, volumeAnalysisMode, analysisEditTool, sectionViewOpen, sectionViewPlane, analysisRegions, threeRenderMode } from './state.js?v=20261112-build719';
+import { tr } from './i18n.js?v=20261112-build719';
+import { datasetFingerprint } from './project-file.js?v=20261112-build719';
+import { voxelToLocal3D } from './crosshair.js?v=20261112-build719';
+import { pointColor, darkFill, inkOn } from './point-colors.js?v=20261112-build719';
+import { getComments, onCommentsChange, commentMatchesSeries, commentTarget, getMarkersShown, onMarkersShownChange } from './comments.js?v=20261112-build719';
+import { getMeasurements, setLabelOffset, onMeasurementsChange, measurementMm, measureLabel, seriesSpacing, spacingLevel, getMeasureStart, onMeasureStartChange, createLongPress } from './measurements.js?v=20261112-build719';
+import { openPointMenu, endMeasureAt, cancelMeasureUi } from './point-menu.js?v=20261112-build719';
+import { request3DRender } from './scene3d.js?v=20261112-build719';
+import { gpuVolumeTarget } from './gpu-volume-data.js?v=20261112-build719';
+import { analysisRegionShown, segmentState, segmentEditState, SEGMENT_PRESET_ORDER, gpuSegmentOrder, segmentById } from './segments.js?v=20261112-build719';
+import { sectionLocalPoint, sectionLocalNormal } from './section-view.js?v=20261112-build719';
+import { planeLabelPlacement, clampLabelCenter, stepDelta, createFocusTracker, LINE_SAMPLES, probeKey, labelPart, lineSamplePoints, lineAlphas, lineStopOffsets, createIdMaker } from './measure-label.js?v=20261112-build719';
+import { planeRelations, boxHalfExtent, clipSegmentNear } from './comment-3d-section.js?v=20261112-build719';
+import { computeHiddenIds, shownChannels, sectionPlaneLocal, createHiddenThrottle } from './comment-3d-hidden.js?v=20261112-build719';
+import { regionCustomName, regionChipTitle } from './region-name.js?v=20261112-build719'; // the shared region name rule (name, else ID <atlas id>), as the VR cards
+import { judgeLabelPlace, tissueAt, PUSH_DIRS, LABEL_PUSH_MAX, LABEL_PUSH_MARGIN_VOX, labelDisplay, thinOverlaps, analysisLabelsInView, frontMost, stackOrder, putAttr, putStyle } from './comment-3d-label-occlusion.js?v=20261112-build719'; // occlusion of the analysis labels (behind = hidden, embedded = translucent, pushed out, overlaps thinned)
+import { childLabelItems, childLabelItemById, labelChipTitle, labelVolumeText } from './child-labels.js?v=20261112-build719'; // a child segment's name label is drawn / dragged by the code of the analysis labels (it has the shape of a region)
+import { onChildSegChange } from './child-segments.js?v=20261112-build719';
+import { setRegionLabelOffset, onAnalysisLabelsChange, leaderVisible, labelLocal, offsetForLocal, rectEdgePoint, pcVoxelStep, createBoneGlow, boneHoverPickable, glowPairOf, pcLeaderLimit, pcLengthFactor, pcDrawnLength, pcDragUncap, pushWithinLimit, PC_REF_DISTANCE, thinActive } from './analysis-label.js?v=20261112-build719';
+import { settings } from './app-settings.js?v=20261112-build719'; // the device setting labelOverlap (what happens to a card behind another card)
+import { analysisRunsContain } from './run-length.js?v=20261112-build719';
 
 
 // analysis result labels (analysis-label.js, region.label): a chip (colour, number, segments, volume) at its anchor, MOVABLE by a drag (mouse / pen / touch) in the camera-facing plane through the label's
@@ -76,7 +77,7 @@ function refreshHidden(obj,camera,pts,plane){
  if(!anyShown||!pts.length){const had=hiddenIds.size>0;hiddenIds=new Set();if(lastPrep){lastPrep=null;refreshSoon()}return had}
  if(vrModFailed)return false; // the builder could not be loaded: every point stays exposed
  if(!vrMod){ // the classification builder lives in vr-view.js: loaded once, on the first need; until then the previous judgement stays
-  if(!vrModLoading){vrModLoading=true;import('./vr-view.js?v=20261111-build718').then(m=>{vrMod=m;throttle.reset();refreshSoon()},()=>{vrModFailed=true;if(hiddenIds.size){hiddenIds=new Set();refreshSoon()}})}
+  if(!vrModLoading){vrModLoading=true;import('./vr-view.js?v=20261112-build719').then(m=>{vrMod=m;throttle.reset();refreshSoon()},()=>{vrModFailed=true;if(hiddenIds.size){hiddenIds=new Set();refreshSoon()}})}
   return false;
  }
  const prep=vrMod.hiddenClsFor(()=>{throttle.reset();refreshSoon()});
@@ -240,10 +241,11 @@ function updateLabelPlaces(regs,dims,plane,now){
  clearTimeout(capTimer);capTimer=waiting?setTimeout(refreshSoon,Math.max(0,LABEL_SETTLE_MS-(now-capAt))+20):0; // one more frame once the view has stopped, for the judgement (3)
  for(const id of [...places.keys()])if(!live.has(id))places.delete(id);
 }
-// the places of ALL shown labels' cards (object space), judged hidden-behind-tissue with the points; an embedded card that could not be pushed out is not judged (it is drawn translucent)
+// the places of ALL shown labels' cards (object space), judged hidden-behind-tissue with the points; an embedded card that could not be pushed out is not judged (it is drawn translucent).
+// The ANCHOR (the foot of the leader, where the dot is drawn) of every label is judged too, as its own probe ('AA|id'): a dot behind tissue is drawn translucent, never hidden (setAlState).
 function analysisProbes(regs){
  const out=[];
- for(const r of regs){const pl=places.get(r.id);if(!pl||(pl.embedded&&!pl.pushed))continue;out.push({id:'A|'+r.id,local:pl.place})}
+ for(const r of regs){const pl=places.get(r.id);if(!pl)continue;out.push({id:'AA|'+r.id,local:pl.al});if(pl.embedded&&!pl.pushed)continue;out.push({id:'A|'+r.id,local:pl.place})}
  return out;
 }
 // DOM writes only when the value changed (a frame in which nothing moved writes nothing: the camera / the labels / the display are unchanged); the last written value sits on the element
@@ -260,7 +262,7 @@ function drawAnalysisLabels(obj,camera,W,H,regs,keep,dims){
    const label=document.createElement('div');label.className='analysis-label-3d';
    const sw=document.createElement('i'),t1=document.createElement('b'),t2=document.createElement('span');label.append(sw,t1,t2);layer.appendChild(label);
    if(isLitKey('A:'+r.id)){label.classList.add('is-lit');leader.classList.add('is-lit')}
-   e={label,leader,dot,sw,t1,t2,sig:'',w:90,h:16,sx:0,sy:0,ctx:null,lh:false,disp:'off',z:0,st:'',over:false};alEls.set(r.id,e);
+   e={label,leader,dot,sw,t1,t2,sig:'',w:90,h:16,sx:0,sy:0,ctx:null,lh:false,disp:'off',z:0,st:'',over:false,dotBehind:false};alEls.set(r.id,e);
   }
   const sig=r.id+'|'+(r.segmentKeys||[]).join()+'|'+r.mm3+'|'+r.color+'|'+(warn?1:0)+'|'+tr('analysisRegion')+'|'+regionCustomName(r)+(r.child?'|'+labelChipTitle(r,tr):''); // a rename (or atlas ID) redraws the chip
   if(e.sig!==sig){
@@ -289,18 +291,27 @@ function drawAnalysisLabels(obj,camera,W,H,regs,keep,dims){
    if(Math.abs(ax-c.x)<=e.w/2&&Math.abs(ay-c.y)<=e.h/2){const T=pl?pl.T:Infinity,len=Math.hypot(x2-ax,y2-ay);if(len>T){x2=ax+(x2-ax)*T/len;y2=ay+(y2-ay)*T/len}}
    putAttr(e.leader,'x1',ax.toFixed(1));putAttr(e.leader,'y1',ay.toFixed(1));putAttr(e.leader,'x2',x2.toFixed(1));putAttr(e.leader,'y2',y2.toFixed(1));putStyle(e.leader,'display','')}
   else putStyle(e.leader,'display','none');
-  e.z=lz;e.disp=labelDisplay({embedded:!!pl?.embedded,pushed,behind:hiddenIds.has('A|'+r.id),dragging:e.label.classList.contains('is-dragging')});
+  e.ax=ax;e.ay=ay;e.az=aOk?az:Infinity;e.z=lz;e.dotBehind=hiddenIds.has('AA|'+r.id);e.disp=labelDisplay({embedded:!!pl?.embedded,pushed,behind:hiddenIds.has('A|'+r.id),dragging:e.label.classList.contains('is-dragging')});
  }
- // of the cards that overlap on the screen only the nearest stays (the lit one always); hidden-behind cards take no room
+ // cards that overlap on the screen (device setting labelOverlap): the nearer card is drawn on top (a lit one above all); the cards behind are hidden under the mode's rule (analysis-label.js thinActive:
+ // 'always', or 'many' with 15 or more labels in sight); hidden-behind cards take no room
  const lit=labelFocus.get(),bg=boneGlow.get(),bgc=childBoneGlow.get(),items=[];
  for(const r of regs){const e=alEls.get(r.id);if(e&&e.ctx&&e.disp!=='off'&&(e.disp!=='hide'||r.id===bg||r.id===bgc)&&!e.label.hidden)items.push({id:r.id,x:e.sx,y:e.sy,w:e.w,h:e.h,z:e.z,keep:lit==='A:'+r.id||r.id===bg||r.id===bgc})} // the card of the bone under the mouse always stays (even one judged behind the tissue), nearer cards that overlap it give way
- const over=thinOverlaps(items);
- for(const r of regs){const e=alEls.get(r.id);if(e)setAlState(e,e.disp,over.has(r.id))}
+ const over=thinActive(settings.get('labelOverlap'),analysisLabelsInView(items,W,H))?thinOverlaps(items):NO_OVER; // the number counts the labels in sight (not hidden, on the screen), before any is thinned
+ for(const [id,z] of stackOrder(items.map(it=>({id:it.id,z:it.z,lit:it.keep})))){const e=alEls.get(id);if(e)putStyle(e.label,'zIndex',String(z))}
+ // an anchor dot behind a shown card (a card nearer than the anchor on the depth, covering the dot on the screen; any card, its own included) is not drawn at all: the SVG layer is under the cards and a card is only 88% opaque
+ for(const r of regs){const e=alEls.get(r.id);if(!e)continue;let cov=false;if(e.az!==undefined&&e.az<Infinity)for(const it of items){if(over.has(it.id)||!(it.z<e.az))continue;if(dotUnderCard(e.ax,e.ay,it)){cov=true;break}}e.dotCovered=cov;setAlState(e,e.disp,over.has(r.id),e.dotBehind)}
 }
-// the three looks of a label, its leader and its anchor dot (CSS): .is-behind = hidden completely, .is-faint = translucent (embedded), .is-overlapped = hidden under a nearer card
-function setAlState(e,disp,over){
- const sig=disp+(over?'o':'');e.over=over;if(e.st===sig)return;e.st=sig;
- for(const n of [e.label,e.leader,e.dot]){n.classList.toggle('is-behind',disp==='hide');n.classList.toggle('is-faint',disp==='faint');n.classList.toggle('is-overlapped',over)}
+const DOT_R=3.5;
+function dotUnderCard(ax,ay,it){return Math.abs(ax-it.x)<=it.w/2+DOT_R&&Math.abs(ay-it.y)<=it.h/2+DOT_R} // the dot (radius DOT_R px) touches the card's rectangle on the screen
+const NO_OVER=new Set();
+// the three looks of a label, its leader and its anchor dot (CSS): .is-behind = card and leader hidden completely, .is-faint = translucent (card / leader: embedded; dot: the anchor lies behind tissue, dotBehind),
+// .is-overlapped = card, leader and dot hidden under a nearer card (only when the mode thins the overlapped cards)
+function setAlState(e,disp,over,dotBehind=false){
+ const sig=disp+(over?'o':'')+(dotBehind?'d':'')+(e.dotCovered?'c':'');e.over=over;if(e.st===sig)return;e.st=sig;
+ for(const n of [e.label,e.leader]){n.classList.toggle('is-behind',disp==='hide');n.classList.toggle('is-faint',disp==='faint')}
+ e.dot.classList.toggle('is-faint',dotBehind);e.dot.classList.toggle('is-covered',!!e.dotCovered);
+ for(const n of [e.label,e.leader,e.dot])n.classList.toggle('is-overlapped',over);
 }
 function pruneAnalysisLabels(keep){for(const [id,e] of [...alEls])if(!keep.has(id)){e.label.remove();e.leader.remove();e.dot.remove();alEls.delete(id)}}
 function pruneMeasures(keep){for(const [id,e] of [...measEls])if(!keep.has(id)){e.line.remove();e.leader.remove();e.label.remove();e.grad?.remove();measEls.delete(id)}}
@@ -426,8 +437,12 @@ let lastLabelDown={key:null,t:0,x:0,y:0};
 const inLabel=(e,x,y)=>!e.label.hidden&&Math.abs(x-e.sx)<=e.w/2+4&&Math.abs(y-e.sy)<=e.h/2+4;
 // the label under (x,y) (view px): {kind:'m'|'a',id,key} (a distance label or an analysis label), or null
 function labelAt(x,y){
- for(const [id,e] of alEls)if(!e.over&&e.disp!=='hide'&&inLabel(e,x,y))return{kind:'a',id,key:'A:'+id}; // a shown card wins; a card hidden under a nearer one or behind a volume can still be reached (it comes to the front while lit: the old behaviour)
- for(const [id,e] of alEls)if(inLabel(e,x,y))return{kind:'a',id,key:'A:'+id};
+ // the cards under the point: the nearest one wins (frontMost: a lit card first, else the smallest depth z, as the card is drawn on top of the cards behind it). A shown card wins over a card hidden under a nearer one or behind a volume
+ // (that one can still be reached: it comes to the front while lit: the old behaviour).
+ for(const shown of [true,false]){
+  const c=[];for(const [id,e] of alEls)if((!shown||(!e.over&&e.disp!=='hide'))&&inLabel(e,x,y))c.push({id,z:e.z,lit:isLitKey('A:'+id)});
+  const id=frontMost(c);if(id!=null)return{kind:'a',id,key:'A:'+id};
+ }
  for(const [id,e] of measEls)if(inLabel(e,x,y))return{kind:'m',id,key:'M:'+id};
  return null;
 }

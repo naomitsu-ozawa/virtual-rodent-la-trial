@@ -230,12 +230,16 @@ export function rayCovered(from, to, isInside, halfExt, voxel, endSkip = 2.5) {
 
 // ---- upload savers (build 7xx: weight) ----
 // a leader's two end points: the vertex buffer is re-sent to the GPU only when an end moved by more than eps (world metres: 1e-4 = 0.1 mm).
-// attr = a BufferAttribute (or anything with .array, setXYZ, needsUpdate). Returns true when it was written (= will be uploaded).
+// attr = a BufferAttribute (or anything with .array, setXYZ, needsUpdate); a ribbon leg (4 vertices) also takes its `other` attribute. Returns true when it was written (= will be uploaded).
 export const LEADER_EPS = 1e-4; // 0.1 mm: invisible; normal head sway moves the ends (they follow the head) by tens of micrometres
-export function setLeaderIfMoved(attr, x0, y0, z0, x1, y1, z1, eps = LEADER_EPS) {
+export function setLeaderIfMoved(attr, x0, y0, z0, x1, y1, z1, eps = LEADER_EPS, other = null) {
   const a = attr.array;
   if (Math.abs(a[0] - x0) <= eps && Math.abs(a[1] - y0) <= eps && Math.abs(a[2] - z0) <= eps && Math.abs(a[3] - x1) <= eps && Math.abs(a[4] - y1) <= eps && Math.abs(a[5] - z1) <= eps) return false;
   attr.setXYZ(0, x0, y0, z0); attr.setXYZ(1, x1, y1, z1); attr.needsUpdate = true;
+  if (attr.count >= 4) { // the ribbon leg (vr-anchor-dots.js createLegMesh): v2 = A, v3 = B, and each vertex's `other` end
+    attr.setXYZ(2, x0, y0, z0); attr.setXYZ(3, x1, y1, z1);
+    if (other) { other.setXYZ(0, x1, y1, z1); other.setXYZ(1, x0, y0, z0); other.setXYZ(2, x1, y1, z1); other.setXYZ(3, x0, y0, z0); other.needsUpdate = true; }
+  }
   return true;
 }
 

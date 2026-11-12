@@ -1,11 +1,11 @@
 import * as THREE from './vendor/three@0.186.0/build/three.module.js';
-import { volumeTexturePlan, reduceSliceArea, packedRgSlice, packCtSlice } from './medical-volume.js?v=20261111-build718';
-import { computeBricksOf, buildEditMaskOf, buildRegionIndexOf, buildChildIndexOf, BRICK } from './vr-volume-prep.js?v=20261111-build718';
-import { gpuRunsForTexture } from './gpu-runs.js?v=20261111-build718';
-import { MATERIALS, materialKey, materialVec } from './lighting.js?v=20261111-build718';
-import { MAX_SECTION_PLANES } from './vr-section-frame.js?v=20261111-build718';
-import { SHADE_BRIGHT_DEFAULT, SHADE_CONTRAST_DEFAULT, brightOf, contrastOf } from './cap-shade.js?v=20261111-build718';
-import { pickRay } from './webgl-volume-pick.js?v=20261111-build718';
+import { volumeTexturePlan, reduceSliceArea, packedRgSlice, packCtSlice } from './medical-volume.js?v=20261112-build719';
+import { computeBricksOf, buildEditMaskOf, buildRegionIndexOf, buildChildIndexOf, BRICK } from './vr-volume-prep.js?v=20261112-build719';
+import { gpuRunsForTexture } from './gpu-runs.js?v=20261112-build719';
+import { MATERIALS, materialKey, materialVec } from './lighting.js?v=20261112-build719';
+import { MAX_SECTION_PLANES } from './vr-section-frame.js?v=20261112-build719';
+import { SHADE_BRIGHT_DEFAULT, SHADE_CONTRAST_DEFAULT, brightOf, contrastOf } from './cap-shade.js?v=20261112-build719';
+import { pickRay } from './webgl-volume-pick.js?v=20261112-build719';
 
 export const WEBGL_VOLUME_DEFAULT = true;
 export const webglVolumeEnabled = (search = typeof location !== 'undefined' ? location.search : '', m = /[?&]webglvolume=(\d)(&|$)/.exec(search || '')) => (m ? m[1] !== '0' : WEBGL_VOLUME_DEFAULT); // one line: the public gate reads a URL key from the line that reads location.search
