@@ -5,11 +5,11 @@
 // What the partner has none of: manual edits (project.edits), child segments (project.treeSegments), filters and post-processing of a segment are NOT applied (the data is raw, a segment is its range only). A project that has any of them is
 // reported in `unsupported` (never silently dropped), so the caller decides.
 // The result is the `inp` of docs/vr-prep-inputs.js (see there for every field) plus `unsupported` (strings) and `segmentColors` ({key: css colour}) for the later stages.
-import { decodeRuns } from './project-file.js?v=20261112-build719';
-import { effectiveRanges } from './segment-exclusive.js?v=20261112-build719';
-import { gpuSlotOrder } from './segment-slots.js?v=20261112-build719';
-import { analysisRunsVoxelCount } from './run-length.js?v=20261112-build719';
-import { vrUnitsPerMm } from './vr-prep-inputs.js?v=20261112-build719';
+import { decodeRuns } from './project-file.js?v=20261112-build720';
+import { effectiveRanges } from './segment-exclusive.js?v=20261112-build720';
+import { gpuSlotOrder } from './segment-slots.js?v=20261112-build720';
+import { analysisRunsVoxelCount } from './run-length.js?v=20261112-build720';
+import { vrUnitsPerMm } from './vr-prep-inputs.js?v=20261112-build720';
 
 // the segment presets (segments.js SEGMENT_PRESET_ORDER: segments.js reads the page, so this pure module keeps its own copy; tests/unit/vr-pair-data.test.js checks that they agree)
 export const SEGMENT_PRESET_ORDER = ['bone', 'soft', 'fat', 'lung', 'contrast'];
