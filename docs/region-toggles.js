@@ -1,4 +1,4 @@
-import { tr } from './i18n.js?v=20261112-build724';
+import { tr } from './i18n.js?v=20261112-build725';
 export const SHOW_TOGGLE_KEYS = Object.freeze({ color: 'regionColorToggle', shape: 'regionShapeToggle' });
 // canToggle false = the parent tissue is off: the region / child is hidden with it, so both rest (greyed, the title says why: regionSegmentHidden)
 export function showToggleSpec({ colorOn, shapeOn, canToggle = true }) {

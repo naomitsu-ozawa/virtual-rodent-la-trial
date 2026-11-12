@@ -1,9 +1,9 @@
 // 体験会モード - the 設定 > 外観 switch. With it on the page shows the event page (event-launcher.js: the bar with VR / AR / チュートリアル / status, and one card per practice dataset that
 // opens its data through the practice-data chooser's own startSample and goes on to prepare VR); the settings modal keeps 「最初の状態に戻す」 at its top. With the switch off (default) nothing is added to the page.
-import { settings } from './app-settings.js?v=20261112-build724';
-import { tr } from './i18n.js?v=20261112-build724';
-import { levelForSample, chooseEventLevel, resetPress, resetArmed, RESET_ARM_MS } from './event-mode.js?v=20261112-build724';
-import { createEventLauncher } from './event-launcher.js?v=20261112-build724';
+import { settings } from './app-settings.js?v=20261112-build725';
+import { tr } from './i18n.js?v=20261112-build725';
+import { levelForSample, chooseEventLevel, resetPress, resetArmed, RESET_ARM_MS } from './event-mode.js?v=20261112-build725';
+import { createEventLauncher } from './event-launcher.js?v=20261112-build725';
 export function initEventModeUi(){
  const box=document.getElementById('set-event-mode');
  if(box){box.checked=settings.get('eventMode')===true;box.onchange=()=>settings.set('eventMode',box.checked)}

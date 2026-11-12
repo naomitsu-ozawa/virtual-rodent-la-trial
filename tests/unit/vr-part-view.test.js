@@ -2,10 +2,11 @@
 // vr-view.js is not runnable here: the wiring is checked on its source, the rules run for real.
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { PART_GLSL, PART_CALL_SITES, PART_OWN, PART_EXTRA, partUniforms, partTargetOf, partSame, regionSlotMask, patchRegionLut, patchChildLut, anyHiddenIn, partBoundsOf, partKeepVoxelOf, armPress, armed, ARM_MS, PART_TEXT, PART_BTN_X, PART_ARM_W, PART_BTN_GAP, PART_RESTORE_W } from '../../docs/vr-part-view.js';
+import { PART_GLSL, PART_CALL_SITES, PART_OWN, PART_EXTRA, partUniforms, partTargetOf, partSame, regionSlotMask, patchRegionLut, patchChildLut, patchRegionLutMany, patchChildLutMany, anyHiddenIn, partBoundsOf, partProxyBox, partRayRange, partKeepVoxelOf, PART_TEXT, PART_BTN_X, PART_RESTORE_W, PART_OUT_M, PART_ANIM_MS } from '../../docs/vr-part-view.js';
 import { regionLutAlpha, regionLutHiddenSlots } from '../../docs/region-visibility.js';
 import { marchClassificationHitInfo } from '../../docs/vr-pick.js';
 import { simpleMenuLayout } from '../../docs/event-mode.js';
+import { ringState, regionRingItems, partRingItems, applyRingItem } from '../../docs/region-ring.js';
 
 const src = readFileSync(new URL('../../docs/vr-view.js', import.meta.url), 'utf8');
 const menuSrc = readFileSync(new URL('../../docs/event-mode.js', import.meta.url), 'utf8');
@@ -219,22 +220,12 @@ describe('the laser\'s rule on the part (the shader\'s keep-only rule on the CPU
   });
 });
 
-describe('the one-shot arm', () => {
-  it('off by default; a press arms for ARM_MS; a second press disarms; it ends by itself', () => {
-    expect(armed(0, 1000)).toBe(false);
-    const u = armPress(0, 1000);
-    expect(u).toBe(1000 + ARM_MS); expect(armed(u, 1000)).toBe(true); expect(armed(u, 1000 + ARM_MS - 1)).toBe(true); expect(armed(u, 1000 + ARM_MS)).toBe(false);
-    expect(armPress(u, 2000)).toBe(0);
-    expect(armPress(u, 1000 + ARM_MS + 5)).toBe(1000 + ARM_MS + 5 + ARM_MS); // expired: a press arms again
-  });
-});
-
 describe('the wiring in the menu and the session', () => {
   it('the texts exist in both languages with the same keys', () => {
     expect(Object.keys(PART_TEXT.ja).sort()).toEqual(Object.keys(PART_TEXT.en).sort());
     for (const k of Object.keys(PART_TEXT.ja)) { expect(PART_TEXT.ja[k].length).toBeGreaterThan(0); expect(PART_TEXT.en[k].length).toBeGreaterThan(0); }
   });
-  it('the grip stays the body\'s grab: the part\'s grip is tried first and only for a laser on the part, or right after 取り出す was pressed', () => {
+  it('the grip stays the body\'s grab: the part\'s grip is tried first and only for a laser that meets a part nearer than the body', () => {
     expect(src).toContain('if(partGripStart(c))return;');
     const gs = src.slice(src.indexOf(' const gripStart=c=>{'), src.indexOf(' const gripKind='));
     expect(gs.indexOf('partGripStart(c)')).toBeLessThan(gs.indexOf('if(!gripOnVolume(c))return false;'));
@@ -257,39 +248,195 @@ describe('the wiring in the menu and the session', () => {
     const bp = src.slice(src.indexOf(' const bindPair=async('), src.indexOf(' const bindPair=async(') + 400);
     expect(bp).toContain('partRestoreAll(');
   });
-  it('nothing is drawn, uploaded or compiled for the part while none is out: every frame hook returns at once on a null part', () => {
-    for (const fn of ['partPose', 'partFrame', 'partRender']) {
-      const i = src.indexOf(' ' + fn + '=');
+  it('nothing is drawn, uploaded or compiled while no part is out: every frame hook returns at once on an empty list', () => {
+    for (const fn of ['partPose', 'partFrame', 'partRender', 'partPatchRegion', 'partPatchChild', 'partRestoreAll']) {
+      const i = src.indexOf('   ' + fn + '=');
       expect(i, fn).toBeGreaterThan(0);
-      expect(src.slice(i, i + 220), fn).toMatch(/if\(!pm[^)]*\)return/);
+      expect(src.slice(i, i + 160), fn).toMatch(/if\(!parts\.length\)return/);
     }
+    expect(src).toContain(' let parts=[],partPatchRegion=');
+    expect(src).not.toMatch(/\bpm\b[.?]/); // the one-part state is gone
   });
+
 });
 
-describe('the two buttons: in the header, no list row gives up its room', () => {
+describe('すべて元に戻す: one button in the header, no list row gives up its room', () => {
   const text = { show: 'Show', hide: 'Hide', color: '色', shape: '表示', section: '断面', sliceOpacity: '不透明度', scale: '拡大率', trigger: 'モード', trigPoint: 'P', trigLabel: 'L', trigHintPoint: 'hp', trigHintLabel: 'hl', results: '解析結果', kids: 'セグメント', total: '合計', page: 'ページ', noSeg: 'なし', home: '正面', undo: '戻', reset: 'リセット', resetAgain: 'もう一度', all: '設定', exit: '終了' };
   const board = (nr, nk) => simpleMenuLayout({ segments: ['bone', 'soft', 'fat', 'lung'].map(k => ({ key: k, name: k, color: '#fff', on: true })), sectionOn: true, scale: { pos: 0.3, text: 'x1', locked: false }, trigger: { show: true, label: false },
     results: Array.from({ length: nr }, (_, i) => ({ hex: '#fff', name: 'r' + i, text: '1 mm³' })), kids: Array.from({ length: nk }, (_, i) => ({ hex: '#fff', name: 'k' + i })), total: '1', showAll: { n: 0, label: 'すべて表示' },
     levels: { items: [{ id: 'a', label: 'A', on: true }, { id: 'b', label: 'B' }], busy: false, hint: '', text: { title: 'データ', again: 'again' } }, pair: { label: 'pair', on: false, busy: false }, text });
-  it('the かんたん board is the board of before: event-mode.js is not changed, so no list loses a row (the real boards are already tight: the lists would have lost rows to a new row)', () => {
+  it('the かんたん board is the board of before: event-mode.js is not changed (the real boards are already tight)', () => {
     for (const [nr, nk] of [[4, 0], [12, 5], [8, 1], [0, 40]]) expect(board(nr, nk).some(x => /^detach:/.test(x.id || ''))).toBe(false);
     expect(menuSrc).not.toMatch(/detach/);
   });
-  it('they sit between the title (ends near x 400) and 「閉じる」 (x 780) in the header row (y 18, the same 72 px as 閉じる), 取り出す left of すべて元に戻す, and over no widget of the board', () => {
+  it('it sits between the title (ends near x 400) and 「閉じる」 (x 780) in the header row (y 18, 72 px like 閉じる), over nothing of the board; the 取り出す button is gone (the ring does it)', () => {
     expect(PART_BTN_X).toBeGreaterThanOrEqual(400);
-    expect(PART_BTN_X + PART_ARM_W + PART_BTN_GAP + PART_RESTORE_W).toBeLessThanOrEqual(780);
-    for (const [nr, nk] of [[4, 0], [12, 5]]) for (const o of board(nr, nk)) if (o.type !== 'label') expect(o.y, o.id).toBeGreaterThanOrEqual(90); // nothing of the board is in the header's band
-    expect(src).toMatch(/btn\(PART_BTN_X,18,PART_ARM_W,dm\.text\.arm,dm\.armed,\(\)=>partArmPress\(\)/);
-    expect(src).toMatch(/btn\(PART_BTN_X\+PART_ARM_W\+PART_BTN_GAP,18,PART_RESTORE_W,dm\.text\.restore,false,\(\)=>partRestorePress\(\)/);
+    expect(PART_BTN_X + PART_RESTORE_W).toBeLessThanOrEqual(780);
+    for (const [nr, nk] of [[4, 0], [12, 5]]) for (const o of board(nr, nk)) if (o.type !== 'label') expect(o.y, o.id).toBeGreaterThanOrEqual(90);
+    expect(src).toMatch(/btn\(PART_BTN_X,18,PART_RESTORE_W,dm\.text\.restore,false,\(\)=>partRestorePress\(\)/);
+    expect(src).not.toContain('partArmPress'); expect(src).not.toContain('PART_ARM_W');
   });
-  it('drawn on every page of both menus (a normal session has no かんたん board), except where 「かんたん」 sits in the same place (the full menu of 体験会モード)', () => {
-    expect(src).toContain('if(dm&&!(evMenu&&ui.tab!==10))');
-    const hdr = src.slice(src.indexOf("btn(780,18,200,L.close,false,()=>setMenuOpen(false),{size:28});"), src.indexOf('// tabs\n'));
-    expect(hdr).toContain('partMenuInfo()');
-    expect(hdr).toContain("btn(560,18,200,tr('evSimple')"); // the header's other button that is there only in 体験会モード outside tab 10 (560..760: the same place)
-  });
-  it('the buttons are drawn only when the data has results or child segments, and the restore is disabled while nothing is out', () => {
-    expect(src).toContain('partMenuInfo=()=>regionList.length||childList.length?{armed:partArmed(),active:!!pm,busy:partBusy,text:{arm:PT.arm,restore:PT.restore}}:null;');
+  it('drawn on every page of both menus, except where 「かんたん」 sits in the same place (the full menu of 体験会モード); only with results / child segments (or a part out); disabled while nothing is out', () => {
+    expect(src).toContain('if(dm&&!(evMenu&&ui.tab!==10))btn(PART_BTN_X');
     expect(src).toContain('disabled:!dm.active||dm.busy');
+    expect(src).toContain('partMenuInfo=()=>regionList.length||childList.length||parts.length?{active:parts.length>0,busy:partBusy,text:{restore:PT.restore}}:null;');
+    const hdr = src.slice(src.indexOf("btn(780,18,200,L.close,false,()=>setMenuOpen(false),{size:28});"), src.indexOf('// tabs\n'));
+    expect(hdr).toContain("btn(560,18,200,tr('evSimple')");
+  });
+});
+
+describe('several parts at once', () => {
+  const entry = (rid, mask) => ({ rid, segMask: mask });
+  it('result table: every part\'s target is hidden in the body and keeps its colour in the parts\' ONE copy; adding a part and taking one back is a re-patch of the normal table', () => {
+    const base = new Float32Array(256 * 4);
+    for (let i = 1; i <= 5; i++) { base[4 * i] = i / 10; base[4 * i + 3] = regionLutAlpha(1 << (i % 4), { shown: true }); }
+    const patch = parts => { const a = base.slice(), out = new Float32Array(256 * 4), n = patchRegionLutMany(a, out, parts.map(([i, m]) => ({ i, mask: m, colorShown: true }))); return { a, out, n }; };
+    const p3 = patch([[0, 1], [2, 4], [3, 8]]);
+    expect(p3.n).toBe(3);
+    for (const [i, m] of [[0, 1], [2, 4], [3, 8]]) { expect(regionLutHiddenSlots(p3.a[4 * (i + 1) + 3])).toBe(m); expect(regionLutHiddenSlots(p3.out[4 * (i + 1) + 3])).toBe(0); expect(p3.out[4 * (i + 1) + 3]).toBe(m); }
+    for (const i of [2, 5]) expect(p3.a[4 * i + 3]).toBe(base[4 * i + 3]); // the others are the normal table
+    expect(anyHiddenIn(p3.out, 5)).toBe(0); expect(anyHiddenIn(p3.a, 5)).toBe(1);
+    // one part put back: the table is patched again for the two that stay; the put-back one is the normal entry again
+    const p2 = patch([[0, 1], [3, 8]]);
+    expect(p2.a[4 * 3 + 3]).toBe(base[4 * 3 + 3]); expect(regionLutHiddenSlots(p2.a[4 * 1 + 3])).toBe(1);
+    // all put back: the table is the normal one, bit for bit
+    const p0 = patch([]); expect(p0.n).toBe(0); expect(Array.from(p0.a)).toEqual(Array.from(base));
+  });
+  it('child table: the same for children (row 0 colour bits, row 1 hidden mask), and out-of-range entries are skipped', () => {
+    const R = 1024, base = new Float32Array(256 * 12);
+    for (let j = 0; j < 3; j++) { base[(j + 1) * 4 + 3] = 1; base[R + (j + 1) * 4 + 2] = 5; }
+    const a = base.slice(), out = new Float32Array(256 * 12);
+    expect(patchChildLutMany(a, out, [{ j: 0, mask: 1, colorOn: true }, { j: 2, mask: 2, colorOn: false }, { j: 300, mask: 1, colorOn: true }])).toBe(2);
+    expect(a[R + 4 * 1 + 3]).toBe(1); expect(a[4 * 1 + 3]).toBe(0); expect(out[R + 4 * 1 + 3]).toBe(0); expect(out[4 * 1 + 3]).toBe(1);
+    expect(out[4 * 3 + 3]).toBe(0); expect(a[R + 4 * 3 + 3]).toBe(2); expect(a[R + 4 * 2 + 3]).toBe(0); // child 1 untouched
+    expect(a[R + 4 * 1 + 2]).toBe(5); // other rows are as they were
+  });
+  it('the single-part functions are the many-part ones with one target', () => {
+    const a1 = new Float32Array(256 * 4), o1 = new Float32Array(256 * 4), a2 = a1.slice(), o2 = o1.slice();
+    patchRegionLut(a1, o1, 3, 5, true); patchRegionLutMany(a2, o2, [{ i: 3, mask: 5, colorShown: true }]);
+    expect(Array.from(a1)).toEqual(Array.from(a2)); expect(Array.from(o1)).toEqual(Array.from(o2));
+  });
+  it('every part has its own bounding box: the voxels of ITS id only', () => {
+    const dims = [16, 16, 16], ids = new Uint8Array(16 * 16 * 16), at = (x, y, z) => x + 16 * (y + 16 * z);
+    for (let z = 2; z < 5; z++) for (let y = 3; y < 6; y++) for (let x = 1; x < 4; x++) ids[at(x, y, z)] = 1;
+    for (let z = 10; z < 14; z++) for (let y = 8; y < 12; y++) for (let x = 9; x < 15; x++) ids[at(x, y, z)] = 2;
+    const he = [8, 8, 8], b1 = partBoundsOf(ids, dims, 1, he, 0), b2 = partBoundsOf(ids, dims, 2, he, 0);
+    expect(b1.count).toBe(27); expect(b2.count).toBe(96);
+    expect(b1.h).toEqual([1.5, 1.5, 1.5]); expect(b2.h[0]).toBeCloseTo(3, 12); expect(b2.h[1]).toBeCloseTo(2, 12); expect(b2.h[2]).toBeCloseTo(2, 12);
+    expect(b1.c[0]).not.toBeCloseTo(b2.c[0], 3);
+    const k1 = partKeepVoxelOf({ ids, idims: dims, cdims: dims, id: 1, mask: 1, chan: [0, -1, -1, -1] }), k2 = partKeepVoxelOf({ ids, idims: dims, cdims: dims, id: 2, mask: 1, chan: [0, -1, -1, -1] });
+    expect(k1(2, 4, 3, 0)).toBe(false); expect(k2(2, 4, 3, 0)).toBe(true); expect(k2(10, 9, 11, 0)).toBe(false); expect(k1(10, 9, 11, 0)).toBe(true);
+  });
+  it('the proxy box (what the GPU rasterises) is the content box grown by a few voxels, clamped to the data box: far smaller than the whole box for a small part', () => {
+    const he = [4, 4, 4], dims = [64, 64, 64], box = { c: [0, 0, 0], h: [0.25, 0.25, 0.25] };
+    const p = partProxyBox(box, he, dims, 4), v = 2 * 4 / 64;
+    expect(p.h[0]).toBeCloseTo(0.25 + 4 * v, 12); expect(p.c).toEqual([0, 0, 0]);
+    const edge = partProxyBox({ c: [3.8, 0, 0], h: [0.2, 0.2, 0.2] }, he, dims, 4);
+    expect(edge.c[0] + edge.h[0]).toBeCloseTo(4, 12); // clamped at the data box's face
+    // the rays a part runs: the proxy's silhouette is a tiny share of the full box's
+    const share = (p.h[0] * p.h[1]) / (he[0] * he[1]); expect(share).toBeLessThan(0.05);
+    expect(partProxyBox({ c: [0, 0, 0], h: [4, 4, 4] }, he, dims, 4).h).toEqual([4, 4, 4]); // a part as big as the data: the full box
+  });
+  it('the laser march of a part runs only inside its box: partRayRange', () => {
+    const box = { c: [1, 0, 0], h: [0.5, 0.5, 0.5] };
+    expect(partRayRange({ x: -5, y: 0, z: 0 }, { x: 1, y: 0, z: 0 }, box)).toEqual([5.5, 6.5]);
+    expect(partRayRange({ x: -5, y: 2, z: 0 }, { x: 1, y: 0, z: 0 }, box)).toBeNull(); // misses
+    expect(partRayRange({ x: 1, y: 0, z: 0 }, { x: 0, y: 1, z: 0 }, box)).toEqual([0, 0.5]); // starts inside
+    expect(partRayRange({ x: 3, y: 0, z: 0 }, { x: -1, y: 0, z: 0 }, box)).toEqual([1.5, 2.5]);
+    expect(partRayRange({ x: -5, y: 0, z: 0 }, { x: -1, y: 0, z: 0 }, box)).toBeNull(); // pointing away
+  });
+  it('the part\'s box is its own: the proxy geometry is made per part from its box, never the body\'s box; its programs are shared', () => {
+    expect(src).toContain('const geo=new THREE.BoxGeometry(2*prox.h[0]/he[0],2*prox.h[1]/he[1],2*prox.h[2]/he[2]);geo.translate(prox.c[0]/he[0],prox.c[1]/he[1],prox.c[2]/he[2]);');
+    expect(src).toContain('const m=new THREE.Mesh(geo,mats.vars[partFull()])');
+    expect(src).toContain('const r=new THREE.Mesh(geo,mats.rays[partFull()])');
+    expect(src).not.toMatch(/new THREE\.Mesh\(meshObj\.geometry,(mats|res\.|q\.)/); // no part is drawn on the body's box
+    expect(src).toContain('u.boxEntry'.slice(0, 0) + 'boxEntry:{value:1}'); // the march starts at the content box
+    expect(src).toContain('partFree=q=>{partHide(q);q.held=null;'); expect(src).toContain('q.geo.dispose()');
+    expect(src).toContain('partMaterials=own=>'); // one material set per part, the compiled programs shared (template compiled once)
+    expect((src.match(/compileVariantPrograms\(renderer,wanted/g) || []).length).toBe(1);
+  });
+  it('every part has its own grip: a hand holds one part; the laser takes the NEAREST part that is not held and is nearer than the body', () => {
+    expect(src).toContain('const u=c.userData,ph=partHitOf(c,true);if(!ph)return false;');
+    expect(src).toContain('if(vh&&vh.distance<=ph.distance)return false;');
+    expect(src).toContain('partHold(ph.part,c);pulse(c);return true;');
+    expect(src).toContain('if(hi&&(!best||hi.t<best.distance))best={part:q,distance:hi.t};');
+    expect(src).toContain('partGripEnd=c=>{let r=false;for(const q of parts)if(q.held?.c===c){q.held=null;');
+  });
+  it('a part that was cut out starts where the target is, comes PART_OUT_M toward the viewer and glides there; a grip stops the glide', () => {
+    expect(PART_OUT_M).toBeGreaterThan(0); expect(PART_OUT_M).toBeLessThanOrEqual(0.1); expect(PART_ANIM_MS).toBeGreaterThan(0);
+    expect(src).toContain('const to=apos.clone().addScaledVector(partV.subVectors(head,apos).normalize(),PART_OUT_M);');
+    expect(src).toContain('anim:{from:apos.clone(),to,t0:performance.now()}');
+    expect(src).toContain('const partHold=(q,c)=>{const a=holdOf(c);q.anim=null;');
+  });
+  it('a second cut-out of the same target is refused; one at a time while the programs prepare; none while a pair is shown', () => {
+    expect(src).toContain('if(parts.some(q=>partSame(q.target,tg)))return false;');
+    expect(src).toContain('if(partBusy){flashMsg(PT.busy,2500);return false}');
+    expect(src).toContain("if(pair?.on){flashMsg(PT.pairBusy,3000);return false}");
+  });
+  it('個別の戻し / 全部戻し: one part back = its own free + a re-patch of the tables; all back = every part freed, the tables are the normal ones', () => {
+    expect(src).toContain('parts.splice(i,1);partFree(q);');
+    expect(src).toContain('const all=parts.splice(0);for(const q of all)partFree(q);');
+    const one = src.slice(src.indexOf('const partRestoreOne=q=>{'), src.indexOf('   partRestoreAll=()=>{'));
+    expect(one).toContain('refreshRegionLut();refreshChildLut()');
+    const all = src.slice(src.indexOf('   partRestoreAll=()=>{'), src.indexOf('   partDispose=()=>{'));
+    expect(all).toContain('refreshRegionLut();refreshChildLut()');
+  });
+});
+
+describe('the ring: 切り出す on the laser\'s target, 戻す on a part', () => {
+  const ringSrc = readFileSync(new URL('../../docs/region-ring.js', import.meta.url), 'utf8');
+  it('a long press on a part opens its ring BEFORE the body\'s rules (a part nearer than the body\'s hit); the point ring and the body\'s region ring are as before', () => {
+    const up = src.slice(src.indexOf(' const updatePress=(c,now)=>{'), src.indexOf(' const updatePress=(c,now)=>{') + 1500);
+    expect(up.indexOf('partRingStart(c,pr.res)')).toBeGreaterThan(0);
+    expect(up.indexOf('partRingStart(c,pr.res)')).toBeLessThan(up.indexOf("else if(pr.res.kind==='point')"));
+    expect(up).toContain("else if(pr.res.kind==='record'||pr.res.kind==='label'||pr.res.kind==='tissue'){");
+    const rs = src.slice(src.indexOf('partRingStart=(c,res)=>{'), src.indexOf('partBackPress=uid=>'));
+    expect(rs).toContain("if(k!=='record'&&k!=='label'&&k!=='tissue'&&k!=='empty'&&k!=='none')return false;");
+    expect(rs).toContain('if(Number.isFinite(bd)&&bd<ph.distance)return false;'); // the body's hit is nearer: the body's ring
+  });
+  it('切り出す is the target the laser was on, as it is: the ring was opened on it, nothing is chosen again, no arm', () => {
+    expect(src).toContain('detachRegion:g=>{partDetachRing(g,null);return true},detachChild:key=>{partDetachRing(null,childByKey(key));return true}');
+    expect(src).toContain('partDetachRing=(reg,child)=>{void partDetach(partTargetOfRing(reg,child))};');
+    expect(src).toContain('const i=regionList.findIndex(e=>e.rid===reg.id);');
+    // region = the region's own item (top half), child = the child's (bottom half)
+    const calls = [];
+    const ops = { detachRegion: r => { calls.push(['r', r.id]); return true; }, detachChild: k => { calls.push(['c', k]); return true; } };
+    expect(applyRingItem('rdetach', { reg: { id: 7 }, child: { key: 'k1' } }, ops)).toBe(true);
+    expect(applyRingItem('cdetach', { reg: { id: 7 }, child: { key: 'k1' } }, ops)).toBe(true);
+    expect(calls).toEqual([['r', 7], ['c', 'k1']]);
+    expect(applyRingItem('rdetach', { reg: null, child: { key: 'k1' } }, ops)).toBe(false); // no region there
+    expect(applyRingItem('cdetach', { reg: { id: 7 }, child: null }, ops)).toBe(false);
+    expect(applyRingItem('rdetach', { reg: { id: 7 } }, {})).toBe(false); // an old caller without the op
+  });
+  it('the part\'s ring has one item, 戻す; it puts back that part only', () => {
+    const items = partRingItems({ back: '戻す' });
+    expect(items).toEqual([{ id: 'pback', label: '戻す', on: false, enabled: true }]);
+    let n = 0; expect(applyRingItem('pback', {}, { partBack: () => { n++; return true; } })).toBe(true); expect(n).toBe(1);
+    expect(src).toContain('const partUid=pw.partUid;closePointWheel();');
+    expect(src).toContain('partBack:()=>partBackPress(partUid)');
+    expect(src).toContain("pw={c,kind:'region',id:null,rid:0,childKey:'',partUid:ph.part.uid,mode:'main',items,name:''};");
+    expect(src).toContain('partBackPress=uid=>{const q=parts.find(x=>x.uid===uid);return q?partRestoreOne(q):false};');
+  });
+  it('切り出す is dark while a pair is shown (the ring item is disabled and the stick skips it)', () => {
+    const text = { color: 'c', shape: 's', detach: 'd', regionColor: 'rc', regionShape: 'rs', regionDetach: 'rd', childColor: 'cc', childShape: 'cs', childDetach: 'cd' };
+    for (const st of [ringState({ id: 1 }, null), ringState(null, { key: 'a' }), ringState({ id: 1 }, { key: 'a' })]) {
+      expect(regionRingItems(st, text, false).filter(i => /detach/.test(i.id)).every(i => i.enabled === false)).toBe(true);
+      expect(regionRingItems(st, text, false).filter(i => !/detach/.test(i.id)).every(i => i.enabled === true)).toBe(true);
+      expect(regionRingItems(st, text).every(i => i.enabled === true)).toBe(true);
+    }
+    expect(src).toContain('ringText(),!pair?.on);');
+    expect(src).toContain("pw.kind==='region'?pw.items.map(i=>i.enabled!==false):pwIds().map(()=>true),pw.kind==='region'&&(pw.items.length===3||pw.items.length===6)");
+  });
+  it('the existing 色 / 表示 items act as before (the two flags, the stick press); 切り出す writes no flag', () => {
+    const calls = [];
+    const ops = { setRegionVisible: (r, on) => { calls.push(['rv', on]); return true; }, setRegionHidden: (r, on) => { calls.push(['rh', on]); return true; }, setChildLook: (k, o) => { calls.push(['cl', k, o]); return true; }, detachRegion: () => true, detachChild: () => true };
+    applyRingItem('rcolor', { reg: { id: 1, visible: true } }, ops); applyRingItem('rshape', { reg: { id: 1 } }, ops); applyRingItem('cshape', { child: { key: 'a', visible: true } }, ops);
+    applyRingItem('rdetach', { reg: { id: 1 } }, ops); applyRingItem('cdetach', { child: { key: 'a' } }, ops);
+    expect(calls).toEqual([['rv', false], ['rh', true], ['cl', 'a', { visible: false }]]);
+  });
+  it('the words: 切り出す / 戻す in both languages, no emoji', () => {
+    for (const l of ['ja', 'en']) for (const k of ['ringDetach', 'ringRegionDetach', 'ringChildDetach', 'ringBack']) { expect(PART_TEXT[l][k]).toBeTruthy(); expect(PART_TEXT[l][k]).not.toMatch(/\p{Extended_Pictographic}/u); }
+    expect([PART_TEXT.ja.ringDetach, PART_TEXT.ja.ringRegionDetach, PART_TEXT.ja.ringChildDetach, PART_TEXT.ja.ringBack]).toEqual(['切り出す', '領域の切り出す', '子の切り出す', '戻す']);
+    expect(ringSrc).toContain("'pback'");
   });
 });
