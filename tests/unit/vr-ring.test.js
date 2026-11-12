@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
 import {
   WHEEL_SLOTS, WHEEL_ITEMS, DEFAULT_WHEEL, normalizeWheelItems, serializeWheelItems, parseWheelItems, setWheelItem, moveWheelItem, clearWheelItem, migrateWheelSectionFlip,
   wheelAngles, wheelSlotFromAngle, wheelSlotFromLocal, createWheelStick, createButtonPress,
@@ -45,7 +46,7 @@ describe('edit helpers', () => {
 });
 describe('wheelAngles', () => {
   it('6, 2, 3', () => {
-    expect(wheelAngles(6)).toEqual([0, 60, 120, 180, 240, 300]); expect(wheelAngles(2)).toEqual([270, 90]); expect(wheelAngles(3)).toEqual([0, 120, 240]);
+    expect(wheelAngles(6)).toEqual([0, 60, 120, 180, 240, 300]); expect(wheelAngles(2)).toEqual([270, 90]); expect(wheelAngles(4)).toEqual([0, 90, 180, 270]); expect(wheelAngles(4, false)).toEqual([0, 90, 180, 270]); expect(wheelAngles(4, true)).toEqual([315, 45, 225, 135]); expect(wheelAngles(6, true)).toEqual([300, 60, 0, 240, 120, 180]); expect(wheelAngles(3, true)).toEqual([240, 120, 0]); /* an earlier change: the region ring's 6 / 3 items */ expect(wheelAngles(2, true)).toEqual([270, 90]); expect(wheelAngles(3)).toEqual([0, 120, 240]);
   });
 });
 describe('createWheelStick', () => {
@@ -283,5 +284,24 @@ describe('migrateWheelSectionFlip (one-time)', () => {
   it('a full layout is not filled later either (flag already set)', () => {
     const r = migrateWheelSectionFlip({ wheel: ['home', null, null, null, null, null], wheelMig: 1 });
     expect(r.wheel).not.toContain('section-flip');
+  });
+});
+
+describe('an earlier change: the region / child ring with 4 items is a 2 x 2 board (quad), the other rings are unchanged', () => {
+  const R = 0.055, at = (x, y, n, q) => wheelSlotFromLocal(x * R, y * R, n, R, q);
+  it('upper left / upper right / lower left / lower right = items 0 / 1 / 2 / 3 (the region on top, the child below; 色 left, 表示 right)', () => {
+    expect(at(-0.8, 0.8, 4, true)).toBe(0); expect(at(0.8, 0.8, 4, true)).toBe(1); expect(at(-0.8, -0.8, 4, true)).toBe(2); expect(at(0.8, -0.8, 4, true)).toBe(3);
+    expect(wheelSlotFromAngle(315, 4, [true, true, true, true], null, { quad: true })).toBe(0); expect(wheelSlotFromAngle(45, 4, [true, true, true, true], null, { quad: true })).toBe(1);
+    expect(wheelSlotFromAngle(225, 4, [true, true, true, true], null, { quad: true })).toBe(2); expect(wheelSlotFromAngle(135, 4, [true, true, true, true], null, { quad: true })).toBe(3);
+  });
+  it('without quad the 4-item layout is the old one (top / right / bottom / left)', () => {
+    expect(at(0, 1, 4)).toBe(0); expect(at(1, 0, 4)).toBe(1); expect(at(0, -1, 4)).toBe(2); expect(at(-1, 0, 4)).toBe(3);
+  });
+  it('the drawing and the laser pick of the ring board both use the same angles (quad set by setItems; the ring passes it only for 4 items)', () => {
+    const r = readFileSync(new URL('../../docs/vr-ring.js', import.meta.url), 'utf8'), v = readFileSync(new URL('../../docs/vr-view.js', import.meta.url), 'utf8');
+    expect(r).toContain('ang=wheelAngles(n,quad),half=n?180/n:180;'); expect(r).toContain('ang=wheelAngles(n,quad),half=180/n;');
+    expect(r).toContain('setItems(l,e,o,q){labels=l;enabled=e;on=o||[];quad=!!q;draw()}');
+    expect(v).toContain('items.map(i=>i.on),items.length===3||items.length===4||items.length===6);pointWheel.setCentre(pw.name)');
+    expect(v).toContain("pointWheel.setItems(ids.map(k=>lab[k]),ids.map(()=>true),[]);"); // the point ring: no quad
   });
 });

@@ -40,6 +40,16 @@ describe('vr-view.js skipTick (the real source, mocked inputs)', () => {
   u.segA.value[3].w = 0; tick(); expect(u.useSkip.value).toBe(1);
   const other = u.clsTex.value; u.clsTex.value = { image: {} }; tick(); expect(u.useSkip.value).toBe(0); u.clsTex.value = other; tick(); expect(u.useSkip.value).toBe(1);
  });
+ it('a rebuild that only changes the hidden state (rb.hideOnly) keeps the bits in use, also while the texture reports mixed content (comboMask -1); a rebuild of another mask still gives 0', () => {
+  const { t, u, made, tick } = rig();
+  for (let i = 0; i < 100; i++) tick();
+  expect(u.useSkip.value).toBe(1);
+  t.rb = { busy: true, hideOnly: true, skipContent: 0b0111 }; t.comboMask = -1; // the bytes are being written: comboMask is -1, the skip bits describe 0b0111 all the time
+  for (let i = 0; i < 20; i++) { tick(); expect(u.useSkip.value).toBe(1); }
+  expect(made).toHaveLength(1); // not rebuilt
+  t.rb = { busy: true, hideOnly: false, skipContent: 0b0111 }; tick(); expect(u.useSkip.value).toBe(0); // a mask change: as before
+  t.rb = { busy: true, hideOnly: true, skipContent: -1 }; tick(); expect(u.useSkip.value).toBe(0); // a hide job cancelled mid-write (content unknown): off
+ });
  it('after a rebuild that changed the bytes and the mask the bits are rebuilt from the new bytes', () => {
   const { t, u, made, tick } = rig();
   for (let i = 0; i < 100; i++) tick();

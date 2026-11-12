@@ -98,6 +98,63 @@ export function outsideFovea(e, r) {
   const ix = Math.max(0, Math.min(e.x1, r[2]) - Math.max(e.x0, r[0])), iy = Math.max(0, Math.min(e.y1, r[3]) - Math.max(e.y0, r[1]));
   return Math.max(0, e.cover - ix * iy);
 }
+// one MORE volume in the same volume pass (the partner of a sample pair). The two ray meshes are drawn into one low-resolution target at one render scale, so the ray
+// budget (N_MAX, "rays per frame") counts both: the covered pixels of the partner's eyes are added to the primary's (acc.cover), its detail need joins the primary's
+// (acc.need: the scale is one for both, every voxel of either keeps its pixel) and its pixels outside the fovea rect join the periphery count (acc.outside).
+// acc = { cover, outside, need } (reused, start from the primary's sums); e = eyeMetrics out of that volume for one eye, rFov = that eye's foveaRect (viewport px). Returns acc.
+// With no partner this is never called: a single volume is computed exactly as before.
+export function addVolumeEye(acc, e, rFov) {
+  acc.cover += e.cover;
+  if (e.cover > 0) acc.need = Math.max(acc.need, capFromPpv(e.ppvCenter, e.ppvFar));
+  acc.outside += outsideFovea(e, rFov);
+  return acc;
+}
+
+const COVER_SHRINK = 1e-4, COVER_NEAR = 1e-3, COVER_PX = 1.5, PROJ_EPS = 1e-6;
+const cvA = new Float64Array(12), cvI = new Float64Array(9), PROJ_ZERO = [1, 2, 3, 4, 6, 7, 12, 13, 15];
+export function boxCoversView(m, half, view, proj, vw, vh) {
+  if (!(vw > 0 && vh > 0) || !proj[0] || !proj[5]) return false;
+  for (let i = 0; i < PROJ_ZERO.length; i++) if (Math.abs(proj[PROJ_ZERO[i]]) >= PROJ_EPS) return false; // a plain (asymmetric) perspective only
+  if (Math.abs(proj[11] + 1) >= PROJ_EPS) return false;
+  const near = proj[14] / (proj[10] - 1), far = proj[10] + 1 === 0 ? Infinity : proj[14] / (proj[10] + 1); // eye depths (> 0 in front of the eye)
+  if (!(near > 0) || !(far > near)) return false;
+  // A = view x m (object -> eye space): the 3 x 3 part in cvA[0..8] and the translation in cvA[9..11], column major
+  for (let c = 0; c < 4; c++) for (let r = 0; r < 3; r++) cvA[c * 3 + r] = view[r] * m[c * 4] + view[4 + r] * m[c * 4 + 1] + view[8 + r] * m[c * 4 + 2] + view[12 + r] * m[c * 4 + 3];
+  const a = cvA[0], b = cvA[3], c = cvA[6], d = cvA[1], e = cvA[4], f = cvA[7], g = cvA[2], h = cvA[5], k = cvA[8]; // rows (a b c) (d e f) (g h k)
+  const det = a * (e * k - f * h) - b * (d * k - f * g) + c * (d * h - e * g);
+  if (!(Math.abs(det) > 1e-30)) return false;
+  cvI[0] = (e * k - f * h) / det; cvI[1] = (c * h - b * k) / det; cvI[2] = (b * f - c * e) / det; // the inverse, row major
+  cvI[3] = (f * g - d * k) / det; cvI[4] = (a * k - c * g) / det; cvI[5] = (c * d - a * f) / det;
+  cvI[6] = (d * h - e * g) / det; cvI[7] = (b * g - a * h) / det; cvI[8] = (a * e - b * d) / det;
+  const tx = cvA[9], ty = cvA[10], tz = cvA[11];
+  if (far < Infinity) for (let i = 0; i < 8; i++) { // every corner of the box nearer than the far plane: no exit point is clipped by it
+    const ox = SX[i] * half[0], oy = SY[i] * half[1], oz = SZ[i] * half[2];
+    if (-(g * ox + h * oy + k * oz + tz) >= far * (1 - COVER_NEAR)) return false;
+  }
+  const Ox = -(cvI[0] * tx + cvI[1] * ty + cvI[2] * tz), Oy = -(cvI[3] * tx + cvI[4] * ty + cvI[5] * tz), Oz = -(cvI[6] * tx + cvI[7] * ty + cvI[8] * tz); // the eye in object space
+  const hx = half[0] * (1 - COVER_SHRINK), hy = half[1] * (1 - COVER_SHRINK), hz = half[2] * (1 - COVER_SHRINK), minExit = near * (1 + COVER_NEAR);
+  for (let s = 0; s < 4; s++) {
+    // the corner ray in eye space at depth 1 (z = -1): its parameter along the ray IS the eye depth, in object space as well (an affine map keeps it)
+    const nx = SX[s] * (1 + 2 * COVER_PX / vw), ny = SY[s] * (1 + 2 * COVER_PX / vh);
+    const vx = (nx + proj[8]) / proj[0], vy = (ny + proj[9]) / proj[5];
+    const Dx = cvI[0] * vx + cvI[1] * vy - cvI[2], Dy = cvI[3] * vx + cvI[4] * vy - cvI[5], Dz = cvI[6] * vx + cvI[7] * vy - cvI[8];
+    let t0 = -Infinity, t1 = Infinity;
+    for (let ax = 0; ax < 3; ax++) {
+      const o = ax === 0 ? Ox : ax === 1 ? Oy : Oz, dd = ax === 0 ? Dx : ax === 1 ? Dy : Dz, hh = ax === 0 ? hx : ax === 1 ? hy : hz;
+      if (Math.abs(dd) < 1e-15) { if (Math.abs(o) >= hh) return false; continue; }
+      let ta = (-hh - o) / dd, tb = (hh - o) / dd; if (ta > tb) { const q = ta; ta = tb; tb = q; }
+      if (ta > t0) t0 = ta; if (tb < t1) t1 = tb;
+    }
+    if (!(t1 > t0) || !(t1 > minExit)) return false; // misses the box, or leaves it before the near plane
+  }
+  return true;
+}
+// which of the two composites of a pair the low-resolution path draws: primaryOnly / partnerOnly = that composite alone draws the picture, else both (as before). vr-view.js passes
+// primaryOnly only when it cannot change a pixel (the primary's box covers every eye viewport AND the primary is the nearer box, so it draws first with LessEqual and the partner's, Less,
+// is rejected at every pixel), and never partnerOnly. Constant objects: no allocation per frame.
+const COMP_BOTH = Object.freeze({ primary: true, partner: true }), COMP_PRIMARY = Object.freeze({ primary: true, partner: false }), COMP_PARTNER = Object.freeze({ primary: false, partner: true });
+export const pairComposites = (primaryOnly, partnerOnly) => (primaryOnly ? COMP_PRIMARY : partnerOnly ? COMP_PARTNER : COMP_BOTH);
+
 // is the offscreen foveation worth its second pass? The periphery pass ray-marches every covered pixel again at (f k)^2, the centre pass only the ones in
 // the rect at f^2: it pays off when more than k^2 of the covered pixels lie outside the rect (switched on above 1.25 k^2, off below 1.05 k^2: no flicker at
 // the threshold). A volume that fits in the rect (max zoom at arm's length) is drawn by the centre pass alone.

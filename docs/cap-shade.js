@@ -12,7 +12,7 @@
 // full width; until it is ready (and for a segment without voxels / with one value) the initial value is used: the segment's own min..max (what its sliders show) cut to the data's actual min..max (an open-ended segment, bone up to
 // 61535, ends at the data's top). Once the user moves one of the two range sliders of a segment both ends are kept (manual) until 「自動に戻す」. The manual ranges live in segments.js (segmentShadeRanges), saved in the project file; the auto values are not saved.
 
-import { HIST_BINS, binOf, binValue, binValues, binRuns, createHist } from './histogram.js?v=20261110-build708'; // build after 703: the ONE histogram implementation (equal bins over an axis {min, max}); the shade histogram below is histogram.js with the data's own range as the axis
+import { HIST_BINS, binOf, binValue, binValues, binRuns, createHist } from './histogram.js?v=20261112-build730'; // build after 703: the ONE histogram implementation (equal bins over an axis {min, max}); the shade histogram below is histogram.js with the data's own range as the axis
 
 export const SHADE_BRIGHT_DEFAULT = 1.8, SHADE_CONTRAST_DEFAULT = 1.7, SHADE_FLOOR = 0.35; // the same defaults as VR (vr-view.js DEFAULTS ctShadeBright / ctShadeContrast)
 export const SHADE_BRIGHT_MIN = 0.5, SHADE_BRIGHT_MAX = 2, SHADE_CONTRAST_MIN = 0.5, SHADE_CONTRAST_MAX = 2; // 50..200 % in 10 % steps, as the VR sliders

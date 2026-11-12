@@ -154,7 +154,7 @@ describe('the point ring offers 色 (static check of vr-view.js)', () => {
     expect(src).toContain("['move','delete','color','distance']");
     expect(src).toContain("const COLOR_IDS=['auto',...POINT_PALETTE.map(p=>p.hex)]");
     expect(src).toContain("undo.push({type:'color'");
-    expect(src).toContain('updateCommentPosition,updateCommentColor,removeMeasurement,restoreMeasurements}');
+    expect(src).toContain('updateCommentPosition:(id,pos)'); expect(src).toContain('updateCommentColor:(id,hex)'); expect(src).toContain('},undoStore=routed;'); // stage 3: the undo goes to the store that owns the id (the primary's, or the partner's)
   });
 });
 

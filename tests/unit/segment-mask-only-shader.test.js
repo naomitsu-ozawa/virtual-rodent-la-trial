@@ -56,7 +56,7 @@ describe('shaders: membership tests honour the mask-only bit', () => {
     expect(vr).toMatch(/\(\(editMaskOnly>>s\)&1\)==1\|\|\(v>=a\.x&&v<=a\.y\)/);
     // the classification builder moved to point-cls.js (shared with the PC 3D point markers)
     const cls = readFileSync(new URL('../../docs/point-cls.js', import.meta.url), 'utf8');
-    expect(cls).toMatch(/else if\(maskOnly&&f<191\)f=191/);
+    expect(cls).toMatch(/if\(maskOnly\)f=mb>=128\?Math\.min\(mb,Math\.max\(f,191\)\):mb;/); // n730 (rat brain voxel look): for a 0 \/ 255 mask byte this is the old "inside: f at least 191, outside: 0"
   });
 });
 

@@ -10,8 +10,8 @@
 // magnification the VR / AR view starts the data at (1 = real size; the registry's Lv0 bone has 4); default (true on at most one dataset) = the dataset the page opens when none is chosen.
 // Order: the levels Lv0, Lv1, Lv2, Lv3 by the `level` field, then the datasets without a level (「その他」) in the order of the list. A second dataset that claims a level
 // already taken is treated as 「その他」 (console warning).
-import { I18N } from './i18n.js?v=20261110-build708';
-import { sampleJsonUrl, sampleListUrl, setKnownSampleIds, isSampleId } from './sample-sets.js?v=20261110-build708';
+import { I18N } from './i18n.js?v=20261112-build730';
+import { sampleJsonUrl, sampleListUrl, setKnownSampleIds, isSampleId } from './sample-sets.js?v=20261112-build730';
 
 export const SAMPLE_LEVELS = Object.freeze([0, 1, 2, 3]);
 export const VR_INITIAL_SCALE_RANGE = Object.freeze({ min: 0.1, max: 20 }); // sane bounds for sample.json vrInitialScale (the viewer clamps to its own limits anyway)
@@ -191,6 +191,10 @@ async function fetchSampleJson(id) {
     if (!res.ok) throw new Error('HTTP ' + res.status + ' for ' + id + '/sample.json');
     try { return await res.json(); } catch { return null; } // a server that answers a missing file with a page (200): no such file
   } finally { clearTimeout(timer); }
+}
+// The name of the PARTNER folder of a dataset (docs/demo/<id>/<dir>/sample.json, a listed partner only: sample-sets.js sampleJsonUrl): { ja, en } or null (not readable / no valid name). The VR menu's pair row says it.
+export async function loadPartnerName(id, dir) {
+  try { const raw = await fetchSampleJson(id + '/' + dir); return raw && isBilingual(raw.name) ? { ja: raw.name.ja, en: raw.name.en } : null; } catch { return null; }
 }
 export async function loadRegistry() {
   try { setRegistry(await discoverSamples(parseSampleList(await fetchSampleList()), fetchSampleJson)); } catch (e) { console.warn('Sample registry: the practice data list could not be read; no practice data cards are shown', e); registry = EMPTY_REGISTRY; setKnownSampleIds([]); }

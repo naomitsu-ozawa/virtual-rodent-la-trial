@@ -1,7 +1,7 @@
 // The analysis regions as a TREE under their parent segment (the browser segment cards and the VR segment menu): pure data builders, no DOM, no three.js, unit-tested
 // (tests/unit/segment-tree.test.js). A region hangs under the first of its segments that the tree knows (a merged region of bone + fat is under bone, listed once);
 // the order of a segment's children is the order of the analysis list. A row = what the view draws: colour, display name, shown flag, focus.
-import { regionVisible } from './region-visibility.js?v=20261110-build708';
+import { regionVisible, regionHidden } from './region-visibility.js?v=20261112-build730';
 export const TREE_COLLAPSE_OVER=8; // the browser's tree starts collapsed when a segment has more regions than this
 export const treeDefaultExpanded=count=>count<=TREE_COLLAPSE_OVER;
 // the segment a region is listed under, or null (no segment of it is in the tree: such a region stays only in the analysis list)
@@ -11,13 +11,13 @@ export function treeParentKey(region,segmentKeys){
 }
 // regions: the analysis list; segmentKeys: the tree's segments in their display order; nameOf(region): the display name (analysis-results.js analysisRegionName);
 // segmentsShown(region) (optional): false while every segment of the region is unticked (the toggle rests then); focusedId: the focused region's id
-// -> [{ key, count, rows:[{ id, name, color, visible, canToggle, focused }] }] only for segments that have regions, in segmentKeys order
+// (visible = the colour flag, hidden = the shape flag: the row is dimmed only for hidden) -> [{ key, count, rows:[{ id, name, color, visible, hidden, canToggle, focused }] }] only for segments that have regions, in segmentKeys order
 export function buildSegmentTree(regions,{segmentKeys,nameOf,segmentsShown=null,focusedId=null}){
  const groups=new Map();
  for(const r of regions||[]){
   const key=treeParentKey(r,segmentKeys);if(key==null)continue;
   if(!groups.has(key))groups.set(key,[]);
-  groups.get(key).push({id:r.id,name:String(nameOf(r)),color:r.color,visible:regionVisible(r),canToggle:segmentsShown?!!segmentsShown(r):true,focused:r.id===focusedId});
+  groups.get(key).push({id:r.id,name:String(nameOf(r)),color:r.color,visible:regionVisible(r),hidden:regionHidden(r),canToggle:segmentsShown?!!segmentsShown(r):true,focused:r.id===focusedId});
  }
  return segmentKeys.filter(k=>groups.has(k)).map(key=>({key,count:groups.get(key).length,rows:groups.get(key)}));
 }
