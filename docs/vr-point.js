@@ -9,8 +9,8 @@
 // that another clipping section has cut away. A section whose intersection is outside the volume is skipped, never clamped.
 // Voxel rule: voxel i covers the fraction [i/n, (i+1)/n) of the box along its axis, so the index is floor(fraction * n); a point
 // outside [0,1) on any axis (the far face itself included) is NOT recorded: it is never moved into the volume.
-import { createComment, addComment, getComments, removeComment, restoreComment, updateCommentPosition, updateCommentColor, commentMatchesSeries } from './comments.js?v=20261110-build708';
-import { marchClassificationHitInfo } from './vr-pick.js?v=20261110-build708';
+import { createComment, addComment, getComments, removeComment, restoreComment, updateCommentPosition, updateCommentColor, commentMatchesSeries } from './comments.js?v=20261112-build724';
+import { marchClassificationHitInfo } from './vr-pick.js?v=20261112-build724';
 const T_MIN=1e-6,EDGE_EPS=1e-4;
 
 // t of the ray o + t*q on the plane, or null (parallel, or behind the origin)
@@ -389,6 +389,7 @@ export function createUndoStack({max=20}={}){
   push(op){if(!op)return;ops.push(op);if(ops.length>max)ops=ops.slice(ops.length-max)},
   pop(){return ops.length?ops.pop():null},
   clear(){ops=[]},
+  dropWhere(pred){ops=ops.filter(o=>!pred(o))}, // (the partner's steps go with the partner)
   get size(){return ops.length},
  };
 }

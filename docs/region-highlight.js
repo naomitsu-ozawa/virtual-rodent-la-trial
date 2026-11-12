@@ -19,6 +19,11 @@ export function highlightIndex(entries, rid) {
   return i >= 0 && entries[i].shown ? i : -1;
 }
 
+// A CHILD SEGMENT is lit the same way, through ITS look-up table (childLut row 0, rgb only): the lit child moves toward white like a lit result. The shader is not touched (GLSL / WebGL read the table as they do).
+// Once a child is lit (alone or with a result under it) every coloured thing that is not lit goes back toward its segment's colour, results and children alike. A lit result alone dims results only, as it always did; nothing lit = the plain tables.
+// resultAt / childAt = highlightIndex of each table (-1 = none lit).
+export const anyLit = (resultAt, childAt) => resultAt >= 0 || childAt >= 0;
+
 // Which result is highlighted, from what the lasers point at. One tracker per session.
 // update(hands, enabled): hands = [{key, pin, hover}] (key: any stable id of the hand / controller; pin: the region id of the pinned label the laser is on or holds, or 0;
 // hover: the region id of the result under the laser whose name card is shown, or 0). Returns the region id to highlight (0 = none).
