@@ -126,7 +126,7 @@ describe('VR: the child under the laser, and the event mode switch', () => {
   });
   it('vr-view.js wiring: the hit carries childKey, the hover card and the pin use the child, the switch counts the children', () => {
     const v = readFileSync('docs/vr-view.js', 'utf8');
-    expect(v).toContain('childKey=childKeyAtHit(ch.rg,childList,'); // an earlier change: the one RG index array (R at 2 k; a hidden child there: G at 2 k + 1) expect(v).toContain('return{distance:hi.t,key:gpuSegmentOrder()[si]||\'\',id,childKey,');
+    expect(v).toContain('childKey=childKeyAtHit(ch.rg,childList,'); expect(v).toContain('return{distance:hi.t,key:gpuSegmentOrder()[si]||\'\',id,childKey,'); // an earlier change: the one RG index array (R at 2 k; a hidden child there: G at 2 k + 1)
     expect(v).toContain("kc=!r&&hit.childKey?childByKey(hit.childKey):null"); expect(v).toContain('childLabelTitle(kc,tr)');
     expect(v).toContain("triggerMode(evLabels,labelTargets(regionList.length,childList.length))==='label'"); expect(v).toContain('hasRes=labelTargets(regionList.length,childList.length)>0');
     expect(v).toContain('for(const reg of childLabelItems())'); expect(v).toContain('const regionByRid=rid=>rid<0?childLabelItemById(rid):');

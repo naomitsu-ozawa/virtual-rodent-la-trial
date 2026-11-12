@@ -77,7 +77,7 @@ describe('the VR shader keeps child segments out of every session without them',
     // draws with exactly the programs it always had. If this fails the shader text of a child-free session changed: justify it, or move the change under VRL_CHILDREN.
     const t = shaderTemplate(src), V = [[], ['VRL_NO_GENERAL', 'VRL_OPAQUE'], ['VRL_NO_GENERAL', 'VRL_NO_EVENTS', 'VRL_OPAQUE']], h = createHash('sha256');
     for (const med of [0, 1]) for (const reg of [0, 1]) for (const cls4 of [0, 1]) for (const v of V) h.update(preprocess(t, new Set([...v, ...(med ? ['VRL_MEDIUMP'] : []), ...(reg ? ['VRL_REGIONS'] : []), ...(cls4 ? ['VRL_CLS4'] : [])])) + '\n--\n');
-    expect(h.digest('hex').slice(0, 24)).toBe('38489677902097d63e0703c5');
+    expect(h.digest('hex').slice(0, 24)).toBe('a3fec59290a59ee420a06ab3');
   });
 });
 

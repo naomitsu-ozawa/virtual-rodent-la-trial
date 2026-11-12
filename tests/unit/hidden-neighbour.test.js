@@ -98,8 +98,9 @@ describe('the picks go through the hidden part and stop at the neighbour (synthe
 describe('the VR / PC WebGL shader (a)-(c): only on a ray that passed a hidden part', () => {
   const v = src('vr-view.js');
   it('(a) no distance-field jump from a hidden sample, in every loop (two tight copies, the combined and the distance path of the general loop)', () => {
-    expect(v.match(/#ifdef VRL_HIDE\n {3}if\(prevHid\)dd=0\.0;/g)).toHaveLength(3);
-    expect(v).toContain('#ifdef VRL_HIDE\n    if(prevHid)dd=0.0;');
+    expect(v.match(/#ifdef VRL_HIDE\n#ifdef VRL_OPAQUE\n {3}if\(prevHid\)dd=0\.0;[^\n]*\n#else\n {3}if\(prevHid\|\|\(lastIndex>=0&&hideAnyOn\(\)\)\)dd=0\.0;[^\n]*\n#endif\n/g)).toHaveLength(3);
+    expect(v).toMatch(/#ifdef VRL_HIDE\n#ifdef VRL_OPAQUE\n {4}if\(prevHid\)dd=0\.0;[^\n]*\n#else\n {4}if\(prevHid\|\|\(lastIndex>=0&&hideAnyOn\(\)\)\)dd=0\.0;[^\n]*\n#endif\n/);
+    // review 1: on a see-through path, inside the segment the ray is in (lastIndex >= 0), no jump either while something is hidden (a jump could cross a thin hidden part); the opaque path as before
     // and none from the FIRST sample when it lies in a hidden part (a hidden cap point, the eye inside the box): tested ONCE per ray before the loops (prevHid), only while something is hidden
     expect(v).not.toContain('t<=t0)');
     expect(v).toContain(' bool prevHid=false;\n'); expect(v).toContain('if(hideAnyOn()){vec3 tcS=tcO+tcD*t;int si=segmentIndexAt(tcS);if(si>=0&&hideAt(tcS,si))prevHid=true;}');
@@ -262,6 +263,10 @@ describe('the shader follow-up (see-through hidden part, the child look, the gat
     expect(v).toContain(' childLook(childLookIdAt(texCoord(p),si),si);');
     expect(v.match(/if\(ci>=0\)childLook\(childLookIdAt\(texCoord\(cp\),ci\),ci\);/g)).toHaveLength(2);
     expect(v).not.toContain('childLook(childIdAt(');
+  });
+  it('the VR HU histogram marks a hidden result / child by the hide index (G, rg[2 i + 1]), as the shader (review 2)', () => {
+    expect(v).toContain('const rg=g.rg;for(let i=0;i<d.length;i++){const v=mr[rg[2*i+1]];if(v)d[i]=v}}');
+    expect(v).toContain('const rg=ch.rg;for(let i=0;i<d.length;i++){const v=mk[rg[2*i+1]];if(v)d[i]=v}}');
   });
   it("the laser label / pin: where the colour index's result or child is HIDDEN, the hide index's own one (as the shader's colour)", () => {
     expect(v).toContain('id0=idR&&regionHiddenVr(regionList[idR-1]?.rid)&&idG!==idR?idG:idR,');

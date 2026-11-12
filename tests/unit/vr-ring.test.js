@@ -46,7 +46,7 @@ describe('edit helpers', () => {
 });
 describe('wheelAngles', () => {
   it('6, 2, 3', () => {
-    expect(wheelAngles(6)).toEqual([0, 60, 120, 180, 240, 300]); expect(wheelAngles(2)).toEqual([270, 90]); expect(wheelAngles(4)).toEqual([0, 90, 180, 270]); expect(wheelAngles(4, false)).toEqual([0, 90, 180, 270]); expect(wheelAngles(4, true)).toEqual([315, 45, 225, 135]); expect(wheelAngles(6, true)).toEqual(wheelAngles(6)); expect(wheelAngles(2, true)).toEqual([270, 90]); expect(wheelAngles(3)).toEqual([0, 120, 240]);
+    expect(wheelAngles(6)).toEqual([0, 60, 120, 180, 240, 300]); expect(wheelAngles(2)).toEqual([270, 90]); expect(wheelAngles(4)).toEqual([0, 90, 180, 270]); expect(wheelAngles(4, false)).toEqual([0, 90, 180, 270]); expect(wheelAngles(4, true)).toEqual([315, 45, 225, 135]); expect(wheelAngles(6, true)).toEqual([300, 60, 0, 240, 120, 180]); expect(wheelAngles(3, true)).toEqual([240, 120, 0]); /* an earlier change: the region ring's 6 / 3 items */ expect(wheelAngles(2, true)).toEqual([270, 90]); expect(wheelAngles(3)).toEqual([0, 120, 240]);
   });
 });
 describe('createWheelStick', () => {
@@ -301,7 +301,7 @@ describe('an earlier change: the region / child ring with 4 items is a 2 x 2 boa
     const r = readFileSync(new URL('../../docs/vr-ring.js', import.meta.url), 'utf8'), v = readFileSync(new URL('../../docs/vr-view.js', import.meta.url), 'utf8');
     expect(r).toContain('ang=wheelAngles(n,quad),half=n?180/n:180;'); expect(r).toContain('ang=wheelAngles(n,quad),half=180/n;');
     expect(r).toContain('setItems(l,e,o,q){labels=l;enabled=e;on=o||[];quad=!!q;draw()}');
-    expect(v).toContain('items.map(i=>i.on),items.length===4);pointWheel.setCentre(pw.name)');
+    expect(v).toContain('items.map(i=>i.on),items.length===3||items.length===4||items.length===6);pointWheel.setCentre(pw.name)');
     expect(v).toContain("pointWheel.setItems(ids.map(k=>lab[k]),ids.map(()=>true),[]);"); // the point ring: no quad
   });
 });

@@ -8,24 +8,30 @@ import { wheelAngles } from '../../docs/vr-ring.js';
 import { I18N } from '../../docs/i18n.js';
 const v = readFileSync(new URL('../../docs/vr-view.js', import.meta.url), 'utf8');
 const ring = readFileSync(new URL('../../docs/vr-ring.js', import.meta.url), 'utf8');
-const text = { color: '色', shape: '表示', regionColor: '領域の色', regionShape: '領域の表示', childColor: '子の色', childShape: '子の表示' };
+const text = { color: '色', shape: '表示', regionColor: '領域の色', regionShape: '領域の表示', childColor: '子の色', childShape: '子の表示', detach: '切り出す', regionDetach: '領域の切り出す', childDetach: '子の切り出す', back: '戻す' };
 const mkChild = (o = {}) => ({ key: 's1', visible: true, colorOff: false, ...o });
 
 describe('the ring items: one target = 2, a region and a child together = 4', () => {
   it('a region alone: 色 (left) and 表示 (right), lit = colour on / shape shown', () => {
     const items = regionRingItems(ringState({ id: 1 }, null), text);
-    expect(items.map(i => i.label)).toEqual(['色', '表示']); expect(items.map(i => i.id)).toEqual(['rcolor', 'rshape']); expect(items.map(i => i.on)).toEqual([true, true]);
-    expect(wheelAngles(items.length)).toEqual([270, 90]); // slot 0 = left, slot 1 = right (vr-ring.js)
+    expect(items.map(i => i.label)).toEqual(['色', '表示', '切り出す']); expect(items.map(i => i.id)).toEqual(['rcolor', 'rshape', 'rdetach']); expect(items.map(i => i.on)).toEqual([true, true, false]);
+    expect(wheelAngles(items.length, true)).toEqual([240, 120, 0]); // slot 0 (色) = lower left, slot 1 (表示) = lower right, slot 2 (切り出す) = top (vr-ring.js): 色 left, 表示 right as decided
   });
   it('a child alone: the same two items on the child\'s flags', () => {
     const items = regionRingItems(ringState(null, mkChild({ colorOff: true })), text);
-    expect(items.map(i => i.label)).toEqual(['色', '表示']); expect(items.map(i => i.id)).toEqual(['ccolor', 'cshape']); expect(items.map(i => i.on)).toEqual([false, true]);
+    expect(items.map(i => i.label)).toEqual(['色', '表示', '切り出す']); expect(items.map(i => i.id)).toEqual(['ccolor', 'cshape', 'cdetach']); expect(items.map(i => i.on)).toEqual([false, true, false]);
   });
   it('a region and a child (they overlap under the laser): four items that say whose they are, in the agreed order', () => {
     const items = regionRingItems(ringState({ id: 1, hidden: true }, mkChild({ visible: false })), text);
-    expect(items.map(i => i.label)).toEqual(['領域の色', '領域の表示', '子の色', '子の表示']); expect(items.map(i => i.id)).toEqual(['rcolor', 'rshape', 'ccolor', 'cshape']);
-    expect(items.map(i => i.on)).toEqual([true, false, true, false]);
-    expect(RING_ITEM_IDS).toEqual(['rcolor', 'rshape', 'ccolor', 'cshape']);
+    expect(items.map(i => i.label)).toEqual(['領域の色', '領域の表示', '領域の切り出す', '子の色', '子の表示', '子の切り出す']); expect(items.map(i => i.id)).toEqual(['rcolor', 'rshape', 'rdetach', 'ccolor', 'cshape', 'cdetach']);
+    expect(items.map(i => i.on)).toEqual([true, false, false, true, false, false]);
+    expect(RING_ITEM_IDS).toEqual(['rcolor', 'rshape', 'ccolor', 'cshape', 'rdetach', 'cdetach', 'pback']);
+    const ang = wheelAngles(items.length, true), at = id => ang[items.findIndex(i => i.id === id)];
+    expect([at('rcolor'), at('rshape'), at('rdetach')]).toEqual([300, 60, 0]); expect([at('ccolor'), at('cshape'), at('cdetach')]).toEqual([240, 120, 180]);
+    for (const id of ['rcolor', 'rshape', 'rdetach']) expect(Math.cos(at(id) * Math.PI / 180)).toBeGreaterThanOrEqual(0); // up (0 = up, clockwise)
+    for (const id of ['ccolor', 'cshape', 'cdetach']) expect(Math.cos(at(id) * Math.PI / 180)).toBeLessThan(0);
+    for (const [l, r] of [['rcolor', 'rshape'], ['ccolor', 'cshape']]) expect(Math.sin(at(l) * Math.PI / 180)).toBeLessThan(0), expect(Math.sin(at(r) * Math.PI / 180)).toBeGreaterThan(0); // left / right
+    expect(new Set(ang).size).toBe(6);
   });
   it('no target = no ring; the names go in the middle', () => {
     expect(regionRingItems(ringState(null, null), text)).toEqual([]);
@@ -101,12 +107,12 @@ describe('vr-view.js wiring of the ring', () => {
     expect(v).toContain("if(pw?.kind==='point'&&!ids.has(pw.id))closePointWheel();");
     expect(v).toContain("const pwIds=()=>pw?.kind==='region'?pw.items.map(i=>i.id):pw?.mode==='color'?COLOR_IDS:");
     expect(v).toContain("if(pw?.kind==='region')return confirmRegionRing(k,c);");
-    expect(v).toContain("if(pw.kind==='region'){if(!(pw.rid?regionById(pw.rid):childByKey(pw.childKey))){closePointWheel();return}}");
+    expect(v).toContain("if(pw.kind==='region'){if(pw.partUid!=null?!parts.some(q=>q.uid===pw.partUid):!(pw.rid?regionById(pw.rid):childByKey(pw.childKey))){closePointWheel();return}}");
     expect(v).toContain('else{const pt=vpMarkers.centres().find(x=>x.id===pw.id);if(!pt){closePointWheel();return}}');
   });
   it('the ring is the point ring\'s board (same laser pick, thumbstick, closing); a confirm closes it, pulses and applies the item', () => {
-    expect(v).toContain("pointWheel.setItems(items.map(i=>i.label),items.map(()=>true),items.map(i=>i.on),items.length===4);pointWheel.setCentre(pw.name);");
-    expect(v).toContain('closePointWheel();pulse(c,HAPTIC.ringConfirm.amp,HAPTIC.ringConfirm.ms);\n  applyRingItem(it.id,{reg,child},{setRegionVisible,setRegionHidden,setChildLook,pressRegionColor,pressChildColor});menu.refresh();return true;');
+    expect(v).toContain("pointWheel.setItems(items.map(i=>i.label),items.map(i=>i.enabled!==false),items.map(i=>i.on),items.length===3||items.length===4||items.length===6);pointWheel.setCentre(pw.name);");
+    expect(v).toContain('closePointWheel();pulse(c,HAPTIC.ringConfirm.amp,HAPTIC.ringConfirm.ms);\n  applyRingItem(it.id,{reg,child},{setRegionVisible,setRegionHidden,setChildLook,pressRegionColor,pressChildColor,');
     expect(v).toContain("pointWheel.setCentre('')"); // the point ring has no name in the middle
     expect(ring).toContain('setCentre(t){');
   });
@@ -122,7 +128,7 @@ describe('(消えたら消灯に揃える): the 色 items and buttons show what 
     const s = ringState(reg, kid, { reg: false, child: false });
     expect(s.reg).toEqual({ color: false, shape: true }); expect(s.child).toEqual({ color: false, shape: true });
     expect(ringState(reg, kid, { reg: undefined, child: undefined }).reg.color).toBe(true);
-    expect(regionRingItems(ringState(reg, null, { reg: false }), text).map(i => i.on)).toEqual([false, true]);
+    expect(regionRingItems(ringState(reg, null, { reg: false }), text).map(i => i.on)).toEqual([false, true, false]);
   });
   it('applyRingItem: the 色 items go through the board\'s press when it is given (one helper), else toggle the flag as before', () => {
     const calls = [], reg = { id: 1, visible: true }, kid = mkChild({ colorOff: false });
