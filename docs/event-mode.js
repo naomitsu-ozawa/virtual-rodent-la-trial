@@ -2,7 +2,7 @@
 // Four levels, each one of the bundled practice datasets (docs/demo/sampleN, the same set ids as the practice-data chooser);
 // texts are i18n keys (i18n.js). The switch is settings.eventMode (app-settings.js, per device, default off); the chosen
 // level lives only in this page (a reload starts with none chosen) and follows whichever practice dataset was opened last.
-import { registry, sampleKey } from './sample-registry.js?v=20261110-build708';
+import { registry, sampleKey } from './sample-registry.js?v=20261112-build721';
 export const EVENT_HINT_KEYS={section:'evHintSection',move:'evHintMove',toggle:'evHintToggle',mark:'evHintMark',distance:'evHintDistance'};
 // the levels, the other datasets and each dataset's starting segments are no longer tables here: they come from the registry (sample-registry.js), built from the sample.json
 // of every docs/demo/sampleN folder. Order: Lv0..Lv3 by the level field, then the datasets without a level by folder number. Names / missions are i18n keys the registry adds (sampleKey).
@@ -43,6 +43,12 @@ export const levelForSample=sample=>EVENT_LEVELS.find(l=>l.sample===sample)||nul
 export function levelSwitchItems(nameOf,openSample,armedId=null,levels=EVENT_DATASETS){
  return levels.map(l=>({id:l.id,sample:l.sample,label:datasetLabel(l,nameOf),on:l.sample===openSample,armed:armedId===l.id}));
 }
+// The data switch INSIDE a VR / AR session (the かんたん menu's row, the full menu's データ tab, the press itself) exists only while the data in view is a practice dataset that HAS a level
+// (sample.json level 0-3: EVENT_LEVELS), and it switches only to datasets that have a level. A dataset without a level, or the visitor's own data (openSample null), is shown alone: no row, no tab, no switch.
+// Decided from what the visitor has open (the sample's level), never from a count or from whether something is loaded. Pure.
+export const sampleHasLevel=(sample,levels=EVENT_LEVELS)=>sample!=null&&levels.some(l=>l.sample===sample);
+export const levelSwitchTargets=(openSample,levels=EVENT_LEVELS)=>sampleHasLevel(openSample,levels)?levels:[];
+export const canSwitchData=(openSample,targetSample,levels=EVENT_LEVELS)=>sampleHasLevel(openSample,levels)&&sampleHasLevel(targetSample,levels);
 let chosen=null;
 // id of a level, or null / unknown = none chosen
 export function chooseEventLevel(id){chosen=levelById(id)?.id??null;return chosen}
@@ -55,14 +61,17 @@ export const activeEventLevel=api=>eventModeOn(api)?chosenEventLevel():null;
 // the help board). Its contents come from the loaded dataset: one 表示 / 非表示 row per shown segment (active and enabled; at most MAX_SEG_ROWS, the
 // rest is counted), 断面, the trigger switch (only when the dataset has analysis results), the analysis results as a read-only list, and the bottom row.
 export const MAX_SEG_ROWS=6;
+export const KID_MIN_ROWS=4; // the かんたん menu: the least rows the child segments' list gets when the results are listed too
 // the segment rows: the shown segments (active and enabled, in the order given), capped
 export const simpleMenuSegments=shownKeys=>[...(shownKeys||[])].slice(0,MAX_SEG_ROWS);
 // What the trigger does is ONE of two exclusive modes, switched on the board (never both):
 //  'point' = a short press records a point (印) where the laser meets the surface / the section (vr-view.js, vrPointMode decides where);
 //  'label' = the laser on an analysed region shows its label and the trigger pins / unpins it (as in the 解析 tab).
-// The switch exists only when the dataset has analysis results (a label needs a result); without them the trigger is always 'point'.
+// The switch exists only when the dataset has something to label: analysis results OR child segments (a child segment has its own name label); without them the trigger is always 'point'.
 // The start is always 'point', for every dataset: it is the one every mission can use (Lv3 marks and measures) and it never swallows a press;
 // a visitor who wants the labels presses 解析モード once, and the board says what the trigger does now.
+// how many things a label can be pinned on: the analysis results + the child segments; the switch (triggerModeRow / triggerMode) exists when this is not 0
+export const labelTargets=(results,children)=>(results|0)+(children|0);
 export const triggerModeRow=hasResults=>!!hasResults;
 export const TRIGGER_AT_START='point';
 export const triggerMode=(labelsOn,hasResults)=>hasResults&&labelsOn?'label':'point';
@@ -73,6 +82,7 @@ export const SIMPLE_MENU=Object.freeze({W:1024,H:1400,X:40,STATUS:140,TOP:180,RO
 // There is no title line and no level text; the board's status line sits at STATUS and the rows start at TOP.
 // o: {segments:[{key,name,color,on}], sectionOn, sliceOpacity (0..1, the slider's value; default SLICE_OPACITY_DEFAULT), trigger:{show,label}, results:[{hex,name,text}], total, resetArmed, text:{...},
 //     page (0-based, the results list's page: rounded into range), text.page ('ページ' / 'Page'),
+//     pair?: {label, on, busy}
 //     levels?: {items:[{id,label,on,armed}], busy, hint, text:{title,again}}}
 // The slice-opacity slider row (always there, for every dataset: it only shows once a section is) sits under the 断面 row; its steps are 5 % (sliceOpacityValue).
 export const SLICE_OPACITY_DEFAULT=0.6;
@@ -131,11 +141,15 @@ export function simpleMenuLayout(o){
   btn('trigger:point',440,y,250,t.trigPoint,!lab,{size:32,color:!lab?'#cfe3f0':undefined});btn('trigger:label',710,y,250,t.trigLabel,lab,{size:32,color:lab?'#cfe3f0':undefined});
   label('trigger:hint',X,y+M.BTN_H+22,lab?t.trigHintLabel:t.trigHintPoint,{size:24,color:'#ffd27a'});y+=M.TRIG_ROW;
  }
- const res=o.results||[],listEnd=o.levels?M.LEVEL_Y-M.ROW/2:M.BOTTOM;
+ // o.pair = {label, on, busy}: ONE wide button (id 'pair:toggle') that places the partner of the open dataset beside it / takes it away ('<partner name>と並べる' / '並べるのをやめる'; the texts come from the caller). It sits where the
+ // level row sits (above the bottom row); with the level row too it sits just above that one. Without o.pair the board is exactly the one of before.
+ const pairY=o.pair?(o.levels?M.LEVEL_Y-M.ROW-30:M.LEVEL_Y):0,listEnd=o.pair?pairY-M.ROW/2:o.levels?M.LEVEL_Y-M.ROW/2:M.BOTTOM;
+ const res=o.results||[],kids=o.kids||[];
+ const kidReserve=kids.length&&res.length?56+54+M.LIST_ROW*Math.min(kids.length,KID_MIN_ROWS):0,resEnd=listEnd-kidReserve;let resBottom=y; // resBottom: where the results block ends (the children's list starts there)
  if(res.length){
   label('results',X,y+30,t.results,{bold:true,size:28});
   // the whole row is the hit area of its show / hide switch (same action as the colour chip: id 'result:<i>:row', target 'result:<i>'); with more results than rows, ◀ ▶ and 「ページ n/N」 sit right of the total
-  const top=y+56,cap=Math.max(0,Math.floor((listEnd-24-30-top)/M.LIST_ROW)),pg=resultPaging(res.length,o.page,cap),shown=res.slice(pg.start,pg.start+pg.count);
+  const top=y+56,cap=Math.max(0,Math.floor((resEnd-24-30-top)/M.LIST_ROW)),pg=resultPaging(res.length,o.page,cap),shown=res.slice(pg.start,pg.start+pg.count);
   shown.forEach((r,k)=>{const i=pg.start+k,ry=top+k*M.LIST_ROW;
    const on=r.on!==false; // the chip is the result's show / hide switch (lit = shown)
    w.push({type:'hit',id:'result:'+i+':row',target:'result:'+i,x:X,y:ry,w:M.W-2*X,h:M.LIST_ROW,on});
@@ -143,12 +157,29 @@ export function simpleMenuLayout(o){
    label('result:'+i+':name',X+76,ry+30,r.name,{size:28,bold:true,color:on?r.hex:'#6b7885'});label('result:'+i+':vol',X+520,ry+30,r.text,{size:28})});
   const more=res.length-shown.length,py=top+shown.length*M.LIST_ROW;
   label('total',X,py+26,t.total+' '+o.total+' · '+res.length+(more>0&&pg.pages<2?'  (… +'+more+')':''),{size:24,color:'#9fb3c3'});
+  resBottom=py+54;
   if(pg.pages>1){
    w.push({type:'button',id:'results:prev',page:pg.page-1,x:560,y:py+2,w:96,h:50,label:'◀',on:false,size:28,disabled:pg.page<=0});
    w.push({type:'button',id:'results:next',page:pg.page+1,x:666,y:py+2,w:96,h:50,label:'▶',on:false,size:28,disabled:pg.page>=pg.pages-1});
    label('results:page',778,py+28,(t.page||'')+' '+(pg.page+1)+'/'+pg.pages,{size:26,color:'#9fb3c3'});
   }
  }
+ if(kids.length){
+  const ky=res.length?resBottom:y,top=ky+56,cap=Math.max(0,Math.floor((listEnd-24-30-top)/M.LIST_ROW)),pg=resultPaging(kids.length,o.kidPage,cap),shown=kids.slice(pg.start,pg.start+pg.count);
+  label('kids',X,ky+30,t.kids||'',{bold:true,size:28});
+  shown.forEach((k,j)=>{const i=pg.start+j,ry=top+j*M.LIST_ROW,on=k.on!==false;
+   w.push({type:'hit',id:'kid:'+i+':row',target:'kid:'+i,x:X,y:ry,w:M.W-2*X,h:M.LIST_ROW,on});
+   w.push({type:'button',id:'kid:'+i,x:X,y:ry,w:56,h:40,label:'',on,color:k.hex});
+   label('kid:'+i+':name',X+76,ry+30,k.name,{size:28,bold:true,color:on?k.hex:'#6b7885'})});
+  const py=top+shown.length*M.LIST_ROW;
+  label('kids:count',X,py+26,String(kids.length),{size:24,color:'#9fb3c3'});
+  if(pg.pages>1){
+   w.push({type:'button',id:'kids:prev',page:pg.page-1,x:560,y:py+2,w:96,h:50,label:'◀',on:false,size:28,disabled:pg.page<=0});
+   w.push({type:'button',id:'kids:next',page:pg.page+1,x:666,y:py+2,w:96,h:50,label:'▶',on:false,size:28,disabled:pg.page>=pg.pages-1});
+   label('kids:page',778,py+28,(t.page||'')+' '+(pg.page+1)+'/'+pg.pages,{size:26,color:'#9fb3c3'});
+  }
+ }
+ if(o.pair)btn('pair:toggle',X,pairY,M.W-2*X,o.pair.label,!!o.pair.on,{size:28,disabled:!!o.pair.busy,...(o.pair.on?{color:'#2d6cdf'}:{})});
  if(o.levels){
   const lv=o.levels,n=lv.items.length,gap=10,x0=270,bw=Math.floor((M.W-X-x0-(n-1)*gap)/Math.max(1,n));
   label('levels:name',X,M.LEVEL_Y+40,lv.text.title,{color:'#cfe3f0',bold:true,size:34});

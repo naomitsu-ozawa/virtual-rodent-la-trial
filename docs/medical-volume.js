@@ -1,13 +1,13 @@
 import * as THREE from './vendor/three@0.186.0/build/three.webgpu.js';
 import dicomParser from './vendor/dicom-parser@1.8.21/index.js';
-import { canvasBackground3dUnit } from './canvas-theme.js?v=20261110-build708';
-import { lightOffsetExpr, lightingWGSL, MATERIALS, materialKey } from './lighting.js?v=20261110-build708';
-import { EDIT_MASK_MAX_BYTES, editMaskInfoWord, editMaskLayout, editMaskPlanes, fillEditMaskWords, sameU32 } from './edit-mask-texture.js?v=20261110-build708';
-import { loadStats } from './load-stats.js?v=20261110-build708'; // what the load did, for the VR switch report
-import { frameOrTimer } from './utils.js?v=20261110-build708'; // rAF or a timer (the window rAF stands still during a WebXR session)
-import { SHADE_BRIGHT_DEFAULT, SHADE_CONTRAST_DEFAULT, brightOf, contrastOf } from './cap-shade.js?v=20261110-build708'; // the cut face's shading when the slice image is hidden (same maths as the WGSL capShadeLum below;: per-segment range)
-import { storedLayout, storedValue } from './stored-bits.js?v=20261110-build708';
-import { gpuRunsForTexture } from './gpu-runs.js?v=20261110-build708'; // the run-mapping functions moved to their own module (the VR preparation worker is made from them)
+import { canvasBackground3dUnit } from './canvas-theme.js?v=20261112-build721';
+import { lightOffsetExpr, lightingWGSL, MATERIALS, materialKey } from './lighting.js?v=20261112-build721';
+import { EDIT_MASK_MAX_BYTES, editMaskInfoWord, editMaskLayout, editMaskPlanes, fillEditMaskWords, sameU32 } from './edit-mask-texture.js?v=20261112-build721';
+import { loadStats } from './load-stats.js?v=20261112-build721'; // what the load did, for the VR switch report
+import { frameOrTimer } from './utils.js?v=20261112-build721'; // rAF or a timer (the window rAF stands still during a WebXR session)
+import { SHADE_BRIGHT_DEFAULT, SHADE_CONTRAST_DEFAULT, brightOf, contrastOf } from './cap-shade.js?v=20261112-build721'; // the cut face's shading when the slice image is hidden (same maths as the WGSL capShadeLum below;: per-segment range)
+import { storedLayout, storedValue } from './stored-bits.js?v=20261112-build721';
+import { gpuRunsForTexture } from './gpu-runs.js?v=20261112-build721'; // the run-mapping functions moved to their own module (the VR preparation worker is made from them)
 export { gpuRunsForTexture };
 
 const UNCOMPRESSED_TS=new Set(['1.2.840.10008.1.2','1.2.840.10008.1.2.1','1.2.840.10008.1.2.2']);
@@ -516,6 +516,10 @@ ${lightingWGSL()}
      if(analysisOverlay[0]!=0u&&(analysisOverlay[analysisOverlay[0]]&(1u<<u32(capIndex)))!=0u){
       let ov=analysisOverlayAt(ctc);
       if(ov!=0u){capColor=mix(vec3<f32>(f32((ov>>16u)&255u),f32((ov>>8u)&255u),f32(ov&255u))/255.0,vec3<f32>(1.0),0.22);}
+     }
+     {
+      var capN=vec3<f32>(0.0,0.0,1.0);if(u.section.x>1.5&&u.section.x<2.5){capN=vec3<f32>(0.0,1.0,0.0);}if(u.section.x>=2.5){capN=vec3<f32>(1.0,0.0,0.0);}
+      capColor=vrlRealCut(capColor,capN,-dir,${lightOffsetExpr('u.camRightTan.xyz','u.camUpAspect.xyz')},vrlDepth01(capT,u.camOrigin.xyz,u.halfStep.xyz));
      }
      if(u.sectionCap.z>0.5){
       var huv=vec2<f32>(ctc.x,ctc.y);

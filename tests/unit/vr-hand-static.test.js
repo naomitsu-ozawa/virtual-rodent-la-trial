@@ -246,7 +246,7 @@ describe('nearGrabTarget run from its own source (units, scales, priorities)', (
       menu: { mesh: plane(0.5, 0.3, new THREE.Vector3(0.8, 1.3, -0.5)) }, help: { mesh: plane(0.4, 0.3, new THREE.Vector3(-0.8, 1.3, -0.5)) },
       hist: { isOpen: false, group: new THREE.Group(), board: plane(0.4, 0.3, new THREE.Vector3(0, 2, -0.5)) },
       huLine: { panel: plane(0.3, 0.2, new THREE.Vector3(0, 0.5, -0.5)), isDragging: () => false },
-      vrHalfExt: [1, 1, 1], section: { on: false }, planes: [], draggedBy: () => false, mesh,
+      vrHalfExt: [1, 1, 1], section: { on: false }, planes: [], draggedBy: () => false, mesh, pair: null,
     };
     x.menu.mesh.visible = false; x.help.mesh.visible = false; x.huLine.panel.visible = false;
     x.near = new Function('ctx', 'with(ctx){' + code + '}')(x);
@@ -364,9 +364,9 @@ describe('a point is recorded on a section only on tissue (hands and controllers
   const code = t => t.split('\n').map(l => l.replace(/\/\/.*$/, '')).join('\n');
   it('recordPoint asks sectionTissue for a section (plane) hit, once, before anything is recorded; a surface hit (no .plane) is not asked', () => {
     const rp = bodyAfter(src, 'const recordPoint=(c,hit)=>{');
-    expect(rp).toContain('if(hit.plane!==undefined&&!sectionTissue(hit))return null;');
+    expect(rp).toContain('if(hit.plane!==undefined&&!(X?px.sectionTissue(X,hit):sectionTissue(hit)))return null;'); // stage 3: a partner hit asks the partner's own rule
     expect(rp.indexOf('sectionTissue(hit)')).toBeLessThan(rp.indexOf('recordVrPoint('));
-    expect(code(src).match(/sectionTissue\(/g)).toHaveLength(1); // the one call (recordPoint's)
+    expect(code(src).match(/sectionTissue\(/g)).toHaveLength(2); // the two calls of recordPoint: the primary's and (stage 3) the partner's
     const st = bodyAfter(src, 'const sectionTissue=hit=>{');
     expect(st).toContain('classifiedAt(hit.point,vp.halfExt,vp.dims,vp.cls,chs,hiddenChildVoxel())'); // a hidden child segment shows no tissue on a section expect(st).toContain('vp.cls.chan[i]>=0'); // the shown channels, as volumeHitRay
     expect(src.match(/recordPoint\(c,/g).length).toBe(2); // both callers (the controller's and the hand's deferred release) go through it
@@ -390,7 +390,7 @@ describe('empty-space pinch actions and the double pinch (hands only; the contro
   const code = t => t.split('\n').map(l => l.replace(/\/\/.*$/, '')).join('\n');
   it('empStart: only a pinch that hits nothing (empty / none), never with the palm to the face, a grab / drag, the wrist menu or a distance in the making; right = B/Y, left = the frame hold', () => {
     const b = bodyAfter(src, 'const empStart=(c,res,now)=>{');
-    for (const w of ['isEmptyKind(res.kind)', 'getMeasureStart()', 'handIn.palmToFace(c)', 'handIn.wristShown', 'handIn.grabbing(c)', 'c.userData.drag', 'c.userData.lblDrag']) expect(b, w).toContain(w);
+    for (const w of ['isEmptyKind(res.kind)', 'msStart()', 'handIn.palmToFace(c)', 'handIn.wristShown', 'handIn.grabbing(c)', 'c.userData.drag', 'c.userData.lblDrag']) expect(b, w).toContain(w);
     expect(b).toContain("if(e.right){c.userData.vB=true;c.userData.vCancel=false}");
     expect(src).toContain("isEmptyKind=k=>k==='empty'||k==='none'");
   });

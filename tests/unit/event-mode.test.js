@@ -419,7 +419,7 @@ describe('static wiring', () => {
   });
   it('the かんたん menu: tab 10 hides the tab bar, rows come from the loaded data (no level), すべての設定 opens the full menu, かんたん comes back (event mode only)', () => {
     const src = read('vr-view.js');
-    expect(src).toContain('if(ui.tab!==10){const tw=(MENU_W-2*X)/L.tabs.length,TAB_IDS=[0,1,2,3,4,5,6,9,11];'); // the 9th tab is データ (11)
+    expect(src).toContain('if(ui.tab!==10){const TAB_IDS=[0,1,2,3,4,5,6,9,11],tabIx=L.tabs.map((_,i)=>i).filter(i=>TAB_IDS[i]!==11||levelSwitchOn()||pairRowOn()),tw=(MENU_W-2*X)/tabIx.length;'); // the 9th tab is データ (11);: only while the open data has a level
     expect(src).toContain("if(evMenu&&ui.tab!==10)btn(560,18,200,tr('evSimple'),false,()=>{ui.tab=10},{size:28});");
     const block = src.match(/if\(ui\.tab===10\)\{[\s\S]*?\}else if\(ui\.tab===0\)\{/)[0];
     expect(block).toContain('keys=simpleMenuSegments(act)');
@@ -427,11 +427,11 @@ describe('static wiring', () => {
     expect(block).not.toMatch(/activeEventLevel|\blv\b/); // nothing level-dependent in the rows;: the one level-aware part is the data-switch row (levels, 'level:<id>' ids: simpleMenuLayout's levels option)
     expect(block).toContain("acts['level:'+l.id]=()=>swapPress(l.sample)");
     // the actions behind the layout's widget ids: 断面 (B/Y's setSection), the trigger switch, 元に戻す (the ring's undo), すべての設定 -> the full menu, 終了 = the full menu's session.end()
-    expect(src).toContain("const acts={section:v=>setSection(v),'trigger:point':()=>{evLabels=false},'trigger:label':()=>{evLabels=true;emit('trigger-label')},undo:()=>{undoLast()},home:goHome,reset:pressReset,all:()=>{ui.tab=0},exit:()=>session.end()};");
+    expect(src).toContain("const acts={'pair:toggle':()=>{void pairToggle()},section:v=>setSection(v),'trigger:point':()=>{evLabels=false},'trigger:label':()=>{evLabels=true;emit('trigger-label')},undo:()=>{undoLast()},home:goHome,reset:pressReset,all:()=>{ui.tab=0},exit:()=>session.end()};");
     expect(src).toContain("exit:tr(mode==='ar'?'evExitAr':'evExitVr')");
     expect(src).toContain("btn(MENU_W-X-260,yb,260,L.exit,true,()=>session.end(),{color:'#b33'})"); // the full menu's own exit, unchanged
-    // who decides what the trigger does: label mode only when the switch says so AND the data has results (or the 解析 tab is open, as before)
-    expect(src).toContain("const evLabelOn=()=>evMenu&&triggerMode(evLabels,regionList.length>0)==='label';");
+    // who decides what the trigger does: label mode only when the switch says so AND the data has results or child segments (or the 解析 tab is open, as before)
+    expect(src).toContain("const evLabelOn=()=>evMenu&&triggerMode(evLabels,labelTargets(regionList.length,childList.length))==='label';"); // results OR child segments
     expect(src).toContain('const labelMode=()=>(ui.open&&ui.tab===5)||!section.on||evLabelOn();');
     expect(src).toContain('analysis:analysisOn(),canDrag:');
     // evLabels is only ever switched from the かんたん menu (declared once, reset when the session's data arrives, the two switch buttons, and 最初の状態に戻す)
@@ -447,7 +447,7 @@ describe('analysis mode keeps the pinned label move', () => {
   const src = readFileSync(new URL('../../docs/vr-view.js', import.meta.url), 'utf8');
   it('pickPin is gated by analysisOn (tab 5 or 解析モード), not by the tab alone', () => {
     expect(src).toMatch(/const analysisOn=\(\)=>\(ui\.open&&ui\.tab===5\)\|\|evLabelOn\(\)/);
-    expect(src).toMatch(/if\(analysisOn\(\)&&pins\.size\)mlb=nearerLabel\(mlb,pickPin\(/);
+    expect(src).toMatch(/if\(analysisOn\(\)&&\(pins\.size\|\|px\.cards\(\)\.size\)\)mlb=nearerLabel\(mlb,pickPin\(/);
     expect(src).not.toMatch(/ui\.open&&ui\.tab===5&&pins\.size/);
     expect(src).toMatch(/analysis:analysisOn\(\),/);
   });
@@ -512,7 +512,7 @@ describe('最初の状態に戻す: wiring', () => {
     const fn = src.match(/const resetToStart=\(\)=>\{[\s\S]*?\n \};/)[0];
     // the page side first (points / distances / pinned labels from the project file), then the session's own state
     expect(fn.indexOf("'vrl-event-project-reset'")).toBeGreaterThan(-1);
-    for (const part of ['endAllDrags()', 'closeWheel()', 'closePointWheel()', 'removePlane(pl)', 'section.on=false', 'secUndo.clear()', 'undo.clear()', 'cancelMeasure()', 'huLine.clear()', 'setHistOpen(false)', 'evLabels=TRIGGER_AT_START===\'label\'', 'vrWindow.c=', 'bringVolumeFront()', 'resetEventViewSettings(settings)', 'ui.tab=10', 'placeMenuNow()', 'placeHelpNow()', 'placeHuNow()']) expect(fn, part).toContain(part);
+    for (const part of ['endAllDrags()', 'closeWheel()', 'closePointWheel()', 'removePlane(pl)', 'section.on=false', 'secUndo.clear()', 'undo.clear()', 'msCancel()', 'huLine.clear()', 'setHistOpen(false)', 'evLabels=TRIGGER_AT_START===\'label\'', 'vrWindow.c=', 'bringVolumeFront()', 'resetEventViewSettings(settings)', 'ui.tab=10', 'placeMenuNow()', 'placeHelpNow()', 'placeHuNow()']) expect(fn, part).toContain(part);
     // nothing is decoded / uploaded / re-prepared and the session is not left
     expect(fn).not.toMatch(/prepareVr|session\.end|selectSeries|startSample/);
     // the module-level modes of the session (per-segment mode, point place, screenshots) go back with 'vrl-event-fresh'
@@ -617,10 +617,14 @@ describe('hidden segments in VR (event mode): prepared, listed, shown from the s
   it('a segment the page keeps hidden counts as available in event mode only, in the data key, the classification, the results, the shown mask, the menus and the shader flags', () => {
     expect(src).toContain('const segAvail=g=>!!g?.active&&(!!g.enabled||eventModeOn());');
     expect(src).toContain('return [g.active?1:0,segAvail(g)?1:0,g.min,g.max,g.opening,');
-    expect(src).toContain('if(segAvail(seg)&&segMode[key]!==2)mask|=1<<i}return mask};');
-    expect(src).toContain('order=gpuSegmentOrder(),segs=vrSegments(),state={}'); // the classification is built in the worker from the segment state resolved here (vr-volume-prep.js prepRun -> buildClsData)
+    // stage 1 of the sample pairs: the rules moved to vr-prep-inputs.js (over the input object inp); vr-view.js hands its own (pageInputs) in
+    const pi = readFileSync(new URL('../../docs/vr-prep-inputs.js', import.meta.url), 'utf8');
+    expect(pi).toContain('export const segAvailOf = (inp, g) => !!g?.active && (!!g.enabled || !!inp.eventMode);');
+    expect(pi).toContain('if (segAvailOf(inp, seg) && segMode[key] !== 2) mask |= 1 << i;');
+    expect(src).toContain('const shownMask=()=>shownMaskOf(pageInputs);');
+    expect(src).toContain('order=inp.order,state=classifyStateOf(inp)'); expect(pi).toContain('const segs = inp.vrSegments, state = {};'); expect(src).toContain('get vrSegments(){return vrSegments()}'); // the classification is built in the worker from the segment state resolved here (vr-volume-prep.js prepRun -> buildClsData)
     expect(src).toContain('gpuVolumeEditDescriptors(undefined,segAvail)');
-    expect(src).toContain('r.segmentKeys.some(k=>segAvail(segmentState[k]))');
+    expect(pi).toContain('r.segmentKeys.some(k => segAvailOf(inp, inp.segments[k]))');
     expect(src).toContain('const act=SEGMENT_PRESET_ORDER.filter(k=>segAvail(segmentState[k])),keys=simpleMenuSegments(act)');
     expect(src).toContain('segAvail(seg)&&segMode[key]!==2?1:0);');
     // outside event mode the derived state is the real one

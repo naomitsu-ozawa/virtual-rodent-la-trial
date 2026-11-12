@@ -53,6 +53,8 @@ h1{margin:0;font-size:clamp(23px,3vw,34px);line-height:1;letter-spacing:-.035em}
 .segment-tree-row.is-focused{border-color:rgb(var(--ui-blue-bd));background:rgb(var(--ui-blue-bg) / 0.92)}
 .segment-tree-row.is-off .segment-tree-name,.segment-tree-row.is-off .analysis-region-swatch{opacity:.45}
 .segment-tree-name{min-width:0;font-size:11px;color:rgb(var(--ui-t1));overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.segment-child-tree .segment-tree-row{grid-template-columns:auto minmax(0,1fr) auto auto auto auto}
+.segment-child-tree .segment-tree-detail{grid-column:1/-1}
 .segment-color{width:44px;height:32px;padding:0;border:1px solid rgb(var(--ui-b2));border-radius:7px;background:transparent}
 .segment-range{display:grid;grid-template-columns:58px 1fr auto;gap:7px;align-items:center;font-size:10px;color:rgb(var(--ui-t4))}
 .segment-range input[type="range"]{grid-column:1/-1;width:100%;min-height:34px}
@@ -1034,14 +1036,15 @@ html.vrl-ipad-ui .point-menu-btn{min-height:44px;min-width:64px;font-size:15px}
 .analysis-label-3d.is-lit,.analysis-label-3d.is-dragging{background:#ffe27a;color:#111;border-color:#fff!important;box-shadow:0 0 0 2px rgba(255,255,255,.9),0 0 10px 2px rgba(255,210,61,.85)}
 .analysis-label-3d.is-lit>span,.analysis-label-3d.is-dragging>span{color:#111;opacity:1}
 .vrl-ipad-ui .analysis-label-3d{font-size:12px;line-height:15px}
-.comment-lines-3d .analysis-leader-3d{stroke-width:1.2;stroke-opacity:.85}
-.comment-lines-3d .analysis-leader-3d.is-lit{stroke:#ffe27a!important;stroke-opacity:1;stroke-width:2}
+.comment-lines-3d .analysis-leader-3d{stroke-width:3;stroke-opacity:.9;stroke-linecap:round}
+.comment-lines-3d .analysis-leader-3d.is-lit{stroke:#ffe27a!important;stroke-opacity:1;stroke-width:4.5}
 .comment-lines-3d .analysis-anchor-3d{stroke:#fff;stroke-width:1;stroke-opacity:.9}
 .analysis-label-3d,.analysis-leader-3d{transition:opacity .15s}
-/* behind a volume = hidden completely (label, leader, anchor dot; a card being dragged stays); embedded in shown tissue and not pushed out = translucent; under a nearer overlapping card = hidden (a lit one always shows) */
-.analysis-label-3d.is-behind:not(.is-lit):not(.is-dragging),.analysis-leader-3d.is-behind:not(.is-lit),.comment-lines-3d .analysis-anchor-3d.is-behind:not(.is-lit){visibility:hidden}
+/* behind a volume = card and leader hidden completely (a card being dragged stays), the anchor dot translucent (.is-faint, 0.45: the dot is never hidden by tissue); embedded in shown tissue and not pushed out = translucent; under a nearer overlapping card = hidden, only in the modes that thin the overlapped cards (a lit one always shows) */
+.analysis-label-3d.is-behind:not(.is-lit):not(.is-dragging),.analysis-leader-3d.is-behind:not(.is-lit){visibility:hidden}
 .analysis-label-3d.is-faint:not(.is-lit):not(.is-dragging),.analysis-leader-3d.is-faint:not(.is-lit),.comment-lines-3d .analysis-anchor-3d.is-faint:not(.is-lit){opacity:.45}
 .analysis-label-3d.is-overlapped:not(.is-lit):not(.is-dragging),.analysis-leader-3d.is-overlapped:not(.is-lit),.comment-lines-3d .analysis-anchor-3d.is-overlapped:not(.is-lit){visibility:hidden}
+.comment-lines-3d .analysis-anchor-3d.is-covered{visibility:hidden} /* behind a nearer card: not drawn at all (even a lit one) */
 @media (prefers-reduced-motion:reduce){.analysis-label-3d,.analysis-leader-3d{transition:none}}
 .analysis-label-actions{display:flex;flex-wrap:wrap;gap:6px}
 .analysis-label-actions button{min-height:32px;border:1px solid rgb(var(--ui-b3));border-radius:7px;background:rgb(var(--ui-s2));color:rgb(var(--ui-t2));padding:5px 8px;font-size:10px;font-weight:750;cursor:pointer;pointer-events:auto}

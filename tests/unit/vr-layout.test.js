@@ -141,7 +141,7 @@ describe('slice fill (slice tab row + shader guards, static)', () => {
     expect(v).not.toMatch(/URLSearchParams[^;]*ctShadeBright|get\('ctShadeBright'\)/);
   });
   it('ctShadeContrast: 50..200 % in 10 % steps, default 170 %, a menu preference like ctShadeBright (not an event view value, no URL parameter); clamped before the shader', () => {
-    expect(v).toContain('ctShade:1,ctShadeBright:1.8,ctShadeContrast:1.7,laserStyle:2}');
+    expect(v).toContain('ctShade:1,ctShadeBright:1.8,ctShadeContrast:1.7,laserStyle:2,stickShort:0}');
     expect(v).toContain('const CT_CONTRAST_MIN=0.5,CT_CONTRAST_MAX=2,CT_CONTRAST_STEP=0.1,ctContrastOf=v=>{v=+v;return Number.isFinite(v)?Math.min(CT_CONTRAST_MAX,Math.max(CT_CONTRAST_MIN,Math.round(v*10)/10)):DEFAULTS.ctShadeContrast};');
     expect(v).toContain('ctShadeContrast:{value:1.7}'); expect(v).toContain('u.ctShadeContrast.value=ctContrastOf(settings.ctShadeContrast);');
     expect(v).toContain("const EVENT_VIEW_KEYS=['cut','cap','sliceAir','sliceTint','sliceOpacity','labelSize'];");
@@ -176,7 +176,7 @@ describe('slice fill (slice tab row + shader guards, static)', () => {
     expect(v).toContain('vec4(mix(vec3(g),regionColor(p,segC[si].rgb,si)*ctLumHU(hu,si),sliceTint),a)'); // above 0 %: the tint colour carries the CT value (factor 1 when solid = the old slice)
     expect(v).not.toContain('segHitColor'); expect(v).not.toContain('CT_SHADE_DEPTH');
     expect(v.match(/lit=regionColor\(hp\+dir\*\(0\.75\*voxelMin\),segC\[idx\]\.rgb,idx\)\*diffuse\+vec3\(spec\)/g)).toHaveLength(4);
-    expect(v.match(/lit=mix\(regionColor\(cp,segC\[ci\]\.rgb,ci\),vec3\(1\.0\),0\.22\)\*diffuse/g)).toHaveLength(2);
+    expect(v.match(/lit=vrlRealCut\(mix\(regionColor\(cp,segC\[ci\]\.rgb,ci\),vec3\(1\.0\),0\.22\),n,viewDir,vLightOff,vrlDepth01\(capAt,o,halfExt\)\);/g)).toHaveLength(2); // the cut face: every segment lit with the cut look (lighting.js vrlRealCut, the muscle values), no CT factor here
     expect(v).toContain('if(ctShade<0.5||diag==3||segC[s].w>0.5)return 1.0;');
   });
   it('the shader\'s fixed fill opacity equals the JS constant (0.95)', () => {

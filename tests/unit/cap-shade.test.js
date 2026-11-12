@@ -21,7 +21,7 @@ const CT = dataRangeOf(-1024, 3071), U16 = dataRangeOf(0, 65535);
 describe('the shared maths (docs/cap-shade.js)', () => {
   it('the defaults are the VR ones: brightness 1.8, contrast 1.7, the darkest level fixed at 0.35', () => {
     expect([SHADE_BRIGHT_DEFAULT, SHADE_CONTRAST_DEFAULT, SHADE_FLOOR]).toEqual([1.8, 1.7, 0.35]);
-    expect(vr).toContain('ctShadeBright:1.8,ctShadeContrast:1.7,laserStyle:2}');
+    expect(vr).toContain('ctShadeBright:1.8,ctShadeContrast:1.7,laserStyle:2,stickShort:0}');
   });
   it('the position in a range: below the lower end 0 (darkest), above the upper end 1 (brightest), linear between', () => {
     expect(shadeT(-1000, 40, 440)).toBe(0); expect(shadeT(40, 40, 440)).toBe(0); expect(shadeT(440, 40, 440)).toBe(1); expect(shadeT(5000, 40, 440)).toBe(1);
