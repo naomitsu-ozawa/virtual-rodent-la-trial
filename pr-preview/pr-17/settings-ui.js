@@ -1,18 +1,18 @@
 // Settings dialog. Tabs: 描画 (rendering) and デバッグ (debug);
 // add a tab button + panel in ui-shell.js to extend it.
-import { settings } from './app-settings.js?v=20261112-build724';
-import { request3DRender } from './scene3d.js?v=20261112-build724';
-import { updateGpuStatus } from './gpu-compute.js?v=20261112-build724';
-import { volumeCache, updateVolumeCacheControl, volumeCacheBudget } from './gpu-volume-data.js?v=20261112-build724';
-import { tr } from './i18n.js?v=20261112-build724';
-import { normalizeLabelOverlap } from './analysis-label.js?v=20261112-build724';
-import { askInline, armConfirm, noteInline } from './inline-ask.js?v=20261112-build724';
-import { setupEventPrepareButton } from './event-prepare-ui.js?v=20261112-build724'; // 「体験会用データを準備」
-import { fmt } from './utils.js?v=20261112-build724';
-import { gpuPreferenceSupported, gpuEffectivePreference, gpuHybridModeSupported, gpuEffectiveHybridMode } from './gpu-preference.js?v=20261112-build724';
-import { initDebugSwitches } from './debug-switches-ui.js?v=20261112-build724';
-import { initGpuDiagnosticsUi } from './gpu-diagnostics-ui.js?v=20261112-build724';
-import { collectGpuDiagnostics } from './gpu-diagnostics-collect.js?v=20261112-build724';
+import { settings } from './app-settings.js?v=20261112-build725';
+import { request3DRender } from './scene3d.js?v=20261112-build725';
+import { updateGpuStatus } from './gpu-compute.js?v=20261112-build725';
+import { volumeCache, updateVolumeCacheControl, volumeCacheBudget } from './gpu-volume-data.js?v=20261112-build725';
+import { tr } from './i18n.js?v=20261112-build725';
+import { normalizeLabelOverlap } from './analysis-label.js?v=20261112-build725';
+import { askInline, armConfirm, noteInline } from './inline-ask.js?v=20261112-build725';
+import { setupEventPrepareButton } from './event-prepare-ui.js?v=20261112-build725'; // 「体験会用データを準備」
+import { fmt } from './utils.js?v=20261112-build725';
+import { gpuPreferenceSupported, gpuEffectivePreference, gpuHybridModeSupported, gpuEffectiveHybridMode } from './gpu-preference.js?v=20261112-build725';
+import { initDebugSwitches } from './debug-switches-ui.js?v=20261112-build725';
+import { initGpuDiagnosticsUi } from './gpu-diagnostics-ui.js?v=20261112-build725';
+import { collectGpuDiagnostics } from './gpu-diagnostics-collect.js?v=20261112-build725';
 export function initSettingsDialog(){
  const dlg=document.getElementById('settings-dialog'),open=document.getElementById('settings-open');if(!dlg||!open)return;
  // settings are always a real modal (the workspace UI rail 設定 entry and the code that calls #settings-open all end here).

@@ -1,7 +1,7 @@
-import { regionVisible, regionHidden } from './region-visibility.js?v=20261112-build724';
+import { regionVisible, regionHidden } from './region-visibility.js?v=20261112-build725';
 
 // the ids of the items (the same in the one-target and the two-target ring, so one confirm handles both)
-export const RING_ITEM_IDS = Object.freeze(['rcolor', 'rshape', 'ccolor', 'cshape']);
+export const RING_ITEM_IDS = Object.freeze(['rcolor', 'rshape', 'ccolor', 'cshape', 'rdetach', 'cdetach', 'pback']);
 
 export function ringState(reg, child, seen = null) {
   return {
@@ -10,27 +10,32 @@ export function ringState(reg, child, seen = null) {
   };
 }
 
-// state = ringState(...); text = {color, shape, regionColor, regionShape, childColor, childShape} -> [{id, label, on}] ([] = nothing to ring: no target)
-export function regionRingItems(state, text) {
-  const mk = (id, label, on) => ({ id, label, on: !!on });
+export function regionRingItems(state, text, canDetach = true) {
+  const mk = (id, label, on, enabled = true) => ({ id, label, on: !!on, enabled: !!enabled });
   const { reg, child } = state || {};
-  if (reg && child) return [mk('rcolor', text.regionColor, reg.color), mk('rshape', text.regionShape, reg.shape), mk('ccolor', text.childColor, child.color), mk('cshape', text.childShape, child.shape)];
+  if (reg && child) return [mk('rcolor', text.regionColor, reg.color), mk('rshape', text.regionShape, reg.shape), mk('rdetach', text.regionDetach, false, canDetach), mk('ccolor', text.childColor, child.color), mk('cshape', text.childShape, child.shape), mk('cdetach', text.childDetach, false, canDetach)];
   const one = reg || child;
   if (!one) return [];
-  return [mk(reg ? 'rcolor' : 'ccolor', text.color, one.color), mk(reg ? 'rshape' : 'cshape', text.shape, one.shape)];
+  return [mk(reg ? 'rcolor' : 'ccolor', text.color, one.color), mk(reg ? 'rshape' : 'cshape', text.shape, one.shape), mk(reg ? 'rdetach' : 'cdetach', text.detach, false, canDetach)];
 }
+// the ring of a part that is out (long press on it): ONE item, 戻す (only that part goes back)
+export const partRingItems = text => [{ id: 'pback', label: text.back, on: false, enabled: true }];
 
 // the ring's centre text: the names of the targets (region first); one name when only one is there
 export const regionRingName = (regName, childName) => [regName, childName].filter(Boolean).join(' / ');
 
-// what a confirmed item does. ops = {setRegionVisible(region,on), setRegionHidden(region,on), setChildLook(key,{colorOff}|{visible})}; reg / child = the page's objects.
+// what a confirmed item does. ops = {setRegionVisible(region,on), setRegionHidden(region,on), setChildLook(key,{colorOff}|{visible}), detachRegion(region), detachChild(key), partBack()}; reg / child = the page's objects.
 // ops.pressRegionColor(region) / ops.pressChildColor(key) (optional, VR): the 色 items go through them (the board's own press: it also ends the stick's colour-off, vr-view.js); without them the flags are toggled directly.
+// ops.detachRegion / detachChild (VR, an earlier change): 切り出す takes THAT target out of the body as a part (no flag is written); ops.partBack: 戻す puts the part the ring belongs to back
 // -> true when something was switched (a toggle of the same state is never sent)
 export function applyRingItem(id, { reg, child }, ops) {
   if (id === 'rcolor' && reg) return ops.pressRegionColor ? !!ops.pressRegionColor(reg) : !!ops.setRegionVisible(reg, !regionVisible(reg));
   if (id === 'rshape' && reg) return !!ops.setRegionHidden(reg, !regionHidden(reg));
   if (id === 'ccolor' && child) return ops.pressChildColor ? !!ops.pressChildColor(child.key) : !!ops.setChildLook(child.key, { colorOff: child.colorOff !== true });
   if (id === 'cshape' && child) return !!ops.setChildLook(child.key, { visible: child.visible === false });
+  if (id === 'rdetach' && reg) return !!ops.detachRegion?.(reg);
+  if (id === 'cdetach' && child) return !!ops.detachChild?.(child.key);
+  if (id === 'pback') return !!ops.partBack?.();
   return false;
 }
 

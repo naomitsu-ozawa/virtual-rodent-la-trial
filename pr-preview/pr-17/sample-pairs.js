@@ -5,8 +5,8 @@
 // of the folder's .vrlab (dataset.seriesUid) - with the same slice count and the same rows x columns - is the series. Every other group (e.g. a label volume with its own UID) is not opened.
 // This module does no loading itself: docs/data-load.js reads the files and hands them in (so no fetch is made here, and nothing touches the volume / the active series).
 import { unzipSync, strFromU8 } from './vendor/fflate@0.8.2/index.js';
-import { normalizeSamplePairs, sliceSubfolder } from './sample-sets.js?v=20261112-build724';
-import { parseDicomHeader, parsedSliceMeta } from './dicom.js?v=20261112-build724';
+import { normalizeSamplePairs, sliceSubfolder } from './sample-sets.js?v=20261112-build725';
+import { parseDicomHeader, parsedSliceMeta } from './dicom.js?v=20261112-build725';
 
 // where docs/sample-pairs.json is read from: next to the page (it is part of the site's own files, not of docs/demo)
 export const samplePairsUrl = () => 'sample-pairs.json';

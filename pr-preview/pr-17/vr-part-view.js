@@ -4,9 +4,10 @@
 //     the body's own draw is NOT changed: the target is hidden in the body by patching the look-up tables AFTER they were written (patchRegionLut / patchChildLut) -- a run-time overlay like the stick's colour-off,
 //     region.hidden / child.visible (saved in the project, shown on the 表示 buttons) are never written,
 //   - which uniforms the part owns (the rest is the body's by reference: PART_OWN), the target a grip takes (partTargetOf), the part's own box (partBoundsOf), the laser's rule on the CPU (partKeepVoxelOf),
-//   - the one-shot arm of the pull-out (the grip is the body's grab: it takes a part out only right after 「取り出す」 was pressed), the texts.
-import { regionLutAlpha } from './region-visibility.js?v=20261112-build724';
-import { boxFromRange } from './vr-content-box.js?v=20261112-build724';
+//   - several parts at once: every part has its own box, uniforms and pose; the tables are patched for all of them (patchRegionLutMany / patchChildLutMany); a part's proxy box is its own bounding box (partProxyBox) and its laser march
+//     runs only inside it (partRayRange), the texts. The way in is the long-press ring (region-ring.js 切り出す / 戻す); the grip stays the body's grab and takes a part only where the laser meets one.
+import { regionLutAlpha } from './region-visibility.js?v=20261112-build725';
+import { boxFromRange } from './vr-content-box.js?v=20261112-build725';
 
 // ---- the shader block. Spliced into the volume fragment shader once (vr-view.js ${PART_GLSL}, after the hidden-shape block A), so that no existing line of the shader has to change. Without VRL_PART (every program but the
 // part's) the preprocessor drops all of it: the body's programs are the ones they were. With VRL_PART the two functions the marching loops ask "is this voxel a hidden shape?" (regionHiddenAt / childHiddenAt) are
@@ -87,6 +88,34 @@ export function patchChildLut(a, out, j, mask, colorOn, stride = 1024) {
   a[stride + o + 3] = mask;
   return true;
 }
+// several parts at once: targets = [{i, mask, colorShown}] (result table) / [{j, mask, colorOn}] (child table). `out` = ONE table for every part (a copy of the normal table in which no part's target is hidden and each target keeps its colour bits:
+// every part's box keeps only its own target, so the others' entries do no harm there); the body's table `a` gets every target hidden. Returns how many targets were written.
+export function patchRegionLutMany(a, out, targets) {
+  out.set(a);
+  let n = 0;
+  for (const t of targets) {
+    const o = (t.i + 1) * 4;
+    if (o + 3 >= a.length) continue;
+    out[o + 3] = regionLutAlpha(t.mask, { shown: !!t.colorShown });
+    a[o + 3] = regionLutAlpha(t.mask, { hidden: true });
+    n++;
+  }
+  return n;
+}
+export function patchChildLutMany(a, out, targets, stride = 1024) {
+  out.set(a);
+  let n = 0;
+  for (const t of targets) {
+    const o = (t.j + 1) * 4;
+    if (o + 3 >= stride) continue;
+    out[o + 3] = t.colorOn ? t.mask : 0;
+    out[stride + o + 3] = 0;
+    a[o + 3] = 0;
+    a[stride + o + 3] = t.mask;
+    n++;
+  }
+  return n;
+}
 // does any entry of the (part's) result table hide a shape? -> 1 / 0 (the uniform regionAnyHidden: the shader reads regionHiddenAt only then)
 export function anyHiddenIn(a, count, shift = 8) {
   for (let i = 1; i <= count && i < 256 && 4 * i + 3 < a.length; i++) if ((Math.round(a[4 * i + 3]) >> shift) & 15) return 1;
@@ -114,6 +143,28 @@ export function partBoundsOf(ids, dims, id, he, pad = 2) {
   return { c: b.c, h: b.h, count, full: !!b.full };
 }
 
+// the box a part's proxy geometry (the box the GPU rasterises: its rays, its composite) is drawn on: the content box grown by `pad` voxels of the data grid on every side (the composite's bilinear upscale reaches a texel past the silhouette), clamped to
+// the data box. box = {c, h} (partBoundsOf), he = the data box half extents, dims = the grid. -> {c, h} in object space. The proxy is NOT the full data box (a part covering a few pixels must not run a ray for every pixel the whole body covers).
+export function partProxyBox(box, he, dims, pad = 4) {
+  const c = [0, 0, 0], h = [0, 0, 0];
+  for (let a = 0; a < 3; a++) {
+    const v = 2 * he[a] / dims[a], lo = Math.max(-he[a], box.c[a] - box.h[a] - pad * v), hi = Math.min(he[a], box.c[a] + box.h[a] + pad * v);
+    c[a] = (lo + hi) / 2; h[a] = (hi - lo) / 2;
+  }
+  return { c, h };
+}
+// where a ray (o + q t, object space) is inside a box {c, h}: [t0, t1] (t0 >= 0), or null. The part's laser march runs only there (vr-pick.js marchClassificationHitInfo tMin / tMax).
+export function partRayRange(o, q, box) {
+  let t0 = 0, t1 = Infinity;
+  const O = [o.x, o.y, o.z], Q = [q.x, q.y, q.z];
+  for (let a = 0; a < 3; a++) {
+    if (Math.abs(Q[a]) < 1e-12) { if (Math.abs(O[a] - box.c[a]) > box.h[a]) return null; continue; }
+    const ta = (box.c[a] - box.h[a] - O[a]) / Q[a], tb = (box.c[a] + box.h[a] - O[a]) / Q[a];
+    t0 = Math.max(t0, Math.min(ta, tb)); t1 = Math.min(t1, Math.max(ta, tb));
+  }
+  return t0 <= t1 ? [t0, t1] : null;
+}
+
 // ---- the laser's rule on the CPU (the shader's rule: a voxel that is not the part is no tissue; vr-pick.js marchClassificationHitInfo skipVoxel). ids / idims = the index texture; cdims = the classification grid the march runs on
 // (the same grid in practice; when they differ the voxel is mapped by position). chan = the classification channel of each slot (cls.chan). -> (x, y, z, c) -> true when the voxel of channel c is NOT part of the part
 export function partKeepVoxelOf({ ids, idims, cdims, id, mask, chan }) {
@@ -130,17 +181,15 @@ export function partKeepVoxelOf({ ids, idims, cdims, id, mask, chan }) {
   };
 }
 
-// ---- the one-shot arm. The grip is the BODY's grab (it never changes). A part comes out only right after 取り出す was pressed in the menu header (both menus): the NEXT grip on a region / child takes it out (and ends the arm);
-// the arm also ends by itself after ARM_MS, by pressing the button again, and with the session's data. Off by default: nothing about the grip changes until the button is pressed.
-export const ARM_MS = 20000;
-export const armPress = (armedUntil, now) => (armed(armedUntil, now) ? 0 : now + ARM_MS);
-export const armed = (armedUntil, now) => !!armedUntil && now < armedUntil;
-
 // ---- the texts (this prototype keeps them here, not in the i18n table)
 export const PART_TEXT = Object.freeze({
-  ja: { arm: '取り出す', restore: 'すべて元に戻す', armHint: '取り出す領域・子セグメントをレーザーで指し、グリップを握って引き抜く', pairBusy: '並べて表示中は取り出せません', none: '取り出せる領域・子セグメントがありません', preparing: '取り出しを準備中…', done: '取り出しました。握って動かせます', back: '元に戻しました', failed: '取り出せませんでした', noTarget: 'レーザーが領域・子セグメントに当たっていません' },
-  en: { arm: 'Pull out', restore: 'Put all back', armHint: 'Point at a region or child segment and squeeze the grip to pull it out', pairBusy: 'Not while a pair is shown', none: 'No region or child segment to pull out', preparing: 'Preparing the pull-out...', done: 'Pulled out. Grab it to move it', back: 'Put back', failed: 'Could not pull it out', noTarget: 'The laser is not on a region or child segment' },
+  ja: { restore: 'すべて元に戻す', pairBusy: '並べて表示中は切り出せません', preparing: '切り出しを準備中…', done: '切り出しました。握って動かせます', back: '元に戻しました', failed: '切り出せませんでした', busy: '切り出し中です。少し待ってください',
+    ringDetach: '切り出す', ringRegionDetach: '領域の切り出す', ringChildDetach: '子の切り出す', ringBack: '戻す' },
+  en: { restore: 'Put all back', pairBusy: 'Not while a pair is shown', preparing: 'Preparing the cut-out...', done: 'Cut out. Grab it to move it', back: 'Put back', failed: 'Could not cut it out', busy: 'Cutting out, please wait',
+    ringDetach: 'Cut out', ringRegionDetach: 'Region cut out', ringChildDetach: 'Child cut out', ringBack: 'Put back' },
 });
 
-// ---- where the two buttons sit (menu canvas px, the header row y 18..90: the title 'Virtual Rodent Lab' ends near x 400, 「閉じる」 starts at 780): between them, on every page of the menu
-export const PART_BTN_X = 412, PART_ARM_W = 140, PART_BTN_GAP = 6, PART_RESTORE_W = 214; // 412 + 140 + 6 + 214 = 772
+// ---- where the button sits (menu canvas px, the header row y 18..90: the title 'Virtual Rodent Lab' ends near x 400, 「閉じる」 starts at 780): between them, on every page of the menu
+export const PART_BTN_X = 412, PART_RESTORE_W = 360; // 412 + 360 = 772
+// a part that was just cut out comes this far toward the viewer (world metres) and glides there in PART_ANIM_MS
+export const PART_OUT_M = 0.05, PART_ANIM_MS = 300;
