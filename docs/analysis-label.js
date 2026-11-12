@@ -6,7 +6,7 @@
 //   offset : where the user left the label, as the vector from the anchor in VOXEL units (the same convention as a distance label's labelOffset in measurements.js), so it does not
 //            depend on the model's move / rotation / scale and is the same in VR and on the PC. No offset = the view's default placement (beside the anchor, facing the viewer).
 // A leader line joins a moved label to its anchor (leaderVisible).
-import { stepDelta, offsetFromDelta } from './measure-label.js?v=20261111-build718';
+import { stepDelta, offsetFromDelta } from './measure-label.js?v=20261112-build719';
 
 export const ANALYSIS_LABEL_MAX=1e4; // |component| limit (voxels): anything beyond is a corrupt file, dropped
 const num=(x)=>typeof x==='number'&&Number.isFinite(x)&&Math.abs(x)<=ANALYSIS_LABEL_MAX;
@@ -99,6 +99,16 @@ export const boneHoverPickable=({touch,buttons,onCanvas,overLabel,gate,labelled}
 export const glowRegionOf=(regions,picked,runsContain)=>{if(!picked)return 0;const r=regions.find(q=>q.label&&q.segmentKeys?.includes(picked.key)&&runsContain(q,picked.x,picked.y,picked.z));return r?r.id:0};
 // OVERLAP: the shown labelled results and the shown labelled children (r.child) are looked at SEPARATELY, so a voxel a result and a child cover lights both cards (the result's id, the child's id; 0 = none each)
 export const glowPairOf=(regions,picked,runsContain)=>[glowRegionOf(regions.filter(r=>!r.child),picked,runsContain),glowRegionOf(regions.filter(r=>r.child),picked,runsContain)];
+
+// ---- the cards of labels that overlap (device setting labelOverlap, 設定 > 描画 / the VR menu's 解析 tab; PC / iPad and VR share the rule, not the judgement) ----
+// What happens to a label card that lies BEHIND another card on the screen (the nearer card covers it): 'keep' = not hidden (default; the nearer card is drawn on top and is the one a
+// click / the laser picks), 'always' = hidden, 'many' = hidden only while LABEL_MANY_COUNT or more labels are in sight. The number is the labels the user SEES (not hidden by a segment / the
+// label switch / tissue, on the screen), counted before any card is thinned. The leader and the anchor dot of a thinned card go with it.
+export const LABEL_OVERLAP_MODES=['keep','always','many'];
+export const LABEL_MANY_COUNT=15;
+export const normalizeLabelOverlap=v=>LABEL_OVERLAP_MODES.includes(v)?v:'keep'; // anything else (a missing / odd stored value) is 'keep'
+// is the thinning of overlapped cards on for this mode and this number of labels in sight?
+export const thinActive=(mode,n)=>{const m=normalizeLabelOverlap(mode);return m==='always'||(m==='many'&&Number.isFinite(n)&&n>=LABEL_MANY_COUNT)};
 
 // ---- the views' per-voxel steps ----
 // VR: object-space change per voxel along i / j / k (vr-point.js voxelToLocal); PC 3D: crosshair.js voxelToLocal3D (the longest side is 3.3 units)

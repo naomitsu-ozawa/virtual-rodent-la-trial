@@ -246,7 +246,7 @@ describe('nearGrabTarget run from its own source (units, scales, priorities)', (
       menu: { mesh: plane(0.5, 0.3, new THREE.Vector3(0.8, 1.3, -0.5)) }, help: { mesh: plane(0.4, 0.3, new THREE.Vector3(-0.8, 1.3, -0.5)) },
       hist: { isOpen: false, group: new THREE.Group(), board: plane(0.4, 0.3, new THREE.Vector3(0, 2, -0.5)) },
       huLine: { panel: plane(0.3, 0.2, new THREE.Vector3(0, 0.5, -0.5)), isDragging: () => false },
-      vrHalfExt: [1, 1, 1], section: { on: false }, planes: [], draggedBy: () => false, mesh,
+      vrHalfExt: [1, 1, 1], section: { on: false }, planes: [], draggedBy: () => false, mesh, pair: null,
     };
     x.menu.mesh.visible = false; x.help.mesh.visible = false; x.huLine.panel.visible = false;
     x.near = new Function('ctx', 'with(ctx){' + code + '}')(x);

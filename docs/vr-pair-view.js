@@ -8,6 +8,17 @@ export const pairOffsetX = (halfA, halfB) => halfA[0] + halfB[0] + PAIR_GAP * Ma
 // a section belongs to the partner when its frame's centre (holder space, x) is past the middle between the two boxes (the partner's box is the primary's moved by deltaX along x); else to the primary
 export const planeOnPartner = (x, deltaX) => x > deltaX / 2;
 export const pairSectionOwner = (prevOnPartner, x, deltaX, halfA, halfB) => (x >= deltaX - halfB && x <= deltaX + halfB ? true : x >= -halfA && x <= halfA ? false : !!prevOnPartner);
+export const pairBoxHas = (p, half) => Math.abs(p.x) <= half[0] && Math.abs(p.y) <= half[1] && Math.abs(p.z) <= half[2];
+export const pairSectionOwnerIn = (prevOnPartner, inPrimary, inPartner) => (inPartner && !inPrimary ? true : inPrimary && !inPartner ? false : !!prevOnPartner);
+export const planeNearerPartner = (distPrimary, distPartner) => distPartner < distPrimary;
+// Which dataset a grip / a fist takes: the laser's hits on the primary (vh) and on the partner (ph), {distance} or null; the nearer one (the primary when the partner is not hit or the distances tie)
+export const grabTargetOf = (vh, ph) => (ph && (!vh || ph.distance < vh.distance) ? 'pair' : 'main');
+// What the hands holding a volume do. kinds: for every hand that holds one, 'main' (the primary) or 'pair' (the partner). Two hands on the SAME dataset scale (the magnification is one for both: real size);
+// otherwise every hand moves / turns its own dataset (one hand on each, or one hand alone).
+export function pairGrabPlan(kinds) {
+  const main = kinds.filter(k => k !== 'pair').length, pair = kinds.length - main;
+  return { main, pair, scale: main === 2 || pair === 2, moveMain: main === 1 && pair < 2, movePair: pair === 1 && main < 2 };
+}
 // the plane written for a dataset that does NOT own that section: far outside the box (never meets it, draws no slice), with no clip bit
 export const PLANE_PARK_W = 1e6;
 

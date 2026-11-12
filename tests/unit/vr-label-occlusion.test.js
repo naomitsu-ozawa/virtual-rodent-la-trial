@@ -271,7 +271,7 @@ describe('vr-view.js wiring (source)', () => {
     expect(src).toContain('const bw=pp?tmpLe.set(pp.x,pp.y,pp.z):null;'); expect(src).toContain('SEGMENT_PRESET_ORDER.map(k=>{const g=segmentState[k]||{};return g.min');
     expect(src).toContain('const pp=pinPlace(lb);'); expect(src).toContain('if(lb.off&&pp){'); expect(src).not.toContain('lb.ext');
     expect(src).toContain('{if(lb.lit||lb.glow)lb.thin=false;if(lb.thin){lb.m.visible=false;lb.line.visible=false}}');
-    expect(src).toContain('if(thinFrame++%3===0)thinCompute();');
+    expect(src).toContain('if(thinFrame++%3===0)thinCompute(occ);');
   });
 });
 
@@ -403,7 +403,7 @@ describe('the size of a label card follows its text (cardLayout: width, then wra
   });
   it('vr-view.js wiring: the picture and the board are scaled together in x and y, each size user takes the card\'s own size, a taller card grows upward, a picture is made only for a new content (the cache), not per frame', () => {
     expect(src).toContain('lb.m.scale.set(k*lb.wr,k*lb.hr,k);'); expect(src).toContain('it.halfW=cardHalfW(LABEL_W,lb.wr,k);it.halfH=cardHalfH(LABEL_H,lb.hr,k);');
-    expect(src).toContain('const labelRise=lb=>labelScale()*0.045+(lb.hr-1)*LABEL_H*labelScale()/2;'); expect(src).toContain('lb.m.position.y-cardHalfH(LABEL_H,lb.hr,k),lb.m.position.z)'); // the leader's start: the lower edge of the card
+    expect(src).toContain('const labelRise=lb=>labelScale()*0.045+(lb.hr-1)*LABEL_H*labelScale()/2;'); expect(src).toContain('lb.m.position.y-cardHalfH(LABEL_H,lb.hr,k),lb.m.position.z,'); // the leader's start: the lower edge of the card
     expect(src).toContain('ctx.roundRect(4,4,CW-8,CH-8,26)'); expect(src).toContain('lb.wr=face.wr;lb.hr=face.hr;'); expect(src).toContain('ctx.arc(62,CH/2,34'); expect(src).not.toContain('ctx.clearRect(0,0,512,154)');
     const draw = src.slice(src.indexOf('const drawLabel=(lb,hit,faint,lit=false)=>{'), src.indexOf('const lineGlow=')); // the layout (measureText) sits after the cache hit: a cached face returns before it
     expect(draw.indexOf('if(face){')).toBeGreaterThan(0); expect(draw.indexOf('if(face){')).toBeLessThan(draw.indexOf('cardLayout(')); expect(draw.slice(0, draw.indexOf('cardLayout(')).includes('return}')).toBe(true);
@@ -412,5 +412,53 @@ describe('the size of a label card follows its text (cardLayout: width, then wra
     expect(src).toContain('const e=rectEdgePoint(tmpLb.x,tmpLb.y,LABEL_W/2,LABEL_H/2);'); // plane space: the unscaled plane
     // a one-line card (hr = 1, wr = 1) is placed exactly as before: rise = labelScale * 0.045, leader start = the lower edge
     const hr1 = 0.5 * 0.045 + (1 - 1) * 0.036 * 0.5 / 2; expect(hr1).toBe(0.5 * 0.045);
+  });
+});
+
+describe('vr-view.js: overlapping cards follow the device setting labelOverlap (source)', () => {
+  it('thinning is off in keep (no judgement at all), is not tied to 実際に隠す, and counts the labels in sight', () => {
+    expect(src).toContain("if(pins.size<2||labelOverlapMode()==='keep'){for(const lb of pins.values()){lb.thin=false;lb.cov=false}labelThinner.reset();return}");
+    expect(src).not.toContain('if(!occ||pins.size<2)');
+    expect(src).toContain('const cx=occ?embedCtx():null;'); // tissue cover is a depth-test matter: only 実際に隠す; 薄くする draws every card, so every card counts
+    expect(src).toContain("if(!thinActive(labelOverlapMode(),seen)){for(const lb of pins.values())lb.thin=false;labelThinner.reset();return}");
+    expect(src).toContain('if(inSight(p,Math.hypot(it.halfW,it.halfH)))seen++;');
+    expect(src).toContain("normalizeLabelOverlap(globalThis.__vrlSettings?.get?.('labelOverlap'))");
+  });
+  it('a lit card and its leader are drawn above the others; a thinned card takes its leader (and its anchor dot, which follows lb.m.visible) with it', () => {
+    expect(src).toContain('lb.m.renderOrder=lb.line.renderOrder=lit?6:5;');
+    expect(src).toContain('{if(lb.lit||lb.glow)lb.thin=false;if(lb.thin){lb.m.visible=false;lb.line.visible=false}}');
+    expect(src).toContain('if(lb.hid||!lb.m.visible)continue;'); // syncAnchorDots: a card that is not shown has no dot
+  });
+  it('the menu: a 3-way row in the 解析 tab (消さない / 常に消す / 15枚以上で消す) and the settings dialog row, both on the device setting', () => {
+    expect(src).toContain("lbOvV:['消さない','常に消す','15枚以上で消す']"); expect(src).toContain("lbOvV:['Keep','Always hide','Hide at 15+']");
+    expect(src).toContain('LABEL_OVERLAP_MODES.forEach((m,i)=>btn(330+i*(bw+12),y0+854,bw,L.lbOvV[i],labelOverlapMode()===m,()=>{setLabelOverlapMode(m)},{size:22}))');
+    const shell = readFileSync(new URL('../../docs/ui-shell.js', import.meta.url), 'utf8'), ui = readFileSync(new URL('../../docs/settings-ui.js', import.meta.url), 'utf8');
+    expect(shell).toContain('<select id="set-label-overlap"><option value="keep" data-i18n="labelOverlapKeep"></option><option value="always" data-i18n="labelOverlapAlways"></option><option value="many" data-i18n="labelOverlapMany"></option></select>');
+    expect(ui).toContain("bind('set-label-overlap','labelOverlap')"); expect(ui).toContain("put('set-label-overlap',normalizeLabelOverlap(v.labelOverlap))");
+    const i18n = readFileSync(new URL('../../docs/i18n.js', import.meta.url), 'utf8');
+    for (const k of ['setLabelOverlap', 'labelOverlapKeep', 'labelOverlapAlways', 'labelOverlapMany']) expect(i18n.split(k + ':').length - 1).toBe(2); // ja and en
+  });
+  it('the anchor of a pinned label is judged with the CPU probes in 薄くする only (updateHidden), and the dot follows it', () => {
+    expect(src).toContain('aps=gpuOcc?[]:[...pins.values()].filter(lb=>!lb.hid)');
+    expect(src).toContain('for(const lb of aps)if(pointIsHidden(lb.anchor,tmpEyeL,opt))nextA.add(lb.rid);vpAnchorHidden=nextA');
+    expect(src).toContain('d.hidden=!gpu&&vpAnchorHidden.has(lb.rid)');
+    expect(src).toContain('syncAnchorDots(occ)');
+  });
+});
+
+describe('the leg ribbon (createLegMesh) and setLeaderIfMoved with a 4-vertex leg', () => {
+  const mk = () => { const arr = new Float32Array(12); let up = 0; return { array: arr, count: 4, setXYZ(i, x, y, z) { arr[i * 3] = x; arr[i * 3 + 1] = y; arr[i * 3 + 2] = z; }, set needsUpdate(v) { if (v) up++; }, get uploads() { return up; } }; };
+  it('writes A,B,A,B and the opposite ends; nothing when unmoved', () => {
+    const a = mk(), o = mk();
+    expect(setLeaderIfMoved(a, 1, 2, 3, 4, 5, 6, undefined, o)).toBe(true);
+    expect([...a.array]).toEqual([1, 2, 3, 4, 5, 6, 1, 2, 3, 4, 5, 6]);
+    expect([...o.array]).toEqual([4, 5, 6, 1, 2, 3, 4, 5, 6, 1, 2, 3]);
+    expect(setLeaderIfMoved(a, 1, 2, 3, 4, 5, 6, undefined, o)).toBe(false);
+  });
+  it('vr-view.js uses the ribbon leg; width is 2.4 mm with a minimum angular width', () => {
+    const vr = readFileSync(new URL('../../docs/vr-view.js', import.meta.url), 'utf8');
+    expect(vr).toContain('const line=createLegMesh(THREE);');
+    const dots = readFileSync(new URL('../../docs/vr-anchor-dots.js', import.meta.url), 'utf8');
+    expect(dots).toContain('LEG_WIDTH_M = 0.0024'); expect(dots).toContain('length(cameraPosition-position)*minAngle');
   });
 });

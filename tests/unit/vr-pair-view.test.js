@@ -158,17 +158,18 @@ describe('each dataset has its own sections', () => {
   });
   it('vr-view.js: the holder is decided in the frame loop only (from the earlier holder and the centre\'s x); a new / restored frame takes the rule of planeOnPartner; every clamp gets the holder; a scroll never changes it; unbinding gives the partner\'s sections back to the primary', () => {
     const loop = src.slice(src.indexOf('for(const pl of planes){\n     if(pOn)'), src.indexOf('if(bench.noSection){n=0;cutBits=0}'));
-    expect(loop).toContain('pairSectionOwner(!!pl.own,pl.obj.position.x,pair.delta[0],vrHalfExt[0],pair.halfExt[0])'); expect(loop).toContain('setPlaneOwner(pl,o)');
-    expect(src.match(/pairSectionOwner\(/g).length).toBe(2); // the loop and the scroll's check
+    expect(loop).toContain('planeOwnerNow(pl)'); expect(loop).toContain('setPlaneOwner(pl,o)');
+    expect(src.match(/planeOwnerNow\(/g).length).toBe(2); // the loop and the scroll's check
+    expect(src).toContain('pairSectionOwnerIn(!!pl.own,inPairBox(pl.obj.position,false),inPairBox(pl.obj.position,true))'); // each box seen from its own pose
     expect(src).toContain('const planeOwnerPair=pl=>!!pair?.on&&!!pl.own;');
     expect(src).toContain('const intoBox=(fn,pos,n,own=false)=>');
     expect(src).toContain('intoBox(snapPlaneCenterIntoBox,pl.obj.position,n,planeOwnerPair(pl))');
     expect(src).toContain('{x:1,y:0,z:0}),planeOwnerPair(pl)):pl.obj.position;'); // deleteSection
     expect(src).toContain('intoBox(clampPlaneCenter,sp.obj.position,qRot(sp.obj.quaternion,{x:1,y:0,z:0}),planeOwnerPair(sp))');
     expect(src).toContain('sp.obj.position.set(sx0,sy0,sz0)');
-    expect(src.match(/pl\.own=!!pair\?\.on&&planeOnPartner\(pl\.obj\.position\.x,pair\.delta\[0\]\)/g).length).toBe(2); // addPlane, restoreSection
+    expect(src.match(/pl\.own=planeStartOwner\(pl\)/g).length).toBe(2); // addPlane, restoreSection
     const u0 = src.indexOf('const unbindPair=pt=>{'), ub = src.slice(u0, src.indexOf('if(pair===pt)pair=null;', u0));
-    expect(ub).toContain('if(!pl.own)continue;pl.own=false;'); expect(ub).toContain('snapPlaneCenterIntoBox(c,'); expect(ub).toContain('p.x-pt.delta[0]');
+    expect(ub).toContain('if(!pl.own)continue;pl.own=false;'); expect(ub).toContain('snapPlaneCenterIntoBox(c,'); expect(ub).toContain('tmpIm.copy(pt.mesh.matrix).invert()'); // the frame seen from the partner's own pose
     expect(src).toContain('outline:(()=>{'); expect(src).toContain('pt.outline.removeFromParent()'); expect(src).toContain('holder.add(pt.outline);pair=pt;');
     expect(src).toContain('if(p.lit&&!pl)pl=p;if(now<p.ownFlash&&!fl)fl=p'); expect(src).toContain('o.material.color.setHex(pl.color)');
     for (const k of ['pairSecOwn', 'ptDistOtherPair', 'ptDistHintPair', 'pairMainName']) expect(src.match(new RegExp(k + ':', 'g')).length, k).toBe(2); // ja + en

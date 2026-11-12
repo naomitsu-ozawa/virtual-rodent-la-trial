@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { labelSegmentsShown, surfaceAnchor, rectEdgePoint, vrVoxelStep, pcVoxelStep, normalizeAnalysisLabel, hasOffset, leaderVisible, withOffset, labelLocal, offsetForLocal, voxelFromLocalVr, voxelFromLocal3d, clampVoxel, setRegionLabel, setRegionLabelOffset, onAnalysisLabelsChange, labelForProject, sameLabel, ANALYSIS_LABEL_MAX, keepLengthFactor, pcLeaderCap, pcLeaderUncap, pcDragUncap, pcLeaderLimit, pcLengthFactor, pcScreenLength, pcDrawnLength, pushWithinLimit, scaledStep, PC_REF_DISTANCE, LABEL_LEADER_MAX_GROWTH } from '../../docs/analysis-label.js';
+import { labelSegmentsShown, surfaceAnchor, rectEdgePoint, vrVoxelStep, pcVoxelStep, normalizeAnalysisLabel, hasOffset, leaderVisible, withOffset, labelLocal, offsetForLocal, voxelFromLocalVr, voxelFromLocal3d, clampVoxel, setRegionLabel, setRegionLabelOffset, onAnalysisLabelsChange, labelForProject, sameLabel, ANALYSIS_LABEL_MAX, keepLengthFactor, pcLeaderCap, pcLeaderUncap, pcDragUncap, pcLeaderLimit, pcLengthFactor, pcScreenLength, pcDrawnLength, pushWithinLimit, scaledStep, PC_REF_DISTANCE, LABEL_LEADER_MAX_GROWTH, LABEL_OVERLAP_MODES, LABEL_MANY_COUNT, normalizeLabelOverlap, thinActive } from '../../docs/analysis-label.js';
 import { voxelToLocal } from '../../docs/vr-point.js';
 import { voxelToLocal3D } from '../../docs/crosshair.js';
 import { packProject, unpackProject } from '../../docs/project-file.js';
@@ -487,5 +487,33 @@ describe('leader length cap', () => {
     for (const gone of ['capBin', 'capK', 'pcKeepFactor', 'pcFrameFactor', 'pcShownLength', 'PC_LABEL_FRAME', 'capW', 'capH']) expect(c3).not.toContain(gone);
     for (const gone of ['clampLabelCenter', 'pcFrameFactor', 'pcShownLength', 'PC_LABEL_FRAME']) expect(al).not.toContain(gone);
     expect(al).not.toMatch(/pc(LeaderCap|LengthFactor|LeaderLimit|LeaderUncap|DragUncap|Uncap)\([^)]*\bW\b/); // no window in the signatures
+  });
+});
+
+describe('labelOverlap: the three modes (pure rule shared by the PC and the VR view)', () => {
+  it('the modes, the count, the default', () => {
+    expect(LABEL_OVERLAP_MODES).toEqual(['keep', 'always', 'many']); expect(LABEL_MANY_COUNT).toBe(15);
+    expect(normalizeLabelOverlap('keep')).toBe('keep'); expect(normalizeLabelOverlap('always')).toBe('always'); expect(normalizeLabelOverlap('many')).toBe('many');
+  });
+  it('an invalid / missing value is keep (消さない)', () => {
+    for (const v of [undefined, null, '', 'ALWAYS', 'Keep', 0, 1, true, {}, [], 'fade', 'standard']) expect(normalizeLabelOverlap(v)).toBe('keep');
+  });
+  it('keep never thins, whatever the number of labels', () => {
+    for (const n of [0, 1, 2, 14, 15, 16, 100]) expect(thinActive('keep', n)).toBe(false);
+  });
+  it('always thins whatever the number of labels', () => {
+    for (const n of [0, 1, 2, 14, 15, 16, 100]) expect(thinActive('always', n)).toBe(true);
+  });
+  it('many thins from 15 labels: 14 no, 15 yes, 16 yes', () => {
+    expect(thinActive('many', 14)).toBe(false); expect(thinActive('many', 15)).toBe(true); expect(thinActive('many', 16)).toBe(true);
+    expect(thinActive('many', 0)).toBe(false); expect(thinActive('many', 1)).toBe(false); expect(thinActive('many', 100)).toBe(true);
+  });
+  it('an invalid mode is keep; an invalid number never turns many on', () => {
+    for (const n of [0, 14, 15, 16, 100]) { expect(thinActive(undefined, n)).toBe(false); expect(thinActive('x', n)).toBe(false); expect(thinActive(null, n)).toBe(false); }
+    for (const n of [NaN, undefined, null, '20', Infinity]) expect(thinActive('many', n)).toBe(false);
+  });
+  it('the device setting defaults to keep and an odd stored value reads as keep (app-settings.js, source)', () => {
+    const src = readFileSync(new URL('../../docs/app-settings.js', import.meta.url), 'utf8');
+    expect(src).toContain("labelOverlap:'keep',"); expect(src).toContain("if(!['keep','always','many'].includes(values.labelOverlap))values.labelOverlap='keep';");
   });
 });
