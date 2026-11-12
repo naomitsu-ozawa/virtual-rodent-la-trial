@@ -1,0 +1,36 @@
+{
+  "name": {
+    "ja": "マウス脳・脳血管",
+    "en": "Mouse brain and cerebrovasculature"
+  },
+  "level": null,
+  "description": {
+    "ja": "マウス脳の光子計数 microCT・脳血管ラベル付き（{mb}）",
+    "en": "Photon-counting micro-CT of a mouse brain with cerebrovascular labels ({mb})"
+  },
+  "credit": {
+    "name": "Huang Siyi / Han Xin / Li Zuoyan / Zhou Enze / Wang Shaoyang / Liu Qian / Xie Tianwu",
+    "url": "https://doi.org/10.5281/zenodo.22092756",
+    "dataUrl": "https://doi.org/10.5281/zenodo.22092756"
+  },
+  "license": {
+    "name": "CC BY 4.0",
+    "url": "https://creativecommons.org/licenses/by/4.0/"
+  },
+  "changes": {
+    "ja": "元の NIfTI 形式データ（total_whole_brain、頭蓋含み全脳のトータルエネルギー像）を頭部範囲に切り出して DICOM に変換し、スライス方向を 670 枚から 512 枚にリサンプル（間隔 0.02292 mm → 0.02999 mm）。同梱の脳血管マスク（vessel_mask）をそのまま造影セグメントに、頭蓋内像（total_intracranial）のサポート領域から血管分を差し引いたものを軟部組織セグメント（脳）として登録し、本アプリで3D再構成。格納値は光子計数CTの処理値で、HUには較正されていない",
+    "en": "Converted from the original NIfTI data (total_whole_brain, the total-energy whole-brain image including the skull): cropped to the head and resampled along the slice axis from 670 to 512 slices (spacing 0.02292 mm -> 0.02999 mm), then written as DICOM. The bundled vessel mask (vessel_mask) is registered as-is on the contrast segment, and the support region of the intracranial image (total_intracranial) minus the vessels is registered as the soft-tissue (brain) segment; 3D reconstruction and rendering in this app. Stored values are photon-counting CT processed values, not calibrated Hounsfield units"
+  },
+  "terms": {
+    "ja": "出典を表示すれば、営利・非営利を問わず利用・改変できます。",
+    "en": "You may use and adapt it for any purpose, including commercial use, with attribution."
+  },
+  "size": {
+    "dims": [
+      512,
+      408,
+      512
+    ],
+    "megabytes": 214.5
+  }
+}
