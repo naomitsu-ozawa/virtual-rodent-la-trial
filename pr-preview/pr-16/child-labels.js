@@ -5,9 +5,9 @@
 //   id    : -(the child's id) (a negative number: it never meets an analysis region's id, which is positive). The views key their label cards by it ('A:' + id on the PC, the pin map of VR).
 //   mm3   : the child's voxel count x one voxel's volume (spacing in mm), NaN while the spacing is not known.
 // Pure data (no DOM, no three.js): unit-tested (tests/unit/child-labels.test.js).
-import { childSegments, volume, current3DVolume } from './state.js?v=20261112-build728';
-import { childDisplayName, childByKey } from './child-segments.js?v=20261112-build728';
-import { regionChipTitle } from './region-name.js?v=20261112-build728';
+import { childSegments, volume, current3DVolume } from './state.js?v=20261112-build729';
+import { childDisplayName, childByKey } from './child-segments.js?v=20261112-build729';
+import { regionChipTitle } from './region-name.js?v=20261112-build729';
 
 // the volume of one child in mm3: voxels x sx x sy x sz; NaN when the voxel size is unknown (never a made-up number)
 export function childVolumeMm3(voxels, spacing) {

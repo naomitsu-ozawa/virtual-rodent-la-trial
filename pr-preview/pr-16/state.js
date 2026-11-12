@@ -1,5 +1,5 @@
-import { clampVoxel, sameVoxel, withSliceIndex } from './crosshair.js?v=20261112-build728';
-import { SHADE_BRIGHT_DEFAULT, SHADE_CONTRAST_DEFAULT } from './cap-shade.js?v=20261112-build728';
+import { clampVoxel, sameVoxel, withSliceIndex } from './crosshair.js?v=20261112-build729';
+import { SHADE_BRIGHT_DEFAULT, SHADE_CONTRAST_DEFAULT } from './cap-shade.js?v=20261112-build729';
 // Shared mutable application state, moved out of app.js by
 // tools/state-codemod.mjs. Read these bindings directly (imports are live);
 // write them only through the setters (imported bindings are read-only).
@@ -130,7 +130,7 @@ export let cutControlPreviewRaf=0;
 export function setCutControlPreviewRaf(v){return cutControlPreviewRaf=v}
 export let smoothingRefreshTimer=null;
 export function setSmoothingRefreshTimer(v){return smoothingRefreshTimer=v}
-import { settings } from './app-settings.js?v=20261112-build728';
+import { settings } from './app-settings.js?v=20261112-build729';
 // 3D volume in-plane size, remembered in the settings: 512 / 768 / 0 (full). Device parity: every device may choose every size;
 // the per-device memory cap is numeric (gpuVolumePlanOptions in gpu-volume-data.js).
 export const normalizeGpuSide=v=>v===768?768:v===0?0:512;

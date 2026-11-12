@@ -6,8 +6,8 @@
 //   - which uniforms the part owns (the rest is the body's by reference: PART_OWN), the target a grip takes (partTargetOf), the part's own box (partBoundsOf), the laser's rule on the CPU (partKeepVoxelOf),
 //   - several parts at once: every part has its own box, uniforms and pose; the tables are patched for all of them (patchRegionLutMany / patchChildLutMany); a part's proxy box is its own bounding box (partProxyBox) and its laser march
 //     runs only inside it (partRayRange), the texts. The way in is the long-press ring (region-ring.js 切り出す / 戻す); the grip stays the body's grab and takes a part only where the laser meets one.
-import { regionLutAlpha } from './region-visibility.js?v=20261112-build728';
-import { boxFromRange } from './vr-content-box.js?v=20261112-build728';
+import { regionLutAlpha } from './region-visibility.js?v=20261112-build729';
+import { boxFromRange } from './vr-content-box.js?v=20261112-build729';
 
 export const PART_GLSL = `
 // ==== DETACHED PART: compiled only with VRL_PART (the parts' boxes, and the body while a part is out; never otherwise) ====
@@ -18,37 +18,41 @@ export const PART_GLSL = `
 uniform int partKind; // 0 = the body while parts are out, 1 = a result's part, 2 = a child segment's part
 uniform int partId;
 uniform int partMask;
-// the field of the cut (vr-part-view.js partFieldOf, read LINEAR, 0.5 = the cut; outside its box 0): a part keeps where it is >= 0.5, the body hides there (slots of partFieldMask only).
-// The body's partFieldMask = the slots EVERY part out has (partFieldUnion): a slot only some parts have is cut by the voxels as before (no part's field hides another part's slot there)
+// the field of the cut (vr-part-view.js partFieldOf, read LINEAR, 0.5 = the cut; outside its box 0): a part keeps where it is >= 0.5, the body hides there. partFieldSel[s] = which channel of the field is slot s's
+// (a one-hot vec4; 0 = slot s has no field: never cut by it). A part: its R8 field on its own slots. The body: one channel per group of slots the same parts have (partFieldUnion: one channel when every part has the same
+// slots), so a part's field cuts only its own slots, in the part's band too (one read, no branch: the dot product picks the channel)
 uniform sampler3D partField;
 uniform vec3 partFieldScale;
 uniform vec3 partFieldOff;
-uniform int partFieldMask;
-float partFieldAt(vec3 tc){vec3 u=tc*partFieldScale+partFieldOff;if(any(lessThan(u,vec3(0.0)))||any(greaterThan(u,vec3(1.0))))return 0.0;return texture(partField,u).r;}
-bool partFieldIn(vec3 tc,int s){return ((partFieldMask>>s)&1)==1&&partFieldAt(tc)>=0.5;}
+uniform vec4 partFieldSel[4];
+float partFieldAt(vec3 tc,vec4 w){vec3 u=tc*partFieldScale+partFieldOff;if(any(lessThan(u,vec3(0.0)))||any(greaterThan(u,vec3(1.0))))return 0.0;return dot(texture(partField,u),w);}
+bool partFieldIn(vec3 tc,int s){return partFieldAt(tc,partFieldSel[s])>=0.5;}
 #ifdef VRL_REGIONS
-bool regionHiddenAtP(vec3 tc,int s){
- if(partKind==1)return !partFieldIn(tc,s)||regionHiddenAt(tc,s);
- if(partKind==0){
-  int i=int(texture(regionTex,clamp(tc,vec3(0.0),vec3(0.999999))).g*255.0+0.5);
-  if(i>=1&&((partFieldMask>>s)&1)==1&&((int(texelFetch(regionLut,ivec2(i,0),0).a+0.5)>>16)&1)==1)return partFieldAt(tc)>=0.5; // a cut-out result (vr-part-view.js PART_CUT_REGION_BIT), on a slot a part has: the field decides, not its voxels
+bool regionHiddenAtP(vec3 tc,int s){ // one read each of the field, the index and the table (the compiler inlines this at every hidden test: one copy of each keeps the programs as quick to compile); a result's part leaves at once outside its field
+ bool f=partKind!=2&&partFieldIn(tc,s);
+ if(partKind==1&&!f)return true;
+ int i=int(texture(regionTex,clamp(tc,vec3(0.0),vec3(0.999999))).g*255.0+0.5);
+ int a=i<1?0:int(texelFetch(regionLut,ivec2(i,0),0).a+0.5);
+ bool h=((a>>(8+s))&1)==1; // regionHiddenAt: a hidden result (slot s)
+ if(partKind!=0)return h;
+ if(((a>>16)&1)==1)return f; // a cut-out result (vr-part-view.js PART_CUT_REGION_BIT): the field of slot s decides, not its voxels
 #ifndef VRL_CHILDREN
-  if(partFieldIn(tc,s))return true; // the cut reaching into a neighbour's voxel (with child segments: childHiddenAtP, read first by every caller)
+ if(f)return true; // the cut reaching into a neighbour's voxel (with child segments: childHiddenAtP, read first by every caller)
 #endif
- }
- return regionHiddenAt(tc,s);
+ return h;
 }
 #define regionHiddenAt(tc,s) regionHiddenAtP(tc,s)
 #endif
 #ifdef VRL_CHILDREN
-bool childHiddenAtP(vec3 tc,int s){
- if(partKind==2)return !partFieldIn(tc,s)||childHiddenAt(tc,s);
- if(partKind==0){
-  int i=childHideIdAt(tc);
-  if(i>=1&&((partFieldMask>>s)&1)==1&&((int(texelFetch(childLut,ivec2(i,1),0).a+0.5)>>8)&1)==1)return partFieldAt(tc)>=0.5; // a cut-out child (PART_CUT_CHILD_BIT), as the results'
-  if(partFieldIn(tc,s))return true;
- }
- return childHiddenAt(tc,s);
+bool childHiddenAtP(vec3 tc,int s){ // as regionHiddenAtP: one read each, a child's part leaves at once outside its field
+ bool f=partKind!=1&&partFieldIn(tc,s);
+ if(partKind==2&&!f)return true;
+ int i=childHideIdAt(tc);
+ int a=i<1?0:int(texelFetch(childLut,ivec2(i,1),0).a+0.5);
+ bool h=((a>>s)&1)==1; // childHiddenAt: a hidden child (slot s)
+ if(partKind!=0)return h;
+ if(((a>>8)&1)==1)return f; // a cut-out child (PART_CUT_CHILD_BIT), as the results'
+ return f||h; // the cut reaching into a neighbour's voxel
 }
 #define childHiddenAt(tc,s) childHiddenAtP(tc,s)
 #endif
@@ -64,7 +68,7 @@ export const PART_CALL_SITES = Object.freeze(['passH=childHiddenAt(tcO+tcD*t,idx
 //   regionLut / childLut: the part's own copies of the tables (the target NOT hidden: the body's has it hidden); regionAnyHidden: the part's own.
 export const PART_OWN = Object.freeze(['boxC', 'boxH', 'boxEntry', 'planeCount', 'planeCut', 'regionLut', 'regionAnyHidden', 'childLut']);
 // the part's uniform names that volumeUniforms does NOT have (made only for the part's materials)
-export const PART_EXTRA = Object.freeze(['partKind', 'partId', 'partMask', 'partField', 'partFieldScale', 'partFieldOff', 'partFieldMask']);
+export const PART_EXTRA = Object.freeze(['partKind', 'partId', 'partMask', 'partField', 'partFieldScale', 'partFieldOff', 'partFieldSel']);
 // the part's uniforms: the body's (every key by reference) with `own` ({name: {value}}) put over them
 export function partUniforms(primary, own) { return { ...primary, ...own }; }
 
@@ -404,24 +408,34 @@ export function partFieldPlain(codes, size) {
   }
   return out;
 }
-// the body's field: the parts' fields as one, in the box that holds them all (the larger byte wins where boxes overlap: the body hides every part). fields = [{data, lo, size, mask?}] -> {data, lo, size, mask} | null.
-// mask = the slots every part has (15 when none says): the body cuts those slots by the field; a slot only some parts have is cut by its voxels (hidden bits) as before, so that one part's field never hides another part's slot
-// (a field per slot would have to be read per slot at every hidden test: the programs would compile more slowly)
+// the body's field: the parts' fields in the box that holds them all, one CHANNEL per group of slots that the same parts have (the larger byte wins where boxes overlap). fields = [{data, lo, size, mask?}] (mask: the part's slots,
+// 15 when it does not say) -> {data (C bytes a voxel, interleaved), lo, size, C, sel, mask} | null. sel[s] = the shader's partFieldSel[s] (one-hot [4] on slot s's channel; zeros when no part has slot s), mask = the slots some part has.
+// Every part with the same slots (the usual case): C = 1, the bytes are the larger byte of all, as before. Parts with different slots (a result and a child segment): a channel for each group, so that a part's field hides only
+// its own slots (the tissue of another slot in its band stays the body's: no part draws it) and every slot a part has is cut smoothly. Channels 3 are stored as 4 (no 3-byte 3D texture).
 export function partFieldUnion(fields) {
   const list = (fields || []).filter(f => f && f.data && f.lo && f.size);
   if (!list.length) return null;
-  const mask = list.reduce((t, f) => t & ((typeof f.mask === 'number' ? f.mask : 15) & 15), 15);
+  const masks = list.map(f => (typeof f.mask === 'number' ? f.mask : 15) & 15), mask = masks.reduce((t, m) => t | m, 0);
+  // slot s -> the parts that have it (a key), equal keys share a channel
+  const keyOf = s => masks.map(m => (m >> s) & 1).join(''), keys = [], chOf = [-1, -1, -1, -1];
+  for (let s = 0; s < 4; s++) { if (!((mask >> s) & 1)) continue; const k = keyOf(s); let c = keys.indexOf(k); if (c < 0) { c = keys.length; keys.push(k); } chOf[s] = c; }
+  const nc = Math.max(1, keys.length), C = nc === 3 ? 4 : nc;
+  const sel = [0, 1, 2, 3].map(s => [0, 1, 2, 3].map(c => (chOf[s] === c ? 1 : 0)));
   const lo = [0, 1, 2].map(a => Math.min(...list.map(f => f.lo[a]))), hi = [0, 1, 2].map(a => Math.max(...list.map(f => f.lo[a] + f.size[a])));
-  const size = [hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]], data = new Uint8Array(size[0] * size[1] * size[2]);
-  for (const f of list) {
+  const size = [hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]], data = new Uint8Array(size[0] * size[1] * size[2] * C);
+  list.forEach((f, p) => {
+    const chs = keys.map((k, c) => (k[p] === '1' ? c : -1)).filter(c => c >= 0);
+    if (!chs.length) return;
     const [fw, fh, fd] = f.size, ox = f.lo[0] - lo[0], oy = f.lo[1] - lo[1], oz = f.lo[2] - lo[2];
     for (let z = 0; z < fd; z++) for (let y = 0; y < fh; y++) {
-      const s0 = fw * (y + fh * z), o = ox + size[0] * (oy + y + size[1] * (oz + z));
-      for (let x = 0; x < fw; x++) { const v = f.data[s0 + x]; if (v > data[o + x]) data[o + x] = v; }
+      const s0 = fw * (y + fh * z), o = (ox + size[0] * (oy + y + size[1] * (oz + z))) * C;
+      for (const c of chs) for (let x = 0, q = o + c; x < fw; x++, q += C) { const v = f.data[s0 + x]; if (v > data[q]) data[q] = v; }
     }
-  }
-  return { data, lo, size, mask };
+  });
+  return { data, lo, size, C, sel, mask };
 }
+// a part's own field (R8) on the shader: partFieldSel[s] = the red channel on the slots of mask, zeros on the others
+export function partFieldSelOf(mask) { return [0, 1, 2, 3].map(s => ((mask >> s) & 1 ? [1, 0, 0, 0] : [0, 0, 0, 0])); }
 // the shader's mapping of a field box: texture coordinate u = tc * scale + off (tc over the index grid dims) -> {scale: [3], off: [3]}
 export function partFieldMap(box, dims) { return { scale: [0, 1, 2].map(a => dims[a] / box.size[a]), off: [0, 1, 2].map(a => -box.lo[a] / box.size[a]) }; }
 // the "air" test of partFieldCodes from the laser's classification bytes (vr-pick: cls {data, C, chan} on cdims): an index-grid voxel is air when, on every slot of mask, its classification byte is below 128 (the shader's 0.5); null without them
