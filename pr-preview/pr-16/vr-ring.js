@@ -78,9 +78,13 @@ export function clearWheelItem(items,slot){
 // quad (the region / child ring with its 4 items): a 2 x 2 layout, upper left / upper right / lower left / lower right = items 0, 1, 2, 3 (315, 45, 225, 135): the top half = the region (色 left, 表示 right), the bottom half = the child.
 // Only that ring passes quad; every other 4-item ring keeps 0, 90, 180, 270.
 export const WHEEL_QUAD_ANGLES=Object.freeze([315,45,225,135]);
+export const WHEEL_REGION3_ANGLES=Object.freeze([240,120,0]);
+export const WHEEL_REGION6_ANGLES=Object.freeze([300,60,0,240,120,180]);
 export function wheelAngles(n,quad=false){
  if(n===2)return[270,90];
  if(n===4&&quad)return[...WHEEL_QUAD_ANGLES];
+ if(n===3&&quad)return[...WHEEL_REGION3_ANGLES];
+ if(n===6&&quad)return[...WHEEL_REGION6_ANGLES];
  return Array.from({length:n},(_,k)=>k*360/n);
 }
 const angDiff=(a,b)=>{const d=Math.abs(a-b)%360;return d>180?360-d:d};
@@ -113,12 +117,12 @@ export function wheelSlotFromLocal(x,y,n,R,quad=false){
 export function createWheelStick({enter=0.5,release=0.25,hysDeg=10}={}){
  let armed=false,hl=null;
  return{
-  update(ax,ay,enabled){
+  update(ax,ay,enabled,quad=false){ // quad: the region / child ring's 3- and 6-item layouts (wheelAngles quad); omitted = the usual layout, as before
    const n=enabled?.length||0,x=+ax||0,y=-(+ay||0),m=Math.hypot(x,y);
    if(!armed){if(m<release)armed=true;return{highlight:null,changed:false,confirm:null}}
    let changed=false,confirm=null;
    if(m>=enter&&n>0){
-    const k=wheelSlotFromAngle(toTheta(x,y),n,enabled,hl,{hysDeg});
+    const k=wheelSlotFromAngle(toTheta(x,y),n,enabled,hl,{hysDeg,quad});
     if(k!==hl){hl=k;changed=k!==null}
    }else if(m<release&&hl!==null){confirm=hl;hl=null}
    return{highlight:hl,changed,confirm};

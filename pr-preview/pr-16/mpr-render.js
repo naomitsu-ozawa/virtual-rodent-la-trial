@@ -1,20 +1,20 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { wc, ww, planes, footer, state, wcVal, wwVal } from './ui-shell.js?v=20261112-build726';
-import { SEGMENT_PRESET_ORDER, allSegmentKeys, segmentById, childDrawLook, activeMprSegments, mprSegmentAlpha, analysisRegionShown, segmentEditActive, segmentState, segmentHasProcessedMask, getProcessedSegmentMask, segmentEditState } from './segments.js?v=20261112-build726';
-import { volume, volumeAnalysisMode, analysisRegions, childSegments, analysisFocusedRegionId, sectionViewPlane, memoryGpuPreviewActive, sourceVolume, setMemoryGpuPreviewActive, sceneState, incSourceMprWarmupToken, sourceMprWarmupPlane, setSourceMprWarmupPlane, residentGpuUploadSeriesId, sourceMprWarmupToken, setCrosshairSlice , sectionViewOpen, threeRenderMode} from './state.js?v=20261112-build726';
-import { analysisRunsContain, runsPlaneMask } from './run-length.js?v=20261112-build726';
-import { getFocusedChildKey, childByKey } from './child-segments.js?v=20261112-build726';
-import { mpr3DVisibility, refreshMpr3DPlaneTexture, setSectionCapColors, updateMpr3DPlanePositions, syncMpr3DSliceSliders, mpr3DOrthoSliding, pushCachedMpr3DPlane, mpr3DPreviewCache, mpr3DPreviewSignature, paintMpr3DCacheSliceFast, ensureMpr3DPreviewCache } from './mpr3d-overlay.js?v=20261112-build726';
-import { updateSectionClipPlaneWorld, rebindWebGpuSectionClipGroup, updateSectionViewUi } from './section-view.js?v=20261112-build726';
-import { request3DRender } from './scene3d.js?v=20261112-build726';
-import { planeRenderRevision, sourceFilterStages, getFilteredMemoryPlaneValues, getFilteredSourcePlaneValues, getCachedSourceSlice, sourceFilterSignature, sourceFilterCacheGet, memoryFilterPreviewGet, currentFilterSignature } from './source-filters.js?v=20261112-build726';
-import { cachedSagittalDisplayPlane, cachedSourceMprPlane } from './volume-io.js?v=20261112-build726';
-import { sourceOrthogonalCacheGet, residentGpuMprAvailable, buildSourceOrthogonalPlane } from './mpr-orthogonal.js?v=20261112-build726';
-import { hexRgb, formatCtValue, frameYield } from './utils.js?v=20261112-build726';
+import { wc, ww, planes, footer, state, wcVal, wwVal } from './ui-shell.js?v=20261112-build727';
+import { SEGMENT_PRESET_ORDER, allSegmentKeys, segmentById, childDrawLook, activeMprSegments, mprSegmentAlpha, analysisRegionShown, segmentEditActive, segmentState, segmentHasProcessedMask, getProcessedSegmentMask, segmentEditState } from './segments.js?v=20261112-build727';
+import { volume, volumeAnalysisMode, analysisRegions, childSegments, analysisFocusedRegionId, sectionViewPlane, memoryGpuPreviewActive, sourceVolume, setMemoryGpuPreviewActive, sceneState, incSourceMprWarmupToken, sourceMprWarmupPlane, setSourceMprWarmupPlane, residentGpuUploadSeriesId, sourceMprWarmupToken, setCrosshairSlice , sectionViewOpen, threeRenderMode} from './state.js?v=20261112-build727';
+import { analysisRunsContain, runsPlaneMask } from './run-length.js?v=20261112-build727';
+import { getFocusedChildKey, childByKey } from './child-segments.js?v=20261112-build727';
+import { mpr3DVisibility, refreshMpr3DPlaneTexture, setSectionCapColors, updateMpr3DPlanePositions, syncMpr3DSliceSliders, mpr3DOrthoSliding, pushCachedMpr3DPlane, mpr3DPreviewCache, mpr3DPreviewSignature, paintMpr3DCacheSliceFast, ensureMpr3DPreviewCache } from './mpr3d-overlay.js?v=20261112-build727';
+import { updateSectionClipPlaneWorld, rebindWebGpuSectionClipGroup, updateSectionViewUi } from './section-view.js?v=20261112-build727';
+import { request3DRender } from './scene3d.js?v=20261112-build727';
+import { planeRenderRevision, sourceFilterStages, getFilteredMemoryPlaneValues, getFilteredSourcePlaneValues, getCachedSourceSlice, sourceFilterSignature, sourceFilterCacheGet, memoryFilterPreviewGet, currentFilterSignature } from './source-filters.js?v=20261112-build727';
+import { cachedSagittalDisplayPlane, cachedSourceMprPlane } from './volume-io.js?v=20261112-build727';
+import { sourceOrthogonalCacheGet, residentGpuMprAvailable, buildSourceOrthogonalPlane } from './mpr-orthogonal.js?v=20261112-build727';
+import { hexRgb, formatCtValue, frameYield } from './utils.js?v=20261112-build727';
 import * as THREE from './vendor/three@0.186.0/build/three.webgpu.js';
-import { latestOnlyRunner } from './latest-runner.js?v=20261112-build726';
-import { regionHidden } from './region-visibility.js?v=20261112-build726';
+import { latestOnlyRunner } from './latest-runner.js?v=20261112-build727';
+import { regionHidden } from './region-visibility.js?v=20261112-build727';
 export function analysisColorCss(color){return '#'+Number(color??0x00d8ff).toString(16).padStart(6,'0')}
 export const HIDDEN_SHAPE=Object.freeze(['hidden']);
 // (an item inside another, like the yolk in the white of an egg, keeps its shape when the outer one is hidden): while a result is hidden (withHidden and at least one), EVERY result with runs is a layer,
