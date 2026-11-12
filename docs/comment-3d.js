@@ -11,28 +11,28 @@
 // view's cut plane included; refreshed at most about 10 times a second while the view moves and once more when it stops
 // (comment-3d-hidden.js). Until the bytes are ready, or when no segment is shown / no source data is in memory, every point is exposed.
 import * as THREE from './vendor/three@0.186.0/build/three.webgpu.js';
-import { sceneState, volume, activeSeries, volumeAnalysisMode, analysisEditTool, sectionViewOpen, sectionViewPlane, analysisRegions, threeRenderMode } from './state.js?v=20261112-build728';
-import { tr } from './i18n.js?v=20261112-build728';
-import { datasetFingerprint } from './project-file.js?v=20261112-build728';
-import { voxelToLocal3D } from './crosshair.js?v=20261112-build728';
-import { pointColor, darkFill, inkOn } from './point-colors.js?v=20261112-build728';
-import { getComments, onCommentsChange, commentMatchesSeries, commentTarget, getMarkersShown, onMarkersShownChange } from './comments.js?v=20261112-build728';
-import { getMeasurements, setLabelOffset, onMeasurementsChange, measurementMm, measureLabel, seriesSpacing, spacingLevel, getMeasureStart, onMeasureStartChange, createLongPress } from './measurements.js?v=20261112-build728';
-import { openPointMenu, endMeasureAt, cancelMeasureUi } from './point-menu.js?v=20261112-build728';
-import { request3DRender } from './scene3d.js?v=20261112-build728';
-import { gpuVolumeTarget } from './gpu-volume-data.js?v=20261112-build728';
-import { analysisRegionCounted, segmentState, segmentEditState, SEGMENT_PRESET_ORDER, gpuSegmentOrder, segmentById } from './segments.js?v=20261112-build728';
-import { sectionLocalPoint, sectionLocalNormal } from './section-view.js?v=20261112-build728';
-import { planeLabelPlacement, clampLabelCenter, stepDelta, createFocusTracker, LINE_SAMPLES, probeKey, labelPart, lineSamplePoints, lineAlphas, lineStopOffsets, createIdMaker } from './measure-label.js?v=20261112-build728';
-import { planeRelations, boxHalfExtent, clipSegmentNear } from './comment-3d-section.js?v=20261112-build728';
-import { computeHiddenIds, shownChannels, sectionPlaneLocal, createHiddenThrottle, hiddenRegionSignature, withHiddenRegionSkip } from './comment-3d-hidden.js?v=20261112-build728';
-import { regionCustomName, regionChipTitle } from './region-name.js?v=20261112-build728'; // the shared region name rule (name, else ID <atlas id>), as the VR cards
-import { judgeLabelPlace, tissueAt, PUSH_DIRS, LABEL_PUSH_MAX, LABEL_PUSH_MARGIN_VOX, labelDisplay, thinOverlaps, analysisLabelsInView, frontMost, stackOrder, putAttr, putStyle } from './comment-3d-label-occlusion.js?v=20261112-build728'; // occlusion of the analysis labels (behind = hidden, embedded = translucent, pushed out, overlaps thinned)
-import { childLabelItems, childLabelItemById, labelChipTitle, labelVolumeText } from './child-labels.js?v=20261112-build728'; // a child segment's name label is drawn / dragged by the code of the analysis labels (it has the shape of a region)
-import { onChildSegChange } from './child-segments.js?v=20261112-build728';
-import { setRegionLabelOffset, onAnalysisLabelsChange, leaderVisible, labelLocal, offsetForLocal, rectEdgePoint, pcVoxelStep, createBoneGlow, boneHoverPickable, glowPairOf, pcLeaderLimit, pcLengthFactor, pcDrawnLength, pcDragUncap, pushWithinLimit, PC_REF_DISTANCE, thinActive } from './analysis-label.js?v=20261112-build728';
-import { settings } from './app-settings.js?v=20261112-build728'; // the device setting labelOverlap (what happens to a card behind another card)
-import { analysisRunsContain } from './run-length.js?v=20261112-build728';
+import { sceneState, volume, activeSeries, volumeAnalysisMode, analysisEditTool, sectionViewOpen, sectionViewPlane, analysisRegions, threeRenderMode } from './state.js?v=20261112-build729';
+import { tr } from './i18n.js?v=20261112-build729';
+import { datasetFingerprint } from './project-file.js?v=20261112-build729';
+import { voxelToLocal3D } from './crosshair.js?v=20261112-build729';
+import { pointColor, darkFill, inkOn } from './point-colors.js?v=20261112-build729';
+import { getComments, onCommentsChange, commentMatchesSeries, commentTarget, getMarkersShown, onMarkersShownChange } from './comments.js?v=20261112-build729';
+import { getMeasurements, setLabelOffset, onMeasurementsChange, measurementMm, measureLabel, seriesSpacing, spacingLevel, getMeasureStart, onMeasureStartChange, createLongPress } from './measurements.js?v=20261112-build729';
+import { openPointMenu, endMeasureAt, cancelMeasureUi } from './point-menu.js?v=20261112-build729';
+import { request3DRender } from './scene3d.js?v=20261112-build729';
+import { gpuVolumeTarget } from './gpu-volume-data.js?v=20261112-build729';
+import { analysisRegionCounted, segmentState, segmentEditState, SEGMENT_PRESET_ORDER, gpuSegmentOrder, segmentById } from './segments.js?v=20261112-build729';
+import { sectionLocalPoint, sectionLocalNormal } from './section-view.js?v=20261112-build729';
+import { planeLabelPlacement, clampLabelCenter, stepDelta, createFocusTracker, LINE_SAMPLES, probeKey, labelPart, lineSamplePoints, lineAlphas, lineStopOffsets, createIdMaker } from './measure-label.js?v=20261112-build729';
+import { planeRelations, boxHalfExtent, clipSegmentNear } from './comment-3d-section.js?v=20261112-build729';
+import { computeHiddenIds, shownChannels, sectionPlaneLocal, createHiddenThrottle, hiddenRegionSignature, withHiddenRegionSkip } from './comment-3d-hidden.js?v=20261112-build729';
+import { regionCustomName, regionChipTitle } from './region-name.js?v=20261112-build729'; // the shared region name rule (name, else ID <atlas id>), as the VR cards
+import { judgeLabelPlace, tissueAt, PUSH_DIRS, LABEL_PUSH_MAX, LABEL_PUSH_MARGIN_VOX, labelDisplay, thinOverlaps, analysisLabelsInView, frontMost, stackOrder, putAttr, putStyle } from './comment-3d-label-occlusion.js?v=20261112-build729'; // occlusion of the analysis labels (behind = hidden, embedded = translucent, pushed out, overlaps thinned)
+import { childLabelItems, childLabelItemById, labelChipTitle, labelVolumeText } from './child-labels.js?v=20261112-build729'; // a child segment's name label is drawn / dragged by the code of the analysis labels (it has the shape of a region)
+import { onChildSegChange } from './child-segments.js?v=20261112-build729';
+import { setRegionLabelOffset, onAnalysisLabelsChange, leaderVisible, labelLocal, offsetForLocal, rectEdgePoint, pcVoxelStep, createBoneGlow, boneHoverPickable, glowPairOf, pcLeaderLimit, pcLengthFactor, pcDrawnLength, pcDragUncap, pushWithinLimit, PC_REF_DISTANCE, thinActive } from './analysis-label.js?v=20261112-build729';
+import { settings } from './app-settings.js?v=20261112-build729'; // the device setting labelOverlap (what happens to a card behind another card)
+import { analysisRunsContain } from './run-length.js?v=20261112-build729';
 
 
 // analysis result labels (analysis-label.js, region.label): a chip (colour, number, segments, volume) at its anchor, MOVABLE by a drag (mouse / pen / touch) in the camera-facing plane through the label's
@@ -78,7 +78,7 @@ function refreshHidden(obj,camera,pts,plane){
  if(!anyShown||!pts.length){const had=hiddenIds.size>0;hiddenIds=new Set();if(lastPrep){lastPrep=null;refreshSoon()}return had}
  if(vrModFailed)return false; // the builder could not be loaded: every point stays exposed
  if(!vrMod){ // the classification builder lives in vr-view.js: loaded once, on the first need; until then the previous judgement stays
-  if(!vrModLoading){vrModLoading=true;import('./vr-view.js?v=20261112-build728').then(m=>{vrMod=m;throttle.reset();refreshSoon()},()=>{vrModFailed=true;if(hiddenIds.size){hiddenIds=new Set();refreshSoon()}})}
+  if(!vrModLoading){vrModLoading=true;import('./vr-view.js?v=20261112-build729').then(m=>{vrMod=m;throttle.reset();refreshSoon()},()=>{vrModFailed=true;if(hiddenIds.size){hiddenIds=new Set();refreshSoon()}})}
   return false;
  }
  const built=vrMod.hiddenClsFor(()=>{throttle.reset();refreshSoon()});

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { PART_FIELD, partFieldBox, partFieldCodes, partFieldOf, partFieldPlain, partFieldBoxOf, partBoundsOf, runPartField, partFieldUnion, partFieldMap, partAirOf, markCutRegionLut, markCutChildLut, PART_CUT_REGION_BIT, PART_CUT_CHILD_BIT } from '../../docs/vr-part-view.js';
+import { PART_FIELD, partFieldBox, partFieldCodes, partFieldOf, partFieldPlain, partFieldBoxOf, partBoundsOf, runPartField, partFieldUnion, partFieldSelOf, partFieldMap, partAirOf, markCutRegionLut, markCutChildLut, PART_CUT_REGION_BIT, PART_CUT_CHILD_BIT } from '../../docs/vr-part-view.js';
 import { regionLutAlpha, regionLutHiddenSlots } from '../../docs/region-visibility.js';
 import { makeMask } from '../helpers/voxel-mesh.js';
 
@@ -97,11 +97,19 @@ describe('the box, the codes, the worker, the union', () => {
   });
   it('partFieldUnion: one box over all, the larger byte wins; partFieldMap: texture coordinates of the box', () => {
     const a = { data: Uint8Array.from([10, 200]), lo: [1, 0, 0], size: [2, 1, 1] }, b = { data: Uint8Array.from([150, 20]), lo: [2, 0, 0], size: [2, 1, 1] };
-    expect(partFieldUnion([a, b])).toEqual({ data: Uint8Array.from([10, 200, 20]), lo: [1, 0, 0], size: [3, 1, 1], mask: 15 });
-    // review: parts of different slots -> the body's field mask is the slots they ALL have (A on slot 0, B on slots 0 and 1 -> slot 0; A on 0, B on 1 -> none: those slots are cut by their voxels, no tissue of one is hidden by the other's field)
-    expect(partFieldUnion([{ ...a, mask: 1 }, { ...b, mask: 3 }]).mask).toBe(1);
-    expect(partFieldUnion([{ ...a, mask: 1 }, { ...b, mask: 2 }]).mask).toBe(0);
-    expect(partFieldUnion([{ ...a, mask: 3 }, { ...b, mask: 3 }]).mask).toBe(3);
+    const one = [1, 0, 0, 0], none = [0, 0, 0, 0];
+    expect(partFieldUnion([a, b])).toEqual({ data: Uint8Array.from([10, 200, 20]), lo: [1, 0, 0], size: [3, 1, 1], C: 1, sel: [one, one, one, one], mask: 15 });
+    // every part with the same slots: ONE channel, the bytes of before (the larger byte of all), on those slots only
+    expect(partFieldUnion([{ ...a, mask: 3 }, { ...b, mask: 3 }])).toEqual({ data: Uint8Array.from([10, 200, 20]), lo: [1, 0, 0], size: [3, 1, 1], C: 1, sel: [one, one, none, none], mask: 3 });
+    // parts of different slots (a result and a child segment): a channel per group of slots the same parts have, so a part's field cuts only its own slots, and every slot a part has is cut by a field
+    // A on slot 0, B on slot 1 -> two channels: slot 0 = A's field, slot 1 = B's
+    expect(partFieldUnion([{ ...a, mask: 1 }, { ...b, mask: 2 }])).toEqual({ data: Uint8Array.from([10, 0, 200, 150, 0, 20]), lo: [1, 0, 0], size: [3, 1, 1], C: 2, sel: [one, [0, 1, 0, 0], none, none], mask: 3 });
+    // A on slot 0, B on slots 0 and 1 -> slot 0 = both (the larger byte), slot 1 = B's
+    expect(partFieldUnion([{ ...a, mask: 1 }, { ...b, mask: 3 }])).toEqual({ data: Uint8Array.from([10, 0, 200, 150, 20, 20]), lo: [1, 0, 0], size: [3, 1, 1], C: 2, sel: [one, [0, 1, 0, 0], none, none], mask: 3 });
+    // three groups are stored as four channels (no 3-byte texture)
+    const c3 = partFieldUnion([{ ...a, mask: 1 }, { ...b, mask: 2 }, { ...b, lo: [0, 0, 0], mask: 4 }]);
+    expect(c3.C).toBe(4); expect(c3.sel).toEqual([one, [0, 1, 0, 0], [0, 0, 1, 0], none]); expect(c3.data.length).toBe(4 * 4);
+    expect(partFieldSelOf(5)).toEqual([one, none, one, none]);
     expect(partFieldUnion([])).toBe(null);
     const m = partFieldMap({ lo: [2, 1, 0], size: [4, 2, 6] }, [8, 8, 6]);
     expect(m.scale).toEqual([2, 4, 1]); expect(m.off).toEqual([-0.5, -0.5, -0]);
@@ -131,5 +139,37 @@ describe('the other kind\'s table of a part keeps only what is hidden (re-review
     const c = new Float32Array(256 * 12); c.set([0.9, 0.1, 0.1, 3], 4); c.set([300, 3000, 3, 2], 1024 + 4); c.set([0.2, 0.5, 20, 0.7], 2048 + 4);
     const dc = new Float32Array(256 * 12); partHideOnlyChildLut(c, dc);
     expect(dc[7]).toBe(0); expect(dc[1024 + 7]).toBe(2); expect(dc[1024 + 6]).toBe(0);
+  });
+});
+
+describe('parts of different slots out together (a result and a child segment)', () => {
+  it('every point of tissue is drawn by exactly one of the body and the parts, on both slots', () => {
+    const W = 24, H = 16, D = 20, n = W * H * D, at = (x, y, z) => x + W * (y + H * z);
+    const reg = new Uint8Array(n), chi = new Uint8Array(n), cls = [new Uint8Array(n), new Uint8Array(n)];
+    for (let z = 1; z < D - 1; z++) for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
+      const k = at(x, y, z), under = z + 0.5 < 6 + 0.4 * (x + 0.5);
+      if (y < 8) { cls[0][k] = 1; if (under) reg[k] = 1; if (x % 6 === 3 && y % 4 === 2) cls[1][k] = 1; } // slot 0 with the result under a slope, slot-1 tissue (no child) through it
+      else { cls[1][k] = 1; if (under) chi[k] = 1; if (x % 6 === 1 && y % 4 === 1) cls[0][k] = 1; } // slot 1 with the child under the slope, slot-0 tissue (no result) through it
+    }
+    const fA = partFieldOf(reg, [W, H, D], PART_FIELD), fB = partFieldOf(chi, [W, H, D], PART_FIELD);
+    const un = partFieldUnion([{ data: fA, lo: [0, 0, 0], size: [W, H, D], mask: 1 }, { data: fB, lo: [0, 0, 0], size: [W, H, D], mask: 2 }]);
+    expect(un.C).toBe(2);
+    const tri = (f, C, c, x, y, z) => { const u = x - 0.5, v = y - 0.5, s = z - 0.5, X = Math.floor(u), Y = Math.floor(v), Z = Math.floor(s), fx = u - X, fy = v - Y, fz = s - Z; let r = 0;
+      for (let q = 0; q < 8; q++) { const a = q & 1, b = (q >> 1) & 1, e = (q >> 2) & 1; r += (a ? fx : 1 - fx) * (b ? fy : 1 - fy) * (e ? fz : 1 - fz) * f[at(Math.min(W - 1, Math.max(0, X + a)), Math.min(H - 1, Math.max(0, Y + b)), Math.min(D - 1, Math.max(0, Z + e))) * C + c]; } return r; };
+    const near = (m, x, y, z) => m[at(Math.floor(x), Math.floor(y), Math.floor(z))];
+    const fin = (x, y, z, s) => un.sel[s].reduce((t, w, c) => t + (w ? tri(un.data, un.C, c, x, y, z) / 255 : 0), 0) >= 0.5; // partFieldIn: dot(texture, partFieldSel[s]) >= 0.5
+    // the body: childHiddenAtP (child 1 cut out: the field; else the field reaching in, else its hidden bits) || regionHiddenAtP (result 1 cut out: the field; else its hidden bits; with children: no reach-in here)
+    const bodyHides = (x, y, z, s) => (near(chi, x, y, z) === 1 ? fin(x, y, z, s) : fin(x, y, z, s)) || (near(reg, x, y, z) === 1 && fin(x, y, z, s));
+    const partA = (x, y, z, s) => s === 0 && tri(fA, 1, 0, x, y, z) / 255 >= 0.5; // the result's part: its own field on its own slot (the child it does not draw is on slot 1 only)
+    const partB = (x, y, z, s) => s === 1 && tri(fB, 1, 0, x, y, z) / 255 >= 0.5;
+    let pts = 0, none = 0, twice = 0;
+    for (let z = 1.2; z < D - 1.2; z += 0.31) for (let y = 1.2; y < H - 1.2; y += 0.27) for (let x = 1.2; x < W - 1.2; x += 0.37) for (let s = 0; s < 2; s++) {
+      if (tri(cls[s], 1, 0, x, y, z) < 0.5) continue;
+      pts++; const k = (bodyHides(x, y, z, s) ? 0 : 1) + (partA(x, y, z, s) ? 1 : 0) + (partB(x, y, z, s) ? 1 : 0);
+      if (k === 0) none++; else if (k > 1) twice++;
+    }
+    expect(pts).toBeGreaterThan(10000);
+    expect(none).toBe(0);
+    expect(twice).toBe(0);
   });
 });

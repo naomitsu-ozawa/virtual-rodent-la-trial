@@ -24,13 +24,19 @@ describe('the shader block', () => {
     for (const l of body) { if (/^#if/.test(l)) depth++; else if (/^#endif/.test(l)) depth--; expect(depth).toBeGreaterThanOrEqual(0); }
     expect(depth).toBe(0);
     expect(PART_GLSL).toContain('uniform sampler3D partField;');
-    expect(PART_GLSL).toContain('bool partFieldIn(vec3 tc,int s){return ((partFieldMask>>s)&1)==1&&partFieldAt(tc)>=0.5;}'); // one field per slot in the body when the parts' slots differ (review: a part hides only its own slots)
-    expect(PART_GLSL).toContain('if(partKind==1)return !partFieldIn(tc,s)||regionHiddenAt(tc,s);');
-    expect(PART_GLSL).toContain('if(partKind==2)return !partFieldIn(tc,s)||childHiddenAt(tc,s);');
+    expect(PART_GLSL).toContain('bool partFieldIn(vec3 tc,int s){return partFieldAt(tc,partFieldSel[s])>=0.5;}'); // slot s's channel of the field (partFieldUnion: a channel per group of slots; a part hides only its own slots)
+    expect(PART_GLSL).toContain('return dot(texture(partField,u),w);}'); // one read, the channel picked by a product (no branch)
+    expect(PART_GLSL).not.toContain('partFieldMask');
+    // a part keeps only where its field is (and nothing hidden there); every function reads the index, the table and the field once (one inlined copy each at every hidden test)
+    expect(PART_GLSL).toContain(' bool f=partKind!=2&&partFieldIn(tc,s);\n if(partKind==1&&!f)return true;');
+    expect(PART_GLSL).toContain(' bool f=partKind!=1&&partFieldIn(tc,s);\n if(partKind==2&&!f)return true;');
+    expect(PART_GLSL.match(/ if\(partKind!=0\)return h;/g)).toHaveLength(2);
+    expect(PART_GLSL.match(/partFieldIn\(tc,s\)/g)).toHaveLength(2);
+    expect(PART_GLSL).toContain(' return f||h; // the cut reaching into a neighbour\'s voxel');
     // the body (partKind 0): a cut-out target is decided by the field (its table bit), by the hide index G as the body's hiding is
     expect(PART_GLSL).toContain('regionTex,clamp(tc,vec3(0.0),vec3(0.999999))).g*255.0');
-    expect(PART_GLSL).toContain('>>16)&1)==1)return partFieldAt(tc)>=0.5;');
-    expect(PART_GLSL).toContain('>>8)&1)==1)return partFieldAt(tc)>=0.5;');
+    expect(PART_GLSL).toContain(' if(((a>>16)&1)==1)return f;');
+    expect(PART_GLSL).toContain(' if(((a>>8)&1)==1)return f;');
     expect(PART_GLSL).not.toContain('childIdAt(tc)');
     expect(PART_GLSL).not.toContain(').r*255.0');
     expect(PART_GLSL).not.toContain('PartCellAt');
