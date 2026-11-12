@@ -1,18 +1,18 @@
 // 3D EDIT OF A CHILD SEGMENT (the cut tools). The child has an edit state of the preset's shape (segments.js registerChildEditState), so keep / delete selected, undo / redo / reset run through analysis-ops.js unchanged (the edits are applied to the
 // child's own runs by segments.js segmentEditsChanged). The one thing analysis-ops.js applyCutStroke refuses is a key that is not a preset: this is its twin for a child key (the same steps and the same cut voxels, the same messages), used by the
 // cut plan's apply button (app.js) for a child target. The history fallback of undo / redo (a child with a history when no preset target is known) is here too. Imported only by app.js: analysis-ops.js does not import this file.
-import { sceneState, threeRenderMode, current3DVolume, volume, sourceVolume, currentLanguage, childSegments, analysisEditTargetKey, setAnalysisEditTargetKey, analysisFocusedRegionId } from './state.js?v=20261112-build722';
-import { SEGMENT_PRESET_ORDER, segmentEditState, segmentEditsChanged, segmentById } from './segments.js?v=20261112-build722';
-import { isChildKey } from './segment-look.js?v=20261112-build722';
-import { childByKey } from './child-segments.js?v=20261112-build722';
-import { cutRunsFromVoxelStroke, cutWidthMm, updateThreeEditUi, analysisRegionById, childHistoryKey } from './edit-tools.js?v=20261112-build722';
-import { pushEditUndo, snapshotAnalysisRegionsForSegment, trimAnalysisRegionsAfterEdit, rebuildEditedAnalysisForSegment, clearThreeEditOverlay } from './analysis-ops.js?v=20261112-build722';
-import { refreshEditedSegmentSurface } from './surface-build.js?v=20261112-build722';
-import { syncGpuVolumeEdits } from './gpu-volume-data.js?v=20261112-build722';
-import { surfaceEditsPending } from './rebuild-3d.js?v=20261112-build722';
-import { analysisCutDepth, analysisCutYaw, analysisCutPitch, analysisCutOffset, footer } from './ui-shell.js?v=20261112-build722';
-import { analysisRunsVoxelCount, unionRunArrays } from './run-length.js?v=20261112-build722';
-import { request3DRender } from './scene3d.js?v=20261112-build722';
+import { sceneState, threeRenderMode, current3DVolume, volume, sourceVolume, currentLanguage, childSegments, analysisEditTargetKey, setAnalysisEditTargetKey, analysisFocusedRegionId } from './state.js?v=20261112-build723';
+import { SEGMENT_PRESET_ORDER, segmentEditState, segmentEditsChanged, segmentById } from './segments.js?v=20261112-build723';
+import { isChildKey } from './segment-look.js?v=20261112-build723';
+import { childByKey } from './child-segments.js?v=20261112-build723';
+import { cutRunsFromVoxelStroke, cutWidthMm, updateThreeEditUi, analysisRegionById, childHistoryKey } from './edit-tools.js?v=20261112-build723';
+import { pushEditUndo, snapshotAnalysisRegionsForSegment, trimAnalysisRegionsAfterEdit, rebuildEditedAnalysisForSegment, clearThreeEditOverlay } from './analysis-ops.js?v=20261112-build723';
+import { refreshEditedSegmentSurface } from './surface-build.js?v=20261112-build723';
+import { syncGpuVolumeEdits } from './gpu-volume-data.js?v=20261112-build723';
+import { surfaceEditsPending } from './rebuild-3d.js?v=20261112-build723';
+import { analysisCutDepth, analysisCutYaw, analysisCutPitch, analysisCutOffset, footer } from './ui-shell.js?v=20261112-build723';
+import { analysisRunsVoxelCount, unionRunArrays } from './run-length.js?v=20261112-build723';
+import { request3DRender } from './scene3d.js?v=20261112-build723';
 
 // the cut plan of the pen / line tool is applied to the child: its cut voxels leave the child (they go back to its parent). true = applied
 export async function applyChildCutStroke(points, key, mode = 'pen') {

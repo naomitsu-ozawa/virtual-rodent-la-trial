@@ -1,20 +1,21 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { volume, activeSeries, incNextSegmentMaskVolumeId, childSegments } from './state.js?v=20261112-build722';
-import { isChildKey, childSegNormalizeName, childSegColorCss } from './segment-look.js?v=20261112-build722';
-import { childByKey, childKeysOf, childDisplayName, onChildSegChange, emitChildSegChange, setChildRuns } from './child-segments.js?v=20261112-build722';
-import { tr } from './i18n.js?v=20261112-build722';
-import { HU_AXIS, axisFor, valueStepOf } from './histogram.js?v=20261112-build722';
-import { hexRgb } from './utils.js?v=20261112-build722';
-import { settings } from './app-settings.js?v=20261112-build722';
-import { buildThresholdMask, morphMask, fillMaskHoles, removeSmallMaskComponents } from './mask-ops.js?v=20261112-build722';
-import { thinSuppressActive, suppressThinMask } from './thin-suppress.js?v=20261112-build722';
-import { effectiveRanges } from './segment-exclusive.js?v=20261112-build722';
-import { maskFromAnalysisRuns, intersectRunArrays, subtractRunArrays } from './run-length.js?v=20261112-build722';
-import { sourceFilterStages } from './source-filters.js?v=20261112-build722';
-import { gpuSlotOrder, slotSignature } from './segment-slots.js?v=20261112-build722';
-import { segmentPresetDefaults } from './dataset-reset.js?v=20261112-build722';
-import { dataRangeOf, shadeRangeOf, moveShadeEnd, autoShadeRange, shadeSpanOf, createShadeAutoScheduler } from './cap-shade.js?v=20261112-build722';
+import { volume, activeSeries, incNextSegmentMaskVolumeId, childSegments, analysisRegions } from './state.js?v=20261112-build723';
+import { isChildKey, childSegNormalizeName, childSegColorCss } from './segment-look.js?v=20261112-build723';
+import { childByKey, childKeysOf, childDisplayName, onChildSegChange, emitChildSegChange, setChildRuns } from './child-segments.js?v=20261112-build723';
+import { tr } from './i18n.js?v=20261112-build723';
+import { HU_AXIS, axisFor, valueStepOf } from './histogram.js?v=20261112-build723';
+import { hexRgb } from './utils.js?v=20261112-build723';
+import { settings } from './app-settings.js?v=20261112-build723';
+import { buildThresholdMask, morphMask, fillMaskHoles, removeSmallMaskComponents } from './mask-ops.js?v=20261112-build723';
+import { thinSuppressActive, suppressThinMask } from './thin-suppress.js?v=20261112-build723';
+import { effectiveRanges } from './segment-exclusive.js?v=20261112-build723';
+import { regionHidden, setRegionHidden } from './region-visibility.js?v=20261112-build723';
+import { maskFromAnalysisRuns, intersectRunArrays, subtractRunArrays } from './run-length.js?v=20261112-build723';
+import { sourceFilterStages } from './source-filters.js?v=20261112-build723';
+import { gpuSlotOrder, slotSignature } from './segment-slots.js?v=20261112-build723';
+import { segmentPresetDefaults } from './dataset-reset.js?v=20261112-build723';
+import { dataRangeOf, shadeRangeOf, moveShadeEnd, autoShadeRange, shadeSpanOf, createShadeAutoScheduler } from './cap-shade.js?v=20261112-build723';
 // 'contrast' (造影領域) is the fifth preset; at most GPU_SEGMENT_SLOTS (4) are enabled at once (segment-slots.js)
 export const SEGMENT_PRESET_ORDER=['bone','soft','fat','lung','contrast'];
 export const segmentEditState=Object.fromEntries(SEGMENT_PRESET_ORDER.map(key=>[key,{baseRuns:null,baseSignature:'',keepRuns:null,excludeRuns:null,cutRuns:null,finalRuns:null,revision:0,undo:[],redo:[],surfaceGroup:null,rawCutSurface:false}]));
@@ -90,6 +91,16 @@ export function resetShadeAutoForDataset(){shadeAutoPage.reset();clearSegmentSha
 export const SEGMENT_PRESET_DEFAULTS=segmentPresetDefaults(segmentState);
 export function analysisRegionSegmentsShown(r){return !r?.segmentKeys?.length||r.segmentKeys.some(k=>segmentState[k]?.enabled||(childSegments.length>0&&isChildKey(k)&&!!segmentById(k)?.enabled))} // a selection region of a child segment (3D edit target) follows the child (shown AND its parent ticked)
 export function analysisRegionShown(r){return !!r&&r.visible!==false&&analysisRegionSegmentsShown(r)}
+export function analysisRegionCounted(r){return !!r&&!regionHidden(r)&&analysisRegionSegmentsShown(r)}
+// 「隠れ N」「すべて表示」(the analysis list's header): what has its SHAPE hidden = the analysis regions with region.hidden and the child segments with visible:false. Colour-off ones (region.visible:false, child colorOff) are
+// not counted: their shape is there. showAllHiddenShapes puts back only these shapes (nothing else: colours, places, cuts, settings stay); -> how many it changed.
+export const hiddenShapeCount=(regions=analysisRegions,children=childSegments)=>regions.filter(regionHidden).length+children.filter(c=>c.visible===false).length;
+export function showAllHiddenShapes(regions=analysisRegions,children=childSegments){
+ let n=0;
+ for(const r of [...regions])if(regionHidden(r)&&setRegionHidden(r,false))n++;
+ for(const c of [...children])if(c.visible===false&&setChildLook(c.key,{visible:true}))n++;
+ return n;
+}
 
 const parentLookOf=c=>{const p=segmentState[c.parentKey],m=segmentShadeRanges[c.parentKey];return{opacity:p?.opacity??1,material:p?.material||'standard',shade:m?{lower:m.lower,upper:m.upper}:null}};
 export function segmentById(key){

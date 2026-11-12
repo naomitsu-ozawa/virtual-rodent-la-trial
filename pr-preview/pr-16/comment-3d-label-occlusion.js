@@ -12,7 +12,7 @@
 //      for a card at its limited place the same march is analysis-label.js pushWithinLimit, which takes only a free place whose leader is within the limit; none = translucent.
 //  (4) OVERLAP (device setting labelOverlap, analysis-label.js): of the cards that overlap on the screen the nearer one is drawn on top and is the one a press takes (frontMost, stackOrder); a lit
 //      (hovered / dragged) card is on top of all. Whether the cards behind are also hidden is the mode: 'keep' no, 'always' yes, 'many' yes while 15 or more labels are in sight (thinOverlaps, analysisLabelsInView).
-import { classifiedAt } from './vr-pick.js?v=20261112-build722';
+import { classifiedAt } from './vr-pick.js?v=20261112-build723';
 
 export const LABEL_PUSH_MAX = 0.8; // how far (object space) a card may be pushed out of the tissue; beyond it the card stays embedded (translucent)
 export const LABEL_PUSH_MARGIN_VOX = 1.5; // how far beyond the surface (in voxels of the classification grid) the pushed card is put
@@ -34,7 +34,7 @@ const planeKeeps = (p, plane) => !plane || plane.x * p.x + plane.y * p.y + plane
 // is the point p (object space) inside tissue that is shown? prep = {cls,dims,halfExt} (as comment-3d-hidden.js computeHiddenIds), chs = shown channels
 export function tissueAt(p, prep, chs, plane = null) {
   if (!prep?.cls || !chs?.length || !p) return false;
-  return planeKeeps(p, plane) && classifiedAt(p, prep.halfExt, prep.dims, prep.cls, chs);
+  return planeKeeps(p, plane) && classifiedAt(p, prep.halfExt, prep.dims, prep.cls, chs, prep.skip || null); // prep.skip = the hidden results (comment-3d-hidden.js): a hidden shape is no tissue
 }
 
 // the smallest classification voxel edge in object space (step of the marches)

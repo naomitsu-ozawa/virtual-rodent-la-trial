@@ -2,7 +2,7 @@
 // Four levels, each one of the bundled practice datasets (docs/demo/sampleN, the same set ids as the practice-data chooser);
 // texts are i18n keys (i18n.js). The switch is settings.eventMode (app-settings.js, per device, default off); the chosen
 // level lives only in this page (a reload starts with none chosen) and follows whichever practice dataset was opened last.
-import { registry, sampleKey } from './sample-registry.js?v=20261112-build722';
+import { registry, sampleKey } from './sample-registry.js?v=20261112-build723';
 export const EVENT_HINT_KEYS={section:'evHintSection',move:'evHintMove',toggle:'evHintToggle',mark:'evHintMark',distance:'evHintDistance'};
 // the levels, the other datasets and each dataset's starting segments are no longer tables here: they come from the registry (sample-registry.js), built from the sample.json
 // of every docs/demo/sampleN folder. Order: Lv0..Lv3 by the level field, then the datasets without a level by folder number. Names / missions are i18n keys the registry adds (sampleKey).
@@ -76,12 +76,14 @@ export const triggerModeRow=hasResults=>!!hasResults;
 export const TRIGGER_AT_START='point';
 export const triggerMode=(labelsOn,hasResults)=>hasResults&&labelsOn?'label':'point';
 // the かんたん menu's board layout (1024 x 1400 px canvas,: was 1180; the bottom edge keeps its place, the board grows upward, vr-layout.js MENU_CANVAS), pure so that it can be tested and drawn without a headset. Widgets only carry an id;
-// vr-view.js maps the id to its action: 'seg:<key>:show|hide', 'section:show|hide', 'sliceOpacity' (the one slider: the same widget and setting as the full menu's スライス tab), 'trigger:point|label', 'undo', 'home', 'reset', 'all', 'exit'.
+// vr-view.js maps the id to its action: 'seg:<key>:show|hide', 'result:<i>:color|shape', 'kid:<i>:color|shape', 'showAll' (stage 3), 'section:show|hide', 'sliceOpacity' (the one slider: the same widget and setting as the full menu's スライス tab), 'trigger:point|label', 'undo', 'home', 'reset', 'all', 'exit'.
 // Advanced settings (quality, foveation, HU window, ...) are not here: すべての設定 opens the full menu.
 export const SIMPLE_MENU=Object.freeze({W:1024,H:1400,X:40,STATUS:140,TOP:180,ROW:82,TRIG_ROW:104,BTN_H:72,LIST_ROW:46,BOTTOM:1306,LEVEL_Y:1224}); // BOTTOM / LEVEL_Y moved down by the 220 px the board grew (the rows above start at the top as before; the results list gets 4 more rows)
 // There is no title line and no level text; the board's status line sits at STATUS and the rows start at TOP.
 // o: {segments:[{key,name,color,on}], sectionOn, sliceOpacity (0..1, the slider's value; default SLICE_OPACITY_DEFAULT), trigger:{show,label}, results:[{hex,name,text}], total, resetArmed, text:{...},
 //     page (0-based, the results list's page: rounded into range), text.page ('ページ' / 'Page'),
+//     stage 3: results / kids rows = {hex, name, text?, colorOn (default true), shapeOn (default true), disabled (the parent tissue is off)}; text.color / text.shape ('色' / '表示': fixed wording);
+//     showAll?: {n, label} = the heading's 「すべて表示（隠 N）」 button (id 'showAll', disabled while n is 0),
 //     pair?: {label, on, busy}
 //     levels?: {items:[{id,label,on,armed}], busy, hint, text:{title,again}}}
 // The slice-opacity slider row (always there, for every dataset: it only shows once a section is) sits under the 断面 row; its steps are 5 % (sliceOpacityValue).
@@ -114,10 +116,21 @@ export function resultPaging(n, page, cap) {
  const pages = cap > 0 && n > cap ? Math.ceil(n / cap) : 1, pg = Math.min(Math.max(0, Math.floor(+page) || 0), pages - 1);
  return { pages, page: pg, start: pg * (cap > 0 ? cap : 0), count: pages > 1 ? Math.min(cap, n - pg * cap) : Math.min(Math.max(cap, 0), n) };
 }
+// stage 3: where a list row's parts sit (canvas px): the colour sample at X, the name, the volume (results only), the 色 and 表示 toggles at the right end (the board's inner edge is W - X)
+export const ROW_NAME_X = SIMPLE_MENU.X + 76, ROW_VOL_X = 556, TOGGLE_X = 754, TOGGLE_W = 110, TOGGLE_GAP = 10, ROW_BTN_H = 40, SHOW_ALL_W = 300;
 export function simpleMenuLayout(o){
  const M=SIMPLE_MENU,t=o.text,w=[],X=M.X,label=(id,x,y,text,extra={})=>w.push({type:'label',id,x,y,text,...extra});
  const btn=(id,x,y,wd,text,on,extra={})=>w.push({type:'button',id,x,y,w:wd,h:M.BTN_H,label:text,on,...extra});
  const row=(id,y,name,color,on)=>{label(id+':name',X,y+40,name,{color,bold:true,size:34});btn(id+':show',440,y,250,t.show,on,{size:32,color:on?color:undefined});btn(id+':hide',710,y,250,t.hide,!on,{size:32})};
+ // one list row's non-text widgets: the colour sample (a button with no action: swatch) and the 色 / 表示 toggles (ids '<id>:color' / '<id>:shape')
+ const rowToggles=(id,ry,r)=>{
+  const dis=!!r.disabled,colorOn=r.colorOn!==false,shapeOn=r.shapeOn!==false;
+  w.push({type:'button',id,x:X,y:ry,w:56,h:ROW_BTN_H,label:'',on:true,color:r.hex,swatch:true});
+  btn(id+':color',TOGGLE_X,ry,TOGGLE_W,t.color,colorOn,{size:26,h:ROW_BTN_H,disabled:dis});
+  btn(id+':shape',TOGGLE_X+TOGGLE_W+TOGGLE_GAP,ry,TOGGLE_W,t.shape,shapeOn,{size:26,h:ROW_BTN_H,disabled:dis});
+ };
+ // the heading's 「すべて表示（隠 N）」 (once, on the first list's heading; id 'showAll'): puts back every region / child whose SHAPE is hidden (colour-off ones are not counted); disabled while none is hidden
+ const showAll=ky=>{if(o.showAll)btn('showAll',M.W-X-SHOW_ALL_W,ky+6,SHOW_ALL_W,o.showAll.label,false,{size:24,h:44,disabled:!(o.showAll.n>0)})};
  let y=M.TOP;
  const segs=o.segments||[];
  if(!segs.length){label('noseg',X,y+40,t.noSeg);y+=M.ROW}
@@ -148,15 +161,13 @@ export function simpleMenuLayout(o){
  const kidReserve=kids.length&&res.length?56+54+M.LIST_ROW*Math.min(kids.length,KID_MIN_ROWS):0,resEnd=listEnd-kidReserve;let resBottom=y; // resBottom: where the results block ends (the children's list starts there)
  if(res.length){
   label('results',X,y+30,t.results,{bold:true,size:28});
-  // the whole row is the hit area of its show / hide switch (same action as the colour chip: id 'result:<i>:row', target 'result:<i>'); with more results than rows, ◀ ▶ and 「ページ n/N」 sit right of the total
+  showAll(y);
   const top=y+56,cap=Math.max(0,Math.floor((resEnd-24-30-top)/M.LIST_ROW)),pg=resultPaging(res.length,o.page,cap),shown=res.slice(pg.start,pg.start+pg.count);
-  shown.forEach((r,k)=>{const i=pg.start+k,ry=top+k*M.LIST_ROW;
-   const on=r.on!==false; // the chip is the result's show / hide switch (lit = shown)
-   w.push({type:'hit',id:'result:'+i+':row',target:'result:'+i,x:X,y:ry,w:M.W-2*X,h:M.LIST_ROW,on});
-   w.push({type:'button',id:'result:'+i,x:X,y:ry,w:56,h:40,label:'',on,color:r.hex});
-   label('result:'+i+':name',X+76,ry+30,r.name,{size:28,bold:true,color:on?r.hex:'#6b7885'});label('result:'+i+':vol',X+520,ry+30,r.text,{size:28})});
+  shown.forEach((r,k)=>{const i=pg.start+k,ry=top+k*M.LIST_ROW,shapeOn=r.shapeOn!==false,dis=!!r.disabled;
+   rowToggles('result:'+i,ry,r);
+   label('result:'+i+':name',ROW_NAME_X,ry+30,r.name,{size:28,bold:true,color:shapeOn&&!dis?r.hex:'#6b7885',maxW:ROW_VOL_X-ROW_NAME_X-10});label('result:'+i+':vol',ROW_VOL_X,ry+30,r.text,{size:28,maxW:TOGGLE_X-ROW_VOL_X-10})});
   const more=res.length-shown.length,py=top+shown.length*M.LIST_ROW;
-  label('total',X,py+26,t.total+' '+o.total+' · '+res.length+(more>0&&pg.pages<2?'  (… +'+more+')':''),{size:24,color:'#9fb3c3'});
+  label('total',X,py+26,t.total+' '+o.total+' · '+res.filter(r=>r.shapeOn!==false).length+(more>0&&pg.pages<2?'  (… +'+more+')':''),{size:24,color:'#9fb3c3'});
   resBottom=py+54;
   if(pg.pages>1){
    w.push({type:'button',id:'results:prev',page:pg.page-1,x:560,y:py+2,w:96,h:50,label:'◀',on:false,size:28,disabled:pg.page<=0});
@@ -167,10 +178,10 @@ export function simpleMenuLayout(o){
  if(kids.length){
   const ky=res.length?resBottom:y,top=ky+56,cap=Math.max(0,Math.floor((listEnd-24-30-top)/M.LIST_ROW)),pg=resultPaging(kids.length,o.kidPage,cap),shown=kids.slice(pg.start,pg.start+pg.count);
   label('kids',X,ky+30,t.kids||'',{bold:true,size:28});
-  shown.forEach((k,j)=>{const i=pg.start+j,ry=top+j*M.LIST_ROW,on=k.on!==false;
-   w.push({type:'hit',id:'kid:'+i+':row',target:'kid:'+i,x:X,y:ry,w:M.W-2*X,h:M.LIST_ROW,on});
-   w.push({type:'button',id:'kid:'+i,x:X,y:ry,w:56,h:40,label:'',on,color:k.hex});
-   label('kid:'+i+':name',X+76,ry+30,k.name,{size:28,bold:true,color:on?k.hex:'#6b7885'})});
+  if(!res.length)showAll(ky);
+  shown.forEach((k,j)=>{const i=pg.start+j,ry=top+j*M.LIST_ROW,shapeOn=k.shapeOn!==false,dis=!!k.disabled;
+   rowToggles('kid:'+i,ry,k);
+   label('kid:'+i+':name',ROW_NAME_X,ry+30,k.name,{size:28,bold:true,color:shapeOn&&!dis?k.hex:'#6b7885',maxW:TOGGLE_X-ROW_NAME_X-10})});
   const py=top+shown.length*M.LIST_ROW;
   label('kids:count',X,py+26,String(kids.length),{size:24,color:'#9fb3c3'});
   if(pg.pages>1){

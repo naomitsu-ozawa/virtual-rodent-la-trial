@@ -5,11 +5,11 @@
 // What the partner has none of: manual edits (project.edits), child segments (project.treeSegments), filters and post-processing of a segment are NOT applied (the data is raw, a segment is its range only). A project that has any of them is
 // reported in `unsupported` (never silently dropped), so the caller decides.
 // The result is the `inp` of docs/vr-prep-inputs.js (see there for every field) plus `unsupported` (strings) and `segmentColors` ({key: css colour}) for the later stages.
-import { decodeRuns } from './project-file.js?v=20261112-build722';
-import { effectiveRanges } from './segment-exclusive.js?v=20261112-build722';
-import { gpuSlotOrder } from './segment-slots.js?v=20261112-build722';
-import { analysisRunsVoxelCount } from './run-length.js?v=20261112-build722';
-import { vrUnitsPerMm } from './vr-prep-inputs.js?v=20261112-build722';
+import { decodeRuns } from './project-file.js?v=20261112-build723';
+import { effectiveRanges } from './segment-exclusive.js?v=20261112-build723';
+import { gpuSlotOrder } from './segment-slots.js?v=20261112-build723';
+import { analysisRunsVoxelCount } from './run-length.js?v=20261112-build723';
+import { vrUnitsPerMm } from './vr-prep-inputs.js?v=20261112-build723';
 
 // the segment presets (segments.js SEGMENT_PRESET_ORDER: segments.js reads the page, so this pure module keeps its own copy; tests/unit/vr-pair-data.test.js checks that they agree)
 export const SEGMENT_PRESET_ORDER = ['bone', 'soft', 'fat', 'lung', 'contrast'];
@@ -48,7 +48,7 @@ export function partnerLabelOf(l) {
   const vec = v => (v && [v.i, v.j, v.k].every(x => typeof x === 'number' && Number.isFinite(x)) ? { i: v.i, j: v.j, k: v.k } : null), anchor = vec(l?.anchor), offset = vec(l?.offset);
   return anchor ? { anchor, ...(offset ? { offset } : {}) } : null;
 }
-// the analysis results of a project: [{ id, color, segmentKeys, runsBySlice, voxels, mm3, atlasId?, name?, label? }] in the project's order, ids 1.. (as restoreAnalysisRegions numbers them: a result without voxels or segments gets none)
+// the analysis results of a project: [{ id, color, segmentKeys, runsBySlice, voxels, mm3, atlasId?, name?, hidden? (an earlier change: the SHAPE flag as the project saved it), label? }] in the project's order, ids 1.. (as restoreAnalysisRegions numbers them: a result without voxels or segments gets none)
 export function regionsOf(project, files, dims, voxelMm3) {
   const out = [];
   for (const e of project?.analysis?.regions || []) {
@@ -56,7 +56,7 @@ export function regionsOf(project, files, dims, voxelMm3) {
     const bytes = files?.[e.runs]; if (!bytes) throw new Error('missing ' + e.runs);
     const runsBySlice = decodeRuns(bytes, dims), voxels = analysisRunsVoxelCount(runsBySlice); if (!voxels) continue;
     out.push({ id: out.length + 1, color: Number(e.color), segmentKeys: keys, runsBySlice, voxels, mm3: voxels * voxelMm3, ...(Number.isFinite(e.atlasId) ? { atlasId: e.atlasId } : {}),
-      ...(typeof e.name === 'string' && e.name.trim() ? { name: e.name.trim() } : {}), ...(partnerLabelOf(e.label) ? { label: partnerLabelOf(e.label) } : {}) }); // atlasId: which bone it is (the two datasets of a pair list different results: the list position does NOT match, the atlas ID does)
+      ...(typeof e.name === 'string' && e.name.trim() ? { name: e.name.trim() } : {}), ...(e.hidden === true ? { hidden: true } : {}), ...(partnerLabelOf(e.label) ? { label: partnerLabelOf(e.label) } : {}) }); // atlasId: which bone it is (the two datasets of a pair list different results: the list position does NOT match, the atlas ID does)
   }
   return out;
 }

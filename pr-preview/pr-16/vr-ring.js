@@ -75,15 +75,19 @@ export function clearWheelItem(items,slot){
 
 // ---- geometry ----
 // centre angle of each item: 6 -> 0,60,..; 2 -> 270 (move, left), 90 (delete, right); 3 -> 0,120,240
-export function wheelAngles(n){
+// quad (the region / child ring with its 4 items): a 2 x 2 layout, upper left / upper right / lower left / lower right = items 0, 1, 2, 3 (315, 45, 225, 135): the top half = the region (色 left, 表示 right), the bottom half = the child.
+// Only that ring passes quad; every other 4-item ring keeps 0, 90, 180, 270.
+export const WHEEL_QUAD_ANGLES=Object.freeze([315,45,225,135]);
+export function wheelAngles(n,quad=false){
  if(n===2)return[270,90];
+ if(n===4&&quad)return[...WHEEL_QUAD_ANGLES];
  return Array.from({length:n},(_,k)=>k*360/n);
 }
 const angDiff=(a,b)=>{const d=Math.abs(a-b)%360;return d>180?360-d:d};
 // angle (0..360, up = 0, clockwise) -> slot, or null (nearest item farther than 180/n, a disabled one, or an empty one).
 // prev: the lit slot; it is kept until the angle is more than 180/n + hysDeg away from it.
-export function wheelSlotFromAngle(theta,n,enabled,prev=null,{hysDeg=10}={}){
- const ang=wheelAngles(n),half=180/n;
+export function wheelSlotFromAngle(theta,n,enabled,prev=null,{hysDeg=10,quad=false}={}){
+ const ang=wheelAngles(n,quad),half=180/n;
  if(prev!==null&&prev!==undefined&&prev>=0&&prev<n&&enabled?.[prev]&&angDiff(theta,ang[prev])<=half+hysDeg)return prev;
  let k=-1,best=Infinity;
  for(let i=0;i<n;i++){const d=angDiff(theta,ang[i]);if(d<best){best=d;k=i}}
@@ -91,10 +95,10 @@ export function wheelSlotFromAngle(theta,n,enabled,prev=null,{hysDeg=10}={}){
 }
 const toTheta=(x,y)=>{const t=Math.atan2(x,y)*180/Math.PI;return t<0?t+360:t};
 // position on the board (x right, y up, metres from its centre) -> slot, only on the ring of items (0.55 R .. 1.5 R), else null
-export function wheelSlotFromLocal(x,y,n,R){
+export function wheelSlotFromLocal(x,y,n,R,quad=false){
  const r=Math.hypot(x,y);
  if(!(r>=0.55*R&&r<=1.5*R))return null;
- const th=toTheta(x,y),ang=wheelAngles(n);
+ const th=toTheta(x,y),ang=wheelAngles(n,quad);
  let k=0,best=Infinity;
  for(let i=0;i<n;i++){const d=angDiff(th,ang[i]);if(d<best){best=d;k=i}}
  return k;
@@ -153,12 +157,12 @@ export function createRingMenu(THREE,{size=WHEEL_BOARD_M}={}){
  const ctx=canvas.getContext('2d'),tex=new THREE.CanvasTexture(canvas);tex.colorSpace=THREE.SRGBColorSpace;
  const mesh=new THREE.Mesh(new THREE.PlaneGeometry(size,size),new THREE.MeshBasicMaterial({map:tex,transparent:true,depthTest:false,depthWrite:false,toneMapped:false,side:THREE.DoubleSide}));
  mesh.renderOrder=7;mesh.frustumCulled=false;mesh.visible=false;
- let labels=[],enabled=[],on=[],hl=null;
+ let labels=[],enabled=[],on=[],hl=null,name='',quad=false; // name (stage 3): the target's name, drawn in the middle while no item is lit
  const isSw=t=>!!t&&typeof t==='object',C=N/2,MID=(RING_IN_PX+RING_OUT_PX)/2;
  const sector=(a0,a1,ro)=>{ctx.beginPath();ctx.arc(C,C,ro,rad(a0),rad(a1));ctx.arc(C,C,RING_IN_PX,rad(a1),rad(a0),true);ctx.closePath()};
  const draw=()=>{
   ctx.clearRect(0,0,N,N);
-  const n=labels.length,ang=wheelAngles(n),half=n?180/n:180;
+  const n=labels.length,ang=wheelAngles(n,quad),half=n?180/n:180;
   ctx.fillStyle='rgba(10,15,22,.62)';ctx.beginPath();ctx.arc(C,C,DISC_PX,0,Math.PI*2);ctx.fill();
   ctx.strokeStyle='rgba(255,255,255,.18)';ctx.lineWidth=3;ctx.stroke();
   ctx.fillStyle='rgba(10,15,22,.5)';ctx.beginPath();ctx.arc(C,C,RING_IN_PX-8,0,Math.PI*2);ctx.fill();
@@ -185,18 +189,21 @@ export function createRingMenu(THREE,{size=WHEEL_BOARD_M}={}){
    if(t.length>lim){const m=Math.ceil(t.length/2);ctx.font='bold 25px system-ui,sans-serif';ctx.fillText(t.slice(0,m),cx,cy-14);ctx.fillText(t.slice(m),cx,cy+14)}else ctx.fillText(t,cx,cy+1);
   });
   if(centre){ctx.fillStyle='#fff';ctx.font='bold '+(centre.length>5?26:32)+'px system-ui,sans-serif';ctx.fillText(centre,C,C+1)}
+  else if(name){ctx.fillStyle='#cfe3f0';ctx.font='bold 24px system-ui,sans-serif';ctx.fillText(name,C,C+1,2*RING_IN_PX-28)}
   tex.needsUpdate=true;
  };
  return{
   mesh,n:()=>labels.length,
   // labels: names (null = empty slot), enabled: usable, on: shown as "on" (e.g. the current mode)
-  setItems(l,e,o){labels=l;enabled=e;on=o||[];draw()},
+  setItems(l,e,o,q){labels=l;enabled=e;on=o||[];quad=!!q;draw()}, // q: the 2 x 2 layout of the region / child ring (wheelAngles quad); omitted = the usual layout
   setHighlight(k){if(k!==hl){hl=k;draw()}},
+  // the target's name in the middle (a region / child ring): drawn while no item is lit; '' = none (the point ring, the quick ring)
+  setCentre(t){const v=t?String(t):'';if(v!==name){name=v;draw()}},
   // the slot under a uv of the board: an annular sector (RING_IN_PX..RING_OUT_PX, within its angular share minus the gap) of a filled, usable item; else null
   slotFromUv(uv){
    const dx=uv.x*N-N/2,dy=(1-uv.y)*N-N/2,r=Math.hypot(dx,dy),n=labels.length;
    if(!n||r<RING_IN_PX||r>RING_OUT_PX+HL_GROW)return null;
-   const th=toTheta(dx,-dy),ang=wheelAngles(n),half=180/n;
+   const th=toTheta(dx,-dy),ang=wheelAngles(n,quad),half=180/n;
    let k=-1,best=Infinity;for(let i=0;i<n;i++){const d=angDiff(th,ang[i]);if(d<best){best=d;k=i}}
    if(k<0||best>half-GAP_DEG/2||labels[k]===null||labels[k]===undefined||!enabled[k])return null;
    return k;
