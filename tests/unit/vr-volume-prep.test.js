@@ -188,7 +188,7 @@ describe('prepRun: the worker jobs', () => {
       const rm = refEditMask(descs, srcDims, dims); // a segment without runs keeps its slot (the page's forEach index)
       expect(r.edit.active).toBe(rm.activeMask); expect(r.edit.maskOnly).toBe(rm.maskOnly); same(r.edit.data, rm.data);
       const rr = refRegionIndex(regions, ['bone', 'soft', 'fat', 'lung'], srcDims, dims);
-      same(r.region.data, rr.data); same(r.region.ids, rr.ids); expect(r.region.colors).toEqual(rr.colors); expect(r.region.segs).toEqual(rr.segs); expect(r.region.list).toEqual(rr.list);
+      same(r.region.data, rr.data); same(r.region.rg ? r.region.rg.filter((_, i) => !(i & 1)) : null, rr.ids); expect(r.region.ids).toBeUndefined(); expect(r.region.colors).toEqual(rr.colors); expect(r.region.segs).toEqual(rr.segs); expect(r.region.list).toEqual(rr.list); // an earlier change: the worker sends the one RG array (R = every second byte)
       const edit = { data: rm.data, dims, active: rm.activeMask, maskOnly: rm.maskOnly };
       const cls = buildClsData({ dims, data: srcCopy }, CAL, edit, st, SEGS.order);
       same(r.cls.data, cls.data); expect(r.cls.C).toBe(cls.C); expect(r.cls.chan).toEqual(cls.chan);

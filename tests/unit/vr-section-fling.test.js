@@ -242,7 +242,7 @@ describe('vr-view.js wiring (static)', () => {
   it('the bench keeps its immediate removePlane', () => { expect(src).toContain('removePlane(bench.tempPlane)'); });
   it('the snapshot of a deleted plane holds the resting position (snapPlaneCenterIntoBox, as a normal release), not the thrown one', () => {
     const t = src.slice(src.indexOf('const deleteSection='), src.indexOf('const restoreSection='));
-    expect(t).toContain('snapPlaneCenterIntoBox(pl.obj.position');
+    expect(t).toContain('intoBox(snapPlaneCenterIntoBox,pl.obj.position'); expect(t).toContain('planeOwnerPair(pl)');
     expect(t).toContain('position:rest');
     expect(t.indexOf('snapPlaneCenterIntoBox')).toBeLessThan(t.indexOf('startFly(pl,vel)'));
     expect(t).not.toContain('pl.obj.position.set'); // the flying frame is not moved back

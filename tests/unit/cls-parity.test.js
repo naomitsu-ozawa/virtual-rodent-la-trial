@@ -46,7 +46,7 @@ describe('the thresholds in the sources agree (a drift in one copy fails here)',
   it('vr-pick.js tests the byte against 128; point-cls.js encodes 0.5 + distance / 2048 and the mask lift 191', () => {
     expect(pick).toMatch(/data\[k\+ch\]>=128/);
     expect(pcls).toContain('(0.5+dd/2048)*255');
-    expect(pcls).toContain('f<191');
+    expect(pcls).toContain('Math.max(f,191)'); // n730 (rat brain voxel look): the mask byte mb may be the smoothed field; for a 0 / 255 mask the fold is the old one (tests/unit/vr-mask-smooth.test.js)
   });
 });
 
