@@ -2,7 +2,7 @@
 // vr-view.js is not runnable here: the wiring is checked on its source, the rules run for real.
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { PART_GLSL, PART_CALL_SITES, hideIndexPlane, PART_OWN, PART_EXTRA, partUniforms, partTargetOf, partSame, regionSlotMask, patchRegionLut, patchChildLut, patchRegionLutMany, patchChildLutMany, anyHiddenIn, partBoundsOf, partProxyBox, partRayRange, partKeepVoxelOf, PART_TEXT, PART_BTN_X, PART_RESTORE_W, PART_OUT_M, PART_ANIM_MS } from '../../docs/vr-part-view.js';
+import { PART_GLSL, PART_CALL_SITES, hideIndexPlane, partOwnRegionLut, partOwnChildLut, PART_OWN, PART_EXTRA, partUniforms, partTargetOf, partSame, regionSlotMask, patchRegionLut, patchChildLut, patchRegionLutMany, patchChildLutMany, anyHiddenIn, partBoundsOf, partProxyBox, partRayRange, partKeepVoxelOf, PART_TEXT, PART_BTN_X, PART_RESTORE_W, PART_OUT_M, PART_ANIM_MS } from '../../docs/vr-part-view.js';
 import { regionLutAlpha, regionLutHiddenSlots } from '../../docs/region-visibility.js';
 import { marchClassificationHitInfo } from '../../docs/vr-pick.js';
 import { simpleMenuLayout } from '../../docs/event-mode.js';
@@ -23,11 +23,19 @@ describe('the shader block', () => {
     let depth = 0;
     for (const l of body) { if (/^#if/.test(l)) depth++; else if (/^#endif/.test(l)) depth--; expect(depth).toBeGreaterThanOrEqual(0); }
     expect(depth).toBe(0);
-    // an earlier change: the part's own test goes by the hide index (G), as the body's hiding does
+    expect(PART_GLSL).toContain('uniform sampler3D partField;');
+    expect(PART_GLSL).toContain('bool partFieldIn(vec3 tc,int s){return ((partFieldMask>>s)&1)==1&&partFieldAt(tc)>=0.5;}'); // one field per slot in the body when the parts' slots differ (review: a part hides only its own slots)
+    expect(PART_GLSL).toContain('if(partKind==1)return !partFieldIn(tc,s)||regionHiddenAt(tc,s);');
+    expect(PART_GLSL).toContain('if(partKind==2)return !partFieldIn(tc,s)||childHiddenAt(tc,s);');
+    // the body (partKind 0): a cut-out target is decided by the field (its table bit), by the hide index G as the body's hiding is
     expect(PART_GLSL).toContain('regionTex,clamp(tc,vec3(0.0),vec3(0.999999))).g*255.0');
-    expect(PART_GLSL).toContain('childHideIdAt(tc)!=partId');
+    expect(PART_GLSL).toContain('>>16)&1)==1)return partFieldAt(tc)>=0.5;');
+    expect(PART_GLSL).toContain('>>8)&1)==1)return partFieldAt(tc)>=0.5;');
     expect(PART_GLSL).not.toContain('childIdAt(tc)');
     expect(PART_GLSL).not.toContain(').r*255.0');
+    expect(PART_GLSL).not.toContain('PartCellAt');
+    expect(PART_GLSL).not.toContain('texelFetch(regionTex');
+    expect(PART_GLSL).not.toContain('texelFetch(childTex');
     expect(PART_GLSL).not.toContain('`');
     expect(PART_GLSL).not.toContain('${');
   });
@@ -71,6 +79,33 @@ describe('the hide index plane (an earlier change: the part goes by G)', () => {
   });
   it('the cut-out reads the plane of the kept RG array (P.region.rg / P.child.rg: the index has no ids field any more)', () => {
     expect(src).toContain('ids=hideIndexPlane(src?.rg)');
+  });
+});
+
+describe('the colour of a part (the grown colour index R may hold a neighbour at its surface)', () => {
+  const lutR = () => { const a = new Float32Array(256 * 4); for (let k = 1; k < 256; k++) a.set([k / 255, 0.1, 0.2, k % 2 ? 1 : 4], k * 4); return a; };
+  it('region: every entry >= 1 answers with the part\'s entry (colour and slot bits), entry 0 and the source are left alone', () => {
+    const out = lutR(), copy = out.slice(), dst = new Float32Array(out.length);
+    expect(partOwnRegionLut(out, 2, dst)).toBe(true); // result index 2 = entry 3
+    expect([...dst.subarray(0, 4)]).toEqual([...out.subarray(0, 4)]);
+    for (const k of [1, 2, 3, 4, 200, 255]) expect([...dst.subarray(k * 4, k * 4 + 4)]).toEqual([...out.subarray(12, 16)]);
+    expect([...out]).toEqual([...copy]);
+    expect(partOwnRegionLut(out, 300, dst)).toBe(false);
+  });
+  it('child: all three rows (colour + bits, range / flat / hidden mask, material + opacity) of every entry >= 1 are the part\'s', () => {
+    const R = 1024, out = new Float32Array(3 * R); for (let r = 0; r < 3; r++) for (let k = 1; k < 256; k++) out.set([r + 1, k, k * 2, r * 10 + k], r * R + k * 4);
+    const dst = new Float32Array(out.length);
+    expect(partOwnChildLut(out, 4, dst)).toBe(true); // child index 4 = entry 5
+    for (let r = 0; r < 3; r++) for (const k of [1, 5, 6, 255]) expect([...dst.subarray(r * R + k * 4, r * R + k * 4 + 4)]).toEqual([...out.subarray(r * R + 20, r * R + 24)]);
+    expect([...dst.subarray(0, 4)]).toEqual([0, 0, 0, 0]);
+    expect(partOwnChildLut(out, 300, dst)).toBe(false);
+  });
+  it('the cut-out gives each part its own table, refreshes it after every patch of the body\'s tables and frees it', () => {
+    expect(src).toContain('ownL.regionLut.value=lutOwnR');
+    expect(src).toContain('ownL.childLut.value=lutOwnC');
+    expect(src).toContain('partOwnRegionLut(out,q.target.index,q.lutOwnR.image.data)');
+    expect(src).toContain('partOwnChildLut(partRes.lutC.image.data,q.target.index,q.lutOwnC.image.data)');
+    expect(src).toContain('q.lutOwnR?.dispose();q.lutOwnC?.dispose()');
   });
 });
 
@@ -275,7 +310,7 @@ describe('the wiring in the menu and the session', () => {
       expect(i, fn).toBeGreaterThan(0);
       expect(src.slice(i, i + 160), fn).toMatch(/if\(!parts\.length\)return/);
     }
-    expect(src).toContain(' let parts=[],partPatchRegion=');
+    expect(src).toContain(' let parts=[],partBodySet=()=>null,partPatchRegion=');
     expect(src).not.toMatch(/\bpm\b[.?]/); // the one-part state is gone
   });
 

@@ -112,7 +112,7 @@ const partner = (m, { on = true, nearer = false } = {}) => ({ on, nearer, mesh: 
 describe('vr-view.js low-resolution path: the partner\'s composite is left out only where it cannot change a pixel (the real source, mocked inputs)', () => {
   it('the source was found, right after the composite material is put on the primary\'s box, inside the low-resolution branch', () => {
     expect(cStart).toBeGreaterThan(0); expect(cEnd).toBeGreaterThan(cStart);
-    const low = src.indexOf('    mesh.material=compMaterial;\n'), dir = src.indexOf('   }else{mesh.material=(diagAn.noRegion?plainSets().vars:variants)[vk];pairRender(false);');
+    const low = src.indexOf('    mesh.material=compMaterial;\n'), dir = src.indexOf('   }else{{const pb=diagAn.noRegion?null:partBodySet(vk);mesh.material=pb?pb.vars[pb.k]:(diagAn.noRegion?plainSets().vars:variants)[vk]}pairRender(false);'); // an earlier change: the body's VRL_PART programs while a part is out
     expect(low).toBeGreaterThan(0); expect(cStart).toBeGreaterThan(low); expect(dir).toBeGreaterThan(cEnd);
   });
   it('no partner: the primary\'s composite is drawn (as before)', () => {
