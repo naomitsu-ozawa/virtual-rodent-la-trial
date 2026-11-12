@@ -77,7 +77,7 @@ describe('the generic VR かんたん menu: segments and the trigger switch', ()
 // the かんたん menu board: simpleMenuLayout is the pure layout vr-view.js draws
 const TEXT = lang => {
   const t = I18N[lang], ja = lang === 'ja';
-  return { show: t.evShow, hide: t.evHide, section: ja ? '断面' : 'Sections', sliceOpacity: ja ? 'スライス不透明度' : 'Slice opacity', trigger: t.evMode, trigPoint: t.evModePoint, trigLabel: t.evModeAnalysis, trigHintPoint: t.evModeHintPoint, trigHintLabel: t.evModeHintAnalysis, results: ja ? '解析結果（体積）' : 'Analysis results (volume)', total: ja ? '合計' : 'Total', page: ja ? 'ページ' : 'Page', noSeg: 'none', home: ja ? '正面に戻す' : 'Bring to front', undo: ja ? '元に戻す' : 'Undo', reset: t.evReset, resetAgain: t.evResetAgain, all: t.evAllSettings, exit: t.evExitVr };
+  return { show: t.evShow, hide: t.evHide, color: t.regionColorToggle, shape: t.regionShapeToggle, section: ja ? '断面' : 'Sections', sliceOpacity: ja ? 'スライス不透明度' : 'Slice opacity', trigger: t.evMode, trigPoint: t.evModePoint, trigLabel: t.evModeAnalysis, trigHintPoint: t.evModeHintPoint, trigHintLabel: t.evModeHintAnalysis, results: ja ? '解析結果（体積）' : 'Analysis results (volume)', total: ja ? '合計' : 'Total', page: ja ? 'ページ' : 'Page', noSeg: 'none', home: ja ? '正面に戻す' : 'Bring to front', undo: ja ? '元に戻す' : 'Undo', reset: t.evReset, resetAgain: t.evResetAgain, all: t.evAllSettings, exit: t.evExitVr };
 };
 const SEG_NAMES = { ja: { bone: '骨', soft: '軟部組織', fat: '脂肪', lung: '肺', contrast: '造影剤' }, en: { bone: 'Bone', soft: 'Soft tissue', fat: 'Fat', lung: 'Lung', contrast: 'Contrast' } };
 const COLORS = { bone: '#f3f0e8', soft: '#f7a99c', fat: '#e7c85d', lung: '#7fb3d9', contrast: '#9b7fd9' };
@@ -112,14 +112,21 @@ describe('the generic かんたん menu board per bundled dataset', () => {
   it('sample2 (Lv2 mouse abdomen): bone, soft tissue, fat, lung, 断面, the trigger switch, 4 results with the total', () => {
     const w = layoutFor('sample2');
     expect(rows(w)).toEqual(['seg:bone', 'seg:soft', 'seg:fat', 'seg:lung', 'section', 'trigger:point']);
-    expect(buttons(w).filter(b => b.id.startsWith('result:')).length).toBe(4);
+    expect(buttons(w).filter(b => /^result:\d+:color$/.test(b.id)).length).toBe(4); expect(buttons(w).filter(b => /^result:\d+:shape$/.test(b.id)).length).toBe(4); // stage 3: every result row has the two toggles 色 / 表示 (and a colour sample)
     expect(w.find(x => x.id === 'results').text).toBe('解析結果（体積）');
     expect(w.find(x => x.id === 'total').text).toBe('合計 99.99 mm³ · 4');
+  });
+  it('an earlier change: the total\'s count is the results whose SHAPE is not hidden (as the mm3 total and the 解析 tab); a colour-off one counts, a hidden one and a disabled-but-shown one are as the shape flag says', () => {
+    const rs = [1, 2, 3, 4].map(i => ({ hex: '#fff', name: String(i), text: '1 mm³', colorOn: i !== 2, shapeOn: i !== 3 }));
+    const w = layoutFor(null, 'ja', { results: rs, total: '3.00 mm³' });
+    expect(w.find(x => x.id === 'total').text).toBe('合計 3.00 mm³ · 3'); // 4 rows, one hidden shape (3): 3; the colour-off row (2) still counts
+    expect(layoutFor(null, 'ja', { results: rs.map(r => ({ ...r, shapeOn: false })), total: '0.00 mm³' }).find(x => x.id === 'total').text).toBe('合計 0.00 mm³ · 0');
+    expect(layoutFor(null, 'ja', { results: rs.map(r => { const { shapeOn, ...o } = r; return o; }), total: '4.00 mm³' }).find(x => x.id === 'total').text).toBe('合計 4.00 mm³ · 4'); // no shapeOn = shown
   });
   it('sample1 (Lv3 rat abdomen): bone, soft tissue, fat, 断面, the trigger switch, 2 results', () => {
     const w = layoutFor('sample1');
     expect(rows(w)).toEqual(['seg:bone', 'seg:soft', 'seg:fat', 'section', 'trigger:point']);
-    expect(buttons(w).filter(b => b.id.startsWith('result:')).length).toBe(2);
+    expect(buttons(w).filter(b => /^result:\d+:color$/.test(b.id)).length).toBe(2);
   });
   it('no dataset: the none-shown note, 断面 and the bottom row; the bottom row is the same everywhere', () => {
     expect(ids(layoutFor(null))).toEqual(expect.arrayContaining(['noseg', 'section:show', 'exit']));
@@ -140,7 +147,7 @@ describe('the generic かんたん menu board per bundled dataset', () => {
   });
   it('no advanced settings and no level text on the board', () => {
     for (const s of [...SAMPLES, null]) for (const x of layoutFor(s)) {
-      expect(x.id).toMatch(/^(noseg|seg:\w+(:name|:show|:hide|)|section(:name|:show|:hide)|sliceOpacity(:name)?|trigger:(name|point|label|hint)|results|results:(prev|next|page)|result:\d+(:name|:vol|:row)?|scale(:name|:text|:minus|:plus)?|total|home|undo|reset|all|exit)$/);
+      expect(x.id).toMatch(/^(noseg|seg:\w+(:name|:show|:hide|)|section(:name|:show|:hide)|sliceOpacity(:name)?|trigger:(name|point|label|hint)|results|results:(prev|next|page)|result:\d+(:name|:vol|:color|:shape)?|showAll|scale(:name|:text|:minus|:plus)?|total|home|undo|reset|all|exit)$/);
       expect(x.text || x.label || '').not.toMatch(/Lv\s?\d/);
     }
   });
@@ -328,8 +335,8 @@ describe('the かんたん menu board layout fits the canvas', () => {
     expect(w.find(x => x.id === 'seg:more').text).toBe('… +3');
     check(w, 'segcap');
   });
-  it('the exact button labels (ja)', () => {
-    expect(buttons(layoutFor('sample2')).filter(b => b.label).map(b => b.label)).toEqual(['表示', '非表示', '表示', '非表示', '表示', '非表示', '表示', '非表示', '表示', '非表示', 'ポイントモード', '解析モード', '正面に戻す', '元に戻す', '最初の状態に戻す', 'すべての設定', 'VRを終了']);
+  it('the exact button labels (ja): an earlier change stage 3 adds 色 / 表示 to each of the 4 result rows', () => {
+    expect(buttons(layoutFor('sample2')).filter(b => b.label).map(b => b.label)).toEqual(['表示', '非表示', '表示', '非表示', '表示', '非表示', '表示', '非表示', '表示', '非表示', 'ポイントモード', '解析モード', '色', '表示', '色', '表示', '色', '表示', '色', '表示', '正面に戻す', '元に戻す', '最初の状態に戻す', 'すべての設定', 'VRを終了']);
   });
 });
 

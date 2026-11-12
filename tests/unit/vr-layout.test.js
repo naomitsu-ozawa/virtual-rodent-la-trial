@@ -171,7 +171,7 @@ describe('slice fill (slice tab row + shader guards, static)', () => {
     expect(v).toContain('labelHide:LABEL_HIDE_DEFAULT,ctShade:1,'); expect(v).toContain('ctShade:{value:1}'); expect(v).toContain('sliceSegOnly:{value:0}');
   });
   it('shader: the CT factor is used by the two slice branches only; surface hits and caps keep the flat colour; 陰影なし (diag 3) is flat', () => {
-    expect(v.match(/ctLumHU\(/g)).toHaveLength(3); expect(v).not.toContain('ctLumTint'); // ctLumHU = the definition + the 0 % branch + the above-0 % tint (one rule: the segment's own shading range; the old ctLumTint with the fixed 1500 span is removed)
+    expect(v.match(/ctLumHU\(/g)).toHaveLength(5); expect(v).not.toContain('ctLumTint'); // ctLumHU = the definition + the 0 % branch + the above-0 % tint (+ the same two in sliceColorR, an earlier change: the copy that leaves a hidden result untinted) (one rule: the segment's own shading range; the old ctLumTint with the fixed 1500 span is removed)
     expect(v).toContain('vec4(regionColor(p,segC[si].rgb,si)*ctLumHU(hu,si),ctShade>0.5?SEG_ALPHA:sliceTint)'); // 0 %: CT shading at the fixed opacity, solid at the tint
     expect(v).toContain('vec4(mix(vec3(g),regionColor(p,segC[si].rgb,si)*ctLumHU(hu,si),sliceTint),a)'); // above 0 %: the tint colour carries the CT value (factor 1 when solid = the old slice)
     expect(v).not.toContain('segHitColor'); expect(v).not.toContain('CT_SHADE_DEPTH');

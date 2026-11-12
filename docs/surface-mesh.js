@@ -1,16 +1,16 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { indexedGeometryFromTrianglePositions, makeSource3DCoordinates, makeVolume3DCoordinates, Float32FaceBuilder, appendAnalysisRunBoundaryFaces } from './mesh-geometry.js?v=20261112-build722';
+import { indexedGeometryFromTrianglePositions, makeSource3DCoordinates, makeVolume3DCoordinates, Float32FaceBuilder, appendAnalysisRunBoundaryFaces } from './mesh-geometry.js?v=20261112-build723';
 import * as THREE from './vendor/three@0.186.0/build/three.webgpu.js';
-import { createSurfaceMaterial } from './mesh-material.js?v=20261112-build722';
-import { list, surfaceSmoothStrength } from './ui-shell.js?v=20261112-build722';
-import { segmentState, segmentEditState, segmentById, childDrawLook } from './segments.js?v=20261112-build722';
-import { isChildKey } from './segment-look.js?v=20261112-build722';
-import { surfaceSmoothingActive } from './settings.js?v=20261112-build722';
-import { frameYield } from './utils.js?v=20261112-build722';
-import { constrainedSmoothPositions, constrainedSmoothSchedule } from './constrained-smooth.js?v=20261112-build722';
-import { smoothChunkHalo, createSeamLinker, OrderedChunkSmoother } from './smooth-chunks.js?v=20261112-build722';
-import { smoothMethod } from './smooth-workers.js?v=20261112-build722';
+import { createSurfaceMaterial } from './mesh-material.js?v=20261112-build723';
+import { list, surfaceSmoothStrength } from './ui-shell.js?v=20261112-build723';
+import { segmentState, segmentEditState, segmentById, childDrawLook } from './segments.js?v=20261112-build723';
+import { isChildKey } from './segment-look.js?v=20261112-build723';
+import { surfaceSmoothingActive } from './settings.js?v=20261112-build723';
+import { frameYield } from './utils.js?v=20261112-build723';
+import { constrainedSmoothPositions, constrainedSmoothSchedule } from './constrained-smooth.js?v=20261112-build723';
+import { smoothChunkHalo, createSeamLinker, OrderedChunkSmoother } from './smooth-chunks.js?v=20261112-build723';
+import { smoothMethod } from './smooth-workers.js?v=20261112-build723';
 // ignoreCut: runs that are not the segment itself (an analysis region), so the
 // segment's raw cut faces do not apply
 // slices of the neighbouring chunks smoothed with a chunk: smoothChunkHalo

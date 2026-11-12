@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { PAIR_GAP, pairOffsetX, PAIR_UNIFORMS, pairUniforms, shiftPlanes, pairShownMask, pairHeldMask, pairSlotShown } from '../../docs/vr-pair-view.js';
+import { PAIR_GAP, pairOffsetX, PAIR_UNIFORMS, pairUniforms, shiftPlanes, pairShownMask, pairHeldMask, pairSlotShown, pairShapeShown } from '../../docs/vr-pair-view.js';
 import { createUploadQueue } from '../../docs/vr-data-switch.js';
 
 const src = readFileSync(new URL('../../docs/vr-view.js', import.meta.url), 'utf8');
@@ -180,5 +180,15 @@ describe('each dataset has its own sections', () => {
     expect(src).toContain('u2.cutPlanes.value[i].copy(pairPl[i]);u2.planeCut.value=pairCutBits;');
     expect(src).not.toMatch(/\bshiftPlanes\(u\.cutPlanes/); // the stage-2 rule (one set of planes shifted into the partner's space) is gone from the frame
     expect(src).toContain('intoBox(clampPlaneCenter,sp.obj.position,'); expect(src).toContain('&&!planeOwnerPair(section.selected)'); // the box a section is clamped into, the markers' perpendicular
+  });
+});
+
+describe('an earlier change: the partner result\'s card follows how it is drawn and picked', () => {
+  it('the shape rule is the matching primary result\'s region.hidden; with no match the partner\'s own saved flag is not read (it is drawn and picked, so it has its card)', () => {
+    expect(pairShapeShown(null)).toBe(true); expect(pairShapeShown({ hidden: false })).toBe(true); expect(pairShapeShown({ hidden: true })).toBe(false); expect(pairShapeShown({})).toBe(true);
+    const v = readFileSync(new URL('../../docs/vr-view.js', import.meta.url), 'utf8');
+    expect(v).toContain(':pairShapeShown(null)&&labelSegmentsShown(reg.segmentKeys,pairShownKey)'); expect(v).not.toMatch(/reg\.hidden!==true/);
+    expect(v).toContain('id=e&&(!pp||!regionHidden(pp))?id0:0;'); // the pick: the same rule
+    expect(v).toContain('hidden:regionHidden(p)}); // an earlier change: the primary\'s result of the same bone hidden'); // the draw: the same rule
   });
 });

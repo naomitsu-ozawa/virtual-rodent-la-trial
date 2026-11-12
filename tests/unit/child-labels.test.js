@@ -138,7 +138,7 @@ describe('VR: the child under the laser, and the event mode switch', () => {
 describe('PC 3D view and the tree row', () => {
   it('comment-3d.js draws the child labels with the results\' code (negative ids, the shown rule of the child, the chip title)', () => {
     const t = readFileSync('docs/comment-3d.js', 'utf8');
-    expect(t).toContain('for(const it of childLabelItems())if(shownRegion(it))out.push(it)'); expect(t).toContain('r.child?!!segmentById(r.key)?.enabled:analysisRegionShown(r)');
+    expect(t).toContain('for(const it of childLabelItems())if(shownRegion(it))out.push(it)'); expect(t).toContain('r.child?!!segmentById(r.key)?.enabled:analysisRegionCounted(r)'); // an earlier change: was analysisRegionShown (the colour flag)
     expect(t).toContain('const regionOf=id=>childLabelItemById(id)||analysisRegions.find'); expect(t).toContain('labelChipTitle(r,tr)'); expect(t).toContain('onChildSegChange(again)');
   });
   it('the child\'s tree row has the pin / put-back buttons, app.js injects the pin (the analysis result\'s anchor rule)', () => {

@@ -229,10 +229,10 @@ describe('a result label follows its segments (VR)', () => {
     expect(vv).toMatch(/const placeLabel=lb=>\{\n  if\(lb\.hid\)\{lb\.m\.visible=false;lb\.line\.visible=false;return\}/);
     expect(vv).toMatch(/for\(const lb of pins\.values\(\)\)\{\s*if\(!lb\.m\.visible\)continue;/); // pickPin skips hidden cards
   });
-  it('the PC 3D view already hides labels of unticked segments (analysisRegionShown)', () => {
+  it('the PC 3D view already hides labels of unticked segments (analysisRegionCounted: the shape rule, an earlier change)', () => {
     const c3 = readFileSync(new URL('../../docs/comment-3d.js', import.meta.url), 'utf8');
     expect(c3).toContain('r.label&&shownRegion(r)');
-    expect(c3).toContain('analysisRegionShown(r)'); // a child's label follows the child's own shown rule (r.child?...:analysisRegionShown(r))
+    expect(c3).toContain('analysisRegionCounted(r)'); // a child's label follows the child's own shown rule (r.child?...:analysisRegionCounted(r)); an earlier change: a result's label follows its SHAPE (hidden / segments ticked), not its colour flag (visible)
   });
 });
 

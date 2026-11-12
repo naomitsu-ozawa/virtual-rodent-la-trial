@@ -32,9 +32,9 @@ describe('stick click short press with no section: the regions\' colours (stickS
     expect(run([{}], true, 1)).toBe('opacity');
   });
   it('regionColorOff clears the segment bits in refreshRegionLut only (region.visible untouched), and toggleRegionColor re-uploads the table with a toast', () => {
-    expect(v).toContain('a[o+3]=regionShownVr(e.rid)&&!regionColorOff?(');
+    expect(v).toContain('a[o+3]=regionLutAlpha(m,{shown:regionColorSeen(e.rid),hidden:regionHiddenVr(e.rid)})'); // an earlier change: the alpha through regionLutAlpha (colour bits = the seen colour: the flag, or only the picked ones while the stick has the colours off; a hidden shape gets the hide bits instead)
     const t = v.match(/const toggleRegionColor=c=>\{[^\n]*\}/)[0];
-    expect(t).toContain('regionColorOff=!regionColorOff;');
+    expect(t).toContain('regionColorOff=!regionColorOff;colorPick.clear();');
     expect(t).toContain('refreshRegionLut()');
     expect(t).toContain('L.regColT+(regionColorOff?L.labelHid:L.labelShow)');
     expect(t).not.toMatch(/setRegionVisible|regionVisible/);
@@ -50,7 +50,7 @@ describe('stick click short press with no section: the regions\' colours (stickS
     expect(v).toContain('settings.stickShort=v;saveSettings(settings)');
   });
   it('the 体験会 reset and the data switch put regionColorOff back (and rewrite the tables of the results and of the child segments)', () => {
-    const re = /labelsHidden=false;if\(regionColorOff\)\{regionColorOff=false;try\{refreshRegionLut\(\);refreshChildLut\(\)\}catch\(e\)\{console\.warn\(e\)\}\}/g;
+    const re = /labelsHidden=false;if\(regionColorOff\|\|colorPick\.size\)\{regionColorOff=false;colorPick\.clear\(\);try\{refreshRegionLut\(\);refreshChildLut\(\)\}catch\(e\)\{console\.warn\(e\)\}\}/g;
     expect(v.match(re).length).toBe(2);
   });
 });

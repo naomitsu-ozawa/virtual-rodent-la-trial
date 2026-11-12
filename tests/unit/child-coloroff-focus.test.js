@@ -70,7 +70,8 @@ describe('colour off: the child stops standing out, the shape stays', () => {
   });
   it('the page: the row has the colour off / on button (separate from show / hide), the parent card tells its colour-off children, the mesh uses the parent look', () => {
     const ui = src('segment-ui.js');
-    expect(ui).toContain("colorBtn.dataset.childColorOff=c.key"); expect(ui).toContain('setChildLook(c.key,{colorOff:!(c.colorOff===true)})'); expect(ui).toContain('vis.dataset.childVisible=c.key'); expect(ui).toContain('vis.onclick=()=>setChildLook(c.key,{visible:');
+    // an earlier change: the two buttons are built by region-toggles.js (色 / 表示); the data-child-color-off / data-child-visible hooks and the two setChildLook calls are the same ones
+    expect(ui).toContain("attr:['childColorOff',c.key]"); expect(ui).toContain('setChildLook(c.key,{colorOff:!(c.colorOff===true)})'); expect(ui).toContain("attr:['childVisible',c.key]"); expect(ui).toContain('onClick:()=>setChildLook(c.key,{visible:');
     const app = src('app.js'); expect(app).toContain('color.oninput=()=>{segmentState[key].color=color.value;syncColorOffChildren(key);'); expect(app).toContain("k==='colorOff'");
     const u = src('child-segments-ui.js'); expect(u).toContain('childDrawLook(c).material'); expect(u).toContain('childDrawLook(c).color');
     expect(src('surface-mesh.js')).toContain('color:childDrawLook(key).color');

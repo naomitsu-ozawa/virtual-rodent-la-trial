@@ -2,13 +2,13 @@
 // own overlay canvases (NOT the slice canvases: those must keep their pixels, tools/theme-image-check.mjs compares them) and the
 // small HU / position readout. The position itself lives in state.js (setCrosshair / getCrosshair / clearCrosshair); the
 // geometry is in crosshair.js. Scope of this stage: crosshair, HU readout and the position API only.
-import { planes } from './ui-shell.js?v=20261112-build722';
-import { volume, sourceVolume, getCrosshair, setCrosshair, clearCrosshair, onCrosshairChange } from './state.js?v=20261112-build722';
-import { tr } from './i18n.js?v=20261112-build722';
-import { schedulePlaneRender } from './mpr-render.js?v=20261112-build722';
-import { sourceSliceCache } from './volume-io.js?v=20261112-build722';
-import { sourceFilterStages, sourceFilterSignature, sourceFilterCacheGet } from './source-filters.js?v=20261112-build722';
-import { CROSSHAIR_PLANES, clientToFraction, voxelFromPlanePoint, planePointFromVoxel, sliceIndexFor, voxelToMm, sampleHu, formatHu, formatMm } from './crosshair.js?v=20261112-build722';
+import { planes } from './ui-shell.js?v=20261112-build723';
+import { volume, sourceVolume, getCrosshair, setCrosshair, clearCrosshair, onCrosshairChange } from './state.js?v=20261112-build723';
+import { tr } from './i18n.js?v=20261112-build723';
+import { schedulePlaneRender } from './mpr-render.js?v=20261112-build723';
+import { sourceSliceCache } from './volume-io.js?v=20261112-build723';
+import { sourceFilterStages, sourceFilterSignature, sourceFilterCacheGet } from './source-filters.js?v=20261112-build723';
+import { CROSSHAIR_PLANES, clientToFraction, voxelFromPlanePoint, planePointFromVoxel, sliceIndexFor, voxelToMm, sampleHu, formatHu, formatMm } from './crosshair.js?v=20261112-build723';
 let overlayPainter=null;
 // other overlays (the comment markers) paint on the same canvases: fn(ctx,plane,{x0,y0,w,h,dpr,cssW,cssH}) with the transform set to CSS px
 export const setOverlayPainter=fn=>{overlayPainter=fn};

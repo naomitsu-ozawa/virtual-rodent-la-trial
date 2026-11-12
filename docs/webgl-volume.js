@@ -1,11 +1,12 @@
 import * as THREE from './vendor/three@0.186.0/build/three.module.js';
-import { volumeTexturePlan, reduceSliceArea, packedRgSlice, packCtSlice } from './medical-volume.js?v=20261112-build722';
-import { computeBricksOf, buildEditMaskOf, buildRegionIndexOf, buildChildIndexOf, BRICK } from './vr-volume-prep.js?v=20261112-build722';
-import { gpuRunsForTexture } from './gpu-runs.js?v=20261112-build722';
-import { MATERIALS, materialKey, materialVec } from './lighting.js?v=20261112-build722';
-import { MAX_SECTION_PLANES } from './vr-section-frame.js?v=20261112-build722';
-import { SHADE_BRIGHT_DEFAULT, SHADE_CONTRAST_DEFAULT, brightOf, contrastOf } from './cap-shade.js?v=20261112-build722';
-import { pickRay } from './webgl-volume-pick.js?v=20261112-build722';
+import { volumeTexturePlan, reduceSliceArea, packedRgSlice, packCtSlice } from './medical-volume.js?v=20261112-build723';
+import { computeBricksOf, buildEditMaskOf, buildRegionIndexOf, buildChildIndexOf, BRICK } from './vr-volume-prep.js?v=20261112-build723';
+import { gpuRunsForTexture } from './gpu-runs.js?v=20261112-build723';
+import { MATERIALS, materialKey, materialVec } from './lighting.js?v=20261112-build723';
+import { MAX_SECTION_PLANES } from './vr-section-frame.js?v=20261112-build723';
+import { SHADE_BRIGHT_DEFAULT, SHADE_CONTRAST_DEFAULT, brightOf, contrastOf } from './cap-shade.js?v=20261112-build723';
+import { pickRay, hiddenTestOf } from './webgl-volume-pick.js?v=20261112-build723';
+import { regionLutAlpha, regionLutHiddenSlots } from './region-visibility.js?v=20261112-build723';
 
 export const WEBGL_VOLUME_DEFAULT = true;
 export const webglVolumeEnabled = (search = typeof location !== 'undefined' ? location.search : '', m = /[?&]webglvolume=(\d)(&|$)/.exec(search || '')) => (m ? m[1] !== '0' : WEBGL_VOLUME_DEFAULT); // one line: the public gate reads a URL key from the line that reads location.search
@@ -228,7 +229,7 @@ export class WebGlVolumeRenderer {
       ctShade: { value: 0 }, ctShadeBright: { value: SHADE_BRIGHT_DEFAULT }, ctShadeContrast: { value: SHADE_CONTRAST_DEFAULT }, ctShadeRange: { value: four(() => new THREE.Vector2(0, 1)) }, sliceSegOnly: { value: 0 },
       cutPlanes: { value: Array.from({ length: MAX_SECTION_PLANES }, () => V4(0, 0, 1, 0)) }, planeCount: { value: 0 }, planeCut: { value: 0 }, planeSlice: { value: 0 }, capOn: { value: 0 }, capAlpha: { value: 0.85 }, capHatch: { value: 0 }, capShade: { value: 0 },
       sliceTint: { value: 0 }, sliceOpacity: { value: 0 }, sliceWindow: { value: new THREE.Vector2(0, 1) }, sliceAir: { value: SLICE_AIR }, sliceVol: { value: null },
-      regionTex: { value: this.dummy }, regionLut: { value: null }, refine: { value: 1 },
+      regionTex: { value: this.dummy }, regionLut: { value: null }, regionAnyHidden: { value: 0 }, refine: { value: 1 },
       useCls: { value: 0 }, clsTex: { value: this.dummy }, cls4Tex: { value: this.dummy }, useSkip: { value: 0 }, skipTex: { value: this.skipDummy }, clsChan: { value: V4(-1, -1, -1, -1) },
       editMask: { value: 0 }, editMaskOnly: { value: 0 }, editTex: { value: this.dummy }, useDist: { value: 0 }, distInCls: { value: 0 }, distTex: { value: this.dummy }, voxelMin: { value: 1 }, voxelSize: { value: V3(1, 1, 1) },
     };
@@ -297,7 +298,7 @@ export class WebGlVolumeRenderer {
     this.previewRuns = { slot, runs, v }; this.applyRegions(true);
   }
   clearAnalysisRuns() { this.analysisOverlaySignature = ''; this.regionsArgs = null; this.applyRegions(true); }
-  // regions: [{runs, color, focused, segments (slot indices), shown (default true)}]. The index texture holds one index PER RESULT (1..255, a later result wins where two overlap:, as the VR volume);
+  // regions: [{runs, color, focused, segments (slot indices), shown (default true), hidden (default false; an earlier change: the SHAPE is hidden: drawn as a hidden child, the table's hide bits)}]. The index texture holds one index PER RESULT (1..255, a later result wins where two overlap:, as the VR volume);
   // the look-up table regionLut says, per result, its colour and the slots it is drawn on (0 = hidden: only that result stops colouring, the data and the index stay). Every result the page has is passed,
   // a hidden one with shown false (analysis-ops.js syncVolumeAnalysisOverlay), so hiding / showing / focusing one rewrites 4 KB of the table and never the index.
   setAnalysisRuns(regions, v, signature = '', textureSignature = signature) {
@@ -324,7 +325,7 @@ export class WebGlVolumeRenderer {
   }
   regionItems() {
     const hv = this.hoverRuns;
-    const items = (this.regionsArgs?.regions || []).map(r => ({ color: r.color, focused: !!r.focused || (!!hv && r.runs === hv), shown: r.shown !== false, segMask: (r.segments || []).reduce((m, i) => (i >= 0 && i < 4 ? m | (1 << i) : m), 0), runsBySlice: r.runs, mm3: 0, segmentKeys: [], rid: 0 }));
+    const items = (this.regionsArgs?.regions || []).map(r => ({ color: r.color, focused: !!r.focused || (!!hv && r.runs === hv), shown: r.shown !== false, hidden: r.hidden === true, segMask: (r.segments || []).reduce((m, i) => (i >= 0 && i < 4 ? m | (1 << i) : m), 0), runsBySlice: r.runs, mm3: 0, segmentKeys: [], rid: 0 }));
     const pv = this.previewRuns;
     if (pv) items.push({ color: PREVIEW_COLOR, focused: true, shown: true, segMask: 1 << pv.slot, runsBySlice: pv.runs, mm3: 0, segmentKeys: [], rid: 0 });
     return items;
@@ -342,9 +343,10 @@ export class WebGlVolumeRenderer {
       }
       old?.dispose();
     }
-    // the table: texel i = result i (list order, up to 255): rgb = colour, a = the slot bits it is drawn on (+16 when focused), 0 when hidden
+    // the table: texel i = result i (list order, up to 255): rgb = colour, a = the slot bits it is drawn on (+16 when focused), 0 when its colour is off; an earlier change: a hidden SHAPE = the slot bits << 8 (region-visibility.js regionLutAlpha, read by the VR shader's regionHiddenAt)
     const a = this.regionLut.image.data; a.fill(0);
-    if (this.regionTexture) items.slice(0, 255).forEach((it, i) => { const o = (i + 1) * 4; this.color.setHex(Number(it.color) >>> 0); a[o] = this.color.r; a[o + 1] = this.color.g; a[o + 2] = this.color.b; a[o + 3] = it.shown ? (it.segMask | (it.focused ? 16 : 0)) : 0; });
+    if (this.regionTexture) items.slice(0, 255).forEach((it, i) => { const o = (i + 1) * 4; this.color.setHex(Number(it.color) >>> 0); a[o] = this.color.r; a[o + 1] = this.color.g; a[o + 2] = this.color.b; a[o + 3] = regionLutAlpha(it.segMask, { shown: it.shown, hidden: it.hidden, focused: it.focused }); });
+    { let any = 0; for (let i = 1; i <= items.length && i < 256; i++) if (regionLutHiddenSlots(a[i * 4 + 3])) { any = 1; break; } u.regionAnyHidden.value = any; } // an earlier change: as vr-view.js refreshRegionLut, from the table just written (the VR shader reads regionHiddenAt only while this is 1)
     this.regionLut.needsUpdate = true; u.regionLut.value = this.regionLut;
     u.regionTex.value = this.regionTexture || this.dummy;
     this.hasRegions = !!this.regionTexture;
@@ -464,17 +466,26 @@ export class WebGlVolumeRenderer {
     for (let s = 0; s < 4; s++) { const r = sh.ranges?.[segmentOrder[s]]; if (r && Number.isFinite(r.lower) && Number.isFinite(r.upper)) u.ctShadeRange.value[s].set(r.lower, r.upper); else u.ctShadeRange.value[s].set(0, 1); }
   }
   // ---- pick (CPU) ----
+  // an earlier change: what the pick goes through, read from the very tables the shader reads: a hidden result (regionLut alpha bits 8..11) and a hidden child segment (childLut row 1, hidden mask); both indexes are on the mask grid
+  hiddenTest() {
+    const dims = maskDims(this.textureDims), layers = [];
+    const rl = this.regionLut?.image?.data, rids = this.regionTexture?.image?.data;
+    if (rl && rids) { const slotsOf = id => (id < 256 ? regionLutHiddenSlots(rl[4 * id + 3]) : 0); let any = false; for (let i = 1; i < 256; i++) if (slotsOf(i)) { any = true; break; } layers.push({ ids: rids, dims, slotsOf, any }); }
+    const cl = this.childLutTexture?.image?.data, cids = this.hasChildren ? this.childTexture?.image?.data : null;
+    if (cl && cids) { const R = 256 * 4, slotsOf = id => (id < 256 ? Math.round(cl[R + 4 * id + 3]) & 15 : 0); let any = false; for (let i = 1; i < 256; i++) if (slotsOf(i)) { any = true; break; } layers.push({ ids: cids, dims, slotsOf, any }); }
+    return hiddenTestOf(layers);
+  }
   pickMany(points, camera, obj, segmentState, segmentOrder, preferredKey = null) {
     if (!this.active || !this.cpu || !obj || !points?.length) return Promise.resolve(points?.map(() => null) || []);
     camera.updateMatrixWorld(true); obj.updateMatrixWorld(true);
     const rect = this.renderer.domElement.getBoundingClientRect(), inv = this.tmpInv.copy(obj.matrixWorld).invert();
     const segs = [0, 1, 2, 3].map(s => { const seg = segmentState[segmentOrder[s]]; return { min: seg?.min || 0, max: seg?.max || 0, enabled: !!(seg?.active && seg?.enabled) }; });
-    const preferred = preferredKey ? segmentOrder.indexOf(preferredKey) : -1;
+    const preferred = preferredKey ? segmentOrder.indexOf(preferredKey) : -1, hidden = this.hiddenTest();
     const out = points.map(p => {
       const ndc = new THREE.Vector2(((p.clientX - rect.left) / Math.max(rect.width, 1)) * 2 - 1, -((p.clientY - rect.top) / Math.max(rect.height, 1)) * 2 + 1);
       this.raycaster.setFromCamera(ndc, camera);
       const o = this.raycaster.ray.origin.clone().applyMatrix4(inv), d = this.raycaster.ray.direction.clone().transformDirection(inv);
-      const hit = pickRay({ data: this.cpu.data, dims: this.cpu.dims, calibration: this.cpu.calibration, halfExt: this.halfExtents, step: this.step, origin: [o.x, o.y, o.z], dir: [d.x, d.y, d.z], segs, edit: this.edit, preferred, srcDims: [this.volume.columns, this.volume.rows, this.volume.slices] });
+      const hit = pickRay({ data: this.cpu.data, dims: this.cpu.dims, calibration: this.cpu.calibration, halfExt: this.halfExtents, step: this.step, origin: [o.x, o.y, o.z], dir: [d.x, d.y, d.z], segs, edit: this.edit, preferred, srcDims: [this.volume.columns, this.volume.rows, this.volume.slices], hidden });
       return hit ? { x: hit.x, y: hit.y, z: hit.z, key: segmentOrder[hit.slot] } : null;
     });
     return Promise.resolve(out);

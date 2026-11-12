@@ -368,7 +368,7 @@ describe('a point is recorded on a section only on tissue (hands and controllers
     expect(rp.indexOf('sectionTissue(hit)')).toBeLessThan(rp.indexOf('recordVrPoint('));
     expect(code(src).match(/sectionTissue\(/g)).toHaveLength(2); // the two calls of recordPoint: the primary's and (stage 3) the partner's
     const st = bodyAfter(src, 'const sectionTissue=hit=>{');
-    expect(st).toContain('classifiedAt(hit.point,vp.halfExt,vp.dims,vp.cls,chs,hiddenChildVoxel())'); // a hidden child segment shows no tissue on a section expect(st).toContain('vp.cls.chan[i]>=0'); // the shown channels, as volumeHitRay
+    expect(st).toContain('classifiedAt(hit.point,vp.halfExt,vp.dims,vp.cls,chs,hiddenVoxel())'); // an earlier change: hiddenVoxel = the hidden children + the hidden results;: a hidden child segment shows no tissue on a section expect(st).toContain('vp.cls.chan[i]>=0'); // the shown channels, as volumeHitRay
     expect(src.match(/recordPoint\(c,/g).length).toBe(2); // both callers (the controller's and the hand's deferred release) go through it
   });
   it('the HU line path does not know the tissue rule: its pick / start and its module never mention it', () => {
