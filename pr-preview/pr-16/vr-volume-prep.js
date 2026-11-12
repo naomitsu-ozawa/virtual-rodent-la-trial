@@ -10,10 +10,10 @@
 //                     distance field, the combined texture's bytes for the shown mask, brick occupancy of the mask-only segments)
 // The worker is a Blob made from this site's own functions (the same way as vr-combo-rebuild.js); the data goes in and comes back by
 // transfer (no second copy of a 512 MB array is ever held). Without a Worker (tests) the same job runs on the calling thread.
-import { buildClsData } from './point-cls.js?v=20261112-build727';
-import { chamferDistanceBytes, combineClassificationDistance, fourthChannelBytes } from './distance-field.js?v=20261112-build727';
-import { brickOccupancy, cellRange } from './vr-brick-occupancy.js?v=20261112-build727';
-import { gpuRunsForTexture, gpuRunRowMapToSlice, gpuLowerBound, gpuUpperBound, gpuDilateRuns, gpuOwnerOrder, gpuOwnerSlices } from './gpu-runs.js?v=20261112-build727';
+import { buildClsData } from './point-cls.js?v=20261112-build728';
+import { chamferDistanceBytes, combineClassificationDistance, fourthChannelBytes } from './distance-field.js?v=20261112-build728';
+import { brickOccupancy, cellRange } from './vr-brick-occupancy.js?v=20261112-build728';
+import { gpuRunsForTexture, gpuRunRowMapToSlice, gpuLowerBound, gpuUpperBound, gpuDilateRuns, gpuOwnerOrder, gpuOwnerSlices } from './gpu-runs.js?v=20261112-build728';
 
 export const BRICK = 8;
 
