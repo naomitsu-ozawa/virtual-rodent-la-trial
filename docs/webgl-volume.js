@@ -1,13 +1,13 @@
 import * as THREE from './vendor/three@0.186.0/build/three.module.js';
-import { volumeTexturePlan, reduceSliceArea, packedRgSlice, packCtSlice } from './medical-volume.js?v=20261113-build732';
-import { computeBricksOf, buildEditMaskOf, buildRegionIndexOf, buildChildIndexOf, packIndexRg, BRICK, smoothEditMaskOf } from './vr-volume-prep.js?v=20261113-build732';
-import { PART_FIELD, runEditMaskField } from './vr-part-view.js?v=20261113-build732';
-import { gpuRunsForTexture } from './gpu-runs.js?v=20261113-build732';
-import { MATERIALS, materialKey, materialVec } from './lighting.js?v=20261113-build732';
-import { MAX_SECTION_PLANES } from './vr-section-frame.js?v=20261113-build732';
-import { SHADE_BRIGHT_DEFAULT, SHADE_CONTRAST_DEFAULT, brightOf, contrastOf } from './cap-shade.js?v=20261113-build732';
-import { pickRay, hiddenTestOf } from './webgl-volume-pick.js?v=20261113-build732';
-import { regionLutAlpha, regionLutHiddenSlots } from './region-visibility.js?v=20261113-build732';
+import { volumeTexturePlan, reduceSliceArea, packedRgSlice, packCtSlice } from './medical-volume.js?v=20261113-build733';
+import { computeBricksOf, buildEditMaskOf, buildRegionIndexOf, buildChildIndexOf, packIndexRg, BRICK, smoothEditMaskOf } from './vr-volume-prep.js?v=20261113-build733';
+import { PART_FIELD, runEditMaskField } from './vr-part-view.js?v=20261113-build733';
+import { gpuRunsForTexture } from './gpu-runs.js?v=20261113-build733';
+import { MATERIALS, materialKey, materialVec } from './lighting.js?v=20261113-build733';
+import { MAX_SECTION_PLANES } from './vr-section-frame.js?v=20261113-build733';
+import { SHADE_BRIGHT_DEFAULT, SHADE_CONTRAST_DEFAULT, brightOf, contrastOf } from './cap-shade.js?v=20261113-build733';
+import { pickRay, hiddenTestOf } from './webgl-volume-pick.js?v=20261113-build733';
+import { regionLutAlpha, regionLutHiddenSlots } from './region-visibility.js?v=20261113-build733';
 
 export const WEBGL_VOLUME_DEFAULT = true;
 export const webglVolumeEnabled = (search = typeof location !== 'undefined' ? location.search : '', m = /[?&]webglvolume=(\d)(&|$)/.exec(search || '')) => (m ? m[1] !== '0' : WEBGL_VOLUME_DEFAULT); // one line: the public gate reads a URL key from the line that reads location.search

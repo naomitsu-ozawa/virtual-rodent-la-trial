@@ -8,9 +8,9 @@
 //   the distance flow: startMeasure(id) / getMeasureStart() / cancelMeasure() / pickMeasureEnd(id) -> { kind: 'created' | 'existed' | 'same' | 'refused' | 'none', ... }
 //   onChange(cb) -> off; clear() (everything, when the partner goes)
 // Ids start with PAIR_ID_PREFIX, so an id says which store owns it (vr-view.js routes by it); a point added here gets its id here (whatever id the caller's createComment made).
-import { commentVoxel } from './comments.js?v=20261113-build732';
-import { normalizeColor } from './point-colors.js?v=20261113-build732';
-import { normalizeLabelOffset } from './measurements.js?v=20261113-build732';
+import { commentVoxel } from './comments.js?v=20261113-build733';
+import { normalizeColor } from './point-colors.js?v=20261113-build733';
+import { normalizeLabelOffset } from './measurements.js?v=20261113-build733';
 
 export const PAIR_ID_PREFIX = 'pp-';
 export const isPairId = id => typeof id === 'string' && id.startsWith(PAIR_ID_PREFIX);

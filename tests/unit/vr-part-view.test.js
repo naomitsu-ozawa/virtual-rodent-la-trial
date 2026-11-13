@@ -320,7 +320,7 @@ describe('the wiring in the menu and the session', () => {
       expect(src.slice(i, i + 160), fn).toMatch(/if\(!parts\.length\)return/);
     }
     expect(src).toContain(' let parts=[],partHideSrc=()=>null,partBodySet=()=>null,partPatchRegion='); // n731 perf ③: partHideSrc (the body's cut as a hide source) is null on an empty list too
-    expect(src).toMatch(/partHideSrc=\(\)=>\{const r=partRes;return parts\.length&&/);
+    expect(src).toMatch(/partHideSrc=\(\)=>\{const r=partRes;if\(!\(parts\.length&&/);
     expect(src).not.toMatch(/\bpm\b[.?]/); // the one-part state is gone
   });
 

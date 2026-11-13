@@ -189,15 +189,15 @@ describe('thin structures: a grid that is not reduced (256 or less) is not chang
 describe('thin structures: inside the worker source (a fresh scope with only `self`, as a Blob worker)', () => {
   const rawSource = () => prepWorkerSource().replace(/\(0,\s*__vite_ssr_import_\d+__\.(\w+)\)/g, '$1').replace(/__vite_ssr_import_\d+__\./g, '');
   it('the volume job and the cls job give the same thin-keep bytes as prepRun on the calling thread (value range, mask, child, no warning)', () => {
-    const posted = [], self = { postMessage: (m, tr) => posted.push(m) }; new Function('self', rawSource())(self);
+    const posted = [], post = (m, tr) => posted.push(m), ws = new Function('self', rawSource() + '\nreturn { prepRun };')({ postMessage: post }); // prepRun of the worker's own scope (the job its message handler runs; as hidden-neighbour.test.js)
     const dims = [40, 40, 40], { h } = half(dims, sheet(11, 11)), src = [40, 40, 40];
     const base = x => ({ t: 'cls', id: 7, src: h.data.slice().buffer, ...srcExtra(h), dims: h.dims, calib: CAL, editDescs: [{ si: 0, mode: 'keep', maskOnly: false, runs: runsOf(src, (x, y, z) => z >= 10 && z <= 12 && x >= 6 && x <= 33 && y >= 6 && y <= 33) }], editSourceDims: src, regionItems: [], childItems: [{ key: 'c', segMask: 1, runsBySlice: runsOf(src, (x, y, z) => z === 11 && x >= 6 && x <= 33 && y >= 6 && y <= 33), hash: '' }], order: ORDER, state: STATE(), brickDimsFull: [1, 1, 1], brickDimsHalf: h.brickDims, mask: 1, maskField: { ...PART_FIELD }, ...x });
     const ref = run(base({}));
-    self.onmessage({ data: base({}) });
+    ws.prepRun(base({}), post);
     const r = posted.at(-1); expect(r.t).toBe('cls'); expect(r.warnings).toEqual([]);
     expect(Buffer.compare(Buffer.from(r.cls.data), Buffer.from(ref.cls.data))).toBe(0); expect(Buffer.compare(Buffer.from(r.edit.data), Buffer.from(ref.edit.data))).toBe(0); expect(Buffer.compare(Buffer.from(r.child.rg), Buffer.from(ref.child.rg))).toBe(0);
     expect(count(r.cls.data, x => x === 255)).toBeGreaterThanOrEqual(14 * 14); expect(r.body.byteLength).toBe(h.srcV.byteLength); // the source grid comes back by transfer
-    const vol = volumeOf(dims, sheet(11, 11)); self.onmessage({ data: { t: 'volume', id: 8, data: vol.buffer, dims, calib: CAL, brick: BRICK, half: true } });
+    const vol = volumeOf(dims, sheet(11, 11)); ws.prepRun({ t: 'volume', id: 8, data: vol.buffer, dims, calib: CAL, brick: BRICK, half: true }, post);
     const vr = posted.at(-1); expect(vr.t).toBe('volume'); expect(vr.half.rangeHi).toBeUndefined(); // the extremes only make the bricks
   });
 });
@@ -275,7 +275,7 @@ describe('thin structures: the diagnostic HU view (clsDiag, the classification i
   });
 });
 
-describe('an earlier change: the shape bytes keep their 708 strength, no beads, no specks, no taking of another child\'s voxels', () => {
+describe('an earlier change: the shape bytes keep their 708 strength, no beads, nothing made up, no taking of another child\'s voxels', () => {
   const dims = [20, 20, 20], src = [20, 20, 20];
   it('classification bytes made with the smoothed mask field are the bytes made with the plain 0 / 255 mask (strength 250 stays 250); the mask texture is still smooth', () => {
     const v = volumeOf(src, () => BONE), runs = runsOf(src, (x, y, z) => z < 12 + (y >> 2)), d = [{ si: 0, mode: 'keep', maskOnly: false, runs }];
@@ -285,10 +285,10 @@ describe('an earlier change: the shape bytes keep their 708 strength, no beads, 
     expect(Buffer.compare(Buffer.from(smooth.cls.data), Buffer.from(plain.cls.data))).toBe(0); // the shape bytes are not
     expect(count(smooth.cls.data, b => b >= 128 && b < 160)).toBe(count(plain.cls.data, b => b >= 128 && b < 160));
   });
-  it('a lone single-voxel speck is not kept, a line is; voxels the reduction already set are never raised (no beads)', () => {
+  it('a lone single-voxel structure and a line are both kept (nothing that was in the source is dropped); voxels the reduction already set are never raised (no beads)', () => {
     const dims3 = [40, 40, 40], huAt = (x, y, z) => ((x === 9 && y === 9) || (x === 25 && y === 25 && z === 25) ? BONE : AIR), { h } = half(dims3, huAt);
     const off = run(clsJob(h, { ...srcExtra(h), thinKeep: false })), on = run(clsJob(h, { ...srcExtra(h) }));
-    expect(count(on.cls.data, v => v >= 128)).toBe(20); // the 20 grid voxels of the line, not the speck
+    expect(count(on.cls.data, v => v >= 128)).toBe(21); // the 20 grid voxels of the line AND the lone voxel (it is in the source: no size or isolation test)
     // thick wall with a thin neighbour: only voxels that were below 128 change
     const { h: h2 } = half(dims3, (x, y, z) => (z === 11 && x >= 6 && x <= 33 && y >= 6 && y <= 33 ? BONE : (z >= 20 && z <= 21 ? BONE : AIR)));
     const a = run(clsJob(h2, { ...srcExtra(h2), thinKeep: false })), b = run(clsJob(h2, { ...srcExtra(h2) }));

@@ -111,6 +111,15 @@ describe('the worker job', () => {
     expect(Array.from(b.dist.data)).toEqual(Array.from(a.dist.data));
     expect(b.warnings).toEqual([]);
   });
+  it('after the thin-keep / #239 merge: editTex (what gradientAtS reads) is still the SMOOTHED field, while the classification bytes of the shape are hard 0 / 255 on the mask side', () => {
+    const b = run(job({ maskField: OPT }));
+    const mid = b.edit.data.filter((v, i) => i % 4 === 0 && v > 0 && v < 255).length;
+    expect(mid).toBeGreaterThan(50); // the field a normal can be taken from
+    for (let i = 0; i < n; i++) expect(b.edit.data[i * 4] >= 128).toBe(b.cls.data[i * b.cls.C] >= 128); // the shape's sides are the mask's
+    const gsrc = readFileSync(new URL('../../docs/vr-view.js', import.meta.url), 'utf8');
+    const fn = gsrc.slice(gsrc.indexOf('vec3 gradientAtS('), gsrc.indexOf('#define gradientAt(tc)'));
+    expect(fn).toContain('texture(editTex,');
+  });
   it('only the classified slots are smoothed: a mask on a slot that is not active stays 0 / 255', () => {
     const b = run(job({ maskField: OPT, state: { soft: { active: false, enabled: false, min: 0, max: 4095 } } }));
     expect(b.edit.data.every((v, i) => i % 4 !== 0 || v === 0 || v === 255)).toBe(true);

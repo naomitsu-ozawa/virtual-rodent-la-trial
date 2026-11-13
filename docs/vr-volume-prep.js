@@ -12,11 +12,11 @@
 //                     distance field, the combined texture's bytes for the shown mask, brick occupancy of the mask-only segments)
 // The worker is a Blob made from this site's own functions (the same way as vr-combo-rebuild.js); the data goes in and comes back by
 // transfer (no second copy of a 512 MB array is ever held). Without a Worker (tests) the same job runs on the calling thread.
-import { buildClsData } from './point-cls.js?v=20261113-build732';
-import { partFieldOf } from './vr-part-view.js?v=20261113-build732';
-import { euclideanDistanceBytes, morph3, combineClassificationDistance, fourthChannelBytes } from './distance-field.js?v=20261113-build732';
-import { brickOccupancy, cellRange } from './vr-brick-occupancy.js?v=20261113-build732';
-import { gpuRunsForTexture, gpuRunRowMapToSlice, gpuLowerBound, gpuUpperBound, gpuDilateRuns, gpuOwnerOrder, gpuOwnerSlices } from './gpu-runs.js?v=20261113-build732';
+import { buildClsData } from './point-cls.js?v=20261113-build733';
+import { partFieldOf } from './vr-part-view.js?v=20261113-build733';
+import { euclideanDistanceBytes, morph3, combineClassificationDistance, fourthChannelBytes } from './distance-field.js?v=20261113-build733';
+import { brickOccupancy, cellRange } from './vr-brick-occupancy.js?v=20261113-build733';
+import { gpuRunsForTexture, gpuRunRowMapToSlice, gpuLowerBound, gpuUpperBound, gpuDilateRuns, gpuOwnerOrder, gpuOwnerSlices } from './gpu-runs.js?v=20261113-build733';
 
 export const BRICK = 8;
 
@@ -25,10 +25,13 @@ export const BRICK = 8;
 export function computeBricksOf(data, dims, calibration, brick) {
   const tw = dims[0], th = dims[1], td = dims[2], slope = calibration[0], intercept = calibration[1], bias = calibration[2];
   const bx = Math.ceil(tw / brick), by = Math.ceil(th / brick), bz = Math.ceil(td / brick), mm = new Float32Array(bx * by * bz * 4);
+  // the rg8 words read as one u16 each when the platform is little-endian and the view is aligned (the same values, one load instead of two: the volume job's cost)
+  const u16 = (data.byteOffset & 1) === 0 && new Uint8Array(Uint16Array.of(1).buffer)[0] === 1 ? new Uint16Array(data.buffer, data.byteOffset, tw * th * td) : null;
   for (let k = 0; k < bz; k++) for (let j = 0; j < by; j++) for (let i = 0; i < bx; i++) {
     let lo = 65535, hi = 0;
     const z0 = Math.max(0, k * brick - 1), z1 = Math.min(td, (k + 1) * brick + 1), y0 = Math.max(0, j * brick - 1), y1 = Math.min(th, (j + 1) * brick + 1), x0 = Math.max(0, i * brick - 1), x1 = Math.min(tw, (i + 1) * brick + 1);
-    for (let z = z0; z < z1; z++) for (let y = y0; y < y1; y++) { let o = (z * th + y) * tw * 2 + x0 * 2; for (let x = x0; x < x1; x++, o += 2) { const w = data[o] | (data[o + 1] << 8); if (w < lo) lo = w; if (w > hi) hi = w; } }
+    if (u16) { for (let z = z0; z < z1; z++) for (let y = y0; y < y1; y++) { let o = (z * th + y) * tw + x0; for (let x = x0; x < x1; x++, o++) { const w = u16[o]; if (w < lo) lo = w; if (w > hi) hi = w; } } }
+    else for (let z = z0; z < z1; z++) for (let y = y0; y < y1; y++) { let o = (z * th + y) * tw * 2 + x0 * 2; for (let x = x0; x < x1; x++, o += 2) { const w = data[o] | (data[o + 1] << 8); if (w < lo) lo = w; if (w > hi) hi = w; } }
     const b = ((k * by + j) * bx + i) * 4, a = (lo - bias) * slope + intercept, c = (hi - bias) * slope + intercept; mm[b] = Math.min(a, c); mm[b + 1] = Math.max(a, c);
   }
   return { bricks: mm, brickDims: [bx, by, bz] };
@@ -39,7 +42,21 @@ export function halveData(src, dims, withRange) {
   const w = dims[0], h = dims[1], d = dims[2], tw = Math.max(1, w >> 1), th = Math.max(1, h >> 1), td = Math.max(1, d >> 1), out = new Uint8Array(tw * th * td * 2);
   // withRange (n731): also the smallest / largest source word of each block (halveRangeOf's result, with the odd last row / column / slice folded in), in the same loop (one read of the source instead of two)
   const lo = withRange ? new Uint16Array(tw * th * td).fill(65535) : null, hi = withRange ? new Uint16Array(tw * th * td) : null;
-  for (let z = 0; z < td; z++) for (let y = 0; y < th; y++) for (let x = 0; x < tw; x++) {
+  const u16 = (src.byteOffset & 1) === 0 && w * h * d * 2 <= src.length && new Uint8Array(Uint16Array.of(1).buffer)[0] === 1 ? new Uint16Array(src.buffer, src.byteOffset, w * h * d) : null; // one u16 load per word (same values) where the platform allows
+  if (u16 && w >= 2 && h >= 2 && d >= 2) {
+    for (let z = 0; z < td; z++) for (let y = 0; y < th; y++) {
+      const ob = (z * th + y) * tw;
+      for (let x = 0; x < tw; x++) {
+        const o00 = ((z * 2 * h + y * 2) * w + x * 2), o01 = o00 + w, o10 = o00 + w * h, o11 = o10 + w;
+        const a0 = u16[o00], a1 = u16[o00 + 1], b0 = u16[o01], b1 = u16[o01 + 1], c0 = u16[o10], c1 = u16[o10 + 1], d0 = u16[o11], d1 = u16[o11 + 1];
+        const v = Math.round((a0 + a1 + b0 + b1 + c0 + c1 + d0 + d1) / 8), q = (ob + x) * 2; out[q] = v & 255; out[q + 1] = v >> 8;
+        if (withRange) { // smallest / largest of the eight words (a pairwise tournament: no variadic Math.min)
+          const l1 = a0 < a1 ? a0 : a1, l2 = b0 < b1 ? b0 : b1, l3 = c0 < c1 ? c0 : c1, l4 = d0 < d1 ? d0 : d1, h1 = a0 < a1 ? a1 : a0, h2 = b0 < b1 ? b1 : b0, h3 = c0 < c1 ? c1 : c0, h4 = d0 < d1 ? d1 : d0;
+          const l5 = l1 < l2 ? l1 : l2, l6 = l3 < l4 ? l3 : l4, h5 = h1 < h2 ? h2 : h1, h6 = h3 < h4 ? h4 : h3; lo[ob + x] = l5 < l6 ? l5 : l6; hi[ob + x] = h5 < h6 ? h6 : h5;
+        }
+      }
+    }
+  } else for (let z = 0; z < td; z++) for (let y = 0; y < th; y++) for (let x = 0; x < tw; x++) {
     let acc = 0, a = 65535, c = 0;
     for (let dz = 0; dz < 2; dz++) for (let dy = 0; dy < 2; dy++) {
       const o = (((z * 2 + dz) * h + (y * 2 + dy)) * w + x * 2) * 2, v0 = src[o] | (src[o + 1] << 8), v1 = src[o + 2] | (src[o + 3] << 8); acc += v0 + v1;
@@ -121,10 +138,9 @@ export function coverRunsOnGrid(runs, sourceDims, dims, U, bb) {
   }
   return U;
 }
-// -> Uint32Array of the voxel indexes to RESTORE (put to the extreme byte): the voxels of U that the normal reduction did NOT set (isSet(i) false: judged before any change), with no set voxel in their 26 neighbours (the structure is not represented there at all: it
-// has vanished), and, as a restored piece (26-connected restored voxels), hold at least 4 grid voxels (a smaller piece is a speck, an earlier change).
-// Voxels the reduction set are never changed (no beads along a surface), and a voxel beside a set one is left as the reduction made it (no new bumps on a wall that is partly there: an earlier change); a thick body has no such voxel. box: optional {x0, x1, y0, y1, z0, z1} that holds
-// every voxel of U. Self-contained.
+// -> Uint32Array of the voxel indexes to RESTORE (put to the extreme byte): EVERY voxel of U that the reduction did NOT set (isSet(i) false: judged before any change) and that has no set voxel in its 26 neighbours (the structure is not represented there at all: it has
+// vanished). However small the piece is, it is kept: a voxel of U holds a source voxel that is really there (nothing is made up), so no size or isolation test is applied. Voxels the reduction set are never changed (no beads along a surface), and a voxel beside a set one
+// is left as the reduction made it (the structure is still drawn there, and no new bump is made on a wall that is partly there: an earlier change); a thick body has no such voxel. box: optional {x0, x1, y0, y1, z0, z1} that holds every voxel of U. Self-contained.
 export function thinKeepOf(U, isSet, dims, box) {
   const w = dims[0], h = dims[1], d = dims[2], lost = [];
   const x0 = box ? box.x0 : 0, x1 = box ? box.x1 : w - 1, y0 = box ? box.y0 : 0, y1 = box ? box.y1 : h - 1, z0 = box ? box.z0 : 0, z1 = box ? box.z1 : d - 1;
@@ -134,23 +150,13 @@ export function thinKeepOf(U, isSet, dims, box) {
 }
 // the same from the list of the voxels of U that the reduction did not set (index order), without the scan of the grid: judged on isSet as it is. Self-contained.
 export function thinKeepLostOf(lost, isSet, dims) {
-  const w = dims[0], h = dims[1], d = dims[2], out = [], stack = [], seen = new Set();
+  const w = dims[0], h = dims[1], d = dims[2], out = [];
   for (const i of lost) {
     const x = i % w, y = ((i / w) | 0) % h, z = (i / (w * h)) | 0; let beside = false;
     for (let dz = -1; dz <= 1 && !beside; dz++) { const zz = z + dz; if (zz < 0 || zz >= d) continue; for (let dy = -1; dy <= 1 && !beside; dy++) { const yy = y + dy; if (yy < 0 || yy >= h) continue; for (let dx = -1; dx <= 1; dx++) { const xx = x + dx; if ((!dx && !dy && !dz) || xx < 0 || xx >= w) continue; if (isSet((zz * h + yy) * w + xx)) { beside = true; break; } } } }
     if (!beside) out.push(i);
   }
-  // a restored piece (26-connected restored voxels) must hold at least 4 grid voxels: a smaller one is a floating speck, not a structure (counted by a flood that stops at 4)
-  const cand = new Set(out), keep = [];
-  for (const i of out) {
-    stack.length = 0; seen.clear(); stack.push(i); seen.add(i);
-    for (let sp = 0; sp < stack.length && stack.length < 4; sp++) {
-      const q = stack[sp], qx = q % w, qy = ((q / w) | 0) % h, qz = (q / (w * h)) | 0;
-      for (let dz = -1; dz <= 1; dz++) { const zz = qz + dz; if (zz < 0 || zz >= d) continue; for (let dy = -1; dy <= 1; dy++) { const yy = qy + dy; if (yy < 0 || yy >= h) continue; for (let dx = -1; dx <= 1; dx++) { const xx = qx + dx; if (xx < 0 || xx >= w) continue; const r = (zz * h + yy) * w + xx; if (cand.has(r) && !seen.has(r)) { seen.add(r); stack.push(r); } } } }
-    }
-    if (stack.length >= 4) keep.push(i);
-  }
-  return Uint32Array.from(keep);
+  return Uint32Array.from(out);
 }
 
 // the processing masks of the segments on the grid `dims` (RGBA, channel = GPU slot): the WebGPU edit runs mapped with gpuRunsForTexture (exclude runs dilated by one on a reduced
@@ -479,12 +485,16 @@ export function prepRun(m, post) {
   try {
     if (m.t === 'volume') {
       const data = new Uint8Array(m.data), own = !m.half && m.rangeLo && m.rangeHi ? { lo: new Uint16Array(m.rangeLo), hi: new Uint16Array(m.rangeHi) } : null; // own: a drawn grid of at most 256 that was reduced on its way in: the classification is made on it, its bricks come from the source extremes too
-      const b = own ? computeBricksRangeOf(own.lo, own.hi, m.dims, m.calib, m.brick) : computeBricksOf(data, m.dims, m.calib, m.brick);
-      const out = { t: 'volume', id: m.id, data: m.data, bricks: b.bricks, brickDims: b.brickDims, half: null }, tr = [m.data, b.bricks.buffer]; // the extremes (m.rangeLo / rangeHi, or halveRangeOf) only make the bricks: they are not kept (applyThinCls reads exact marks of the source voxels)
+      // the grid's own bricks: from the source extremes (a reduced drawn grid of at most 256), else from the 2x2x2 block extremes of the halving when the grid has a 256 copy and every side is even (brick k of 8 voxels with one voxel of overlap = the blocks 4k - 1 .. 4k + 4: at most one voxel wider
+      // on each side than the exact brick, never narrower: a safe superset, and one pass over the blocks instead of the whole grid), else exactly as before (computeBricksOf)
+      const evenAll = m.half && !(m.rangeLo && m.rangeHi) && m.dims.every(v => v >= 2 && (v & 1) === 0) && m.brick % 2 === 0;
+      const hh = m.half ? halveData(data, m.dims, !(m.rangeLo && m.rangeHi)) : null, hr = !m.half ? null : m.rangeLo && m.rangeHi ? { lo: new Uint16Array(m.rangeLo), hi: new Uint16Array(m.rangeHi) } : { lo: hh.lo, hi: hh.hi };
+      const b = own ? computeBricksRangeOf(own.lo, own.hi, m.dims, m.calib, m.brick) : evenAll ? computeBricksRangeOf(hr.lo, hr.hi, hh.dims, m.calib, m.brick / 2) : computeBricksOf(data, m.dims, m.calib, m.brick);
+      const out = { t: 'volume', id: m.id, data: m.data, bricks: b.bricks, brickDims: b.brickDims, half: null }, tr = [m.data, b.bricks.buffer]; // the extremes (m.rangeLo / rangeHi, or the halving's) only make the bricks: they are not kept (applyThinCls reads exact marks of the source voxels)
       if (m.half) {
         // n731: the half copy's bricks come from the block extremes (not the averaged words), (a brick that holds a voxel kept thin must not be skipped because the AVERAGE never reaches the range)
-        const h = halveData(data, m.dims, !(m.rangeLo && m.rangeHi)), hr = m.rangeLo && m.rangeHi ? { lo: new Uint16Array(m.rangeLo), hi: new Uint16Array(m.rangeHi) } : { lo: h.lo, hi: h.hi }, hb = computeBricksRangeOf(hr.lo, hr.hi, h.dims, m.calib, m.brick); // m.rangeLo / rangeHi: the extremes of the SOURCE voxels when the drawn grid was reduced on its way in (sourceRangeInit)
-        out.half = { data: h.data, dims: h.dims, bricks: hb.bricks, brickDims: hb.brickDims }; tr.push(h.data.buffer, hb.bricks.buffer);
+        const hb = computeBricksRangeOf(hr.lo, hr.hi, hh.dims, m.calib, m.brick); // m.rangeLo / rangeHi: the extremes of the SOURCE voxels when the drawn grid was reduced on its way in (sourceRangeInit)
+        out.half = { data: hh.data, dims: hh.dims, bricks: hb.bricks, brickDims: hb.brickDims }; tr.push(hh.data.buffer, hb.bricks.buffer);
       }
       post(out, tr);
     } else if (m.t === 'cls') {

@@ -154,8 +154,8 @@ describe('vr-view.js wiring of the visible-content field', () => {
     expect(vsrc).toContain('const cur=hideCur();let rb=t.rb;');
     expect(vsrc).toContain("for(const q of parts){const tg=q.target,i=(tg?.index|0)+1;if(i>0&&i<256)(tg.kind==='region'?hideCurR:hideCurC)[i]=0}");
     expect(vsrc).toContain("(tg.kind==='region'?hideCurR:hideCurC)[i]|=q.mask");
-    expect(vsrc).toContain('partHideSrc=()=>{const r=partRes;return parts.length&&r?.body?.ok&&r.hide&&r.hide.td===(comboT?.dims||[]).join()?r.hide:null};');
-    expect(vsrc).toContain('b.ok=true;if(!keepB||!r.hide)partHideSet(r,set.body,dims);');
+    expect(vsrc).toContain('partHideSrc=()=>{const r=partRes;if(!(parts.length&&r?.body?.ok))return null;if(!r.hide&&r.hidArgs&&comboT&&pageHides())partHideBuild(r,r.hidArgs.body,r.hidArgs.dims);return r.hide&&r.hide.td===(comboT?.dims||[]).join()?r.hide:null};'); // the cut source is made when the page hides something
+    expect(vsrc).toContain('b.ok=true;if(!keepB||(!r.hide&&!r.hidArgs))partHideSet(r,set.body,dims);');
   });
   it('a rebuilt child index drops what the visible-content field was built from', () => {
     expect(vsrc).toContain("hideSourcesChanged=()=>{comboT?.rb?.setHideSources(P.cls,hideSrcs())};");
