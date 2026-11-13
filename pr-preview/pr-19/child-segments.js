@@ -1,7 +1,7 @@
-import { childSegments, setChildSegments, setNextChildSegmentId, incNextChildSegmentId } from './state.js?v=20261113-build732';
-import { childSegColorCss, childSegNormalizeName, isChildKey } from './segment-look.js?v=20261113-build732';
-import { analysisRunsVoxelCount, unionAnalysisRuns, intersectRunArrays, analysisRunsContain } from './run-length.js?v=20261113-build732';
-import { normalizeAnalysisLabel, labelForProject } from './analysis-label.js?v=20261113-build732';
+import { childSegments, setChildSegments, setNextChildSegmentId, incNextChildSegmentId } from './state.js?v=20261113-build733';
+import { childSegColorCss, childSegNormalizeName, isChildKey } from './segment-look.js?v=20261113-build733';
+import { analysisRunsVoxelCount, unionAnalysisRuns, intersectRunArrays, analysisRunsContain } from './run-length.js?v=20261113-build733';
+import { normalizeAnalysisLabel, labelForProject } from './analysis-label.js?v=20261113-build733';
 // the parents a child can hang under = the preset keys (segments.js SEGMENT_PRESET_ORDER; asserted equal in the unit test: segments.js imports this module, so it cannot be imported here)
 export const CHILD_PARENT_KEYS = ['bone', 'soft', 'fat', 'lung', 'contrast'];
 // at most this many child segments (the GPU volume's index texture is r8uint: 0 = none, 1..255 = the child); more are refused by the button and left out of a project that has more

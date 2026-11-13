@@ -6,8 +6,8 @@
 //   - which uniforms the part owns (the rest is the body's by reference: PART_OWN), the target a grip takes (partTargetOf), the part's own box (partBoundsOf), the laser's rule on the CPU (partKeepVoxelOf),
 //   - several parts at once: every part has its own box, uniforms and pose; the tables are patched for all of them (patchRegionLutMany / patchChildLutMany); a part's proxy box is its own bounding box (partProxyBox) and its laser march
 //     runs only inside it (partRayRange), the texts. The way in is the long-press ring (region-ring.js 切り出す / 戻す); the grip stays the body's grab and takes a part only where the laser meets one.
-import { regionLutAlpha } from './region-visibility.js?v=20261113-build732';
-import { boxFromRange } from './vr-content-box.js?v=20261113-build732';
+import { regionLutAlpha } from './region-visibility.js?v=20261113-build733';
+import { boxFromRange } from './vr-content-box.js?v=20261113-build733';
 
 export const PART_GLSL = `
 // ==== DETACHED PART: compiled only with VRL_PART (the parts' boxes, and the body while a part is out; never otherwise) ====
@@ -308,7 +308,7 @@ export function partFieldOf(codes, size, opt) {
   const budget = o.budget > 0 ? o.budget : 8e6, K = n <= budget ? d : Math.max(1, Math.floor(budget / wh) - 2 * halo), out = new Uint8Array(n);
   // the slab's arrays, made once for the largest slab and used again by every slab (no garbage left per slab): the distance / sd, and three for the smoothing
   const mMax = wh * Math.min(d, K + 2 * halo), S = new Float32Array(mMax), X = new Float32Array(mMax), Y = sigma > 0 ? new Float32Array(mMax) : null, Z = sigma > 0 ? new Float32Array(mMax) : null;
-  const rMax = Math.max(0, ...rA, ...rB), line = new Float32Array(Math.max(w, h, d)), accW = new Float64Array(w), pl = new Float32Array(wh), ring = new Float32Array((rMax + 1) * wh), acc = new Float64Array(wh);
+  const rMax = Math.max(0, ...rA, ...rB), padL = new Float32Array(w + 2 * rMax + 2), accW = new Float64Array(w), pl = new Float32Array(wh), ring = new Float32Array((rMax + 1) * wh), acc = new Float64Array(wh);
   for (let z0 = 0; z0 < d; z0 += K) {
     const z1 = Math.min(d, z0 + K), e0 = Math.max(0, z0 - halo), e1 = Math.min(d, z1 + halo), sd_ = e1 - e0, m = wh * sd_, sIns = ins.subarray(e0 * wh, e1 * wh);
     // chamfer distance (centre to centre) to the nearest voxel of the given side: 0 on it, then the forward half of the 3x3x3 neighbourhood in raster order, the backward half in reverse
@@ -334,10 +334,13 @@ export function partFieldOf(codes, size, opt) {
       for (const r of radii) {
         if (r <= 0) continue;
         const inv = 1 / (2 * r + 1);
-        for (let base = 0; base < m; base += w) { // x
-          for (let t = 0; t < w; t++) line[t] = a[base + t];
-          let acc = 0; for (let t = -r; t <= r; t++) acc += line[t < 0 ? 0 : t >= w ? w - 1 : t];
-          for (let t = 0; t < w; t++) { a[base + t] = acc * inv; const add = t + r + 1, sub = t - r; acc += line[add >= w ? w - 1 : add] - line[sub < 0 ? 0 : sub]; }
+        const O = r + 1; // x: the row copied with its clamped ends (r + 1 copies of the first value before it, r + 1 of the last after), so that the running sum reads no bound test: the same values, the same order
+        for (let base = 0; base < m; base += w) {
+          const f0 = a[base], f1 = a[base + w - 1];
+          for (let t = 0; t < O; t++) { padL[t] = f0; padL[O + w + t] = f1; }
+          for (let t = 0; t < w; t++) padL[O + t] = a[base + t];
+          let acc = 0; for (let t = -r; t <= r; t++) acc += padL[O + t];
+          for (let t = 0; t < w; t++) { a[base + t] = acc * inv; acc += padL[O + t + r + 1] - padL[O + t - r]; }
         }
         for (let z = 0; z < sd_; z++) { // y
           const P = z * wh; pl.set(a.subarray(P, P + wh)); accW.fill(0);
@@ -347,8 +350,8 @@ export function partFieldOf(codes, size, opt) {
         acc.fill(0); // z: ring = the last r + 1 planes as they were
         for (let t = -r; t <= r; t++) { const P = (t < 0 ? 0 : t >= sd_ ? sd_ - 1 : t) * wh; for (let i = 0; i < wh; i++) acc[i] += a[P + i]; }
         for (let t = 0; t < sd_; t++) {
-          const P = t * wh, Rt = (t % (r + 1)) * wh; ring.set(a.subarray(P, P + wh), Rt);
-          for (let i = 0; i < wh; i++) a[P + i] = acc[i] * inv;
+          const P = t * wh, Rt = (t % (r + 1)) * wh;
+          for (let i = 0; i < wh; i++) { ring[Rt + i] = a[P + i]; a[P + i] = acc[i] * inv; } // the plane as it was goes to the ring as it is overwritten (one pass)
           const add = Math.min(t + r + 1, sd_ - 1), sub = Math.max(t - r, 0), Sb = (sub % (r + 1)) * wh;
           if (add > t) { const A = add * wh; for (let i = 0; i < wh; i++) acc[i] += a[A + i] - ring[Sb + i]; }
           else { const A = (add % (r + 1)) * wh; for (let i = 0; i < wh; i++) acc[i] += ring[A + i] - ring[Sb + i]; }
@@ -704,6 +707,7 @@ export async function partFieldSet(fields, run = runPartGroup, opt = PART_FIELD,
     };
     // the group in the order `gr`, up to its plan (the labels, the seams' voxels, J, which seams each part reads; no smoothing): -> {gr, lab, lb, masks, J, pl, failed}
     const prep = async (gr, again = true) => {
+      try { jointOf(); } catch (e) { jP = null; } // the joint field's task goes to the pool first: it runs there while this thread makes the labels
       const lab = new Uint8Array(gs[0] * gs[1] * gs[2]);
       // the labels: the results, then the child segments over them (a child inside a result: the child's voxel); of one kind, the one earlier in `fields` (written last)
       const writes = gr.map((p, k) => ({ p, k: k + 1 })).sort((u, v) => (partIsChild(list[u.p]) - partIsChild(list[v.p])) || (v.p - u.p));
@@ -755,7 +759,10 @@ export async function partFieldSet(fields, run = runPartGroup, opt = PART_FIELD,
           const readers = gr.filter((_p, k) => pl[k].js.includes(j)); if (!readers.length) return;
           const sb = boxAround(readers, halo, masks[j]), sz3 = sb.size, m = masks[j], out = new Uint8Array(sz3[0] * sz3[1] * sz3[2]);
           const in1 = [Infinity, Infinity, Infinity], ax1 = [-1, -1, -1];
-          for (let z = 0; z < sz3[2]; z++) for (let y = 0; y < sz3[1]; y++) { const o = sb.lo[0] - m.lo[0] + m.size[0] * (sb.lo[1] - m.lo[1] + y + m.size[1] * (sb.lo[2] - m.lo[2] + z)); for (let x = 0; x < sz3[0]; x++) if (m.bytes[o + x] === 1) { if (x < in1[0]) in1[0] = x; if (x > ax1[0]) ax1[0] = x; if (y < in1[1]) in1[1] = y; if (y > ax1[1]) ax1[1] = y; if (z < in1[2]) in1[2] = z; if (z > ax1[2]) ax1[2] = z; } }
+          for (let z = 0; z < sz3[2]; z++) for (let y = 0; y < sz3[1]; y++) { // the box of the seam's voxels: the first and the last 1 of each row (the typed array's own search)
+            const o = sb.lo[0] - m.lo[0] + m.size[0] * (sb.lo[1] - m.lo[1] + y + m.size[1] * (sb.lo[2] - m.lo[2] + z)), row = m.bytes.subarray(o, o + sz3[0]), x0 = row.indexOf(1); if (x0 < 0) continue;
+            const x1 = row.lastIndexOf(1); if (x0 < in1[0]) in1[0] = x0; if (x1 > ax1[0]) ax1[0] = x1; if (y < in1[1]) in1[1] = y; if (y > ax1[1]) ax1[1] = y; if (z < in1[2]) in1[2] = z; if (z > ax1[2]) ax1[2] = z;
+          }
           if (ax1[0] >= 0) {
             const kl = in1.map(v => Math.max(0, v - halo)), kh = ax1.map((v, a) => Math.min(sz3[a], v + 1 + halo)), el = kl.map(v => Math.max(0, v - halo)), eh = kh.map((v, a) => Math.min(sz3[a], v + halo)), es = eh.map((v, a) => v - el[a]);
             const codes = new Uint8Array(es[0] * es[1] * es[2]);
@@ -842,7 +849,7 @@ export async function partFieldSet(fields, run = runPartGroup, opt = PART_FIELD,
     return { data: out, lo: f.lo, size: f.size, C: Cp, a, b };
   });
   const a = [0, 1, 2, 3].map(s => [0, 1, 2, 3].map(c => (chOf[s] === c ? 1 : 0))), b = [0, 1, 2, 3].map(s => [0, 1, 2, 3].map(c => (chOf[s] < 0 ? 0 : chOf[s] === c ? 0 : 1)));
-  return { body: { data, lo, size, C, a, b, mask: un.mask, hid: partBodyHidOf(data, size, C), occ: partBodyOccOf({ data, size, C, a, b }) }, parts, plain, merged, own: ownOut.sort((u, v) => u.p - v.p) };
+  return { body: { data, lo, size, C, a, b, mask: un.mask, occ: partBodyOccOf({ data, size, C, a, b }) }, parts, plain, merged, own: ownOut.sort((u, v) => u.p - v.p) };
 }
 // n731 perf ③: the voxels the body's cut surely hides, for the distance field of the visible content (vr-hide-field.js: an index source, bit c of a voxel's byte = channel c of the body's field hides it). A voxel counts only when
 // the field's byte is at least PART_HID_MIN on that channel at the voxel and at all 26 of its neighbours inside the box (a voxel on the box's edge never): every sample whose nearest voxel it is reads the field LINEAR from those 8
@@ -892,9 +899,12 @@ export function createPartPool(opt0 = PART_FIELD, pool = PART_POOL, taskTimeoutM
 export const PART_SET_WORKER_TIMEOUT_MS = 600000, PART_CACHE_BYTES = 160e6;
 // 64 bits of a byte array as a string (two different 32-bit hashes and the length): the key of a group's labels, the signature of a field's bytes
 function partHash64(b) {
-  let h1 = 0x811c9dc5, h2 = 0x9747b28c;
-  for (let i = 0, n = b.length; i < n; i++) { const v = b[i]; h1 = Math.imul(h1 ^ v, 16777619); h2 = (Math.imul(h2 ^ (v + 0x9e), 0x85ebca6b) + (h2 >>> 15)) | 0; }
-  return (h1 >>> 0).toString(16) + '.' + (h2 >>> 0).toString(16) + '.' + b.length;
+  // by 32-bit words where the bytes lie aligned (four times fewer steps), the tail by bytes
+  let h1 = 0x811c9dc5, h2 = 0x9747b28c, i = 0;
+  const n = b.length, n4 = b.byteOffset % 4 === 0 && b.BYTES_PER_ELEMENT === 1 ? n >> 2 : 0;
+  if (n4) { const u = new Uint32Array(b.buffer, b.byteOffset, n4); for (; i < n4; i++) { const v = u[i]; h1 = Math.imul(h1 ^ v, 16777619); h1 ^= h1 >>> 15; h2 = (Math.imul(h2 ^ (v + 0x9e), 0x85ebca6b) + (h2 >>> 15)) | 0; } i = n4 << 2; }
+  for (; i < n; i++) { const v = b[i]; h1 = Math.imul(h1 ^ v, 16777619); h2 = (Math.imul(h2 ^ (v + 0x9e), 0x85ebca6b) + (h2 >>> 15)) | 0; }
+  return (h1 >>> 0).toString(16) + '.' + (h2 >>> 0).toString(16) + '.' + n;
 }
 // the memory of the answers of the tasks of the groups (the same group again, or a task whose input did not change, costs nothing): key -> bytes, the least recently used out first, at most `limit` bytes (an answer larger than that is not kept)
 function partGroupCacheOf(limit) {
@@ -1077,8 +1087,6 @@ export function partOccOf(pf) {
 // left out (outside the field's box nothing is cut). A slot nothing cuts (a = b = 0) is never full (the shader ignores the slots it does not draw). The texel margin is the whole of it: no voxel neighbourhood rule. -> {data: Uint8Array RGBA (255 / 0), dims: [bx, by, bz]}
 export function partBodyOccOf(pf) {
   const [w, h, d] = pf.size, C = pf.C || 1, B = 8, bw = Math.ceil(w / B), bh = Math.ceil(h / B), bd = Math.ceil(d / B), nb = bw * bh * bd, data = pf.data, thr = 0.5 + 1 / 1024;
-  const blk = (i, n) => [Math.max(0, Math.ceil((i - B - 1) / B)), Math.min(n - 1, Math.floor((i + 1) / B))];
-  const bx = [], by = [], bz = []; for (let x = 0; x < w; x++) bx.push(blk(x, bw)); for (let y = 0; y < h; y++) by.push(blk(y, bh)); for (let z = 0; z < d; z++) bz.push(blk(z, bd));
   const edge = new Uint8Array(nb); // 1 = a texel the block reads (8b - 1 .. 8b + 9) is outside the texture
   for (let k = 0, q = 0; k < bd; k++) for (let j = 0; j < bh; j++) for (let i = 0; i < bw; i++, q++) if (i < 1 || 8 * i + 9 > w - 1 || j < 1 || 8 * j + 9 > h - 1 || k < 1 || 8 * k + 9 > d - 1) edge[q] = 1;
   const out = new Uint8Array(nb * 4);
@@ -1090,13 +1098,18 @@ export function partBodyOccOf(pf) {
       if (c >= C || ac === 0) { const v = c >= C ? (c === 3 ? 1 : 0) : 0; if (!(ac * v + bc >= thr)) never = true; } else act.push([c, ac, bc]);
     }
     if (never) continue;
-    const bad = new Uint8Array(nb);
-    for (let z = 0, i = 0; z < d; z++) for (let y = 0; y < h; y++) for (let x = 0; x < w; x++, i++) {
-      let ok = true; for (const [c, ac, bc] of act) if (!(ac * (data[i * C + c] / 255) + bc >= thr)) { ok = false; break; }
-      if (ok) continue;
-      const [x0, x1] = bx[x], [y0, y1] = by[y], [z0, z1] = bz[z];
-      for (let k = z0; k <= z1; k++) for (let j = y0; j <= y1; j++) for (let q = x0; q <= x1; q++) bad[q + bw * (j + bh * k)] = 1;
+    // the blocks with a failing texel among those they read (8b - 1 .. 8b + 9 per axis), as three separable passes: the rows of x first (each texel once), then y and z over the reduced arrays
+    const F1 = new Uint8Array(bw * h * d), pass = new Uint8Array(w);
+    for (let z = 0; z < d; z++) for (let y = 0; y < h; y++) {
+      const o = w * (y + h * z);
+      for (let x = 0; x < w; x++) { let ok = 1; const q = (o + x) * C; for (let k = 0; k < act.length; k++) { const e = act[k]; if (!(e[1] * (data[q + e[0]] / 255) + e[2] >= thr)) { ok = 0; break; } } pass[x] = ok; }
+      const r0 = bw * (y + h * z);
+      for (let i = 0; i < bw; i++) { const a0 = Math.max(0, 8 * i - 1), a1 = Math.min(w - 1, 8 * i + 9); let f = 0; for (let x = a0; x <= a1; x++) if (!pass[x]) { f = 1; break; } F1[r0 + i] = f; }
     }
+    const F2 = new Uint8Array(bw * bh * d);
+    for (let z = 0; z < d; z++) for (let j = 0; j < bh; j++) { const a0 = Math.max(0, 8 * j - 1), a1 = Math.min(h - 1, 8 * j + 9); for (let i = 0; i < bw; i++) { let f = 0; for (let y = a0; y <= a1; y++) if (F1[i + bw * (y + h * z)]) { f = 1; break; } F2[i + bw * (j + bh * z)] = f; } }
+    const bad = new Uint8Array(nb);
+    for (let k = 0; k < bd; k++) { const a0 = Math.max(0, 8 * k - 1), a1 = Math.min(d - 1, 8 * k + 9); for (let q = 0; q < bw * bh; q++) { let f = 0; for (let z = a0; z <= a1; z++) if (F2[q + bw * bh * z]) { f = 1; break; } bad[q + bw * bh * k] = f; } }
     for (let q = 0; q < nb; q++) if (!bad[q] && !edge[q]) out[q * 4 + s] = 255;
   }
   return { data: out, dims: [bw, bh, bd] };
