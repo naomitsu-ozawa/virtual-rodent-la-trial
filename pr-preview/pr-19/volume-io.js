@@ -1,10 +1,10 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { dicomCodecModulePromise, setDicomCodecModulePromise } from './state.js?v=20261113-build733';
-import { fmt, frameYield, isTabletRuntime, isDesktopRuntime } from './utils.js?v=20261113-build733';
-import { isNativeDicomTransferSyntax, COMPRESSED_DICOM_TRANSFER_SYNTAXES, encapsulatedFrameBytes, dicomImageFrameInfo } from './dicom.js?v=20261113-build733';
+import { dicomCodecModulePromise, setDicomCodecModulePromise } from './state.js?v=20261113-build734';
+import { fmt, frameYield, isTabletRuntime, isDesktopRuntime } from './utils.js?v=20261113-build734';
+import { isNativeDicomTransferSyntax, COMPRESSED_DICOM_TRANSFER_SYNTAXES, encapsulatedFrameBytes, dicomImageFrameInfo } from './dicom.js?v=20261113-build734';
 import dicomParser from './vendor/dicom-parser@1.8.21/index.js';
-import { storedLayout, storedValue, readStored } from './stored-bits.js?v=20261113-build733';
+import { storedLayout, storedValue, readStored } from './stored-bits.js?v=20261113-build734';
 export function sourceMprCacheLimit(){
  if(isTabletRuntime())return 1536*1024*1024;
  return Number.MAX_SAFE_INTEGER;

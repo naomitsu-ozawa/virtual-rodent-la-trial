@@ -12,11 +12,11 @@
 //                     distance field, the combined texture's bytes for the shown mask, brick occupancy of the mask-only segments)
 // The worker is a Blob made from this site's own functions (the same way as vr-combo-rebuild.js); the data goes in and comes back by
 // transfer (no second copy of a 512 MB array is ever held). Without a Worker (tests) the same job runs on the calling thread.
-import { buildClsData } from './point-cls.js?v=20261113-build733';
-import { partFieldOf } from './vr-part-view.js?v=20261113-build733';
-import { euclideanDistanceBytes, morph3, combineClassificationDistance, fourthChannelBytes } from './distance-field.js?v=20261113-build733';
-import { brickOccupancy, cellRange } from './vr-brick-occupancy.js?v=20261113-build733';
-import { gpuRunsForTexture, gpuRunRowMapToSlice, gpuLowerBound, gpuUpperBound, gpuDilateRuns, gpuOwnerOrder, gpuOwnerSlices } from './gpu-runs.js?v=20261113-build733';
+import { buildClsData } from './point-cls.js?v=20261113-build734';
+import { partFieldOf } from './vr-part-view.js?v=20261113-build734';
+import { euclideanDistanceBytes, morph3, combineClassificationDistance, fourthChannelBytes } from './distance-field.js?v=20261113-build734';
+import { brickOccupancy, cellRange } from './vr-brick-occupancy.js?v=20261113-build734';
+import { gpuRunsForTexture, gpuRunRowMapToSlice, gpuLowerBound, gpuUpperBound, gpuDilateRuns, gpuOwnerOrder, gpuOwnerSlices } from './gpu-runs.js?v=20261113-build734';
 
 export const BRICK = 8;
 
@@ -489,11 +489,11 @@ export function prepRun(m, post) {
       // on each side than the exact brick, never narrower: a safe superset, and one pass over the blocks instead of the whole grid), else exactly as before (computeBricksOf)
       const evenAll = m.half && !(m.rangeLo && m.rangeHi) && m.dims.every(v => v >= 2 && (v & 1) === 0) && m.brick % 2 === 0;
       const hh = m.half ? halveData(data, m.dims, !(m.rangeLo && m.rangeHi)) : null, hr = !m.half ? null : m.rangeLo && m.rangeHi ? { lo: new Uint16Array(m.rangeLo), hi: new Uint16Array(m.rangeHi) } : { lo: hh.lo, hi: hh.hi };
-      const b = own ? computeBricksRangeOf(own.lo, own.hi, m.dims, m.calib, m.brick) : evenAll ? computeBricksRangeOf(hr.lo, hr.hi, hh.dims, m.calib, m.brick / 2) : computeBricksOf(data, m.dims, m.calib, m.brick);
+      const b = computeBricksOf(data, m.dims, m.calib, m.brick);
       const out = { t: 'volume', id: m.id, data: m.data, bricks: b.bricks, brickDims: b.brickDims, half: null }, tr = [m.data, b.bricks.buffer]; // the extremes (m.rangeLo / rangeHi, or the halving's) only make the bricks: they are not kept (applyThinCls reads exact marks of the source voxels)
       if (m.half) {
         // n731: the half copy's bricks come from the block extremes (not the averaged words), (a brick that holds a voxel kept thin must not be skipped because the AVERAGE never reaches the range)
-        const hb = computeBricksRangeOf(hr.lo, hr.hi, hh.dims, m.calib, m.brick); // m.rangeLo / rangeHi: the extremes of the SOURCE voxels when the drawn grid was reduced on its way in (sourceRangeInit)
+        const hb = computeBricksOf(hh.data, hh.dims, m.calib, m.brick); // m.rangeLo / rangeHi: the extremes of the SOURCE voxels when the drawn grid was reduced on its way in (sourceRangeInit)
         out.half = { data: hh.data, dims: hh.dims, bricks: hb.bricks, brickDims: hb.brickDims }; tr.push(hh.data.buffer, hb.bricks.buffer);
       }
       post(out, tr);
@@ -513,12 +513,7 @@ export function prepRun(m, post) {
       let thinInfo = { done: 0, thin: [] };
       try {
         if (thinKeep && cls) {
-          let marks = m.thinMarks ? new Uint8Array(m.thinMarks) : null;
-          if (!marks && m.body) {
-            const bd = m.editSourceDims, acc = thinMarksInit(bd, bd, m.dims, null, null, m.calib, m.state, m.order, m.editDescs), bytes = new Uint8Array(m.body), ss = bd[0] * bd[1] * 2;
-            for (let z = 0; z < bd[2]; z++) thinMarksAdd(acc, bytes.subarray(z * ss, (z + 1) * ss), z);
-            marks = acc.marks;
-          }
+          const marks = null;
           thinInfo = applyThinCls(cls, m.dims, edit, m.state, m.order, marks);
         }
       } catch (e) { warnings.push('thin structures: ' + String((e && e.message) || e)); }

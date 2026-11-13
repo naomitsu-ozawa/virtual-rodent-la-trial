@@ -1,101 +1,101 @@
-import { effectiveFlag } from './debug-flags.js?v=20261113-build733';
+import { effectiveFlag } from './debug-flags.js?v=20261113-build734';
 import * as THREE from './vendor/three@0.186.0/build/three.module.js';
-import { reduceSliceArea, packedRgSlice, packCtSlice, gpuRunsForTexture } from './medical-volume.js?v=20261113-build733';
-import { ensureSegmentBaseRuns } from './segment-runs.js?v=20261113-build733';
-import { gpuVolumeTarget, gpuVolumeEditDescriptors, volumeCache, volumeCacheBudget, volumeCacheBudgetInfo } from './gpu-volume-data.js?v=20261113-build733';
-import { pruneOtherFilterSettings } from './gpu-volume-cache.js?v=20261113-build733';
-import { packEntry, storeEntry, loadEntry, pruneSiblings, removeOldBuilds, storeStatus, noteStore, partsOf, keyOfParts, explainMiss, isStandardOpen, copyPackedSlice } from './vr-prep-cache.js?v=20261113-build733';
-import { vrStateSignature } from './vr-data-key.js?v=20261113-build733'; // the state of the page now, to tell whether a practice level is still in its standard state //: the finished VR data is kept on the device (vr-prep-cache.js)
-import { SEGMENT_PRESET_ORDER, gpuSegmentOrder, segmentHasProcessedMask, segmentState, segmentEditState, segmentSourceSignature, segmentShadeRange, segmentShadeSpan, setSegmentShadeEnd, resetSegmentShadeRange, shadeDataRange, applyShadeAutoHistograms, onShadeAutoChange } from './segments.js?v=20261113-build733'; import { segmentById, childRenderEntries, onChildRenderChange, setChildLook } from './segments.js?v=20261113-build733'; import { setShadeAutoPageHeld } from './segments.js?v=20261113-build733';
-import { sceneState, analysisRegions, activeSeries } from './state.js?v=20261113-build733';
-import { datasetFingerprint, unpackProject } from './project-file.js?v=20261113-build733';
-import { PAIR_UNIFORMS, pairUniforms, pairShapeShown, pairOffsetX, pairBoxHas, pairSectionOwnerIn, planeNearerPartner, grabTargetOf, pairGrabPlan, PLANE_PARK_W, pairShownMask, pairHeldMask, pairSlotShown, createAtlasIndex, atlasPrimary } from './vr-pair-view.js?v=20261113-build733'; // stage 2 of the sample pairs: the partner volume drawn beside the primary (the rules; the GPU side is the `pair` block of startVrView)
-import { PART_GLSL, PART_OWN, PART_OUT_M, PART_ANIM_MS, partUniforms, partSame, regionSlotMask, patchRegionLutMany, patchChildLutMany, anyHiddenIn, partBoundsOf, partProxyBox, partRayRange, partKeepVoxelOf, hideIndexPlane, partOwnRegionLut, partOwnChildLut, partHideOnlyRegionLut, partHideOnlyChildLut, PART_TEXT, PART_BTN_X, PART_RESTORE_W, runPartField, partFieldPlain, partFieldBoxOf, PART_FIELD, partFieldCodesAsync, createPartSetRunner, partOccOf, partBodyHidOf, partFieldNeedsOwn, partFieldMap, partAirOf, markCutRegionLut, markCutChildLut } from './vr-part-view.js?v=20261113-build733'; // an earlier change: regions / child segments taken out of the body (the rules; the GPU side is the `part` block of startVrView)
-import { partnerInputs, unitsPerMmOfSeries, resultRepresentativeVoxel } from './vr-pair-data.js?v=20261113-build733';
-import { findSamplePartners, loadSamplePartnerFiles, loadSamplePartnerProject, loadSamplePairs } from './data-load.js?v=20261113-build733';
-import { samplePartners } from './sample-sets.js?v=20261113-build733';
-import { analysisRunsContain } from './run-length.js?v=20261113-build733';
-import { createPairStore, isPairId } from './vr-pair-store.js?v=20261113-build733'; // stage 3: the partner's own points / distances
-import { loadPartnerName, practiceSeriesName } from './sample-registry.js?v=20261113-build733'; // the sample pair row of the menu (stage 3): which partner the open dataset has (sample-pairs.json) and its name (the partner's sample.json)
-import { parseFiles, groupSeries } from './dicom.js?v=20261113-build733';
-import { HAND_PICK_TOL, sectionRayHit, recordVrPoint, resolveTriggerTarget, volumeGripAllowed, pressDragSection, createTriggerPress, dragShouldStart, DRAG_RECORD, sectionFollowStart, sectionFollowStep, sectionWristTurn, snapPlaneCenterIntoBox, rayLocalPlaneX, squareBandContains, squareContains, createHoverPulse, qMul, qInv, qRot, qAngleDeg, clampPlaneCenter, HAPTIC, normalizePointMode, surfaceVoxelFromHit, voxelToLocal, voxelSize, createStickGate, deleteSelected, createUndoStack, applyUndo, pointIsHidden } from './vr-point.js?v=20261113-build733';
-import { createVrPointMarkers, createSurfaceCursor } from './vr-point-markers.js?v=20261113-build733';
-import { createAnchorDots, dotBehindCard, ANCHOR_DOT_DIAMETER_M, LEG_WIDTH_M, LEG_MIN_ANGLE } from './vr-anchor-dots.js?v=20261113-build733'; // the dot at the foot of a pinned label's leader
-import { createLabelBatch } from './vr-label-batch.js?v=20261113-build733'; // the name cards and their legs drawn in a few calls
-import { buildClsData } from './point-cls.js?v=20261113-build733';
-import { createHiddenClsManager } from './hidden-cls-state.js?v=20261113-build733';
-import { onDatasetChange } from './dataset-reset.js?v=20261113-build733';
-import { shadeRangeStep, shadeValueAt, shadePosOf, createShadeAutoScheduler } from './cap-shade.js?v=20261113-build733'; // the per-segment shading range (slider positions <-> data values);: the scheduler of the auto range
-import { STEP_PRESS, stepClamp, createStepHold } from './value-step.js?v=20261113-build733'; // ＋ / − of the data-value sliders: 10 per press, hold repeats and speeds up to 100
-import { formatCtValue } from './utils.js?v=20261113-build733';
-import { createHoldTracker, createHoldRing, HOLD_RING_RADIUS, HOLD_RING_MIN_DIST } from './vr-hold-ring.js?v=20261113-build733';
-import { WHEEL_ITEMS, DEFAULT_WHEEL, normalizeWheelItems, migrateWheelSectionFlip, setWheelItem, moveWheelItem, clearWheelItem, createRingMenu, createWheelStick, createButtonPress } from './vr-ring.js?v=20261113-build733';
-import { getComments, getMarkersShown, onCommentsChange, commentMatchesSeries, removeComment, restoreComment, updateCommentPosition, updateCommentText, updateCommentColor } from './comments.js?v=20261113-build733';
-import { POINT_PALETTE, pointColor, normalizeColor } from './point-colors.js?v=20261113-build733';
-import { combineClassificationDistance, fourthChannelBytes } from './distance-field.js?v=20261113-build733';
-export { WebGlVolumeRenderer, webglVolumeEnabled } from './webgl-volume.js?v=20261113-build733'; // the page's WebGL volume (no WebGPU) is handed to app.js through this module's existing lazy load
-import { BRICK as PREP_BRICK, thinHuData, sourceRangeInit, sourceRangeAdd, thinMarksInit, thinMarksAdd, computeBricksOf, halveData, buildEditMaskOf, buildChildIndexOf, packIndexRg, createVolumePrep } from './vr-volume-prep.js?v=20261113-build733'; // the heavy pure steps of the preparation (bricks, the 256 copy, classification, distance field) run in a worker
-import { createSwapGuard, runDataSwap, createUploadQueue, createSettleGate, createFrameGapMonitor, swapPlan, SWAP_STAGES, SETTLE_TIMEOUT_MS, LOAD_TIMEOUT_MS, CACHE_READ_TIMEOUT_MS, VR_STORE_FLUSH_MS, saveShouldWait, withTimeout } from './vr-data-switch.js?v=20261113-build733'; // switching the data inside a running session
-import { classifiedAt, marchClassificationHitInfo } from './vr-pick.js?v=20261113-build733';
-import { VR_TARGET_SIDE, volumeMeta, editDescsOf, regionItemsOf, childItemsOf, classifyStateOf, shownMask as shownMaskOf, shownRegions as shownRegionsOf, shownChildren as shownChildrenOf } from './vr-prep-inputs.js?v=20261113-build733'; // stage 1 of the sample pairs: what the preparation reads is ONE object (inp); the page's own is pageInputs below
-import { createSkipState, skipGrid } from './vr-skip-occupancy.js?v=20261113-build733'; // the creep-skip occupancy bits of the combined texture (VR max-zoom cost)
-import { createComboRebuild } from './vr-combo-rebuild.js?v=20261113-build733';
-import { hideBitsOn, hideBitsSame } from './vr-hide-field.js?v=20261113-build733'; // the distance field of the visible content while a result / child is hidden //: the combined texture rebuilt off the frame when the shown segments change
-import { setBusySlot, reportBusyProgress } from './progress-modal.js?v=20261113-build733';
-import { tr } from './i18n.js?v=20261113-build733';
-import { regionCustomName, regionChipTitle } from './region-name.js?v=20261113-build733'; // the shared region name rule (name, else ID <atlas id>)
+import { reduceSliceArea, packedRgSlice, packCtSlice, gpuRunsForTexture } from './medical-volume.js?v=20261113-build734';
+import { ensureSegmentBaseRuns } from './segment-runs.js?v=20261113-build734';
+import { gpuVolumeTarget, gpuVolumeEditDescriptors, volumeCache, volumeCacheBudget, volumeCacheBudgetInfo } from './gpu-volume-data.js?v=20261113-build734';
+import { pruneOtherFilterSettings } from './gpu-volume-cache.js?v=20261113-build734';
+import { packEntry, storeEntry, loadEntry, pruneSiblings, removeOldBuilds, storeStatus, noteStore, partsOf, keyOfParts, explainMiss, isStandardOpen, copyPackedSlice } from './vr-prep-cache.js?v=20261113-build734';
+import { vrStateSignature } from './vr-data-key.js?v=20261113-build734'; // the state of the page now, to tell whether a practice level is still in its standard state //: the finished VR data is kept on the device (vr-prep-cache.js)
+import { SEGMENT_PRESET_ORDER, gpuSegmentOrder, segmentHasProcessedMask, segmentState, segmentEditState, segmentSourceSignature, segmentShadeRange, segmentShadeSpan, setSegmentShadeEnd, resetSegmentShadeRange, shadeDataRange, applyShadeAutoHistograms, onShadeAutoChange } from './segments.js?v=20261113-build734'; import { segmentById, childRenderEntries, onChildRenderChange, setChildLook } from './segments.js?v=20261113-build734'; import { setShadeAutoPageHeld } from './segments.js?v=20261113-build734';
+import { sceneState, analysisRegions, activeSeries } from './state.js?v=20261113-build734';
+import { datasetFingerprint, unpackProject } from './project-file.js?v=20261113-build734';
+import { PAIR_UNIFORMS, pairUniforms, pairShapeShown, pairOffsetX, pairBoxHas, pairSectionOwnerIn, planeNearerPartner, grabTargetOf, pairGrabPlan, PLANE_PARK_W, pairShownMask, pairHeldMask, pairSlotShown, createAtlasIndex, atlasPrimary } from './vr-pair-view.js?v=20261113-build734'; // stage 2 of the sample pairs: the partner volume drawn beside the primary (the rules; the GPU side is the `pair` block of startVrView)
+import { PART_GLSL, PART_OWN, PART_OUT_M, PART_ANIM_MS, partUniforms, partSame, regionSlotMask, patchRegionLutMany, patchChildLutMany, anyHiddenIn, partBoundsOf, partProxyBox, partRayRange, partKeepVoxelOf, hideIndexPlane, partOwnRegionLut, partOwnChildLut, partHideOnlyRegionLut, partHideOnlyChildLut, PART_TEXT, PART_BTN_X, PART_RESTORE_W, runPartField, partFieldPlain, partFieldBoxOf, PART_FIELD, partFieldCodesAsync, createPartSetRunner, partOccOf, partBodyHidOf, partFieldNeedsOwn, partFieldMap, partAirOf, markCutRegionLut, markCutChildLut } from './vr-part-view.js?v=20261113-build734'; // an earlier change: regions / child segments taken out of the body (the rules; the GPU side is the `part` block of startVrView)
+import { partnerInputs, unitsPerMmOfSeries, resultRepresentativeVoxel } from './vr-pair-data.js?v=20261113-build734';
+import { findSamplePartners, loadSamplePartnerFiles, loadSamplePartnerProject, loadSamplePairs } from './data-load.js?v=20261113-build734';
+import { samplePartners } from './sample-sets.js?v=20261113-build734';
+import { analysisRunsContain } from './run-length.js?v=20261113-build734';
+import { createPairStore, isPairId } from './vr-pair-store.js?v=20261113-build734'; // stage 3: the partner's own points / distances
+import { loadPartnerName, practiceSeriesName } from './sample-registry.js?v=20261113-build734'; // the sample pair row of the menu (stage 3): which partner the open dataset has (sample-pairs.json) and its name (the partner's sample.json)
+import { parseFiles, groupSeries } from './dicom.js?v=20261113-build734';
+import { HAND_PICK_TOL, sectionRayHit, recordVrPoint, resolveTriggerTarget, volumeGripAllowed, pressDragSection, createTriggerPress, dragShouldStart, DRAG_RECORD, sectionFollowStart, sectionFollowStep, sectionWristTurn, snapPlaneCenterIntoBox, rayLocalPlaneX, squareBandContains, squareContains, createHoverPulse, qMul, qInv, qRot, qAngleDeg, clampPlaneCenter, HAPTIC, normalizePointMode, surfaceVoxelFromHit, voxelToLocal, voxelSize, createStickGate, deleteSelected, createUndoStack, applyUndo, pointIsHidden } from './vr-point.js?v=20261113-build734';
+import { createVrPointMarkers, createSurfaceCursor } from './vr-point-markers.js?v=20261113-build734';
+import { createAnchorDots, dotBehindCard, ANCHOR_DOT_DIAMETER_M, LEG_WIDTH_M, LEG_MIN_ANGLE } from './vr-anchor-dots.js?v=20261113-build734'; // the dot at the foot of a pinned label's leader
+import { createLabelBatch } from './vr-label-batch.js?v=20261113-build734'; // the name cards and their legs drawn in a few calls
+import { buildClsData } from './point-cls.js?v=20261113-build734';
+import { createHiddenClsManager } from './hidden-cls-state.js?v=20261113-build734';
+import { onDatasetChange } from './dataset-reset.js?v=20261113-build734';
+import { shadeRangeStep, shadeValueAt, shadePosOf, createShadeAutoScheduler } from './cap-shade.js?v=20261113-build734'; // the per-segment shading range (slider positions <-> data values);: the scheduler of the auto range
+import { STEP_PRESS, stepClamp, createStepHold } from './value-step.js?v=20261113-build734'; // ＋ / − of the data-value sliders: 10 per press, hold repeats and speeds up to 100
+import { formatCtValue } from './utils.js?v=20261113-build734';
+import { createHoldTracker, createHoldRing, HOLD_RING_RADIUS, HOLD_RING_MIN_DIST } from './vr-hold-ring.js?v=20261113-build734';
+import { WHEEL_ITEMS, DEFAULT_WHEEL, normalizeWheelItems, migrateWheelSectionFlip, setWheelItem, moveWheelItem, clearWheelItem, createRingMenu, createWheelStick, createButtonPress } from './vr-ring.js?v=20261113-build734';
+import { getComments, getMarkersShown, onCommentsChange, commentMatchesSeries, removeComment, restoreComment, updateCommentPosition, updateCommentText, updateCommentColor } from './comments.js?v=20261113-build734';
+import { POINT_PALETTE, pointColor, normalizeColor } from './point-colors.js?v=20261113-build734';
+import { combineClassificationDistance, fourthChannelBytes } from './distance-field.js?v=20261113-build734';
+export { WebGlVolumeRenderer, webglVolumeEnabled } from './webgl-volume.js?v=20261113-build734'; // the page's WebGL volume (no WebGPU) is handed to app.js through this module's existing lazy load
+import { BRICK as PREP_BRICK, thinHuData, sourceRangeInit, sourceRangeAdd, computeBricksOf, halveData, buildEditMaskOf, buildChildIndexOf, packIndexRg, createVolumePrep } from './vr-volume-prep.js?v=20261113-build734'; // the heavy pure steps of the preparation (bricks, the 256 copy, classification, distance field) run in a worker
+import { createSwapGuard, runDataSwap, createUploadQueue, createSettleGate, createFrameGapMonitor, swapPlan, SWAP_STAGES, SETTLE_TIMEOUT_MS, LOAD_TIMEOUT_MS, CACHE_READ_TIMEOUT_MS, VR_STORE_FLUSH_MS, saveShouldWait, withTimeout } from './vr-data-switch.js?v=20261113-build734'; // switching the data inside a running session
+import { classifiedAt, marchClassificationHitInfo } from './vr-pick.js?v=20261113-build734';
+import { VR_TARGET_SIDE, volumeMeta, editDescsOf, regionItemsOf, childItemsOf, classifyStateOf, shownMask as shownMaskOf, shownRegions as shownRegionsOf, shownChildren as shownChildrenOf } from './vr-prep-inputs.js?v=20261113-build734'; // stage 1 of the sample pairs: what the preparation reads is ONE object (inp); the page's own is pageInputs below
+import { createSkipState, skipGrid } from './vr-skip-occupancy.js?v=20261113-build734'; // the creep-skip occupancy bits of the combined texture (VR max-zoom cost)
+import { createComboRebuild } from './vr-combo-rebuild.js?v=20261113-build734';
+import { hideBitsOn, hideBitsSame } from './vr-hide-field.js?v=20261113-build734'; // the distance field of the visible content while a result / child is hidden //: the combined texture rebuilt off the frame when the shown segments change
+import { setBusySlot, reportBusyProgress } from './progress-modal.js?v=20261113-build734';
+import { tr } from './i18n.js?v=20261113-build734';
+import { regionCustomName, regionChipTitle } from './region-name.js?v=20261113-build734'; // the shared region name rule (name, else ID <atlas id>)
 // ONE name rule for a result in every list (the 3D chip, the VR tree rows, the VR 解析 tab, the かんたん menu): "<number>. <name | ID <atlasId> | the segment names joined with +>" (region-name.js regionChipTitle)
 const vrChipTitle=r=>{const g=analysisRegions.find(x=>x.id===r.rid);return g?regionChipTitle(g,tr):r.rid+'. '+r.segmentKeys.map(k=>tr(k)||k).join('+')};
-import { wrapMenuText, stackMenuRows } from './vr-menu-text.js?v=20261113-build733';
-import { activeEventLevel, levelForSample, chooseEventLevel, levelSwitchItems, sampleHasLevel, levelSwitchTargets, canSwitchData, EVENT_LEVELS, datasetForSample, datasetLabel, eventModeOn, missionLines, simpleMenuSegments, triggerModeRow, labelTargets, triggerMode, TRIGGER_AT_START, resetPress, resetArmed, RESET_ARM_MS, simpleMenuLayout, SIMPLE_MENU, sliceOpacityValue, sliceDrawState, sliderHitTest, sliderGrabOffset, sliderValueAt, KNOB_GRAB_PX } from './event-mode.js?v=20261113-build733'; // 体験会モード - the chosen level's mission on the help board, the かんたん menu
-import { VIEW_TOGGLE_ID, VIEW_TOGGLE_BUTTON, SECTION_DELETE_ID, createViewToggle, createDoublePress, ringIdsFor } from './vr-view-toggle.js?v=20261113-build733';
-import { vrSpacingNote, vrVolumeText } from './vr-spacing-note.js?v=20261113-build733';
-import { NORM_LONG, physicalExtentsMm, longestMm, realMagnification, realHolderScale, startHolderScale, tutorialHolderScale, smallForTutorial, TUT_VOLUME_FWD, TUT_VOLUME_DOWN, magnificationText, createScaleTag, clampScale, pinchScale, scaleLimits, oversizeNote, planeFrameLocalScale, planeTagLocalScale, scaleLineText, scalePosOf, posToScale, scaleStep, viewTabScaleLayout } from './vr-real-scale.js?v=20261113-build733';
-import { createAutoQuality, autoFloor, STEP_LEVELS, marchStep } from './vr-auto-quality.js?v=20261113-build733';
-import { createVrHuLine } from './vr-hu-line.js?v=20261113-build733';
-import { huMenuTexts, voxelFromHits } from './vr-hu-line-core.js?v=20261113-build733';
-import { setHuLineDeferred } from './hu-line-model.js?v=20261113-build733';
-import { createVrMeasure, LABEL_LIT_SCALE } from './vr-measure.js?v=20261113-build733';
-import { resetUserState } from './event-fresh.js?v=20261113-build733'; // 最初から in the tutorial (practice data only, see tutorial-ui.js resetTutorialAll)
-import { tutorialModeOn, createTutorialVr, createSlideViewer, panelTabs, TAB_H, PAGE_H, layoutLevelSlide, levelBoardH, menuAnnotation, menuTargetRect } from './tutorial-vr.js?v=20261113-build733'; // チュートリアル on the help board (only made when tutorialMode is on);: the read-only guide, the level slide, the menu pointer
-import { levelSlide, createSlideImages } from './tutorial-slides.js?v=20261113-build733'; // the 体験会 level slides (ev board: the slide's picture)
-import { vrInitialScaleOf } from './sample-registry.js?v=20261113-build733';
-import { TUT_SAMPLE } from './tutorial-data.js?v=20261113-build733'; // the live tutorial runs on its practice data only
-import { emit, scaleChanged, poseMoved } from './tutorial-signal.js?v=20261113-build733'; // tutorial: one-line signals at the action sites (no-op without a listener)
-import { horizAngleDeg } from './tutorial-orient.js?v=20261113-build733'; // the tutorial's entry guidance (look right / left): head turn toward a board
-import { createControllerHints, createEdgeArrow, createBoardArrow, boardSide, edgeArrowShown } from './tutorial-3d.js?v=20261113-build733'; // the tutorial's 3D guides (controller button, edge arrow, arrow over the menu)
-import { MAX_SECTION_PLANES, nextPlaneColor, frameDepthTest, ARROW_LEN, ARROW_FLASH_MS, arrowFade, arrowShown, tagBehindTissue, sectionPage, pageOfPlane, SECTION_ROWS_PER_PAGE, FLING_UNDO_MS, FLING_DEBUG_MS, createVelocityTracker, flingDecision, frameOutOfView, outOfViewNow, createOutOfViewTracker, outOfViewRelease, flingDebugLines, capVelocity, flyStep, makeSectionSnapshot, restorePlan, createSectionUndo, undoButtonPlace } from './vr-section-frame.js?v=20261113-build733';
-import { createUndoButton } from './vr-undo-button.js?v=20261113-build733';
-import { createFlingDebugTag } from './vr-fling-debug.js?v=20261113-build733';
-import { EMPTY_PINCH, isHand, wristScrollGain, wristScrollSign, wristScrollKeep, NEAR_KINDS, boxDist, centeredBoxDist, squareOutlineDist, pickNearGrab, HAND_RAY_MODES, normalizeHandRay } from './vr-hand.js?v=20261113-build733'; // hand tracking (Quest 3): pure helpers
-import { createHandInput, HAND_LABEL_MOVE_M } from './vr-hand-view.js?v=20261113-build733'; // the hand's ray, wrist menu, fingertips
-import { LABEL_HIDE_DEFAULT, normalizeLabelHide, gpuOcclusionActive, depthVoxelSize, boardVisible, GHOST_ALPHA, EMBEDDED_ALPHA, occludedPass, pinMaterialState } from './vr-depth.js?v=20261113-build733';
-import { highlightColor, highlightIndex, createHighlightTracker, anyLit } from './region-highlight.js?v=20261113-build733';
-import { pinLine, pinPlaceLimited, pinPulledIntoTissue, pinDue, pinJudge, createScaleSettle, createLabelThinner, setLeaderIfMoved, createFaceCache, clippedAt, rayCovered, CARD_W0, CARD_H0, cardLayout, cardHalfW, cardHalfH } from './vr-label-occlusion.js?v=20261113-build733';
-import { brickOccupancy, writeBrickOccupancy } from './vr-brick-occupancy.js?v=20261113-build733';
-import { createProbeGate } from './measure-label.js?v=20261113-build733';
-import { sliceIndex, sliceRange, boxFromRange, createSegScan, segScanStart, segScanStep, segsSubset, segsFromUniforms, contentKeyChanged, KEY_LEN, createContentBox } from './vr-content-box.js?v=20261113-build733'; // the proxy box = the box of what can be drawn
-import { regionVisible, setRegionVisible, onRegionVisibleChange, regionHidden, setRegionHidden, onRegionHiddenChange, regionLutAlpha, regionLutHiddenSlots, hiddenRegionVoxelOf, anyHiddenVoxel } from './region-visibility.js?v=20261113-build733';
-import { buildSegmentTree, pageTreeLines, ellipsize } from './segment-tree.js?v=20261113-build733';
-import { setRegionLabel, setRegionLabelOffset, withOffset, surfaceAnchor, voxelFromLocalVr, clampVoxel, labelLocal, offsetForLocal, vrVoxelStep, rectEdgePoint, leaderVisible, labelSegmentsShown, glowRid, keepLengthFactor, scaledStep, normalizeLabelOverlap, thinActive, LABEL_OVERLAP_MODES } from './analysis-label.js?v=20261113-build733';
-import { childLabelItem, childLabelItems, childLabelItemById, hasChildLabels, childLabelTitle, childVolumeMm3, childKeyAtHit, hitLabelRids, labelToggle, pairShifts } from './child-labels.js?v=20261113-build733'; // a child segment's name label (hover card, pinned card) is the analysis label's, kept on the child
-import { childByKey } from './child-segments.js?v=20261113-build733';
-import { hiddenShapeCount, showAllHiddenShapes } from './segments.js?v=20261113-build733'; // stage 3: 「すべて表示（隠 N）」 of the かんたん menu
-import { ringState, regionRingItems, partRingItems, regionRingName, applyRingItem, ringTargetOf } from './region-ring.js?v=20261113-build733'; // stage 3: the long-press ring of a region / a child
-import { createVrSelfCheck, selfCheckTexts } from './vr-self-check.js?v=20261113-build733'; // 詳細 > 自己診断 (automated frame-time scenarios)
-import { createScaleGuard, createFlapGuard, variantFallback } from './vr-flicker-guard.js?v=20261113-build733'; // flicker safety guard
-import { eyeMetrics, capFromPpv, capFromBudget, nextCap, foveaRect, outsideFovea, foveaWorth, qualityText, FOVEA_K, CAP_MIN, addVolumeEye, boxCoversView, pairComposites } from './vr-render-scale.js?v=20261113-build733'; // data-resolution render scale + offscreen foveation
-import { getMeasureStart, startMeasure, cancelMeasure, pickMeasureEnd, onMeasureStartChange, removeMeasurement, restoreMeasurements, measurementsOfPoint, seriesSpacing } from './measurements.js?v=20261113-build733';
-import { APP_BUILD } from './version.js?v=20261113-build733';
-import { wc, ww } from './ui-shell.js?v=20261113-build733';
-import { VOLUME_FWD, VOLUME_DOWN, MENU_OFFSET, HELP_OFFSET, HU_PANEL_OFFSET, EV_OFFSET, EV_WIDTH, EV_RES, MENU_WIDTH, MENU_CANVAS, HELP_WIDTH, HELP_RES, HIST_OFFSET, HIST_WIDTH, FOLLOW_ANGLE, FOLLOW_DIST } from './vr-layout.js?v=20261113-build733';
-import { onHistogramChange, getHistogramRange, getHistogramLog, setHistogramLog, setHistogramRange } from './histogram-ui.js?v=20261113-build733';
-import { createVrLabelHistogram, UNLABELED_COLOR, labelSlot, labelRegion } from './vr-label-histogram.js?v=20261113-build733';
-import { rangeRes } from './vr-histogram-layout.js?v=20261113-build733';
-import { dataAxis } from './segments.js?v=20261113-build733'; // the histogram axis of the data (histogram.js axisFor + the series' value step)
-import { getHuMode, setHuMode, HU_MODE_FILTERED, HU_MODE_RAW } from './effective-hu.js?v=20261113-build733';
-import { createVrHistogramPanel } from './vr-histogram-panel.js?v=20261113-build733';
-import { lightingGLSL, lightingVertexGLSL, materialVec, MATERIALS, materialKey } from './lighting.js?v=20261113-build733'; // one lighting model for the desktop volume, this VR / AR volume and the 3D-view meshes
+import { wrapMenuText, stackMenuRows } from './vr-menu-text.js?v=20261113-build734';
+import { activeEventLevel, levelForSample, chooseEventLevel, levelSwitchItems, sampleHasLevel, levelSwitchTargets, canSwitchData, EVENT_LEVELS, datasetForSample, datasetLabel, eventModeOn, missionLines, simpleMenuSegments, triggerModeRow, labelTargets, triggerMode, TRIGGER_AT_START, resetPress, resetArmed, RESET_ARM_MS, simpleMenuLayout, SIMPLE_MENU, sliceOpacityValue, sliceDrawState, sliderHitTest, sliderGrabOffset, sliderValueAt, KNOB_GRAB_PX } from './event-mode.js?v=20261113-build734'; // 体験会モード - the chosen level's mission on the help board, the かんたん menu
+import { VIEW_TOGGLE_ID, VIEW_TOGGLE_BUTTON, SECTION_DELETE_ID, createViewToggle, createDoublePress, ringIdsFor } from './vr-view-toggle.js?v=20261113-build734';
+import { vrSpacingNote, vrVolumeText } from './vr-spacing-note.js?v=20261113-build734';
+import { NORM_LONG, physicalExtentsMm, longestMm, realMagnification, realHolderScale, startHolderScale, tutorialHolderScale, smallForTutorial, TUT_VOLUME_FWD, TUT_VOLUME_DOWN, magnificationText, createScaleTag, clampScale, pinchScale, scaleLimits, oversizeNote, planeFrameLocalScale, planeTagLocalScale, scaleLineText, scalePosOf, posToScale, scaleStep, viewTabScaleLayout } from './vr-real-scale.js?v=20261113-build734';
+import { createAutoQuality, autoFloor, STEP_LEVELS, marchStep } from './vr-auto-quality.js?v=20261113-build734';
+import { createVrHuLine } from './vr-hu-line.js?v=20261113-build734';
+import { huMenuTexts, voxelFromHits } from './vr-hu-line-core.js?v=20261113-build734';
+import { setHuLineDeferred } from './hu-line-model.js?v=20261113-build734';
+import { createVrMeasure, LABEL_LIT_SCALE } from './vr-measure.js?v=20261113-build734';
+import { resetUserState } from './event-fresh.js?v=20261113-build734'; // 最初から in the tutorial (practice data only, see tutorial-ui.js resetTutorialAll)
+import { tutorialModeOn, createTutorialVr, createSlideViewer, panelTabs, TAB_H, PAGE_H, layoutLevelSlide, levelBoardH, menuAnnotation, menuTargetRect } from './tutorial-vr.js?v=20261113-build734'; // チュートリアル on the help board (only made when tutorialMode is on);: the read-only guide, the level slide, the menu pointer
+import { levelSlide, createSlideImages } from './tutorial-slides.js?v=20261113-build734'; // the 体験会 level slides (ev board: the slide's picture)
+import { vrInitialScaleOf } from './sample-registry.js?v=20261113-build734';
+import { TUT_SAMPLE } from './tutorial-data.js?v=20261113-build734'; // the live tutorial runs on its practice data only
+import { emit, scaleChanged, poseMoved } from './tutorial-signal.js?v=20261113-build734'; // tutorial: one-line signals at the action sites (no-op without a listener)
+import { horizAngleDeg } from './tutorial-orient.js?v=20261113-build734'; // the tutorial's entry guidance (look right / left): head turn toward a board
+import { createControllerHints, createEdgeArrow, createBoardArrow, boardSide, edgeArrowShown } from './tutorial-3d.js?v=20261113-build734'; // the tutorial's 3D guides (controller button, edge arrow, arrow over the menu)
+import { MAX_SECTION_PLANES, nextPlaneColor, frameDepthTest, ARROW_LEN, ARROW_FLASH_MS, arrowFade, arrowShown, tagBehindTissue, sectionPage, pageOfPlane, SECTION_ROWS_PER_PAGE, FLING_UNDO_MS, FLING_DEBUG_MS, createVelocityTracker, flingDecision, frameOutOfView, outOfViewNow, createOutOfViewTracker, outOfViewRelease, flingDebugLines, capVelocity, flyStep, makeSectionSnapshot, restorePlan, createSectionUndo, undoButtonPlace } from './vr-section-frame.js?v=20261113-build734';
+import { createUndoButton } from './vr-undo-button.js?v=20261113-build734';
+import { createFlingDebugTag } from './vr-fling-debug.js?v=20261113-build734';
+import { EMPTY_PINCH, isHand, wristScrollGain, wristScrollSign, wristScrollKeep, NEAR_KINDS, boxDist, centeredBoxDist, squareOutlineDist, pickNearGrab, HAND_RAY_MODES, normalizeHandRay } from './vr-hand.js?v=20261113-build734'; // hand tracking (Quest 3): pure helpers
+import { createHandInput, HAND_LABEL_MOVE_M } from './vr-hand-view.js?v=20261113-build734'; // the hand's ray, wrist menu, fingertips
+import { LABEL_HIDE_DEFAULT, normalizeLabelHide, gpuOcclusionActive, depthVoxelSize, boardVisible, GHOST_ALPHA, EMBEDDED_ALPHA, occludedPass, pinMaterialState } from './vr-depth.js?v=20261113-build734';
+import { highlightColor, highlightIndex, createHighlightTracker, anyLit } from './region-highlight.js?v=20261113-build734';
+import { pinLine, pinPlaceLimited, pinPulledIntoTissue, pinDue, pinJudge, createScaleSettle, createLabelThinner, setLeaderIfMoved, createFaceCache, clippedAt, rayCovered, CARD_W0, CARD_H0, cardLayout, cardHalfW, cardHalfH } from './vr-label-occlusion.js?v=20261113-build734';
+import { brickOccupancy, writeBrickOccupancy } from './vr-brick-occupancy.js?v=20261113-build734';
+import { createProbeGate } from './measure-label.js?v=20261113-build734';
+import { sliceIndex, sliceRange, boxFromRange, createSegScan, segScanStart, segScanStep, segsSubset, segsFromUniforms, contentKeyChanged, KEY_LEN, createContentBox } from './vr-content-box.js?v=20261113-build734'; // the proxy box = the box of what can be drawn
+import { regionVisible, setRegionVisible, onRegionVisibleChange, regionHidden, setRegionHidden, onRegionHiddenChange, regionLutAlpha, regionLutHiddenSlots, hiddenRegionVoxelOf, anyHiddenVoxel } from './region-visibility.js?v=20261113-build734';
+import { buildSegmentTree, pageTreeLines, ellipsize } from './segment-tree.js?v=20261113-build734';
+import { setRegionLabel, setRegionLabelOffset, withOffset, surfaceAnchor, voxelFromLocalVr, clampVoxel, labelLocal, offsetForLocal, vrVoxelStep, rectEdgePoint, leaderVisible, labelSegmentsShown, glowRid, keepLengthFactor, scaledStep, normalizeLabelOverlap, thinActive, LABEL_OVERLAP_MODES } from './analysis-label.js?v=20261113-build734';
+import { childLabelItem, childLabelItems, childLabelItemById, hasChildLabels, childLabelTitle, childVolumeMm3, childKeyAtHit, hitLabelRids, labelToggle, pairShifts } from './child-labels.js?v=20261113-build734'; // a child segment's name label (hover card, pinned card) is the analysis label's, kept on the child
+import { childByKey } from './child-segments.js?v=20261113-build734';
+import { hiddenShapeCount, showAllHiddenShapes } from './segments.js?v=20261113-build734'; // stage 3: 「すべて表示（隠 N）」 of the かんたん menu
+import { ringState, regionRingItems, partRingItems, regionRingName, applyRingItem, ringTargetOf } from './region-ring.js?v=20261113-build734'; // stage 3: the long-press ring of a region / a child
+import { createVrSelfCheck, selfCheckTexts } from './vr-self-check.js?v=20261113-build734'; // 詳細 > 自己診断 (automated frame-time scenarios)
+import { createScaleGuard, createFlapGuard, variantFallback } from './vr-flicker-guard.js?v=20261113-build734'; // flicker safety guard
+import { eyeMetrics, capFromPpv, capFromBudget, nextCap, foveaRect, outsideFovea, foveaWorth, qualityText, FOVEA_K, CAP_MIN, addVolumeEye, boxCoversView, pairComposites } from './vr-render-scale.js?v=20261113-build734'; // data-resolution render scale + offscreen foveation
+import { getMeasureStart, startMeasure, cancelMeasure, pickMeasureEnd, onMeasureStartChange, removeMeasurement, restoreMeasurements, measurementsOfPoint, seriesSpacing } from './measurements.js?v=20261113-build734';
+import { APP_BUILD } from './version.js?v=20261113-build734';
+import { wc, ww } from './ui-shell.js?v=20261113-build734';
+import { VOLUME_FWD, VOLUME_DOWN, MENU_OFFSET, HELP_OFFSET, HU_PANEL_OFFSET, EV_OFFSET, EV_WIDTH, EV_RES, MENU_WIDTH, MENU_CANVAS, HELP_WIDTH, HELP_RES, HIST_OFFSET, HIST_WIDTH, FOLLOW_ANGLE, FOLLOW_DIST } from './vr-layout.js?v=20261113-build734';
+import { onHistogramChange, getHistogramRange, getHistogramLog, setHistogramLog, setHistogramRange } from './histogram-ui.js?v=20261113-build734';
+import { createVrLabelHistogram, UNLABELED_COLOR, labelSlot, labelRegion } from './vr-label-histogram.js?v=20261113-build734';
+import { rangeRes } from './vr-histogram-layout.js?v=20261113-build734';
+import { dataAxis } from './segments.js?v=20261113-build734'; // the histogram axis of the data (histogram.js axisFor + the series' value step)
+import { getHuMode, setHuMode, HU_MODE_FILTERED, HU_MODE_RAW } from './effective-hu.js?v=20261113-build734';
+import { createVrHistogramPanel } from './vr-histogram-panel.js?v=20261113-build734';
+import { lightingGLSL, lightingVertexGLSL, materialVec, MATERIALS, materialKey } from './lighting.js?v=20261113-build734'; // one lighting model for the desktop volume, this VR / AR volume and the 3D-view meshes
 
 const BG=new THREE.Color(0.035,0.045,0.05);
 const BRICK=PREP_BRICK;
@@ -1341,15 +1341,6 @@ function buildEditMask(dims){const e=editDescsOf(pageInputs);return e?buildEditM
 // what the data's geometry decides (the grid, the calibration, the box, the march step): no voxel is read. buildVolumeData and the cache path (the finished data read from the device) share it
 // (volumeMeta(inp,maxDim) is in vr-prep-inputs.js)
 const spansOf=(n,t)=>{const a=new Uint32Array(t+1);for(let i=0;i<=t;i++)a[i]=Math.min(n,Math.round(i*n/t));for(let i=0;i<t;i++)if(a[i+1]<=a[i])a[i+1]=Math.min(n,a[i]+1);return a}; // the area spans of the in-plane reduction (drawn voxel i = source columns a[i] .. a[i + 1] - 1)
-// n731: the exact marks of the segments drawn by a value range (vr-volume-prep.js thinMarksInit) for a source that was REDUCED on its way in (the source voxels are read slice by slice here, the page's thread, with the main thread handed back every ~sliceMs): -> Uint8Array of the grid `small`
-async function thinMarksFromSlices(inp,maxDim,small,state,order,descs,{sliceMs=0,alive=()=>{}}={}){
- const {v,s,plan,dims:[tw,th,td],first,calibration}=volumeMeta(inp,maxDim),filtered=!!(v.filterSignature&&typeof v.sliceData==='function');
- const read=filtered?async z=>packCtSlice(await v.sliceData(z),first):z=>packedRgSlice(s.slices[z]),sd=s.slices.length;
- const acc=thinMarksInit([s.columns,s.rows,sd],[tw,th,td],small,spansOf(s.columns,tw),spansOf(s.rows,th),calibration,state,order,descs);let at=performance.now();
- if(!acc.any)return acc.marks;
- for(let z=0;z<sd;z++){thinMarksAdd(acc,await read(z),z);alive();if(sliceMs>0?performance.now()-at>=sliceMs:(z&15)===15){await(sliceMs>0?yieldMain():new Promise(r=>setTimeout(r,0)));at=performance.now()}}
- return acc.marks;
-}
 async function buildVolumeData(inp,maxDim,onProgress,{noBricks=false,sliceMs=0,range=false}={}){ // range (n731): also the extremes of the SOURCE voxels on the grid the classification is made on, when this grid is reduced from the source (see sourceRangeInit)
  const {v,s,plan,dims:[tw,th,td],first,signed,calibration:calib0,halfExt,step}=volumeMeta(inp,maxDim);
  const filtered=!!(v.filterSignature&&typeof v.sliceData==='function');
@@ -1822,7 +1813,7 @@ const ownBuffer=a=>a.byteOffset===0&&a.byteLength===a.buffer.byteLength?a.buffer
 // The keys no longer contain the build number (a new build keeps the entries); the 'build' tag in an entry's info is kept for diagnostics only. Version 3: the key format changed, so the entries of version 2 are cleaned up.
 // tests/unit/vr-prep-version-guard.test.js fails when the generating sources change without this number being bumped.
 const maskMemoStore=new Map(),MASK_MEMO_BYTES=24<<20; // an earlier change (3): the smoothed masks' changed boxes by key (oldest out first)
-const VR_PREP_VERSION=13;
+const VR_PREP_VERSION=14; // n733: 14 = the value-range thin-keep is removed (applyThinCls has no marks: the classification bytes of a value-range slot are as before it; the half bricks are computeBricksOf again); the entries of 13 are different.
 let vrCacheNotify=null; // the session sets it: the 詳細 tab redraws when a store makes progress
 const vrCacheState={last:null,cap:null}; // last: what the latest preparation did with the cache (cinfo); cap: the storage numbers (refreshVrCapacity)
 async function vrCacheContext(inp,maxDim){
@@ -2065,10 +2056,6 @@ async function prepareVrDataFrom(inp,{key,fresh,aliasId,track,onProgress,sliceMs
    }
    // n731: the exact marks of the value-range segments on this reduced grid are made from the SOURCE voxels: a source reduced on its way in is read again slice by slice here (the page's thread); an unreduced one that has a 256 copy hands its grid to the worker (the 512 body is read first when only the 256 copy was in the cache)
    let thinIn={};
-   if(ed&&ed.sourceDims.join()!==small.dims.join()&&order.slice(0,4).some(k=>state[k]?.active&&state[k].enabled)){
-    if(meta.plan.reduced){onProgress({phase:'cls',done:0,total:1});thinIn={thinMarks:(await thinMarksFromSlices(inp,maxDim,small.dims,state,order,ed.descs,{sliceMs,alive})).buffer}}
-    else{const body=vd.data||(vd.loadBody?await vd.loadBody({}):null);alive();if(!body)throw new Error('VR: the source grid is not available for the thin structures');thinIn={body:ownBuffer(body)}}
-   }
    const job=prep.cls({src:ownBuffer(small.data),...thinIn,dims:small.dims,calib:vd.calibration,editDescs:ed?ed.descs:[],editSourceDims:ed?ed.sourceDims:small.dims,regionItems,order,state,childItems,
     brickDimsFull:vd.brickDims,brickDimsHalf:half?half.brickDims:null,mask:comboMask,maskField:{band:PART_FIELD.band,sigma:PART_FIELD.sigma,margin:PART_FIELD.margin,pad:PART_FIELD.pad},maskMemo:[...maskMemoStore.values()]},(a,b)=>onProgress({phase:'dist',done:a,total:b}));
    times.collect=performance.now()-tCollect;

@@ -17,7 +17,7 @@
 // The bytes go into the combined texture's ALPHA, as min(ordinary field, this field), by the same rebuild that follows the shown set (vr-combo-rebuild.js: a worker; the class bytes and the hide indexes go to it once, one
 // slab per frame). min(.., ordinary) keeps every byte a lower bound of the ordinary field too, so while any part of the texture is of the old or the new kind the OLD rule (no jump from a hidden sample) stays safe;
 // the shader drops that rule (hideVMode) only when the rebuild is complete and the current state is exactly what the bytes were built with (on the shown slots). Pure (no DOM / GL), unit-tested.
-import { euclideanDistanceBytes, morph3 } from './distance-field.js?v=20261113-build733';
+import { euclideanDistanceBytes, morph3 } from './distance-field.js?v=20261113-build734';
 
 // P of slot `slot` on channel `ch`: 1 where the voxel is visible tissue (S and not hidden) or an air voxel beside hidden tissue (not hidden itself). cls: {data, C}; sources: [{ids: Uint8Array (the G byte of an index per
 // voxel), bits: Uint8Array(256) (bit s of entry i: item i is hidden on slot s)}]; out: Uint8Array(n) (written); scratch: {sh, dl, hd} Uint8Array(n) each (optional). Self-contained (no outer names): it is the worker's source too.

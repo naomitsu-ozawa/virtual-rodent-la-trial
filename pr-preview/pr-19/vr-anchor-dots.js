@@ -1,4 +1,4 @@
-import { GHOST_ALPHA } from './vr-depth.js?v=20261113-build733';
+import { GHOST_ALPHA } from './vr-depth.js?v=20261113-build734';
 
 export const ANCHOR_DOT_DIAMETER_M = 0.005; // world metres: fixed, the model's scale does not change it
 const CAPACITY0 = 32;

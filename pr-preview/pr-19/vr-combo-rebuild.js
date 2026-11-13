@@ -19,8 +19,8 @@
 // the old shader rule (no jump from a hidden sample) is safe for any bytes in the texture; hideValid(cur, shown) says when the shader may drop that rule: no rebuild running, the bytes finished, built for exactly the hidden state
 // cur (on the shown slots; hiding MORE than was built is not safe), for a mask that contains what is shown. A change of the mask carries no state (a segment just shown must not wait for the extra pass); the state is asked for again once that job is over (requestHide). Without a worker (or when it fails) the alpha is the ordinary one and hideValid stays false: the picture is as before.
 // Pure (no DOM / GL; the worker is injected), unit-tested.
-import { combinedAlphaRange, morph3, euclideanDistanceBytes } from './distance-field.js?v=20261113-build733';
-import { hiddenClassBytes, hideFieldMin, hideBitsMatch, hideBitsSame, hideBitsAny, hideBitsOn } from './vr-hide-field.js?v=20261113-build733';
+import { combinedAlphaRange, morph3, euclideanDistanceBytes } from './distance-field.js?v=20261113-build734';
+import { hiddenClassBytes, hideFieldMin, hideBitsMatch, hideBitsSame, hideBitsAny, hideBitsOn } from './vr-hide-field.js?v=20261113-build734';
 
 export const UPLOAD_BYTES = 2 << 20, SLAB_BYTES = 1 << 20, CHUNK = 1 << 16, WORKER_CHUNK = 1 << 20, BUDGET_MS = 2, WORKER_FRAMES = 600, HIDE_FRAMES = 36000;
 
