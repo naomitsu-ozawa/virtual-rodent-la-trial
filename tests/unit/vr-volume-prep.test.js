@@ -172,9 +172,7 @@ describe('prepRun: the worker jobs', () => {
     bricksSuperset(msg.bricks, refBricks(copy, dims, CAL).bricks); expect(msg.brickDims).toEqual(refBricks(copy, dims, CAL).brickDims);
     const h = refHalve({ data: copy, dims });
     expect(msg.half.dims).toEqual(h.dims); same(msg.half.data, h.data); // n731: the half bricks come from the block extremes (halveRangeOf), no longer from the averaged words
-    expect(msg.half.rangeLo).toBeUndefined(); // the extremes only make the bricks (applyThinCls reads exact marks of the source voxels)
-    const hr = halveRangeOf(copy, dims); same(msg.half.bricks, computeBricksRangeOf(hr.lo, hr.hi, h.dims, CAL, BRICK).bricks);
-    { const old = refBricks(h.data, h.dims, CAL).bricks; for (let i = 0; i < old.length; i += 4) { expect(msg.half.bricks[i]).toBeLessThanOrEqual(old[i]); expect(msg.half.bricks[i + 1]).toBeGreaterThanOrEqual(old[i + 1]); } } // wider than the averaged ones, never narrower
+    same(msg.half.bricks, refBricks(h.data, h.dims, CAL).bricks); // n733: the half bricks are computeBricksOf of the averaged words again
     for (const b of [msg.bricks, msg.half.data, msg.half.bricks]) expect(tr).toContain(b.buffer);
     expect(run({ t: 'volume', id: 4, data: copy.slice().buffer, dims, calib: CAL, brick: BRICK, half: false })[0].msg.half).toBe(null);
   });

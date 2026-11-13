@@ -1,9 +1,9 @@
-import { segmentById, setChildLook, onChildSegLookChange } from './segments.js?v=20261113-build733';
-import { CHILD_SEG_NAME_MAX } from './segment-look.js?v=20261113-build733';
-import { childByKey } from './child-segments.js?v=20261113-build733';
-import { childLabelItem } from './child-labels.js?v=20261113-build733';
-import { setRegionLabelOffset, hasOffset, onAnalysisLabelsChange } from './analysis-label.js?v=20261113-build733';
-import { tr } from './i18n.js?v=20261113-build733';
+import { segmentById, setChildLook, onChildSegLookChange } from './segments.js?v=20261113-build734';
+import { CHILD_SEG_NAME_MAX } from './segment-look.js?v=20261113-build734';
+import { childByKey } from './child-segments.js?v=20261113-build734';
+import { childLabelItem } from './child-labels.js?v=20261113-build734';
+import { setRegionLabelOffset, hasOffset, onAnalysisLabelsChange } from './analysis-label.js?v=20261113-build734';
+import { tr } from './i18n.js?v=20261113-build734';
 
 // the actions the page injects (app.js: deleteChild(key)), so that this module imports nothing of the 3D code
 let actions = { deleteChild: null };

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { prepRun, prepWorkerSource, thinMarksInit, thinMarksAdd, thinHuData, sourceRangeInit, sourceRangeAdd, halveRangeOf, halveData, coverRunsOnGrid, thinKeepOf, BRICK } from '../../docs/vr-volume-prep.js';
+import { prepRun, prepWorkerSource, thinHuData, sourceRangeInit, sourceRangeAdd, halveRangeOf, halveData, coverRunsOnGrid, thinKeepOf, BRICK } from '../../docs/vr-volume-prep.js';
 import { PART_FIELD } from '../../docs/vr-part-view.js';
 
 
@@ -14,95 +14,9 @@ const half = (dims, huAt) => { const v = volumeOf(dims, huAt), r = run({ t: 'vol
 const srcExtra = h => ({ body: h.srcV.slice().buffer, editSourceDims: h.srcDims }); // the cls job reads the SOURCE voxels (the unreduced source grid) for the exact marks of a value-range segment
 const clsJob = (h, extra) => ({ t: 'cls', id: 2, src: h.data.slice().buffer, dims: h.dims, calib: CAL, editDescs: [], editSourceDims: h.dims, regionItems: [], childItems: [], order: ORDER, state: STATE(), brickDimsFull: [1, 1, 1], brickDimsHalf: h.brickDims, mask: 1, ...extra });
 const count = (arr, f) => { let n = 0; for (let i = 0; i < arr.length; i++) if (f(arr[i], i)) n++; return n; };
+const sheet = (z0, z1, x0 = 6, x1 = 33) => (x, y, z) => (z >= z0 && z <= z1 && x >= x0 && x <= x1 && y >= x0 && y <= x1 ? BONE : AIR);
 const rows = [];
 const note = (kind, what, before, after) => { rows.push({ kind, what, before, after }); };
-
-// ---- a value range (bone)
-const valueCase = (name, dims, huAt, check) => it('a segment drawn by a value range: ' + name, () => {
-  const { h } = half(dims, huAt), hd = h.dims, n = hd[0] * hd[1] * hd[2];
-  const off = run(clsJob(h, { ...srcExtra(h), thinKeep: false })), on = run(clsJob(h, { ...srcExtra(h) }));
-  expect(on.warnings).toEqual([]);
-  const set = c => count(c.cls.data, v => v >= 128), full = c => count(c.cls.data, v => v === 255);
-  check({ h, hd, n, off, on, set, full });
-  return { off, on };
-});
-const sheet = (z0, z1, x0 = 6, x1 = 33) => (x, y, z) => (z >= z0 && z <= z1 && x >= x0 && x <= x1 && y >= x0 && y <= x1 ? BONE : AIR);
-describe('thin structures on the 256 copy: a segment drawn by a value range (骨などの値で描く部分)', () => {
-  valueCase('a flat 1-voxel sheet at an odd offset: gone before, one full voxel layer after', [40, 40, 40], sheet(11, 11), ({ hd, off, on, set, full, h }) => {
-    expect(set(off)).toBe(0); expect(set(on)).toBe(14 * 14); expect(full(on)).toBe(14 * 14);
-    for (let z = 0; z < hd[2]; z++) for (let y = 0; y < hd[1]; y++) for (let x = 0; x < hd[0]; x++) { const f = on.cls.data[(z * hd[1] + y) * hd[0] + x]; expect(f === 255).toBe(z === 5 && x >= 3 && x <= 16 && y >= 3 && y <= 16); }
-    // the brick that holds it is not culled: its largest HU reaches the range (the averaged bricks never did)
-    const bi = (Math.floor(5 / BRICK) * h.brickDims[1] + Math.floor(8 / BRICK)) * h.brickDims[0] + Math.floor(8 / BRICK);
-    expect(h.bricks[bi * 4 + 1]).toBeGreaterThanOrEqual(BONE);
-    note('値', '1ボクセル平板(奇数位置) 40x40x40', set(off), set(on));
-  });
-  valueCase('a 2-voxel sheet straddling a block edge: both blocks kept (two voxels, never zero)', [40, 40, 40], sheet(11, 12), ({ off, on, set }) => {
-    expect(set(on)).toBeGreaterThanOrEqual(14 * 14); expect(set(on)).toBeGreaterThan(set(off));
-    note('値', '2ボクセル平板(ブロック境界をまたぐ)', set(off), set(on));
-  });
-  valueCase('a 3-voxel sheet: at least one voxel layer', [40, 40, 40], sheet(11, 13), ({ on, set, off }) => { expect(set(on)).toBeGreaterThanOrEqual(14 * 14); note('値', '3ボクセル平板', set(off), set(on)); });
-  valueCase('a stepped 1-voxel sheet: every block it touches is kept, no holes', [40, 40, 40], (x, y, z) => (x >= 4 && x <= 35 && y >= 4 && y <= 35 && z === 5 + (x >> 2) * 2 + 1 ? BONE : AIR), ({ on, off, set }) => {
-    expect(set(off)).toBeLessThan(set(on)); // before: the blocks the sheet averaged away
-    for (let y = 2; y <= 17; y++) for (let x = 2; x <= 17; x++) { let hit = 0; for (let z = 0; z < 20; z++) if (on.cls.data[(z * 20 + y) * 20 + x] === 255) hit++; expect(hit).toBeGreaterThanOrEqual(1); } // every column of the sheet shows at least one full voxel
-    note('値', '階段状の1ボクセル平板', set(off), set(on));
-  });
-  valueCase('a thick body is not changed (byte for byte)', [40, 40, 40], (x, y, z) => (x >= 8 && x < 28 && y >= 8 && y < 28 && z >= 8 && z < 28 ? BONE : AIR), ({ on, off }) => {
-    expect(Buffer.compare(Buffer.from(on.cls.data), Buffer.from(off.cls.data))).toBe(0); note('値', '厚い塊(20^3)', count(off.cls.data, v => v >= 128), count(on.cls.data, v => v >= 128));
-  });
-  valueCase('a thin sheet one grid voxel away from a thick body: the sheet is kept, the body is not changed', [40, 40, 40], (x, y, z) => (x >= 4 && x < 36 && y >= 4 && y < 36 && ((z >= 2 && z < 10) || z === 13) ? BONE : AIR), ({ on, off, set }) => {
-    expect(set(on)).toBeGreaterThan(set(off));
-    for (let y = 4; y <= 15; y++) for (let x = 4; x <= 15; x++) expect(on.cls.data[(6 * 20 + y) * 20 + x]).toBe(255); // block z 6 (source 12, 13) holds the sheet
-    note('値', '厚い塊から1ブロック離れた1ボクセル平板', set(off), set(on));
-  });
-  valueCase('an odd grid (the last odd slice that halving drops holds the sheet)', [41, 37, 39], (x, y, z) => (z === 38 && x >= 6 && x <= 33 && y >= 6 && y <= 30 ? BONE : AIR), ({ on, off, set, hd }) => {
-    expect(hd).toEqual([20, 18, 19]); expect(set(off)).toBe(0); expect(set(on)).toBeGreaterThan(0); note('値', '奇数サイズ(41x37x39)の最後の1スライス', set(off), set(on));
-  });
-  valueCase('a 1-voxel line and a single speck survive', [40, 40, 40], (x, y, z) => ((x === 9 && y === 9) || (x === 25 && y === 25 && z === 25) ? BONE : AIR), ({ on, off, set }) => {
-    expect(set(off)).toBe(0); expect(set(on)).toBeGreaterThanOrEqual(1 + 1); note('値', '1ボクセルの線と点', set(off), set(on));
-  });
-  it('a band range (soft tissue) keeps a thin layer whose own value is the block extreme; a block that only straddles the range is NOT painted', () => {
-    const dims = [40, 40, 40], SOFT = 60, huAt = (x, y, z) => (z === 11 && x >= 6 && x <= 33 && y >= 6 && y <= 33 ? SOFT : AIR), { h } = half(dims, huAt);
-    const st = { ...STATE(), bone: { active: true, enabled: true, min: -100, max: 300 } };
-    const job = x => clsJob(h, { ...srcExtra(h), state: st, ...x });
-    const off = run(job({ thinKeep: false })), on = run(job({}));
-    expect(count(off.cls.data, v => v >= 128)).toBe(0); expect(count(on.cls.data, v => v >= 128)).toBe(14 * 14);
-    // air + bone in one block and a band range between them (-100..300): neither extreme is in it -> nothing is painted (no shell on the interface)
-    const huB = (x, y, z) => (z >= 10 ? 1500 : AIR), { h: hb } = half(dims, huB), onB = run(clsJob(hb, { ...srcExtra(hb), state: st }));
-    expect(count(onB.cls.data, v => v >= 128)).toBe(0);
-    note('値(帯の範囲)', '軟部1ボクセル平板', count(off.cls.data, v => v >= 128), count(on.cls.data, v => v >= 128));
-  });
-});
-
-describe('thin structures: a closed (band) range, judged on the source voxels (no guess from block extremes)', () => {
-  const dims = [40, 40, 40], FAT = -100, SOFT = 40, band = { ...STATE(), bone: { active: true, enabled: true, min: -190, max: -30 } };
-  const job = (h, x) => clsJob(h, { ...srcExtra(h), state: band, ...x });
-  it('a 1-voxel fat layer between air and soft tissue (neither block extreme is in the range): gone before, one full layer after', () => {
-    const { h } = half(dims, (x, y, z) => (x < 6 || x > 33 || y < 6 || y > 33 ? AIR : z < 11 ? AIR : z === 11 ? FAT : SOFT));
-    const off = run(job(h, { thinKeep: false })), on = run(job(h, {}));
-    const set = r => count(r.cls.data, v => v >= 128);
-    expect(set(off)).toBe(0); expect(on.warnings).toEqual([]); expect(set(on)).toBeGreaterThanOrEqual(14 * 14); expect(count(on.cls.data, v => v === 255)).toBeGreaterThanOrEqual(14 * 14);
-    note('値(帯の範囲)', '空気と軟部の間の1ボクセルの脂肪層', set(off), set(on));
-  });
-  it('an interface between air and soft tissue with NO voxel in the range paints nothing (no shell)', () => {
-    const { h } = half(dims, (x, y, z) => (z >= 11 ? SOFT : AIR)), on = run(job(h, {}));
-    expect(count(on.cls.data, v => v >= 128)).toBe(0);
-  });
-  it('a thin band voxel line and a speck among values outside the range', () => {
-    const { h } = half(dims, (x, y, z) => ((x === 9 && y === 9) || (x === 25 && y === 25 && z === 25) ? FAT : (z > 20 ? SOFT : AIR)));
-    const off = run(job(h, { thinKeep: false })), on = run(job(h, {}));
-    expect(count(off.cls.data, v => v >= 128)).toBe(0); expect(count(on.cls.data, v => v >= 128)).toBeGreaterThanOrEqual(2);
-    note('値(帯の範囲)', '帯の値の1ボクセルの線と点', 0, count(on.cls.data, v => v >= 128));
-  });
-  it('with a processing mask: only a source voxel that is in the range AND allowed by the mask counts (judged per source voxel, not per block)', () => {
-    const { h } = half(dims, (x, y, z) => (z === 11 && x >= 6 && x <= 33 && y >= 6 && y <= 33 ? FAT : AIR)), src = [40, 40, 40];
-    const mk = runs => job(h, { editDescs: [{ si: 0, mode: 'keep', maskOnly: false, runs }], editSourceDims: src, maskField: { ...PART_FIELD } });
-    const inside = run(mk(runsOf(src, (x, y, z) => z >= 10 && z <= 12 && x >= 6 && x <= 33 && y >= 6 && y <= 33))), elsewhere = run(mk(runsOf(src, (x, y, z) => z === 10 && x >= 6 && x <= 33 && y >= 6 && y <= 33)));
-    expect(count(inside.cls.data, v => v === 255)).toBeGreaterThanOrEqual(14 * 14);
-    // the mask holds z 10 only, the layer is at z 11: the same block (z 10, 11 are one grid slice) holds mask voxels and range voxels, but no voxel that is both
-    expect(count(elsewhere.cls.data, v => v >= 128)).toBe(0);
-    note('値+領域(帯)', 'マスク外の帯の値は数えない', count(elsewhere.cls.data, v => v >= 128), count(inside.cls.data, v => v >= 128));
-  });
-});
 
 // ---- a processing mask (領域): include (a region that keeps), exclude (a region that cuts), with the smoothing on as in a session
 describe('thin structures on the 256 copy: a processing mask (領域)', () => {
@@ -135,14 +49,6 @@ describe('thin structures on the 256 copy: a processing mask (領域)', () => {
     const d = { si: 0, mode: 'keep', maskOnly: true, runs: region(8, 27) }, off = run(job(d, { thinKeep: false })), on = run(job(d, {}));
     expect(Buffer.compare(Buffer.from(on.edit.data), Buffer.from(off.edit.data))).toBe(0); expect(Buffer.compare(Buffer.from(on.cls.data), Buffer.from(off.cls.data))).toBe(0);
     note('領域(厚い)', '厚い領域', count(off.edit.data, (v, i) => i % 4 === 0 && v >= 128), count(on.edit.data, (v, i) => i % 4 === 0 && v >= 128));
-  });
-  it('a mask that limits a value range: the thin region AND the thin bone inside it are both kept', () => {
-    const huAt = (x, y, z) => (z === 11 && x >= 6 && x <= 33 && y >= 6 && y <= 33 ? BONE : AIR), { h } = half(src, huAt);
-    const d = { si: 0, mode: 'keep', maskOnly: false, runs: region(10, 12) };
-    const mk = x => ({ t: 'cls', id: 3, src: h.data.slice().buffer, ...srcExtra(h), dims, calib: CAL, editDescs: [d], editSourceDims: src, regionItems: [], childItems: [], order: ORDER, state: STATE(), brickDimsFull: [1, 1, 1], brickDimsHalf: h.brickDims, mask: 1, maskField: { ...PART_FIELD }, ...x });
-    const off = run(mk({ thinKeep: false })), on = run(mk({}));
-    expect(count(off.cls.data, v => v >= 128)).toBe(0); expect(count(on.cls.data, v => v === 255)).toBeGreaterThanOrEqual(14 * 14);
-    note('値+領域', '領域の中の1ボクセルの骨', count(off.cls.data, v => v >= 128), count(on.cls.data, v => v >= 128));
   });
 });
 
@@ -196,7 +102,6 @@ describe('thin structures: inside the worker source (a fresh scope with only `se
     ws.prepRun(base({}), post);
     const r = posted.at(-1); expect(r.t).toBe('cls'); expect(r.warnings).toEqual([]);
     expect(Buffer.compare(Buffer.from(r.cls.data), Buffer.from(ref.cls.data))).toBe(0); expect(Buffer.compare(Buffer.from(r.edit.data), Buffer.from(ref.edit.data))).toBe(0); expect(Buffer.compare(Buffer.from(r.child.rg), Buffer.from(ref.child.rg))).toBe(0);
-    expect(count(r.cls.data, x => x === 255)).toBeGreaterThanOrEqual(14 * 14); expect(r.body.byteLength).toBe(h.srcV.byteLength); // the source grid comes back by transfer
     const vol = volumeOf(dims, sheet(11, 11)); ws.prepRun({ t: 'volume', id: 8, data: vol.buffer, dims, calib: CAL, brick: BRICK, half: true }, post);
     const vr = posted.at(-1); expect(vr.t).toBe('volume'); expect(vr.half.rangeHi).toBeUndefined(); // the extremes only make the bricks
   });
@@ -215,59 +120,10 @@ describe('thin structures: a source that was reduced on its way in (area average
     expect(Buffer.compare(Buffer.from(acc.lo.buffer), Buffer.from(eLo.buffer))).toBe(0); expect(Buffer.compare(Buffer.from(acc.hi.buffer), Buffer.from(eHi.buffer))).toBe(0);
     expect(acc.lo.every(x => x < 65535)).toBe(true); // every block of the grid saw a source voxel (none is left empty)
   });
-  it('the volume job takes the given extremes (and makes the half bricks from them); a drawn grid of at most 256 gets its own bricks from them', () => {
-    const dims = [40, 40, 40], v = volumeOf(dims, () => AIR), n = 20 * 20 * 20, lo = new Uint16Array(n).fill(24), hi = new Uint16Array(n).fill(24); hi[(5 * 20 + 8) * 20 + 8] = BONE + 1024;
-    const r = run({ t: 'volume', id: 1, data: v.slice().buffer, dims, calib: CAL, brick: BRICK, half: true, rangeLo: lo.slice().buffer, rangeHi: hi.slice().buffer });
-    const bi = (Math.floor(5 / BRICK) * r.half.brickDims[1] + 1) * r.half.brickDims[0] + 1; expect(r.half.bricks[bi * 4 + 1]).toBeGreaterThanOrEqual(BONE);
-    const own = run({ t: 'volume', id: 2, data: v.slice().buffer, dims: [20, 20, 20], calib: CAL, brick: BRICK, half: false, rangeLo: lo.slice().buffer, rangeHi: hi.slice().buffer });
-    expect(own.half).toBe(null); expect(Math.max(...Array.from(own.bricks).filter((_, i) => i % 4 === 1))).toBeGreaterThanOrEqual(BONE);
-  });
-});
-
-describe('thin structures: a 256 copy whose side is more than 256 (a source of more than 512 slices; the HU path was used for it before)', () => {
-  it('40 x 40 x 540 source -> 20 x 20 x 270 copy: the classification is made on it and keeps the thin sheet and the thin band layer', () => {
-    const dims = [40, 40, 540], { h } = half(dims, (x, y, z) => (z === 301 && x >= 6 && x <= 33 && y >= 6 && y <= 33 ? BONE : AIR));
-    expect(h.dims).toEqual([20, 20, 270]);
-    const off = run(clsJob(h, { ...srcExtra(h), thinKeep: false })), on = run(clsJob(h, { ...srcExtra(h) }));
-    expect(on.warnings).toEqual([]); expect(count(off.cls.data, v => v >= 128)).toBe(0); expect(count(on.cls.data, v => v === 255)).toBe(14 * 14);
-    note('値(256超の256コピー)', '20x20x270 に間引いた 1 ボクセル平板', count(off.cls.data, v => v >= 128), count(on.cls.data, v => v >= 128));
-  });
-});
-
-describe('thin structures: a source reduced on its way in (area average + nearest slice): marks of the SOURCE voxels from the page', () => {
-  it('thinMarksInit / thinMarksAdd = brute force, and the cls job with those marks keeps the thin sheet that the reduced grid itself lost', () => {
-    const src = [80, 80, 80], draw = [40, 40, 40], small = [20, 20, 20];
-    const spans = (n, t) => { const a = new Uint32Array(t + 1); for (let i = 0; i <= t; i++) a[i] = Math.min(n, Math.round(i * n / t)); return a; };
-    const huAt = (x, y, z) => (z === 45 && x >= 12 && x <= 67 && y >= 12 && y <= 67 ? BONE : AIR), v = volumeOf(src, huAt), st = STATE();
-    const acc = thinMarksInit(src, draw, small, spans(80, 40), spans(80, 40), CAL, st, ORDER, []);
-    for (let z = 0; z < 80; z++) thinMarksAdd(acc, v.subarray(z * 6400 * 2, (z + 1) * 6400 * 2), z);
-    const exp = new Uint8Array(8000); for (let z = 0; z < 80; z++) for (let y = 0; y < 80; y++) for (let x = 0; x < 80; x++) if (huAt(x, y, z) >= 300) exp[(Math.min(19, (Math.floor(z * 40 / 80)) >> 1) * 20 + (y >> 2)) * 20 + (x >> 2)] |= 1;
-    expect(Buffer.compare(Buffer.from(acc.marks), Buffer.from(exp))).toBe(0);
-    // the reduced grid: area-averaged (2x2 in plane) and the nearest slice per drawn slice (every other source slice: z = 45 is never taken)
-    const reduced = volumeOf(draw, (x, y, z) => { let s2 = 0; for (let dz = 0; dz < 1; dz++) for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) s2 += huAt(x * 2 + dx, y * 2 + dy, Math.round(z * 79 / 39)); return s2 / 4; });
-    const r = run({ t: 'volume', id: 1, data: reduced.slice().buffer, dims: draw, calib: CAL, brick: BRICK, half: true }), hh = r.half;
-    const job = x => ({ t: 'cls', id: 2, src: hh.data.slice().buffer, dims: hh.dims, calib: CAL, editDescs: [], editSourceDims: src, regionItems: [], childItems: [], order: ORDER, state: st, brickDimsFull: [1, 1, 1], brickDimsHalf: hh.brickDims, mask: 1, ...x });
-    const off = run(job({ thinKeep: false })), on = run(job({ thinMarks: acc.marks.slice().buffer }));
-    expect(on.warnings).toEqual([]); expect(count(off.cls.data, v => v >= 128)).toBe(0); expect(count(on.cls.data, v => v === 255)).toBe(14 * 14);
-    note('値(面内512超から縮小して入るデータ)', '80^3 を 40^3 に縮小(Zは最近傍)→20^3、1ボクセル平板', count(off.cls.data, v => v >= 128), count(on.cls.data, v => v >= 128));
-  });
 });
 
 describe('thin structures: the diagnostic HU view (clsDiag, the classification is off)', () => {
   const huOf = (data, i, calib = CAL) => ((data[i * 2] | (data[i * 2 + 1] << 8)) - calib[2]) * calib[0] + calib[1];
-  for (const [name, lo, hi, fn] of [['a one-sided range (bone), a 1-voxel sheet', 300, 4000, sheet(11, 11)], ['a band range (fat), a 1-voxel layer between air and soft tissue', -190, -30, (x, y, z) => (x < 6 || x > 33 || y < 6 || y > 33 ? AIR : z < 11 ? AIR : z === 11 ? -100 : 40)]]) {
-    it(name + ': the voxel and its face neighbours are inside the range in the HU copy (three in a row: more than one voxel wide), the others are untouched', () => {
-      const dims = [40, 40, 40], { h } = half(dims, fn), st = { ...STATE(), bone: { active: true, enabled: true, min: lo, max: hi } };
-      const on = run(clsJob(h, { ...srcExtra(h), state: st })); expect(on.thin.length).toBe(1);
-      const thin = on.thin.map(t => ({ ...t, lo, hi })), hd = h.dims, out = thinHuData(h.data, hd, thin, CAL), idx = on.thin[0].idx;
-      expect(idx.length).toBeGreaterThanOrEqual(14 * 14);
-      let changed = 0; for (let i = 0; i < out.length; i += 2) if (out[i] !== h.data[i] || out[i + 1] !== h.data[i + 1]) changed++;
-      for (const i of idx) { const z = (i / (hd[0] * hd[1])) | 0, wh = hd[0] * hd[1]; expect(huOf(out, i) >= lo && huOf(out, i) <= hi).toBe(true); if (z > 0) expect(huOf(out, i - wh) >= lo && huOf(out, i - wh) <= hi).toBe(true); if (z < hd[2] - 1) expect(huOf(out, i + wh) >= lo && huOf(out, i + wh) <= hi).toBe(true); }
-      expect(changed).toBeLessThan(idx.length * 7 + 1); expect(changed).toBeGreaterThan(0);
-      let before = 0; for (const i of idx) { const v = huOf(h.data, i); if (v >= lo && v <= hi) before++; }
-      note('診断のHU表示', name, before, idx.length);
-    });
-  }
   it('is a copy (the 256 copy itself is not changed) and does nothing without kept voxels', () => {
     const dims = [20, 20, 20], d = volumeOf(dims, () => AIR), copy = d.slice(), out = thinHuData(d, dims, [], CAL);
     expect(Buffer.compare(Buffer.from(out), Buffer.from(copy))).toBe(0); expect(out).not.toBe(d);
@@ -285,21 +141,26 @@ describe('an earlier change: the shape bytes keep their 708 strength, no beads, 
     expect(Buffer.compare(Buffer.from(smooth.cls.data), Buffer.from(plain.cls.data))).toBe(0); // the shape bytes are not
     expect(count(smooth.cls.data, b => b >= 128 && b < 160)).toBe(count(plain.cls.data, b => b >= 128 && b < 160));
   });
-  it('a lone single-voxel structure and a line are both kept (nothing that was in the source is dropped); voxels the reduction already set are never raised (no beads)', () => {
-    const dims3 = [40, 40, 40], huAt = (x, y, z) => ((x === 9 && y === 9) || (x === 25 && y === 25 && z === 25) ? BONE : AIR), { h } = half(dims3, huAt);
-    const off = run(clsJob(h, { ...srcExtra(h), thinKeep: false })), on = run(clsJob(h, { ...srcExtra(h) }));
-    expect(count(on.cls.data, v => v >= 128)).toBe(21); // the 20 grid voxels of the line AND the lone voxel (it is in the source: no size or isolation test)
-    // thick wall with a thin neighbour: only voxels that were below 128 change
-    const { h: h2 } = half(dims3, (x, y, z) => (z === 11 && x >= 6 && x <= 33 && y >= 6 && y <= 33 ? BONE : (z >= 20 && z <= 21 ? BONE : AIR)));
-    const a = run(clsJob(h2, { ...srcExtra(h2), thinKeep: false })), b = run(clsJob(h2, { ...srcExtra(h2) }));
-    for (let i = 0; i < a.cls.data.length; i++) if (a.cls.data[i] !== b.cls.data[i]) expect(a.cls.data[i]).toBeLessThan(128);
-  });
   it('a thin child never takes a voxel of another child', () => {
     const runs = (z0, z1) => runsOf(src, (x, y, z) => z >= z0 && z <= z1 && x >= 2 && x <= 17 && y >= 2 && y <= 17), big = { key: 'a', segMask: 1, runsBySlice: runsOf([40, 40, 40], (x, y, z) => z >= 4 && z <= 33 && x >= 4 && x <= 33 && y >= 4 && y <= 33), hash: '' }, thin = { key: 'b', segMask: 1, runsBySlice: runsOf([40, 40, 40], (x, y, z) => z === 21 && x >= 10 && x <= 29 && y >= 10 && y <= 29), hash: '' };
     void runs;
     const base = x => ({ t: 'cls', id: 1, src: new Uint8Array(20 * 20 * 20 * 2).buffer, dims, calib: CAL, editDescs: [], editSourceDims: [40, 40, 40], regionItems: [], childItems: [big, thin], order: ORDER, state: STATE(-5000, 5000), brickDimsFull: [1, 1, 1], brickDimsHalf: [3, 3, 3], mask: 1, ...x });
     const off = run(base({ thinKeep: false })), on = run(base({}));
     for (let i = 0; i < off.child.rg.length / 2; i++) if (off.child.rg[2 * i] !== 0) expect(on.child.rg[2 * i]).toBe(off.child.rg[2 * i]); // 0 voxels changed that anyone owned
+  });
+});
+
+describe('n733: a segment drawn by a value range has no thin-keep (no noise)', () => {
+  it('an isolated source voxel / line in the range is NOT set on the 256 copy, with or without the source grid handed to the job (the bytes are those of thinKeep: false)', () => {
+    const dims = [40, 40, 40], { h } = half(dims, (x, y, z) => ((x === 9 && y === 9) || (x === 25 && y === 25 && z === 25) ? BONE : AIR));
+    const a = run(clsJob(h, { thinKeep: false })), b = run(clsJob(h, {})), c = run(clsJob(h, { ...srcExtra(h) }));
+    expect(b.warnings).toEqual([]); expect(c.warnings).toEqual([]);
+    expect(count(c.cls.data, v => v >= 128)).toBe(0); expect(c.thin).toEqual([]);
+    for (const r of [b, c]) expect(Buffer.compare(Buffer.from(r.cls.data), Buffer.from(a.cls.data))).toBe(0);
+  });
+  it('a 1-voxel sheet of the range that the reduction lost stays lost (nothing is made up)', () => {
+    const { h } = half([40, 40, 40], (x, y, z) => (z === 11 && x >= 6 && x <= 33 && y >= 6 && y <= 33 ? BONE : AIR)), r = run(clsJob(h, { ...srcExtra(h) }));
+    expect(count(r.cls.data, v => v === 255)).toBe(0);
   });
 });
 
