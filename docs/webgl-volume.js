@@ -1,11 +1,13 @@
 import * as THREE from './vendor/three@0.186.0/build/three.module.js';
-import { volumeTexturePlan, reduceSliceArea, packedRgSlice, packCtSlice } from './medical-volume.js?v=20261110-build708';
-import { computeBricksOf, buildEditMaskOf, buildRegionIndexOf, buildChildIndexOf, BRICK } from './vr-volume-prep.js?v=20261110-build708';
-import { gpuRunsForTexture } from './gpu-runs.js?v=20261110-build708';
-import { MATERIALS, materialKey, materialVec } from './lighting.js?v=20261110-build708';
-import { MAX_SECTION_PLANES } from './vr-section-frame.js?v=20261110-build708';
-import { SHADE_BRIGHT_DEFAULT, SHADE_CONTRAST_DEFAULT, brightOf, contrastOf } from './cap-shade.js?v=20261110-build708';
-import { pickRay } from './webgl-volume-pick.js?v=20261110-build708';
+import { volumeTexturePlan, reduceSliceArea, packedRgSlice, packCtSlice } from './medical-volume.js?v=20261113-build735';
+import { computeBricksOf, buildEditMaskOf, buildRegionIndexOf, buildChildIndexOf, packIndexRg, BRICK, smoothEditMaskOf } from './vr-volume-prep.js?v=20261113-build735';
+import { PART_FIELD, runEditMaskField } from './vr-part-view.js?v=20261113-build735';
+import { gpuRunsForTexture } from './gpu-runs.js?v=20261113-build735';
+import { MATERIALS, materialKey, materialVec } from './lighting.js?v=20261113-build735';
+import { MAX_SECTION_PLANES } from './vr-section-frame.js?v=20261113-build735';
+import { SHADE_BRIGHT_DEFAULT, SHADE_CONTRAST_DEFAULT, brightOf, contrastOf } from './cap-shade.js?v=20261113-build735';
+import { pickRay, hiddenTestOf } from './webgl-volume-pick.js?v=20261113-build735';
+import { regionLutAlpha, regionLutHiddenSlots } from './region-visibility.js?v=20261113-build735';
 
 export const WEBGL_VOLUME_DEFAULT = true;
 export const webglVolumeEnabled = (search = typeof location !== 'undefined' ? location.search : '', m = /[?&]webglvolume=(\d)(&|$)/.exec(search || '')) => (m ? m[1] !== '0' : WEBGL_VOLUME_DEFAULT); // one line: the public gate reads a URL key from the line that reads location.search
@@ -27,7 +29,7 @@ export const SHADER_PATCHES = [
   { name: 'region-lit', find: 'VRL_MP vec3 lit=regionColor(hp+dir*(0.75*voxelMin),segC[idx].rgb,idx)*diffuse+vec3(spec);', put: 'VRL_MP vec3 lit=regionLit(hp+dir*(0.75*voxelMin),segC[idx].rgb,idx,diffuse,spec);', all: true },
   // the cut face: opacity (section cap opacity), hatching and the CT shading of the segment colour (cap-shade.js, ctLumHU through the segment's own range), as the WebGPU volume's cap
   { name: 'cap-alpha', find: 'clamp(segA[ci].z,0.03,1.0)', put: '(clamp(segA[ci].z,0.03,1.0)*capAlpha)', all: true },
-  { name: 'cap-lit', find: 'VRL_MP vec3 lit=mix(regionColor(cp,segC[ci].rgb,ci),vec3(1.0),0.22)*diffuse;', put: 'VRL_MP vec3 lit=mix(regionColor(cp,segC[ci].rgb,ci),vec3(1.0),0.22)*diffuse*capHatchF(cp,capPlane)*capShadeF(cp,ci);', all: true },
+  { name: 'cap-lit', find: 'VRL_MP vec3 lit=vrlRealCut(mix(regionColor(cp,segC[ci].rgb,ci),vec3(1.0),0.22),n,viewDir,vLightOff,vrlDepth01(capAt,o,halfExt));', put: 'VRL_MP vec3 lit=vrlRealCut(mix(regionColor(cp,segC[ci].rgb,ci),vec3(1.0),0.22),n,viewDir,vLightOff,vrlDepth01(capAt,o,halfExt))*capHatchF(cp,capPlane)*capShadeF(cp,ci);', all: true },
   { name: 'cap-functions', find: 'void main(){\n gl_FragDepth=gl_FragCoord.z;', put: `float capHatchF(vec3 cp,int pl){
  if(capHatch<0.5)return 1.0;
  vec3 tc=texCoord(cp);vec3 n=abs(cutPlanes[pl].xyz);vec2 uv=n.z>0.5?tc.xy:(n.y>0.5?tc.xz:tc.yz);
@@ -37,6 +39,7 @@ float capShadeF(vec3 cp,int s){return capShade>0.5?ctLumHU(huAt(texCoord(cp)),s)
 vec3 regionLit(vec3 p,vec3 base,int s,float diffuse,float spec){
 #ifdef VRL_REGIONS
  int i=int(texture(regionTex,clamp(texCoord(p),vec3(0.0),vec3(0.999999))).r*255.0+0.5);
+ if(i>=1&&regionAnyHidden!=0&&((int(texelFetch(regionLut,ivec2(i,0),0).a+0.5)>>(8+s))&1)==1){int j=int(texture(regionTex,clamp(texCoord(p),vec3(0.0),vec3(0.999999))).g*255.0+0.5);i=j==i?0:j;} // the colour index's result is hidden here: the hide index's own result (as the VR regionColor)
  if(i>=1){vec4 e=texelFetch(regionLut,ivec2(i,0),0);int m=int(e.a+0.5);if(((m>>s)&1)==1)return e.rgb*diffuse*(((m>>4)&1)==1?1.18:1.0)+vec3(spec);}
 #endif
  return base*diffuse+vec3(spec);
@@ -51,6 +54,25 @@ export const CHILD_SHADER_PATCHES = [
   { name: 'child-region-lit', find: ' return base*diffuse+vec3(spec);\n}', put: ' return childBase(p,base,s)*diffuse+vec3(spec);\n}' },
   { name: 'child-cap-shade', find: 'float capShadeF(vec3 cp,int s){return capShade>0.5?ctLumHU(huAt(texCoord(cp)),s):1.0;}', put: 'float capShadeF(vec3 cp,int s){return capShade>0.5?ctLumAt(cp,huAt(texCoord(cp)),s):1.0;}' },
 ];
+// n731 fix2: the mask-field normal (vr-view.js gradientAtS, compiled in every program) reads the smoothed field editFieldTex (webgl-volume smoothEditField), applied to EVERY shader (with and without child segments);
+// editTex stays the plain mask that decides the shape. editFieldReady = 0 (the field is not made yet, or it failed): the plain mask, blurred (maskBlurGrad), is the field and a masked slot never falls back to the HU gradient (md).
+// until the smoothed field exists (editFieldReady 0: the first seconds after an edit, or the smoothing failed for good): the plain mask (editFieldTex = editTex then) read as a box blur, +-3 voxels along the axis, 3 x 3 columns 2 voxels apart
+// across it (18 reads per axis): a smooth normal, never the HU gradient and not the one-voxel stair of a plain central difference
+const MASK_BLUR_GLSL = `highp float maskBlurGrad(int k,highp vec3 tc,highp vec3 dd,int s){
+ highp vec3 e=vec3(k==0?1.0:0.0,k==1?1.0:0.0,k==2?1.0:0.0),p1=vec3(k==1?1.0:0.0,k==2?1.0:0.0,k==0?1.0:0.0),p2=vec3(k==2?1.0:0.0,k==0?1.0:0.0,k==1?1.0:0.0);
+ highp float r=0.0;
+ for(int a=-1;a<=1;a++)for(int b=-1;b<=1;b++){highp vec3 o=dd*2.0*(float(a)*p1+float(b)*p2),q=dd*3.0*e;
+  r+=texture(editFieldTex,clamp(tc+o+q,vec3(0.0),vec3(0.999999)))[s]-texture(editFieldTex,clamp(tc+o-q,vec3(0.0),vec3(0.999999)))[s];}
+ return r;
+}
+`;
+export const FIELD_SHADER_PATCHES = [
+  { name: 'child-field-uniform', find: 'vec3 gradientAtS(vec3 tc,int s){', put: 'uniform sampler3D editFieldTex;\nuniform int editFieldReady;\n' + MASK_BLUR_GLSL + 'vec3 gradientAtS(vec3 tc,int s){' },
+  { name: 'child-field-size', find: 'highp vec3 dd=1.0/max(vec3(textureSize(editTex,0)),vec3(1.0)),tq=', put: 'highp vec3 dd=1.0/max(vec3(textureSize(editFieldTex,0)),vec3(1.0)),tq=' },
+  { name: 'child-field-md', find: 'bool md=((editMaskOnly>>s)&1)==1;', put: 'bool md=((editMaskOnly>>s)&1)==1||editFieldReady<1;' },
+  { name: 'child-field-band', find: 'if(md||abs(texture(editTex,tq)[s]-0.5)<0.3){', put: 'if(md||abs(texture(editFieldTex,tq)[s]-0.5)<0.3){' },
+  { name: 'child-field-grad', find: 'g[k]=texture(editTex,clamp(tc+o,vec3(0.0),vec3(0.999999)))[s]-texture(editTex,clamp(tc-o,vec3(0.0),vec3(0.999999)))[s];', put: 'g[k]=editFieldReady>0?texture(editFieldTex,clamp(tc+o,vec3(0.0),vec3(0.999999)))[s]-texture(editFieldTex,clamp(tc-o,vec3(0.0),vec3(0.999999)))[s]:maskBlurGrad(k,tc,dd,s);' },
+];
 export function patchFragmentShader(src, { children = false } = {}) {
   let out = src;
   const apply = list => { for (const p of list) {
@@ -58,6 +80,7 @@ export function patchFragmentShader(src, { children = false } = {}) {
     out = p.all ? out.split(p.find).join(p.put) : out.replace(p.find, () => p.put);
   } };
   apply(SHADER_PATCHES);
+  apply(FIELD_SHADER_PATCHES);
   if (children) apply(CHILD_SHADER_PATCHES);
   return out;
 }
@@ -117,6 +140,14 @@ export function syncChildListMasks(list, items) {
 const rangeOk = r => !!r && Number.isFinite(+r.lower) && Number.isFinite(+r.upper) && +r.upper > +r.lower;
 // the shading range of a child: its own (the user's), else the app-resolved one for its key (section.shade.ranges: the automatic range of this frame wins over the one handed over earlier, as in the WebGPU volume), else the one handed over (entry.shadeRange), else 0..1
 export const childShadeOf = (e, range = null) => { const r = rangeOk(e.shade) ? e.shade : rangeOk(range) ? range : rangeOk(e.shadeRange) ? e.shadeRange : null; return r ? [+r.lower, +r.upper] : [0, 1]; };
+// the PC's focus of a child (the mouse on its name card): its table colour x 1.18, the same 18 % a FOCUSED result gets in the shader ((m >> 4) & 1: rgb x 1.18), so a lit child and a lit result look alike. Only row 0's rgb of that child's
+// texel (list order, entry j + 1) is scaled; alpha (the slot bits) and every other row stay. -> true when a texel changed.
+export const CHILD_FOCUS_GAIN = 1.18;
+export function applyChildFocus(a, list, key, gain = CHILD_FOCUS_GAIN) {
+  const j = key ? (list || []).findIndex(e => e.key === key) : -1, o = (j + 1) * 4;
+  if (j < 0 || j + 1 >= 256 || !(a[o + 3] > 0)) return false; // not prepared, past the 255th, or hidden (alpha 0): nothing to light
+  a[o] *= gain; a[o + 1] *= gain; a[o + 2] *= gain; return true;
+}
 // vr-view.js refreshChildLut: the 256 x 3 RGBA32F table (row stride 256 * 4), entry j + 1 = list[j]. Row 0: colour + the parent's slot bit (0 while hidden); row 1: lower, upper, flat mask (the page has no simple mode: 0), hidden mask;
 // row 2: the child's material (ambient, spec, shininess) + opacity. A child hidden = its own shown flag off (entry.shown, else entry.visible). A child deleted since (no entry) has no row.
 export function fillChildLut(a, list, entries, rgbOf, materialsOf) {
@@ -220,9 +251,9 @@ export class WebGlVolumeRenderer {
       ctShade: { value: 0 }, ctShadeBright: { value: SHADE_BRIGHT_DEFAULT }, ctShadeContrast: { value: SHADE_CONTRAST_DEFAULT }, ctShadeRange: { value: four(() => new THREE.Vector2(0, 1)) }, sliceSegOnly: { value: 0 },
       cutPlanes: { value: Array.from({ length: MAX_SECTION_PLANES }, () => V4(0, 0, 1, 0)) }, planeCount: { value: 0 }, planeCut: { value: 0 }, planeSlice: { value: 0 }, capOn: { value: 0 }, capAlpha: { value: 0.85 }, capHatch: { value: 0 }, capShade: { value: 0 },
       sliceTint: { value: 0 }, sliceOpacity: { value: 0 }, sliceWindow: { value: new THREE.Vector2(0, 1) }, sliceAir: { value: SLICE_AIR }, sliceVol: { value: null },
-      regionTex: { value: this.dummy }, regionLut: { value: null }, refine: { value: 1 },
+      regionTex: { value: this.dummy }, regionLut: { value: null }, regionAnyHidden: { value: 0 }, refine: { value: 1 },
       useCls: { value: 0 }, clsTex: { value: this.dummy }, cls4Tex: { value: this.dummy }, useSkip: { value: 0 }, skipTex: { value: this.skipDummy }, clsChan: { value: V4(-1, -1, -1, -1) },
-      editMask: { value: 0 }, editMaskOnly: { value: 0 }, editTex: { value: this.dummy }, useDist: { value: 0 }, distInCls: { value: 0 }, distTex: { value: this.dummy }, voxelMin: { value: 1 }, voxelSize: { value: V3(1, 1, 1) },
+      editMask: { value: 0 }, editMaskOnly: { value: 0 }, editTex: { value: this.dummy }, editFieldTex: { value: this.dummy }, editFieldReady: { value: 0 }, useDist: { value: 0 }, distInCls: { value: 0 }, distTex: { value: this.dummy }, voxelMin: { value: 1 }, voxelSize: { value: V3(1, 1, 1) },
     };
   }
   ensureMaterial() {
@@ -275,11 +306,23 @@ export class WebGlVolumeRenderer {
       if (built.data) {
         const t = new THREE.Data3DTexture(built.data, ...dims); t.format = THREE.RGBAFormat; t.type = THREE.UnsignedByteType; t.minFilter = t.magFilter = THREE.LinearFilter; t.unpackAlignment = 1; t.generateMipmaps = false; t.needsUpdate = true;
         this.editTexture = t; this.edit = { activeMask: built.activeMask, maskOnly: built.maskOnly, data: built.data, dims };
+        this.smoothEditField(t, built.data, dims, built.activeMask);
       }
     }
     u.editMask.value = this.edit?.activeMask | 0; u.editMaskOnly.value = this.edit?.maskOnly | 0; u.editTex.value = this.editTexture || this.dummy;
+    if (!this.editTexture) { this.editSmoothGen = (this.editSmoothGen | 0) + 1; this.editFieldTexture?.dispose(); this.editFieldTexture = null; }
+    u.editFieldTex.value = this.editFieldTexture || this.editTexture || this.dummy; u.editFieldReady.value = this.editFieldTexture ? 1 : 0;
     old?.dispose();
     this.onRedraw();
+  }
+  smoothEditField(t, data, dims, slots) {
+    const gen = this.editSmoothGen = (this.editSmoothGen | 0) + 1;
+    const oldField = this.editFieldTexture; this.editFieldTexture = null; oldField?.dispose();
+    runEditMaskField(smoothEditMaskOf, data, dims, slots, PART_FIELD).then(bytes => {
+      if (gen !== this.editSmoothGen || this.editTexture !== t || !this.uniforms) return;
+      const f = new THREE.Data3DTexture(bytes, ...dims); f.format = THREE.RGBAFormat; f.type = THREE.UnsignedByteType; f.minFilter = f.magFilter = THREE.LinearFilter; f.unpackAlignment = 1; f.generateMipmaps = false; f.needsUpdate = true;
+      this.editFieldTexture = f; this.uniforms.editFieldTex.value = f; this.uniforms.editFieldReady.value = 1; this.onRedraw();
+    }, e => { console.warn('WebGL volume: mask smoothing skipped:', e?.message || e); });
   }
   // the cut being previewed is painted on the segment's surface like a focused result, in the WebGPU volume's red (previewContains there)
   clearPreviewRuns() { if (!this.previewRuns) return; this.previewRuns = null; this.applyRegions(true); }
@@ -289,7 +332,7 @@ export class WebGlVolumeRenderer {
     this.previewRuns = { slot, runs, v }; this.applyRegions(true);
   }
   clearAnalysisRuns() { this.analysisOverlaySignature = ''; this.regionsArgs = null; this.applyRegions(true); }
-  // regions: [{runs, color, focused, segments (slot indices), shown (default true)}]. The index texture holds one index PER RESULT (1..255, a later result wins where two overlap:, as the VR volume);
+  // regions: [{runs, color, focused, segments (slot indices), shown (default true), hidden (default false; an earlier change: the SHAPE is hidden: drawn as a hidden child, the table's hide bits)}]. The index texture holds one index PER RESULT (1..255, a later result wins where two overlap:, as the VR volume);
   // the look-up table regionLut says, per result, its colour and the slots it is drawn on (0 = hidden: only that result stops colouring, the data and the index stay). Every result the page has is passed,
   // a hidden one with shown false (analysis-ops.js syncVolumeAnalysisOverlay), so hiding / showing / focusing one rewrites 4 KB of the table and never the index.
   setAnalysisRuns(regions, v, signature = '', textureSignature = signature) {
@@ -306,9 +349,17 @@ export class WebGlVolumeRenderer {
     this.hoverRuns = runs;
     if (this.uniforms && this.regionTexture && !this.previewRuns) this.applyRegions();
   }
+  // The same for a CHILD segment (comment-3d.js: the mouse on a child's name card): key = the child's key, '' = none. Only its own row-0 colour in the child table is scaled (applyChildFocus); the page's data is never touched.
+  // Rewrites the table (8 KB) only when it changes; nothing at all while the view has no child segments.
+  setHoverChildFocus(key) {
+    key = key || '';
+    if (key === (this.hoverChild || '')) return;
+    this.hoverChild = key;
+    if (this.uniforms && this.childArgs && this.childTexture) this.applyChildren();
+  }
   regionItems() {
     const hv = this.hoverRuns;
-    const items = (this.regionsArgs?.regions || []).map(r => ({ color: r.color, focused: !!r.focused || (!!hv && r.runs === hv), shown: r.shown !== false, segMask: (r.segments || []).reduce((m, i) => (i >= 0 && i < 4 ? m | (1 << i) : m), 0), runsBySlice: r.runs, mm3: 0, segmentKeys: [], rid: 0 }));
+    const items = (this.regionsArgs?.regions || []).map(r => ({ color: r.color, focused: !!r.focused || (!!hv && r.runs === hv), shown: r.shown !== false, hidden: r.hidden === true, segMask: (r.segments || []).reduce((m, i) => (i >= 0 && i < 4 ? m | (1 << i) : m), 0), runsBySlice: r.runs, mm3: 0, segmentKeys: [], rid: 0 }));
     const pv = this.previewRuns;
     if (pv) items.push({ color: PREVIEW_COLOR, focused: true, shown: true, segMask: 1 << pv.slot, runsBySlice: pv.runs, mm3: 0, segmentKeys: [], rid: 0 });
     return items;
@@ -318,17 +369,19 @@ export class WebGlVolumeRenderer {
     const u = this.uniforms, pv = this.previewRuns, args = this.regionsArgs, items = this.regionItems();
     const reuse = !rebuild && !pv && !!this.regionTexture && !!args && !!args.textureSignature && this.regionTexSignature === args.textureSignature && this.regionIndexed === items.length;
     if (!reuse) {
-      const old = this.regionTexture; this.regionTexture = null; this.regionIndexed = 0; this.regionTexSignature = null;
+      const old = this.regionTexture; this.regionTexture = null; this.regionIndexed = 0; this.regionTexSignature = null; this.regionRg = null;
       if (items.length && this.texture) {
-        const v = args?.v || pv.v, dims = maskDims(this.textureDims), built = buildRegionIndexOf(items, [v.columns, v.rows, v.slices], dims);
+        const v = args?.v || pv.v, dims = maskDims(this.textureDims), built = packIndexRg(buildRegionIndexOf(items, [v.columns, v.rows, v.slices], dims));
         this.regionIndexed = built.list.length;
-        if (built.ids) { const t = new THREE.Data3DTexture(built.ids, ...dims); t.format = THREE.RedFormat; t.type = THREE.UnsignedByteType; t.minFilter = t.magFilter = THREE.NearestFilter; t.unpackAlignment = 1; t.generateMipmaps = false; t.needsUpdate = true; this.regionTexture = t; this.regionTexSignature = pv ? null : args?.textureSignature; }
+        // an earlier change: RG8 as the VR one (R = colour index, G = hide index), the one array kept (packIndexRg); the pick reads its G bytes (regionRg)
+        if (built.rg) { const t = new THREE.Data3DTexture(built.rg, ...dims); t.format = THREE.RGFormat; this.regionRg = built.rg; t.type = THREE.UnsignedByteType; t.minFilter = t.magFilter = THREE.NearestFilter; t.unpackAlignment = 1; t.generateMipmaps = false; t.needsUpdate = true; this.regionTexture = t; this.regionTexSignature = pv ? null : args?.textureSignature; }
       }
       old?.dispose();
     }
-    // the table: texel i = result i (list order, up to 255): rgb = colour, a = the slot bits it is drawn on (+16 when focused), 0 when hidden
+    // the table: texel i = result i (list order, up to 255): rgb = colour, a = the slot bits it is drawn on (+16 when focused), 0 when its colour is off; an earlier change: a hidden SHAPE = the slot bits << 8 (region-visibility.js regionLutAlpha, read by the VR shader's regionHiddenAt)
     const a = this.regionLut.image.data; a.fill(0);
-    if (this.regionTexture) items.slice(0, 255).forEach((it, i) => { const o = (i + 1) * 4; this.color.setHex(Number(it.color) >>> 0); a[o] = this.color.r; a[o + 1] = this.color.g; a[o + 2] = this.color.b; a[o + 3] = it.shown ? (it.segMask | (it.focused ? 16 : 0)) : 0; });
+    if (this.regionTexture) items.slice(0, 255).forEach((it, i) => { const o = (i + 1) * 4; this.color.setHex(Number(it.color) >>> 0); a[o] = this.color.r; a[o + 1] = this.color.g; a[o + 2] = this.color.b; a[o + 3] = regionLutAlpha(it.segMask, { shown: it.shown, hidden: it.hidden, focused: it.focused }); });
+    { let any = 0; for (let i = 1; i <= items.length && i < 256; i++) if (regionLutHiddenSlots(a[i * 4 + 3])) { any = 1; break; } u.regionAnyHidden.value = any; } // an earlier change: as vr-view.js refreshRegionLut, from the table just written (the VR shader reads regionHiddenAt only while this is 1)
     this.regionLut.needsUpdate = true; u.regionLut.value = this.regionLut;
     u.regionTex.value = this.regionTexture || this.dummy;
     this.hasRegions = !!this.regionTexture;
@@ -359,27 +412,29 @@ export class WebGlVolumeRenderer {
     const u = this.uniforms, a = this.childArgs, items = a && this.texture ? childItemsOfEntries(a.entries) : [];
     if (!items.length) {
       const old = this.childTexture; this.childTexture = null; this.childTexSignature = ''; this.childList = [];
-      if (u.childTex) { u.childTex.value = this.dummy; u.childLut.value = this.dummy; }
+      if (u.childTex) { u.childTex.value = this.dummy; u.childLut.value = this.dummy; u.childAnyHidden.value = 0; }
       old?.dispose();
       if (this.hasChildren) { this.hasChildren = false; if (this.mesh) this.mesh.material = this.pickMaterial(); this.onRedraw(); }
       return;
     }
     const dims = maskDims(this.textureDims), texSig = this.textureDims.join('x') + '|' + this.seriesId + '|' + this.dataGeneration + '|' + items.map(i => i.key + ':' + i.hash).join(',');
     if (!(this.childTexture && this.childTexSignature === texSig)) {
-      const built = buildChildIndexOf(items, [a.v.columns, a.v.rows, a.v.slices], dims), old = this.childTexture;
-      this.childTexture = null; this.childTexSignature = ''; this.childList = built?.list || [];
-      if (built?.ids) {
+      const built = packIndexRg(buildChildIndexOf(items, [a.v.columns, a.v.rows, a.v.slices], dims)), old = this.childTexture;
+      this.childTexture = null; this.childTexSignature = ''; this.childList = built?.list || []; this.childRg = null;
+      if (built?.rg) {
         if (built.dropped) console.warn('WebGL volume: ' + built.dropped + ' child segment(s) past the 255th are not drawn.');
-        const t = new THREE.Data3DTexture(built.ids, ...dims); t.format = THREE.RedFormat; t.type = THREE.UnsignedByteType; t.minFilter = t.magFilter = THREE.NearestFilter; t.unpackAlignment = 1; t.generateMipmaps = false; t.needsUpdate = true;
-        this.childTexture = t; this.childTexSignature = texSig;
+        const t = new THREE.Data3DTexture(built.rg, ...dims); t.format = THREE.RGFormat; t.type = THREE.UnsignedByteType; t.minFilter = t.magFilter = THREE.NearestFilter; t.unpackAlignment = 1; t.generateMipmaps = false; t.needsUpdate = true; // an earlier change: R = colour index, G = hide index
+        this.childTexture = t; this.childTexSignature = texSig; this.childRg = built.rg;
       }
       old?.dispose();
     }
-    if (!this.childTexture) { this.childList = []; this.hasChildren = false; if (u.childTex) { u.childTex.value = this.dummy; u.childLut.value = this.dummy; } if (this.mesh) this.mesh.material = this.pickMaterial(); this.onRedraw(); return; }
+    if (!this.childTexture) { this.childList = []; this.hasChildren = false; if (u.childTex) { u.childTex.value = this.dummy; u.childLut.value = this.dummy; u.childAnyHidden.value = 0; } if (this.mesh) this.mesh.material = this.pickMaterial(); this.onRedraw(); return; }
     syncChildListMasks(this.childList, items); // a reused index texture: the parents' slots may have moved since (the index does not depend on them), the table follows
     if (!this.childLutTexture) { const t = new THREE.DataTexture(new Float32Array(256 * 12), 256, 3, THREE.RGBAFormat, THREE.FloatType); t.minFilter = t.magFilter = THREE.NearestFilter; t.generateMipmaps = false; this.childLutTexture = t; }
-    if (!u.childTex) { u.childTex = { value: this.dummy }; u.childLut = { value: this.dummy }; } // the uniforms exist only once a child segment does
+    if (!u.childTex) { u.childTex = { value: this.dummy }; u.childLut = { value: this.dummy }; u.childAnyHidden = { value: 0 }; } // the uniforms exist only once a child segment does
     fillChildLut(this.childLutTexture.image.data, this.childList, a.entries, c => { this.color.set(c); return [this.color.r, this.color.g, this.color.b]; }, m => MATERIALS[materialKey(m)]);
+    { const d = this.childLutTexture.image.data; let any = 0; for (let j = 1; j <= this.childList.length && j < 256; j++) if (d[256 * 4 + j * 4 + 3] > 0) { any = 1; break; } u.childAnyHidden.value = any; } // an earlier change: as vr-view.js refreshChildLut (the shader's per-sample hidden test runs only while something is hidden)
+    if (this.hoverChild) applyChildFocus(this.childLutTexture.image.data, this.childList, this.hoverChild); // the child whose card the mouse is on stays lit through a table rewrite
     this.childLutTexture.needsUpdate = true;
     u.childTex.value = this.childTexture; u.childLut.value = this.childLutTexture;
     this.hasChildren = true;
@@ -411,12 +466,13 @@ export class WebGlVolumeRenderer {
   resetData() {
     this.dataGeneration++; this.setActive(false);
     if (this.mesh?.parent) this.mesh.parent.remove(this.mesh);
+    this.editSmoothGen = (this.editSmoothGen | 0) + 1; this.editFieldTexture?.dispose(); this.editFieldTexture = null;
     for (const t of [this.texture, this.bricksTexture, this.editTexture, this.regionTexture]) t?.dispose();
-    this.childTexture?.dispose(); this.childTexture = null; this.childTexSignature = ''; this.childArgs = null; this.childSignature = ''; this.childList = []; this.hasChildren = false;
-    this.texture = this.bricksTexture = this.editTexture = this.regionTexture = null; this.cpu = null; this.edit = null; this.hasRegions = false;
+    this.childTexture?.dispose(); this.childTexture = null; this.childRg = null; this.childTexSignature = ''; this.childArgs = null; this.childSignature = ''; this.childList = []; this.hasChildren = false;
+    this.texture = this.bricksTexture = this.editTexture = this.regionTexture = this.regionRg = null; this.cpu = null; this.edit = null; this.hasRegions = false;
     this.seriesId = null; this.dataSignature = ''; this.planSignature = ''; this.volume = null; this.textureDims = [1, 1, 1]; this.textureBytes = 0; this.reducedVolume = false;
     this.editArgs = null; this.previewRuns = null; this.regionsArgs = null; this.regionIndexed = 0; this.regionTexSignature = null; this.analysisOverlaySignature = '';
-    if (this.uniforms) { this.uniforms.vol.value = this.uniforms.sliceVol.value = this.uniforms.bricks.value = null; this.uniforms.editTex.value = this.uniforms.regionTex.value = this.dummy; this.uniforms.editMask.value = this.uniforms.editMaskOnly.value = 0; if (this.uniforms.childTex) { this.uniforms.childTex.value = this.uniforms.childLut.value = this.dummy; } if (this.mesh) this.mesh.material = this.material; }
+    if (this.uniforms) { this.uniforms.vol.value = this.uniforms.sliceVol.value = this.uniforms.bricks.value = null; this.uniforms.editTex.value = this.uniforms.editFieldTex.value = this.uniforms.regionTex.value = this.dummy; this.uniforms.editFieldReady.value = 0; this.uniforms.editMask.value = this.uniforms.editMaskOnly.value = 0; if (this.uniforms.childTex) { this.uniforms.childTex.value = this.uniforms.childLut.value = this.dummy; } if (this.mesh) this.mesh.material = this.material; }
   }
   destroy() { this.resetData(); this.mesh?.geometry?.dispose(); this.material?.dispose(); this.materialRegions?.dispose(); this.materialChild?.dispose(); this.materialRegionsChild?.dispose(); this.childLutTexture?.dispose(); this.dummy.dispose(); this.skipDummy.dispose(); this.regionLut.dispose(); }
   // ---- one frame: the uniforms; the page then calls renderer.render(scene, camera) ----
@@ -447,17 +503,26 @@ export class WebGlVolumeRenderer {
     for (let s = 0; s < 4; s++) { const r = sh.ranges?.[segmentOrder[s]]; if (r && Number.isFinite(r.lower) && Number.isFinite(r.upper)) u.ctShadeRange.value[s].set(r.lower, r.upper); else u.ctShadeRange.value[s].set(0, 1); }
   }
   // ---- pick (CPU) ----
+  // an earlier change: what the pick goes through, read from the very tables the shader reads: a hidden result (regionLut alpha bits 8..11) and a hidden child segment (childLut row 1, hidden mask); both indexes are on the mask grid
+  hiddenTest() {
+    const dims = maskDims(this.textureDims), layers = [];
+    const rl = this.regionLut?.image?.data, rids = this.regionTexture ? this.regionRg : null; // an earlier change: the hide index (the texture's G channel), never the grown colour index
+    if (rl && rids) { const slotsOf = id => (id < 256 ? regionLutHiddenSlots(rl[4 * id + 3]) : 0); let any = false; for (let i = 1; i < 256; i++) if (slotsOf(i)) { any = true; break; } layers.push({ ids: rids, stride: 2, off: 1, dims, slotsOf, any }); }
+    const cl = this.childLutTexture?.image?.data, cids = this.hasChildren && this.childTexture ? this.childRg : null;
+    if (cl && cids) { const R = 256 * 4, slotsOf = id => (id < 256 ? Math.round(cl[R + 4 * id + 3]) & 15 : 0); let any = false; for (let i = 1; i < 256; i++) if (slotsOf(i)) { any = true; break; } layers.push({ ids: cids, stride: 2, off: 1, dims, slotsOf, any }); }
+    return hiddenTestOf(layers);
+  }
   pickMany(points, camera, obj, segmentState, segmentOrder, preferredKey = null) {
     if (!this.active || !this.cpu || !obj || !points?.length) return Promise.resolve(points?.map(() => null) || []);
     camera.updateMatrixWorld(true); obj.updateMatrixWorld(true);
     const rect = this.renderer.domElement.getBoundingClientRect(), inv = this.tmpInv.copy(obj.matrixWorld).invert();
     const segs = [0, 1, 2, 3].map(s => { const seg = segmentState[segmentOrder[s]]; return { min: seg?.min || 0, max: seg?.max || 0, enabled: !!(seg?.active && seg?.enabled) }; });
-    const preferred = preferredKey ? segmentOrder.indexOf(preferredKey) : -1;
+    const preferred = preferredKey ? segmentOrder.indexOf(preferredKey) : -1, hidden = this.hiddenTest();
     const out = points.map(p => {
       const ndc = new THREE.Vector2(((p.clientX - rect.left) / Math.max(rect.width, 1)) * 2 - 1, -((p.clientY - rect.top) / Math.max(rect.height, 1)) * 2 + 1);
       this.raycaster.setFromCamera(ndc, camera);
       const o = this.raycaster.ray.origin.clone().applyMatrix4(inv), d = this.raycaster.ray.direction.clone().transformDirection(inv);
-      const hit = pickRay({ data: this.cpu.data, dims: this.cpu.dims, calibration: this.cpu.calibration, halfExt: this.halfExtents, step: this.step, origin: [o.x, o.y, o.z], dir: [d.x, d.y, d.z], segs, edit: this.edit, preferred, srcDims: [this.volume.columns, this.volume.rows, this.volume.slices] });
+      const hit = pickRay({ data: this.cpu.data, dims: this.cpu.dims, calibration: this.cpu.calibration, halfExt: this.halfExtents, step: this.step, origin: [o.x, o.y, o.z], dir: [d.x, d.y, d.z], segs, edit: this.edit, preferred, srcDims: [this.volume.columns, this.volume.rows, this.volume.slices], hidden });
       return hit ? { x: hit.x, y: hit.y, z: hit.z, key: segmentOrder[hit.slot] } : null;
     });
     return Promise.resolve(out);

@@ -136,7 +136,7 @@ describe('vr-view.js passes the true gaze', () => {
   it('headGaze is the camera\'s view direction (headFwd stays horizontal for the boards) and goes to the measure update', () => {
     const src = readFileSync(new URL('../../docs/vr-view.js', import.meta.url), 'utf8');
     expect(src).toContain('headGaze.set(0,0,-1).applyQuaternion(tmpQh);headFwd.copy(headGaze);headFwd.y=0;');
-    expect(src).toContain('hint:L.ptDistHint,gaze:headGaze,');
+    expect(src).toContain('hint:measureHint(),gaze:headGaze,');
   });
 });
 

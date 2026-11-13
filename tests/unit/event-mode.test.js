@@ -77,7 +77,7 @@ describe('the generic VR かんたん menu: segments and the trigger switch', ()
 // the かんたん menu board: simpleMenuLayout is the pure layout vr-view.js draws
 const TEXT = lang => {
   const t = I18N[lang], ja = lang === 'ja';
-  return { show: t.evShow, hide: t.evHide, section: ja ? '断面' : 'Sections', sliceOpacity: ja ? 'スライス不透明度' : 'Slice opacity', trigger: t.evMode, trigPoint: t.evModePoint, trigLabel: t.evModeAnalysis, trigHintPoint: t.evModeHintPoint, trigHintLabel: t.evModeHintAnalysis, results: ja ? '解析結果（体積）' : 'Analysis results (volume)', total: ja ? '合計' : 'Total', page: ja ? 'ページ' : 'Page', noSeg: 'none', home: ja ? '正面に戻す' : 'Bring to front', undo: ja ? '元に戻す' : 'Undo', reset: t.evReset, resetAgain: t.evResetAgain, all: t.evAllSettings, exit: t.evExitVr };
+  return { show: t.evShow, hide: t.evHide, color: t.regionColorToggle, shape: t.regionShapeToggle, section: ja ? '断面' : 'Sections', sliceOpacity: ja ? 'スライス不透明度' : 'Slice opacity', trigger: t.evMode, trigPoint: t.evModePoint, trigLabel: t.evModeAnalysis, trigHintPoint: t.evModeHintPoint, trigHintLabel: t.evModeHintAnalysis, results: ja ? '解析結果（体積）' : 'Analysis results (volume)', total: ja ? '合計' : 'Total', page: ja ? 'ページ' : 'Page', noSeg: 'none', home: ja ? '正面に戻す' : 'Bring to front', undo: ja ? '元に戻す' : 'Undo', reset: t.evReset, resetAgain: t.evResetAgain, all: t.evAllSettings, exit: t.evExitVr };
 };
 const SEG_NAMES = { ja: { bone: '骨', soft: '軟部組織', fat: '脂肪', lung: '肺', contrast: '造影剤' }, en: { bone: 'Bone', soft: 'Soft tissue', fat: 'Fat', lung: 'Lung', contrast: 'Contrast' } };
 const COLORS = { bone: '#f3f0e8', soft: '#f7a99c', fat: '#e7c85d', lung: '#7fb3d9', contrast: '#9b7fd9' };
@@ -112,14 +112,21 @@ describe('the generic かんたん menu board per bundled dataset', () => {
   it('sample2 (Lv2 mouse abdomen): bone, soft tissue, fat, lung, 断面, the trigger switch, 4 results with the total', () => {
     const w = layoutFor('sample2');
     expect(rows(w)).toEqual(['seg:bone', 'seg:soft', 'seg:fat', 'seg:lung', 'section', 'trigger:point']);
-    expect(buttons(w).filter(b => b.id.startsWith('result:')).length).toBe(4);
+    expect(buttons(w).filter(b => /^result:\d+:color$/.test(b.id)).length).toBe(4); expect(buttons(w).filter(b => /^result:\d+:shape$/.test(b.id)).length).toBe(4); // stage 3: every result row has the two toggles 色 / 表示 (and a colour sample)
     expect(w.find(x => x.id === 'results').text).toBe('解析結果（体積）');
     expect(w.find(x => x.id === 'total').text).toBe('合計 99.99 mm³ · 4');
+  });
+  it('an earlier change: the total\'s count is the results whose SHAPE is not hidden (as the mm3 total and the 解析 tab); a colour-off one counts, a hidden one and a disabled-but-shown one are as the shape flag says', () => {
+    const rs = [1, 2, 3, 4].map(i => ({ hex: '#fff', name: String(i), text: '1 mm³', colorOn: i !== 2, shapeOn: i !== 3 }));
+    const w = layoutFor(null, 'ja', { results: rs, total: '3.00 mm³' });
+    expect(w.find(x => x.id === 'total').text).toBe('合計 3.00 mm³ · 3'); // 4 rows, one hidden shape (3): 3; the colour-off row (2) still counts
+    expect(layoutFor(null, 'ja', { results: rs.map(r => ({ ...r, shapeOn: false })), total: '0.00 mm³' }).find(x => x.id === 'total').text).toBe('合計 0.00 mm³ · 0');
+    expect(layoutFor(null, 'ja', { results: rs.map(r => { const { shapeOn, ...o } = r; return o; }), total: '4.00 mm³' }).find(x => x.id === 'total').text).toBe('合計 4.00 mm³ · 4'); // no shapeOn = shown
   });
   it('sample1 (Lv3 rat abdomen): bone, soft tissue, fat, 断面, the trigger switch, 2 results', () => {
     const w = layoutFor('sample1');
     expect(rows(w)).toEqual(['seg:bone', 'seg:soft', 'seg:fat', 'section', 'trigger:point']);
-    expect(buttons(w).filter(b => b.id.startsWith('result:')).length).toBe(2);
+    expect(buttons(w).filter(b => /^result:\d+:color$/.test(b.id)).length).toBe(2);
   });
   it('no dataset: the none-shown note, 断面 and the bottom row; the bottom row is the same everywhere', () => {
     expect(ids(layoutFor(null))).toEqual(expect.arrayContaining(['noseg', 'section:show', 'exit']));
@@ -140,7 +147,7 @@ describe('the generic かんたん menu board per bundled dataset', () => {
   });
   it('no advanced settings and no level text on the board', () => {
     for (const s of [...SAMPLES, null]) for (const x of layoutFor(s)) {
-      expect(x.id).toMatch(/^(noseg|seg:\w+(:name|:show|:hide|)|section(:name|:show|:hide)|sliceOpacity(:name)?|trigger:(name|point|label|hint)|results|results:(prev|next|page)|result:\d+(:name|:vol|:row)?|scale(:name|:text|:minus|:plus)?|total|home|undo|reset|all|exit)$/);
+      expect(x.id).toMatch(/^(noseg|seg:\w+(:name|:show|:hide|)|section(:name|:show|:hide)|sliceOpacity(:name)?|trigger:(name|point|label|hint)|results|results:(prev|next|page)|result:\d+(:name|:vol|:color|:shape)?|showAll|scale(:name|:text|:minus|:plus)?|total|home|undo|reset|all|exit)$/);
       expect(x.text || x.label || '').not.toMatch(/Lv\s?\d/);
     }
   });
@@ -328,8 +335,8 @@ describe('the かんたん menu board layout fits the canvas', () => {
     expect(w.find(x => x.id === 'seg:more').text).toBe('… +3');
     check(w, 'segcap');
   });
-  it('the exact button labels (ja)', () => {
-    expect(buttons(layoutFor('sample2')).filter(b => b.label).map(b => b.label)).toEqual(['表示', '非表示', '表示', '非表示', '表示', '非表示', '表示', '非表示', '表示', '非表示', 'ポイントモード', '解析モード', '正面に戻す', '元に戻す', '最初の状態に戻す', 'すべての設定', 'VRを終了']);
+  it('the exact button labels (ja): an earlier change stage 3 adds 色 / 表示 to each of the 4 result rows', () => {
+    expect(buttons(layoutFor('sample2')).filter(b => b.label).map(b => b.label)).toEqual(['表示', '非表示', '表示', '非表示', '表示', '非表示', '表示', '非表示', '表示', '非表示', 'ポイントモード', '解析モード', '色', '表示', '色', '表示', '色', '表示', '色', '表示', '正面に戻す', '元に戻す', '最初の状態に戻す', 'すべての設定', 'VRを終了']);
   });
 });
 
@@ -419,7 +426,7 @@ describe('static wiring', () => {
   });
   it('the かんたん menu: tab 10 hides the tab bar, rows come from the loaded data (no level), すべての設定 opens the full menu, かんたん comes back (event mode only)', () => {
     const src = read('vr-view.js');
-    expect(src).toContain('if(ui.tab!==10){const tw=(MENU_W-2*X)/L.tabs.length,TAB_IDS=[0,1,2,3,4,5,6,9,11];'); // the 9th tab is データ (11)
+    expect(src).toContain('if(ui.tab!==10){const TAB_IDS=[0,1,2,3,4,5,6,9,11],tabIx=L.tabs.map((_,i)=>i).filter(i=>TAB_IDS[i]!==11||levelSwitchOn()||pairRowOn()),tw=(MENU_W-2*X)/tabIx.length;'); // the 9th tab is データ (11);: only while the open data has a level
     expect(src).toContain("if(evMenu&&ui.tab!==10)btn(560,18,200,tr('evSimple'),false,()=>{ui.tab=10},{size:28});");
     const block = src.match(/if\(ui\.tab===10\)\{[\s\S]*?\}else if\(ui\.tab===0\)\{/)[0];
     expect(block).toContain('keys=simpleMenuSegments(act)');
@@ -427,11 +434,11 @@ describe('static wiring', () => {
     expect(block).not.toMatch(/activeEventLevel|\blv\b/); // nothing level-dependent in the rows;: the one level-aware part is the data-switch row (levels, 'level:<id>' ids: simpleMenuLayout's levels option)
     expect(block).toContain("acts['level:'+l.id]=()=>swapPress(l.sample)");
     // the actions behind the layout's widget ids: 断面 (B/Y's setSection), the trigger switch, 元に戻す (the ring's undo), すべての設定 -> the full menu, 終了 = the full menu's session.end()
-    expect(src).toContain("const acts={section:v=>setSection(v),'trigger:point':()=>{evLabels=false},'trigger:label':()=>{evLabels=true;emit('trigger-label')},undo:()=>{undoLast()},home:goHome,reset:pressReset,all:()=>{ui.tab=0},exit:()=>session.end()};");
+    expect(src).toContain("const acts={'pair:toggle':()=>{void pairToggle()},section:v=>setSection(v),'trigger:point':()=>{evLabels=false},'trigger:label':()=>{evLabels=true;emit('trigger-label')},undo:()=>{undoLast()},home:goHome,reset:pressReset,all:()=>{ui.tab=0},exit:()=>session.end()};");
     expect(src).toContain("exit:tr(mode==='ar'?'evExitAr':'evExitVr')");
     expect(src).toContain("btn(MENU_W-X-260,yb,260,L.exit,true,()=>session.end(),{color:'#b33'})"); // the full menu's own exit, unchanged
-    // who decides what the trigger does: label mode only when the switch says so AND the data has results (or the 解析 tab is open, as before)
-    expect(src).toContain("const evLabelOn=()=>evMenu&&triggerMode(evLabels,regionList.length>0)==='label';");
+    // who decides what the trigger does: label mode only when the switch says so AND the data has results or child segments (or the 解析 tab is open, as before)
+    expect(src).toContain("const evLabelOn=()=>evMenu&&triggerMode(evLabels,labelTargets(regionList.length,childList.length))==='label';"); // results OR child segments
     expect(src).toContain('const labelMode=()=>(ui.open&&ui.tab===5)||!section.on||evLabelOn();');
     expect(src).toContain('analysis:analysisOn(),canDrag:');
     // evLabels is only ever switched from the かんたん menu (declared once, reset when the session's data arrives, the two switch buttons, and 最初の状態に戻す)
@@ -447,7 +454,7 @@ describe('analysis mode keeps the pinned label move', () => {
   const src = readFileSync(new URL('../../docs/vr-view.js', import.meta.url), 'utf8');
   it('pickPin is gated by analysisOn (tab 5 or 解析モード), not by the tab alone', () => {
     expect(src).toMatch(/const analysisOn=\(\)=>\(ui\.open&&ui\.tab===5\)\|\|evLabelOn\(\)/);
-    expect(src).toMatch(/if\(analysisOn\(\)&&pins\.size\)mlb=nearerLabel\(mlb,pickPin\(/);
+    expect(src).toMatch(/if\(analysisOn\(\)&&\(pins\.size\|\|px\.cards\(\)\.size\)\)mlb=nearerLabel\(mlb,pickPin\(/);
     expect(src).not.toMatch(/ui\.open&&ui\.tab===5&&pins\.size/);
     expect(src).toMatch(/analysis:analysisOn\(\),/);
   });
@@ -512,7 +519,7 @@ describe('最初の状態に戻す: wiring', () => {
     const fn = src.match(/const resetToStart=\(\)=>\{[\s\S]*?\n \};/)[0];
     // the page side first (points / distances / pinned labels from the project file), then the session's own state
     expect(fn.indexOf("'vrl-event-project-reset'")).toBeGreaterThan(-1);
-    for (const part of ['endAllDrags()', 'closeWheel()', 'closePointWheel()', 'removePlane(pl)', 'section.on=false', 'secUndo.clear()', 'undo.clear()', 'cancelMeasure()', 'huLine.clear()', 'setHistOpen(false)', 'evLabels=TRIGGER_AT_START===\'label\'', 'vrWindow.c=', 'bringVolumeFront()', 'resetEventViewSettings(settings)', 'ui.tab=10', 'placeMenuNow()', 'placeHelpNow()', 'placeHuNow()']) expect(fn, part).toContain(part);
+    for (const part of ['endAllDrags()', 'closeWheel()', 'closePointWheel()', 'removePlane(pl)', 'section.on=false', 'secUndo.clear()', 'undo.clear()', 'msCancel()', 'huLine.clear()', 'setHistOpen(false)', 'evLabels=TRIGGER_AT_START===\'label\'', 'vrWindow.c=', 'bringVolumeFront()', 'resetEventViewSettings(settings)', 'ui.tab=10', 'placeMenuNow()', 'placeHelpNow()', 'placeHuNow()']) expect(fn, part).toContain(part);
     // nothing is decoded / uploaded / re-prepared and the session is not left
     expect(fn).not.toMatch(/prepareVr|session\.end|selectSeries|startSample/);
     // the module-level modes of the session (per-segment mode, point place, screenshots) go back with 'vrl-event-fresh'
@@ -617,10 +624,14 @@ describe('hidden segments in VR (event mode): prepared, listed, shown from the s
   it('a segment the page keeps hidden counts as available in event mode only, in the data key, the classification, the results, the shown mask, the menus and the shader flags', () => {
     expect(src).toContain('const segAvail=g=>!!g?.active&&(!!g.enabled||eventModeOn());');
     expect(src).toContain('return [g.active?1:0,segAvail(g)?1:0,g.min,g.max,g.opening,');
-    expect(src).toContain('if(segAvail(seg)&&segMode[key]!==2)mask|=1<<i}return mask};');
-    expect(src).toContain('order=gpuSegmentOrder(),segs=vrSegments(),state={}'); // the classification is built in the worker from the segment state resolved here (vr-volume-prep.js prepRun -> buildClsData)
+    // stage 1 of the sample pairs: the rules moved to vr-prep-inputs.js (over the input object inp); vr-view.js hands its own (pageInputs) in
+    const pi = readFileSync(new URL('../../docs/vr-prep-inputs.js', import.meta.url), 'utf8');
+    expect(pi).toContain('export const segAvailOf = (inp, g) => !!g?.active && (!!g.enabled || !!inp.eventMode);');
+    expect(pi).toContain('if (segAvailOf(inp, seg) && segMode[key] !== 2) mask |= 1 << i;');
+    expect(src).toContain('const shownMask=()=>shownMaskOf(pageInputs);');
+    expect(src).toContain('order=inp.order,state=classifyStateOf(inp)'); expect(pi).toContain('const segs = inp.vrSegments, state = {};'); expect(src).toContain('get vrSegments(){return vrSegments()}'); // the classification is built in the worker from the segment state resolved here (vr-volume-prep.js prepRun -> buildClsData)
     expect(src).toContain('gpuVolumeEditDescriptors(undefined,segAvail)');
-    expect(src).toContain('r.segmentKeys.some(k=>segAvail(segmentState[k]))');
+    expect(pi).toContain('r.segmentKeys.some(k => segAvailOf(inp, inp.segments[k]))');
     expect(src).toContain('const act=SEGMENT_PRESET_ORDER.filter(k=>segAvail(segmentState[k])),keys=simpleMenuSegments(act)');
     expect(src).toContain('segAvail(seg)&&segMode[key]!==2?1:0);');
     // outside event mode the derived state is the real one

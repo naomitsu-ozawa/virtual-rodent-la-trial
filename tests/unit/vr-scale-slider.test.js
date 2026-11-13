@@ -77,7 +77,7 @@ const bundled = d => JSON.parse(strFromU8(unzipSync(new Uint8Array(readFileSync(
 const DEMOS = readdirSync(new URL('../../docs/demo', import.meta.url)).filter(d => existsSync(new URL(`../../docs/demo/${d}/project.vrlab`, import.meta.url)));
 const SEG_ORDER = ['bone', 'soft', 'fat', 'lung', 'contrast'];
 const measure = (text, size, bold) => [...String(text)].reduce((a, ch) => a + (ch.charCodeAt(0) > 0x2e80 ? 1 : 0.6) * size * (bold ? 1.08 : 1), 0);
-const TEXT = ja => ({ show: ja ? '表示' : 'Show', hide: ja ? '非表示' : 'Hide', section: ja ? '断面' : 'Sections', sliceOpacity: ja ? 'スライス不透明度' : 'Slice opacity', scale: ja ? '拡大率' : 'Scale', trigger: ja ? 'トリガー' : 'Trigger', trigPoint: ja ? 'ポイントモード' : 'Point mode', trigLabel: ja ? '解析モード' : 'Analysis mode', trigHintPoint: 'h', trigHintLabel: 'h', results: ja ? '解析結果（体積）' : 'Analysis results (volume)', total: ja ? '合計' : 'Total', page: ja ? 'ページ' : 'Page', noSeg: 'none', home: ja ? '正面に戻す' : 'Bring to front', undo: ja ? '元に戻す' : 'Undo', reset: ja ? '最初の状態に戻す' : 'Back to the start', resetAgain: ja ? 'もう一度押すとリセット' : 'Press again to reset', all: ja ? 'すべての設定' : 'All settings', exit: ja ? 'VRを終了' : 'Exit VR' });
+const TEXT = ja => ({ color: ja ? '色' : 'Color', shape: ja ? '表示' : 'Show', show: ja ? '表示' : 'Show', hide: ja ? '非表示' : 'Hide', section: ja ? '断面' : 'Sections', sliceOpacity: ja ? 'スライス不透明度' : 'Slice opacity', scale: ja ? '拡大率' : 'Scale', trigger: ja ? 'トリガー' : 'Trigger', trigPoint: ja ? 'ポイントモード' : 'Point mode', trigLabel: ja ? '解析モード' : 'Analysis mode', trigHintPoint: 'h', trigHintLabel: 'h', results: ja ? '解析結果（体積）' : 'Analysis results (volume)', total: ja ? '合計' : 'Total', page: ja ? 'ページ' : 'Page', noSeg: 'none', home: ja ? '正面に戻す' : 'Bring to front', undo: ja ? '元に戻す' : 'Undo', reset: ja ? '最初の状態に戻す' : 'Back to the start', resetAgain: ja ? 'もう一度押すとリセット' : 'Press again to reset', all: ja ? 'すべての設定' : 'All settings', exit: ja ? 'VRを終了' : 'Exit VR' });
 const LEVELS = { items: [1, 2, 3, 4].map(i => ({ id: 'l' + i, label: 'Lv' + i })), busy: false, hint: '', text: { title: 'Data', again: 'Again' } };
 const boardFor = (demo, ja, scale, levels, page = 0) => {
   const p = demo ? bundled(demo) : { segments: {}, analysis: {} }, keys = simpleMenuSegments(SEG_ORDER.filter(k => p.segments?.[k]?.active));
@@ -117,12 +117,13 @@ describe('かんたん menu: the 拡大率 row (coordinates)', () => {
       const first = boardFor(demo, ja, scale, lv ? LEVELS : null), pages = first.w.some(x => x.id === 'results:page') ? +first.w.find(x => x.id === 'results:page').text.split('/')[1] : 1, seen = new Set();
       for (let pg = 0; pg < pages; pg++) {
         const { w, regs } = boardFor(demo, ja, scale, lv ? LEVELS : null, pg), bs = w.filter(x => x.type === 'button'), hits = w.filter(x => x.type === 'hit');
-        for (const h of hits) { seen.add(h.target); expect(h.id).toBe(h.target + ':row'); }
+        expect(hits.length, 'no whole-row hit area any more').toBe(0);
+        const rowBtns = bs.filter(x => /^result:\d+:(color|shape)$/.test(x.id));
+        for (const b of rowBtns) seen.add(b.id.split(':').slice(0, 2).join(':'));
+        for (const b of rowBtns) expect(b.x + b.w, b.id).toBeLessThanOrEqual(M.W - M.X);
+        for (const l of w.filter(x => x.type === 'label' && /^result:\d+:(name|vol)$/.test(x.id))) expect(l.x + l.maxW, `${l.id} ends before the toggles`).toBeLessThanOrEqual(rowBtns[0].x);
         for (let i = 0; i < bs.length; i++) for (let j = i + 1; j < bs.length; j++) expect(overlap(rect(bs[i]), rect(bs[j])), `p${pg} ${bs[i].id} / ${bs[j].id}`).toBe(false);
-        for (let i = 0; i < hits.length; i++) for (let j = i + 1; j < hits.length; j++) expect(overlap(rect(hits[i]), rect(hits[j])), `p${pg} ${hits[i].id} / ${hits[j].id}`).toBe(false);
-        for (const h of hits) for (const b of bs) if (b.id !== h.target) expect(overlap(rect(h), rect(b)), `p${pg} ${h.id} / ${b.id}`).toBe(false); // a row's own chip is the one thing inside it
         for (const b of bs) { expect(b.x).toBeGreaterThanOrEqual(0); expect(b.x + b.w).toBeLessThanOrEqual(M.W); expect(b.y + b.h).toBeLessThanOrEqual(M.H); }
-        for (const h of hits) { expect(h.x).toBeGreaterThanOrEqual(0); expect(h.x + h.w).toBeLessThanOrEqual(M.W); expect(h.y + h.h).toBeLessThanOrEqual(M.H); }
         const sc = w.find(x => x.id === 'scale'), home = bs.find(b => b.id === 'home'), bottom = home.y;
         expect(bottom).toBe(M.BOTTOM); expect(bottom + M.BTN_H).toBeLessThanOrEqual(M.H); expect(M.H - (bottom + M.BTN_H)).toBeLessThanOrEqual(30); // the bottom row stays at the lower edge
         expect(sc.y + sc.h).toBeLessThan(bottom);
@@ -140,7 +141,7 @@ describe('かんたん menu: the 拡大率 row (coordinates)', () => {
           expect(nx && pv && pt).toBeTruthy(); expect(pv.page).toBe(pg - 1); expect(nx.page).toBe(pg + 1); expect(!!pv.disabled).toBe(pg === 0); expect(!!nx.disabled).toBe(pg === pages - 1);
           expect(pt.text).toBe(`${ja ? 'ページ' : 'Page'} ${pg + 1}/${pages}`); expect(pt.x + measure(pt.text, pt.size, false)).toBeLessThanOrEqual(M.W - 20);
           expect(tot.x + measure(tot.text, tot.size, false)).toBeLessThan(pv.x); expect(tot.text).not.toContain('…');
-          expect(pv.y + pv.h).toBeLessThanOrEqual((lv ? M.LEVEL_Y - M.ROW / 2 : M.BOTTOM)); expect(pv.y).toBeGreaterThan(Math.max(...hits.map(h => h.y + h.h)) - 1);
+          expect(pv.y + pv.h).toBeLessThanOrEqual((lv ? M.LEVEL_Y - M.ROW / 2 : M.BOTTOM)); expect(pv.y).toBeGreaterThan(Math.max(...rowBtns.map(h => h.y + h.h)) - 1);
         } else { expect(nx || pv || pt).toBeFalsy(); expect(tot ? tot.text : '').not.toContain('…'); }
         const nm = w.find(x => x.id === 'scale:name'), tx = w.find(x => x.id === 'scale:text');
         expect(nm.x + measure(nm.text, 34, true)).toBeLessThanOrEqual(430);
@@ -154,12 +155,12 @@ describe('かんたん menu: the 拡大率 row (coordinates)', () => {
     });
   }
   it('many results: 後足 (sample7: 34 results, no data switch row) pages 12 + 12 + 10; 2 and 4 results (sample1 / sample2) show no pager', () => {
-    const rows = (demo, pg, lv) => boardFor(demo, true, SC, lv ? LEVELS : null, pg).w.filter(x => x.type === 'hit').map(x => +x.target.split(':')[1]);
+    const rows = (demo, pg, lv) => boardFor(demo, true, SC, lv ? LEVELS : null, pg).w.filter(x => /^result:\d+:color$/.test(x.id)).map(x => +x.id.split(':')[1]); // one 色 toggle per listed result (stage 3)
     expect(rows('sample7', 0).length).toBe(12); expect(rows('sample7', 1).length).toBe(12); expect(rows('sample7', 2).length).toBe(10);
     expect([...rows('sample7', 0), ...rows('sample7', 1), ...rows('sample7', 2)]).toEqual(Array.from({ length: 34 }, (_, i) => i));
     expect(boardFor('sample7', true, SC, null, 0).w.find(x => x.id === 'results:page').text).toBe('ページ 1/3');
     for (const lv of [false, true]) for (const d of ['sample2', 'sample1']) {
-      const { w, regs } = boardFor(d, true, SC, lv ? LEVELS : null); expect(w.filter(x => x.type === 'hit').length).toBe(regs.length); expect(w.some(x => x.id === 'results:next')).toBe(false);
+      const { w, regs } = boardFor(d, true, SC, lv ? LEVELS : null); expect(w.filter(x => /^result:\d+:color$/.test(x.id)).length).toBe(regs.length); expect(w.some(x => x.id === 'results:next')).toBe(false);
     }
     expect(boardFor('sample2', true, SC, LEVELS).regs.length).toBe(4); // sample2: 4 results, 4 segments, with the data switch row: all four listed
   });
@@ -173,16 +174,17 @@ describe('かんたん menu: the 拡大率 row (coordinates)', () => {
     }
     expect(resultPaging(34, 99, 12)).toMatchObject({ page: 2, start: 24, count: 10 }); expect(resultPaging(34, -1, 12)).toMatchObject({ page: 0, start: 0, count: 12 }); expect(resultPaging(12, 3, 12)).toMatchObject({ pages: 1, page: 0, count: 12 });
     // the layout itself: a stale page index (the data now has fewer results) draws the last page, not an empty one
-    const w = boardFor('sample7', true, SC, null, 99).w; expect(w.find(x => x.id === 'results:page').text).toBe('ページ 3/3'); expect(w.filter(x => x.type === 'hit').length).toBe(10);
-    expect(boardFor('sample1', true, SC, null, 7).w.filter(x => x.type === 'hit').length).toBe(2);
+    const w = boardFor('sample7', true, SC, null, 99).w; expect(w.find(x => x.id === 'results:page').text).toBe('ページ 3/3'); expect(w.filter(x => /^result:\d+:color$/.test(x.id)).length).toBe(10);
+    expect(boardFor('sample1', true, SC, null, 7).w.filter(x => /^result:\d+:color$/.test(x.id)).length).toBe(2);
   });
-  it('the whole result row is the hit area, its action target is the colour chip (same id as before: result:<i>)', () => {
-    const { w } = boardFor('sample7', true, SC, null, 1);
-    for (const h of w.filter(x => x.type === 'hit')) {
-      const chip = w.find(x => x.id === h.target); expect(chip.type).toBe('button');
-      expect(h.x).toBe(chip.x); expect(h.y).toBeLessThanOrEqual(chip.y); expect(h.y + h.h).toBeGreaterThanOrEqual(chip.y + chip.h);
-      expect(h.w).toBe(SIMPLE_MENU.W - 2 * SIMPLE_MENU.X); // the name and the volume text are inside it
-      for (const l of w.filter(x => x.type === 'label' && x.id.startsWith(h.target + ':'))) { expect(l.y).toBeGreaterThan(h.y); expect(l.y).toBeLessThan(h.y + h.h); }
+  it('a result row (stage 3): a colour SAMPLE at the left (not pressable), the name and the volume, then 色 and 表示 at the right end; there is no whole-row hit area', () => {
+    const { w } = boardFor('sample7', true, SC, null, 1), M = SIMPLE_MENU;
+    expect(w.filter(x => x.type === 'hit').length).toBe(0);
+    for (const c of w.filter(x => /^result:\d+:color$/.test(x.id))) {
+      const id = c.id.replace(':color', ''), shape = w.find(x => x.id === id + ':shape'), chip = w.find(x => x.id === id);
+      expect(chip.swatch).toBe(true); expect(chip.x).toBe(M.X); expect(chip.action).toBeUndefined();
+      expect(shape.y).toBe(c.y); expect(shape.x).toBeGreaterThan(c.x + c.w - 1); expect(shape.x + shape.w).toBeLessThanOrEqual(M.W - M.X);
+      for (const l of w.filter(x => x.type === 'label' && x.id.startsWith(id + ':'))) { expect(l.y).toBeGreaterThan(c.y); expect(l.y).toBeLessThan(c.y + c.h + 10); expect(l.x + l.maxW).toBeLessThanOrEqual(c.x); }
     }
   });
 });
