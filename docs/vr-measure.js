@@ -5,11 +5,11 @@
 // distance is being made, the START point with a pulsing ring and the hint 「終点のポイントを選んでください」 next to it.
 // vr-view.js calls createVrMeasure(THREE, scene) -> { update, probes, pickLabel, dragLabel, dispose } every frame and does everything else (the flow, haptics, undo) itself; the state is
 // measurements.js (the same for the PC / iPad). The value follows the points: it is recomputed from their voxels each frame (a point being moved included, preview).
-import { getComments, getMarkersShown, commentMatchesSeries, commentTarget } from './comments.js?v=20261110-build708';
-import { getMeasurements, setLabelOffset, distanceMm, measureLabel } from './measurements.js?v=20261110-build708';
-import { nearLabelWorld, stepDelta, offsetFromDelta, LINE_SAMPLES, probeKey, fadeAlpha, approachAlpha, OCCLUDED_ALPHA } from './measure-label.js?v=20261110-build708';
-import { voxelToLocal } from './vr-point.js?v=20261110-build708';
-import { GHOST_ALPHA, occludedPass } from './vr-depth.js?v=20261110-build708';
+import { getComments, getMarkersShown, commentMatchesSeries, commentTarget } from './comments.js?v=20261113-build735';
+import { getMeasurements, setLabelOffset, distanceMm, measureLabel } from './measurements.js?v=20261113-build735';
+import { nearLabelWorld, stepDelta, offsetFromDelta, LINE_SAMPLES, probeKey, fadeAlpha, approachAlpha, OCCLUDED_ALPHA } from './measure-label.js?v=20261113-build735';
+import { voxelToLocal } from './vr-point.js?v=20261113-build735';
+import { GHOST_ALPHA, occludedPass } from './vr-depth.js?v=20261113-build735';
 export const VR_MEASURE_COLOR=0xffd23d,MEASURE_LABEL_W_M=0.045,MEASURE_LABEL_H_M=0.0132,MEASURE_HINT_W_M=0.2,MEASURE_HINT_H_M=0.026;
 export const HINT_DIST_M=0.7,HINT_ELEV=0.5,HINT_ALPHA=0.6,HINT_FADED_ALPHA=0.28,HINT_FADE_AFTER_MS=3000,HINT_FADE_MS=1200;
 // pure: the hint's opacity after elapsedMs on screen
@@ -60,12 +60,12 @@ export function createVrMeasure(THREE,scene,deps={getComments,getMarkersShown,ge
   const ghost=ghostMesh?addGhost(mesh,Object.assign(mesh.material.clone(),{depthFunc:THREE.GreaterDepth,depthTest:true,depthWrite:false,opacity:GHOST_ALPHA,visible:false})):null; // a child of the label: moves, scales and hides with it
   return{mesh,canvas,tex,text:null,lit:false,ghost};
  };
- const drawText=(lb,text,font,lit=false)=>{
+ const drawText=(lb,text,font,lit=false,fit=false)=>{
   if(lb.text===text&&lb.lit===lit)return;lb.text=text;lb.lit=lit; // the canvas is redrawn (and re-uploaded) only when the text or the lit state changes
   const c=lb.canvas,ctx=c.getContext('2d');ctx.clearRect(0,0,c.width,c.height);
   ctx.fillStyle=lit?'#ffe27a':'rgba(17,23,27,.92)';ctx.beginPath();ctx.roundRect(3,3,c.width-6,c.height-6,c.height/2.4);ctx.fill();
   ctx.lineWidth=lit?7:5;ctx.strokeStyle=lit?'#ffffff':'#ffd23d';ctx.stroke();
-  ctx.fillStyle=lit?'#111111':'#ffffff';ctx.font=font;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(text,c.width/2,c.height/2+2);
+  ctx.fillStyle=lit?'#111111':'#ffffff';ctx.font=font;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(text,c.width/2,c.height/2+2,...(fit?[c.width-36]:[])); // fit: a long text (the hint of a pair, 「…（<name>の点）」) shrinks to the label; the other labels are drawn as they were
   lb.tex.needsUpdate=true;
  };
  const disposeLabel=lb=>{scene.remove(lb.mesh);lb.tex.dispose();lb.mesh.material.dispose();lb.ghost?.material.dispose()};
@@ -136,7 +136,7 @@ export function createVrMeasure(THREE,scene,deps={getComments,getMarkersShown,ge
      if(start.id!==startId){start.id=startId;start.t0=now} // another start point: the hint is read again (full strength, then fades)
      a.set(S.local.x,S.local.y,S.local.z);mesh.localToWorld(a);
      start.ring.position.copy(a);start.ring.scale.setScalar(r0*0.4*(2.1+0.9*pulsePhase(now)));
-     drawText(start.hint,hint,'bold 30px system-ui,sans-serif');
+     drawText(start.hint,hint,'bold 30px system-ui,sans-serif',false,true);
      const hh=hintHandPlace(handPos),hp=hh||hintPlace(head,gaze);
      {const hk=hh?HINT_HAND_SCALE:1;start.hint.mesh.scale.set(MEASURE_HINT_W_M*hk,MEASURE_HINT_H_M*hk,1)} // keep the plane's real width x height (a uniform setScalar made it a 0.7 m square: the 512x64 text stretched into vertical streaks)
      if(hp)start.hint.mesh.position.set(hp.x,hp.y,hp.z);else start.hint.mesh.position.set(a.x,a.y+0.045+r0,a.z);

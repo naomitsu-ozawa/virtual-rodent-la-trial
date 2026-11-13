@@ -48,7 +48,7 @@ describe('vr-view.js: the no-jump interim of a rebuild does not lock the auto-qu
 describe('vr-view.js: segment visibility changes rebuild the combined texture off the frame (V2)', () => {
   const rc = src.slice(src.indexOf('  const comboBox=new THREE.Box3()'), src.indexOf('  // processed segments: built once when VR starts'));
   it('refreshCombo hands a changed mask to the rebuild instead of combining and re-sending all of it', () => {
-    expect(rc).toContain('t.rb.request(mask)');
+    expect(rc).toContain('getRb(t).request(mask,'); // the rebuild object is made by getRb (it also carries the hidden state)
     expect(rc).toContain('createComboRebuild(');
     expect(rc).not.toContain('needsUpdate=true'); // a full re-upload of the 64 MB texture
     expect(rc.match(/combineClassificationDistance\(/g)).toHaveLength(1); // only the first build of a grid (no texture yet)
