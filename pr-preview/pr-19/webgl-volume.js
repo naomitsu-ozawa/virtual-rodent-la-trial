@@ -1,12 +1,13 @@
 import * as THREE from './vendor/three@0.186.0/build/three.module.js';
-import { volumeTexturePlan, reduceSliceArea, packedRgSlice, packCtSlice } from './medical-volume.js?v=20261113-build731';
-import { computeBricksOf, buildEditMaskOf, buildRegionIndexOf, buildChildIndexOf, packIndexRg, BRICK } from './vr-volume-prep.js?v=20261113-build731';
-import { gpuRunsForTexture } from './gpu-runs.js?v=20261113-build731';
-import { MATERIALS, materialKey, materialVec } from './lighting.js?v=20261113-build731';
-import { MAX_SECTION_PLANES } from './vr-section-frame.js?v=20261113-build731';
-import { SHADE_BRIGHT_DEFAULT, SHADE_CONTRAST_DEFAULT, brightOf, contrastOf } from './cap-shade.js?v=20261113-build731';
-import { pickRay, hiddenTestOf } from './webgl-volume-pick.js?v=20261113-build731';
-import { regionLutAlpha, regionLutHiddenSlots } from './region-visibility.js?v=20261113-build731';
+import { volumeTexturePlan, reduceSliceArea, packedRgSlice, packCtSlice } from './medical-volume.js?v=20261113-build732';
+import { computeBricksOf, buildEditMaskOf, buildRegionIndexOf, buildChildIndexOf, packIndexRg, BRICK, smoothEditMaskOf } from './vr-volume-prep.js?v=20261113-build732';
+import { PART_FIELD, runEditMaskField } from './vr-part-view.js?v=20261113-build732';
+import { gpuRunsForTexture } from './gpu-runs.js?v=20261113-build732';
+import { MATERIALS, materialKey, materialVec } from './lighting.js?v=20261113-build732';
+import { MAX_SECTION_PLANES } from './vr-section-frame.js?v=20261113-build732';
+import { SHADE_BRIGHT_DEFAULT, SHADE_CONTRAST_DEFAULT, brightOf, contrastOf } from './cap-shade.js?v=20261113-build732';
+import { pickRay, hiddenTestOf } from './webgl-volume-pick.js?v=20261113-build732';
+import { regionLutAlpha, regionLutHiddenSlots } from './region-visibility.js?v=20261113-build732';
 
 export const WEBGL_VOLUME_DEFAULT = true;
 export const webglVolumeEnabled = (search = typeof location !== 'undefined' ? location.search : '', m = /[?&]webglvolume=(\d)(&|$)/.exec(search || '')) => (m ? m[1] !== '0' : WEBGL_VOLUME_DEFAULT); // one line: the public gate reads a URL key from the line that reads location.search
@@ -53,6 +54,25 @@ export const CHILD_SHADER_PATCHES = [
   { name: 'child-region-lit', find: ' return base*diffuse+vec3(spec);\n}', put: ' return childBase(p,base,s)*diffuse+vec3(spec);\n}' },
   { name: 'child-cap-shade', find: 'float capShadeF(vec3 cp,int s){return capShade>0.5?ctLumHU(huAt(texCoord(cp)),s):1.0;}', put: 'float capShadeF(vec3 cp,int s){return capShade>0.5?ctLumAt(cp,huAt(texCoord(cp)),s):1.0;}' },
 ];
+// n731 fix2: the mask-field normal (vr-view.js gradientAtS, compiled in every program) reads the smoothed field editFieldTex (webgl-volume smoothEditField), applied to EVERY shader (with and without child segments);
+// editTex stays the plain mask that decides the shape. editFieldReady = 0 (the field is not made yet, or it failed): the plain mask, blurred (maskBlurGrad), is the field and a masked slot never falls back to the HU gradient (md).
+// until the smoothed field exists (editFieldReady 0: the first seconds after an edit, or the smoothing failed for good): the plain mask (editFieldTex = editTex then) read as a box blur, +-3 voxels along the axis, 3 x 3 columns 2 voxels apart
+// across it (18 reads per axis): a smooth normal, never the HU gradient and not the one-voxel stair of a plain central difference
+const MASK_BLUR_GLSL = `highp float maskBlurGrad(int k,highp vec3 tc,highp vec3 dd,int s){
+ highp vec3 e=vec3(k==0?1.0:0.0,k==1?1.0:0.0,k==2?1.0:0.0),p1=vec3(k==1?1.0:0.0,k==2?1.0:0.0,k==0?1.0:0.0),p2=vec3(k==2?1.0:0.0,k==0?1.0:0.0,k==1?1.0:0.0);
+ highp float r=0.0;
+ for(int a=-1;a<=1;a++)for(int b=-1;b<=1;b++){highp vec3 o=dd*2.0*(float(a)*p1+float(b)*p2),q=dd*3.0*e;
+  r+=texture(editFieldTex,clamp(tc+o+q,vec3(0.0),vec3(0.999999)))[s]-texture(editFieldTex,clamp(tc+o-q,vec3(0.0),vec3(0.999999)))[s];}
+ return r;
+}
+`;
+export const FIELD_SHADER_PATCHES = [
+  { name: 'child-field-uniform', find: 'vec3 gradientAtS(vec3 tc,int s){', put: 'uniform sampler3D editFieldTex;\nuniform int editFieldReady;\n' + MASK_BLUR_GLSL + 'vec3 gradientAtS(vec3 tc,int s){' },
+  { name: 'child-field-size', find: 'highp vec3 dd=1.0/max(vec3(textureSize(editTex,0)),vec3(1.0)),tq=', put: 'highp vec3 dd=1.0/max(vec3(textureSize(editFieldTex,0)),vec3(1.0)),tq=' },
+  { name: 'child-field-md', find: 'bool md=((editMaskOnly>>s)&1)==1;', put: 'bool md=((editMaskOnly>>s)&1)==1||editFieldReady<1;' },
+  { name: 'child-field-band', find: 'if(md||abs(texture(editTex,tq)[s]-0.5)<0.3){', put: 'if(md||abs(texture(editFieldTex,tq)[s]-0.5)<0.3){' },
+  { name: 'child-field-grad', find: 'g[k]=texture(editTex,clamp(tc+o,vec3(0.0),vec3(0.999999)))[s]-texture(editTex,clamp(tc-o,vec3(0.0),vec3(0.999999)))[s];', put: 'g[k]=editFieldReady>0?texture(editFieldTex,clamp(tc+o,vec3(0.0),vec3(0.999999)))[s]-texture(editFieldTex,clamp(tc-o,vec3(0.0),vec3(0.999999)))[s]:maskBlurGrad(k,tc,dd,s);' },
+];
 export function patchFragmentShader(src, { children = false } = {}) {
   let out = src;
   const apply = list => { for (const p of list) {
@@ -60,6 +80,7 @@ export function patchFragmentShader(src, { children = false } = {}) {
     out = p.all ? out.split(p.find).join(p.put) : out.replace(p.find, () => p.put);
   } };
   apply(SHADER_PATCHES);
+  apply(FIELD_SHADER_PATCHES);
   if (children) apply(CHILD_SHADER_PATCHES);
   return out;
 }
@@ -232,7 +253,7 @@ export class WebGlVolumeRenderer {
       sliceTint: { value: 0 }, sliceOpacity: { value: 0 }, sliceWindow: { value: new THREE.Vector2(0, 1) }, sliceAir: { value: SLICE_AIR }, sliceVol: { value: null },
       regionTex: { value: this.dummy }, regionLut: { value: null }, regionAnyHidden: { value: 0 }, refine: { value: 1 },
       useCls: { value: 0 }, clsTex: { value: this.dummy }, cls4Tex: { value: this.dummy }, useSkip: { value: 0 }, skipTex: { value: this.skipDummy }, clsChan: { value: V4(-1, -1, -1, -1) },
-      editMask: { value: 0 }, editMaskOnly: { value: 0 }, editTex: { value: this.dummy }, useDist: { value: 0 }, distInCls: { value: 0 }, distTex: { value: this.dummy }, voxelMin: { value: 1 }, voxelSize: { value: V3(1, 1, 1) },
+      editMask: { value: 0 }, editMaskOnly: { value: 0 }, editTex: { value: this.dummy }, editFieldTex: { value: this.dummy }, editFieldReady: { value: 0 }, useDist: { value: 0 }, distInCls: { value: 0 }, distTex: { value: this.dummy }, voxelMin: { value: 1 }, voxelSize: { value: V3(1, 1, 1) },
     };
   }
   ensureMaterial() {
@@ -285,11 +306,23 @@ export class WebGlVolumeRenderer {
       if (built.data) {
         const t = new THREE.Data3DTexture(built.data, ...dims); t.format = THREE.RGBAFormat; t.type = THREE.UnsignedByteType; t.minFilter = t.magFilter = THREE.LinearFilter; t.unpackAlignment = 1; t.generateMipmaps = false; t.needsUpdate = true;
         this.editTexture = t; this.edit = { activeMask: built.activeMask, maskOnly: built.maskOnly, data: built.data, dims };
+        this.smoothEditField(t, built.data, dims, built.activeMask);
       }
     }
     u.editMask.value = this.edit?.activeMask | 0; u.editMaskOnly.value = this.edit?.maskOnly | 0; u.editTex.value = this.editTexture || this.dummy;
+    if (!this.editTexture) { this.editSmoothGen = (this.editSmoothGen | 0) + 1; this.editFieldTexture?.dispose(); this.editFieldTexture = null; }
+    u.editFieldTex.value = this.editFieldTexture || this.editTexture || this.dummy; u.editFieldReady.value = this.editFieldTexture ? 1 : 0;
     old?.dispose();
     this.onRedraw();
+  }
+  smoothEditField(t, data, dims, slots) {
+    const gen = this.editSmoothGen = (this.editSmoothGen | 0) + 1;
+    const oldField = this.editFieldTexture; this.editFieldTexture = null; oldField?.dispose();
+    runEditMaskField(smoothEditMaskOf, data, dims, slots, PART_FIELD).then(bytes => {
+      if (gen !== this.editSmoothGen || this.editTexture !== t || !this.uniforms) return;
+      const f = new THREE.Data3DTexture(bytes, ...dims); f.format = THREE.RGBAFormat; f.type = THREE.UnsignedByteType; f.minFilter = f.magFilter = THREE.LinearFilter; f.unpackAlignment = 1; f.generateMipmaps = false; f.needsUpdate = true;
+      this.editFieldTexture = f; this.uniforms.editFieldTex.value = f; this.uniforms.editFieldReady.value = 1; this.onRedraw();
+    }, e => { console.warn('WebGL volume: mask smoothing skipped:', e?.message || e); });
   }
   // the cut being previewed is painted on the segment's surface like a focused result, in the WebGPU volume's red (previewContains there)
   clearPreviewRuns() { if (!this.previewRuns) return; this.previewRuns = null; this.applyRegions(true); }
@@ -433,12 +466,13 @@ export class WebGlVolumeRenderer {
   resetData() {
     this.dataGeneration++; this.setActive(false);
     if (this.mesh?.parent) this.mesh.parent.remove(this.mesh);
+    this.editSmoothGen = (this.editSmoothGen | 0) + 1; this.editFieldTexture?.dispose(); this.editFieldTexture = null;
     for (const t of [this.texture, this.bricksTexture, this.editTexture, this.regionTexture]) t?.dispose();
     this.childTexture?.dispose(); this.childTexture = null; this.childRg = null; this.childTexSignature = ''; this.childArgs = null; this.childSignature = ''; this.childList = []; this.hasChildren = false;
     this.texture = this.bricksTexture = this.editTexture = this.regionTexture = this.regionRg = null; this.cpu = null; this.edit = null; this.hasRegions = false;
     this.seriesId = null; this.dataSignature = ''; this.planSignature = ''; this.volume = null; this.textureDims = [1, 1, 1]; this.textureBytes = 0; this.reducedVolume = false;
     this.editArgs = null; this.previewRuns = null; this.regionsArgs = null; this.regionIndexed = 0; this.regionTexSignature = null; this.analysisOverlaySignature = '';
-    if (this.uniforms) { this.uniforms.vol.value = this.uniforms.sliceVol.value = this.uniforms.bricks.value = null; this.uniforms.editTex.value = this.uniforms.regionTex.value = this.dummy; this.uniforms.editMask.value = this.uniforms.editMaskOnly.value = 0; if (this.uniforms.childTex) { this.uniforms.childTex.value = this.uniforms.childLut.value = this.dummy; } if (this.mesh) this.mesh.material = this.material; }
+    if (this.uniforms) { this.uniforms.vol.value = this.uniforms.sliceVol.value = this.uniforms.bricks.value = null; this.uniforms.editTex.value = this.uniforms.editFieldTex.value = this.uniforms.regionTex.value = this.dummy; this.uniforms.editFieldReady.value = 0; this.uniforms.editMask.value = this.uniforms.editMaskOnly.value = 0; if (this.uniforms.childTex) { this.uniforms.childTex.value = this.uniforms.childLut.value = this.dummy; } if (this.mesh) this.mesh.material = this.material; }
   }
   destroy() { this.resetData(); this.mesh?.geometry?.dispose(); this.material?.dispose(); this.materialRegions?.dispose(); this.materialChild?.dispose(); this.materialRegionsChild?.dispose(); this.childLutTexture?.dispose(); this.dummy.dispose(); this.skipDummy.dispose(); this.regionLut.dispose(); }
   // ---- one frame: the uniforms; the page then calls renderer.render(scene, camera) ----

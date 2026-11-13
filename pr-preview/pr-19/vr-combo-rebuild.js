@@ -19,8 +19,8 @@
 // the old shader rule (no jump from a hidden sample) is safe for any bytes in the texture; hideValid(cur, shown) says when the shader may drop that rule: no rebuild running, the bytes finished, built for exactly the hidden state
 // cur (on the shown slots; hiding MORE than was built is not safe), for a mask that contains what is shown. A change of the mask carries no state (a segment just shown must not wait for the extra pass); the state is asked for again once that job is over (requestHide). Without a worker (or when it fails) the alpha is the ordinary one and hideValid stays false: the picture is as before.
 // Pure (no DOM / GL; the worker is injected), unit-tested.
-import { combinedAlphaRange, morph3, euclideanDistanceBytes } from './distance-field.js?v=20261113-build731';
-import { hiddenClassBytes, hideFieldMin, hideBitsMatch, hideBitsSame, hideBitsAny, hideBitsOn } from './vr-hide-field.js?v=20261113-build731';
+import { combinedAlphaRange, morph3, euclideanDistanceBytes } from './distance-field.js?v=20261113-build732';
+import { hiddenClassBytes, hideFieldMin, hideBitsMatch, hideBitsSame, hideBitsAny, hideBitsOn } from './vr-hide-field.js?v=20261113-build732';
 
 export const UPLOAD_BYTES = 2 << 20, SLAB_BYTES = 1 << 20, CHUNK = 1 << 16, WORKER_CHUNK = 1 << 20, BUDGET_MS = 2, WORKER_FRAMES = 600, HIDE_FRAMES = 36000;
 
@@ -66,14 +66,14 @@ const blobWorker = () => {
 // place), mask: the mask data holds (-1: unknown / mixed), upload(z0, z1): send slices [z0, z1) of data to the GPU. tick() once per frame;
 // it returns true when a rebuild has just completed. A worker that reports an error, fails, or has not answered a build after workerFrames
 // frames is dropped and the job goes on on the main thread (the jumps never stay off for the session).
-// hide = {cls: {data, C} (the classification bytes), rgs: [the results' index, the children's] (RG bytes, G = the hide index; an entry may be null)} makes request(m, bits) accept a hidden state (see the top);
+// hide = {cls: {data, C} (the classification bytes), rgs: [the results' index, the children's] (RG bytes, G = the hide index; an entry may be null; n731 perf ③: a source may also be one byte a voxel, the body's cut while parts are out)} makes request(m, bits) accept a hidden state (see the top);
 // setHideSources(cls, rgs) replaces them (the child index was rebuilt: what the worker holds and what was built from it are dropped).
 export function createComboRebuild({ dist, chan, dims, data, mask, upload, hide = null, makeWorker = blobWorker, now = () => performance.now(), budgetMs = BUDGET_MS, uploadBytes = UPLOAD_BYTES, slabBytes = SLAB_BYTES, workerFrames = WORKER_FRAMES, hideFrames = HIDE_FRAMES }) {
   const plane = dims[0] * dims[1], depth = dims[2], n = plane * depth, C = dist.C, chanA = Array.from(chan);
   let content = mask, safe = mask < 0 ? 0 : mask, job = null, seq = 0, wk = null, broken = false, sent = 0, spare = null, hideOut = 0; // hideOut: the id of a build with a hidden state posted to this worker and not answered yet: it computes it in ONE blocking pass (seconds on a headset), so for that job (and one queued behind it) no answer within workerFrames frames is not yet a failure
   let hcls = hide ? hide.cls : null, hrgs = hide ? hide.rgs : null, hidx = [], hfeed = [], hsent = 0, hat = 0, hinit = false; // the hide inputs: what the worker has to be sent, how far it is
   let contentHide = null, wantMask = mask; // contentHide: the hidden state the finished bytes were built with (null: none, the ordinary field only); wantMask: the mask of the last request
-  const setupHide = () => { hidx = []; if (hrgs) hrgs.forEach((r, k) => { if (r && r.length === n * 2) hidx.push(k); }); hfeed = hcls ? [['cls', hcls.data, 1, 0, n * hcls.C], ...hidx.map((k, j) => ['s' + j, hrgs[k], 2, 1, n])] : []; hsent = 0; hat = 0; hinit = false; };
+  const setupHide = () => { hidx = []; if (hrgs) hrgs.forEach((r, k) => { if (r && (r.length === n * 2 || r.length === n)) hidx.push(k); }); hfeed = hcls ? [['cls', hcls.data, 1, 0, n * hcls.C], ...hidx.map((k, j) => (hrgs[k].length === n ? ['s' + j, hrgs[k], 1, 0, n] : ['s' + j, hrgs[k], 2, 1, n]))] : []; hsent = 0; hat = 0; hinit = false; }; // an index source: RG bytes (G = the index) or, n731 perf ③, one byte a voxel (the body's cut: vr-part-view.js partBodyHidOf)
   setupHide();
   const bitsFor = b => b ? hidx.map(k => b[k]) : null; // the worker's tables, one per index it holds
   const sameBits = (a, b) => hideBitsSame(a, b);

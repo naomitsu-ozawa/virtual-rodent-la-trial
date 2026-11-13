@@ -1,8 +1,8 @@
 // the credit box of a practice dataset with a license notice (its sample.json: credit / license / changes / terms, read through sample-registry.js): shown in the データ panel while that dataset is open
 // (a 'vrl-event-sample-open' with its id), hidden when other data replaces it. Source and license are real links. Nothing is loaded from anywhere.
 // creditRows is also what the card's 「詳細」 (event-launcher.js) shows: the same four lines, the same existing label texts.
-import { tr } from './i18n.js?v=20261113-build731';
-import { sampleCredit } from './sample-registry.js?v=20261113-build731';
+import { tr } from './i18n.js?v=20261113-build732';
+import { sampleCredit } from './sample-registry.js?v=20261113-build732';
 // the lines of a credit (c = sampleCredit(id)): source (+ the data link when it is another one), license (+ link), changes, terms and the note (when the dataset has them)
 export function creditRows(doc, c) {
  const el=(tag,cls,key)=>{const e=doc.createElement(tag);if(cls)e.className=cls;if(key){e.dataset.i18n=key;e.textContent=tr(key)}return e};
