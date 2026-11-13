@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeBricksOf, halveData, buildDistanceBytesSync, buildEditMaskOf, buildRegionIndexOf, prepRun, prepWorkerSource, createVolumePrep, BRICK } from '../../docs/vr-volume-prep.js';
+import { computeBricksOf, computeBricksRangeOf, halveRangeOf, halveData, buildDistanceBytesSync, buildEditMaskOf, buildRegionIndexOf, prepRun, prepWorkerSource, createVolumePrep, BRICK } from '../../docs/vr-volume-prep.js';
 import { gpuRunsForTexture } from '../../docs/gpu-runs.js';
 import { buildClsData } from '../../docs/point-cls.js';
 import { buildDistanceBytes, combineClassificationDistance, fourthChannelBytes } from '../../docs/distance-field.js';
@@ -169,7 +169,10 @@ describe('prepRun: the worker jobs', () => {
     same(new Uint8Array(msg.data), copy);
     same(msg.bricks, refBricks(copy, dims, CAL).bricks); expect(msg.brickDims).toEqual(refBricks(copy, dims, CAL).brickDims);
     const h = refHalve({ data: copy, dims });
-    expect(msg.half.dims).toEqual(h.dims); same(msg.half.data, h.data); same(msg.half.bricks, refBricks(h.data, h.dims, CAL).bricks);
+    expect(msg.half.dims).toEqual(h.dims); same(msg.half.data, h.data); // n731: the half bricks come from the block extremes (halveRangeOf), no longer from the averaged words
+    expect(msg.half.rangeLo).toBeUndefined(); // the extremes only make the bricks (applyThinCls reads exact marks of the source voxels)
+    const hr = halveRangeOf(copy, dims); same(msg.half.bricks, computeBricksRangeOf(hr.lo, hr.hi, h.dims, CAL, BRICK).bricks);
+    { const old = refBricks(h.data, h.dims, CAL).bricks; for (let i = 0; i < old.length; i += 4) { expect(msg.half.bricks[i]).toBeLessThanOrEqual(old[i]); expect(msg.half.bricks[i + 1]).toBeGreaterThanOrEqual(old[i + 1]); } } // wider than the averaged ones, never narrower
     for (const b of [msg.bricks, msg.half.data, msg.half.bricks]) expect(tr).toContain(b.buffer);
     expect(run({ t: 'volume', id: 4, data: copy.slice().buffer, dims, calib: CAL, brick: BRICK, half: false })[0].msg.half).toBe(null);
   });
@@ -181,7 +184,7 @@ describe('prepRun: the worker jobs', () => {
       const regions = [{ color: 0xff3300, segmentKeys: ['bone'], runsBySlice: blobRuns(srcDims, 3), mm3: 1.5, id: 7 }, { color: 0x2255ff, segmentKeys: ['soft', 'fat'], runsBySlice: blobRuns(srcDims, 4), mm3: 2.5, id: 8 }, { color: 0xff3300, segmentKeys: ['lung'], runsBySlice: blobRuns(srcDims, 6), mm3: 0.5, id: 9 }];
       const regionItems = regions.map(r => ({ color: r.color, segMask: r.segmentKeys.reduce((m, k) => m | (1 << ['bone', 'soft', 'fat', 'lung'].indexOf(k)), 0), runsBySlice: r.runsBySlice, mm3: r.mm3, segmentKeys: r.segmentKeys, rid: r.id }));
       const bricksFull = refBricks(volume([36, 24, 20], 2), [36, 24, 20], CAL), bricksHalf = refBricks(srcCopy, dims, CAL), mask = n >= 2 ? 3 : 1;
-      const out = run({ t: 'cls', id: 9, src: src.buffer, dims, calib: CAL, editDescs, editSourceDims: srcDims, regionItems, order: SEGS.order, state: st, brickDimsFull: bricksFull.brickDims, brickDimsHalf: bricksHalf.brickDims, mask });
+      const out = run({ t: 'cls', id: 9, thinKeep: false, src: src.buffer, dims, calib: CAL, editDescs, editSourceDims: srcDims, regionItems, order: SEGS.order, state: st, brickDimsFull: bricksFull.brickDims, brickDimsHalf: bricksHalf.brickDims, mask });
       const r = out.at(-1).msg;
       expect(r.t).toBe('cls'); expect(r.warnings).toEqual([]);
       // the processing mask and the analysis index = what the page built (the reference above)
@@ -236,7 +239,7 @@ describe('the worker source is self-contained', () => {
     const dims = [14, 12, 10], src = volume(dims, 4), copy = src.slice(), st = stateOf(4);
     const descs = [{ si: 0, mode: 'exclude', maskOnly: false, runs: blobRuns([28, 24, 20], 1) }, { si: 1, mode: 'keep', maskOnly: true, runs: blobRuns([28, 24, 20], 2) }];
     const items = [{ color: 0x123456, segMask: 3, runsBySlice: blobRuns([28, 24, 20], 3), mm3: 1, segmentKeys: ['bone', 'soft'], rid: 4 }];
-    self.onmessage({ data: { t: 'cls', id: 2, src: src.buffer, dims, calib: CAL, editDescs: descs, editSourceDims: [28, 24, 20], regionItems: items, order: SEGS.order, state: st, brickDimsFull: [2, 2, 2], brickDimsHalf: null, mask: 15 } });
+    self.onmessage({ data: { t: 'cls', id: 2, thinKeep: false, src: src.buffer, dims, calib: CAL, editDescs: descs, editSourceDims: [28, 24, 20], regionItems: items, order: SEGS.order, state: st, brickDimsFull: [2, 2, 2], brickDimsHalf: null, mask: 15 } });
     const r = posted.at(-1).m, em = buildEditMaskOf(descs, [28, 24, 20], dims), cls = buildClsData({ dims, data: copy }, CAL, { data: em.data, dims, active: em.activeMask, maskOnly: em.maskOnly }, st, SEGS.order), dist = buildDistanceBytesSync(cls, dims);
     same(r.cls.data, cls.data); same(r.dist.data, dist.data); same(r.combo, combineClassificationDistance(cls, dist, 15, null, { four: true })); same(r.cls4, fourthChannelBytes(cls)); same(r.edit.data, em.data);
     same(r.region.data, buildRegionIndexOf(items, [28, 24, 20], dims).data);

@@ -77,7 +77,7 @@ describe('the VR shader keeps child segments out of every session without them',
     // draws with exactly the programs it always had. If this fails the shader text of a child-free session changed: justify it, or move the change under VRL_CHILDREN.
     const t = shaderTemplate(src), V = [[], ['VRL_NO_GENERAL', 'VRL_OPAQUE'], ['VRL_NO_GENERAL', 'VRL_NO_EVENTS', 'VRL_OPAQUE']], h = createHash('sha256');
     for (const med of [0, 1]) for (const reg of [0, 1]) for (const cls4 of [0, 1]) for (const v of V) h.update(preprocess(t, new Set([...v, ...(med ? ['VRL_MEDIUMP'] : []), ...(reg ? ['VRL_REGIONS'] : []), ...(cls4 ? ['VRL_CLS4'] : [])])) + '\n--\n');
-    expect(h.digest('hex').slice(0, 24)).toBe('115fdd59a34ed168fb34cd1f');
+    expect(h.digest('hex').slice(0, 24)).toBe('ab1d7b560ea8325168c51a3b');
   });
 });
 
@@ -86,7 +86,7 @@ describe('an earlier change: the programs WITHOUT results are the ones they were
   it('no results, no child segments: the shader text of every variant is unchanged by the hidden-result code (it is all under VRL_REGIONS / VRL_HIDE)', () => {
     const t = shaderTemplate(src), V = [[], ['VRL_NO_GENERAL', 'VRL_OPAQUE'], ['VRL_NO_GENERAL', 'VRL_NO_EVENTS', 'VRL_OPAQUE']], h = createHash('sha256');
     for (const med of [0, 1]) for (const cls4 of [0, 1]) for (const v of V) h.update(preprocess(t, new Set([...v, ...(med ? ['VRL_MEDIUMP'] : []), ...(cls4 ? ['VRL_CLS4'] : [])])) + '\n--\n');
-    expect(h.digest('hex').slice(0, 24)).toBe('f6f6cc005e27fae57955701e');
+    expect(h.digest('hex').slice(0, 24)).toBe('780089e056aa4384f815afde');
     for (const v of V) expect(preprocess(t, new Set(v))).not.toMatch(/regionHiddenAt|regionVis|passH|VRL_HIDE|sliceColorR/);
   });
 });

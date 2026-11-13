@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import vm from 'node:vm';
 import { Worker as NodeWorker } from 'node:worker_threads';
-import { PART_FIELD, partFieldBoxOf, partFieldOf, partFieldHaloOf, partFieldReach, partGroupLabelOf, partGroupSeamOf, partFieldNeedsOwn, partFieldSet, partGroupFieldsOf, partSetWorkerSource, runPartSet, createPartSetRunner, runPartGroup, partComputeWorkerSource } from '../../docs/vr-part-view.js';
+import { PART_FIELD, partFieldBoxOf, partFieldOf, partFieldHaloOf, partFieldReach, partGroupLabelOf, partGroupSeamOf, partFieldNeedsOwn, partFieldSet, partGroupFieldsOf, partSetWorkerSource, runPartSet, createPartSetRunner, runPartGroup, partComputeWorkerSource, partFieldJointGroups, partFieldNearOf } from '../../docs/vr-part-view.js';
 
 const W = 26, H = 16, D = 18, n = W * H * D;
 const blob = (inside, lo = [0, 0, 0]) => { const c = new Uint8Array(n); for (let z = 1; z < D - 1; z++) for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) if (inside(x, y, z)) c[x + W * (y + H * z)] = 1; return { data: partFieldOf(c, [W, H, D], PART_FIELD), lo, size: [W, H, D], mask: 1, kind: 'region' }; };
@@ -108,7 +108,7 @@ describe('runPartSet on real threads: the tasks of a group on a pool', () => {
       expect(made.filter(r => r === 'set').length).toBe(1); expect(made.filter(r => r === 'task').length).toBeGreaterThan(1); // the pool had several workers
     });
   }, 120000);
-  it('a task that fails fails its group only: that group is made unsmoothed (counted), the answer still comes; a set worker that dies is retried unsmoothed', async () => {
+  it('a task that fails fails its group only: that group is made unsmoothed (counted), the answer still comes; a set worker that dies is retried by the same path (smoothed, not counted)', async () => {
     const hookTask = (src, role) => (role === 'task' ? 'onmessage=e=>postMessage({ok:false,id:e.data.id,message:"out of memory"});' : src);
     await withThreads(async () => {
       const got = await runPartSet([A, B, lone]), want = await partFieldSet([A, B, lone], async () => { throw new Error('x'); });
@@ -116,7 +116,7 @@ describe('runPartSet on real threads: the tasks of a group on a pool', () => {
     }, hookTask);
     const hookSet = (src, role) => (role === 'set' && !globalThis.__setDied ? (globalThis.__setDied = true, 'throw new Error("boom")') : src);
     const warn = console.warn; console.warn = () => {};
-    try { await withThreads(async () => { const got = await runPartSet([A, B]); expect(got.plain).toBe(1); }, hookSet); } finally { console.warn = warn; delete globalThis.__setDied; }
+    try { await withThreads(async () => { const got = await runPartSet([A, B]); expect(got.plain).toBe(0); }, hookSet); } finally { console.warn = warn; delete globalThis.__setDied; }
   }, 120000);
 });
 
@@ -270,6 +270,49 @@ describe('the newest first does not raise the merges (the 4-channel limit)', () 
         got.parts.forEach(p => expect(p.C).toBeLessThanOrEqual(4));
       }
       r.dispose();
+    }
+  }, 300000);
+});
+
+describe('n731 perf: one smoothing per seam, the joint field once, the same bytes from the last joint field', () => {
+  const blobsOf = (DIM, seeds) => seeds.map(sd => {
+    const ids = new Uint8Array(DIM[0] * DIM[1] * DIM[2]), lo = [1e9, 1e9, 1e9], hi = [-1, -1, -1];
+    for (let z = 0, k = 0; z < DIM[2]; z++) for (let y = 0; y < DIM[1]; y++) for (let x = 0; x < DIM[0]; x++, k++) if ((x - sd[0]) ** 2 + (y - sd[1]) ** 2 + (z - sd[2]) ** 2 < sd[3] ** 2) { ids[k] = 1; [x, y, z].forEach((v, a) => { lo[a] = Math.min(lo[a], v); hi[a] = Math.max(hi[a], v); }); }
+    const box = partFieldBoxOf({ lo, hi }, DIM), [bw, bh, bd] = box.size, codes = new Uint8Array(bw * bh * bd);
+    for (let z = 0, o = 0; z < bd; z++) for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++, o++) codes[o] = ids[box.lo[0] + x + DIM[0] * (box.lo[1] + y + DIM[1] * (box.lo[2] + z))];
+    return { lo: box.lo, size: box.size, mask: 1, kind: 'child', data: partFieldOf(codes, box.size, PART_FIELD) };
+  });
+  const eqSet = (got, want) => {
+    expect(got.merged).toBe(want.merged); expect(got.plain).toBe(want.plain); expect(got.parts.length).toBe(want.parts.length);
+    same(got.body.data, want.body.data); expect([got.body.C, got.body.lo, got.body.size, got.body.a, got.body.b]).toEqual([want.body.C, want.body.lo, want.body.size, want.body.a, want.body.b]);
+    got.parts.forEach((p, i) => { const w = want.parts[i]; same(p.data, w.data); expect([p.C, p.lo, p.size, p.a, p.b]).toEqual([w.C, w.lo, w.size, w.a, w.b]); });
+  };
+  it('a chain of parts detached, put back and detached again: the runner (the joint field from the last one, the seams over their voxels) gives the bytes of the whole computation at every step', async () => {
+    // spheres along x that touch their neighbours: the group's box grows at one end, or stays and changes inside (then only the box around the change is made again: cache.near)
+    const DIM = [200, 30, 30], parts = blobsOf(DIM, Array.from({ length: 12 }, (_, i) => [10 + 15 * i, 15 + (i % 3) - 1, 15 - (i % 2), 7 + (i % 2)]));
+    const r = createPartSetRunner(PART_FIELD, {}), st = { rank: new Map(), next: 0 }; let cur = [], near = 0;
+    for (const step of ['+0', '+1', '+2', '+3', '+4', '+5', '+6', '+7', '-3', '+3', '-6', '+9', '+8', '+6']) {
+      const i = +step.slice(1); cur = step[0] === '+' ? [...cur, i] : cur.filter(x => x !== i);
+      const fields = cur.map(k => ({ ...parts[k], id: 'c' + k })), got = await r.run(fields.map(f => ({ ...f }))), want = await partFieldSet(fields.map(f => ({ ...f })), localRun, PART_FIELD, st);
+      eqSet(got, want); near += got.cache.near || 0;
+    }
+    expect(near).toBeGreaterThan(2); // the joint field was made from the last one
+    r.dispose();
+  }, 300000);
+  it('the joint field is asked once for a group, and each seam is smoothed at most once (never for two orders)', async () => {
+    // seed 18, the parts in order: at the fifth, made the group twice (the joint field asked twice, 8 seams smoothed for the 4 of the group)
+    let st = 18; const rnd = () => { st = (st * 1664525 + 1013904223) >>> 0; return st / 4294967296; };
+    const DIM = [52, 52, 52], parts = blobsOf(DIM, Array.from({ length: 7 }, () => [12 + rnd() * 28, 12 + rnd() * 28, 12 + rnd() * 28, 5 + rnd() * 5]));
+    for (const order of [[0, 1, 2, 3, 4, 5, 6], [6, 4, 2, 0, 1, 3, 5], [3, 0, 5, 2, 6, 1, 4]]) {
+      const state = { rank: new Map(), next: 0 }, cur = [];
+      for (const i of order) {
+        cur.push({ ...parts[i], id: 'q' + i }); const calls = { J: 0, S: 0 };
+        const ops = { joint: async (lab, size, opt) => { calls.J++; return partGroupFieldsOf(lab, size, 2, opt).J; }, label: async (lab, size, k) => partGroupLabelOf(lab, size, k), smooth: async (codes, size, opt, ctx) => { if (!(ctx && ctx.own)) calls.S++; return partFieldOf(codes, size, opt); } };
+        const set = await partFieldSet(cur.map(f => ({ ...f })), ops, PART_FIELD, state), want = await runPartSet(cur.map(f => ({ ...f })));
+        const groups = partFieldJointGroups(cur, partFieldNearOf(cur, PART_FIELD.pad));
+        expect(calls.J).toBeLessThanOrEqual(groups.length); expect(calls.S).toBeLessThanOrEqual(groups.reduce((t, g) => t + g.parts.length - 1, 0));
+        expect(set.merged).toBeLessThanOrEqual(want.merged); expect(set.plain).toBe(0);
+      }
     }
   }, 300000);
 });

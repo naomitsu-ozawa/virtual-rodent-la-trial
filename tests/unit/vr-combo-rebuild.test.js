@@ -227,6 +227,20 @@ describe('createComboRebuild with a hidden state', () => {
     rb.request(0b10, cur); await tickDone(rb); rb.requestHide(cur); expect(rb.busy).toBe(false); // slot 1 alone has no hidden part: nothing to merge, no job
     rb.dispose();
   });
+  // n731 perf ③: while parts are out the body's cut is a third index source of ONE byte a voxel (vr-part-view.js partBodyHidOf, scattered on this grid): sent as it is, merged as the RG indexes are
+  it('a one-byte index source (the body\'s cut) is sent and merged like the RG ones', async () => {
+    const { n, cls, dist, rg, bits } = world(), data = combineClassificationDistance(cls, dist, 0b11), [w, h] = dims;
+    const cut = new Uint8Array(n); for (let z = 8; z < 20; z++) for (let y = 6; y < 20; y++) for (let x = 2; x < 10; x++) cut[(z * h + y) * w + x] = 1; // channel 0 of the body's field hides this block
+    const pb = new Uint8Array(256); for (let i = 1; i < 16; i++) if (i & 1) pb[i] = 0b01; // channel 0 is slot 0's
+    const rb = createComboRebuild({ dist, chan: cls.chan, dims, data, mask: 0b11, upload: () => {}, hide: { cls, rgs: [rg, null, cut] }, makeWorker: mk(), slabBytes: 30000, uploadBytes: 40 * 36 * 4 * 5 });
+    const cur = [bits, new Uint8Array(256), pb]; rb.request(0b11, cur); await tickDone(rb);
+    const ref = new Uint8Array(n); { const full = combineClassificationDistance(cls, dist, 0b11); for (let i = 0; i < n; i++) ref[i] = full[i * 4 + 3]; }
+    hideFieldMin(ref, { cls: { data: cls.data, C: 2 }, chan: cls.chan, dims, mask: 0b11, sources: [{ ids: Uint8Array.from({ length: n }, (_, i) => rg[i * 2 + 1]), bits }, { ids: cut, bits: pb }] });
+    for (let i = 0; i < n; i++) if (data[i * 4 + 3] !== ref[i]) throw new Error('alpha differs at ' + i);
+    expect(rb.hideValid(cur, 0b11)).toBe(true); expect(rb.hideValid([bits, new Uint8Array(256), new Uint8Array(256)], 0b11)).toBe(false); // the cut gone (the parts put back): the old rule until rebuilt
+    rb.setHideSources(cls, [rg, null, null]); expect(rb.hideValid(cur, 0b11)).toBe(false); // a new field of the cut: what was built from the old one is dropped
+    rb.dispose();
+  });
   it('a state hiding nothing on a shown slot makes no merge; without a worker the ordinary alpha is written and hideValid stays false (no rebuild loop)', async () => {
     const { cls, dist, rg, bits } = world(), data = combineClassificationDistance(cls, dist, 0b11), cur = [bits, new Uint8Array(256)];
     const rb = createComboRebuild({ dist, chan: cls.chan, dims, data, mask: 0b11, upload: () => {}, hide: { cls, rgs: [rg, null] }, makeWorker: () => null, budgetMs: 1e9, uploadBytes: 40 * 36 * 4 * 5 });

@@ -10,7 +10,8 @@ import { createHash } from 'node:crypto';
 // Not covered: the page-side steps of prepareVrData inside docs/vr-view.js (reading the slices, the processing mask, the analysis index); bump by hand when those change what is stored.
 const SOURCES = ['vr-volume-prep.js', 'point-cls.js', 'distance-field.js', 'vr-brick-occupancy.js', 'gpu-runs.js', 'vr-prep-cache.js'];
 const KNOWN_HASHES = {
-  12: 'f1404f28b532ab3d',
+  13: '042e3d7bbff1f28a',
+  12: '8c75acfb92755b65',
   3: '537024a77ad091c7',
   5: '5e53f21df1612fef', // the list entries carry segMask (the prepared slot bits). (child segments): the new buildChildIndexOf + a `child` field of the worker answer, present only when child items were sent; the output WITHOUT child segments is byte-identical to before, and an entry made with children has its own key (the child items are an extra hashed `child` part), so no old entry can be mistaken for it: same version
   4: '18ca6924fc9d55f1', // buildRegionIndexOf keeps every result (up to 255) in ids / list, the 14-colour cap only limits the colour index of the histogram (a result of the 15th colour used to be dropped)

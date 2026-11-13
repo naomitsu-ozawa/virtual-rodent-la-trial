@@ -6,8 +6,8 @@
 //   - which uniforms the part owns (the rest is the body's by reference: PART_OWN), the target a grip takes (partTargetOf), the part's own box (partBoundsOf), the laser's rule on the CPU (partKeepVoxelOf),
 //   - several parts at once: every part has its own box, uniforms and pose; the tables are patched for all of them (patchRegionLutMany / patchChildLutMany); a part's proxy box is its own bounding box (partProxyBox) and its laser march
 //     runs only inside it (partRayRange), the texts. The way in is the long-press ring (region-ring.js 切り出す / 戻す); the grip stays the body's grab and takes a part only where the laser meets one.
-import { regionLutAlpha } from './region-visibility.js?v=20261113-build731';
-import { boxFromRange } from './vr-content-box.js?v=20261113-build731';
+import { regionLutAlpha } from './region-visibility.js?v=20261113-build732';
+import { boxFromRange } from './vr-content-box.js?v=20261113-build732';
 
 export const PART_GLSL = `
 // ==== DETACHED PART: compiled only with VRL_PART (the parts' boxes, and the body while a part is out; never otherwise) ====
@@ -27,6 +27,7 @@ uniform vec3 partFieldScale;
 uniform vec3 partFieldOff;
 uniform vec4 partFieldA[4];
 uniform vec4 partFieldB[4];
+uniform sampler3D partOcc; // n731 perf 案②: per 8x8x8 cells of partField, 0 = no point of them is in the part (partOccOf); read by the parts' rays only (partKind != 0)
 float partFieldAt(vec3 tc,vec4 a,vec4 b){vec3 u=tc*partFieldScale+partFieldOff;if(any(lessThan(u,vec3(0.0)))||any(greaterThan(u,vec3(1.0))))return 0.0;vec4 m=texture(partField,u)*a+b;return min(min(m.x,m.y),min(m.z,m.w));}
 bool partFieldIn(vec3 tc,int s){return partFieldAt(tc,partFieldA[s],partFieldB[s])>=0.5;}
 #ifdef VRL_REGIONS
@@ -70,7 +71,7 @@ export const PART_CALL_SITES = Object.freeze(['passH=childHiddenAt(tcO+tcD*t,idx
 //   regionLut / childLut: the part's own copies of the tables (the target NOT hidden: the body's has it hidden); regionAnyHidden: the part's own.
 export const PART_OWN = Object.freeze(['boxC', 'boxH', 'boxEntry', 'planeCount', 'planeCut', 'regionLut', 'regionAnyHidden', 'childLut']);
 // the part's uniform names that volumeUniforms does NOT have (made only for the part's materials)
-export const PART_EXTRA = Object.freeze(['partKind', 'partId', 'partMask', 'partField', 'partFieldScale', 'partFieldOff', 'partFieldA', 'partFieldB']);
+export const PART_EXTRA = Object.freeze(['partKind', 'partId', 'partMask', 'partField', 'partFieldScale', 'partFieldOff', 'partFieldA', 'partFieldB', 'partOcc']);
 // the part's uniforms: the body's (every key by reference) with `own` ({name: {value}}) put over them
 export function partUniforms(primary, own) { return { ...primary, ...own }; }
 
@@ -398,6 +399,26 @@ export function runPartField(codes, size, opt = PART_FIELD, timeoutMs = PART_FIE
     try { w.postMessage({ codes: copy.buffer, size: [...size], opt: { band: opt.band, sigma: opt.sigma, margin: opt.margin, budget: opt.budget } }, [copy.buffer]); } catch (e) { fail('part field worker: ' + (e && e.message || e)); }
   });
 }
+export function runEditMaskField(smooth, data, dims, slots, opt = PART_FIELD, timeoutMs = PART_FIELD_TIMEOUT_MS) {
+  const local = () => new Promise((res, rej) => setTimeout(() => { try { const out = data.slice(); smooth(out, dims, slots, opt); res(out); } catch (e) { rej(e); } }, 0));
+  if (typeof Worker === 'undefined' || typeof Blob === 'undefined' || typeof URL === 'undefined' || !URL.createObjectURL) return local();
+  let w, url;
+  try {
+    url = URL.createObjectURL(new Blob(['const partFieldOf=' + partFieldOf.toString() + ';\nconst smoothEditMaskOf=' + smooth.toString() + ';\nonmessage=e=>{const m=e.data;try{const d=new Uint8Array(m.data);smoothEditMaskOf(d,m.dims,m.slots,m.opt);postMessage({ok:true,data:d.buffer},[d.buffer])}catch(err){postMessage({ok:false,message:String(err&&err.message||err)})}};'], { type: 'text/javascript' }));
+    w = new Worker(url);
+  } catch { if (url) URL.revokeObjectURL(url); return local(); }
+  const copy = data.slice();
+  return new Promise((res, rej) => {
+    let done = false, timer = 0;
+    const end = () => { done = true; clearTimeout(timer); try { w.terminate(); } catch { /* none */ } URL.revokeObjectURL(url); };
+    const fail = m => { if (!done) { end(); rej(new Error(m)); } };
+    w.onmessage = e => { if (done) return; end(); if (e.data && e.data.ok) res(new Uint8Array(e.data.data)); else rej(new Error('mask field: ' + (e.data && e.data.message))); };
+    w.onerror = ev => { if (ev && ev.preventDefault) ev.preventDefault(); fail('mask field worker: ' + ((ev && ev.message) || 'error')); };
+    w.onmessageerror = () => fail('mask field worker: message error');
+    timer = setTimeout(() => fail('mask field worker: no answer in ' + timeoutMs + ' ms'), timeoutMs);
+    try { w.postMessage({ data: copy.buffer, dims: [...dims], slots: slots | 0, opt: { band: opt.band, sigma: opt.sigma, margin: opt.margin, pad: opt.pad, budget: opt.budget } }, [copy.buffer]); } catch (e) { fail('mask field worker: ' + (e && e.message || e)); }
+  });
+}
 // the field without its smoothing (the voxels as they are: 255 = the part + its skin, as partFieldOf's step 1; 0 = the rest), for when the smoothed one could not be made (a worker out of memory on a very large part): the cut works, unsmoothed
 export function partFieldPlain(codes, size) {
   const [w, h, d] = size, wh = w * h, out = new Uint8Array(w * h * d);
@@ -531,15 +552,21 @@ export function partGroupJointOf(lab, size, opt) {
 export function partGroupLabelOf(lab, size, k) {
   const w = size[0] | 0, h = size[1] | 0, d = size[2] | 0, N = w * h * d, codes = new Uint8Array(N);
   // the nearest of the parts k..n for every voxel: a two-pass 3x3x3 chamfer from their voxels, carrying the part (an equal distance keeps the one found first)
-  const dist = new Float32Array(N), nl = new Uint8Array(N), off = [], wt = [];
-  for (let dz = -1; dz <= 1; dz++) for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const q = dx + 3 * (dy + 3 * dz); if (q >= 0) continue; const m = Math.abs(dx) + Math.abs(dy) + Math.abs(dz); off.push(dx, dy, dz); wt.push(m === 1 ? 1 : m === 2 ? Math.SQRT2 : Math.sqrt(3)); }
+  // n731 perf (the labels are the longest tasks of a group): the same arithmetic in the same order, with the neighbours of a voxel by index offsets (no bound test) where all 26 neighbours are inside the box, and the bounds tested only on the box's faces
+  const dist = new Float32Array(N), nl = new Uint8Array(N), off = [], wt = [], di = [];
+  for (let dz = -1; dz <= 1; dz++) for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const q = dx + 3 * (dy + 3 * dz); if (q >= 0) continue; const m = Math.abs(dx) + Math.abs(dy) + Math.abs(dz); off.push(dx, dy, dz); di.push(dx + w * (dy + h * dz)); wt.push(m === 1 ? 1 : m === 2 ? Math.SQRT2 : Math.sqrt(3)); }
+  const nq = wt.length;
   for (let i = 0; i < N; i++) { const l = lab[i]; if (l >= k) { dist[i] = 0; nl[i] = l; } else { dist[i] = 1e9; nl[i] = 0; } }
-  for (let fw = 1; fw >= -1; fw -= 2) for (let zi = 0; zi < d; zi++) { const z = fw > 0 ? zi : d - 1 - zi; for (let yi = 0; yi < h; yi++) { const y = fw > 0 ? yi : h - 1 - yi; for (let xi = 0; xi < w; xi++) {
+  for (let fw = 1; fw >= -1; fw -= 2) for (let zi = 0; zi < d; zi++) { const z = fw > 0 ? zi : d - 1 - zi; for (let yi = 0; yi < h; yi++) { const y = fw > 0 ? yi : h - 1 - yi, rowIn = z > 0 && z < d - 1 && y > 0 && y < h - 1; for (let xi = 0; xi < w; xi++) {
     const x = fw > 0 ? xi : w - 1 - xi, i = x + w * (y + h * z); let mm = dist[i], ml = nl[i]; if (mm === 0) continue;
-    for (let q = 0, p = 0; q < wt.length; q++, p += 3) {
-      const xx = x + fw * off[p], yy = y + fw * off[p + 1], zz = z + fw * off[p + 2];
-      if (xx < 0 || xx >= w || yy < 0 || yy >= h || zz < 0 || zz >= d) continue;
-      const j = xx + w * (yy + h * zz), v = dist[j] + wt[q]; if (v < mm) { mm = v; ml = nl[j]; }
+    if (rowIn && x > 0 && x < w - 1) {
+      for (let q = 0; q < nq; q++) { const j = i + fw * di[q], v = dist[j] + wt[q]; if (v < mm) { mm = v; ml = nl[j]; } }
+    } else {
+      for (let q = 0, p = 0; q < nq; q++, p += 3) {
+        const xx = x + fw * off[p], yy = y + fw * off[p + 1], zz = z + fw * off[p + 2];
+        if (xx < 0 || xx >= w || yy < 0 || yy >= h || zz < 0 || zz >= d) continue;
+        const j = xx + w * (yy + h * zz), v = dist[j] + wt[q]; if (v < mm) { mm = v; ml = nl[j]; }
+      }
     }
     dist[i] = mm; nl[i] = ml;
   } } }
@@ -647,18 +674,37 @@ export async function partFieldSet(fields, run = runPartGroup, opt = PART_FIELD,
   const asks = order => order.map((p, k) => (k < order.length - 1 ? 1 : 0) + order.slice(0, k).filter(q => meet(p, q)).length); // per position
   const over = (order, ask) => order.reduce((t, p, k) => t + Math.max(0, used[p] + ask[k] - 4), 0);
   for (const { channel: c, parts: gr0 } of groups) {
-    // G: the newest part goes FIRST (it has no earlier neighbour, and the seams of the older parts are the same as before it came: they are not made again). The smallest-last order (partSeamOrder) is kept where it matters: the newest
-    // first only when no part is asked for more than the 4 it can read, or when every part of the group meets every other (then every order asks the same of the group, and the 4 are over for every order alike)
-    let gr = gr0, cand = false, full = false;
-    if (state && gr.every(p => list[p].id != null && state.rank.has(list[p].id))) {
-      const newest = [...gr].sort((u, v) => state.rank.get(list[v].id) - state.rank.get(list[u].id));
-      full = gr.every(p => gr.every(q => p === q || meet(p, q)));
-      if (over(newest, asks(newest)) === 0 || (full && over(newest, asks(newest)) <= over(gr, asks(gr)))) { gr = newest; cand = true; }
+    // G: the newest part goes FIRST (it has no earlier neighbour, and the seams of the older parts are the same as before it came: they are not made again). The smallest-last order (partSeamOrder) is kept where it matters: the order
+    // is decided by what each part really reads (the plan: the joint field and the seams' voxels, before any smoothing), the newest first when it asks no more than the 4 a part can read, or when every part of the group meets every other
+    // (every order asks the same), or when it asks fewer than the smallest-last order (with as many: the smallest-last order where the boxes said so, as did). Only the order taken is smoothed (n731 perf ⑤: smoothed
+    // the newest first and then made the whole group again in the smallest-last order, or made it in that order at once, where the boxes over-counted: every seam made again at every detach past the fifth)
+    let newest = null, full = false, boxOk = false;
+    { // n731 perf ⑤: the parts' ages are the state's ranks; without them (no state, or a part without an id) the age is the position in `fields` (a later one is newer, as the ranks are made): the newest first in every case
+      const ranked = !!state && gr0.every(p => list[p].id != null && state.rank.has(list[p].id)), age = p => (ranked ? state.rank.get(list[p].id) : p);
+      newest = [...gr0].sort((u, v) => age(v) - age(u));
+      full = gr0.every(p => gr0.every(q => p === q || meet(p, q)));
+      boxOk = over(newest, asks(newest)) === 0 || (full && over(newest, asks(newest)) <= over(gr0, asks(gr0)));
     }
-    // the group made in the order `gr` (the tasks, the seams, the plan): -> {gr, n, glo, gs, J, S, pl, reg, failed}
-    const make = async gr => {
-      const n = gr.length, glo = [0, 1, 2].map(a => Math.min(...gr.map(p => list[p].lo[a]))), ghi = [0, 1, 2].map(a => Math.max(...gr.map(p => list[p].lo[a] + list[p].size[a])));
-      const gs = [ghi[0] - glo[0], ghi[1] - glo[1], ghi[2] - glo[2]], lab = new Uint8Array(gs[0] * gs[1] * gs[2]);
+    // the group's box and the inside of any of its parts (the same for every order): the joint field J is made once, from these 0 / 1 (partGroupJointOf reads lab != 0 only: the same bytes as from the labels of any order)
+    const n = gr0.length, glo = [0, 1, 2].map(a => Math.min(...gr0.map(p => list[p].lo[a]))), ghi = [0, 1, 2].map(a => Math.max(...gr0.map(p => list[p].lo[a] + list[p].size[a])));
+    const gs = [ghi[0] - glo[0], ghi[1] - glo[1], ghi[2] - glo[2]], halo = partFieldHaloOf(opt);
+    let jP = null; const jointOf = () => { if (!jP) { const bin = new Uint8Array(gs[0] * gs[1] * gs[2]); for (const p of gr0) { const f = list[p], [fw, fh, fd] = f.size, ox = f.lo[0] - glo[0], oy = f.lo[1] - glo[1], oz = f.lo[2] - glo[2]; for (let z = 0; z < fd; z++) for (let y = 0; y < fh; y++) { const s0 = fw * (y + fh * z), o = ox + gs[0] * (oy + y + gs[1] * (oz + z)); for (let x = 0; x < fw; x++) if (f.data[s0 + x] >= 128) bin[o + x] = 1; } } jP = ops.joint(bin, gs, opt, { glo }); jP.catch(() => {}); } return jP; };
+    // the box f of the part out of a region m = {bytes, lo, size} (one byte a voxel)
+    const reg = (m, f) => {
+      const [fw, fh, fd] = f.size, out = new Uint8Array(fw * fh * fd), ox = f.lo[0] - glo[0] - m.lo[0], oy = f.lo[1] - glo[1] - m.lo[1], oz = f.lo[2] - glo[2] - m.lo[2];
+      for (let z = 0, i = 0; z < fd; z++) for (let y = 0; y < fh; y++) { const q = ox + m.size[0] * (oy + y + m.size[1] * (oz + z)); for (let x = 0; x < fw; x++, i++) out[i] = m.bytes[q + x]; }
+      return out;
+    };
+    // the box of some parts (their field boxes) and `pad` around it, in the group's coordinates, cut to `within` ({lo, size}; none: not cut). The seam of the parts k..n is made over the box of THOSE parts (as if they were a group of their
+    // own) and the halo around the parts that read it, cut to that box: what it is made of then does not depend on the parts that are decided before them (nor on how large the group is), so it is the same bytes when such a part comes or goes
+    const boxAround = (parts, pad, within) => {
+      const lo3 = [0, 1, 2].map(a => Math.min(...parts.map(p => list[p].lo[a])) - glo[a] - pad), hi3 = [0, 1, 2].map(a => Math.max(...parts.map(p => list[p].lo[a] + list[p].size[a])) - glo[a] + pad);
+      if (within) for (let a = 0; a < 3; a++) { lo3[a] = Math.max(lo3[a], within.lo[a]); hi3[a] = Math.min(hi3[a], within.lo[a] + within.size[a]); }
+      return { lo: lo3, size: [0, 1, 2].map(a => hi3[a] - lo3[a]) };
+    };
+    // the group in the order `gr`, up to its plan (the labels, the seams' voxels, J, which seams each part reads; no smoothing): -> {gr, lab, lb, masks, J, pl, failed}
+    const prep = async (gr, again = true) => {
+      const lab = new Uint8Array(gs[0] * gs[1] * gs[2]);
       // the labels: the results, then the child segments over them (a child inside a result: the child's voxel); of one kind, the one earlier in `fields` (written last)
       const writes = gr.map((p, k) => ({ p, k: k + 1 })).sort((u, v) => (partIsChild(list[u.p]) - partIsChild(list[v.p])) || (v.p - u.p));
       for (const { p, k } of writes) {
@@ -668,18 +714,6 @@ export async function partFieldSet(fields, run = runPartGroup, opt = PART_FIELD,
       // ---- the group's tasks (ops): J, and for every seam the voxels of S_k (before their smoothing; exact: S_k's byte is >= 128 where its label is); only the S_k that some part reads are smoothed, each over the box of the parts that read it.
       // The labels of S_k are made over the box of the parts k..n (and the halo): from the voxels of part k (1), those of the later parts (2), nothing else, so that they are the same however the parts before k are, and are made again
       // by nobody (the answer is remembered by these bytes). All the boxes below are boxes of the group, as {bytes, lo, size}
-      const halo = partFieldHaloOf(opt), reg = (m, f) => { // the box f of the part out of a region m = {bytes, lo, size} (one byte a voxel)
-        const [fw, fh, fd] = f.size, out = new Uint8Array(fw * fh * fd), ox = f.lo[0] - glo[0] - m.lo[0], oy = f.lo[1] - glo[1] - m.lo[1], oz = f.lo[2] - glo[2] - m.lo[2];
-        for (let z = 0, i = 0; z < fd; z++) for (let y = 0; y < fh; y++) { const q = ox + m.size[0] * (oy + y + m.size[1] * (oz + z)); for (let x = 0; x < fw; x++, i++) out[i] = m.bytes[q + x]; }
-        return out;
-      };
-      // the box of some parts (their field boxes) and `pad` around it, in the group's coordinates, cut to `within` ({lo, size}; none: not cut). The seam of the parts k..n is made over the box of THOSE parts (as if they were a group of their
-      // own) and the halo around the parts that read it, cut to that box: what it is made of then does not depend on the parts that are decided before them (nor on how large the group is), so it is the same bytes when such a part comes or goes
-      const boxAround = (parts, pad, within) => {
-        const lo3 = [0, 1, 2].map(a => Math.min(...parts.map(p => list[p].lo[a])) - glo[a] - pad), hi3 = [0, 1, 2].map(a => Math.max(...parts.map(p => list[p].lo[a] + list[p].size[a])) - glo[a] + pad);
-        if (within) for (let a = 0; a < 3; a++) { lo3[a] = Math.max(lo3[a], within.lo[a]); hi3[a] = Math.min(hi3[a], within.lo[a] + within.size[a]); }
-        return { lo: lo3, size: [0, 1, 2].map(a => hi3[a] - lo3[a]) };
-      };
       const labelsOf = j => { // the canonical labels of the seam j (parts j..n-1) over their box
         const bx = boxAround(gr.slice(j), 0), [bw, bh, bd] = bx.size, out = new Uint8Array(bw * bh * bd);
         for (let z = 0, i = 0; z < bd; z++) for (let y = 0; y < bh; y++) { const o = bx.lo[0] + gs[0] * (bx.lo[1] + y + gs[1] * (bx.lo[2] + z)); for (let x = 0; x < bw; x++, i++) { const v = lab[o + x]; out[i] = v === j + 1 ? 1 : v > j + 1 ? 2 : 0; } }
@@ -696,33 +730,58 @@ export async function partFieldSet(fields, run = runPartGroup, opt = PART_FIELD,
         }
         return { js, jc };
       });
-      let J = null, S = null, pl = null, failed = false; // S[j] = {bytes, lo, size}: S_j over a box of the group
       try {
         const lb = Array.from({ length: n - 1 }, (_, j) => labelsOf(j));
-        const [Jr, ...ms] = await Promise.all([ops.joint(lab, gs, opt), ...lb.map(b => ops.label(b.codes, b.size, 1, opt))]);
+        const [Jr, ...ms] = await Promise.all([jointOf(), ...lb.map(b => ops.label(b.codes, b.size, 1, opt))]);
         const masks = ms.map((bytes, j) => ({ bytes, lo: lb[j].lo, size: lb[j].size }));
-        pl = planOf(Jr, masks); S = new Array(n - 1).fill(null);
+        return { gr, lab, lb, masks, J: Jr, pl: planOf(Jr, masks), planOf, failed: false };
+      } catch (e) { jP = null; return again ? prep(gr, false) : failedOf(gr, lab, planOf); } // a task failed: the group is asked once more by the same path; the voxel fallback only when that fails too
+    };
+    // a task failed (out of memory on a large group): this group is made from the voxels (S_k = 255 on part k's own voxels, 0 elsewhere: still drawn once) and the larger byte of its parts' own fields; counted
+    const failedOf = async (gr, lab, planOf) => {
+      const masks = Array.from({ length: n - 1 }, (_, j) => { const m = new Uint8Array(lab.length); for (let i = 0; i < m.length; i++) if (lab[i] === j + 1) m[i] = 1; return { bytes: m, lo: [0, 0, 0], size: gs }; });
+      const S = masks.map(m => ({ bytes: m.bytes.map(v => (v ? 255 : 0)), lo: [0, 0, 0], size: gs }));
+      for (const p of gr) if (list[p].plain) { fieldsNow[p] = list[p]; await smoothField(p); list[p] = fieldsNow[p]; } // the larger byte of the parts' OWN smoothed fields: the members that were given unsmoothed bytes are smoothed now
+      const J = new Uint8Array(lab.length); for (const p of gr) partFieldPutMax(J, gs, 1, [0], list[p].data, list[p].lo, list[p].size, glo);
+      return { gr, lab, J, S, pl: planOf(J, masks), planOf, failed: true };
+    };
+    // the seams some part reads, smoothed, each over the box of its readers and the halo (cut to the seam's own box). A seam is 0 farther than the halo from its voxels (partFieldOf's byte depends on the codes within the halo only,
+    // and a box without any is 0 there): only the box of its voxels and the halo around them is made (from that box and one more halo), the rest is 0, the very bytes of the whole box (④)
+    const smoothOf = async (mk, again = true) => {
+      if (mk.failed) return mk;
+      const { gr, lb, masks, pl } = mk, S = new Array(n - 1).fill(null);
+      try {
         await Promise.all(Array.from({ length: n - 1 }, async (_, j) => {
           const readers = gr.filter((_p, k) => pl[k].js.includes(j)); if (!readers.length) return;
-          const sb = boxAround(readers, halo, masks[j]), sz3 = sb.size, m = masks[j], codes = new Uint8Array(sz3[0] * sz3[1] * sz3[2]);
-          for (let z = 0, i = 0; z < sz3[2]; z++) for (let y = 0; y < sz3[1]; y++) { const o = sb.lo[0] - m.lo[0] + m.size[0] * (sb.lo[1] - m.lo[1] + y + m.size[1] * (sb.lo[2] - m.lo[2] + z)); for (let x = 0; x < sz3[0]; x++, i++) codes[i] = m.bytes[o + x] === 1 ? 1 : 0; }
-          S[j] = { bytes: await ops.smooth(codes, sz3, opt, { lab: lb[j].codes, gs: lb[j].size, k: 1, lo: [0, 1, 2].map(a => sb.lo[a] - lb[j].lo[a]) }), lo: sb.lo, size: sz3 };
+          const sb = boxAround(readers, halo, masks[j]), sz3 = sb.size, m = masks[j], out = new Uint8Array(sz3[0] * sz3[1] * sz3[2]);
+          const in1 = [Infinity, Infinity, Infinity], ax1 = [-1, -1, -1];
+          for (let z = 0; z < sz3[2]; z++) for (let y = 0; y < sz3[1]; y++) { const o = sb.lo[0] - m.lo[0] + m.size[0] * (sb.lo[1] - m.lo[1] + y + m.size[1] * (sb.lo[2] - m.lo[2] + z)); for (let x = 0; x < sz3[0]; x++) if (m.bytes[o + x] === 1) { if (x < in1[0]) in1[0] = x; if (x > ax1[0]) ax1[0] = x; if (y < in1[1]) in1[1] = y; if (y > ax1[1]) ax1[1] = y; if (z < in1[2]) in1[2] = z; if (z > ax1[2]) ax1[2] = z; } }
+          if (ax1[0] >= 0) {
+            const kl = in1.map(v => Math.max(0, v - halo)), kh = ax1.map((v, a) => Math.min(sz3[a], v + 1 + halo)), el = kl.map(v => Math.max(0, v - halo)), eh = kh.map((v, a) => Math.min(sz3[a], v + halo)), es = eh.map((v, a) => v - el[a]);
+            const codes = new Uint8Array(es[0] * es[1] * es[2]);
+            for (let z = 0, i = 0; z < es[2]; z++) for (let y = 0; y < es[1]; y++) { const o = sb.lo[0] + el[0] - m.lo[0] + m.size[0] * (sb.lo[1] + el[1] + y - m.lo[1] + m.size[1] * (sb.lo[2] + el[2] + z - m.lo[2])); for (let x = 0; x < es[0]; x++, i++) codes[i] = m.bytes[o + x] === 1 ? 1 : 0; }
+            const r = await ops.smooth(codes, es, opt, { lab: lb[j].codes, gs: lb[j].size, k: 1, lo: [0, 1, 2].map(a => sb.lo[a] + el[a] - lb[j].lo[a]) });
+            for (let z = kl[2]; z < kh[2]; z++) for (let y = kl[1]; y < kh[1]; y++) { const s0 = (kl[0] - el[0]) + es[0] * (y - el[1] + es[1] * (z - el[2])), o = sz3[0] * (y + sz3[1] * z); for (let x = kl[0]; x < kh[0]; x++) out[o + x] = r[s0 + x - kl[0]]; }
+          }
+          S[j] = { bytes: out, lo: sb.lo, size: sz3 };
         }));
-        J = Jr;
-      } catch (e) { // a task failed (out of memory on a large group): this group is made from the voxels (S_k = 255 on part k's own voxels, 0 elsewhere: still drawn once) and the larger byte of its parts' own fields; counted
-        failed = true;
-        const masks = Array.from({ length: n - 1 }, (_, j) => { const m = new Uint8Array(lab.length); for (let i = 0; i < m.length; i++) if (lab[i] === j + 1) m[i] = 1; return { bytes: m, lo: [0, 0, 0], size: gs }; });
-        S = masks.map(m => ({ bytes: m.bytes.map(v => (v ? 255 : 0)), lo: [0, 0, 0], size: gs }));
-        for (const p of gr) if (list[p].plain) { fieldsNow[p] = list[p]; await smoothField(p); list[p] = fieldsNow[p]; } // the larger byte of the parts' OWN smoothed fields: the members that were given unsmoothed bytes are smoothed now
-        J = new Uint8Array(lab.length); for (const p of gr) partFieldPutMax(J, gs, 1, [0], list[p].data, list[p].lo, list[p].size, glo);
-        pl = planOf(J, masks);
-      }
-      return { gr, n, glo, gs, J, S, pl, reg, failed };
+      } catch (e) { return again ? smoothOf(mk, false) : failedOf(gr, mk.lab, mk.planOf); }
+      return { ...mk, S };
     };
     const overOf = (mk, order) => order.reduce((t, p, k) => t + Math.max(0, used[p] + mk.pl[k].js.length - 4), 0); // how many seams over the 4 a part can read (before the merging): the parts' own count of what was decided
-    let mk = await make(gr);
-    if (cand && !full && overOf(mk, gr) > 0) { const alt = await make(gr0); if (overOf(alt, gr0) < overOf(mk, gr)) { mk = alt; gr = gr0; } } // the newest first asks more channels than the smallest-last order does (the bound said it would not): that order
-    const { n, glo, gs, J, S, pl, reg } = mk; if (mk.failed) plain++;
+    let mk;
+    if (!newest) mk = await prep(gr0);
+    else {
+      // where the boxes say the newest first can ask more than 4 (and the order is another one), the smallest-last order's plan is asked at the same time (its labels on the pool beside the newest's: not one after the other); taken
+      // or not, the decision and the bytes are the same as when it is asked only after
+      const pN = prep(newest), pG = !boxOk && newest.some((p, k) => p !== gr0[k]) ? prep(gr0) : null;
+      if (pG) pG.catch(() => {});
+      const mN = await pN, oN = overOf(mN, newest);
+      if (oN === 0 || (full && boxOk)) mk = mN;
+      else { const mG = await (pG || prep(gr0)), oG = overOf(mG, gr0); mk = oN < oG || (boxOk && oN === oG) ? mN : mG; }
+    }
+    mk = await smoothOf(mk);
+    const gr = mk.gr, { J, S, pl } = mk; if (mk.failed) plain++;
     gr.forEach((p, k) => { used[p] += pl[k].js.length; });
     // the group's joint field over each of its parts' own field boxes, as the larger byte there (a part of the channel that is not in the group can have its box over a part of this one: what it has is not overwritten; the parts of the group
     // are not in the union, so the bytes are the group's alone); a part reads the group's field on its box (jc), not the union's
@@ -783,7 +842,22 @@ export async function partFieldSet(fields, run = runPartGroup, opt = PART_FIELD,
     return { data: out, lo: f.lo, size: f.size, C: Cp, a, b };
   });
   const a = [0, 1, 2, 3].map(s => [0, 1, 2, 3].map(c => (chOf[s] === c ? 1 : 0))), b = [0, 1, 2, 3].map(s => [0, 1, 2, 3].map(c => (chOf[s] < 0 ? 0 : chOf[s] === c ? 0 : 1)));
-  return { body: { data, lo, size, C, a, b, mask: un.mask }, parts, plain, merged, own: ownOut.sort((u, v) => u.p - v.p) };
+  return { body: { data, lo, size, C, a, b, mask: un.mask, hid: partBodyHidOf(data, size, C), occ: partBodyOccOf({ data, size, C, a, b }) }, parts, plain, merged, own: ownOut.sort((u, v) => u.p - v.p) };
+}
+// n731 perf ③: the voxels the body's cut surely hides, for the distance field of the visible content (vr-hide-field.js: an index source, bit c of a voxel's byte = channel c of the body's field hides it). A voxel counts only when
+// the field's byte is at least PART_HID_MIN on that channel at the voxel and at all 26 of its neighbours inside the box (a voxel on the box's edge never): every sample whose nearest voxel it is reads the field LINEAR from those 8
+// of the 27 bytes, all above 0.5 by a margin (0.518: the GPU's filtering rounds), so the shader hides it (the body hides where the field is >= 0.5). Fewer voxels than the shader hides, never more: the field built from them is
+// never longer than the distance to something the body draws (hiding less is safe). -> Uint8Array over the box (1 byte a voxel)
+export const PART_HID_MIN = 132;
+export function partBodyHidOf(data, size, C, min = 132) {
+  const w = size[0] | 0, h = size[1] | 0, d = size[2] | 0, wh = w * h, n = wh * d, out = new Uint8Array(n), a = new Uint8Array(n), b = new Uint8Array(n);
+  for (let c = 0; c < C; c++) {
+    for (let i = 0, q = c; i < n; i++, q += C) a[i] = data[q] >= min ? 1 : 0;
+    for (let z = 0, i = 0; z < d; z++) for (let y = 0; y < h; y++) for (let x = 0; x < w; x++, i++) b[i] = a[i] && x > 0 && x + 1 < w && a[i - 1] && a[i + 1] ? 1 : 0;
+    for (let z = 0, i = 0; z < d; z++) for (let y = 0; y < h; y++) for (let x = 0; x < w; x++, i++) a[i] = b[i] && y > 0 && y + 1 < h && b[i - w] && b[i + w] ? 1 : 0;
+    for (let z = 0, i = 0; z < d; z++) for (let y = 0; y < h; y++) for (let x = 0; x < w; x++, i++) if (a[i] && z > 0 && z + 1 < d && a[i - wh] && a[i + wh]) out[i] |= 1 << c;
+  }
+  return out;
 }
 export const PART_POOL = Object.freeze({ workers: 3, voxels: 36e6 });
 export function partComputeWorkerSource() {
@@ -830,6 +904,7 @@ function partGroupCacheOf(limit) {
     put(k, r) { const bb = r.length; if (bb > limit || m.has(k)) return; while (bytes + bb > limit && m.size) { const f = m.keys().next().value; bytes -= m.get(f).bb; m.delete(f); } m.set(k, { r, bb }); bytes += bb; },
     clear() { m.clear(); bytes = 0; },
     stats() { return { entries: m.size, bytes }; },
+    last(test) { const ks = [...m.keys()]; for (let i = ks.length - 1; i >= 0; i--) if (test(ks[i])) return m.get(ks[i]).r; return null; }, // the most recently used answer whose key passes (not moved)
   };
 }
 // the group's tasks (ops) with the cache in front of them: the key is every byte of the input, its box, the smoothing's numbers. stats.hit / stats.miss count them. A part's own field (ctx.own) is the caller's to keep: not remembered
@@ -837,8 +912,39 @@ function partCachedOps(cache, stats, ops) {
   const keys = new WeakMap(), no = o => [o.band, o.sigma, o.margin, o.budget].join(',');
   const keyOf = (a, size) => { let k = keys.get(a); if (!k) { k = partHash64(a) + '|' + size.join('x'); keys.set(a, k); } return k; };
   const through = async (key, make) => { const got = cache.get(key); if (got) { stats.hit++; return got; } stats.miss++; const r = await make(); cache.put(key, r); return r; };
+  // n731 perf ④: the joint field of a group from the last one made (ctx.glo: where the box lies). J's byte depends on the codes and the box's faces within the halo only (partFieldHaloOf), so the voxels with the same codes and
+  // faces within the halo keep the last field's bytes; the rest (one box: around the codes that changed and along the faces that moved, and the halo) is made again from that box and one more halo, the very bytes of the whole box.
+  // The last field's codes are its bytes >= 128 (partFieldOf's rule). No size limit on what is reused (a box that is most of the group costs what the whole field does); only where there is no last field (a first group) or it shares no voxel with this box: the whole field
+  const jointNear = async (lab, size, opt, ctx) => {
+    const h = partFieldHaloOf(opt), sfx = '|' + no(opt), old = ctx && ctx.glo ? cache.last(k => k.startsWith('J|') && k.endsWith(sfx)) : null, N = size[0] * size[1] * size[2];
+    if (!old || !old.vrAt || !old.vrGs) return ops.joint(lab, size, opt);
+    const glo = ctx.glo, ol = old.vrAt, os = old.vrGs, lo = [0, 1, 2].map(a => Math.max(0, ol[a] - glo[a])), hi = [0, 1, 2].map(a => Math.min(size[a], ol[a] + os[a] - glo[a]));
+    if (hi.some((v, a) => v <= lo[a])) return ops.joint(lab, size, opt);
+    const cl = [Infinity, Infinity, Infinity], ch = [-1, -1, -1], dl = [Infinity, Infinity, Infinity], dh = [-Infinity, -Infinity, -Infinity];
+    for (let z = lo[2]; z < hi[2]; z++) for (let y = lo[1]; y < hi[1]; y++) {
+      const i0 = size[0] * (y + size[1] * z), j0 = os[0] * (y + glo[1] - ol[1] + os[1] * (z + glo[2] - ol[2])) + glo[0] - ol[0];
+      for (let x = lo[0]; x < hi[0]; x++) if ((lab[i0 + x] !== 0) !== (old[j0 + x] >= 128)) { if (x < cl[0]) cl[0] = x; if (x > ch[0]) ch[0] = x; if (y < cl[1]) cl[1] = y; if (y > ch[1]) ch[1] = y; if (z < cl[2]) cl[2] = z; if (z > ch[2]) ch[2] = z; }
+    }
+    const add = (l, u) => { for (let a = 0; a < 3; a++) { dl[a] = Math.min(dl[a], Math.max(0, l[a])); dh[a] = Math.max(dh[a], Math.min(size[a], u[a])); } };
+    if (ch[0] >= 0) add(cl.map(v => v - h), ch.map(v => v + 1 + h));
+    for (let a = 0; a < 3; a++) {
+      if (glo[a] !== ol[a]) { const l = [0, 0, 0], u = [...size]; u[a] = Math.max(0, ol[a] - glo[a]) + h; add(l, u); }
+      if (glo[a] + size[a] !== ol[a] + os[a]) { const l = [0, 0, 0], u = [...size]; l[a] = Math.min(size[a], ol[a] + os[a] - glo[a]) - h; add(l, u); }
+    }
+    const out = new Uint8Array(N);
+    if (dl[0] !== Infinity) {
+      const el = dl.map(v => Math.max(0, v - h)), eh = dh.map((v, a) => Math.min(size[a], v + h)), es = eh.map((v, a) => v - el[a]);
+      const sub = new Uint8Array(es[0] * es[1] * es[2]);
+      for (let z = 0, i = 0; z < es[2]; z++) for (let y = 0; y < es[1]; y++) { const o = el[0] + size[0] * (el[1] + y + size[1] * (el[2] + z)); for (let x = 0; x < es[0]; x++, i++) sub[i] = lab[o + x] ? 1 : 0; }
+      const Je = await ops.joint(sub, es, opt);
+      for (let z = lo[2]; z < hi[2]; z++) for (let y = lo[1]; y < hi[1]; y++) { const i0 = size[0] * (y + size[1] * z), j0 = os[0] * (y + glo[1] - ol[1] + os[1] * (z + glo[2] - ol[2])) + glo[0] - ol[0]; for (let x = lo[0]; x < hi[0]; x++) out[i0 + x] = old[j0 + x]; }
+      for (let z = dl[2]; z < dh[2]; z++) for (let y = dl[1]; y < dh[1]; y++) { const i0 = size[0] * (y + size[1] * z), s0 = es[0] * (y - el[1] + es[1] * (z - el[2])) - el[0]; for (let x = dl[0]; x < dh[0]; x++) out[i0 + x] = Je[s0 + x]; }
+      stats.near = (stats.near || 0) + 1; // made from the last joint field
+    } else for (let z = 0; z < size[2]; z++) for (let y = 0; y < size[1]; y++) { const i0 = size[0] * (y + size[1] * z), j0 = os[0] * (y + glo[1] - ol[1] + os[1] * (z + glo[2] - ol[2])) + glo[0] - ol[0]; for (let x = 0; x < size[0]; x++) out[i0 + x] = old[j0 + x]; } // the same codes, the same box
+    return out;
+  };
   return {
-    joint: (lab, size, opt) => through('J|' + keyOf(lab, size) + '|' + no(opt), () => ops.joint(lab, size, opt)),
+    joint: (lab, size, opt, ctx) => through('J|' + keyOf(lab, size) + '|' + no(opt), async () => { const r = await jointNear(lab, size, opt, ctx); if (ctx && ctx.glo) { r.vrAt = [...ctx.glo]; r.vrGs = [...size]; } return r; }),
     label: (lab, size, k, opt) => through('L' + k + '|' + keyOf(lab, size), () => ops.label(lab, size, k, opt)),
     smooth: (codes, size, opt, ctx) => (ctx && ctx.own ? ops.smooth(codes, size, opt, ctx) : through('F|' + keyOf(codes, size) + '|' + no(opt), () => ops.smooth(codes, size, opt, ctx))),
   };
@@ -848,7 +954,7 @@ function partSigOf(x) { return partHash64(x.data) + ':' + x.C + ':' + x.size.joi
 export function partSetWorkerSource(limit = PART_CACHE_BYTES) {
   return ['const PART_SEAM_TIE=' + PART_SEAM_TIE + ';', 'const partBoxesMeet=' + partBoxesMeet.toString() + ';', 'const partIsChild=' + partIsChild.toString() + ';', 'const PART_FIELD=' + JSON.stringify(PART_FIELD) + ';',
     partHash64, partGroupCacheOf, partCachedOps, partSigOf, partOpsOfRun,
-    partFieldOf, partFieldPlain, partGroupLabelOf, partGroupJointOf, partFieldHaloOf, partFieldReach, partFieldDilate, partFieldNearOf, partFieldChannels, partFieldUnion, partFieldPutMax, partFieldTouching, partSeamOrder, partFieldJointGroups, partFieldSet].map(f => (typeof f === 'string' ? f : f.toString())).join('\n') +
+    partFieldOf, partFieldPlain, partGroupLabelOf, partGroupJointOf, partFieldHaloOf, partBodyHidOf, partBodyOccOf, partFieldReach, partFieldDilate, partFieldNearOf, partFieldChannels, partFieldUnion, partFieldPutMax, partFieldTouching, partSeamOrder, partFieldJointGroups, partFieldSet].map(f => (typeof f === 'string' ? f : f.toString())).join('\n') +
     '\nconst cache=partGroupCacheOf(' + (+limit || 0) + '),state={rank:new Map(),next:0};let seq=0;const pend=new Map(),rpc=(msg,buf)=>new Promise((res,rej)=>{const id=++seq;pend.set(id,{res,rej});postMessage({...msg,id},[buf])});' +
     '\nconst taskOf=(kind,k,bytes,size,opt)=>{const c=bytes.slice(),o=opt||{};return rpc({rpc:"task",kind,k,bytes:c.buffer,size:[...size],opt:{band:o.band,sigma:o.sigma,margin:o.margin,budget:o.budget}},c.buffer).then(r=>new Uint8Array(r.bytes))};' +
     '\nconst rpcOps={joint:(lab,size,opt)=>taskOf("J",0,lab,size,opt),label:(lab,size,k,opt)=>taskOf("L",k,lab,size,opt),smooth:(codes,size,opt)=>taskOf("F",0,codes,size,opt)};' +
@@ -857,7 +963,7 @@ export function partSetWorkerSource(limit = PART_CACHE_BYTES) {
     '\nonmessage=async e=>{const m=e.data;if(m.reply){const p=pend.get(m.id);pend.delete(m.id);if(p){if(m.ok)p.res(m);else p.rej(new Error(m.message))}return}if(m.clear){cache.clear();state.rank.clear();state.next=0;return}try{const fields=m.fields.map(f=>{const b=new Uint8Array(f.bytes);return f.codes?{data:partFieldPlain(b,f.size),plain:true,lo:f.lo,size:f.size,mask:f.mask,kind:f.kind,id:f.id}:{data:b,lo:f.lo,size:f.size,mask:f.mask,kind:f.kind,id:f.id}});' +
     'const stats={hit:0,miss:0},base=m.plainOnly?noOps:m.pool?rpcOps:localOps,set=await partFieldSet(fields,m.plainOnly?base:partCachedOps(cache,stats,base),m.opt,m.plainOnly?null:state);' +
     'if(!set){postMessage({ok:true,id:m.id,set:null});return}const idx=new Map(fields.map((f,i)=>[f.data,i])),tr=new Set(),pack=x=>{const i=idx.get(x.data);if(i!==undefined&&!fields[i].plain)return{...x,data:null,same:i,sig:partSigOf(x)};tr.add(x.data.buffer);return{...x,sig:partSigOf(x)}};' +
-    'const body=pack(set.body),parts=set.parts.map(pack),own=set.own.map(o=>{tr.add(o.data.buffer);return o});postMessage({ok:true,id:m.id,set:{body,parts,plain:set.plain,merged:set.merged,own,cache:{...stats,...cache.stats()}}},[...tr])}catch(err){postMessage({ok:false,id:m.id,message:String(err&&err.message||err)})}};';
+    'if(set.body.hid)tr.add(set.body.hid.buffer);if(set.body.occ)tr.add(set.body.occ.data.buffer);const body=pack(set.body),parts=set.parts.map(pack),own=set.own.map(o=>{tr.add(o.data.buffer);return o});postMessage({ok:true,id:m.id,set:{body,parts,plain:set.plain,merged:set.merged,own,cache:{...stats,...cache.stats()}}},[...tr])}catch(err){postMessage({ok:false,id:m.id,message:String(err&&err.message||err)})}};';
 }
 // partFieldSet on a worker that stays (so that its memory of the groups' answers does) -> {run(fields) -> Promise of {body, parts, plain, merged, own, cache} | null, clear(), dispose()}. A set is partFieldSet's answer, but for
 //  - a part's / the body's `data` is the very array of its field where partFieldSet gives that (a part alone in its channels), and every one has a `sig` (its bytes' signature: the same sig = the same texture),
@@ -918,7 +1024,7 @@ export function createPartSetRunner(opt = PART_FIELD, cfg = {}) {
     const valid = validOf(fields);
     if (gone) return Promise.reject(new Error('the runner is closed'));
     if (!threads) return local(valid, false);
-    return once(valid, false).catch(e => { if (gone || (e && e.answered)) throw e; console.warn('[VR] part set worker failed, the groups are made unsmoothed:', e && e.message || e); return once(valid, true); });
+    return once(valid, false).catch(e => { if (gone || (e && e.answered)) throw e; console.warn('[VR] part set worker failed, tried once more:', e && e.message || e); return once(valid, false); }).catch(e => { if (gone || (e && e.answered)) throw e; console.warn('[VR] part set worker failed twice, the groups are made unsmoothed:', e && e.message || e); return once(valid, true); }); // a failure is first made again by the same path (the same speed), the unsmoothed groups only when it fails again
   };
   return {
     run(fields) { const p = chain.then(() => runOne(fields)); chain = p.catch(() => {}); return p; },
@@ -934,6 +1040,67 @@ export async function runPartSet(fields, opt = PART_FIELD, cfg = {}) {
 // a part's own field (R8) on the shader: partFieldSel[s] = the red channel on the slots of mask, zeros on the others
 export function partFieldSelOf(mask) { return [0, 1, 2, 3].map(s => ((mask >> s) & 1 ? [1, 0, 0, 0] : [0, 0, 0, 0])); }
 // the shader's mapping of a field box: texture coordinate u = tc * scale + off (tc over the index grid dims) -> {scale: [3], off: [3]}
+// n731 perf 案② (the parts' rays): the occupancy of a part's field texture by blocks of PART_OCC_B^3 trilinear cells, for the shader's partOcc. pf = the part's field as partFieldSet gives it ({data, size, C, a, b}: C channels a voxel,
+// a[s] / b[s] = the shader's partFieldA / partFieldB of slot s). A point is in the part on slot s only where every channel c passes: a[s][c] * T_c + b[s][c] >= 0.5, T_c = the trilinear value of the channel (a channel the texture does not have
+// reads 0, the fourth 1: the texture's RGBA of an R8 / RG8 texture). The trilinear value passes only where one of the cell's 8 corner texels does (a convex mix), so a block is 1 when, on some slot, every channel has a passing texel among
+// those its cells read, grown by one texel on every side (the texel addressing of the hardware, a cell off by one), else 0: no point of the block is in the part (the shader leaves it out). Conservative by construction: a 1 costs only speed.
+// -> {data: Uint8Array (255 / 0, x fastest), dims: [bx, by, bz]}
+export const PART_OCC_B = 8;
+export function partOccOf(pf) {
+  const [w, h, d] = pf.size, C = pf.C || 1, B = PART_OCC_B, bw = Math.ceil(w / B), bh = Math.ceil(h / B), bd = Math.ceil(d / B), nb = bw * bh * bd, data = pf.data, out = new Uint8Array(nb);
+  const thr = 0.5 - 1 / 1024; // a margin under the shader's 0.5 (its float arithmetic): only ever more blocks
+  const blk = (i, n) => [Math.max(0, Math.ceil((i - B - 1) / B)), Math.min(n - 1, Math.floor((i + 1) / B))]; // the blocks whose texels (cells 8b..8b+7 read 8b..8b+8, grown by one: 8b-1..8b+9) contain texel i
+  const bx = [], by = [], bz = []; for (let x = 0; x < w; x++) bx.push(blk(x, bw)); for (let y = 0; y < h; y++) by.push(blk(y, bh)); for (let z = 0; z < d; z++) bz.push(blk(z, bd));
+  let any = null; // per slot: the blocks where every channel has a passing texel
+  for (let s = 0; s < 4; s++) {
+    const a = pf.a[s], b = pf.b[s]; if (!a || !b) continue;
+    let all = null;
+    for (let c = 0; c < 4; c++) {
+      const ac = +a[c] || 0, bc = +b[c] || 0;
+      if (c >= C || ac === 0) { const v = c >= C ? (c === 3 ? 1 : 0) : 0; if (ac * v + bc >= thr) continue; all = new Uint8Array(nb); break; } // a constant term: passes everywhere (no limit) or nowhere (the slot has no point)
+      const m = new Uint8Array(nb);
+      for (let z = 0, i = 0; z < d; z++) for (let y = 0; y < h; y++) for (let x = 0; x < w; x++, i++) {
+        if (!(ac * (data[i * C + c] / 255) + bc >= thr)) continue;
+        const [x0, x1] = bx[x], [y0, y1] = by[y], [z0, z1] = bz[z];
+        for (let k = z0; k <= z1; k++) for (let j = y0; j <= y1; j++) for (let q = x0; q <= x1; q++) m[q + bw * (j + bh * k)] = 1;
+      }
+      if (!all) all = m; else for (let q = 0; q < nb; q++) all[q] &= m[q];
+    }
+    if (!all) { all = new Uint8Array(nb).fill(1); } // every channel constant and passing: the whole box (no limit from this slot)
+    if (!any) any = all; else for (let q = 0; q < nb; q++) any[q] |= all[q];
+  }
+  if (any) for (let q = 0; q < nb; q++) out[q] = any[q] ? 255 : 0;
+  return { data: out, dims: [bw, bh, bd] };
+}
+// n731 perf ③ (without the distance field): the body's blocks that are wholly inside the cut, for the shader's partOcc of the BODY (partKind 0; RGBA8, channel s = slot s). The body draws nothing where its field is >= 0.5 on the slot (PART_GLSL: every
+// hidden test says yes there), so a ray may leave out a block of 8x8x8 trilinear cells whose every texel the cells read (grown by one, as partOccOf) passes on every channel of the slot, by a margin over 0.5; blocks that touch the texture's edge are never
+// left out (outside the field's box nothing is cut). A slot nothing cuts (a = b = 0) is never full (the shader ignores the slots it does not draw). The texel margin is the whole of it: no voxel neighbourhood rule. -> {data: Uint8Array RGBA (255 / 0), dims: [bx, by, bz]}
+export function partBodyOccOf(pf) {
+  const [w, h, d] = pf.size, C = pf.C || 1, B = 8, bw = Math.ceil(w / B), bh = Math.ceil(h / B), bd = Math.ceil(d / B), nb = bw * bh * bd, data = pf.data, thr = 0.5 + 1 / 1024;
+  const blk = (i, n) => [Math.max(0, Math.ceil((i - B - 1) / B)), Math.min(n - 1, Math.floor((i + 1) / B))];
+  const bx = [], by = [], bz = []; for (let x = 0; x < w; x++) bx.push(blk(x, bw)); for (let y = 0; y < h; y++) by.push(blk(y, bh)); for (let z = 0; z < d; z++) bz.push(blk(z, bd));
+  const edge = new Uint8Array(nb); // 1 = a texel the block reads (8b - 1 .. 8b + 9) is outside the texture
+  for (let k = 0, q = 0; k < bd; k++) for (let j = 0; j < bh; j++) for (let i = 0; i < bw; i++, q++) if (i < 1 || 8 * i + 9 > w - 1 || j < 1 || 8 * j + 9 > h - 1 || k < 1 || 8 * k + 9 > d - 1) edge[q] = 1;
+  const out = new Uint8Array(nb * 4);
+  for (let s = 0; s < 4; s++) {
+    const a = pf.a[s], b = pf.b[s]; if (!a || !b) continue;
+    let never = false; const act = [];
+    for (let c = 0; c < 4; c++) {
+      const ac = +a[c] || 0, bc = +b[c] || 0;
+      if (c >= C || ac === 0) { const v = c >= C ? (c === 3 ? 1 : 0) : 0; if (!(ac * v + bc >= thr)) never = true; } else act.push([c, ac, bc]);
+    }
+    if (never) continue;
+    const bad = new Uint8Array(nb);
+    for (let z = 0, i = 0; z < d; z++) for (let y = 0; y < h; y++) for (let x = 0; x < w; x++, i++) {
+      let ok = true; for (const [c, ac, bc] of act) if (!(ac * (data[i * C + c] / 255) + bc >= thr)) { ok = false; break; }
+      if (ok) continue;
+      const [x0, x1] = bx[x], [y0, y1] = by[y], [z0, z1] = bz[z];
+      for (let k = z0; k <= z1; k++) for (let j = y0; j <= y1; j++) for (let q = x0; q <= x1; q++) bad[q + bw * (j + bh * k)] = 1;
+    }
+    for (let q = 0; q < nb; q++) if (!bad[q] && !edge[q]) out[q * 4 + s] = 255;
+  }
+  return { data: out, dims: [bw, bh, bd] };
+}
 export function partFieldMap(box, dims) { return { scale: [0, 1, 2].map(a => dims[a] / box.size[a]), off: [0, 1, 2].map(a => -box.lo[a] / box.size[a]) }; }
 // the "air" test of partFieldCodes from the laser's classification bytes (vr-pick: cls {data, C, chan} on cdims): an index-grid voxel is air when, on every slot of mask, its classification byte is below 128 (the shader's 0.5); null without them
 export function partAirOf(cls, cdims, idims, mask) {

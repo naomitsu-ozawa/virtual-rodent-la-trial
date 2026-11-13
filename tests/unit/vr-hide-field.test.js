@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { combineClassificationDistance, euclideanDistanceBytes } from '../../docs/distance-field.js';
 import { hiddenClassBytes, hideFieldMin, hideBitsMatch, hideBitsSame, hideBitsAny, hideBitsOn } from '../../docs/vr-hide-field.js';
+import { partBodyHidOf, PART_HID_MIN } from '../../docs/vr-part-view.js';
 
 // the distance field of the VISIBLE content while a result / child segment is hidden (docs/vr-hide-field.js). The contract of every distance field here: a byte is never longer than the distance
 // to something the shader can hit, so a jump never crosses visible content. Brute force on small non-cubic grids.
@@ -69,6 +70,44 @@ describe('hideFieldMin: never longer than the distance to visible tissue', () =>
   });
 });
 
+describe('the body\'s cut as a hidden source (n731 perf ③)', () => {
+  const tri = (f, size, C, c, p) => { const [w, h, d] = size, q = p.map(v => v - 0.5), b = q.map(Math.floor), t = q.map((v, k) => v - b[k]); let r = 0; for (let k = 0; k < 8; k++) { const o = [k & 1, (k >> 1) & 1, (k >> 2) & 1], xx = Math.min(w - 1, Math.max(0, b[0] + o[0])), yy = Math.min(h - 1, Math.max(0, b[1] + o[1])), zz = Math.min(d - 1, Math.max(0, b[2] + o[2])); r += (o[0] ? t[0] : 1 - t[0]) * (o[1] ? t[1] : 1 - t[1]) * (o[2] ? t[2] : 1 - t[2]) * f[(xx + w * (yy + h * zz)) * C + c]; } return r / 255; };
+  it('partBodyHidOf: every sample near a counted voxel reads the field above 0.5 by the margin (two channels, random fields)', () => {
+    const r = rnd(11), size = [17, 13, 15], C = 2, n = size[0] * size[1] * size[2], f = new Uint8Array(n * C);
+    for (let i = 0; i < n; i++) for (let c = 0; c < C; c++) { const x = i % 17, y = Math.floor(i / 17) % 13, z = Math.floor(i / 221); f[i * C + c] = Math.max(0, Math.min(255, Math.round(128 + 120 * Math.sin(x * 0.4 + c) * Math.cos(y * 0.3 - z * 0.25) + (r() - 0.5) * 40))); }
+    const hid = partBodyHidOf(f, size, C); let counted = 0, samples = 0;
+    expect(PART_HID_MIN).toBe(132);
+    for (let i = 0; i < n; i++) for (let c = 0; c < C; c++) {
+      if (!((hid[i] >> c) & 1)) continue; counted++;
+      const v = [i % 17, Math.floor(i / 17) % 13, Math.floor(i / 221)];
+      expect(v.every((x, k) => x > 0 && x < size[k] - 1)).toBe(true); // never on the box's edge
+      for (let k = 0; k < 20; k++) { const p = v.map(x => x + r()); expect(tri(f, size, C, c, p)).toBeGreaterThanOrEqual(PART_HID_MIN / 255 - 1e-9); samples++; }
+    }
+    expect(counted).toBeGreaterThan(50); expect(samples).toBeGreaterThan(1000);
+  });
+  it('hideFieldMin with the body\'s cut: never longer than the distance to visible tissue (brute force), shorter than the ordinary field somewhere', () => {
+    const dims = [22, 14, 16], [w, h, d] = dims, { n, cls } = scene(dims, 9), ins = Uint8Array.from(cls.data, v => (v >= 128 ? 1 : 0));
+    // the body's field: a ball of the cut over a box (as partFieldOf's bytes: >= 128 inside), scattered on the grid as partHideSet does
+    const lo = [3, 2, 2], size = [14, 11, 12], fb = new Uint8Array(size[0] * size[1] * size[2]);
+    for (let z = 0; z < size[2]; z++) for (let y = 0; y < size[1]; y++) for (let x = 0; x < size[0]; x++) { const q = Math.hypot(x - 7, y - 5, z - 6); fb[x + size[0] * (y + size[1] * z)] = Math.max(0, Math.min(255, Math.round(255 * (0.5 + (5 - q) / 6)))); }
+    const hid = partBodyHidOf(fb, size, 1), ids = new Uint8Array(n), cutAt = new Uint8Array(n);
+    for (let z = 0; z < size[2]; z++) for (let y = 0; y < size[1]; y++) for (let x = 0; x < size[0]; x++) { const o = lo[0] + x + w * (lo[1] + y + h * (lo[2] + z)), k = x + size[0] * (y + size[1] * z); ids[o] = hid[k]; cutAt[o] = fb[k] >= 128 ? 1 : 0; }
+    const bits = new Uint8Array(256); for (let i = 1; i < 16; i++) if (i & 1) bits[i] = 1;
+    const ord = euclideanDistanceBytes(ins, dims), alpha = Uint8Array.from(ord);
+    expect(hideFieldMin(alpha, { cls, chan: [0, -1, -1, -1], dims, mask: 1, sources: [{ ids, bits }] })).toBe(true);
+    const vis = []; for (let i = 0; i < n; i++) if (ins[i] && !cutAt[i]) vis.push(i); // visible: tissue the cut does not hide at the voxel centre
+    let changed = 0;
+    for (let i = 0; i < n; i++) {
+      expect(alpha[i]).toBeLessThanOrEqual(ord[i]); if (alpha[i] < ord[i]) changed++;
+      if (ins[i] && !cutAt[i]) continue;
+      const x = i % w, y = Math.floor(i / w) % h, z = Math.floor(i / (w * h)); let best = 1e9;
+      for (const v of vis) { const q = Math.hypot((v % w) - x, (Math.floor(v / w) % h) - y, Math.floor(v / (w * h)) - z); if (q < best) best = q; }
+      expect(alpha[i]).toBeLessThanOrEqual(best + 1e-9);
+    }
+    expect(changed).toBeGreaterThan(0);
+  });
+});
+
 describe('hide state helpers', () => {
   const t = (...idx) => { const b = new Uint8Array(256); for (const [i, v] of idx) b[i] = v; return b; };
   it('match / same / any / on', () => {
@@ -97,19 +136,29 @@ describe('vr-view.js wiring of the visible-content field', () => {
     expect(vsrc.indexOf('hideBitsR[i]=')).toBeGreaterThan(0); expect(vsrc.indexOf('hideBitsR[i]=')).toBeLessThan(vsrc.indexOf('partPatchRegion(a);'));
     expect(vsrc.indexOf('hideBitsC[j]=')).toBeGreaterThan(0); expect(vsrc.indexOf('hideBitsC[j]=')).toBeLessThan(vsrc.indexOf('partPatchChild(a);'));
   });
-  it('the shader: hideFieldOk is false in the programs of a part, the uniform is declared with the hide helpers, three loops read it', () => {
-    expect(vsrc).toContain('uniform int hideVMode;\n#ifdef VRL_PART\nbool hideFieldOk(){return false;}\n#else\nbool hideFieldOk(){return hideVMode>0;}\n#endif');
+  it('the shader: hideFieldOk is false in the programs of a part (the body while parts are out reads hideVMode), the uniform is declared with the hide helpers, three loops read it', () => {
+    expect(vsrc).toContain('uniform int hideVMode;\n#ifdef VRL_PART\nbool hideFieldOk(){return partKind==0&&hideVMode>0;}\n#else\nbool hideFieldOk(){return hideVMode>0;}\n#endif');
     expect(vsrc.match(/prevHid&&!hideFieldOk\(\)/g)).toHaveLength(6); // opaque and see-through copies of the two tight loops and of the combined branch of the general loop
     expect(vsrc).toContain('hideVMode:{value:0}');
   });
   it('the partner owns hideVMode (always 0); hideTick runs once per frame after the content box, with the shader\'s shown set', () => {
     expect(readFileSync(new URL('../../docs/vr-pair-view.js', import.meta.url), 'utf8')).toContain("'distInCls', 'hideVMode', 'distTex'");
     expect(vsrc).toMatch(/   refreshContentBox\(\);\n   hideTick\(vis,sh\);[^\n]*\n   skipTick\(\);/);
-    expect(vsrc).toContain("hide:{cls:P.cls,rgs:[P.region?.rg||null,P.child?.rg||null]}");
+    expect(vsrc).toContain("hide:{cls:P.cls,rgs:hideSrcs()}");
+    expect(vsrc).toContain("const hideSrcs=()=>[P.region?.rg||null,P.child?.rg||null,partHideSrc()?.ids||null];");
     expect(vsrc).toContain('u.hideVMode.value=rb&&rb.hideValid(cur,vis)?1:0;');
-    expect(vsrc).toContain('if(!t||!(u.distInCls.value>0)||parts.length){u.hideVMode.value=0;return}'); // a part taken out: the old rule (the page's hide state does not include the part's cut)
+    // a part taken out (n731 perf ③): the old rule unless the body's cut is a hide source for the field the body draws with, and the VRL_PART programs draw the body; the state leaves every part's target out
+    expect(vsrc).toContain('if(!t||!(u.distInCls.value>0)){u.hideVMode.value=0;return}');
+    expect(vsrc).not.toContain('if(parts.length&&(!partHideSrc()||diagAn.noRegion||!partBodySet(variantKey()))){u.hideVMode.value=0;return}'); // no state keeps the old rule now: hideCur is that of the way the body is drawn (bodyCutDraws)
+    expect(vsrc).toContain('const bodyCutDraws=()=>!!(parts.length&&partHideSrc()&&!diagAn.noRegion&&partBodySet(variantKey()));');
+    expect(vsrc).toContain('const cur=hideCur();let rb=t.rb;');
+    expect(vsrc).toContain("for(const q of parts){const tg=q.target,i=(tg?.index|0)+1;if(i>0&&i<256)(tg.kind==='region'?hideCurR:hideCurC)[i]=0}");
+    expect(vsrc).toContain("(tg.kind==='region'?hideCurR:hideCurC)[i]|=q.mask");
+    expect(vsrc).toContain('partHideSrc=()=>{const r=partRes;return parts.length&&r?.body?.ok&&r.hide&&r.hide.td===(comboT?.dims||[]).join()?r.hide:null};');
+    expect(vsrc).toContain('b.ok=true;if(!keepB||!r.hide)partHideSet(r,set.body,dims);');
   });
   it('a rebuilt child index drops what the visible-content field was built from', () => {
-    expect(vsrc).toContain('comboT?.rb?.setHideSources(P.cls,[P.region?.rg||null,P.child?.rg||null]);');
+    expect(vsrc).toContain("hideSourcesChanged=()=>{comboT?.rb?.setHideSources(P.cls,hideSrcs())};");
+    expect(vsrc).toContain('childTex=tex;hideSourcesChanged();');
   });
 });

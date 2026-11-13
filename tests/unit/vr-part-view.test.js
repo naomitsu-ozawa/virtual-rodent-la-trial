@@ -3,6 +3,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { PART_GLSL, PART_CALL_SITES, hideIndexPlane, partOwnRegionLut, partOwnChildLut, PART_OWN, PART_EXTRA, partUniforms, partTargetOf, partSame, regionSlotMask, patchRegionLut, patchChildLut, patchRegionLutMany, patchChildLutMany, anyHiddenIn, partBoundsOf, partProxyBox, partRayRange, partKeepVoxelOf, PART_TEXT, PART_BTN_X, PART_RESTORE_W, PART_OUT_M, PART_ANIM_MS } from '../../docs/vr-part-view.js';
+import * as PV from '../../docs/vr-part-view.js';
 import { regionLutAlpha, regionLutHiddenSlots } from '../../docs/region-visibility.js';
 import { marchClassificationHitInfo } from '../../docs/vr-pick.js';
 import { simpleMenuLayout } from '../../docs/event-mode.js';
@@ -318,7 +319,8 @@ describe('the wiring in the menu and the session', () => {
       expect(i, fn).toBeGreaterThan(0);
       expect(src.slice(i, i + 160), fn).toMatch(/if\(!parts\.length\)return/);
     }
-    expect(src).toContain(' let parts=[],partBodySet=()=>null,partPatchRegion=');
+    expect(src).toContain(' let parts=[],partHideSrc=()=>null,partBodySet=()=>null,partPatchRegion='); // n731 perf ③: partHideSrc (the body's cut as a hide source) is null on an empty list too
+    expect(src).toMatch(/partHideSrc=\(\)=>\{const r=partRes;return parts\.length&&/);
     expect(src).not.toMatch(/\bpm\b[.?]/); // the one-part state is gone
   });
 
@@ -502,5 +504,60 @@ describe('the ring: 切り出す on the laser\'s target, 戻す on a part', () =
     for (const l of ['ja', 'en']) for (const k of ['ringDetach', 'ringRegionDetach', 'ringChildDetach', 'ringBack']) { expect(PART_TEXT[l][k]).toBeTruthy(); expect(PART_TEXT[l][k]).not.toMatch(/\p{Extended_Pictographic}/u); }
     expect([PART_TEXT.ja.ringDetach, PART_TEXT.ja.ringRegionDetach, PART_TEXT.ja.ringChildDetach, PART_TEXT.ja.ringBack]).toEqual(['切り出す', '領域の切り出す', '子の切り出す', '戻す']);
     expect(ringSrc).toContain("'pback'");
+  });
+});
+
+// n731 perf 案②: the parts' rays leave out the 8^3 blocks of the field texture where no point is in the part (partOccOf -> the shader's partOcc). Conservative: every point the shader would keep is in a block marked 1.
+describe('n731 perf: the occupancy of a part field (partOccOf)', () => {
+  // the shader's test of a point at texel coordinates p (= u * size - 0.5), ClampToEdge LINEAR: min over the channels of a * T + b >= 0.5 on some slot (an R8 / RG8 texture reads 0 in the missing channels, 1 in the fourth)
+  const keeps = (pf, p) => {
+    const [w, h, d] = pf.size, C = pf.C, at = (x, y, z, c) => { if (c >= C) return c === 3 ? 1 : 0; x = Math.min(w - 1, Math.max(0, x)); y = Math.min(h - 1, Math.max(0, y)); z = Math.min(d - 1, Math.max(0, z)); return pf.data[(x + w * (y + h * z)) * C + c] / 255; };
+    const f = p.map(Math.floor), r = p.map((v, k) => v - f[k]);
+    const T = [0, 1, 2, 3].map(c => { let s = 0; for (let k = 0; k < 8; k++) { const dx = k & 1, dy = (k >> 1) & 1, dz = k >> 2; s += (dx ? r[0] : 1 - r[0]) * (dy ? r[1] : 1 - r[1]) * (dz ? r[2] : 1 - r[2]) * at(f[0] + dx, f[1] + dy, f[2] + dz, c); } return s; });
+    return [0, 1, 2, 3].some(s => Math.min(...[0, 1, 2, 3].map(c => pf.a[s][c] * T[c] + pf.b[s][c])) >= 0.5);
+  };
+  const blockOf = (pf, occ, p) => { const b = p.map((v, k) => Math.min(occ.dims[k] - 1, Math.min(pf.size[k] - 1, Math.max(0, Math.floor(v))) >> 3)); return occ.data[b[0] + occ.dims[0] * (b[1] + occ.dims[1] * b[2])]; };
+  let seed = 7; const rnd = () => ((seed = (Math.imul(seed, 1103515245) + 12345) >>> 0) / 4294967296);
+  const blob = (size, C, cx) => { const [w, h, d] = size, data = new Uint8Array(w * h * d * C); for (let z = 0; z < d; z++) for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) for (let c = 0; c < C; c++) { const r = Math.hypot(x - cx[c][0], y - cx[c][1], z - cx[c][2]); data[(x + w * (y + h * z)) * C + c] = Math.max(0, Math.min(255, Math.round(255 * (0.5 + (cx[c][3] - r) / 6)))); } return data; };
+  const cases = [
+    { size: [29, 23, 19], C: 1, a: [[1, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], b: [[0, 1, 1, 1], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]] }, // a part alone on slot 0
+    { size: [33, 17, 26], C: 2, a: [[1, -1, 0, 0], [1, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], b: [[0, 1, 1, 1], [0, 1, 1, 1], [0, 0, 0, 0], [0, 0, 0, 0]] }, // J and the seam of an earlier part (1 - S) on slot 0, J alone on slot 1
+    { size: [18, 30, 21], C: 4, a: [[1, 1, -1, 0], [0, 0, 0, 0], [0, 0, 0, 1], [0, 0, 0, 0]], b: [[0, -(2 ** -24), 1, 1], [0, 0, 0, 0], [1, 1, 1, 0], [0, 0, 0, 0]] }, // its own seam (tie), a channel of another slot
+  ];
+  it('every point the shader keeps lies in a block marked 1, and blocks without a point are 0', () => {
+    for (const cs of cases) {
+      const centers = [0, 1, 2, 3].map(() => [rnd() * cs.size[0], rnd() * cs.size[1], rnd() * cs.size[2], 3 + rnd() * 5]);
+      const pf = { ...cs, data: blob(cs.size, cs.C, centers) }, occ = PV.partOccOf(pf);
+      expect(occ.dims).toEqual(cs.size.map(v => Math.ceil(v / 8)));
+      let kept = 0, zero = 0; for (const v of occ.data) if (!v) zero++;
+      for (let k = 0; k < 40000; k++) { const p = cs.size.map(v => -0.5 + rnd() * v); if (keeps(pf, p)) { kept++; expect(blockOf(pf, occ, p)).toBe(255); } }
+      expect(kept).toBeGreaterThan(100); expect(zero).toBeGreaterThan(0); // the test means something: points kept, blocks left out
+    }
+  });
+  it('a field with no point in the part leaves every block out; a slot without a limit keeps every block', () => {
+    const pf = { size: [20, 20, 20], C: 1, data: new Uint8Array(8000), a: [[1, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], b: [[0, 1, 1, 1], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]] };
+    expect([...PV.partOccOf(pf).data].every(v => v === 0)).toBe(true);
+    expect([...PV.partOccOf({ ...pf, a: [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], b: [[1, 1, 1, 1], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]] }).data].every(v => v === 255)).toBe(true);
+  });
+  it('the shader leaves a block out only for a part ray, reads the block of the clamped cell, and the host gives every part its occupancy with its field', () => {
+    expect(PART_GLSL).toContain('uniform sampler3D partOcc;');
+    expect(src).toContain('bool pfOn=true;');
+    expect(src).toContain('ivec3 bk=min(clamp(ivec3(floor(pp)),ivec3(0),ivec3(pfD)-1)>>3,textureSize(partOcc,0)-1);');
+    expect(src).toContain('q.u.partOcc.value=q.otex');
+  });
+});
+
+describe('partBodyOccOf (n731 perf ③, the body without a distance field): the blocks wholly inside the cut', () => {
+  it('a block is full only where every texel it reads passes on the slot; edge blocks and slots nothing cuts never are', async () => {
+    const { partBodyOccOf } = await import('../../docs/vr-part-view.js');
+    const n = 40, data = new Uint8Array(n * n * n).fill(255);
+    for (let z = 0; z < n; z++) for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) if (x >= 30) data[x + n * (y + n * z)] = 0; // the cut ends at x = 30
+    const a = [[1, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], b = [[0, 1, 1, 1], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]];
+    const o = partBodyOccOf({ data, size: [n, n, n], C: 1, a, b }), [bw, bh] = o.dims, at = (i, j, k, s) => o.data[(i + bw * (j + bh * k)) * 4 + s];
+    expect(at(1, 2, 2, 0)).toBe(255);   // x 8..16 (texels 7..17 read) inside the cut, off the edges
+    expect(at(0, 2, 2, 0)).toBe(0);     // an edge block
+    expect(at(3, 2, 2, 0)).toBe(0);     // reads texels up to 33 > 30: not wholly in
+    expect(at(1, 2, 2, 1)).toBe(0);     // a slot nothing cuts
+    expect(at(1, 0, 2, 0)).toBe(0);     // y edge
   });
 });

@@ -16,7 +16,7 @@ export function buildClsData(t,calibration,edit,segmentState,order=SEGMENT_ORDER
    let f=Math.round((0.5+dd/2048)*255);f=f<0?0:f>255?255:f;
    // the mask byte mb: 0 / 255 for a plain mask (then this is: outside -> 0, a mask-only segment inside -> at least 191), or the SMOOTHED field of vr-volume-prep.js smoothEditMaskOf (n730 (rat brain voxel look): >= 128 exactly where the mask is set,
    // the 0.5 level of the LINEAR read is the smooth edge): the class is the smaller of the range's value and the mask's, a mask-only segment is the mask's field alone (floored at 191 where it is far inside)
-   if(masked){const mb=edit.data[i*4+si];if(maskOnly)f=mb>=128?Math.min(mb,Math.max(f,191)):mb;else if(mb<f)f=mb}
+   if(masked){let mb=edit.data[i*4+si];if(edit.hard)mb=mb>=128?255:0;if(maskOnly)f=mb>=128?Math.min(mb,Math.max(f,191)):mb;else if(mb<f)f=mb}
    out[i*C+ch]=f;
   }
  }

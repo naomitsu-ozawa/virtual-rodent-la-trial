@@ -1,13 +1,13 @@
 import * as THREE from './vendor/three@0.186.0/build/three.webgpu.js';
 import dicomParser from './vendor/dicom-parser@1.8.21/index.js';
-import { canvasBackground3dUnit } from './canvas-theme.js?v=20261113-build731';
-import { lightOffsetExpr, lightingWGSL, MATERIALS, materialKey } from './lighting.js?v=20261113-build731';
-import { EDIT_MASK_MAX_BYTES, editMaskInfoWord, editMaskLayout, editMaskPlanes, fillEditMaskWords, sameU32 } from './edit-mask-texture.js?v=20261113-build731';
-import { loadStats } from './load-stats.js?v=20261113-build731'; // what the load did, for the VR switch report
-import { frameOrTimer } from './utils.js?v=20261113-build731'; // rAF or a timer (the window rAF stands still during a WebXR session)
-import { SHADE_BRIGHT_DEFAULT, SHADE_CONTRAST_DEFAULT, brightOf, contrastOf } from './cap-shade.js?v=20261113-build731'; // the cut face's shading when the slice image is hidden (same maths as the WGSL capShadeLum below;: per-segment range)
-import { storedLayout, storedValue } from './stored-bits.js?v=20261113-build731';
-import { gpuRunsForTexture } from './gpu-runs.js?v=20261113-build731'; // the run-mapping functions moved to their own module (the VR preparation worker is made from them)
+import { canvasBackground3dUnit } from './canvas-theme.js?v=20261113-build732';
+import { lightOffsetExpr, lightingWGSL, MATERIALS, materialKey } from './lighting.js?v=20261113-build732';
+import { EDIT_MASK_MAX_BYTES, editMaskInfoWord, editMaskLayout, editMaskPlanes, fillEditMaskWords, sameU32 } from './edit-mask-texture.js?v=20261113-build732';
+import { loadStats } from './load-stats.js?v=20261113-build732'; // what the load did, for the VR switch report
+import { frameOrTimer } from './utils.js?v=20261113-build732'; // rAF or a timer (the window rAF stands still during a WebXR session)
+import { SHADE_BRIGHT_DEFAULT, SHADE_CONTRAST_DEFAULT, brightOf, contrastOf } from './cap-shade.js?v=20261113-build732'; // the cut face's shading when the slice image is hidden (same maths as the WGSL capShadeLum below;: per-segment range)
+import { storedLayout, storedValue } from './stored-bits.js?v=20261113-build732';
+import { gpuRunsForTexture } from './gpu-runs.js?v=20261113-build732'; // the run-mapping functions moved to their own module (the VR preparation worker is made from them)
 export { gpuRunsForTexture };
 
 const UNCOMPRESSED_TS=new Set(['1.2.840.10008.1.2','1.2.840.10008.1.2.1','1.2.840.10008.1.2.2']);
@@ -159,6 +159,7 @@ struct Uniforms{
 // search. mprWindow.z = bits per voxel + 256 * log2(texture width) (0 = no texture: the row search below, unchanged),
 // mprWindow.w = plane table (3 bits per entry: edit slot s, then cut slot 4 + s).
 @group(0) @binding(12) var editMaskTex:texture_3d<u32>;
+@group(0) @binding(15) var editFieldTex:texture_3d<f32>;
 
 struct VOut{@builtin(position) position:vec4<f32>};
 @vertex fn vs(@builtin(vertex_index) i:u32)->VOut{
@@ -503,6 +504,45 @@ fn gradientAt(tc:vec3<f32>)->vec3<f32>{
  let g=vec3<f32>(gx/max(voxel.x,1e-6),-gy/max(voxel.y,1e-6),gz/max(voxel.z,1e-6));
  let l=length(g);if(l<1e-6){return vec3<f32>(0.0,0.0,1.0);}return g/l;
 }
+// n731: a hit on a slot with a processing mask: the normal is NEVER the HU gradient (the soft tissue's own noise: the organs of the mouse whole body were mottled). Where the mask is what cuts (a mask-only
+// slot, or the field within 0.3 of its 0.5 level: the band of vr-view.js gradientAtS) it is the gradient of the mask's smoothed field, rising INTO the segment. Where it is not (no field bound yet: the first
+// moments after the edits arrive, or no field could be made) it is the gradient of the mask itself blurred over +-3 voxels (editBlurNormal: 18 reads of editAllows per axis, a smooth shading, never the HU gradient); a zero gradient is the ray (flat).
+// w = 1: this normal. w = 0: not such a hit (no mask on the slot; a surface of the HU range with the mask far from the hit: the HU gradient, the surface that range makes).
+fn editFieldAt(seg:u32,tc0:vec3<f32>)->f32{let f=textureSampleLevel(editFieldTex,volumeSampler,clamp(tc0,vec3<f32>(0.0),vec3<f32>(0.999999)),0.0);return f[seg];}
+fn editBlurNormal(seg:u32,tc:vec3<f32>,dir:vec3<f32>)->vec4<f32>{
+ let dd=1.0/max(u.textureDims.xyz,vec3<f32>(1.0));
+ var g=vec3<f32>(0.0);
+ for(var k:i32=0;k<3;k=k+1){
+  let e=vec3<f32>(select(0.0,1.0,k==0),select(0.0,1.0,k==1),select(0.0,1.0,k==2));
+  let p1=vec3<f32>(select(0.0,1.0,k==1),select(0.0,1.0,k==2),select(0.0,1.0,k==0));
+  let p2=vec3<f32>(select(0.0,1.0,k==2),select(0.0,1.0,k==0),select(0.0,1.0,k==1));
+  var sum=0.0;
+  for(var a:i32=-1;a<=1;a=a+1){for(var b:i32=-1;b<=1;b=b+1){
+   let o=dd*2.0*(f32(a)*p1+f32(b)*p2);let r=dd*3.0*e;
+   sum=sum+select(0.0,1.0,editAllows(seg,tc+o+r))-select(0.0,1.0,editAllows(seg,tc+o-r));
+  }}
+  if(k==0){g.x=sum;}else if(k==1){g.y=sum;}else{g.z=sum;}
+ }
+ let voxel=2.0*u.halfStep.xyz/max(u.textureDims.xyz,vec3<f32>(1.0));
+ let n=vec3<f32>(g.x/max(voxel.x,1e-6),-g.y/max(voxel.y,1e-6),g.z/max(voxel.z,1e-6));
+ let l=length(n);if(l<1e-6){return vec4<f32>(dir,1.0);}
+ return vec4<f32>(n/l,1.0);
+}
+fn editFieldNormal(seg:u32,tc:vec3<f32>,dir:vec3<f32>)->vec4<f32>{
+ if((editRows[0]&(1u<<seg))==0u){return vec4<f32>(0.0);}
+ let fd=vec3<f32>(textureDimensions(editFieldTex));
+ if(fd.x<2.0){return editBlurNormal(seg,tc,dir);}
+ let md=(editRows[1]&(16u<<seg))!=0u;
+ if(!md&&abs(editFieldAt(seg,tc)-0.5)>=0.3){return vec4<f32>(0.0);}
+ let d=1.0/fd;
+ let gx=editFieldAt(seg,tc+vec3<f32>(d.x,0.0,0.0))-editFieldAt(seg,tc-vec3<f32>(d.x,0.0,0.0));
+ let gy=editFieldAt(seg,tc+vec3<f32>(0.0,d.y,0.0))-editFieldAt(seg,tc-vec3<f32>(0.0,d.y,0.0));
+ let gz=editFieldAt(seg,tc+vec3<f32>(0.0,0.0,d.z))-editFieldAt(seg,tc-vec3<f32>(0.0,0.0,d.z));
+ let voxel=2.0*u.halfStep.xyz/fd;
+ let g=vec3<f32>(gx/max(voxel.x,1e-6),-gy/max(voxel.y,1e-6),gz/max(voxel.z,1e-6));
+ let l=length(g);if(l<1e-6){return vec4<f32>(dir,1.0);}
+ return vec4<f32>(g/l,1.0);
+}
 ${lightingWGSL()}
 @fragment fn fs(@builtin(position) frag:vec4<f32>)->@location(0) vec4<f32>{
  let ndc=vec2<f32>(frag.x/max(u.viewport.x,1.0)*2.0-1.0,1.0-frag.y/max(u.viewport.y,1.0)*2.0);
@@ -629,7 +669,10 @@ ${lightingWGSL()}
      let a=u.segments[u32(idx)*2u];
      let onBoxFace=bounds.x>0.0&&hi<=bounds.x+step&&previousCutIdx!=idx;
      var n=vec3<f32>(0.0);
-     if(onBoxFace){n=select(1.0,-1.0,hvPrev<-1e8||hvPrev<a.x)*entryFaceNormal(u.camOrigin.xyz,dir,u.halfStep.xyz);}else{n=gradientAt(tc);}
+     if(onBoxFace){n=select(1.0,-1.0,hvPrev<-1e8||hvPrev<a.x)*entryFaceNormal(u.camOrigin.xyz,dir,u.halfStep.xyz);}else{n=gradientAt(tc);
+      // n731: the mask's field where the mask is the surface; turned so that inward below comes out as the field's rise (into the segment)
+      let fv=editFieldNormal(u32(idx),tc,dir);if(fv.w>0.5){n=select(-fv.xyz,fv.xyz,hvPrev<-1e8||hvPrev<a.x);}
+     }
      if(previousCutIdx==idx){
       let prevTc=texCoord(u.camOrigin.xyz+dir*previousT);
       n=appliedCutNormal(u32(idx),prevTc);
@@ -1080,7 +1123,7 @@ export class MedicalVolumeRenderer{
   const pickModule=this.device.createShaderModule({label:'VRL medical volume pick',code:safeWgsl(volumePickShader())});this.pickPipeline=this.device.createComputePipeline({label:'VRL medical volume pick',layout:'auto',compute:{module:pickModule,entryPoint:'main'}});this.pickBuffer=null;this.pickOutput=null;this.pickCapacity=0;
   const brickModule=this.device.createShaderModule({label:'VRL volume minmax bricks',code:safeWgsl(brickShader())});this.brickPipeline=this.device.createComputePipeline({label:'VRL volume minmax bricks',layout:'auto',compute:{module:brickModule,entryPoint:'main'}});this.brickBuffer=null;this.brickDims=[1,1,1];this.brickSize=8;
   const mprModule=this.device.createShaderModule({label:'VRL resident volume MPR',code:safeWgsl(mprPlaneShader())});this.mprPipeline=this.device.createComputePipeline({label:'VRL resident volume MPR',layout:'auto',compute:{module:mprModule,entryPoint:'main'}});this.mprUniformBuffer=this.device.createBuffer({size:48,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
-  this.editMaskTexture=null;this.editMaskBuilt=null;this.editMaskInfo='';this.editUpload=null;this.cutUpload=null;
+  this.editMaskTexture=null;this.editMaskBuilt=null;this.editMaskInfo='';this.editUpload=null;this.cutUpload=null;this.editFieldTexture=null;this.editFieldFor=null;this.editFieldGen=0;this._editFieldDummy=null;
   this.editRowsBuffer=null;this.editIntervalsBuffer=null;this.editSignature='';this.clearEditRuns();
   this.previewRowsBuffer=null;this.previewIntervalsBuffer=null;this.previewSignature='';this.clearPreviewRuns();
   this.appliedCutRowsBuffer=null;this.appliedCutIntervalsBuffer=null;this.appliedCutSignature='';this.clearAppliedCutRuns();
@@ -1241,7 +1284,8 @@ export class MedicalVolumeRenderer{
    {binding:11,resource:(this.regionTexture||this.regionDummy()).createView({dimension:'3d'})},
    // the mask texture only once its out-of-memory scope came back clean (an invalid texture would invalidate the whole group)
    {binding:12,resource:(this.editMaskTexture&&this.editMaskBuilt?.ready?this.editMaskTexture:this.regionDummy()).createView({dimension:'3d'})},
-   {binding:10,resource:{buffer:this.analysisOverlayBuffer}}
+   {binding:10,resource:{buffer:this.analysisOverlayBuffer}},
+   {binding:15,resource:(this.editFieldTexture||this.editFieldDummy()).createView({dimension:'3d'})} // n731: the smoothed processing masks (updateEditFieldTexture)
   ];
   this.bindGroup=this.device.createBindGroup({layout:this.pipeline.getBindGroupLayout(0),entries});
   // the child variant (a patched copy of the same shader) has a layout of its own and two more bindings: its own bind group, only while a child exists
@@ -1469,7 +1513,30 @@ export class MedicalVolumeRenderer{
  }
  // the row buffers, then the voxel bit mask texture from exactly what they hold (rebuilt only when that changed)
  setEditRuns(edits,segmentOrder,v){
-  try{this.setEditRows(edits,segmentOrder,v)}finally{this.updateEditMaskTexture()}
+  try{this.setEditRows(edits,segmentOrder,v)}finally{this.updateEditMaskTexture();this.updateEditFieldTexture(edits,segmentOrder,v)}
+ }
+ editFieldDummy(){if(!this._editFieldDummy){this._editFieldDummy=this.device.createTexture({label:'VRL edit field (none)',size:{width:1,height:1,depthOrArrayLayers:1},dimension:'3d',format:'rgba8unorm',usage:GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.COPY_DST})}return this._editFieldDummy} // a new texture reads 0 (WebGPU zero-initialises it)
+ dropEditFieldTexture(){this.editFieldGen=(this.editFieldGen|0)+1;this.editFieldFor=null;const had=this.editFieldTexture;this.editFieldTexture=null;if(had){this.rebuildBindGroup();had.destroy?.();this.onRedraw?.()}}
+ updateEditFieldTexture(edits,segmentOrder,v){
+  const up=this.editUpload,dims=this.textureDims.slice(),f=this.editFieldFor;
+  if(up&&f&&f.dims.join('x')===dims.join('x')&&f.up.activeMask===up.activeMask&&sameU32(f.up.offsets,up.offsets)&&sameU32(f.up.intervals,up.intervals)){f.up=up;return}
+  this.dropEditFieldTexture();
+  if(!up||!v||!segmentOrder?.length||typeof this.device?.createTexture!=='function')return;
+  const gen=this.editFieldGen,src=[v.columns,v.rows,v.slices],m=Math.max(...dims),k=m>256?256/m:1,fdims=dims.map(x=>Math.max(1,Math.round(x*k)));
+  this.editFieldFor={dims,up};
+  const descs=[];segmentOrder.slice(0,4).forEach((key,si)=>{const d=edits?.[key];if(d?.runs)descs.push({si,mode:d.mode,maskOnly:!!d.maskOnly,runs:gpuRunsForTexture(d.runs,src,fdims,{dilate:0})})});
+  if(!descs.length)return;
+  import('./vr-volume-prep.js?v=20261113-build732').then(async prep=>{
+   const part=await import('./vr-part-view.js?v=20261113-build732');
+   if(gen!==this.editFieldGen)return null;
+   const built=prep.buildEditMaskOf(descs,fdims,fdims);if(!built.data)return null;
+   return {bytes:await part.runEditMaskField(prep.smoothEditMaskOf,built.data,fdims,built.activeMask,part.PART_FIELD)};
+  }).then(r=>{
+   if(!r||gen!==this.editFieldGen||!this.device)return;
+   const tex=this.device.createTexture({label:'VRL edit field',size:{width:fdims[0],height:fdims[1],depthOrArrayLayers:fdims[2]},dimension:'3d',format:'rgba8unorm',usage:GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.COPY_DST});
+   this.device.queue.writeTexture({texture:tex},r.bytes,{bytesPerRow:fdims[0]*4,rowsPerImage:fdims[1]},{width:fdims[0],height:fdims[1],depthOrArrayLayers:fdims[2]});
+   this.editFieldTexture=tex;this.rebuildBindGroup();this.onRedraw?.();
+  }).catch(e=>{console.warn('Edit mask field not available; the masked surfaces are lit by the blurred mask.',e?.message||e)});
  }
  setEditRows(edits,segmentOrder,v){
   if(!v||!segmentOrder?.length){this.clearEditRuns();this.clearAppliedCutRuns();return}
@@ -1805,8 +1872,8 @@ struct O{@builtin(position) p:vec4<f32>,@location(0) uv:vec2<f32>};
  async pick(clientX,clientY,camera,obj,segmentState,segmentOrder,preferredKey=null){
   const result=await this.pickMany([{clientX,clientY}],camera,obj,segmentState,segmentOrder,preferredKey);return result[0]||null;
  }
- resetData(){this.dataGeneration=(this.dataGeneration|0)+1;this.setActive(false);this.dropEditMaskTexture();this.texture?.destroy?.();this.brickBuffer?.destroy?.();this.texture=null;this.brickBuffer=null;this.bindGroup=null;this.seriesId=null;this.bricksReady=false;this.previewVolume=null;this.previewPlaneBuffers={coronal:null,sagittal:null};this.volume=null;this.textureDims=[1,1,1];this.reducedVolume=false;this.textureBytes=0;this.planSignature='';this.clearEditRuns();this.clearPreviewRuns();this.clearAppliedCutRuns();this.clearAnalysisRuns();this.clearChildSegments()} // the region index texture (r32uint, 67 MB at 512³) and the overlay buffer belong to the old grid too: released here, not at the next clearAnalysisRuns
- destroy(){this.resetData();this.regionTexture?.destroy?.();this._regionDummy?.destroy?.();this.uniformBuffer?.destroy?.();this.pickBuffer?.destroy?.();this.pickOutput?.destroy?.();this.editRowsBuffer?.destroy?.();this.editIntervalsBuffer?.destroy?.();this.previewRowsBuffer?.destroy?.();this.previewIntervalsBuffer?.destroy?.();this.analysisOverlayBuffer?.destroy?.();this.appliedCutRowsBuffer?.destroy?.();this.appliedCutIntervalsBuffer?.destroy?.();this.mprUniformBuffer?.destroy?.();this.canvas.remove()}
+ resetData(){this.dataGeneration=(this.dataGeneration|0)+1;this.setActive(false);this.dropEditMaskTexture();this.dropEditFieldTexture();this.texture?.destroy?.();this.brickBuffer?.destroy?.();this.texture=null;this.brickBuffer=null;this.bindGroup=null;this.seriesId=null;this.bricksReady=false;this.previewVolume=null;this.previewPlaneBuffers={coronal:null,sagittal:null};this.volume=null;this.textureDims=[1,1,1];this.reducedVolume=false;this.textureBytes=0;this.planSignature='';this.clearEditRuns();this.clearPreviewRuns();this.clearAppliedCutRuns();this.clearAnalysisRuns();this.clearChildSegments()} // the region index texture (r32uint, 67 MB at 512³) and the overlay buffer belong to the old grid too: released here, not at the next clearAnalysisRuns
+ destroy(){this.resetData();this.regionTexture?.destroy?.();this._regionDummy?.destroy?.();this._editFieldDummy?.destroy?.();this._editFieldDummy=null;this.uniformBuffer?.destroy?.();this.pickBuffer?.destroy?.();this.pickOutput?.destroy?.();this.editRowsBuffer?.destroy?.();this.editIntervalsBuffer?.destroy?.();this.previewRowsBuffer?.destroy?.();this.previewIntervalsBuffer?.destroy?.();this.analysisOverlayBuffer?.destroy?.();this.appliedCutRowsBuffer?.destroy?.();this.appliedCutIntervalsBuffer?.destroy?.();this.mprUniformBuffer?.destroy?.();this.canvas.remove()}
 }
 
 

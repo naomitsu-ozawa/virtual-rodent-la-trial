@@ -1,8 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { smoothEditMaskOf, buildEditMaskOf, prepRun, prepWorkerSource, buildDistanceBytesSync } from '../../docs/vr-volume-prep.js';
+import { smoothEditMaskOf, smoothEditMaskMemoOf, buildEditMaskOf, prepRun, prepWorkerSource, buildDistanceBytesSync } from '../../docs/vr-volume-prep.js';
 import { buildClsData } from '../../docs/point-cls.js';
 import { PART_FIELD } from '../../docs/vr-part-view.js';
+import { installDomStub, importApp } from '../helpers/dom-stub.js';
+import { shaderTemplate, preprocess } from '../helpers/glsl-preprocess.js';
 
 
 const OPT = { band: PART_FIELD.band, sigma: PART_FIELD.sigma, margin: PART_FIELD.margin, pad: PART_FIELD.pad };
@@ -124,20 +126,113 @@ describe('the worker job', () => {
 
 describe('the VR shader: the normal at a mask-defined surface', () => {
   const src = readFileSync(new URL('../../docs/vr-view.js', import.meta.url), 'utf8');
-  it('gradientAtS is compiled only with VRL_CHILDREN and the four call sites are re-pointed by one #define (their text is as before)', () => {
-    expect(src).toContain('#ifdef VRL_CHILDREN\nvec3 gradientAtS(vec3 tc,int s){');
-    expect(src).toContain('#define gradientAt(tc) gradientAtS(tc,idx)\n#endif\nvoid main(){');
+  it('gradientAtS is compiled in EVERY program (n731 fix2: VR and AR, useCls 1 and 0, with and without child segments / results, VRL_PART, mediump) and the call sites are re-pointed by one #define', () => {
+    expect(src).not.toContain('#ifdef VRL_CHILDREN\nvec3 gradientAtS(vec3 tc,int s){');
+    expect(src).toContain('\nvec3 gradientAtS(vec3 tc,int s){');
+    expect(src).toContain('#define gradientAt(tc) gradientAtS(tc,idx)\nvoid main(){');
     expect(src.match(/gradientAt\(tc\)/g).length).toBeGreaterThanOrEqual(8); // the two ternary forms x four sites (tests/unit/lighting.test.js / hidden-neighbour.test.js count them)
+    const t = shaderTemplate(src); let n = 0;
+    for (const med of [0, 1]) for (const reg of [0, 1]) for (const ch of [0, 1]) for (const part of [0, 1]) for (const cls4 of [0, 1]) for (const v of [[], ['VRL_NO_GENERAL', 'VRL_OPAQUE'], ['VRL_NO_GENERAL', 'VRL_NO_EVENTS', 'VRL_OPAQUE']]) {
+      const text = preprocess(t, new Set([...v, ...(med ? ['VRL_MEDIUMP'] : []), ...(reg ? ['VRL_REGIONS'] : []), ...(ch ? ['VRL_CHILDREN'] : []), ...(part ? ['VRL_PART'] : []), ...(cls4 ? ['VRL_CLS4'] : [])]));
+      expect(text, 'program ' + [...v, med, reg, ch, part, cls4].join(',')).toContain('vec3 gradientAtS(vec3 tc,int s){');
+      expect(text).toContain('#define gradientAt(tc) gradientAtS(tc,idx)');
+      n++;
+    }
+    expect(n).toBe(96);
   });
-  it('it reads editTex (the smoothed field, LINEAR) within 0.08 of its 0.5 level and falls back to the HU gradient otherwise', () => {
+  it('it reads editTex (the smoothed field, LINEAR) within 0.3 of its 0.5 level (a mask-only slot: always, and a zero gradient is the flat normal, never the HU gradient) and falls back to the HU gradient only for a HU-range surface', () => {
     const fn = src.slice(src.indexOf('vec3 gradientAtS('), src.indexOf('#define gradientAt(tc)'));
-    expect(fn).toContain('useCls>0&&s>=0&&((editMask>>s)&1)==1');
-    expect(fn).toContain('abs(texture(editTex,tq)[s]-0.5)<0.08');
+    expect(fn).toContain(' if(s>=0&&((editMask>>s)&1)==1){');
+    expect(fn).not.toContain('useCls>0');
+    expect(fn).toContain('bool md=((editMaskOnly>>s)&1)==1;');
+    expect(fn).toContain('if(md||abs(texture(editTex,tq)[s]-0.5)<0.3){');
+    expect(fn).toContain('return vec3(0.0,0.0,1.0);');
+    expect(fn.indexOf('return gradientAt(tc);')).toBeGreaterThan(fn.indexOf('return vec3(0.0,0.0,1.0);'));
+    expect(fn.match(/highp/g).length).toBeGreaterThanOrEqual(5); // Quest mediump / fp16: the normal is computed in explicit highp
     expect(fn).toContain('return gradientAt(tc);');
     expect(fn).toContain('gHuMean=-1e9');
   });
   it('the preparation asks for the smoothing (maskField) and the cache version is bumped', () => {
     expect(src).toMatch(/maskField:\{band:PART_FIELD\.band,sigma:PART_FIELD\.sigma,margin:PART_FIELD\.margin,pad:PART_FIELD\.pad\}/);
     expect(+/const VR_PREP_VERSION=(\d+);/.exec(src)[1]).toBeGreaterThanOrEqual(11);
+  });
+});
+
+describe('n731 fix2 (item 4): a hit on the mask surface is always inside the +-0.3 band of the field, so the HU gradient is never reached there', () => {
+  it('a curved (sphere) mask: at both voxel centres of every boundary pair (the hit lies between them) |field - 0.5| stays well under 0.3', () => {
+    const dims = [24, 24, 24], [w, h, d] = dims, data = new Uint8Array(w * h * d * 4);
+    for (let z = 0; z < d; z++) for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) data[idx(x, y, z, w, h) * 4] = Math.hypot(x - 11.5, y - 11.5, z - 11.5) < 8 ? 255 : 0;
+    const plain = data.slice(); smoothEditMaskOf(data, dims, 1, OPT);
+    let mx = 0, pairs = 0;
+    for (let z = 0; z < d; z++) for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) for (const [dx, dy, dz] of [[1, 0, 0], [0, 1, 0], [0, 0, 1]]) {
+      if (x + dx >= w || y + dy >= h || z + dz >= d) continue;
+      const a = idx(x, y, z, w, h) * 4, b = idx(x + dx, y + dy, z + dz, w, h) * 4;
+      if ((plain[a] >= 128) !== (plain[b] >= 128)) { pairs++; mx = Math.max(mx, Math.abs(data[a] / 255 - 0.5), Math.abs(data[b] / 255 - 0.5)); }
+    }
+    expect(pairs).toBeGreaterThan(100);
+    expect(mx).toBeLessThan(0.2); // measured 0.124
+  });
+});
+
+describe('n731 fix2: the PC volumes light a mask-defined surface by the smoothed mask field (normal only; the shape stays the plain mask)', () => {
+  const mv = readFileSync(new URL('../../docs/medical-volume.js', import.meta.url), 'utf8');
+  const wv = readFileSync(new URL('../../docs/webgl-volume.js', import.meta.url), 'utf8');
+  it('WebGPU: the hit normal takes editFieldNormal (binding 15) where the slot has a mask, turned so that inward is the field rise; membership still reads the voxel mask', () => {
+    expect(mv).toContain('@group(0) @binding(15) var editFieldTex:texture_3d<f32>;');
+    expect(mv).toContain('let fv=editFieldNormal(u32(idx),tc,dir);if(fv.w>0.5){n=select(-fv.xyz,fv.xyz,hvPrev<-1e8||hvPrev<a.x);}');
+    // never the HU gradient on a masked slot: no field bound yet (or a zero gradient) = the ray (flat); a mask-only slot has no band
+    expect(mv).toContain('if(fd.x<2.0){return editBlurNormal(seg,tc,dir);}');
+    expect(mv).toContain('fn editBlurNormal(seg:u32,tc:vec3<f32>,dir:vec3<f32>)->vec4<f32>{');
+    expect(mv).toContain('let md=(editRows[1]&(16u<<seg))!=0u;');
+    expect(mv).toContain('if(!md&&abs(editFieldAt(seg,tc)-0.5)>=0.3){return vec4<f32>(0.0);}');
+    expect(mv).toContain('if(l<1e-6){return vec4<f32>(dir,1.0);}');
+    expect(mv).not.toContain('the plain mask is the field');
+    expect(mv).toContain("{binding:15,resource:(this.editFieldTexture||this.editFieldDummy()).createView({dimension:'3d'})}");
+    const allows = mv.slice(mv.indexOf('fn editAllows(seg:u32'), mv.indexOf('\n}', mv.indexOf('fn editAllows(seg:u32')));
+    expect(allows.length).toBeGreaterThan(100);
+    expect(allows).not.toContain('editFieldTex');
+  });
+  it('WebGL: gradientAtS reads editFieldTex (the smoothed copy), editTex stays the plain mask', async () => {
+    installDomStub();
+    const { FIELD_SHADER_PATCHES, patchFragmentShader } = await importApp('webgl-volume');
+    const { fragmentShader: frag } = await importApp('vr-view');
+    const names = FIELD_SHADER_PATCHES.map(p => p.name);
+    for (const n of ['child-field-uniform', 'child-field-size', 'child-field-md', 'child-field-band', 'child-field-grad']) expect(names).toContain(n);
+    // applied to EVERY shader, with and without child segments (n731 fix2)
+    for (const children of [false, true]) {
+      const out = patchFragmentShader(frag, { children });
+      const fn = out.slice(out.indexOf('vec3 gradientAtS('), out.indexOf('#define gradientAt(tc)'));
+      expect(fn, 'children=' + children).toContain('editFieldTex');
+      expect(fn).not.toMatch(/texture\(editTex|textureSize\(editTex/); // the normal reads the smoothed copy only
+      expect(fn).toContain('||editFieldReady<1;'); // no field yet / failed: the blurred plain mask, not the HU gradient
+      expect(fn).toContain('maskBlurGrad(k,tc,dd,s)');
+      expect(out).toContain('highp float maskBlurGrad(int k,');
+    }
+    expect(wv).toContain('runEditMaskField(smoothEditMaskOf, data, dims, slots, PART_FIELD)');
+    expect(wv).toContain('u.editFieldTex.value = this.editFieldTexture || this.editTexture || this.dummy; u.editFieldReady.value = this.editFieldTexture ? 1 : 0;');
+    expect(wv).toContain('this.uniforms.editFieldReady.value = 1;');
+  });
+});
+
+describe('smoothEditMaskMemoOf (#239 (3)): the smoothing remembered per slot by the raw bytes', () => {
+  const dims = [24, 24, 20], n = dims[0] * dims[1] * dims[2];
+  const make = () => { const d = slope(dims, 0), second = slope(dims, 2); for (let i = 0; i < n; i++) { d[i * 4 + 2] = second[i * 4 + 2]; d[i * 4 + 1] = 255; } return d; };
+  it('the first call makes the very bytes of smoothEditMaskOf; the second, from the memory, makes them again without smoothing', () => {
+    const ref = make(); smoothEditMaskOf(ref, dims, 0b111, OPT);
+    const a = make(), r1 = smoothEditMaskMemoOf(a, dims, 0b111, OPT, []);
+    expect(Buffer.from(a).equals(Buffer.from(ref))).toBe(true);
+    expect(r1.fresh.length).toBe(2); // slots 0 and 2 hold the same bytes: one entry
+    const b = make(), r2 = smoothEditMaskMemoOf(b, dims, 0b111, OPT, r1.fresh);
+    expect(Buffer.from(b).equals(Buffer.from(ref))).toBe(true);
+    expect(r2.fresh.length).toBe(0);
+    const c = make(), r3 = smoothEditMaskMemoOf(c, dims, 0b101, OPT, r1.fresh); // another set of slots: the same per-slot bytes
+    const ref3 = make(); smoothEditMaskOf(ref3, dims, 0b101, OPT);
+    expect(Buffer.from(c).equals(Buffer.from(ref3))).toBe(true); expect(r3.fresh.length).toBe(0);
+  });
+  it('a changed mask is not taken from the memory', () => {
+    const a = make(), r1 = smoothEditMaskMemoOf(a, dims, 1, OPT, []);
+    const b = make(); b[0] = 255 - b[0]; const ref = b.slice(); smoothEditMaskOf(ref, dims, 1, OPT);
+    const r2 = smoothEditMaskMemoOf(b, dims, 1, OPT, r1.fresh);
+    expect(r2.fresh.length).toBe(1); expect(Buffer.from(b).equals(Buffer.from(ref))).toBe(true);
   });
 });
