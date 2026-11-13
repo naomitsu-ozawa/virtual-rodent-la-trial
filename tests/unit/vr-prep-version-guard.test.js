@@ -10,11 +10,15 @@ import { createHash } from 'node:crypto';
 // Not covered: the page-side steps of prepareVrData inside docs/vr-view.js (reading the slices, the processing mask, the analysis index); bump by hand when those change what is stored.
 const SOURCES = ['vr-volume-prep.js', 'point-cls.js', 'distance-field.js', 'vr-brick-occupancy.js', 'gpu-runs.js', 'vr-prep-cache.js'];
 const KNOWN_HASHES = {
+  12: 'f1404f28b532ab3d',
   3: '537024a77ad091c7',
   5: '5e53f21df1612fef', // the list entries carry segMask (the prepared slot bits). (child segments): the new buildChildIndexOf + a `child` field of the worker answer, present only when child items were sent; the output WITHOUT child segments is byte-identical to before, and an entry made with children has its own key (the child items are an extra hashed `child` part), so no old entry can be mistaken for it: same version
   4: '18ca6924fc9d55f1', // buildRegionIndexOf keeps every result (up to 255) in ids / list, the 14-colour cap only limits the colour index of the histogram (a result of the 15th colour used to be dropped)
   6: '6685a3b5640ff73e', // buildRegionIndexOf on a reduced grid fills the coarse voxels still 0 from the source block they cover (second pass; the first pass is never overwritten); same grid: byte-identical
-  7: '68518a9794210c7f', // buildRegionIndexOf grows ids (not the colour index data) by one voxel into its 6 face neighbours on every grid (a voxel still 0 takes the largest = latest result's id): the shader's NEAREST colour read just behind the surface no longer lands on index 0 (grey streaks on sample7)
+  10: 'add8a4cf55c4857b', // (coordinator: an inner item must lose no voxel when the outer one is hidden): gpuOwnerSlices on a reduced grid gives a grid voxel to the item with fewer voxels (then later) among those with ANY voxel in it (was: the most voxels)
+  9: '939c1fd2bc2d6c02', // (an item inside another keeps its shape when the outer one is hidden): the hide index gives an overlapped voxel to the item with FEWER voxels (gpu-runs.js gpuOwnerOrder), on a reduced grid the source owners are counted per grid voxel (gpuOwnerSlices); the worker sends each index as ONE RG array (packIndexRg: rg, no ids / hide), stored as regionRg / childRg
+  8: 'd650c44cc5a102c7', // (hiding a region / child left holes in its neighbours): buildRegionIndexOf / buildChildIndexOf also return `hide`, the index the hidden test reads (never grown / dilated; on a reduced grid gpu-runs.js gpuOwnerSlices: the item with the most source voxels in a grid voxel); the worker sends it, the cache stores it (regionHide / childHide)
+  7: '45fa0c2b82f52933', // buildRegionIndexOf grows ids (not the colour index data) by one voxel into its 6 face neighbours on every grid (a voxel still 0 takes the largest = latest result's id): the shader's NEAREST colour read just behind the surface no longer lands on index 0 (grey streaks on sample7)
 };
 
 const read = f => readFileSync(new URL('../../docs/' + f, import.meta.url), 'utf8');

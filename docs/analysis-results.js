@@ -1,18 +1,19 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { setAnalysisRegions, setAnalysisFocusedRegionId, setNextAnalysisRegionId, setNextAnalysisColorIndex, sceneState, analysisRegions, analysisFocusedRegionId, currentLanguage, volumeAnalysisBusy, volume, current3DVolume, activeSeries } from './state.js?v=20261110-build708';
-import { analysisSummary, analysisRegionList, analysisMergeButton, analysisClearButton, planes } from './ui-shell.js?v=20261110-build708';
-import { tr } from './i18n.js?v=20261110-build708';
-import { REGION_NAME_MAX, normalizeRegionName, regionDisplayName } from './region-name.js?v=20261110-build708';
-import { spacingWarningHtml } from './slice-spacing.js?v=20261110-build708';
-import { analysisRegionById, updateAnalysisEditorControls } from './edit-tools.js?v=20261110-build708';
-import { analysisColorCss, schedulePlaneRender } from './mpr-render.js?v=20261110-build708';
-import { analysisRegionShown, analysisRegionSegmentsShown } from './segments.js?v=20261110-build708';
-import { request3DRender } from './scene3d.js?v=20261110-build708';
-import { dispose } from './surface-mesh.js?v=20261110-build708';
-import { setRegionLabel, setRegionLabelOffset, hasOffset, clampVoxel, onAnalysisLabelsChange, surfaceAnchor, voxelFromLocal3d } from './analysis-label.js?v=20261110-build708';
-import { analysisRunsContain } from './run-length.js?v=20261110-build708';
-import { setRegionVisible, onRegionVisibleChange } from './region-visibility.js?v=20261110-build708';
+import { setAnalysisRegions, setAnalysisFocusedRegionId, setNextAnalysisRegionId, setNextAnalysisColorIndex, sceneState, analysisRegions, analysisFocusedRegionId, currentLanguage, volumeAnalysisBusy, volume, current3DVolume, activeSeries } from './state.js?v=20261113-build731';
+import { analysisSummary, analysisRegionList, analysisMergeButton, analysisClearButton, planes } from './ui-shell.js?v=20261113-build731';
+import { tr } from './i18n.js?v=20261113-build731';
+import { REGION_NAME_MAX, normalizeRegionName, regionDisplayName } from './region-name.js?v=20261113-build731';
+import { spacingWarningHtml } from './slice-spacing.js?v=20261113-build731';
+import { analysisRegionById, updateAnalysisEditorControls } from './edit-tools.js?v=20261113-build731';
+import { analysisColorCss, schedulePlaneRender } from './mpr-render.js?v=20261113-build731';
+import { analysisRegionShown, analysisRegionSegmentsShown, hiddenShapeCount, showAllHiddenShapes, onChildSegLookChange } from './segments.js?v=20261113-build731';
+import { buildShowToggles } from './region-toggles.js?v=20261113-build731';
+import { request3DRender } from './scene3d.js?v=20261113-build731';
+import { dispose } from './surface-mesh.js?v=20261113-build731';
+import { setRegionLabel, setRegionLabelOffset, hasOffset, clampVoxel, onAnalysisLabelsChange, surfaceAnchor, voxelFromLocal3d } from './analysis-label.js?v=20261113-build731';
+import { analysisRunsContain } from './run-length.js?v=20261113-build731';
+import { setRegionVisible, onRegionVisibleChange, regionVisible, regionHidden, setRegionHidden, onRegionHiddenChange } from './region-visibility.js?v=20261113-build731';
 export function analysisRegionRepresentativeVoxel(region){
  if(!region?.runsBySlice)return null;
  const nonEmpty=[];for(let z=0;z<region.runsBySlice.length;z++)if(region.runsBySlice[z]?.length)nonEmpty.push(z);
@@ -69,11 +70,20 @@ onRegionVisibleChange(region=>{
  if(region.meshGroup)region.meshGroup.visible=analysisRegionShown(region);
  request3DRender();for(const p of Object.keys(planes))schedulePlaneRender(p);renderAnalysisResults();
 });
+onRegionHiddenChange(()=>{request3DRender();for(const p of Object.keys(planes))schedulePlaneRender(p);renderAnalysisResults()});
+// 「隠れ N」 counts the child segments too (their shape flag is child.visible): a child shown / hidden / removed redraws the header only
+onChildSegLookChange((c,changed)=>{if(changed.some(k=>k==='visible'||k==='removed'))syncHiddenSummary()});
 // views that list the regions elsewhere (the segment cards' tree, segment-ui.js) redraw with the list
 const renderHooks=[];
 export function onAnalysisResultsRendered(fn){renderHooks.push(fn)}
 export function analysisRegionName(region){
  return regionDisplayName(region,r=>r.merged?(tr('mergedRegion')+' '+r.id):(tr('analysisRegion')+' '+r.id));
+}
+function syncHiddenSummary(){
+ const head=analysisSummary?.querySelector('.analysis-summary-head');if(!head)return;
+ const n=hiddenShapeCount(),text=head.querySelector('.analysis-hidden-count'),btn=head.querySelector('.analysis-show-all');
+ if(text)text.textContent=tr('hiddenShapeCount').replace('{n}',String(n));
+ if(btn){btn.disabled=n===0;btn.title=tr('showAllHiddenHint')}
 }
 export function renderAnalysisResults(statusText=null){
  if(!analysisSummary||!analysisRegionList)return;
@@ -84,8 +94,13 @@ export function renderAnalysisResults(statusText=null){
   analysisSummary.textContent=tr('volumeHint');
  }else{
   const focused=analysisRegionById(analysisFocusedRegionId)||analysisRegions[analysisRegions.length-1];
-  const count=document.createElement('div');count.textContent=tr('analysisRegions')+': '+analysisRegions.length;count.style.cssText='font-size:11px;color:rgb(var(--ui-t2));margin-bottom:7px';
-  analysisSummary.appendChild(count);
+  // the header: the count, then 「隠れ N」 (regions whose shape is hidden + child segments hidden) and 「すべて表示」 (puts back those shapes only; resting while N is 0)
+  const count=document.createElement('div');count.className='analysis-summary-head';count.style.cssText='font-size:11px;color:rgb(var(--ui-t2))';
+  const countText=document.createElement('span');countText.textContent=tr('analysisRegions')+': '+analysisRegions.length;
+  const hiddenText=document.createElement('span');hiddenText.className='analysis-hidden-count';
+  const showAll=document.createElement('button');showAll.type='button';showAll.className='analysis-region-button analysis-show-all';showAll.dataset.i18n='showAllHidden';showAll.textContent=tr('showAllHidden');showAll.onclick=()=>{showAllHiddenShapes()};
+  count.append(countText,hiddenText,showAll);
+  analysisSummary.appendChild(count);syncHiddenSummary();
   if(focused){
    const card=document.createElement('div');card.style.cssText='display:grid;gap:7px;padding:9px 10px;border:1px solid rgb(var(--ui-b3));border-radius:9px;background:rgb(var(--ui-s1));margin-bottom:8px';
    const title=document.createElement('strong');title.textContent=(currentLanguage==='ja'?'解析結果 · ':'Result · ')+analysisRegionName(focused);title.style.cssText='font-size:11px;color:rgb(var(--ui-t1))';
@@ -130,12 +145,10 @@ export function renderAnalysisResults(statusText=null){
   const keys=document.createElement('span');keys.textContent=region.segmentKeys.map(k=>tr(k)||k).join(' + ');
   const value=document.createElement('span');value.textContent=region.mm3.toFixed(2)+' mm³ · '+region.voxels.toLocaleString()+' voxels';value.style.cssText='white-space:normal;overflow:visible;text-overflow:clip';
   info.append(title,keys,value);
-  const visible=document.createElement('button');visible.type='button';visible.className='analysis-region-button';visible.textContent=region.visible?tr('hideRegion'):tr('showRegion');
-  // its segments all unticked: the region is hidden with them, so the button rests (greyed, says why) until a segment is ticked
-  if(!analysisRegionSegmentsShown(region)){visible.disabled=true;visible.title=tr('regionSegmentHidden')}
-  visible.onclick=()=>setRegionVisible(region,!region.visible);
+  // 色 (the colour only: region.visible) and 表示 (the whole shape: region.hidden), two toggles with fixed wording (region-toggles.js). Its segments all unticked: the region is hidden with them, so both rest (greyed, says why) until a segment is ticked
+  const toggles=buildShowToggles({colorOn:regionVisible(region),shapeOn:!regionHidden(region),canToggle:analysisRegionSegmentsShown(region)},{color:{attr:['regionVisible',String(region.id)],onClick:()=>setRegionVisible(region,!regionVisible(region))},shape:{attr:['regionHidden',String(region.id)],onClick:()=>setRegionHidden(region,!regionHidden(region))}});
   const remove=document.createElement('button');remove.type='button';remove.className='analysis-region-button analysis-region-delete';remove.textContent=tr('deleteRegion');remove.onclick=()=>removeAnalysisRegion(region.id);
-  row.append(select,swatch,info,visible,remove);analysisRegionList.append(row);
+  row.append(select,swatch,info,toggles,remove);analysisRegionList.append(row);
  }
  for(const fn of renderHooks){try{fn()}catch(e){console.warn('[analysis-results] hook',e)}}
 }
