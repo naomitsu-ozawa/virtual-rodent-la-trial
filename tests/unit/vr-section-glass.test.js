@@ -64,7 +64,7 @@ describe('wiring in vr-view.js (not runnable here)', () => {
     expect(src).toContain('const glassHit=(c,list)=>{');
     expect(src).toContain('if(r&&squareContains(r.y,r.z,pl.h)&&(!best||r.t<best.t))best={t:r.t,pl,y:r.y,z:r.z,glass:true};');
     expect(src).toContain('if(vis.length)gl=glassHit(c,vis);');
-    expect(src).toContain('band,glass:gl,tissue:vh,plane:sh,');
+    expect(src).toContain('band,glass:gl,tissue:vx,plane:sx,');
   });
   it('the glass is not drawn when idle: hidden at creation, shown only while a laser is on it; it is never raycast', () => {
     expect(src).toContain('glass.renderOrder=1;glass.visible=false;obj.add(glass);');

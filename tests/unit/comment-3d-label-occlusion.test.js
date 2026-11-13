@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { tissueAt, pushOutOfTissue, judgeLabelPlace, labelDisplay, thinOverlaps, putAttr, putStyle, PUSH_DIRS, LABEL_PUSH_MAX } from '../../docs/comment-3d-label-occlusion.js';
+import { tissueAt, pushOutOfTissue, judgeLabelPlace, labelDisplay, thinOverlaps, putAttr, putStyle, PUSH_DIRS, LABEL_PUSH_MAX, frontMost, stackOrder, analysisLabelsInView, LABEL_LIT_Z } from '../../docs/comment-3d-label-occlusion.js';
 
 // Occlusion rules of the analysis labels on the PC 3D view. Synthetic classification bytes: 16^3 grid, box +-1, a slab of tissue at x voxels 6..9
 // (object x in [-0.25, 0.25]), one channel. A voxel is 0.125 wide.
@@ -116,9 +116,42 @@ describe('the lit / dragged exception lives in the CSS and the draw code uses th
     const css = readFileSync(new URL('../../docs/style.css', import.meta.url), 'utf8');
     expect(css).toContain('.analysis-label-3d.is-behind:not(.is-lit):not(.is-dragging)');
     expect(css).toContain('.analysis-leader-3d.is-behind:not(.is-lit)');
-    expect(css).toContain('.analysis-anchor-3d.is-behind:not(.is-lit)');
+    expect(css).not.toContain('.analysis-anchor-3d.is-behind'); // the anchor dot is never hidden by tissue: translucent (.is-faint), hidden only under a thinned card (.is-overlapped)
+    expect(css).toContain('.analysis-anchor-3d.is-faint:not(.is-lit)'); expect(css).toContain('.analysis-anchor-3d.is-overlapped:not(.is-lit)');
     expect(css).toContain('.analysis-label-3d.is-faint:not(.is-lit):not(.is-dragging)');
     const js = readFileSync(new URL('../../docs/comment-3d.js', import.meta.url), 'utf8');
     expect(js).toContain("putStyle(e.label,'transform'"); expect(js).toContain("putAttr(e.dot,'cx'"); expect(js).toContain("putAttr(svg,'width',W)");
+  });
+});
+
+describe('overlapping cards: the nearer is picked and drawn on top (labelOverlap)', () => {
+  it('frontMost: the nearest (smallest z) among the cards under the point; a lit card first; the first of equals; nothing = null', () => {
+    expect(frontMost([{ id: 1, z: 0.5 }, { id: 2, z: 0.2 }, { id: 3, z: 0.9 }])).toBe(2);
+    expect(frontMost([{ id: 1, z: 0.2 }, { id: 2, z: 0.5 }])).toBe(1); // insertion order does not decide
+    expect(frontMost([{ id: 1, z: 0.1 }, { id: 2, z: 0.9, lit: true }])).toBe(2); // a lit card is on top of all
+    expect(frontMost([{ id: 1, z: 0.4, lit: true }, { id: 2, z: 0.3, lit: true }])).toBe(2);
+    expect(frontMost([{ id: 7, z: 0.3 }, { id: 8, z: 0.3 }])).toBe(7);
+    expect(frontMost([{ id: 0, z: -0.5 }])).toBe(0); // id 0 is an id, not "none"
+    expect(frontMost([])).toBeNull();
+  });
+  it('stackOrder: the farther card gets the lower z-index, a lit card is above all', () => {
+    const m = stackOrder([{ id: 'a', z: 0.2 }, { id: 'b', z: 0.8 }, { id: 'c', z: 0.5 }, { id: 'd', z: 0.99, lit: true }]);
+    expect(m.get('b')).toBeLessThan(m.get('c')); expect(m.get('c')).toBeLessThan(m.get('a'));
+    expect(m.get('d')).toBeGreaterThan(m.get('a')); expect(m.get('d')).toBeGreaterThan(LABEL_LIT_Z);
+    expect(stackOrder([]).size).toBe(0);
+  });
+  it('analysisLabelsInView counts the cards that meet the view rectangle (the labels the user sees)', () => {
+    const c = (x, y) => ({ x, y, w: 40, h: 16 });
+    // in: (100,50) (500,300) (100,400: its top edge is at 392) (100,-7: its bottom edge is at +1); out: x -30 and -21 (right edge -10 / -1), y -9 (bottom edge -1)
+    expect(analysisLabelsInView([c(100, 50), c(500, 300), c(-30, 50), c(-21, 50), c(100, 400), c(100, -9), c(100, -7)], 800, 400)).toBe(4);
+    expect(analysisLabelsInView([c(-19, 50), c(819, 50), c(821, 50)], 800, 400)).toBe(2); // -19: right edge +1 (in); 819: left edge 799 (in); 821: left edge 801 (out)
+    expect(analysisLabelsInView([], 800, 400)).toBe(0);
+  });
+  it('the 3D view picks with frontMost, counts the labels in view, thins only by the mode and stacks the cards (source)', async () => {
+    const { readFileSync } = await import('node:fs');
+    const js = readFileSync(new URL('../../docs/comment-3d.js', import.meta.url), 'utf8');
+    expect(js).toContain("frontMost(c)"); expect(js).toContain("thinActive(settings.get('labelOverlap'),analysisLabelsInView(items,W,H))?thinOverlaps(items):NO_OVER");
+    expect(js).toContain("putStyle(e.label,'zIndex'"); expect(js).toContain("id:'AA|'+r.id,local:pl.al"); // the anchor is its own probe of the hidden judgement
+    expect(js).toContain("e.dot.classList.toggle('is-faint',dotBehind)");
   });
 });

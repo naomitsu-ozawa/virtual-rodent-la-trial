@@ -41,13 +41,33 @@ export const MATERIALS = {
 export const MATERIAL_KEYS = Object.keys(MATERIALS);
 // a preset key as stored on a segment (unknown / missing -> 'standard')
 export const materialKey = k => (Object.prototype.hasOwnProperty.call(MATERIALS, k) ? k : 'standard');
-// [ambient, spec, shininess, 0] of a preset key (the 4th component is spare)
+// [ambient, spec, shininess, 0] of a preset key (the 4th component is spare; a saved skin / muscle / fat of reads as standard through materialKey)
 export function materialVec(k) {
   const m = MATERIALS[materialKey(k)];
   return [m.ambient, m.spec, m.shininess, 0];
 }
 
+export const CUT_REAL = { ambient: 0.26, wrap: [0.12, 0.22, 0.16], sky: [0.95, 1, 0.99], ground: [0.95, 0.5, 0.4], spec1: 0.08, sh1: 5, spec2: 0.12, sh2: 28 }; // the muscle values of (MATERIALS muscle ambient, REAL[2])
+// the highlight of the cut face as a fraction of the one on a surface: the cut face is a flat plane, a strong highlight on it would hide the CT shading
+export const CUT_GLOSS = 0.5;
+// and a gain on its colour: the lit cut face alone was ~10 % darker than the flat one it replaces (measured on the same view, mean of the cut face), the gain brings the mean back; CT shading stays in col
+export const CUT_GAIN = 1.1;
+// JS twin of vrlRealCut(): the lit colour [r, g, b] of a cut-face colour col; n = the plane normal (turned to the viewer), viewDir, off as in shadePoint (off = the light offset, same space as n)
+export function cutTone(col, n, viewDir, off, depth) {
+  const P = CUT_REAL, dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const norm = a => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
+  const nf = dot(n, viewDir) < 0 ? [-n[0], -n[1], -n[2]] : n;
+  const l = norm([viewDir[0] + off[0], viewDir[1] + off[1], viewDir[2] + off[2]]), h = norm([l[0] + viewDir[0], l[1] + viewDir[1], l[2] + viewDir[2]]);
+  const nl = dot(nf, l), up = dot(nf, norm(off)) * 0.5 + 0.5, lp = Math.log2(Math.max(dot(nf, h), 1e-4));
+  const sp = (P.spec1 * Math.pow(2, lp * P.sh1) + P.spec2 * Math.pow(2, lp * P.sh2)) * CUT_GLOSS, fade = 1 - DEPTH_FADE * depth;
+  return [0, 1, 2].map(c => {
+    const d = Math.min(Math.max((nl + P.wrap[c]) / (1 + P.wrap[c]), 0), 1), amb = P.ambient * (P.ground[c] + (P.sky[c] - P.ground[c]) * up);
+    return (col[c] * (amb + (1 - P.ambient) * d) + sp) * fade * CUT_GAIN;
+  });
+}
+
 const f = x => (Number.isInteger(x) ? x.toFixed(1) : String(x));
+const v3 = (t, a) => t + '(' + a.map(f).join(',') + ')';
 
 // direction to the light in VIEW space (x right, y up, z towards the viewer), unit length
 export function viewLightDirection() {
@@ -97,6 +117,17 @@ vec2 vrlShade(vec3 n,vec3 viewDir,vec3 lightOff,float depth01,float keep,vec3 ma
 }
 float vrlDepthD(float t,float dist,float r){return clamp((t-(dist-r))/(2.0*r),0.0,1.0);}
 float vrlDepth01(float t,vec3 o,vec3 halfBox){return vrlDepthD(t,length(o),length(halfBox));}
+// the cut face (lighting.js CUT_REAL: the muscle values of, for every segment): n = the plane normal, turned to the viewer, no rim
+vec3 vrlRealCut(vec3 col,vec3 n,vec3 viewDir,vec3 lightOff,float depth01){
+ if(dot(n,viewDir)<0.0)n=-n;
+ vec3 l=normalize(viewDir+lightOff);
+ vec3 W=${v3('vec3', CUT_REAL.wrap)};
+ vec3 d=clamp((vec3(dot(n,l))+W)/(vec3(1.0)+W),0.0,1.0);
+ vec3 amb=${f(CUT_REAL.ambient)}*mix(${v3('vec3', CUT_REAL.ground)},${v3('vec3', CUT_REAL.sky)},dot(n,normalize(lightOff))*0.5+0.5);
+ float lp=log2(max(dot(n,normalize(l+viewDir)),1e-4));
+ float sp=(${f(CUT_REAL.spec1)}*exp2(lp*${f(CUT_REAL.sh1)})+${f(CUT_REAL.spec2)}*exp2(lp*${f(CUT_REAL.sh2)}))*${f(CUT_GLOSS)};
+ return (col*(amb+${f(1 - CUT_REAL.ambient)}*d)+vec3(sp))*(1.0-${f(DEPTH_FADE)}*depth01)*${f(CUT_GAIN)};
+}
 `;
 }
 // GLSL vertex stage (VR / AR): the statement that sets vLightOff (volume space) from the eye's axes. viewMatrix is the eye's (per eye in XR);
@@ -116,6 +147,17 @@ fn vrlShade(n0:vec3<f32>,viewDir:vec3<f32>,lightOff:vec3<f32>,depth01:f32,keep:f
 }
 fn vrlDepthD(t:f32,dist:f32,r:f32)->f32{return clamp((t-(dist-r))/(2.0*r),0.0,1.0);}
 fn vrlDepth01(t:f32,o:vec3<f32>,halfBox:vec3<f32>)->f32{return vrlDepthD(t,length(o),length(halfBox));}
+// the cut face (lighting.js CUT_REAL: the muscle values of, for every segment): n = the plane normal, turned to the viewer, no rim
+fn vrlRealCut(col:vec3<f32>,n0:vec3<f32>,viewDir:vec3<f32>,lightOff:vec3<f32>,depth01:f32)->vec3<f32>{
+ var n=n0;if(dot(n,viewDir)<0.0){n=-n;}
+ let l=normalize(viewDir+lightOff);
+ let W=${v3('vec3<f32>', CUT_REAL.wrap)};
+ let d=clamp((vec3<f32>(dot(n,l))+W)/(vec3<f32>(1.0)+W),vec3<f32>(0.0),vec3<f32>(1.0));
+ let amb=${f(CUT_REAL.ambient)}*mix(${v3('vec3<f32>', CUT_REAL.ground)},${v3('vec3<f32>', CUT_REAL.sky)},vec3<f32>(dot(n,normalize(lightOff))*0.5+0.5));
+ let lp=log2(max(dot(n,normalize(l+viewDir)),1e-4));
+ let sp=(${f(CUT_REAL.spec1)}*exp2(lp*${f(CUT_REAL.sh1)})+${f(CUT_REAL.spec2)}*exp2(lp*${f(CUT_REAL.sh2)}))*${f(CUT_GLOSS)};
+ return (col*(amb+${f(1 - CUT_REAL.ambient)}*d)+vec3<f32>(sp))*(1.0-${f(DEPTH_FADE)}*depth01)*${f(CUT_GAIN)};
+}
 `;
 }
 
@@ -129,7 +171,7 @@ export function boxRadius(columns, rows, slices, spacing) {
 // TSL node (WebGPU node materials): the display colour of the lit surface in LINEAR working space, = pow(colour * diffuse + spec, DISPLAY_GAMMA).
 // TSL is the module three/tsl passed in (this file imports nothing); depth = { center, radius } uniform nodes: the distance of the eye to the volume's centre
 // and its bounding radius, updated every frame. The normal is normalView (view space, flat shading and DoubleSide handled by three.js), turned to face the viewer.
-// mat = a vec3 uniform node (ambient, spec, shininess) of the mesh's segment (materialVec), so the mesh matches its volume; standard when omitted.
+// mat = a vec4 uniform node (ambient, spec, shininess, spare) of the mesh's segment (materialVec), so the mesh matches its volume; standard when omitted.
 export function meshColorNode(TSL, depth, mat = null) {
   const { materialColor, positionView, normalView, positionViewDirection, vec3, vec4, float, dot, normalize, max, pow, clamp, select, length } = TSL;
   const v = positionViewDirection, n0 = normalView;
@@ -144,17 +186,17 @@ export function meshColorNode(TSL, depth, mat = null) {
   return vec4(pow(max(display, 0), DISPLAY_GAMMA), 1);
 }
 // WebGL fallback (a core MeshStandardMaterial, onBeforeCompile): the fragment source of the standard material with the same evaluation in place of its
-// lights (there are none in the scene). Declares the vec2 uniform vrlMeshDepth (eye distance to the centre, bounding radius) and the vec3 uniform
-// vrlMeshMat (the segment's material: ambient, spec, shininess). The emissive part
+// lights (there are none in the scene). Declares the vec2 uniform vrlMeshDepth (eye distance to the centre, bounding radius) and the vec4 uniform
+// vrlMeshMat (the segment's material: ambient, spec, shininess, spare). The emissive part
 // (the highlight of edited / selected regions) is added after, in linear, as before.
 export function patchStandardFragment(src) {
   const anchor = '#include <opaque_fragment>';
   if (!src.includes(anchor) || !src.includes('void main()')) throw new Error('lighting.js: the standard fragment shader has no opaque_fragment / main anchor');
   const code = `{ // the shared lighting model in place of the scene lights
  vec3 vrlV=normalize(vViewPosition);
- vec2 vrlS=vrlShade(normal,vrlV,vec3(${f(VIEW_LIGHT_OFFSET[0])},${f(VIEW_LIGHT_OFFSET[1])},0.0),vrlDepthD(length(vViewPosition),vrlMeshDepth.x,vrlMeshDepth.y),0.0,vrlMeshMat);
+ vec2 vrlS=vrlShade(normal,vrlV,vec3(${f(VIEW_LIGHT_OFFSET[0])},${f(VIEW_LIGHT_OFFSET[1])},0.0),vrlDepthD(length(vViewPosition),vrlMeshDepth.x,vrlMeshDepth.y),0.0,vrlMeshMat.xyz);
  outgoingLight=pow(max(diffuseColor.rgb*vrlS.x+vec3(vrlS.y),0.0),vec3(${f(DISPLAY_GAMMA)}))+totalEmissiveRadiance;
  }
  `;
-  return src.replace('void main()', 'uniform vec2 vrlMeshDepth;\nuniform vec3 vrlMeshMat;\n' + lightingGLSL() + 'void main()').replace(anchor, code + anchor);
+  return src.replace('void main()', 'uniform vec2 vrlMeshDepth;\nuniform vec4 vrlMeshMat;\n' + lightingGLSL() + 'void main()').replace(anchor, code + anchor);
 }

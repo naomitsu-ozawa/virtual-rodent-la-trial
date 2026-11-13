@@ -1,20 +1,21 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { volume, activeSeries, incNextSegmentMaskVolumeId, childSegments } from './state.js?v=20261110-build708';
-import { isChildKey, childSegNormalizeName, childSegColorCss, childSegLookOf, childSegNormalizeOpacity, childSegNormalizeMaterial, childSegNormalizeShade } from './segment-look.js?v=20261110-build708';
-import { childByKey, childKeysOf, childDisplayName, onChildSegChange, emitChildSegChange, setChildRuns } from './child-segments.js?v=20261110-build708';
-import { tr } from './i18n.js?v=20261110-build708';
-import { HU_AXIS, axisFor, valueStepOf } from './histogram.js?v=20261110-build708';
-import { hexRgb } from './utils.js?v=20261110-build708';
-import { settings } from './app-settings.js?v=20261110-build708';
-import { buildThresholdMask, morphMask, fillMaskHoles, removeSmallMaskComponents } from './mask-ops.js?v=20261110-build708';
-import { thinSuppressActive, suppressThinMask } from './thin-suppress.js?v=20261110-build708';
-import { effectiveRanges } from './segment-exclusive.js?v=20261110-build708';
-import { maskFromAnalysisRuns, intersectRunArrays, subtractRunArrays } from './run-length.js?v=20261110-build708';
-import { sourceFilterStages } from './source-filters.js?v=20261110-build708';
-import { gpuSlotOrder, slotSignature } from './segment-slots.js?v=20261110-build708';
-import { segmentPresetDefaults } from './dataset-reset.js?v=20261110-build708';
-import { dataRangeOf, shadeRangeOf, moveShadeEnd, autoShadeRange, shadeSpanOf, createShadeAutoScheduler } from './cap-shade.js?v=20261110-build708';
+import { volume, activeSeries, incNextSegmentMaskVolumeId, childSegments, analysisRegions } from './state.js?v=20261113-build734';
+import { isChildKey, childSegNormalizeName, childSegColorCss } from './segment-look.js?v=20261113-build734';
+import { childByKey, childKeysOf, childDisplayName, onChildSegChange, emitChildSegChange, setChildRuns } from './child-segments.js?v=20261113-build734';
+import { tr } from './i18n.js?v=20261113-build734';
+import { HU_AXIS, axisFor, valueStepOf } from './histogram.js?v=20261113-build734';
+import { hexRgb } from './utils.js?v=20261113-build734';
+import { settings } from './app-settings.js?v=20261113-build734';
+import { buildThresholdMask, morphMask, fillMaskHoles, removeSmallMaskComponents } from './mask-ops.js?v=20261113-build734';
+import { thinSuppressActive, suppressThinMask } from './thin-suppress.js?v=20261113-build734';
+import { effectiveRanges } from './segment-exclusive.js?v=20261113-build734';
+import { regionHidden, setRegionHidden } from './region-visibility.js?v=20261113-build734';
+import { maskFromAnalysisRuns, intersectRunArrays, subtractRunArrays } from './run-length.js?v=20261113-build734';
+import { sourceFilterStages } from './source-filters.js?v=20261113-build734';
+import { gpuSlotOrder, slotSignature } from './segment-slots.js?v=20261113-build734';
+import { segmentPresetDefaults } from './dataset-reset.js?v=20261113-build734';
+import { dataRangeOf, shadeRangeOf, moveShadeEnd, autoShadeRange, shadeSpanOf, createShadeAutoScheduler } from './cap-shade.js?v=20261113-build734';
 // 'contrast' (造影領域) is the fifth preset; at most GPU_SEGMENT_SLOTS (4) are enabled at once (segment-slots.js)
 export const SEGMENT_PRESET_ORDER=['bone','soft','fat','lung','contrast'];
 export const segmentEditState=Object.fromEntries(SEGMENT_PRESET_ORDER.map(key=>[key,{baseRuns:null,baseSignature:'',keepRuns:null,excludeRuns:null,cutRuns:null,finalRuns:null,revision:0,undo:[],redo:[],surfaceGroup:null,rawCutSurface:false}]));
@@ -32,6 +33,7 @@ export const segmentState={
 // look changes of a child segment (setChildLook below, the shading range ends): the renderers follow through onChildSegLookChange
 const lookListeners=new Set();
 const notifyLook=(c,changed)=>{for(const fn of [...lookListeners]){try{fn(c,changed)}catch(e){console.warn('[segment-look]',e)}}emitChildSegChange('look',c.key,changed)};
+export function notifyChildrenOfParentLook(parentKey,changed){for(const c of childSegments)if(c.parentKey===parentKey)notifyLook(c,changed)}
 export const segmentShadeRanges={};
 export const segmentShadeAuto={};
 export const shadeDataRange=()=>dataRangeOf(volume?.min,volume?.max);
@@ -42,20 +44,18 @@ export function dataAxis(v=volume){
  const m=axisMemo;if(m&&m.series===activeSeries&&m.min===v.min&&m.max===v.max)return m.axis;
  const axis=axisFor(v.min,v.max,valueStepOf(activeSeries?.slices));axisMemo={series:activeSeries,min:v.min,max:v.max,axis};return axis;
 }
-// the range in use for a segment: {lower, upper, touched} (touched = set by the user: manual)
-// a key 's<id>' is a child segment of the tree (child-segments.js): its manual range is child.shade ({lower, upper}, saved on its project entry), its auto value child.shadeAuto (computed from child.runsBySlice,
-// histogram-ui.js computeSegmentHistograms; never saved), its initial value the parent preset's min / max. Every function below takes either kind of key. (Ported from the tree-segments work d99f5414, for child segments only.)
+const shadeKeyOf=key=>isChildKey(key)?childByKey(key)?.parentKey:key;
 export function segmentShadeRange(key,data=shadeDataRange()){
- if(childSegments.length&&isChildKey(key)){const c=childByKey(key),p=c?segmentState[c.parentKey]:null;return shadeRangeOf(c?.shade,p?.userMin??p?.min,p?.userMax??p?.max,data,c?.shadeAuto)}
+ key=shadeKeyOf(key);
  const s=segmentState[key];return shadeRangeOf(segmentShadeRanges[key],s?.userMin??s?.min,s?.userMax??s?.max,data,segmentShadeAuto[key])}
 // the range the segment's lower / upper sliders run over: {min, max} (the values present in the segment + 5 %, else the data's full range)
-export function segmentShadeSpan(key,data=shadeDataRange()){return shadeSpanOf(isChildKey(key)?childByKey(key)?.shadeAuto:segmentShadeAuto[key],data)}
+export function segmentShadeSpan(key,data=shadeDataRange()){return shadeSpanOf(segmentShadeAuto[shadeKeyOf(key)],data)}
 // the user moves one end of the segment's range: it is manual from now on, both ends are kept (lower cannot pass upper)
 export function setSegmentShadeEnd(key,which,value,data=shadeDataRange()){
- if(isChildKey(key)){const c=childByKey(key);if(!c)return null;c.shade=moveShadeEnd(segmentShadeRange(key,data),which,value,data);notifyLook(c,['shade']);return segmentShadeRange(key,data)}
- if(!segmentState[key])return null;const r=moveShadeEnd(segmentShadeRange(key,data),which,value,data);segmentShadeRanges[key]=r;return segmentShadeRange(key,data)}
+ key=shadeKeyOf(key);
+ if(!segmentState[key])return null;const r=moveShadeEnd(segmentShadeRange(key,data),which,value,data);segmentShadeRanges[key]=r;notifyChildrenOfParentLook(key,['shade']);return segmentShadeRange(key,data)}
 // 「自動に戻す」: the manual value is dropped, the segment follows the auto value again
-export function resetSegmentShadeRange(key){if(isChildKey(key)){const c=childByKey(key);if(c&&c.shade){c.shade=null;notifyLook(c,['shade'])}return}delete segmentShadeRanges[key]}
+export function resetSegmentShadeRange(key){key=shadeKeyOf(key);if(segmentShadeRanges[key]){delete segmentShadeRanges[key];notifyChildrenOfParentLook(key,['shade'])}}
 export function clearSegmentShadeRanges(){for(const k of Object.keys(segmentShadeRanges))delete segmentShadeRanges[k]}
 // the auto value of a segment is ready (null: the segment has no usable values, the initial value is used); the listeners repaint
 const shadeAutoListeners=new Set();
@@ -91,17 +91,22 @@ export function resetShadeAutoForDataset(){shadeAutoPage.reset();clearSegmentSha
 export const SEGMENT_PRESET_DEFAULTS=segmentPresetDefaults(segmentState);
 export function analysisRegionSegmentsShown(r){return !r?.segmentKeys?.length||r.segmentKeys.some(k=>segmentState[k]?.enabled||(childSegments.length>0&&isChildKey(k)&&!!segmentById(k)?.enabled))} // a selection region of a child segment (3D edit target) follows the child (shown AND its parent ticked)
 export function analysisRegionShown(r){return !!r&&r.visible!==false&&analysisRegionSegmentsShown(r)}
+export function analysisRegionCounted(r){return !!r&&!regionHidden(r)&&analysisRegionSegmentsShown(r)}
+// 「隠れ N」「すべて表示」(the analysis list's header): what has its SHAPE hidden = the analysis regions with region.hidden and the child segments with visible:false. Colour-off ones (region.visible:false, child colorOff) are
+// not counted: their shape is there. showAllHiddenShapes puts back only these shapes (nothing else: colours, places, cuts, settings stay); -> how many it changed.
+export const hiddenShapeCount=(regions=analysisRegions,children=childSegments)=>regions.filter(regionHidden).length+children.filter(c=>c.visible===false).length;
+export function showAllHiddenShapes(regions=analysisRegions,children=childSegments){
+ let n=0;
+ for(const r of [...regions])if(regionHidden(r)&&setRegionHidden(r,false))n++;
+ for(const c of [...children])if(c.visible===false&&setChildLook(c.key,{visible:true}))n++;
+ return n;
+}
 
-// ---- ONE segment interface for the presets and the CHILD SEGMENTS of the tree (never the analysis regions) ----
-// A key is a preset ('bone' ... 'contrast') or a child segment 's<id>' (child-segments.js). segmentById(key) -> the common shape
-//   {key, kind:'preset'|'child', name, color (CSS), opacity, visible, enabled, min, max, material, shade, parentKey, runs}
-// visible = the segment's own show flag (a preset's tick / child.visible), enabled = what is really drawn (a preset: active and ticked; a child: visible AND its parent active and ticked),
-// shade = the cut-face shading range the user set ({lower, upper}) or null = automatic, parentKey = the preset a child hangs under (null for a preset), runs = the child's mask (runsBySlice; a preset's voxels are found by
-// segment-runs.js getFinalSegmentRuns, asynchronously: null here). null for an unknown key. The returned object is a snapshot: change a child through setChildLook below.
+const parentLookOf=c=>{const p=segmentState[c.parentKey],m=segmentShadeRanges[c.parentKey];return{opacity:p?.opacity??1,material:p?.material||'standard',shade:m?{lower:m.lower,upper:m.upper}:null}};
 export function segmentById(key){
  if(isChildKey(key)){
   const c=childByKey(key);if(!c)return null;
-  const p=segmentState[c.parentKey],look=childSegLookOf(c),parentOn=!!(p?.active&&p?.enabled);
+  const p=segmentState[c.parentKey],look=parentLookOf(c),parentOn=!!(p?.active&&p?.enabled);
   const g={key:c.key,kind:'child',name:childDisplayName(c,x=>tr('childSegment')+' '+x.id),color:c.color,opacity:look.opacity,visible:c.visible!==false,enabled:c.visible!==false&&parentOn,min:p?(p.userMin??p.min):null,max:p?(p.userMax??p.max):null,material:look.material,shade:look.shade,parentKey:c.parentKey,runs:c.runsBySlice||null};
   return g;
  }
@@ -115,25 +120,28 @@ export const allSegmentKeys=()=>[...SEGMENT_PRESET_ORDER.filter(k=>segmentState[
 export const shownSegmentKeys=()=>childSegments.length?allSegmentKeys().filter(k=>segmentById(k)?.enabled):SEGMENT_PRESET_ORDER.filter(k=>segmentState[k].active&&segmentState[k].enabled); // no child segment: the filter it always was (integration-704)
 // ---- the RENDER HAND-OFF of the child segments (the WebGPU volume, VR / AR and any other renderer consume ONLY this and the change event; they never read the analysis regions for it) ----
 // childRenderEntries() -> [{key, runs (the mask: runsBySlice), color ('#rrggbb'), opacity, material, shade ({lower, upper} the user set | null = auto), shadeRange ({lower, upper} in use now: manual, else auto, else initial),
-//   visible (drawn now: the child's own flag AND its parent shown), shown (the child's own flag), parentKey, parentSlot (the parent's GPU slot, gpuSegmentOrder(); -1 when it has none), hash, voxels}] in the tree's order.
+//   colorOff (the child's colour is switched off: color above is then the PARENT's; opacity / material / shade are always the parent's), visible (drawn now: the child's own flag AND its parent shown), shown (the child's own flag), parentKey, parentSlot (the parent's GPU slot, gpuSegmentOrder(); -1 when it has none), hash, voxels}] in the tree's order.
 // The parent's own voxels already EXCLUDE the children's (the parent is built without them: segmentSourcesOf), so a renderer draws a child from its entry and the parent as it always did. onChildRenderChange(fn) calls fn({kind, key, changed})
 // after the list changed ('list') or one child's look / visibility / colour / name changed ('look').
+// the colour and material a child's voxels are DRAWN with: the colour is its own, or - while its colour is switched off (c.colorOff) - its parent's (the shape stays, the child only stops standing out); the material is always its parent's (a child inherits opacity, material and shade range). segmentById(...).color stays the child's own colour (the swatch, the picker, the histogram).
+export function childDrawLook(cOrKey){
+ const c=typeof cOrKey==='string'?childByKey(cOrKey):cOrKey,p=segmentState[c?.parentKey];
+ return{color:c?.colorOff===true?(p?.color||c.color):c?.color,material:p?.material||'standard'}; // the material is always the parent's (a child inherits); only the colour is the child's own unless it is switched off
+}
 export function childRenderEntries(){
  if(!childSegments.length)return [];
  const slots=gpuSegmentOrder(),data=shadeDataRange();
- return childSegments.map(c=>{const g=segmentById(c.key),look=childSegLookOf(c),r=segmentShadeRange(c.key,data);
-  return{key:c.key,runs:c.runsBySlice,color:c.color,opacity:look.opacity,material:look.material,shade:look.shade,shadeRange:{lower:r.lower,upper:r.upper},visible:!!g?.enabled,shown:c.visible!==false,parentKey:c.parentKey,parentSlot:slots.indexOf(c.parentKey),hash:c.hash,voxels:c.voxels}});
+ return childSegments.map(c=>{const g=segmentById(c.key),look=parentLookOf(c),r=segmentShadeRange(c.key,data);
+  const dl=childDrawLook(c); // colorOff: the parent's colour (the material and opacity are always the parent's: a child inherits; VR reads the same entry)
+  return{key:c.key,runs:c.runsBySlice,color:dl.color,opacity:look.opacity,material:dl.material,colorOff:c.colorOff===true,shade:look.shade,shadeRange:{lower:r.lower,upper:r.upper},visible:!!g?.enabled,shown:c.visible!==false,parentKey:c.parentKey,parentSlot:slots.indexOf(c.parentKey),hash:c.hash,voxels:c.voxels}});
 }
 export const onChildRenderChange=onChildSegChange;
-// a child's look changes (the UI of a tree row, VR, a project): patch = {opacity?, material?, shade? ({lower, upper} | null = automatic), visible?}. The renderers follow through onChildSegLookChange (mesh materials, cut face, 2D).
 export const onChildSegLookChange=fn=>{lookListeners.add(fn);return()=>{lookListeners.delete(fn)}};
 export function setChildLook(key,patch){
  const c=childByKey(key);if(!c||!patch)return false;
- const before=childSegLookOf(c),changed=[];
- if('opacity' in patch){const v=childSegNormalizeOpacity(patch.opacity);if(v!==before.opacity){c.opacity=v;changed.push('opacity')}}
- if('material' in patch){const v=childSegNormalizeMaterial(patch.material);if(v!==before.material){c.material=v;changed.push('material')}}
- if('shade' in patch){const v=childSegNormalizeShade(patch.shade);if(JSON.stringify(v)!==JSON.stringify(before.shade)){c.shade=v;changed.push('shade')}}
+ const changed=[];
  if('visible' in patch){const v=!!patch.visible;if(v!==(c.visible!==false)){c.visible=v;changed.push('visible')}}
+ if('colorOff' in patch){const v=patch.colorOff===true;if(v!==(c.colorOff===true)){c.colorOff=v;changed.push('colorOff')}}
  if('color' in patch){const v=childSegColorCss(patch.color);if(v!==c.color){c.color=v;changed.push('color')}}
  if('name' in patch){const v=childSegNormalizeName(patch.name);if(v!==(c.name||'')){c.name=v;changed.push('name')}}
  if(!changed.length)return false;

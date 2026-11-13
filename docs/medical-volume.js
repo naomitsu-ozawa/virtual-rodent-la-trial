@@ -1,13 +1,15 @@
 import * as THREE from './vendor/three@0.186.0/build/three.webgpu.js';
 import dicomParser from './vendor/dicom-parser@1.8.21/index.js';
-import { canvasBackground3dUnit } from './canvas-theme.js?v=20261110-build708';
-import { lightOffsetExpr, lightingWGSL, MATERIALS, materialKey } from './lighting.js?v=20261110-build708';
-import { EDIT_MASK_MAX_BYTES, editMaskInfoWord, editMaskLayout, editMaskPlanes, fillEditMaskWords, sameU32 } from './edit-mask-texture.js?v=20261110-build708';
-import { loadStats } from './load-stats.js?v=20261110-build708'; // what the load did, for the VR switch report
-import { frameOrTimer } from './utils.js?v=20261110-build708'; // rAF or a timer (the window rAF stands still during a WebXR session)
-import { SHADE_BRIGHT_DEFAULT, SHADE_CONTRAST_DEFAULT, brightOf, contrastOf } from './cap-shade.js?v=20261110-build708'; // the cut face's shading when the slice image is hidden (same maths as the WGSL capShadeLum below;: per-segment range)
-import { storedLayout, storedValue } from './stored-bits.js?v=20261110-build708';
-import { gpuRunsForTexture } from './gpu-runs.js?v=20261110-build708'; // the run-mapping functions moved to their own module (the VR preparation worker is made from them)
+import { canvasBackground3dUnit } from './canvas-theme.js?v=20261113-build734';
+import { lightOffsetExpr, lightingWGSL, MATERIALS, materialKey } from './lighting.js?v=20261113-build734';
+import { EDIT_MASK_MAX_BYTES, editMaskInfoWord, editMaskLayout, editMaskPlanes, fillEditMaskWords, sameU32 } from './edit-mask-texture.js?v=20261113-build734';
+import { loadStats } from './load-stats.js?v=20261113-build734'; // what the load did, for the VR switch report
+import { frameOrTimer } from './utils.js?v=20261113-build734'; // rAF or a timer (the window rAF stands still during a WebXR session)
+import { SHADE_BRIGHT_DEFAULT, SHADE_CONTRAST_DEFAULT, brightOf, contrastOf } from './cap-shade.js?v=20261113-build734'; // the cut face's shading when the slice image is hidden (same maths as the WGSL capShadeLum below;: per-segment range)
+import { storedLayout, storedValue } from './stored-bits.js?v=20261113-build734';
+import { gpuRunsForTexture } from './gpu-runs.js?v=20261113-build734'; // the run-mapping functions moved to their own module (the VR preparation worker is made from them)
+import { buildEditMaskOf, smoothEditMaskOf } from './vr-volume-prep.js?v=20261113-build734'; // the edit mask field (updateEditFieldTexture), as webgl-volume.js imports them
+import { PART_FIELD, runEditMaskField } from './vr-part-view.js?v=20261113-build734';
 export { gpuRunsForTexture };
 
 const UNCOMPRESSED_TS=new Set(['1.2.840.10008.1.2','1.2.840.10008.1.2.1','1.2.840.10008.1.2.2']);
@@ -70,6 +72,47 @@ export function packCtSlice(values,calibration){
  return out;
 }
 
+// the analysis results' lookups (region index texture, the run rows, the colour / hidden word) and the hidden-result test: the volume shader and the pick shader use the same text
+const REGION_LOOKUP_WGSL=`fn regionIndexAt(tc0:vec3<f32>)->u32{
+ let dims=vec3<u32>(u32(u.textureDims.x),u32(u.textureDims.y),u32(u.textureDims.z));
+ let tc=clamp(tc0,vec3<f32>(0.0),vec3<f32>(0.999999));
+ let p=min(vec3<u32>(tc*vec3<f32>(dims)),dims-vec3<u32>(1u));
+ let word=textureLoad(regionTex,vec3<i32>(i32(p.x>>3u),i32(p.y),i32(p.z)),0).r;
+ return (word>>((p.x&7u)*4u))&15u;
+}
+fn analysisOverlayRow(tc0:vec3<f32>)->u32{
+ let dims=vec3<u32>(u32(u.textureDims.x),u32(u.textureDims.y),u32(u.textureDims.z));
+ let tc=clamp(tc0,vec3<f32>(0.0),vec3<f32>(0.999999));
+ let p=min(vec3<u32>(tc*vec3<f32>(dims)),dims-vec3<u32>(1u));
+ let row=p.z*dims.y+p.y;
+ let start=analysisOverlay[1u+row];
+ let finish=analysisOverlay[2u+row];
+ // pairs (x0|x1<<16, colour) sorted by x0 per row (setAnalysisRuns): binary search
+ var lo=start/2u;var hi=finish/2u;
+ loop{if(lo>=hi){break;}let mid=(lo+hi)/2u;if((analysisOverlay[mid*2u]&65535u)<=p.x){lo=mid+1u;}else{hi=mid;}}
+ if(lo>start/2u){let i=(lo-1u)*2u;if(p.x<=(analysisOverlay[i]>>16u)){return analysisOverlay[i+1u];}}
+ return 0u;
+}
+fn analysisOverlayAt(tc0:vec3<f32>)->u32{
+ if(analysisOverlay[0]==0u){return 0u;}
+ if(u.section.w>0.5){
+  let k=regionIndexAt(tc0);
+  if(k==0u){return 0u;}
+  if(k<15u){return analysisOverlay[analysisOverlay[0]+k];}
+ }
+ return analysisOverlayRow(tc0);
+}
+// an earlier change: a voxel of a result whose SHAPE is hidden is no member of segment s (the result belongs to s: bit s of its word); the table head's bits 8..15 say which segments have a hidden result at all,
+// so without one this is one buffer read. The same rule as a hidden tree segment of the variant shader (its own test in segmentIndexFor)
+fn regionHiddenAt(s:u32,tc:vec3<f32>)->bool{
+ if(analysisOverlay[0]==0u){return false;}
+ if(((analysisOverlay[analysisOverlay[0]]>>(8u+s))&1u)==0u){return false;}
+ let w=analysisOverlayAt(tc);
+ return (w&0x40000000u)!=0u&&((w>>s)&1u)!=0u;
+}
+// segment s has a hidden result at all (the table head): a buffer read, no lookup
+fn regionHideSeg(s:u32)->bool{return analysisOverlay[0]!=0u&&((analysisOverlay[analysisOverlay[0]]>>(8u+s))&1u)!=0u;}
+`;
 export function volumeShader(){
  return `
 struct Uniforms{
@@ -118,6 +161,7 @@ struct Uniforms{
 // search. mprWindow.z = bits per voxel + 256 * log2(texture width) (0 = no texture: the row search below, unchanged),
 // mprWindow.w = plane table (3 bits per entry: edit slot s, then cut slot 4 + s).
 @group(0) @binding(12) var editMaskTex:texture_3d<u32>;
+@group(0) @binding(15) var editFieldTex:texture_3d<f32>;
 
 struct VOut{@builtin(position) position:vec4<f32>};
 @vertex fn vs(@builtin(vertex_index) i:u32)->VOut{
@@ -224,36 +268,7 @@ fn previewContains(seg:u32,tc0:vec3<f32>)->bool{
  if(lo>start){return p.x<=(previewIntervals[lo-1u]>>16u);}
  return false;
 }
-fn regionIndexAt(tc0:vec3<f32>)->u32{
- let dims=vec3<u32>(u32(u.textureDims.x),u32(u.textureDims.y),u32(u.textureDims.z));
- let tc=clamp(tc0,vec3<f32>(0.0),vec3<f32>(0.999999));
- let p=min(vec3<u32>(tc*vec3<f32>(dims)),dims-vec3<u32>(1u));
- let word=textureLoad(regionTex,vec3<i32>(i32(p.x>>3u),i32(p.y),i32(p.z)),0).r;
- return (word>>((p.x&7u)*4u))&15u;
-}
-fn analysisOverlayRow(tc0:vec3<f32>)->u32{
- let dims=vec3<u32>(u32(u.textureDims.x),u32(u.textureDims.y),u32(u.textureDims.z));
- let tc=clamp(tc0,vec3<f32>(0.0),vec3<f32>(0.999999));
- let p=min(vec3<u32>(tc*vec3<f32>(dims)),dims-vec3<u32>(1u));
- let row=p.z*dims.y+p.y;
- let start=analysisOverlay[1u+row];
- let finish=analysisOverlay[2u+row];
- // pairs (x0|x1<<16, colour) sorted by x0 per row (setAnalysisRuns): binary search
- var lo=start/2u;var hi=finish/2u;
- loop{if(lo>=hi){break;}let mid=(lo+hi)/2u;if((analysisOverlay[mid*2u]&65535u)<=p.x){lo=mid+1u;}else{hi=mid;}}
- if(lo>start/2u){let i=(lo-1u)*2u;if(p.x<=(analysisOverlay[i]>>16u)){return analysisOverlay[i+1u];}}
- return 0u;
-}
-fn analysisOverlayAt(tc0:vec3<f32>)->u32{
- if(analysisOverlay[0]==0u){return 0u;}
- if(u.section.w>0.5){
-  let k=regionIndexAt(tc0);
-  if(k==0u){return 0u;}
-  if(k<15u){return analysisOverlay[analysisOverlay[0]+k];}
- }
- return analysisOverlayRow(tc0);
-}
-// region colour near a surface hit from the index texture alone:
+${REGION_LOOKUP_WGSL}// region colour near a surface hit from the index texture alone:
 // the hit voxel first, then the candidates insideVoxelTc would try (the hit
 // lies between the inside and the outside voxel). No HU fetches; a coloured
 // hit costs one texture load.
@@ -285,6 +300,19 @@ fn appliedCutContains(seg:u32,tc0:vec3<f32>)->bool{
  loop{if(lo>=hi){break;}let mid=(lo+hi)/2u;if((appliedCutIntervals[mid]&65535u)<=p.x){lo=mid+1u;}else{hi=mid;}}
  if(lo>start){return p.x<=(appliedCutIntervals[lo-1u]>>16u);}
  return false;
+}
+// an earlier change: the normal of the cut a hidden result leaves (the gradient of the hidden indicator, pointing into it), the same as the variant shader does for a hidden tree segment
+fn regionHiddenNormal(s:u32,tc0:vec3<f32>)->vec3<f32>{
+ let dims=max(u.textureDims.xyz,vec3<f32>(1.0));
+ let d=vec3<f32>(1.0/dims.x,1.0/dims.y,1.0/dims.z);
+ let gx=select(0.0,1.0,regionHiddenAt(s,tc0+vec3<f32>(d.x,0.0,0.0)))-select(0.0,1.0,regionHiddenAt(s,tc0-vec3<f32>(d.x,0.0,0.0)));
+ let gy=select(0.0,1.0,regionHiddenAt(s,tc0+vec3<f32>(0.0,d.y,0.0)))-select(0.0,1.0,regionHiddenAt(s,tc0-vec3<f32>(0.0,d.y,0.0)));
+ let gz=select(0.0,1.0,regionHiddenAt(s,tc0+vec3<f32>(0.0,0.0,d.z)))-select(0.0,1.0,regionHiddenAt(s,tc0-vec3<f32>(0.0,0.0,d.z)));
+ let voxel=2.0*u.halfStep.xyz/dims;
+ let g=vec3<f32>(gx/max(voxel.x,1e-6),-gy/max(voxel.y,1e-6),gz/max(voxel.z,1e-6));
+ let l=length(g);
+ if(l<1e-6){return vec3<f32>(0.0,0.0,1.0);}
+ return g/l;
 }
 fn appliedCutNormal(seg:u32,tc0:vec3<f32>)->vec3<f32>{
  let dims=max(u.textureDims.xyz,vec3<f32>(1.0));
@@ -356,6 +384,31 @@ fn excludeMaskedInside(seg:u32,tc:vec3<f32>,a:vec4<f32>)->bool{
  }
  return acc>=a.x&&acc<=a.y;
 }
+var<private> gSkin:u32=0u; // bit (4 x kind + slot): the last segmentIndexVis refused that slot as the air cell beside a hidden shape of that kind
+fn hiddenKindsOf(s:u32,ctc:vec3<f32>)->u32{let w=analysisOverlayRow(ctc);return select(0u,1u,(w&0x40000000u)!=0u&&((w>>s)&1u)!=0u);}
+fn hiddenAnyKinds(s:u32)->u32{return select(0u,1u,regionHideSeg(s));}
+fn hiddenCellAt(s:u32,tc0:vec3<f32>)->u32{ // the kinds of hidden shape whose air cell the sample tc0 lies in (0 = none)
+ let any=hiddenAnyKinds(s);
+ if(any==0u||(editRows[1]&(16u<<s))!=0u){return 0u;}
+ let dims=max(u.textureDims.xyz,vec3<f32>(1.0));let last=vec3<i32>(dims)-vec3<i32>(1);
+ let uv=clamp(tc0,vec3<f32>(0.0),vec3<f32>(0.999999))*dims;
+ let a=u.segments[s*2u];let v=huVoxel((floor(uv)+vec3<f32>(0.5))/dims);
+ if(v>=a.x&&v<=a.y){return 0u;}
+ let b=vec3<i32>(floor(uv-vec3<f32>(0.5)));var got=0u;
+ for(var k:u32=0u;k<8u;k=k+1u){
+  let q=clamp(b+vec3<i32>(i32(k&1u),i32((k>>1u)&1u),i32(k>>2u)),vec3<i32>(0),last);
+  got=got|hiddenKindsOf(s,(vec3<f32>(q)+vec3<f32>(0.5))/dims);
+ }
+ return got&any;
+}
+fn segmentIndexVis(v:f32,tc0:vec3<f32>)->i32{ // segmentIndexFor without a sample of the air cell beside a hidden shape (a sample in it is no member: the ray goes on through it)
+ gSkin=0u;
+ let r=segmentIndexFor(v,tc0);
+ if(r<0){return r;}
+ let k=hiddenCellAt(u32(r),tc0);
+ if(k!=0u){gSkin=((k&1u)<<u32(r))|(((k>>1u)&1u)<<(4u+u32(r)));return -1;}
+ return r;
+}
 fn segmentIndexFor(v:f32,tc0:vec3<f32>)->i32{
  let tc=clamp(tc0,vec3<f32>(0.0),vec3<f32>(0.999999));
  let excludeMode=editRows[0]&~editRows[1];
@@ -363,6 +416,7 @@ fn segmentIndexFor(v:f32,tc0:vec3<f32>)->i32{
   let a=u.segments[s*2u];
   if(segMember(s,v,a,tc)){
    if((excludeMode&(1u<<s))!=0u&&!excludeMaskedInside(s,tc,a)){continue;}
+   if(regionHiddenAt(s,tc)){continue;}
    return i32(s);
   }
  }
@@ -393,7 +447,7 @@ fn insideVoxelTc(tc0:vec3<f32>,dir:vec3<f32>,inward:vec3<f32>,seg:u32)->vec3<f32
  for(var k:u32=0u;k<6u;k=k+1u){let v=huVoxel(cand[k]);if(segMember(seg,v,a,cand[k])){return cand[k];}}
  return tc0;
 }
-fn segmentIndexAt(tc0:vec3<f32>)->i32{return segmentIndexFor(huAt(tc0),tc0);}
+fn segmentIndexAt(tc0:vec3<f32>)->i32{return segmentIndexVis(huAt(tc0),tc0);}
 // the cut face with the slice image hidden (capShade.x = 1): the SEGMENT colour of the cap x a brightness from the data value at the cap point, read through THAT SEGMENT's own range (capRange: (lower, upper) of slots 0..3 as
 // (lo0,hi0,lo1,hi1),(lo2,hi2,lo3,hi3); the slice image's window is not used): t = the position in the range (a width <= 0 is the minimal width 0.001), l = mix(0.35,1,t)^(1/brightness), then the contrast about the middle of its range;
 // capShade = (on, brightness, contrast, unused). The maths of docs/cap-shade.js shadeLumV, as vr-view.js ctLumHU
@@ -409,7 +463,7 @@ fn capSegmentIndex(tc0:vec3<f32>)->i32{
  let v=huVoxel(tc);
  // the voxel's own edit / processing mask entry (editAllows looks up that voxel; the interpolated exclusion test of
  // the ray march, excludeMaskedInside, is not used here)
- for(var s:u32=0u;s<4u;s=s+1u){let a=u.segments[s*2u];if(segMember(s,v,a,tc)){return i32(s);}}
+ for(var s:u32=0u;s<4u;s=s+1u){let a=u.segments[s*2u];if(segMember(s,v,a,tc)&&!regionHiddenAt(s,tc)){return i32(s);}}
  return -1;
 }
 fn brickMayContain(p:vec3<f32>)->bool{return brickClass(p)>0;}
@@ -452,6 +506,45 @@ fn gradientAt(tc:vec3<f32>)->vec3<f32>{
  let g=vec3<f32>(gx/max(voxel.x,1e-6),-gy/max(voxel.y,1e-6),gz/max(voxel.z,1e-6));
  let l=length(g);if(l<1e-6){return vec3<f32>(0.0,0.0,1.0);}return g/l;
 }
+// n731: a hit on a slot with a processing mask: the normal is NEVER the HU gradient (the soft tissue's own noise: the organs of the mouse whole body were mottled). Where the mask is what cuts (a mask-only
+// slot, or the field within 0.3 of its 0.5 level: the band of vr-view.js gradientAtS) it is the gradient of the mask's smoothed field, rising INTO the segment. Where it is not (no field bound yet: the first
+// moments after the edits arrive, or no field could be made) it is the gradient of the mask itself blurred over +-3 voxels (editBlurNormal: 18 reads of editAllows per axis, a smooth shading, never the HU gradient); a zero gradient is the ray (flat).
+// w = 1: this normal. w = 0: not such a hit (no mask on the slot; a surface of the HU range with the mask far from the hit: the HU gradient, the surface that range makes).
+fn editFieldAt(seg:u32,tc0:vec3<f32>)->f32{let f=textureSampleLevel(editFieldTex,volumeSampler,clamp(tc0,vec3<f32>(0.0),vec3<f32>(0.999999)),0.0);return f[seg];}
+fn editBlurNormal(seg:u32,tc:vec3<f32>,dir:vec3<f32>)->vec4<f32>{
+ let dd=1.0/max(u.textureDims.xyz,vec3<f32>(1.0));
+ var g=vec3<f32>(0.0);
+ for(var k:i32=0;k<3;k=k+1){
+  let e=vec3<f32>(select(0.0,1.0,k==0),select(0.0,1.0,k==1),select(0.0,1.0,k==2));
+  let p1=vec3<f32>(select(0.0,1.0,k==1),select(0.0,1.0,k==2),select(0.0,1.0,k==0));
+  let p2=vec3<f32>(select(0.0,1.0,k==2),select(0.0,1.0,k==0),select(0.0,1.0,k==1));
+  var sum=0.0;
+  for(var a:i32=-1;a<=1;a=a+1){for(var b:i32=-1;b<=1;b=b+1){
+   let o=dd*2.0*(f32(a)*p1+f32(b)*p2);let r=dd*3.0*e;
+   sum=sum+select(0.0,1.0,editAllows(seg,tc+o+r))-select(0.0,1.0,editAllows(seg,tc+o-r));
+  }}
+  if(k==0){g.x=sum;}else if(k==1){g.y=sum;}else{g.z=sum;}
+ }
+ let voxel=2.0*u.halfStep.xyz/max(u.textureDims.xyz,vec3<f32>(1.0));
+ let n=vec3<f32>(g.x/max(voxel.x,1e-6),-g.y/max(voxel.y,1e-6),g.z/max(voxel.z,1e-6));
+ let l=length(n);if(l<1e-6){return vec4<f32>(dir,1.0);}
+ return vec4<f32>(n/l,1.0);
+}
+fn editFieldNormal(seg:u32,tc:vec3<f32>,dir:vec3<f32>)->vec4<f32>{
+ if((editRows[0]&(1u<<seg))==0u){return vec4<f32>(0.0);}
+ let fd=vec3<f32>(textureDimensions(editFieldTex));
+ if(fd.x<2.0){return editBlurNormal(seg,tc,dir);}
+ let md=(editRows[1]&(16u<<seg))!=0u;
+ if(!md&&abs(editFieldAt(seg,tc)-0.5)>=0.3){return vec4<f32>(0.0);}
+ let d=1.0/fd;
+ let gx=editFieldAt(seg,tc+vec3<f32>(d.x,0.0,0.0))-editFieldAt(seg,tc-vec3<f32>(d.x,0.0,0.0));
+ let gy=editFieldAt(seg,tc+vec3<f32>(0.0,d.y,0.0))-editFieldAt(seg,tc-vec3<f32>(0.0,d.y,0.0));
+ let gz=editFieldAt(seg,tc+vec3<f32>(0.0,0.0,d.z))-editFieldAt(seg,tc-vec3<f32>(0.0,0.0,d.z));
+ let voxel=2.0*u.halfStep.xyz/fd;
+ let g=vec3<f32>(gx/max(voxel.x,1e-6),-gy/max(voxel.y,1e-6),gz/max(voxel.z,1e-6));
+ let l=length(g);if(l<1e-6){return vec4<f32>(dir,1.0);}
+ return vec4<f32>(g/l,1.0);
+}
 ${lightingWGSL()}
 @fragment fn fs(@builtin(position) frag:vec4<f32>)->@location(0) vec4<f32>{
  let ndc=vec2<f32>(frag.x/max(u.viewport.x,1.0)*2.0-1.0,1.0-frag.y/max(u.viewport.y,1.0)*2.0);
@@ -486,7 +579,7 @@ ${lightingWGSL()}
   let x=((u.mprIndices.z+0.5)/max(u.dimsSlope.x,1.0)*2.0-1.0)*u.halfStep.x;
   let q=(x-u.camOrigin.x)/dir.x;if(q>=t&&q<=endT){sagittalT=q;}
  }
- var previousT=t;var lastIndex:i32=-1;var previousCutIdx:i32=-1;var acc=vec4<f32>(0.0);
+ var previousT=t;var lastIndex:i32=-1;var previousCutIdx:i32=-1;var acc=vec4<f32>(0.0);var previousRegHideIdx:i32=-1;
  // brickEnd = t where the current non-empty brick is left; the
  // brick min/max is read once per brick instead of once per sample
  var brickEnd=-1.0;var prevHv=-1e9;var uniformSeg:i32=-1;
@@ -494,7 +587,7 @@ ${lightingWGSL()}
   if(t>endT||acc.a>0.985){break;}
   let p=u.camOrigin.xyz+dir*t;
   var canSample=t<brickEnd;
-  if(!canSample){let bc=brickClass(p);canSample=bc>0;uniformSeg=select(-1,bc-2,bc>=2);if(canSample){brickEnd=t+brickExitDistance(p,dir);}}
+  if(!canSample){let bc=brickClass(p);canSample=bc>0;uniformSeg=select(-1,bc-2,bc>=2);if(uniformSeg>=0&&regionHideSeg(u32(uniformSeg))){uniformSeg=-1;}if(canSample){brickEnd=t+brickExitDistance(p,dir);}}
   var nextT=t+step;var uniformJump=false;
   if(!canSample){brickEnd=-1.0;prevHv=-1e9;let skip=brickExitDistance(p,dir);nextT=t+max(skip+step*0.05,step);}
   else if(uniformSeg>=0&&uniformSeg==lastIndex&&brickEnd>t+step){
@@ -515,7 +608,11 @@ ${lightingWGSL()}
      if(u.capShade.x>0.5){capColor*=capShadeLum(huAt(ctc),capIndex);} // the segment colour only; an analysis result's colour just below replaces it, unshaded as before
      if(analysisOverlay[0]!=0u&&(analysisOverlay[analysisOverlay[0]]&(1u<<u32(capIndex)))!=0u){
       let ov=analysisOverlayAt(ctc);
-      if(ov!=0u){capColor=mix(vec3<f32>(f32((ov>>16u)&255u),f32((ov>>8u)&255u),f32(ov&255u))/255.0,vec3<f32>(1.0),0.22);}
+      if(ov!=0u&&(ov&0x40000000u)==0u){capColor=mix(vec3<f32>(f32((ov>>16u)&255u),f32((ov>>8u)&255u),f32(ov&255u))/255.0,vec3<f32>(1.0),0.22);}
+     }
+     {
+      var capN=vec3<f32>(0.0,0.0,1.0);if(u.section.x>1.5&&u.section.x<2.5){capN=vec3<f32>(0.0,1.0,0.0);}if(u.section.x>=2.5){capN=vec3<f32>(1.0,0.0,0.0);}
+      capColor=vrlRealCut(capColor,capN,-dir,${lightOffsetExpr('u.camRightTan.xyz','u.camUpAspect.xyz')},vrlDepth01(capT,u.camOrigin.xyz,u.halfStep.xyz));
      }
      if(u.sectionCap.z>0.5){
       var huv=vec2<f32>(ctc.x,ctc.y);
@@ -534,7 +631,7 @@ ${lightingWGSL()}
    let tc0=texCoord(p);
    let hv=huAt(tc0);
    let rawIdx=rawSegmentIndexFor(hv);
-   let idx=segmentIndexFor(hv,tc0);
+   let idx=segmentIndexVis(hv,tc0);
    let hvPrev=prevHv;prevHv=hv;
    let maskedCutIdx=select(-1,rawIdx,rawIdx>=0&&idx<0&&appliedCutContains(u32(rawIdx),tc0));
 
@@ -550,7 +647,7 @@ ${lightingWGSL()}
      // measured and outside the range) two secant guesses on the HU plus one
      // bisection (3 fetches) replace the six bisections
      let sa=u.segments[u32(idx)*2u];
-     let iso=u.mprVisible.w>0.5&&((editRows[0]|appliedCutRows[0])&(1u<<u32(idx)))==0u&&hvPrev>-1e8&&(hvPrev<sa.x||hvPrev>sa.y);
+     let iso=u.mprVisible.w>0.5&&((editRows[0]|appliedCutRows[0])&(1u<<u32(idx)))==0u&&hvPrev>-1e8&&(hvPrev<sa.x||hvPrev>sa.y)&&!regionHideSeg(u32(idx));
      if(iso){
       let thr=select(sa.y,sa.x,hvPrev<sa.x);var f0=hvPrev-thr;var f1=hv-thr;
       for(var r:u32=0u;r<3u;r=r+1u){
@@ -574,11 +671,14 @@ ${lightingWGSL()}
      let a=u.segments[u32(idx)*2u];
      let onBoxFace=bounds.x>0.0&&hi<=bounds.x+step&&previousCutIdx!=idx;
      var n=vec3<f32>(0.0);
-     if(onBoxFace){n=select(1.0,-1.0,hvPrev<-1e8||hvPrev<a.x)*entryFaceNormal(u.camOrigin.xyz,dir,u.halfStep.xyz);}else{n=gradientAt(tc);}
+     if(onBoxFace){n=select(1.0,-1.0,hvPrev<-1e8||hvPrev<a.x)*entryFaceNormal(u.camOrigin.xyz,dir,u.halfStep.xyz);}else{n=gradientAt(tc);
+      // n731: the mask's field where the mask is the surface; turned so that inward below comes out as the field's rise (into the segment)
+      let fv=editFieldNormal(u32(idx),tc,dir);if(fv.w>0.5){n=select(-fv.xyz,fv.xyz,hvPrev<-1e8||hvPrev<a.x);}
+     }
      if(previousCutIdx==idx){
       let prevTc=texCoord(u.camOrigin.xyz+dir*previousT);
       n=appliedCutNormal(u32(idx),prevTc);
-     }
+     }else if(previousRegHideIdx==idx){n=regionHiddenNormal(u32(idx),texCoord(u.camOrigin.xyz+dir*previousT));}
      // inward = towards the segment's range: up the gradient when entered from below its minimum, else down
      let inward=select(-n,n,hvPrev<-1e8||hvPrev<a.x);
      // the one shared lighting model (lighting.js): a headlight above / right of the VIEWER (the camera axes in volume space, so a
@@ -597,7 +697,7 @@ ${lightingWGSL()}
      var alpha=clamp(a.z,0.03,1.0);
      var lit=col*diffuse+vec3<f32>(spec);
      var overlay=0u;if(anyRegion&&!isCutPreview){overlay=analysisOverlayAt(tcv);}
-     if(overlay!=0u){
+     if(overlay!=0u&&(overlay&0x40000000u)==0u){
       col=vec3<f32>(f32((overlay>>16u)&255u),f32((overlay>>8u)&255u),f32(overlay&255u))/255.0;
       let focused=(overlay&0x1000000u)!=0u;
       alpha=max(alpha,select(0.72,0.96,focused));
@@ -612,10 +712,12 @@ ${lightingWGSL()}
     }
     lastIndex=idx;
     previousCutIdx=-1;
+    previousRegHideIdx=select(-1,rawIdx,idx<0&&rawIdx>=0&&(regionHiddenAt(u32(rawIdx),tc0)||((gSkin>>u32(rawIdx))&1u)!=0u));
    }else if(idx<0){
     lastIndex=-1;
+    previousRegHideIdx=select(-1,rawIdx,rawIdx>=0&&(regionHiddenAt(u32(rawIdx),tc0)||((gSkin>>u32(rawIdx))&1u)!=0u));
    }
-  }else if(!canSample&&!uniformJump){lastIndex=-1;previousCutIdx=-1;}
+  }else if(!canSample&&!uniformJump){lastIndex=-1;previousCutIdx=-1;previousRegHideIdx=-1;}
 
   for(var pi:u32=0u;pi<3u;pi=pi+1u){
    var pt=1e30;var which:i32=-1;
@@ -684,6 +786,9 @@ struct Uniforms{
 @group(0) @binding(3) var<storage,read> pick:array<f32>;
 @group(0) @binding(4) var<storage,read_write> result:array<u32>;
 @group(0) @binding(5) var<storage,read> editIntervals:array<u32>;
+// an earlier change: the analysis results (as the volume shader's bindings 10 / 11): a result whose shape is hidden is no member of its segments, so the pick goes through it as the drawing does
+@group(0) @binding(8) var<storage,read> analysisOverlay:array<u32>;
+@group(0) @binding(9) var regionTex:texture_3d<u32>;
 fn hitBox(orig:vec3<f32>,dir:vec3<f32>,halfBox:vec3<f32>)->vec2<f32>{
  let inv=1.0/dir;let a=(-halfBox-orig)*inv;let b=(halfBox-orig)*inv;let lo=min(a,b);let hi=max(a,b);
  return vec2<f32>(max(lo.x,max(lo.y,lo.z)),min(hi.x,min(hi.y,hi.z)));
@@ -740,12 +845,13 @@ fn segmentIndexAt(tc0:vec3<f32>,preferred:i32)->i32{
  if(preferred>=0){
   let s=u32(preferred);
   let a=u.segments[s*2u];
-  if(segMember(s,v,a,tc)){return preferred;}
+  if(segMember(s,v,a,tc)&&!regionHiddenAt(s,tc)){return preferred;}
   return -1;
  }
- for(var s:u32=0u;s<4u;s=s+1u){let a=u.segments[s*2u];if(segMember(s,v,a,tc)){return i32(s);}}
+ for(var s:u32=0u;s<4u;s=s+1u){let a=u.segments[s*2u];if(segMember(s,v,a,tc)&&!regionHiddenAt(s,tc)){return i32(s);}}
  return -1;
 }
+${REGION_LOOKUP_WGSL}
 @compute @workgroup_size(64)
 fn main(@builtin(global_invocation_id) gid:vec3<u32>){
  let i=gid.x;
@@ -776,6 +882,17 @@ fn main(@builtin(global_invocation_id) gid:vec3<u32>){
 }`;
 }
 
+export const OVERLAY_HIDDEN_BIT=0x40000000;
+const regionSegBits=r=>{const segs=r?.segments;if(!segs?.length||segs.some(i=>!(i>=0&&i<8)))return 0xff;let m=0;for(const i of segs)m|=1<<i;return m};
+export function analysisOverlayWord(r){
+ if(r?.hidden===true)return (0x80000000|OVERLAY_HIDDEN_BIT|regionSegBits(r))>>>0;
+ return (((r.color>>>0)&0xffffff)|(r.focused?0x1000000:0)|0x80000000)>>>0;
+}
+// the table's first word: bits 0..7 = the segments that have a shown (coloured) result, bits 8..15 = the segments that have a hidden one
+export function analysisOverlayTableHead(regions){
+ let shown=0,hidden=0;for(const r of regions||[]){const m=regionSegBits(r);if(r?.hidden===true)hidden|=m;else shown|=m}
+ return (shown|(hidden<<8))>>>0;
+}
 // ---- child segments (tree-added segments) in the volume ----
 // A child segment is a REAL segment of its own (colour, opacity, material, cut-face shading range, hide) that lives inside one of the four slots: where its mask covers a voxel of the parent slot, the child's look replaces the parent's.
 // It does NOT share the analysis results' tables: setChildSegments (below) builds an index texture of its own (childTex: r8uint for <= 255 children, r16uint above (the page allows 255 at most); 0 = none, 1..N = the child, the order of the
@@ -854,7 +971,10 @@ export function volumeShaderChild() {
  s = patchOnce(s, 'struct VOut{', CHILD_WGSL + CHILD_WGSL_MAIN + 'struct VOut{');
  // a hidden child is not a member of its segment: the surface search marches through it
  s = patchOnce(s, 'if((excludeMode&(1u<<s))!=0u&&!excludeMaskedInside(s,tc,a)){continue;}', 'if((excludeMode&(1u<<s))!=0u&&!excludeMaskedInside(s,tc,a)){continue;} if(childHiddenAt(s,tc)){continue;}');
- s = patchOnce(s, 'if(segMember(s,v,a,tc)){return i32(s);}}\n return -1;\n}\nfn brickMayContain', 'if(segMember(s,v,a,tc)&&!childHiddenAt(s,tc)){return i32(s);}}\n return -1;\n}\nfn brickMayContain');
+ // an earlier change: the cell test beside a hidden part (hiddenCellAt, base shader) takes the children's hidden voxels and gate as its bit 1 (the same single 8-voxel loop)
+ s = patchOnce(s, 'fn hiddenKindsOf(s:u32,ctc:vec3<f32>)->u32{let w=analysisOverlayRow(ctc);return select(0u,1u,(w&0x40000000u)!=0u&&((w>>s)&1u)!=0u);}', 'fn hiddenKindsOf(s:u32,ctc:vec3<f32>)->u32{let w=analysisOverlayRow(ctc);return select(0u,1u,(w&0x40000000u)!=0u&&((w>>s)&1u)!=0u)|select(0u,2u,childHiddenAt(s,ctc));}');
+ s = patchOnce(s, 'fn hiddenAnyKinds(s:u32)->u32{return select(0u,1u,regionHideSeg(s));}', 'fn hiddenAnyKinds(s:u32)->u32{return select(0u,1u,regionHideSeg(s))|select(0u,2u,(u32(u.capShade.w)&16u)!=0u);}');
+ s = patchOnce(s, 'if(segMember(s,v,a,tc)&&!regionHiddenAt(s,tc)){return i32(s);}}\n return -1;\n}\nfn brickMayContain', 'if(segMember(s,v,a,tc)&&!regionHiddenAt(s,tc)&&!childHiddenAt(s,tc)){return i32(s);}}\n return -1;\n}\nfn brickMayContain'); // an earlier change: the hidden result's test stays (base shader)
  // the cut face: the child colour x its own shading range (an analysis result's colour, below, still replaces it)
  s = patchOnce(s, 'if(u.capShade.x>0.5){capColor*=capShadeLum(huAt(ctc),capIndex);}',
   `var capChild=0u;if(((u32(u.capShade.w)>>u32(capIndex))&1u)!=0u){capChild=childIdxAt(ctc);}
@@ -877,9 +997,9 @@ export function volumeShaderChild() {
  s = patchOnce(s, 'uniformSeg=select(-1,bc-2,bc>=2);', 'uniformSeg=select(-1,bc-2,bc>=2&&(u32(u.capShade.w)&16u)==0u);');
  s = patchOnce(s, 'var previousT=t;var lastIndex:i32=-1;var previousCutIdx:i32=-1;', 'var previousT=t;var lastIndex:i32=-1;var previousCutIdx:i32=-1;var previousHideIdx:i32=-1;');
  s = patchOnce(s, 'n=appliedCutNormal(u32(idx),prevTc);\n     }', 'n=appliedCutNormal(u32(idx),prevTc);\n     }else if(previousHideIdx==idx){n=hiddenChildNormal(u32(idx),texCoord(u.camOrigin.xyz+dir*previousT));}');
- s = patchOnce(s, '    lastIndex=idx;\n    previousCutIdx=-1;', '    lastIndex=idx;\n    previousCutIdx=-1;\n    previousHideIdx=select(-1,rawIdx,idx<0&&rawIdx>=0&&childHiddenAt(u32(rawIdx),tc0));');
- s = patchOnce(s, '}else if(idx<0){\n    lastIndex=-1;\n   }', '}else if(idx<0){\n    lastIndex=-1;\n    previousHideIdx=select(-1,rawIdx,rawIdx>=0&&childHiddenAt(u32(rawIdx),tc0));\n   }');
- s = patchOnce(s, '}else if(!canSample&&!uniformJump){lastIndex=-1;previousCutIdx=-1;}', '}else if(!canSample&&!uniformJump){lastIndex=-1;previousCutIdx=-1;previousHideIdx=-1;}');
+ s = patchOnce(s, '    lastIndex=idx;\n    previousCutIdx=-1;', '    lastIndex=idx;\n    previousCutIdx=-1;\n    previousHideIdx=select(-1,rawIdx,idx<0&&rawIdx>=0&&(childHiddenAt(u32(rawIdx),tc0)||((gSkin>>(4u+u32(rawIdx)))&1u)!=0u));');
+ s = patchOnce(s, '}else if(idx<0){\n    lastIndex=-1;\n', '}else if(idx<0){\n    lastIndex=-1;\n    previousHideIdx=select(-1,rawIdx,rawIdx>=0&&(childHiddenAt(u32(rawIdx),tc0)||((gSkin>>(4u+u32(rawIdx)))&1u)!=0u));\n');
+ s = patchOnce(s, '}else if(!canSample&&!uniformJump){lastIndex=-1;previousCutIdx=-1;', '}else if(!canSample&&!uniformJump){lastIndex=-1;previousCutIdx=-1;previousHideIdx=-1;');
  return s;
 }
 // the pick shader with the children: a hidden child is not hit, and the hit reports the child under it (result word 3 = slot + 1 | (child index) << 8). Extra bindings: 6 = childTex, 7 = childLut
@@ -890,8 +1010,8 @@ export function volumePickShaderChild() {
 @group(0) @binding(6) var childTex:texture_3d<u32>;
 @group(0) @binding(7) var childLut:texture_2d<u32>;
 ${CHILD_WGSL.replace(/@group\(0\) @binding\(1[34]\)[^\n]*\n/g, '')}`);
- s = patchOnce(s, 'if(segMember(s,v,a,tc)){return preferred;}', 'if(segMember(s,v,a,tc)&&!childHiddenAt(s,tc)){return preferred;}');
- s = patchOnce(s, 'if(segMember(s,v,a,tc)){return i32(s);}}\n return -1;', 'if(segMember(s,v,a,tc)&&!childHiddenAt(s,tc)){return i32(s);}}\n return -1;');
+ s = patchOnce(s, 'if(segMember(s,v,a,tc)&&!regionHiddenAt(s,tc)){return preferred;}', 'if(segMember(s,v,a,tc)&&!regionHiddenAt(s,tc)&&!childHiddenAt(s,tc)){return preferred;}');
+ s = patchOnce(s, 'if(segMember(s,v,a,tc)&&!regionHiddenAt(s,tc)){return i32(s);}}\n return -1;\n}\n', 'if(segMember(s,v,a,tc)&&!regionHiddenAt(s,tc)&&!childHiddenAt(s,tc)){return i32(s);}}\n return -1;\n}\n');
  s = patchOnce(s, 'result[ob+3u]=u32(idx)+1u;return;', 'var ci=childIdxAt(texCoord(u.camOrigin.xyz+dir*t));if(ci!=0u&&chRow0(ci).w!=u32(idx)){ci=0u;}result[ob+3u]=(u32(idx)+1u)|(ci<<8u);return;');
  return s;
 }
@@ -1005,7 +1125,7 @@ export class MedicalVolumeRenderer{
   const pickModule=this.device.createShaderModule({label:'VRL medical volume pick',code:safeWgsl(volumePickShader())});this.pickPipeline=this.device.createComputePipeline({label:'VRL medical volume pick',layout:'auto',compute:{module:pickModule,entryPoint:'main'}});this.pickBuffer=null;this.pickOutput=null;this.pickCapacity=0;
   const brickModule=this.device.createShaderModule({label:'VRL volume minmax bricks',code:safeWgsl(brickShader())});this.brickPipeline=this.device.createComputePipeline({label:'VRL volume minmax bricks',layout:'auto',compute:{module:brickModule,entryPoint:'main'}});this.brickBuffer=null;this.brickDims=[1,1,1];this.brickSize=8;
   const mprModule=this.device.createShaderModule({label:'VRL resident volume MPR',code:safeWgsl(mprPlaneShader())});this.mprPipeline=this.device.createComputePipeline({label:'VRL resident volume MPR',layout:'auto',compute:{module:mprModule,entryPoint:'main'}});this.mprUniformBuffer=this.device.createBuffer({size:48,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
-  this.editMaskTexture=null;this.editMaskBuilt=null;this.editMaskInfo='';this.editUpload=null;this.cutUpload=null;
+  this.editMaskTexture=null;this.editMaskBuilt=null;this.editMaskInfo='';this.editUpload=null;this.cutUpload=null;this.editFieldTexture=null;this.editFieldFor=null;this.editFieldGen=0;this._editFieldDummy=null;
   this.editRowsBuffer=null;this.editIntervalsBuffer=null;this.editSignature='';this.clearEditRuns();
   this.previewRowsBuffer=null;this.previewIntervalsBuffer=null;this.previewSignature='';this.clearPreviewRuns();
   this.appliedCutRowsBuffer=null;this.appliedCutIntervalsBuffer=null;this.appliedCutSignature='';this.clearAppliedCutRuns();
@@ -1166,7 +1286,8 @@ export class MedicalVolumeRenderer{
    {binding:11,resource:(this.regionTexture||this.regionDummy()).createView({dimension:'3d'})},
    // the mask texture only once its out-of-memory scope came back clean (an invalid texture would invalidate the whole group)
    {binding:12,resource:(this.editMaskTexture&&this.editMaskBuilt?.ready?this.editMaskTexture:this.regionDummy()).createView({dimension:'3d'})},
-   {binding:10,resource:{buffer:this.analysisOverlayBuffer}}
+   {binding:10,resource:{buffer:this.analysisOverlayBuffer}},
+   {binding:15,resource:(this.editFieldTexture||this.editFieldDummy()).createView({dimension:'3d'})} // n731: the smoothed processing masks (updateEditFieldTexture)
   ];
   this.bindGroup=this.device.createBindGroup({layout:this.pipeline.getBindGroupLayout(0),entries});
   // the child variant (a patched copy of the same shader) has a layout of its own and two more bindings: its own bind group, only while a child exists
@@ -1276,13 +1397,12 @@ export class MedicalVolumeRenderer{
   for(let r=0;r<rowCount;r++){data[1+r]=at;cursor[r]=at;at+=counts[r]*2}
   data[1+rowCount]=at;
   for(let ri=0;ri<grids.length;ri++){
-   const g=grids[ri];if(!g)continue;const word=((regions[ri].color>>>0)&0xffffff)|(regions[ri].focused?0x1000000:0)|0x80000000;
+   const g=grids[ri];if(!g)continue;const word=analysisOverlayWord(regions[ri]);
    for(let z=0;z<d;z++){const rec=g[z];if(rec)for(let i=0;i<rec.length;i+=3){const row=z*h+rec[i],c=cursor[row];data[c]=((rec[i+2]&65535)<<16)|(rec[i+1]&65535);data[c+1]=word>>>0;cursor[row]=c+2}}
   }
-  for(let ri=0;ri<Math.min(grids.length,14);ri++)data[tableStart+1+ri]=(((regions[ri].color>>>0)&0xffffff)|(regions[ri].focused?0x1000000:0)|0x80000000)>>>0;
-  // data[tableStart] = mask of the segment indices that have a shown region (unknown segment: all); hits on other segments skip the lookup
-  let segMask=0;for(let ri=0;ri<grids.length;ri++){if(!grids[ri])continue;const segs=regions[ri].segments;if(!segs?.length||segs.some(i=>!(i>=0&&i<8)))segMask=0xff;else for(const i of segs)segMask|=1<<i}
-  data[tableStart]=segMask;
+  for(let ri=0;ri<Math.min(grids.length,14);ri++)data[tableStart+1+ri]=analysisOverlayWord(regions[ri]);
+  // data[tableStart] = mask of the segment indices that have a shown region (unknown segment: all); hits on other segments skip the lookup. an earlier change: bits 8..15 = the segments that have a HIDDEN one
+  data[tableStart]=analysisOverlayTableHead(regions.filter((r,ri)=>!!grids[ri]));
   // the shader binary-searches each row, so its pairs must be sorted by x0 (regions were appended in region order)
   for(let r=0;r<rowCount;r++){const a=data[1+r],b=data[2+r];if(b-a<=2)continue;const pairs=[];for(let c=a;c<b;c+=2)pairs.push([data[c],data[c+1]]);pairs.sort((x,y)=>(x[0]&65535)-(y[0]&65535));for(let k=0;k<pairs.length;k++){data[a+k*2]=pairs[k][0];data[a+k*2+1]=pairs[k][1]}}
   if(data.byteLength>this.device.limits.maxStorageBufferBindingSize)throw new Error('GPU analysis overlay exceeds storage buffer limit');
@@ -1395,7 +1515,29 @@ export class MedicalVolumeRenderer{
  }
  // the row buffers, then the voxel bit mask texture from exactly what they hold (rebuilt only when that changed)
  setEditRuns(edits,segmentOrder,v){
-  try{this.setEditRows(edits,segmentOrder,v)}finally{this.updateEditMaskTexture()}
+  try{this.setEditRows(edits,segmentOrder,v)}finally{this.updateEditMaskTexture();this.updateEditFieldTexture(edits,segmentOrder,v)}
+ }
+ editFieldDummy(){if(!this._editFieldDummy){this._editFieldDummy=this.device.createTexture({label:'VRL edit field (none)',size:{width:1,height:1,depthOrArrayLayers:1},dimension:'3d',format:'rgba8unorm',usage:GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.COPY_DST})}return this._editFieldDummy} // a new texture reads 0 (WebGPU zero-initialises it)
+ dropEditFieldTexture(){this.editFieldGen=(this.editFieldGen|0)+1;this.editFieldFor=null;const had=this.editFieldTexture;this.editFieldTexture=null;if(had){this.rebuildBindGroup();had.destroy?.();this.onRedraw?.()}}
+ updateEditFieldTexture(edits,segmentOrder,v){
+  const up=this.editUpload,dims=this.textureDims.slice(),f=this.editFieldFor;
+  if(up&&f&&f.dims.join('x')===dims.join('x')&&f.up.activeMask===up.activeMask&&sameU32(f.up.offsets,up.offsets)&&sameU32(f.up.intervals,up.intervals)){f.up=up;return}
+  this.dropEditFieldTexture();
+  if(!up||!v||!segmentOrder?.length||typeof this.device?.createTexture!=='function')return;
+  const gen=this.editFieldGen,src=[v.columns,v.rows,v.slices],m=Math.max(...dims),k=m>256?256/m:1,fdims=dims.map(x=>Math.max(1,Math.round(x*k)));
+  this.editFieldFor={dims,up};
+  const descs=[];segmentOrder.slice(0,4).forEach((key,si)=>{const d=edits?.[key];if(d?.runs)descs.push({si,mode:d.mode,maskOnly:!!d.maskOnly,runs:gpuRunsForTexture(d.runs,src,fdims,{dilate:0})})});
+  if(!descs.length)return;
+  Promise.resolve().then(async()=>{
+   if(gen!==this.editFieldGen)return null;
+   const built=buildEditMaskOf(descs,fdims,fdims);if(!built.data)return null;
+   return {bytes:await runEditMaskField(smoothEditMaskOf,built.data,fdims,built.activeMask,PART_FIELD)};
+  }).then(r=>{
+   if(!r||gen!==this.editFieldGen||!this.device)return;
+   const tex=this.device.createTexture({label:'VRL edit field',size:{width:fdims[0],height:fdims[1],depthOrArrayLayers:fdims[2]},dimension:'3d',format:'rgba8unorm',usage:GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.COPY_DST});
+   this.device.queue.writeTexture({texture:tex},r.bytes,{bytesPerRow:fdims[0]*4,rowsPerImage:fdims[1]},{width:fdims[0],height:fdims[1],depthOrArrayLayers:fdims[2]});
+   this.editFieldTexture=tex;this.rebuildBindGroup();this.onRedraw?.();
+  }).catch(e=>{console.warn('Edit mask field not available; the masked surfaces are lit by the blurred mask.',e?.message||e)});
  }
  setEditRows(edits,segmentOrder,v){
   if(!v||!segmentOrder?.length){this.clearEditRuns();this.clearAppliedCutRuns();return}
@@ -1715,7 +1857,8 @@ struct O{@builtin(position) p:vec4<f32>,@location(0) uv:vec2<f32>};
   const group=this.device.createBindGroup({layout:pickPipeline.getBindGroupLayout(0),entries:[
    {binding:0,resource:{buffer:this.uniformBuffer}},{binding:1,resource:this.texture.createView({dimension:'3d'})},{binding:2,resource:{buffer:this.editRowsBuffer}},
    {binding:3,resource:{buffer:this.pickBuffer}},{binding:4,resource:{buffer:this.pickOutput}},{binding:5,resource:{buffer:this.editIntervalsBuffer}},
-   ...(kid?[{binding:6,resource:this.childTex.createView({dimension:'3d'})},{binding:7,resource:this.childLut.createView()}]:[])
+   ...(kid?[{binding:6,resource:this.childTex.createView({dimension:'3d'})},{binding:7,resource:this.childLut.createView()}]:[]),
+   {binding:8,resource:{buffer:this.analysisOverlayBuffer}},{binding:9,resource:(this.regionTexture||this.regionDummy()).createView({dimension:'3d'})} // an earlier change: a hidden result is gone through
   ]});
   const bytes=count*16,read=this.device.createBuffer({size:bytes,usage:GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ}),encoder=this.device.createCommandEncoder({label:'VRL volume batch pick'}),pass=encoder.beginComputePass();
   pass.setPipeline(pickPipeline);pass.setBindGroup(0,group);pass.dispatchWorkgroups(Math.ceil(count/64));pass.end();encoder.copyBufferToBuffer(this.pickOutput,0,read,0,bytes);this.device.queue.submit([encoder.finish()]);
@@ -1730,8 +1873,8 @@ struct O{@builtin(position) p:vec4<f32>,@location(0) uv:vec2<f32>};
  async pick(clientX,clientY,camera,obj,segmentState,segmentOrder,preferredKey=null){
   const result=await this.pickMany([{clientX,clientY}],camera,obj,segmentState,segmentOrder,preferredKey);return result[0]||null;
  }
- resetData(){this.dataGeneration=(this.dataGeneration|0)+1;this.setActive(false);this.dropEditMaskTexture();this.texture?.destroy?.();this.brickBuffer?.destroy?.();this.texture=null;this.brickBuffer=null;this.bindGroup=null;this.seriesId=null;this.bricksReady=false;this.previewVolume=null;this.previewPlaneBuffers={coronal:null,sagittal:null};this.volume=null;this.textureDims=[1,1,1];this.reducedVolume=false;this.textureBytes=0;this.planSignature='';this.clearEditRuns();this.clearPreviewRuns();this.clearAppliedCutRuns();this.clearAnalysisRuns();this.clearChildSegments()} // the region index texture (r32uint, 67 MB at 512³) and the overlay buffer belong to the old grid too: released here, not at the next clearAnalysisRuns
- destroy(){this.resetData();this.regionTexture?.destroy?.();this._regionDummy?.destroy?.();this.uniformBuffer?.destroy?.();this.pickBuffer?.destroy?.();this.pickOutput?.destroy?.();this.editRowsBuffer?.destroy?.();this.editIntervalsBuffer?.destroy?.();this.previewRowsBuffer?.destroy?.();this.previewIntervalsBuffer?.destroy?.();this.analysisOverlayBuffer?.destroy?.();this.appliedCutRowsBuffer?.destroy?.();this.appliedCutIntervalsBuffer?.destroy?.();this.mprUniformBuffer?.destroy?.();this.canvas.remove()}
+ resetData(){this.dataGeneration=(this.dataGeneration|0)+1;this.setActive(false);this.dropEditMaskTexture();this.dropEditFieldTexture();this.texture?.destroy?.();this.brickBuffer?.destroy?.();this.texture=null;this.brickBuffer=null;this.bindGroup=null;this.seriesId=null;this.bricksReady=false;this.previewVolume=null;this.previewPlaneBuffers={coronal:null,sagittal:null};this.volume=null;this.textureDims=[1,1,1];this.reducedVolume=false;this.textureBytes=0;this.planSignature='';this.clearEditRuns();this.clearPreviewRuns();this.clearAppliedCutRuns();this.clearAnalysisRuns();this.clearChildSegments()} // the region index texture (r32uint, 67 MB at 512³) and the overlay buffer belong to the old grid too: released here, not at the next clearAnalysisRuns
+ destroy(){this.resetData();this.regionTexture?.destroy?.();this._regionDummy?.destroy?.();this._editFieldDummy?.destroy?.();this._editFieldDummy=null;this.uniformBuffer?.destroy?.();this.pickBuffer?.destroy?.();this.pickOutput?.destroy?.();this.editRowsBuffer?.destroy?.();this.editIntervalsBuffer?.destroy?.();this.previewRowsBuffer?.destroy?.();this.previewIntervalsBuffer?.destroy?.();this.analysisOverlayBuffer?.destroy?.();this.appliedCutRowsBuffer?.destroy?.();this.appliedCutIntervalsBuffer?.destroy?.();this.mprUniformBuffer?.destroy?.();this.canvas.remove()}
 }
 
 
