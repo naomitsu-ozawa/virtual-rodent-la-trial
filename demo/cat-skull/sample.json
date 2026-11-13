@@ -1,7 +1,7 @@
 {
   "changes": {
-    "en": "converted from the original TIFF stacks (micro-CT 1042x577x749, 0.09 mm isotropic) to DICOM: the skull spans the whole scan grid, so no crop was applied; downsampled by block averaging (z x3, y x2, x x2) to 348 slices x 289 x 375; the 15 labelled bone classes present in the source are registered as unnamed child segments under the bone segment (colour-coded only, no names - identifying each bone is the learning task), so the bone segment's own display is fully subtracted by its children; 3D reconstruction and rendering in this app",
-    "ja": "元のTIFFスタック（micro-CT 1042×577×749、0.09mm等方）からDICOMに変換：頭蓋がスキャン全域に及ぶためクロップなし。ブロック平均で間引き（z×3・y×2・x×2）して348枚×289×375に。出典ラベルの15クラスは骨セグメントの下位に名称なしの子セグメントとして色分けのみで登録（各骨の同定は学習者の課題）。親セグメントの表示は子の差し引きで0になる。本アプリで3D再構成"
+    "en": "converted from the original TIFF stacks (micro-CT 1042x577x749, 0.09 mm isotropic) to DICOM: the skull spans the whole scan grid, so no crop was applied; downsampled by block averaging (z x3, y x2, x x2) to 348 slices x 289 x 375; the 15 labelled bone classes present in the source are registered as named child segments under the bone segment; 3D reconstruction and rendering in this app. Revision 2026-11-13 by the converter: the source segmentation did not cover all bone, so a threshold-based completion (stored value >= 6000) was added - only the surface layer (within 3 voxels) was assigned to the existing classes, the teeth were separated as an independent segment, and the remainder was registered as an 'unclassified bone' segment. The completed voxels, the teeth and the unclassified bone are converter estimates, not part of the source segmentation. Audit correction (2026-11-13): an audit of all increment components found that the small upper premolar pair immediately behind the canines (2,027 voxels) had been missed by the initial teeth identification; they were moved into the teeth segment (teeth total: 125,766 voxels).",
+    "ja": "元のTIFFスタック（micro-CT 1042×577×749、0.09mm等方）からDICOMに変換：頭蓋がスキャン全域に及ぶためクロップなし。ブロック平均で間引き（z×3・y×2・x×2）して348枚×289×375に。出典ラベルの15クラスは骨セグメントの下位に名称付きの子セグメントとして登録。本アプリで3D再構成。2026-11-13改訂（当方による補完）：出典セグメンテーションが骨をカバーしきれていなかったため、閾値（格納値6000）による骨の補完を行い、表面層（3ボクセル以内）のみ既存クラスへ配属、歯を独立セグメントとして分離、残りを「骨（未分類）」セグメントとした。補完分・歯・未分類は出典のセグメンテーションではなく当方の推定である監査による修正（2026-11-13）：増分の全連結成分を監査した結果、犬歯直後の上顎小臼歯の対（2,027ボクセル）が歯の同定から漏れていたため、丸ごと歯セグメントへ移した（歯の合計125,766ボクセル）。"
   },
   "credit": {
     "dataUrl": "https://zenodo.org/records/24047383",
@@ -9,8 +9,8 @@
     "url": "https://zenodo.org/records/24047383"
   },
   "description": {
-    "en": "Domestic cat (Felis catus) skull micro-CT with 15 labelled bone classes ({mb})",
-    "ja": "イエネコ（Felis catus）頭蓋 microCT・骨ラベル15クラス付き（{mb}）"
+    "en": "Domestic cat (Felis catus) skull micro-CT with 15 labelled bone classes, plus teeth and unclassified-bone segments added by the converter ({mb})",
+    "ja": "イエネコ（Felis catus）頭蓋 microCT・骨ラベル15クラス付き（歯・骨（未分類）は当方が追加）（{mb}）"
   },
   "level": null,
   "license": {
