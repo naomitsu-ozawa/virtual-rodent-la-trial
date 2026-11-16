@@ -8,7 +8,7 @@ const src = readFileSync(new URL('../../docs/vr-view.js', import.meta.url), 'utf
 const cut = (from, to) => { const i = src.indexOf(from); expect(i).toBeGreaterThan(0); const j = src.indexOf(to, i); expect(j).toBeGreaterThan(i); return src.slice(i, j); };
 const dragSrc = cut('const pairDragCard=', 'const pairPins=');
 const dragPinSrc = cut('const dragPin=(rid,P)=>{', 'const resetPin=');
-const resetPinSrc = cut('const resetPin=c=>{', '// new plane:');
+const resetPinSrc = cut('const resetPin=c=>{', 'const planeOwnerPair=');
 
 const V = (x = 0, y = 0, z = 0) => ({ x, y, z });
 // a partner whose mesh sits at +10 in x (world = local + 10 in x), a different box / dims from the primary's

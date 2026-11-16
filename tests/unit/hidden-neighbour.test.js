@@ -109,15 +109,20 @@ describe('the VR / PC WebGL shader (a)-(c): only on a ray that passed a hidden p
     expect(v.match(/hidNow=passH;/g)).toHaveLength(3);
     expect(v.match(/prevValid=true;prevSkip=true;lastIndex=-1;prevHid=false;/g)).toHaveLength(2); // a skipped (empty) sample clears it
   });
-  it('(b) the hit search: inside = in the segment and NOT in a hidden part, nor in the air cell beside one (hideSkinAt = hideAt || hideCellAt, one call), at all four search sites (n730: also a hit not after a hidden part; no secant search while something is hidden)', () => {
-    expect(v.match(/if\(inside&&hideAnyOn\(\)&&hideSkinAt\(tcO\+tcD\*mid,idx\)\)inside=false;/g)).toHaveLength(3); // the two see-through copies and the one after the loops
-    expect(v).toContain('if(segmentIndexAt(tm)==idx&&!(hideAnyOn()&&hideSkinAt(tm,idx)))hi=mid;else lo=mid;');
+  it('(b) the hit search: inside = in the segment and NOT in a hidden voxel; adjacent air is not hidden, at all four search sites (n730: also a hit not after a hidden part; no secant search while something is hidden)', () => {
+    expect(v.match(/if\(inside&&hideAnyOn\(\)&&hideAt\(tcO\+tcD\*mid,idx\)\)inside=false;/g)).toHaveLength(3); // the two see-through copies and the one after the loops
+    expect(v).toContain('if(segmentIndexAt(tm)==idx&&!(hideAnyOn()&&hideAt(tm,idx)))hi=mid;else lo=mid;');
     // the part's programs: after a hidden part, any shown segment (its own slot), else the hit's segment while something is hidden: one call for both
     expect(v).toContain('{int hs=idx;bool hc=inside&&hideAnyOn();');
     expect(v).toContain('inside=hs>=0;hc=inside;}');
-    expect(v).toContain('if(hc&&hideSkinAt(tcO+tcD*mid,hs))inside=false;}');
+    expect(v).toContain('if(hc&&hideAt(tcO+tcD*mid,hs))inside=false;}');
     expect(v).not.toMatch(/\(hideAt\((tcO\+tcD\*mid|tm),(idx|sm)\)\|\|hideCellAt\(/); // no search site calls the two bodies itself
-    expect(v).toContain('bool hideSkinAt(vec3 tc,int s){return hideAt(tc,s)||hideCellAt(tc,s);}'); // with a part: hideAt reads the part's re-pointed tests
+    expect(v).not.toMatch(/hideSkinAt|hideCellAt|hideSegAirAt/);
+    for (const name of ['regionHiddenAt', 'childHiddenAt']) {
+      const body = v.slice(v.indexOf('bool '+name+'('), v.indexOf('\n}', v.indexOf('bool '+name+'(')));
+      expect(body).toContain('if(i<1)return false;');
+      expect(body).toContain('texelFetch(');
+    }
     // the secant search has no hidden test: while something is hidden the bisection (with it) finds every hit
     expect(v.match(/if\(!simple&&iso&&!hideAnyOn\(\)\)\{float f0=prevF;/g)).toHaveLength(3);
     expect(v).toContain('else if(hitIso&&!hideAnyOn()){');
