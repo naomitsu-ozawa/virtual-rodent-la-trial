@@ -474,72 +474,6 @@ int segmentIndexAt(vec3 tc){
  for(int s=0;s<4;s++){vec4 a=segA[s];if(a.w>0.5&&(((editMaskOnly>>s)&1)==1||(v>=a.x&&v<=a.y))&&editAllows(s,tc))return s;}
  return -1;
 }
-#ifdef VRL_HIDE
-bool hideSegAirAt(vec3 tc,int s){ // slot s is NOT at tc (a voxel centre): the test of segmentIndexAt for that one slot, without its side effects (gQ / gHu)
- if(useCls>0){
-  vec4 q=texture(clsTex,clamp(tc,vec3(0.0),vec3(0.999999)));
-#ifdef VRL_CLS4
-  q.a=texture(cls4Tex,clamp(tc,vec3(0.0),vec3(0.999999))).r;
-#endif
-  int c=clsChan[s];return c<0||q[c]<0.5;
- }
- float v=huAt(tc);vec4 a=segA[s];
- return !((((editMaskOnly>>s)&1)==1||(v>=a.x&&v<=a.y))&&editAllows(s,tc));
-}
-bool hideCellAt(vec3 tc,int s){ // ONE copy of the cell test (results and children in one loop), called only from the three candidate-hit tests of the loops (a copy per call site made the shader twice as slow to compile)
- vec3 tq=clamp(tc,vec3(0.0),vec3(0.999999));ivec3 n=ivec3(1);bool r0=false,c0=false;
-#ifdef VRL_REGIONS
- n=textureSize(regionTex,0);r0=regionAnyHidden!=0&&int(texture(regionTex,tq).g*255.0+0.5)<1; // the results' cell test: only where this voxel has no result (G 0)
-#endif
-#ifdef VRL_CHILDREN
- n=textureSize(childTex,0);c0=childAnyHidden!=0&&childHideIdAt(tq)<1; // the children's: only where it has no child (both indexes are on the same grid)
-#endif
- if(!r0&&!c0)return false;
- vec3 u=tq*vec3(n);
- if(!hideSegAirAt((floor(u)+0.5)/vec3(n),s))return false;
- ivec3 b=ivec3(floor(u-0.5));
- for(int k=0;k<8;k++){ivec3 q=clamp(b+ivec3(k&1,(k>>1)&1,(k>>2)&1),ivec3(0),n-1);
-#ifdef VRL_REGIONS
-  if(r0){int j=int(texelFetch(regionTex,q,0).g*255.0+0.5);if(j>=1&&((int(texelFetch(regionLut,ivec2(j,0),0).a+0.5)>>(8+s))&1)==1)return true;}
-#endif
-#ifdef VRL_CHILDREN
-  if(c0){int j=int(texelFetch(childTex,q,0).g*255.0+0.5);if(j>=1&&((int(texelFetch(childLut,ivec2(j,1),0).a+0.5)>>s)&1)==1)return true;}
-#endif
- }
- return false;
-}
-// (n730): hideSkinAt = hideAt || hideCellAt, the ONE test of every hit search (bisection) while something is hidden: a point of a hidden part, or of the air cell beside one, is not the surface.
-// Without a part (VRL_PART: hideAt reads the part's re-pointed tests) the hide index G is read once for both (the same rules as hideAt and hideCellAt: G >= 1 = that result / child, hidden on slot s or not;
-// G 0 = the cell test): two index reads fewer per search step than hideAt || hideCellAt (run time; the compile time was about the same)
-#ifdef VRL_PART
-bool hideSkinAt(vec3 tc,int s){return hideAt(tc,s)||hideCellAt(tc,s);}
-#else
-bool hideSkinAt(vec3 tc,int s){
- vec3 tq=clamp(tc,vec3(0.0),vec3(0.999999));ivec3 n=ivec3(1);bool r0=false,c0=false;
-#ifdef VRL_REGIONS
- n=textureSize(regionTex,0);
- if(regionAnyHidden!=0){int i=int(texture(regionTex,tq).g*255.0+0.5);if(i<1)r0=true;else if(((int(texelFetch(regionLut,ivec2(i,0),0).a+0.5)>>(8+s))&1)==1)return true;}
-#endif
-#ifdef VRL_CHILDREN
- n=textureSize(childTex,0);
- {int i=childHideIdAt(tq);if(i<1)c0=childAnyHidden!=0;else if(((int(texelFetch(childLut,ivec2(i,1),0).a+0.5)>>s)&1)==1)return true;} // as hideAt (childHiddenAt, not gated) and hideCellAt (c0)
-#endif
- if(!r0&&!c0)return false;
- vec3 u=tq*vec3(n);
- if(!hideSegAirAt((floor(u)+0.5)/vec3(n),s))return false;
- ivec3 b=ivec3(floor(u-0.5));
- for(int k=0;k<8;k++){ivec3 q=clamp(b+ivec3(k&1,(k>>1)&1,(k>>2)&1),ivec3(0),n-1);
-#ifdef VRL_REGIONS
-  if(r0){int j=int(texelFetch(regionTex,q,0).g*255.0+0.5);if(j>=1&&((int(texelFetch(regionLut,ivec2(j,0),0).a+0.5)>>(8+s))&1)==1)return true;}
-#endif
-#ifdef VRL_CHILDREN
-  if(c0){int j=int(texelFetch(childTex,q,0).g*255.0+0.5);if(j>=1&&((int(texelFetch(childLut,ivec2(j,1),0).a+0.5)>>s)&1)==1)return true;}
-#endif
- }
- return false;
-}
-#endif
-#endif
 // signed distance-like value of segment s at the last sample: >= 0 inside
 float segValue(int s);
 // the largest enabled-segment value at the last sample (negative when the sample is in no segment)
@@ -848,7 +782,6 @@ void main(){
      if(!passH&&regionAnyHidden!=0)passH=regionHiddenAt(tcO+tcD*t,idx); // an earlier change: a hit on a HIDDEN result is no hit either (same rule as a hidden child)
 #endif
 #ifdef VRL_HIDE
-     if(!passH&&hideAnyOn())passH=hideCellAt(tcO+tcD*t,idx); // an earlier change: a hide index 0 voxel of air beside a hidden part (hideCellAt)
      hidNow=passH;
 #endif
      VRL_MP float f1=curF;bool iso=refine==1&&((editMask>>idx)&1)==0&&prevValid&&prevF<0.0;
@@ -890,7 +823,7 @@ void main(){
       bool inside=qm[cIdx]>=0.5;
        for(int s=0;s<4;s++){if(s>=idx)break;int c=clsChan[s];if(c>=0&&segA[s].w>0.5&&qm[c]>=0.5)inside=false;}
 #ifdef VRL_HIDE
-       if(inside&&hideAnyOn()&&hideSkinAt(tcO+tcD*mid,idx))inside=false; // an earlier change: the surface is not in a hidden part, nor in the air cell beside one (hideCellAt, as at the candidate hit): after a hidden part it is where the shown part starts, and a hit next to one is not drawn on its skin (n730)
+       if(inside&&hideAnyOn()&&hideAt(tcO+tcD*mid,idx))inside=false; // A hidden part is not a surface.
 #endif
        if(inside)hi=mid;else lo=mid;}
      vec3 hp=o+dir*hi;vec3 tc=texCoord(hp);
@@ -1014,7 +947,6 @@ void main(){
      if(!passH&&regionAnyHidden!=0)passH=regionHiddenAt(tcO+tcD*t,idx); // an earlier change: a hit on a HIDDEN result is no hit either (same rule as a hidden child)
 #endif
 #ifdef VRL_HIDE
-     if(!passH&&hideAnyOn())passH=hideCellAt(tcO+tcD*t,idx); // an earlier change: a hide index 0 voxel of air beside a hidden part (hideCellAt)
      hidNow=passH;
 #endif
      VRL_MP float f1=curF;bool iso=refine==1&&((editMask>>idx)&1)==0&&prevValid&&prevF<0.0;
@@ -1056,7 +988,7 @@ void main(){
       bool inside=qm[cIdx]>=0.5;
        for(int s=0;s<4;s++){if(s>=idx)break;int c=clsChan[s];if(c>=0&&segA[s].w>0.5&&qm[c]>=0.5)inside=false;}
 #ifdef VRL_HIDE
-       if(inside&&hideAnyOn()&&hideSkinAt(tcO+tcD*mid,idx))inside=false; // an earlier change: the surface is not in a hidden part, nor in the air cell beside one (hideCellAt, as at the candidate hit): after a hidden part it is where the shown part starts, and a hit next to one is not drawn on its skin (n730)
+       if(inside&&hideAnyOn()&&hideAt(tcO+tcD*mid,idx))inside=false; // A hidden part is not a surface.
 #endif
        if(inside)hi=mid;else lo=mid;}
      vec3 hp=o+dir*hi;vec3 tc=texCoord(hp);
@@ -1123,9 +1055,9 @@ void main(){
      // an earlier change: after a hidden part, the first point where ANY shown segment is and it is not hidden (its own slot): the cut face, whatever segment it meets (the stripes where a segment's surface runs just behind the cut)
      {int hs=idx;bool hc=inside&&hideAnyOn();
       if(hitHid){VRL_MP vec4 qmc=qm-0.5;hs=dot(qmc,sel0)-off0>=0.0?0:dot(qmc,sel1)-off1>=0.0?1:dot(qmc,sel2)-off2>=0.0?2:dot(qmc,sel3)-off3>=0.0?3:-1;inside=hs>=0;hc=inside;}
-      if(hc&&hideSkinAt(tcO+tcD*mid,hs))inside=false;} // (n730): a hit not after a hidden part is not on a hidden part's skin either
+      if(hc&&hideAt(tcO+tcD*mid,hs))inside=false;} // A hit not after a hidden part is not on a hidden part's skin either.
 #else
-     if(inside&&hideAnyOn()&&hideSkinAt(tcO+tcD*mid,idx))inside=false; // an earlier change: the surface is not in a hidden part, nor in the air cell beside one (hideCellAt); after a hidden part it is where the shown part starts (n730)
+     if(inside&&hideAnyOn()&&hideAt(tcO+tcD*mid,idx))inside=false; // A hidden part is not a surface.
 #endif
 #endif
      if(inside)hi=mid;else lo=mid;}
@@ -1252,7 +1184,6 @@ void main(){
      if(!passH&&regionAnyHidden!=0)passH=regionHiddenAt(tc0,idx); // an earlier change: a hidden result, as a hidden child
 #endif
 #ifdef VRL_HIDE
-     if(!passH&&hideAnyOn())passH=hideCellAt(tc0,idx); // an earlier change: a hide index 0 voxel of air beside a hidden part (hideCellAt)
      hidNow=passH;
 #endif
 #ifdef VRL_HIDE
@@ -1270,7 +1201,7 @@ void main(){
       for(int r=0;r<3;r++){float mid=(lo+hi)*0.5;if(r<2&&abs(f1-f0)>1e-6)mid=clamp(lo+(hi-lo)*(-f0/(f1-f0)),lo+(hi-lo)*0.02,hi-(hi-lo)*0.02);
        bool inside=segmentIndexAt(texCoord(o+dir*mid))==idx;float fm=segValue(idx);if(inside){hi=mid;f1=fm;}else{lo=mid;f0=fm;}}}
 #ifdef VRL_HIDE
-     else if(!simple)for(int r=0;r<6;r++){float mid=(lo+hi)*0.5;vec3 tm=texCoord(o+dir*mid);if(segmentIndexAt(tm)==idx&&!(hideAnyOn()&&hideSkinAt(tm,idx)))hi=mid;else lo=mid;} // an earlier change: the surface is not in a hidden part, nor in the air cell beside one (hideCellAt); after a hidden part it is where the shown part starts (n730)
+     else if(!simple)for(int r=0;r<6;r++){float mid=(lo+hi)*0.5;vec3 tm=texCoord(o+dir*mid);if(segmentIndexAt(tm)==idx&&!(hideAnyOn()&&hideAt(tm,idx)))hi=mid;else lo=mid;} // A hidden part is not a surface.
 #else
      else if(!simple)for(int r=0;r<6;r++){float mid=(lo+hi)*0.5;if(segmentIndexAt(texCoord(o+dir*mid))==idx)hi=mid;else lo=mid;}
 #endif
