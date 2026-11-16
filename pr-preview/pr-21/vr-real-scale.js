@@ -1,0 +1,213 @@
+// real-size (実寸) reference for the VR / AR volume.
+// The volume is built normalised to NORM_LONG (3.3 units) on its longest side and the holder's scale maps that to metres
+// (displayed longest side = holder scale x 3.3 m; the default 16.5 cm = 0.05 x 3.3). The magnification shown here is
+// displayed size / physical size (voxel spacing x dimensions, anisotropic spacing included), never the raw holder scale
+// and never a render-resolution percentage. Pure maths plus one small canvas tag; no DOM needed for the maths (unit-tested).
+export const NORM_LONG = 3.3;
+
+// physical extents in mm [x, y, z] = dims x spacing (each axis its own spacing); null when unknown
+export function physicalExtentsMm(dims, spacing) {
+  if (!dims || !spacing) return null;
+  const n = [dims.columns, dims.rows, dims.slices];
+  const sp = [spacing.x ?? spacing[0], spacing.y ?? spacing[1], spacing.z ?? spacing[2]];
+  const e = n.map((v, i) => v * sp[i]);
+  return e.every(v => Number.isFinite(v) && v > 0) ? e : null;
+}
+export const longestMm = ext => (ext ? Math.max(...ext) : 0);
+
+// displayed longest side in metres for a holder scale
+export const displayedLongM = holderScale => holderScale * NORM_LONG;
+
+// displayed size / physical size (1 = real size); 0 when the physical size is unknown
+export function realMagnification(holderScale, longMm) {
+  if (!(longMm > 0) || !(holderScale > 0)) return 0;
+  return (displayedLongM(holderScale) * 1000) / longMm;
+}
+
+export const MAX_LONG_M = 0.30; // the largest displayed longest side (m); small animals only (whole body up to about 30 cm)
+export const FALLBACK_MIN = 0.025, FALLBACK_MAX = 20; // when the physical size is unknown (limits of the old two-hand scaling)
+
+// real size in holder-scale units
+const realScaleOf = longMm => longMm / 1000 / NORM_LONG;
+
+// >30 cm data (human / large animals) is out of scope for now: it is shown fitted to 0.30 m and locked
+export const isOversize = longMm => longMm / 1000 > MAX_LONG_M + 1e-9;
+
+// holder-scale limits {min, max, locked}: 1x (real size) .. 0.30 m longest side; oversize data: both = 0.30 m (locked, shown below 1x)
+export function scaleLimits(longMm) {
+  if (!(longMm > 0)) return { min: FALLBACK_MIN, max: FALLBACK_MAX, locked: false };
+  const cap = MAX_LONG_M / NORM_LONG;
+  if (isOversize(longMm)) return { min: cap, max: cap, locked: true };
+  return { min: Math.min(realScaleOf(longMm), cap), max: cap, locked: false };
+}
+export function clampScale(s, longMm) {
+  const l = scaleLimits(longMm);
+  return Math.min(l.max, Math.max(l.min, s));
+}
+
+// the holder scale at which 1 m of the patient is 1 m in VR; null when unknown or when the data is oversize (cannot be shown at real size)
+export function realHolderScale(longMm) {
+  if (!(longMm > 0) || isOversize(longMm)) return null;
+  return clampScale(realScaleOf(longMm), longMm);
+}
+
+export const MIN_START_LONG_M = 0.05;
+export function startHolderScale(longMm, fallbackScale, mag = 1) {
+  const r = realHolderScale(longMm); // null: unknown physical size or oversize data -> the fit, whatever the magnification
+  if (r) {
+    let s = r * (mag > 0 ? mag : 1);
+    if (longMm < 50) s = Math.max(s, MIN_START_LONG_M / NORM_LONG);
+    return clampScale(s, longMm);
+  }
+  return clampScale(fallbackScale, longMm);
+}
+// while the tutorial runs the volume is put where the hands reach it (0.65 m ahead, at chest height, a quarter metre below the eyes).: its size is the tutorial data's start magnification (`mag`: its sample.json vrInitialScale, 4 for the Lv0 bone; was 0.25 m = about x9.8).
+// Only the tutorial uses TUT_VOLUME_*; unknown physical size: TUT_LONG_M (0.1 m longest side).
+export const TUT_VOLUME_FWD = 0.65, TUT_VOLUME_DOWN = 0.25;
+export const TUT_LONG_M = 0.1;
+export const tutorialHolderScale = (longMm, mag = 1) => (longMm > 0 ? startHolderScale(longMm, TUT_LONG_M / NORM_LONG, mag) : clampScale(TUT_LONG_M / NORM_LONG, longMm));
+// the volume is "small" for the tutorial's grab steps when it is displayed at less than 95 % of the tutorial size (the visitor shrank it, or it was never enlarged)
+export const smallForTutorial = (holderScale, longMm, mag = 1) => holderScale < tutorialHolderScale(longMm, mag) * 0.95;
+
+// two-hand pinch: the new scale from the scale and hand distance at the grab (s0, d0) and the current distance d.
+// Always derived from the grab values (not accumulated), so pushing past a limit and coming back resumes exactly where the hands cross the limit.
+export function pinchScale(s0, d0, d, longMm) {
+  const l = scaleLimits(longMm);
+  if (l.locked) return l.max;
+  return clampScale(s0 * d / Math.max(d0, 1e-3), longMm);
+}
+
+// slider position (0..1) <-> holder scale, logarithmic between the limits of scaleLimits (left end = the lower limit = real size,
+// right end = the upper limit = 0.30 m longest side; unknown size: FALLBACK_MIN..FALLBACK_MAX). Locked (oversize) data has no range: position 0 / the locked scale.
+// The ends are returned exactly (no exp / log round trip), everything in between is clamped into the limits.
+export function scalePosOf(s, longMm) {
+  const l = scaleLimits(longMm);
+  if (l.locked || !(l.max > l.min) || !(s > 0)) return 0;
+  return Math.min(1, Math.max(0, Math.log(s / l.min) / Math.log(l.max / l.min)));
+}
+export function posToScale(pos, longMm) {
+  const l = scaleLimits(longMm);
+  if (l.locked) return l.max;
+  const p = Math.min(1, Math.max(0, +pos || 0));
+  if (p <= 0) return l.min;
+  if (p >= 1) return l.max;
+  return clampScale(l.min * Math.pow(l.max / l.min, p), longMm);
+}
+// the same in the shown unit, the real-size magnification (known physical size only; 0 / 0 without one)
+export const magToPos = (mag, longMm) => (longMm > 0 ? scalePosOf(mag * realScaleOf(longMm), longMm) : 0);
+export const posToMag = (pos, longMm) => (longMm > 0 ? realMagnification(posToScale(pos, longMm), longMm) : 0);
+
+// the － / ＋ buttons at the ends of the 拡大率 slider: one press multiplies the scale by 1 / SCALE_STEP or SCALE_STEP (a constant step on the log track), clamped to the
+// limits of scaleLimits (real size .. 30 cm longest side); locked data does not move. Holding repeats (vr-view.js, value-step.js timing: starts after 0.4 s, then one step every 0.1 s).
+export const SCALE_STEP = 1.1;
+export function scaleStep(s, dir, longMm, steps = 1) { // steps: how many 1.1 steps at once (1 for a press and for every repeat of a hold)
+  const l = scaleLimits(longMm);
+  if (l.locked || !(s > 0)) return clampScale(s, longMm);
+  const n = Math.max(1, Math.round(+steps || 1)), d = dir < 0 ? -1 : 1;
+  return clampScale(s * Math.pow(SCALE_STEP, d * n), longMm);
+}
+
+// the 表示 tab's row of the VR full menu (1024 px board, rows 80 px apart, the bottom row at yb): 拡大率 label + slider + the 実寸 button on one row (yb - 320), and the
+// 「よく使う（リング）を設定」 button on the histogram row (yb - 480) beside its 線形 / 対数 buttons (which end at x = X + 512): the row below the 実寸 button is full, so no row is added.
+// Pure so that the coordinates are tested. text.maxW = the width the value text may use (it shrinks to it).
+export function viewTabScaleLayout(yb, W = 1024, X = 40) {
+  // － / ＋ buttons at both ends of the slider. The row: the name (拡大率) with the value text under it (24 px, up to textMax wide: it shrinks to it), － (X + 270, 64 wide), the slider track (knob radius 26: it clears
+  // both buttons by 14 px), ＋, the 実寸 button (280 wide, at the right edge). The value text is no longer at the slider's right (the ＋ is there).
+  const H = 72, real = { x: W - X - 280, y: yb - 320, w: 280, h: H }, mw = 64, mx = X + 270, sx = mx + mw + 40, sw = 170, px = sx + sw + 40;
+  return {
+    wheel: { x: X + 530, y: yb - 480, w: W - X - (X + 530), h: H },
+    label: { x: X, y: yb - 320 + 26 },
+    text: { x: X, y: yb - 320 + 62, maxW: mx - 20 - X },
+    minus: { x: mx, y: yb - 320, w: mw, h: H },
+    slider: { x: sx, y: yb - 320, w: sw, h: H },
+    plus: { x: px, y: yb - 320, w: mw, h: H },
+    real,
+  };
+}
+
+// the section frame (outline, grab band, number tag, glow) is UI, not volume: it is a child of the holder, so it used to grow with the zoom
+// (24 cm square at 16.5 cm display -> 44 cm at 30 cm). Its world size is capped at the size it has at the default 16.5 cm display (holder scale 0.05):
+// above that scale the frame's local scale is shrunk by the same factor, so its world size is constant; below it, it follows the volume as before.
+// the capped square was smaller than the volume at max zoom (24 cm frame around a 30 cm volume: too tight to use). The square (outline, glow,
+// grab band, arrow) now has its own cap of 1.5x the design size (36 cm edge, ~3 cm margin around a 30 cm volume); the number tag keeps the 1x cap (3.4 cm).
+export const FRAME_REF_SCALE = 0.05;
+export const FRAME_SQUARE_MAX = 1.5;
+export const frameWorldScale = holderScale => Math.min(1, holderScale / FRAME_REF_SCALE); // tag / handle: 1 = design size (tag 3.4 cm), never larger
+export const frameSquareWorldScale = holderScale => Math.min(FRAME_SQUARE_MAX, holderScale / FRAME_REF_SCALE); // square: 1 = design size (half side 0.12 m, glow 3 mm), up to 1.5x
+export const planeFrameLocalScale = holderScale => frameSquareWorldScale(holderScale) / holderScale; // obj.scale inside the holder; world scale = holderScale x this
+export const planeTagLocalScale = holderScale => frameWorldScale(holderScale) / frameSquareWorldScale(holderScale); // handle.scale inside obj (<= 1); world tag size = this x obj world scale
+
+// warning shown at load (normal UI) and on entering VR / AR for oversize data; null when none
+export function oversizeNote(longMm, lang) {
+  if (!isOversize(longMm)) return null;
+  return lang === 'ja'
+    ? '実寸の最長辺が30cmを超えるため、30cmに縮小して表示します（拡大・縮小はできません）。このアプリはマウス等の小動物（全身撮影でおよそ30cmまで）を想定しています。'
+    : 'The real longest side exceeds 30 cm, so it is shown reduced to 30 cm (zooming is disabled). This app is meant for small animals such as mice (whole body up to about 30 cm).';
+}
+export function sizeWarningHtml(series, lang, esc) {
+  const ext = series ? physicalExtentsMm({ columns: series.columns, rows: series.rows, slices: series.slices?.length }, [series.spacingX, series.spacingY, series.spacingZ]) : null;
+  const t = oversizeNote(longestMm(ext), lang);
+  return t ? '<span class="size-warn" role="status">⚠ ' + esc(t) + '</span>' : '';
+}
+
+// 2 significant digits below 10, one decimal place from 10 up; a value within 0.5 % of 1 reads exactly 1
+export function formatMagnification(m) {
+  if (!(m > 0)) return '';
+  if (Math.abs(m - 1) < 0.005) return '1';
+  const p = Number(m.toPrecision(2));
+  if (p >= 10) return m.toFixed(1);
+  return String(p);
+}
+export const magnificationText = (m, lang) => {
+  const t = formatMagnification(m);
+  if (!t) return '';
+  return lang === 'ja' ? '×' + t + '（実寸比）' : '×' + t + ' (real size)';
+};
+
+// the scale shown in the 詳細 tab line. It used to print the raw holder scale ("×0.02" at real size, because the volume is built 3.3 units
+// long), which reads as "not 1x" next to the 「×1（実寸比）」 tag. Now the same real-size magnification as the tag; the raw holder scale only when
+// the physical size is unknown (no spacing), where there is no real size to compare with.
+export const scaleLineText = (holderScale, longMm, lang) => magnificationText(realMagnification(holderScale, longMm), lang) || '×' + holderScale.toFixed(2);
+
+// a small billboard tag: a canvas plane of fixed world size placed under the lowest corner of the volume's bounding box
+export function createScaleTag(THREE) {
+  const W = 320, H = 72, canvas = document.createElement('canvas');
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext('2d'), tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.09, 0.09 * H / W), new THREE.MeshBasicMaterial({ map: tex, transparent: true, toneMapped: false, depthTest: false }));
+  mesh.renderOrder = 5; mesh.visible = false;
+  // depth occlusion (same scheme as the pinned labels): while on, the tag is depth tested (hidden behind the volume, which writes depth) and a ghost child
+  // (GreaterDepth, faint) shows it where it is hidden; off = drawn on top without a depth test, as before
+  const ghost = new THREE.Mesh(mesh.geometry, Object.assign(mesh.material.clone(), { depthFunc: THREE.GreaterDepth, depthTest: true, depthWrite: false }));
+  ghost.renderOrder = mesh.renderOrder; ghost.frustumCulled = false; ghost.visible = false; mesh.add(ghost);
+  const setOcclusion = (occ, ghostAlpha) => {
+    occ = !!occ;
+    mesh.material.depthTest = occ; mesh.material.depthWrite = false; ghost.visible = occ;
+    if (occ) ghost.material.opacity = mesh.material.opacity * ghostAlpha;
+  };
+  let text = '';
+  const setText = t => {
+    if (t === text) return;
+    text = t; mesh.userData.text = t;
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = 'rgba(14,20,27,.78)'; ctx.beginPath(); ctx.roundRect(0, 0, W, H, 16); ctx.fill();
+    ctx.fillStyle = '#e8f1f8'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const lines = t.split('\n');
+    lines.forEach((ln, n) => { ctx.font = (n ? '' : 'bold ') + (lines.length > 1 ? 26 : 32) + 'px system-ui,sans-serif'; ctx.fillText(ln, W / 2, lines.length > 1 ? H * (n + 0.5) / lines.length + 1 : H / 2 + 1); });
+    tex.needsUpdate = true;
+  };
+  const v = new THREE.Vector3(), low = new THREE.Vector3();
+  // holder: the volume's group (local box = +-halfExt); head: world position of the viewer
+  const place = (holder, halfExt, head) => {
+    holder.updateWorldMatrix(true, false);
+    let best = Infinity;
+    for (let i = 0; i < 8; i++) {
+      v.set(i & 1 ? halfExt[0] : -halfExt[0], i & 2 ? halfExt[1] : -halfExt[1], i & 4 ? halfExt[2] : -halfExt[2]).applyMatrix4(holder.matrixWorld);
+      if (v.y < best) { best = v.y; low.copy(v); }
+    }
+    mesh.position.copy(low); mesh.position.y -= 0.035;
+    mesh.lookAt(head);
+  };
+  return { mesh, ghost, setText, setOcclusion, place, get text() { return text; }, dispose() { tex.dispose(); mesh.geometry.dispose(); mesh.material.dispose(); ghost.material.dispose(); } };
+}
