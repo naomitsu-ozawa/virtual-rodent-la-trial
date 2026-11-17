@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 
+// the WebGPU device request caps maxBufferSize / maxStorageBufferBindingSize.: the primary cap is 4 GiB (whole-body ~3.5 GB datasets
+// must load), retried 2 GiB -> 1 GiB -> defaults only when requestDevice rejects. The modules need a DOM to
+// import, so the functions are cut out of the sources and evaluated here (as in gpu-check-sync.test.js).
 const read = p => readFileSync(p, 'utf8');
 const gpuSrc = read('docs/gpu-compute.js');
 const grab = (src, re) => { const m = src.match(re); if (!m) throw new Error('not found: ' + re); return m[0].replace(/^export /, ''); };
@@ -30,6 +33,9 @@ function oldDescriptor(adapter, gpuForceCompat = false) {
 }
 
 const MiB = 2 ** 20, GiB = 2 ** 30;
+// Representative adapter limits. Chrome reports Dawn's tiers (Limits.cpp): maxBufferSize 256 MiB / 1 GiB / 2 GiB /
+// 4 GiB-4, maxStorageBufferBindingSize 128 / 256 / 512 MiB / 1 GiB / 2 GiB-4 / 4 GiB-4. The device rows are
+// assumptions (the chrome://gpu values are not logged); the tier sweep below covers every combination.
 const PROFILES = {
   'NVIDIA RTX 4070 Ti (Vulkan)': { core: true, limits: { maxBufferSize: 4 * GiB - 4, maxStorageBufferBindingSize: 4 * GiB - 4, maxComputeInvocationsPerWorkgroup: 1024, maxComputeWorkgroupSizeX: 1024, maxComputeWorkgroupStorageSize: 32768, maxTextureDimension3D: 2048 } },
   'Intel UHD 770 (Vulkan)': { core: true, limits: { maxBufferSize: 2 * GiB, maxStorageBufferBindingSize: 1 * GiB, maxComputeInvocationsPerWorkgroup: 1024, maxComputeWorkgroupSizeX: 1024, maxComputeWorkgroupStorageSize: 32768, maxTextureDimension3D: 2048 } },
@@ -416,6 +422,8 @@ describe('GPU preference through the buffer-limit ladder', () => {
   });
 });
 
+// three.js clips the section in hardware
+// only when the device has 'clip-distances', so it is requested whenever the adapter offers it (otherwise as before)
 describe('device request: clip-distances', () => {
   const { gpuDeviceRequestDescriptor } = api();
   it('is requested when the adapter has it (core and compat), limits unchanged', () => {

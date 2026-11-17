@@ -59,6 +59,7 @@ describe('resolveTriggerTarget', () => {
   it('surface mode: a section face in front never steals (planes are not candidates)', () => {
     expect(resolveTriggerTarget({ mode: 'surface', plane: { t: 0.2 }, tissue: tis(1) })).toMatchObject({ kind: 'record', ref: { t: 1 } });
   });
+  // the object surface occludes a plane behind it
   it('section mode: tissue in front of the plane stops the laser (nothing is recorded)', () => {
     const r = resolveTriggerTarget({ mode: 'section', plane: { t: 2 }, tissue: tis(1) });
     expect(r).toMatchObject({ kind: 'tissue', ref: { t: 1 } });

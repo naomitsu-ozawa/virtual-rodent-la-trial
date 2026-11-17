@@ -23,6 +23,7 @@ describe('child segment shaders (docs/medical-volume.js)', () => {
     const f = new Float32Array(1), u = new Uint32Array(f.buffer), bits = x => { f[0] = x; return u[0]; };
     expect(childLutWords({ color: '#102030', opacity: 0.5, material: 'plastic', shade: { lower: 100, upper: 700 }, visible: true, parentSlot: 2 })).toEqual([0x10, 0x20, 0x30, 2, bits(100), bits(700), bits(0.5 + 2 * 3), 0]);
     expect(childLutWords({ color: 0xff0000, visible: false, parentSlot: 0 }, { lower: 1, upper: 9 })).toEqual([255, 0, 0, 0, bits(1), bits(9), bits(1), 1]); // default opacity 1 / material standard; the app range when the child has none
+    for (const k of ['skin', 'muscle', 'fat']) expect(childLutWords({ color: 0, opacity: 0.25, material: k, parentSlot: 0 })[6]).toBe(bits(0.25)); // a saved build-709 preset packs as standard (index 0)
     expect(childLutWords({ color: 0, shade: { lower: 5, upper: 5 } }).slice(4, 6)).toEqual([0, 0]); // no usable range: upper <= lower = the parent slot's range
   });
   it('the child flags: bit s = slot s has a child, bit 4 = one is hidden', () => {
