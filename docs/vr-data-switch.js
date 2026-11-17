@@ -110,6 +110,8 @@ export function createUploadQueue({ copy, now = () => performance.now(), bytesPe
       return new Promise((res, rej) => { const w = waiters.get(key) || []; w.push([res, rej]); waiters.set(key, w); });
     },
     clear() { const ks = jobs.map(j => j.key); jobs.length = 0; for (const k of ks) finish(k, false); doneKeys.clear(); failed.clear(); },
+    // drops the queued jobs whose key satisfies pred (their waiters get false); the others go on (the partner volume of a sample pair is let go without touching the switch's own uploads)
+    drop(pred) { const ks = jobs.filter(j => pred(j.key)).map(j => j.key); for (const k of ks) jobs.splice(jobs.findIndex(j => j.key === k), 1); for (const k of ks) finish(k, false); },
     get pending() { return jobs.length; },
     get bytesPerTickNow() { return bytesPerTick; },
     get bytesLeft() { return jobs.reduce((a, j) => a + (j.depth - j.next) * j.bytesPerSlice, 0); },

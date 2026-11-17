@@ -17,11 +17,17 @@ export const clampRangeValue=(el,value)=>{
 export function withTimeout(promise,ms,timeoutValue){
  return Promise.race([promise,new Promise(resolve=>setTimeout(()=>resolve(timeoutValue),ms))]);
 }
+// The one place for device detection (parity rule: a feature is never removed by device type; a device may only get a smaller numeric memory / size cap).
+// navigator.platform 'Mac*': a Mac, and also an iPad (iPadOS reports MacIntel); combine with isIPadRuntime() / touch to tell them apart.
 export function isMacPlatformRuntime(){return /Mac/i.test(navigator.platform||'')}
 // A mobile OS in the UA (Android tablets / phones, Meta Quest browser): the same memory caps as the iPad.
 export function isMobileOsUserAgent(ua=navigator.userAgent||''){return /Android|OculusBrowser|Quest/i.test(ua)}
 export function isIPadRuntime(){return /iPad/i.test(navigator.userAgent||'')||((navigator.maxTouchPoints||0)>1&&isMacPlatformRuntime())}
+// one desktop behaviour for every OS. A desktop is a device without touch input.
+// Before, only a Mac counted, so Windows and Linux got smaller budgets and the old UI.
 export function isDesktopRuntime(){return (navigator.maxTouchPoints||0)===0}
+// the iPad memory / texture caps also for the Meta Quest browser and Android tablets (mobile OS in the UA); a touch-screen laptop stays a desktop
+// a VR headset browser (Meta Quest / Pico / Wolvic) starts in the 2D screen mode. UA only: a desktop Chrome with WebXR is not a headset.
 export function isVrHeadsetRuntime(){return /OculusBrowser|\bQuest\b|\bPico\b|Wolvic/i.test(navigator.userAgent||'')}
 export function isTabletRuntime(){return isIPadRuntime()||isMobileOsUserAgent()}
 export const frameYield=()=>new Promise(resolve=>setTimeout(resolve,0));

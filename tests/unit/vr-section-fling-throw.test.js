@@ -4,6 +4,10 @@ import { createVelocityTracker, flingDecision, flingDebugLines, FLING_SPEED_MPS,
 import { sectionFollowStart, sectionFollowStep, qMul } from '../../docs/vr-point.js';
 import { VOLUME_FWD, VOLUME_DOWN } from '../../docs/vr-layout.js';
 
+// . A realistic throw on Quest: the section is dragged by the LASER from 0.5-1 m away and follows the hand rigidly with
+// the hand as the pivot (vr-point.js sectionFollowStart / sectionFollowStep, exactly what vr-view.js updatePress runs). The throw is a wrist flick. This drives that real follow math
+// with controller poses in world metres (reference space local-floor), a volume holder with a tiny scale (holder-local units are not metres), samples at 90 Hz as the frame loop
+// does, and decides at the release event that arrives a frame later, as vr-view.js tryFling does.
 const src = readFileSync(new URL('../../docs/vr-view.js', import.meta.url), 'utf8');
 
 const head = { x: 0, y: 1.6, z: 0 };

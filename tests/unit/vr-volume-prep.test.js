@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeBricksOf, halveData, buildDistanceBytesSync, buildEditMaskOf, buildRegionIndexOf, prepRun, prepWorkerSource, createVolumePrep, BRICK } from '../../docs/vr-volume-prep.js';
+import { computeBricksOf, computeBricksRangeOf, halveRangeOf, halveData, buildDistanceBytesSync, buildEditMaskOf, buildRegionIndexOf, prepRun, prepWorkerSource, createVolumePrep, BRICK } from '../../docs/vr-volume-prep.js';
 import { gpuRunsForTexture } from '../../docs/gpu-runs.js';
 import { buildClsData } from '../../docs/point-cls.js';
 import { buildDistanceBytes, combineClassificationDistance, fourthChannelBytes } from '../../docs/distance-field.js';
@@ -97,6 +97,8 @@ function volume(dims, seed = 1) {
   return data;
 }
 const CAL = [1, -1024, 0];
+// n731: a volume job with a 256 copy makes the grid's own bricks from the halving's block extremes when every side is even: never narrower than the exact bricks, at most one voxel wider on each side (a safe superset, one pass over the blocks)
+const bricksSuperset = (got, exact) => { expect(got.length).toBe(exact.length); for (let i = 0; i < exact.length; i += 4) { expect(got[i]).toBeLessThanOrEqual(exact[i]); expect(got[i + 1]).toBeGreaterThanOrEqual(exact[i + 1]); } };
 const same = (a, b) => { expect(a.length).toBe(b.length); expect(Buffer.compare(Buffer.from(a.buffer, a.byteOffset, a.byteLength), Buffer.from(b.buffer, b.byteOffset, b.byteLength))).toBe(0); };
 
 describe('computeBricksOf / halveData = the code they replace', () => {
@@ -167,9 +169,10 @@ describe('prepRun: the worker jobs', () => {
     const { msg, tr } = out[0];
     expect(msg.t).toBe('volume'); expect(msg.id).toBe(3); expect(msg.data).toBe(data.buffer); expect(tr).toContain(data.buffer);
     same(new Uint8Array(msg.data), copy);
-    same(msg.bricks, refBricks(copy, dims, CAL).bricks); expect(msg.brickDims).toEqual(refBricks(copy, dims, CAL).brickDims);
+    bricksSuperset(msg.bricks, refBricks(copy, dims, CAL).bricks); expect(msg.brickDims).toEqual(refBricks(copy, dims, CAL).brickDims);
     const h = refHalve({ data: copy, dims });
-    expect(msg.half.dims).toEqual(h.dims); same(msg.half.data, h.data); same(msg.half.bricks, refBricks(h.data, h.dims, CAL).bricks);
+    expect(msg.half.dims).toEqual(h.dims); same(msg.half.data, h.data); // n731: the half bricks come from the block extremes (halveRangeOf), no longer from the averaged words
+    same(msg.half.bricks, refBricks(h.data, h.dims, CAL).bricks); // n733: the half bricks are computeBricksOf of the averaged words again
     for (const b of [msg.bricks, msg.half.data, msg.half.bricks]) expect(tr).toContain(b.buffer);
     expect(run({ t: 'volume', id: 4, data: copy.slice().buffer, dims, calib: CAL, brick: BRICK, half: false })[0].msg.half).toBe(null);
   });
@@ -181,14 +184,14 @@ describe('prepRun: the worker jobs', () => {
       const regions = [{ color: 0xff3300, segmentKeys: ['bone'], runsBySlice: blobRuns(srcDims, 3), mm3: 1.5, id: 7 }, { color: 0x2255ff, segmentKeys: ['soft', 'fat'], runsBySlice: blobRuns(srcDims, 4), mm3: 2.5, id: 8 }, { color: 0xff3300, segmentKeys: ['lung'], runsBySlice: blobRuns(srcDims, 6), mm3: 0.5, id: 9 }];
       const regionItems = regions.map(r => ({ color: r.color, segMask: r.segmentKeys.reduce((m, k) => m | (1 << ['bone', 'soft', 'fat', 'lung'].indexOf(k)), 0), runsBySlice: r.runsBySlice, mm3: r.mm3, segmentKeys: r.segmentKeys, rid: r.id }));
       const bricksFull = refBricks(volume([36, 24, 20], 2), [36, 24, 20], CAL), bricksHalf = refBricks(srcCopy, dims, CAL), mask = n >= 2 ? 3 : 1;
-      const out = run({ t: 'cls', id: 9, src: src.buffer, dims, calib: CAL, editDescs, editSourceDims: srcDims, regionItems, order: SEGS.order, state: st, brickDimsFull: bricksFull.brickDims, brickDimsHalf: bricksHalf.brickDims, mask });
+      const out = run({ t: 'cls', id: 9, thinKeep: false, src: src.buffer, dims, calib: CAL, editDescs, editSourceDims: srcDims, regionItems, order: SEGS.order, state: st, brickDimsFull: bricksFull.brickDims, brickDimsHalf: bricksHalf.brickDims, mask });
       const r = out.at(-1).msg;
       expect(r.t).toBe('cls'); expect(r.warnings).toEqual([]);
       // the processing mask and the analysis index = what the page built (the reference above)
       const rm = refEditMask(descs, srcDims, dims); // a segment without runs keeps its slot (the page's forEach index)
       expect(r.edit.active).toBe(rm.activeMask); expect(r.edit.maskOnly).toBe(rm.maskOnly); same(r.edit.data, rm.data);
       const rr = refRegionIndex(regions, ['bone', 'soft', 'fat', 'lung'], srcDims, dims);
-      same(r.region.data, rr.data); same(r.region.ids, rr.ids); expect(r.region.colors).toEqual(rr.colors); expect(r.region.segs).toEqual(rr.segs); expect(r.region.list).toEqual(rr.list);
+      same(r.region.data, rr.data); same(r.region.rg ? r.region.rg.filter((_, i) => !(i & 1)) : null, rr.ids); expect(r.region.ids).toBeUndefined(); expect(r.region.colors).toEqual(rr.colors); expect(r.region.segs).toEqual(rr.segs); expect(r.region.list).toEqual(rr.list); // an earlier change: the worker sends the one RG array (R = every second byte)
       const edit = { data: rm.data, dims, active: rm.activeMask, maskOnly: rm.maskOnly };
       const cls = buildClsData({ dims, data: srcCopy }, CAL, edit, st, SEGS.order);
       same(r.cls.data, cls.data); expect(r.cls.C).toBe(cls.C); expect(r.cls.chan).toEqual(cls.chan);
@@ -229,14 +232,14 @@ describe('the worker source is self-contained', () => {
     const dims = [20, 14, 10], d = volume(dims, 5), copy = d.slice();
     self.onmessage({ data: { t: 'volume', id: 1, data: d.buffer, dims, calib: CAL, brick: BRICK, half: true } });
     const m = posted[0].m;
-    same(m.bricks, refBricks(copy, dims, CAL).bricks); same(m.half.data, refHalve({ data: copy, dims }).data);
+    bricksSuperset(m.bricks, refBricks(copy, dims, CAL).bricks); same(m.half.data, refHalve({ data: copy, dims }).data);
   });
   it("answers a 'cls' job (all four stored: the fourth channel too) with the same bytes", () => {
     const { self, posted } = boot();
     const dims = [14, 12, 10], src = volume(dims, 4), copy = src.slice(), st = stateOf(4);
     const descs = [{ si: 0, mode: 'exclude', maskOnly: false, runs: blobRuns([28, 24, 20], 1) }, { si: 1, mode: 'keep', maskOnly: true, runs: blobRuns([28, 24, 20], 2) }];
     const items = [{ color: 0x123456, segMask: 3, runsBySlice: blobRuns([28, 24, 20], 3), mm3: 1, segmentKeys: ['bone', 'soft'], rid: 4 }];
-    self.onmessage({ data: { t: 'cls', id: 2, src: src.buffer, dims, calib: CAL, editDescs: descs, editSourceDims: [28, 24, 20], regionItems: items, order: SEGS.order, state: st, brickDimsFull: [2, 2, 2], brickDimsHalf: null, mask: 15 } });
+    self.onmessage({ data: { t: 'cls', id: 2, thinKeep: false, src: src.buffer, dims, calib: CAL, editDescs: descs, editSourceDims: [28, 24, 20], regionItems: items, order: SEGS.order, state: st, brickDimsFull: [2, 2, 2], brickDimsHalf: null, mask: 15 } });
     const r = posted.at(-1).m, em = buildEditMaskOf(descs, [28, 24, 20], dims), cls = buildClsData({ dims, data: copy }, CAL, { data: em.data, dims, active: em.activeMask, maskOnly: em.maskOnly }, st, SEGS.order), dist = buildDistanceBytesSync(cls, dims);
     same(r.cls.data, cls.data); same(r.dist.data, dist.data); same(r.combo, combineClassificationDistance(cls, dist, 15, null, { four: true })); same(r.cls4, fourthChannelBytes(cls)); same(r.edit.data, em.data);
     same(r.region.data, buildRegionIndexOf(items, [28, 24, 20], dims).data);
@@ -258,7 +261,7 @@ describe('createVolumePrep (the main-thread side)', () => {
     let w = null; const prep = createVolumePrep({ makeWorker: () => (w = fakeWorker()) });
     const dims = [20, 14, 10], d = volume(dims, 5), copy = d.slice();
     const r = await prep.volume({ data: d.buffer, dims, calib: CAL, brick: BRICK, half: true });
-    expect(w.sent[0].tr).toEqual([d.buffer]); same(r.bricks, refBricks(copy, dims, CAL).bricks);
+    expect(w.sent[0].tr).toEqual([d.buffer]); bricksSuperset(r.bricks, refBricks(copy, dims, CAL).bricks);
     const seen = [], cdims = [10, 10, 8], src = volume(cdims, 2);
     const c = await prep.cls({ src: src.buffer, dims: cdims, calib: CAL, editDescs: [], editSourceDims: cdims, regionItems: [], order: SEGS.order, state: stateOf(2), brickDimsFull: [2, 2, 1], brickDimsHalf: null, mask: 3 }, (a, b) => seen.push([a, b]));
     expect(c.cls.C).toBe(2); expect(seen.at(-1)).toEqual([2, 2]);
@@ -269,7 +272,7 @@ describe('createVolumePrep (the main-thread side)', () => {
   it('without a worker the same job runs on this thread', async () => {
     const prep = createVolumePrep({ makeWorker: () => null }), dims = [12, 12, 12], d = volume(dims, 8), copy = d.slice();
     const r = await prep.volume({ data: d.buffer, dims, calib: CAL, brick: BRICK, half: true });
-    same(r.bricks, refBricks(copy, dims, CAL).bricks); same(r.half.data, refHalve({ data: copy, dims }).data);
+    bricksSuperset(r.bricks, refBricks(copy, dims, CAL).bricks); same(r.half.data, refHalve({ data: copy, dims }).data);
     expect(prep.stats).toEqual({ worker: 0, local: 1 });
     prep.dispose();
   });
