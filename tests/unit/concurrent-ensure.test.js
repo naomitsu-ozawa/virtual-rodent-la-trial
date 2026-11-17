@@ -1,6 +1,10 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { MedicalVolumeRenderer } from '../../docs/medical-volume.js';
 
+// Series switch while the previous series' GPU volume is still uploading. The filtered in-place refresh of A
+// (refreshGpuVolumeData -> ensure) kept writing to A's texture after resetData() destroyed it; WebGPU reports that as a
+// validation error in the innermost error scope, which was B's, so B's upload failed. The mock device below does the
+// same: a write to a destroyed texture is a validation error delivered to the innermost open error scope.
 beforeAll(() => {
   globalThis.requestAnimationFrame ??= cb => setTimeout(cb, 0);
   globalThis.GPUTextureUsage ??= { COPY_SRC: 1, COPY_DST: 2, TEXTURE_BINDING: 4, STORAGE_BINDING: 8, RENDER_ATTACHMENT: 16 };

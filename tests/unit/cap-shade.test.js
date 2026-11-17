@@ -21,7 +21,7 @@ const CT = dataRangeOf(-1024, 3071), U16 = dataRangeOf(0, 65535);
 describe('the shared maths (docs/cap-shade.js)', () => {
   it('the defaults are the VR ones: brightness 1.8, contrast 1.7, the darkest level fixed at 0.35', () => {
     expect([SHADE_BRIGHT_DEFAULT, SHADE_CONTRAST_DEFAULT, SHADE_FLOOR]).toEqual([1.8, 1.7, 0.35]);
-    expect(vr).toContain('ctShadeBright:1.8,ctShadeContrast:1.7,laserStyle:2}');
+    expect(vr).toContain('ctShadeBright:1.8,ctShadeContrast:1.7,laserStyle:2,stickShort:0}');
   });
   it('the position in a range: below the lower end 0 (darkest), above the upper end 1 (brightest), linear between', () => {
     expect(shadeT(-1000, 40, 440)).toBe(0); expect(shadeT(40, 40, 440)).toBe(0); expect(shadeT(440, 40, 440)).toBe(1); expect(shadeT(5000, 40, 440)).toBe(1);
@@ -167,7 +167,7 @@ describe('VR / AR shader (vr-view.js ctLumHU): the segment slot\'s own range, no
   it('both slice branches (0 % opacity and the tint over the visible slice image) use the SAME ctLumHU: no separate tint formula, no fixed span (the old ctLumTint / CT_SHADE_SPAN 1500 is gone)', () => {
     expect(vr).toContain('vec4(regionColor(p,segC[si].rgb,si)*ctLumHU(hu,si),ctShade>0.5?SEG_ALPHA:sliceTint)');
     expect(vr).toContain('regionColor(p,segC[si].rgb,si)*ctLumHU(hu,si),sliceTint),a)');
-    expect(vr.match(/ctLumHU\(/g)).toHaveLength(3); // the definition + the two branches
+    expect(vr.match(/ctLumHU\(/g)).toHaveLength(5); // the definition + the two branches + the same two in sliceColorR, the copy for a session with results whose hidden results get no fill / tint (compiled only with VRL_REGIONS and no child segment)
     expect(vr).not.toMatch(/ctLumTint|CT_SHADE_SPAN|1500\.0/);
   });
   it('the tint path reads the value through the per-segment range like cap-shade.js: the same GLSL function, so the factor for any value / range equals shadeLumV; a segment max open-ended (bone up to 61535) no longer matters', () => {

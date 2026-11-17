@@ -1,3 +1,6 @@
+// Highlight of ONE analysis result while a laser (VR) points at it.
+// Pure functions only (no DOM, no three): vr-view.js feeds them and writes the result into the result look-up table (regionLut, 256 x 1 RGBA floats). The shader is not touched:
+// only the rgb of the table's texels change, never the alpha (the segment bits / the hidden flag) and never the index texture.
 export const HIGHLIGHT_WHITE_MIX = 0.45; // the highlighted result's colour moves this far toward white
 export const HIGHLIGHT_DIM_MIX = 0.35; // every other result's colour moves this far back toward its segment's colour
 
@@ -18,6 +21,11 @@ export function highlightIndex(entries, rid) {
   const i = entries.findIndex(e => e.rid === rid);
   return i >= 0 && entries[i].shown ? i : -1;
 }
+
+// A CHILD SEGMENT is lit the same way, through ITS look-up table (childLut row 0, rgb only): the lit child moves toward white like a lit result. The shader is not touched (GLSL / WebGL read the table as they do).
+// Once a child is lit (alone or with a result under it) every coloured thing that is not lit goes back toward its segment's colour, results and children alike. A lit result alone dims results only, as it always did; nothing lit = the plain tables.
+// resultAt / childAt = highlightIndex of each table (-1 = none lit).
+export const anyLit = (resultAt, childAt) => resultAt >= 0 || childAt >= 0;
 
 // Which result is highlighted, from what the lasers point at. One tracker per session.
 // update(hands, enabled): hands = [{key, pin, hover}] (key: any stable id of the hand / controller; pin: the region id of the pinned label the laser is on or holds, or 0;
