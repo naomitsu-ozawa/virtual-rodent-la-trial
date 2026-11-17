@@ -1,25 +1,25 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { segmentState, segmentNeedsGlobalMask, sourceMprMemoryView, sourceMemoryUsable, getProcessedSegmentMask, segmentEditState, segmentSourcesOf, segmentSourceSignature, segmentHasManualEditsUpstream, segmentEditGen, segmentKeyOf, segmentAddsVoxels } from './segments.js?v=20261110-build708';
-import { activeId, filterRebuildRevision, current3DVolume, volume, currentLanguage, childSegments } from './state.js?v=20261110-build708';
-import { sourceFilterRuntime, sourceFilterSignature, sourceFilterStages, sourceFilterHalo, readSourceRegion, runSourceFilterWorker, fitSourceTile, getCachedSourceSlice } from './source-filters.js?v=20261110-build708';
-import { gpuOpenRuns, gpuCounts, gpuStepTimes, gpuRunInfo, addGpuStepTime, ensureGpuFilterDevice, gpuValidationScope, setGpuComputeBackend, runGpuSourceFilters, gpuFilterRuntime, gpuStagesSupported, beginGpuBufferRetention, endGpuBufferRetention } from './gpu-compute.js?v=20261110-build708';
-import { isNativeDicomTransferSyntax } from './dicom.js?v=20261110-build708';
-import { extractSourceThresholdRuns } from './medical-volume.js?v=20261110-build708';
-import { valuesToSegmentBits } from './mask-ops.js?v=20261110-build708';
-import { state } from './ui-shell.js?v=20261110-build708';
+import { segmentState, segmentNeedsGlobalMask, sourceMprMemoryView, sourceMemoryUsable, getProcessedSegmentMask, segmentEditState, segmentSourcesOf, segmentSourceSignature, segmentHasManualEditsUpstream, segmentEditGen, segmentKeyOf, segmentAddsVoxels } from './segments.js?v=20261117-build737';
+import { activeId, filterRebuildRevision, current3DVolume, volume, currentLanguage, childSegments } from './state.js?v=20261117-build737';
+import { sourceFilterRuntime, sourceFilterSignature, sourceFilterStages, sourceFilterHalo, readSourceRegion, runSourceFilterWorker, fitSourceTile, getCachedSourceSlice } from './source-filters.js?v=20261117-build737';
+import { gpuOpenRuns, gpuCounts, gpuStepTimes, gpuRunInfo, addGpuStepTime, ensureGpuFilterDevice, gpuValidationScope, setGpuComputeBackend, runGpuSourceFilters, gpuFilterRuntime, gpuStagesSupported, beginGpuBufferRetention, endGpuBufferRetention } from './gpu-compute.js?v=20261117-build737';
+import { isNativeDicomTransferSyntax } from './dicom.js?v=20261117-build737';
+import { extractSourceThresholdRuns } from './medical-volume.js?v=20261117-build737';
+import { valuesToSegmentBits } from './mask-ops.js?v=20261117-build737';
+import { state } from './ui-shell.js?v=20261117-build737';
 import dicomParser from './vendor/dicom-parser@1.8.21/index.js';
-import { storedLayout, readStored } from './stored-bits.js?v=20261110-build708';
-import { analysisRunsVoxelCount, unionRunArrays, maskToAnalysisRuns, postprocessSourceRuns, thinSuppressSourceRuns, intersectRunArrays, subtractRunArrays } from './run-length.js?v=20261110-build708';
-import { frameYield } from './utils.js?v=20261110-build708';
-import { BODY_MIN_HU } from './thin-suppress.js?v=20261110-build708';
-import { setProcessingBusy } from './busy.js?v=20261110-build708';
-import { reportBusyProgress } from './progress-modal.js?v=20261110-build708';
-import { segmentRunsCacheKey, segmentRunsCacheInfo, loadCachedSegmentRuns, storeCachedSegmentRuns } from './run-cache.js?v=20261110-build708';
-import { loadStatAdd } from './load-stats.js?v=20261110-build708';
-import { hashHex } from './vr-prep-cache.js?v=20261110-build708'; // a content hash for the key (the upstream manual edits) //: cache hits of a load, for the VR switch report
-import { isChildKey } from './segment-look.js?v=20261110-build708';
-import { childByKey } from './child-segments.js?v=20261110-build708';
+import { storedLayout, readStored } from './stored-bits.js?v=20261117-build737';
+import { analysisRunsVoxelCount, unionRunArrays, maskToAnalysisRuns, postprocessSourceRuns, thinSuppressSourceRuns, intersectRunArrays, subtractRunArrays } from './run-length.js?v=20261117-build737';
+import { frameYield } from './utils.js?v=20261117-build737';
+import { BODY_MIN_HU } from './thin-suppress.js?v=20261117-build737';
+import { setProcessingBusy } from './busy.js?v=20261117-build737';
+import { reportBusyProgress } from './progress-modal.js?v=20261117-build737';
+import { segmentRunsCacheKey, segmentRunsCacheInfo, loadCachedSegmentRuns, storeCachedSegmentRuns } from './run-cache.js?v=20261117-build737';
+import { loadStatAdd } from './load-stats.js?v=20261117-build737';
+import { hashHex } from './vr-prep-cache.js?v=20261117-build737'; // a content hash for the key (the upstream manual edits) //: cache hits of a load, for the VR switch report
+import { isChildKey } from './segment-look.js?v=20261117-build737';
+import { childByKey } from './child-segments.js?v=20261117-build737';
 export async function processSourceRegionMasks(series,target,stages,key,revision,segments){
  const halo=sourceFilterHalo(stages),x0=Math.max(0,target.x-halo),y0=Math.max(0,target.y-halo),z0=Math.max(0,target.z-halo),x1=Math.min(series.columns,target.x+target.width+halo),y1=Math.min(series.rows,target.y+target.height+halo),z1=Math.min(series.slices.length,target.z+target.depth+halo);
  const box={x:x0,y:y0,z:z0,width:x1-x0,height:y1-y0,depth:z1-z0},data=await readSourceRegion(series,box,revision,true);
@@ -279,6 +279,9 @@ async function thresholdSourceRuns(v,key,seg,onProgress,alive,extraSegs=[],airLa
 // Body mask runs (voxels at or above the segment's lower bound, filters applied) for the
 // surface exclusion; one per data/filter state, also cached on the device.
 const bodyRunsMemo={signature:'',promise:null};
+// "Body" = values at or above the segment's lower bound, so "air" is anything
+// darker than the segment. A fixed -500 HU failed on real data, where the fat
+// range itself lies below -500.
 function bodySignature(v,minValue){return[activeId,filterRebuildRevision,sourceFilterRuntime.revision,v.columns,v.rows,v.slices,minValue].join('|')}
 // max is a fixed large value: v.max of a source-backed series can be an
 // estimate or missing, and a NaN bound would make the whole volume "air"

@@ -1,14 +1,14 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { set3DBusy } from './three-status.js?v=20261110-build708';
-import { updateRenderModeControl, clearResidentMprJobs, prepareResidentGpuVolume, activateMedicalVolume, setThreeVolumeOverlay } from './data-load.js?v=20261110-build708';
-import { appVersionBadge, planes, ipadGpuQualityControl, ipadGpuQuality, footer } from './ui-shell.js?v=20261110-build708';
-import { sceneState, volume, currentLanguage, ipadGpuTargetSide, setIpadGpuTargetSide, normalizeGpuSide, sourceVolume, threeRenderMode, setResidentMprReadbackDisabled, setThreeRenderMode } from './state.js?v=20261110-build708';
-import { updateMprCanvasPhysicalAspect, schedulePlaneRender } from './mpr-render.js?v=20261110-build708';
-import { request3DRender } from './scene3d.js?v=20261110-build708';
-import { applyLanguage } from './i18n.js?v=20261110-build708';
-import { isVrHeadsetRuntime, fmt } from './utils.js?v=20261110-build708';
-import { settings } from './app-settings.js?v=20261110-build708';
+import { set3DBusy } from './three-status.js?v=20261117-build737';
+import { updateRenderModeControl, clearResidentMprJobs, prepareResidentGpuVolume, activateMedicalVolume, setThreeVolumeOverlay } from './data-load.js?v=20261117-build737';
+import { appVersionBadge, planes, ipadGpuQualityControl, ipadGpuQuality, footer } from './ui-shell.js?v=20261117-build737';
+import { sceneState, volume, currentLanguage, ipadGpuTargetSide, setIpadGpuTargetSide, normalizeGpuSide, sourceVolume, threeRenderMode, setResidentMprReadbackDisabled, setThreeRenderMode } from './state.js?v=20261117-build737';
+import { updateMprCanvasPhysicalAspect, schedulePlaneRender } from './mpr-render.js?v=20261117-build737';
+import { request3DRender } from './scene3d.js?v=20261117-build737';
+import { applyLanguage } from './i18n.js?v=20261117-build737';
+import { isVrHeadsetRuntime, fmt } from './utils.js?v=20261117-build737';
+import { settings } from './app-settings.js?v=20261117-build737';
 export function initIPadWorkspaceUi(){
  const shell=document.querySelector('.app-shell'),workspace=document.querySelector('.workspace'),sidebar=document.querySelector('.sidebar'),sidebarScroll=document.querySelector('.sidebar-scroll'),viewer=document.querySelector('#viewer-grid'),topbar=document.querySelector('.topbar');
  if(!shell||!workspace||!sidebar||!sidebarScroll||!viewer||!topbar)return;
@@ -19,6 +19,13 @@ export function initIPadWorkspaceUi(){
  toolbar.id='ipad-workspace-toolbar';toolbar.className='ipad-workspace-toolbar';
  toolbar.innerHTML='<div class="ipad-view-modes" role="group" aria-label="View mode"><button type="button" class="is-active" data-ipad-view-mode="3d" data-i18n="ipadView3d">3D</button><button type="button" data-ipad-view-mode="2d" data-i18n="ipadView2d">2D</button><button type="button" data-ipad-view-mode="split" data-i18n="ipadViewSplit">分割</button></div><div class="ipad-mpr-tabs" role="tablist" aria-label="MPR plane"><button type="button" class="is-active" data-ipad-mpr="axial">Axial</button><button type="button" data-ipad-mpr="coronal">Coronal</button><button type="button" data-ipad-mpr="sagittal">Sagittal</button></div>';
  topbar.after(toolbar);
+ // one rule for the top bar - data / project files and VR / AR first (left), then preferences (theme, language, settings)
+ // the top bar keeps only the title - open / save are in the データ panel, VR / AR at the top of 表示,
+ // theme / language / all settings in the 設定 panel (all below; the same elements, moved)
+ // one place per kind of control.
+ //   tool rail (left column of the sidebar) -> picks what the single left panel shows: its settings AND its results
+ //   view bar (#ipad-workspace-toolbar) -> how the views look: screen mode, the 2D plane, what is drawn in 3D
+ //   the 3D view itself carries only the viewpoint buttons (top right). Results can go under the views instead (settings: resultPlace, analysis-dock.js).
  const cap=(key,text)=>{const c=document.createElement('span');c.className='ws-cap';c.dataset.i18n=key;c.textContent=text;return c};
  const sep=()=>{const d=document.createElement('span');d.className='ws-sep';d.setAttribute('aria-hidden','true');return d};
  toolbar.prepend(cap('wsScreen','画面'));
@@ -31,6 +38,8 @@ export function initIPadWorkspaceUi(){
   overlay3d.prepend(cap('ws3dOverlay','3D重ね'));overlay3d.classList.add('ws-3d-only');
   const s3=sep();s3.classList.add('ws-3d-only');toolbar.append(s3,overlay3d);
  }
+ // the 3D viewpoint buttons (roll / X / Y / Z / help) are scene-view.js's overlay inside the 3D pane (top right), not part of the view bar.
+ // The cache delete button is only in 設定 > キャッシュ (#volume-cache-clear stays in the DOM, hidden by CSS, so its handlers keep working).
 
  const settingsHead=document.createElement('div');settingsHead.className='ipad-drawer-head ipad-settings-head';
  settingsHead.innerHTML='<strong data-i18n="ipadSettings">設定</strong>';
@@ -51,6 +60,8 @@ export function initIPadWorkspaceUi(){
    const row=(key,text,btns)=>{if(!btns.length)return;const r=document.createElement('div');r.className='ws-file-row';r.append(cap(key,text),...btns);box.append(r)};
    row('wsFileOpen','データ',open);
    dataPanel.prepend(box);
+   // the practice data choices open in place under the open row (app.js toggles .is-open);
+   // the empty series list offers the same list
    const choices=document.querySelector('#sample-choices-holder .sample-choices');
    if(choices&&box.firstElementChild){
     const picker=document.createElement('div');picker.id='ws-sample-picker';picker.className='ws-sample-picker';picker.inert=true;
@@ -89,6 +100,10 @@ export function initIPadWorkspaceUi(){
  analysisPanel.append(aButtons,analysisSettings,aHost);sidebarScroll.appendChild(analysisPanel);
 
  const byId=id=>document.getElementById(id);
+ // VR / AR buttons stay in the top bar (#vr-view-button / #ar-view-button in .topbar-actions): reachable whichever tool panel is open. Their `hidden`
+ // (shown only where WebXR reports the session type as supported, app.js xrShow) is not touched here. Until this build they were moved into the 表示 panel.
+ // the settings content stays in #settings-dialog (settings-ui.js opens it with showModal); the 外観 / 言語 rows
+ // are at the top of the dialog's body. #settings-open stays (hidden) as the one opener the other code calls; the rail's 設定 entry presses it.
  const dlg=byId('settings-dialog'),openBtn=byId('settings-open'),dlgBody=dlg?.querySelector('.settings-body');
  if(dlgBody){
   const rows=document.createElement('div');rows.className='ws-pref-rows';
@@ -101,6 +116,7 @@ export function initIPadWorkspaceUi(){
 
  const TOOLS=[['data','ipadData','データ'],['display','toolDisplay','表示'],['segment','toolSegment','セグメント'],['filter','toolFilter','フィルター'],['edit','ipadEdit','3D編集'],['analysis','wsAnalysis','解析']];
  const drawerTabs=document.createElement('nav');drawerTabs.className='ipad-drawer-tabs ws-tool-rail';drawerTabs.setAttribute('aria-label','Tools');
+ // an icon over each name (inline SVG, follows the text colour)
  const ICON={data:'<ellipse cx="12" cy="5.5" rx="7" ry="2.5"/><path d="M5 5.5v13c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5v-13"/><path d="M5 12c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5"/>',
   display:'<path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
   segment:'<path d="M12 3 2.5 8 12 13l9.5-5z"/><path d="m2.5 12 9.5 5 9.5-5"/><path d="m2.5 16 9.5 5 9.5-5"/>',

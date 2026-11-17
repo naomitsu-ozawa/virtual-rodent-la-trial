@@ -1,17 +1,17 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { installGpuLedger } from './mem-ledger.js?v=20261110-build708';
-import { gpuSplitCandidate, gpuSplitDecision, gpuVendorKey, gpuAdapterVendorKey, gpuSplitStatusParts, gpuHybridStatusText, gpuStatusDetailed, webglDisplayGpu } from './gpu-split.js?v=20261110-build708';
-import { gpuPlatformOs, gpuEffectivePreference, gpuPreferenceSupported, gpuAdapterRequestOptions, gpuPreferenceInfoText, gpuEffectiveHybridMode } from './gpu-preference.js?v=20261110-build708';
-import { setGpuPrewarmIndex, setGpuPrewarmScheduled, sceneState } from './state.js?v=20261110-build708';
+import { installGpuLedger } from './mem-ledger.js?v=20261117-build737';
+import { gpuSplitCandidate, gpuSplitDecision, gpuVendorKey, gpuAdapterVendorKey, gpuSplitStatusParts, gpuHybridStatusText, gpuStatusDetailed, webglDisplayGpu } from './gpu-split.js?v=20261117-build737';
+import { gpuPlatformOs, gpuEffectivePreference, gpuPreferenceSupported, gpuAdapterRequestOptions, gpuPreferenceInfoText, gpuEffectiveHybridMode } from './gpu-preference.js?v=20261117-build737';
+import { setGpuPrewarmIndex, setGpuPrewarmScheduled, sceneState } from './state.js?v=20261117-build737';
 import * as THREE from './vendor/three@0.186.0/build/three.webgpu.js';
-import { normalizeVrlWgsl, gpuFilterShader, GPU_PREWARM_KINDS, gaussianPassKernel, AIRDIST_X_MAX_N } from './gpu-shaders.js?v=20261110-build708';
-import { spacingParams, spacingRatios, bilateralRadii, nlmRadii, unsharpAxes } from './filter-units.js?v=20261110-build708';
-import { isDesktopRuntime, frameYield } from './utils.js?v=20261110-build708';
-import { runsSliceToMask } from './run-length.js?v=20261110-build708';
-import { status } from './ui-shell.js?v=20261110-build708';
-import { updateLinuxWebgpuNote } from './linux-webgpu-note.js?v=20261110-build708';
-import { logGpuError } from './gpu-diagnostics.js?v=20261110-build708';
+import { normalizeVrlWgsl, gpuFilterShader, GPU_PREWARM_KINDS, gaussianPassKernel, AIRDIST_X_MAX_N } from './gpu-shaders.js?v=20261117-build737';
+import { spacingParams, spacingRatios, bilateralRadii, nlmRadii, unsharpAxes } from './filter-units.js?v=20261117-build737';
+import { isDesktopRuntime, frameYield } from './utils.js?v=20261117-build737';
+import { runsSliceToMask } from './run-length.js?v=20261117-build737';
+import { status } from './ui-shell.js?v=20261117-build737';
+import { updateLinuxWebgpuNote } from './linux-webgpu-note.js?v=20261117-build737';
+import { logGpuError } from './gpu-diagnostics.js?v=20261117-build737';
 export const gpuFilterRuntime={device:null,adapter:null,initPromise:null,disabled:false,pipelines:new Map(),warned:false,lastBackend:'CPU',lastError:'',adapterLabel:'',retryAfter:0,initAttempts:0,bufferPool:new Map(),bufferPoolBytes:0,sharedRendererDevice:false,workgroupSize:128,lastShaderKind:'',split:null,renderDevice:null,renderError:'',renderInfo:'',pendingCompute:null};
 export function gpuAdapterLabel(adapter){
  try{
@@ -26,7 +26,23 @@ export function gpuComputeWorkgroupSize(device=gpuFilterRuntime.device){
  const a=Number(device?.limits?.maxComputeInvocationsPerWorkgroup)||128,b=Number(device?.limits?.maxComputeWorkgroupSizeX)||a;
  const cap=Math.max(1,Math.min(256,a,b));return cap>=256?256:cap>=128?128:cap>=64?64:Math.max(1,cap);
 }
+// chrome://gpu lists one WebGPU adapter, "OpenGLES backend
+// … (Compatibility Mode)"; the core-only requests got none, so filters, segmentation and the 3D view ran on the CPU /
+// WebGL. A compatibility adapter is now the fallback; such a device starts at the compatibility defaults (e.g. fewer
+// storage buffers per stage), so it asks for every limit the adapter offers. ?gpucompat (or localStorage
+// vrl.gpucompat = 1) forces a compatibility device on any machine, for checks.
 export const gpuForceCompat=(()=>{try{return /[?&]gpucompat\b/.test(globalThis.location?.search||'')||globalThis.localStorage?.getItem('vrl.gpucompat')==='1'}catch{return false}})();
+// on the
+// NVIDIA adapter the device request failed with VK_ERROR_OUT_OF_DEVICE_MEMORY; the Intel adapter worked. The request
+// asked for the adapter's own maxBufferSize / maxStorageBufferBindingSize with no upper bound.
+// the primary cap is 4 GiB, not 2 GiB. the request has asked for the adapter's maximum
+// (NVIDIA reports 4 GiB - 4) on purpose: whole-body datasets of about 3.5 GB must load, which the 2 GiB cap of would have prevented.
+// 4 GiB cap: whole-body ~3.5 GB datasets must load; do not lower it.
+// requested = min(adapter limit, cap): maxBufferSize <= 4 GiB, maxStorageBufferBindingSize <= 4 GiB - 4 (a multiple of 4
+// that fits a u32 byte size, as Dawn's / Vulkan's top tier does), so an adapter that reports 4 GiB - 4 or less gets exactly
+// its own limits, as before. No buffer the app allocates scales with these limits (blocks <= 96 MB, tiles <= 32 MB,
+// pool <= 256 MB); they only decide what is allowed. The ladder is walked only when requestDevice rejects:
+// 4 GiB -> 2 GiB -> 1 GiB -> no buffer limits (the WebGPU defaults, 256 MB / 128 MB) before the CPU / WebGL fallback.
 export const GPU_BUFFER_LIMIT_CAPS=[4*1024**3,2*1024**3,1024**3,0];
 export function capGpuBufferLimits(limits,cap){
  if(!(cap>0)){delete limits.maxBufferSize;delete limits.maxStorageBufferBindingSize;return limits}
@@ -43,6 +59,9 @@ export function gpuLimitInfoText(adapter,descriptor,retries=[]){
 }
 export function gpuDeviceRequestDescriptor(adapter,cap=GPU_BUFFER_LIMIT_CAPS[0]){
  const requiredFeatures=[];if(!gpuForceCompat&&adapter?.features?.has?.('core-features-and-limits'))requiredFeatures.push('core-features-and-limits');
+ // three.js clips the section in hardware
+ // (clip distances) only when the device has 'clip-distances'; this device never asked for it, so every clipped mesh
+ // fragment ran a discard (no early depth / hidden-surface removal on Apple GPUs). Asked for whenever the adapter has it.
  if(adapter?.features?.has?.('clip-distances'))requiredFeatures.push('clip-distances');
  if(!requiredFeatures.includes('core-features-and-limits')){const all={};for(const k in adapter?.limits||{}){const v=adapter.limits[k];if(typeof v==='number'&&Number.isFinite(v))all[k]=v}return{requiredFeatures,requiredLimits:capGpuBufferLimits(all,cap)}}
  const requiredLimits={};
@@ -171,6 +190,8 @@ export function installGpuErrorListener(device,role='compute'){
  if(!device||device.__vrlErrorListenerInstalled)return;
  try{
   device.__vrlErrorListenerInstalled=true;
+  // diagnostics for "createTexture: size is zero": record
+  // which texture and caller asked for a zero size; shown in the status bar
   const create=device.createTexture?.bind(device);
   if(create)device.createTexture=desc=>{
    const s=desc?.size,dims=Array.isArray(s)?s:[s?.width,s?.height??1,s?.depthOrArrayLayers??1];

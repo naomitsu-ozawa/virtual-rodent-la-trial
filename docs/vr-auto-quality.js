@@ -1,3 +1,9 @@
+// VR automatic quality: a degradation ladder for the Auto resolution.
+// Auto fell to 25 % and the picture became hard to see, worst with
+// complex fat. Order of degradation: resolution down to MID (0.7), then the
+// ray-march step 1 -> 1.5 -> 2 (the manual Detail setting is the lowest rung),
+// and only then resolution down to the floor. Recovery runs in reverse.
+// Pure logic (no THREE / DOM) so it can be tested with mocked timings.
 export const AUTO_MAX = 1;
 export const AUTO_MID = 0.7;
 export const AUTO_FLOORS = [0.5, 0.35, 0.25]; // settings.autoMin index: 最低 50 % (default) / 35 % / 25 %
@@ -6,6 +12,10 @@ export const STEP_LEVELS = [1, 1.5, 2];
 // so the 256³ copy of 512³ data marched at 0.425 of its own voxel = twice the samples of the 512 case). Hits are bisection-refined and
 // every colour / alpha contribution is per event (surface crossing, slice, cut face), not per step, so no opacity correction is needed.
 export const STEP_VOXELS = 0.85;
+// the VR menu (画質 tab, 刻み) switches the base step among these (voxels of the texture in use) while the session runs. The shader reads it as the stepSize uniform, so a switch
+// recompiles nothing; stepChoiceScale is the factor on the 0.85 base (exactly 1 for the default), and the quality rungs (STEP_LEVELS) multiply the chosen base as before.
+export const STEP_CHOICES = [0.85, 1, 1.25, 1.5];
+export const stepChoiceScale = i => (STEP_CHOICES[i] ?? STEP_VOXELS) / STEP_VOXELS;
 export const marchStep = (halfExt, dims) => Math.max(1e-5, STEP_VOXELS * Math.min(...[0, 1, 2].map(i => 2 * halfExt[i] / Math.max(1, dims[i]))));
 const OVER = 0.9;   // GPU time above this share of the frame budget counts as over
 const UNDER = 0.8;  // a move up needs the predicted time at or below this share (dead band 0.8 .. 0.9)

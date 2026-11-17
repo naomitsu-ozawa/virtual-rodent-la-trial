@@ -7,7 +7,7 @@ const vr = readFileSync('docs/vr-view.js', 'utf8'), sectionShade = readFileSync(
 const between = (s, a, b) => s.slice(s.indexOf(a) + a.length, s.indexOf(b, s.indexOf(a) + a.length));
 
 describe('the step / acceleration rule (docs/value-step.js)', () => {
-  it('the constants are the approved ones: press 10, repeat from 0.4 s every 0.1 s, 10 per step for the first 1 s then 100', () => {
+  it('the constants: press 10, repeat from 0.4 s every 0.1 s, 10 per step for the first 1 s then 100', () => {
     expect([STEP_PRESS, STEP_FAST, HOLD_DELAY_MS, HOLD_INTERVAL_MS, HOLD_SLOW_MS]).toEqual([10, 100, 400, 100, 1000]);
   });
   it('nothing repeats before 0.4 s; the first repeat is at 0.4 s, then one every 0.1 s', () => {

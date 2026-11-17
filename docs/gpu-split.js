@@ -1,4 +1,19 @@
-import { gpuPlatformOs } from './gpu-preference.js?v=20261110-build708';
+// GPU split: render on the display GPU, compute on the other GPU, ONLY for one hybrid case.
+// Pure (its only import is the pure gpu-preference.js), so unit tests load it without a DOM.
+//
+// Why: Chrome allocates every WebGPU "shared image" (canvas getCurrentTexture, copyExternalImageToTexture
+// from a canvas / ImageBitmap such as three.js CanvasTexture, importExternalTexture) with its OWN VkDevice, the display
+// GPU (Intel), and imports it into Dawn's device by opaque file descriptor. When Dawn's device is on the NVIDIA adapter that
+// import fails Dawn's size check ("Requested allocation size (X) is smaller than the image requires (Y)"). Plain
+// createTexture / createBuffer / writeTexture / writeBuffer / compute never take that path. So the app keeps compute on the
+// NVIDIA adapter (its own device, which never configures a canvas or imports an image) and gives the three.js renderer
+// and the volume renderer a separate device on the display (low-power, Intel) adapter. Chrome developers recommend the
+// integrated GPU for presenting on Linux hybrids. Scope: Linux only (the cause is Vulkan opaque-FD import; Windows / D3D12
+// shares across adapters by another mechanism that is not verified here).
+//
+// Handle only this combination (display = Intel, compute = NVIDIA, different GPUs). A single GPU, Mac, iPad,
+// Windows, or any uncertainty keeps the single shared device, i.e. the behaviour of builds up to 515.
+import { gpuPlatformOs } from './gpu-preference.js?v=20261117-build737';
 
 // 'nvidia' | 'intel' | 'amd' | 'apple' | 'software' | 'other' | '' (unknown). `parts` are the strings that name the GPU:
 // adapter.info.vendor / architecture / device / description, or the WebGL UNMASKED_VENDOR / UNMASKED_RENDERER.
