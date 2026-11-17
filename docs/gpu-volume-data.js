@@ -1,19 +1,19 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { beginSharedMpr3DPreview } from './mpr3d-overlay.js?v=20261110-build708';
-import { gpuStepTimes, gpuFilterRuntime, gpuCounts } from './gpu-compute.js?v=20261110-build708';
-import { gpuVolumeRefresh, updateVolumeFilterBadge, set3DBusy } from './three-status.js?v=20261110-build708';
-import { sourceVolume, volume, sceneState, currentLanguage, threeRenderMode, ipadGpuTargetSide, childSegments } from './state.js?v=20261110-build708';
-import { SEGMENT_PRESET_ORDER, gpuSegmentOrder, segmentEditState, segmentState, segmentHasProcessedMask, segmentAddsVoxels } from './segments.js?v=20261110-build708';
-import { request3DRender } from './scene3d.js?v=20261110-build708';
-import { footer, volumeCacheClearBtn } from './ui-shell.js?v=20261110-build708';
-import { subtractRunArrays, intersectRunArrays, unionRunArrays } from './run-length.js?v=20261110-build708';
-import { tr } from './i18n.js?v=20261110-build708';
-import { fmt, isTabletRuntime } from './utils.js?v=20261110-build708';
-import { setPlaneCacheProvider } from './plane-cache.js?v=20261110-build708';
-import { openVolumeCache, cacheKey, textureCacheHandle, pruneOtherFilterSettings } from './gpu-volume-cache.js?v=20261110-build708';
-import { datasetFingerprint } from './project-file.js?v=20261110-build708';
-import { getFilteredSourceAxialBlock, currentFilterSignature, volumeBlockDepth, volumeBlockBudget } from './source-filters.js?v=20261110-build708';
+import { beginSharedMpr3DPreview } from './mpr3d-overlay.js?v=20261117-build739';
+import { gpuStepTimes, gpuFilterRuntime, gpuCounts } from './gpu-compute.js?v=20261117-build739';
+import { gpuVolumeRefresh, updateVolumeFilterBadge, set3DBusy } from './three-status.js?v=20261117-build739';
+import { sourceVolume, volume, sceneState, currentLanguage, threeRenderMode, ipadGpuTargetSide, childSegments } from './state.js?v=20261117-build739';
+import { SEGMENT_PRESET_ORDER, gpuSegmentOrder, segmentEditState, segmentState, segmentHasProcessedMask, segmentAddsVoxels } from './segments.js?v=20261117-build739';
+import { request3DRender } from './scene3d.js?v=20261117-build739';
+import { footer, volumeCacheClearBtn } from './ui-shell.js?v=20261117-build739';
+import { subtractRunArrays, intersectRunArrays, unionRunArrays } from './run-length.js?v=20261117-build739';
+import { tr } from './i18n.js?v=20261117-build739';
+import { fmt, isTabletRuntime } from './utils.js?v=20261117-build739';
+import { setPlaneCacheProvider } from './plane-cache.js?v=20261117-build739';
+import { openVolumeCache, cacheKey, textureCacheHandle, pruneOtherFilterSettings } from './gpu-volume-cache.js?v=20261117-build739';
+import { datasetFingerprint } from './project-file.js?v=20261117-build739';
+import { getFilteredSourceAxialBlock, currentFilterSignature, volumeBlockDepth, volumeBlockBudget } from './source-filters.js?v=20261117-build739';
 export const gpuVolumeApplied={seriesId:null,signature:''};
 export function gpuVolumeDataSignature(){
  const id=(sourceVolume||volume)?.series?.id??null,applied=gpuVolumeApplied.seriesId===id?gpuVolumeApplied.signature:'';
@@ -148,6 +148,7 @@ export async function refreshGpuVolumeData(){
   // a GPU filter failure falls back to the CPU worker silently; say so
   const errNow=gpuFilterRuntime.lastError||'';if(errNow&&errNow!==errBefore)footer.textContent+=(currentLanguage==='ja'?' · GPUフィルター失敗→CPU: ':' · GPU filter failed -> CPU: ')+errNow}
  catch(e){preview?.finish(false);if(String(e.message||e)==='__SUPERSEDED__')footer.textContent=currentLanguage==='ja'?'3D再構築: 新しい設定でやり直し中':'3D rebuild: restarted with newer settings';if(String(e.message||e)!=='__SUPERSEDED__'){console.warn('GPU volume filter refresh failed.',e);
+  // show it (it was console-only)
   footer.textContent=(currentLanguage==='ja'?'3D再構築エラー（表示は途中まで更新）: ':'3D rebuild error (volume partly updated): ')+String(e?.message||e)+(gpuFilterRuntime.lastError?' · GPU: '+gpuFilterRuntime.lastError:'')}}
  finally{if(token===gpuVolumeRefresh.token){gpuVolumeRefresh.running=null;set3DBusy(false)}updateVolumeFilterBadge()}
 }
@@ -195,5 +196,7 @@ export function syncGpuVolumeEdits(v=sourceVolume||volume){
  catch(e){console.error(e);footer.textContent=(currentLanguage==='ja'?'GPU編集マスク更新エラー: ':'GPU edit mask error: ')+String(e.message||e);for(const key of processed)noteSegment3D(key,(currentLanguage==='ja'?'3D反映エラー: ':'3D error: ')+String(e.message||e),true)}
 }
 export function gpuVolumePlanOptions(){
+ // every device: 512 by default (Mac GPUs are no faster than an iPad Air for 3D); 768 or full size (0) are explicit choices.
+ // Device parity: full size is offered on every device with the caps that already exist (no new tablet cap: open point).
  return{maxTextureBytes:0,targetInPlane:ipadGpuTargetSide};
 }

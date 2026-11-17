@@ -4,9 +4,9 @@
 // this module has no UI dependencies and is unit-tested
 // (tests/unit/cpu-filters.test.js). The loops are the former app.js
 // apply* bodies, unchanged apart from reading params instead of sliders.
-import { frameYield } from './utils.js?v=20261110-build708';
-import { boxBlur3D } from './mask-ops.js?v=20261110-build708';
-import { anisotropicLambda, spacingWeights, spacingRatios, bilateralRadii, nlmRadii } from './filter-units.js?v=20261110-build708';
+import { frameYield } from './utils.js?v=20261117-build739';
+import { boxBlur3D } from './mask-ops.js?v=20261117-build739';
+import { anisotropicLambda, spacingWeights, spacingRatios, bilateralRadii, nlmRadii } from './filter-units.js?v=20261117-build739';
 export async function cpuGaussian3D(v,params,onProgress=()=>{}){
  const {columns:w,rows:h,slices:d}=v,n=w*h*d,src=v.data;
  const strength=params.strength;
@@ -213,6 +213,11 @@ export async function cpuUnsharpMask3D(v,params,onProgress=()=>{}){
  return{data:out};
 }
 export async function cpuSigmoid(v,params,onProgress=()=>{}){
+ // an S-curve on the HU values around the centre, within centre ± width/2:
+ // y = c + hw·tanh(g·t)/tanh(g), t = (x − c)/hw, g = 6·strength. Values below the centre move down, above it up, so a
+ // blurred border ramp becomes steep; the centre and every value outside the window keep their HU (no shift of the
+ // whole range — the pre-436 filter mapped the whole data range and moved e.g. −110 → +119 HU, which made 2D white);
+ // strength 0 changes nothing; monotonic.
  const src=v.data,out=new Float32Array(src.length);
  const centerValue=+params.center,hw=Math.max(1,(+params.width||300)/2),g=Math.max(0,+params.strength||0)*6,k=g>1e-4?1/Math.tanh(g):0;
  for(let i=0;i<src.length;i++){

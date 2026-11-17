@@ -1,3 +1,9 @@
+// VR automatic quality: a degradation ladder for the Auto resolution.
+// Auto fell to 25 % and the picture became hard to see, worst with
+// complex fat. Order of degradation: resolution down to MID (0.7), then the
+// ray-march step 1 -> 1.5 -> 2 (the manual Detail setting is the lowest rung),
+// and only then resolution down to the floor. Recovery runs in reverse.
+// Pure logic (no THREE / DOM) so it can be tested with mocked timings.
 export const AUTO_MAX = 1;
 export const AUTO_MID = 0.7;
 export const AUTO_FLOORS = [0.5, 0.35, 0.25]; // settings.autoMin index: 最低 50 % (default) / 35 % / 25 %

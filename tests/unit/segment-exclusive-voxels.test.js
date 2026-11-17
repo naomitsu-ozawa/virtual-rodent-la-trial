@@ -3,6 +3,10 @@ import { installDomStub, importApp } from '../helpers/dom-stub.js';
 import { morphMask, fillMaskHoles, removeSmallMaskComponents } from '../../docs/mask-ops.js';
 import { maskToAnalysisRuns, maskFromAnalysisRuns } from '../../docs/run-length.js';
 
+// . The app's rule: a segment with post-processing or
+// edits is a voxel taker whose FINAL voxels are subtracted from the lower segments voxel by voxel; plain segments still
+// take their range. This checks the real state code (segments.js: applyExclusiveRanges -> getProcessedSegmentMask /
+// getFinalSegmentRuns) against the full model: every active upper segment subtracted by voxels, ranges as the user set them.
 installDomStub();
 let S, R;
 beforeAll(async () => { S = await importApp('segments'); R = await importApp('segment-runs'); });

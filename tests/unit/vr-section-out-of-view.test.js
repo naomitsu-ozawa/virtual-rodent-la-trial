@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { frameOutOfView, pointInView, OUT_OF_VIEW_MARGIN, flingDecision, flingDebugLines, createOutOfViewTracker, outOfViewRelease, outOfViewNow, OUT_OF_VIEW_HOLD_MS, OUT_OF_VIEW_MIN_DIST_M } from '../../docs/vr-section-frame.js';
 import { VOLUME_FWD, VOLUME_DOWN } from '../../docs/vr-layout.js';
 
+// a section let go with its whole frame out of view is deleted whatever its speed or direction; inside the view the (loosened) throw decides.
 const src = readFileSync(new URL('../../docs/vr-view.js', import.meta.url), 'utf8');
 
 // two eyes 64 mm apart at the head, looking along -Z (yaw: turned to the left by yaw radians), a Quest-like ~100 degree vertical field
