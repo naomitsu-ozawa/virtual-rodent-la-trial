@@ -3,6 +3,10 @@ import { installDomStub, importApp } from '../helpers/dom-stub.js';
 import { maskFromAnalysisRuns } from '../../docs/run-length.js';
 import { nextDown } from '../../docs/segment-exclusive.js';
 
+// voxels that a higher-priority segment REMOVED (small-component removal; the same holds for the
+// air boundary, thin suppression and manual edits) must be free for the segments below it, voxels it ADDED (hole filling,
+// Closing) must not be in the lower ones, and what it keeps must not be in them either: "the higher segment wins, and what it
+// adds or removes also moves the segments below it". The state code (segments.js / segment-runs.js) is run for real.
 installDomStub();
 let S, R;
 beforeAll(async () => { S = await importApp('segments'); R = await importApp('segment-runs'); });
@@ -79,6 +83,8 @@ describe('what the higher segment removes or adds moves the segments below it', 
   });
 });
 
+// The case on the device: order bone (off) -> fat -> soft; fat removes a band next to air; that band must not be
+// left empty: the voxels of it inside soft's HU range belong to soft (soft's own air-boundary removal, if set, still applies).
 describe('air-boundary band removed from fat (bone off, fat above soft)', () => {
   const W = 16, H = 16, D = 16, N = W * H * D, idx = (x, y, z) => (z * H + y) * W + x;
   const body = (x, y, z) => x >= 3 && x < 13 && y >= 3 && y < 13 && z >= 3 && z < 13;

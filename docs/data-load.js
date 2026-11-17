@@ -1,54 +1,56 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { defaultSampleId } from './sample-registry.js?v=20261110-build708';
-import { SAMPLE_CACHE, sampleIndexUrl, sampleSliceUrl, sampleCacheKey } from './sample-sets.js?v=20261110-build708';
-import { mark3DStale, mark3DCurrent } from './three-state.js?v=20261110-build708';
-import { updateVolumeFilterBadge, set3DBusy, gpuVolumeRefresh } from './three-status.js?v=20261110-build708';
-import { three3DIsReady, waitThree3DReady, analysisRegions, currentLanguage, current3DVolume, volume, activeSeries, threeRenderMode, sceneState, sourceVolume, setActiveId, setActiveSeries, activeId, setSourceVolume, setVolume, setThreeRenderMode, ipadGpuTargetSide, setResidentGpuUploadSeriesId, setResidentMprReadbackDisabled, residentGpuUploadSeriesId, gpuPrewarmScheduled, gpuPrewarmIndex, setGpuPrewarmScheduled, incGpuPrewarmIndex, setFilterOrder, setCtRangeMode, setCtRangeProfile, ctRangeProfile, incSourceRenderRevision, setThreeDCancelRequested, setCurrent3DVolume, setMemoryGpuPreviewActive, incResidentMprEpoch, ctRangeMode, filterOrder, threeDDirty } from './state.js?v=20261110-build708';
-import { footer, resetFilterBtn, wc, ww, surfaceSmoothEnabled, surfaceSmoothStrength, planes, spikeHoleStrength, spikeHoleThreshold, nlmStrength, nlmSearchRadius, nlmPatchRadius, anisotropicStrength, anisotropicIterations, smoothingType, gaussianStrength, spatialPasses, sigmoidStrength, sigmoidCenter, sigmoidWidth, bilateralStrength, bilateralSpatial, bilateralIntensity, bilateralPasses, tvWeight, tvIterations, unsharpRadius, unsharpAmount, unsharpThreshold, list, selected, prog, volumeAnalysisToggle, threeLabel, state, renderModeToggle, gaussianBtn, spikeHoleBtn, nlmBtn, anisotropicBtn, sigmoidBtn, bilateralBtn, tvBtn, unsharpBtn, filterAddSelect, filterAddButton, ctRangeAuto, ctRangeFull, $, progLabel, bar, anisotropicKappa, tvEps } from './ui-shell.js?v=20261110-build708';
-import { commentsForProject, loadProjectComments, markCommentsSaved } from './comments.js?v=20261110-build708';
-import { normalizeAnalysisLabel, setRegionLabel } from './analysis-label.js?v=20261110-build708';
-import { resetUserState } from './event-fresh.js?v=20261110-build708';
-import { segmentVisibilityPlan } from './event-mode.js?v=20261110-build708';
-import { measurementsForProject, loadProjectMeasurements, markMeasurementsSaved } from './measurements.js?v=20261110-build708';
-import { compareFingerprints, resolveProjectMatch, resolveProjectMatchAsync, legacySpacingUpgrade, datasetFingerprint, decodeRuns, packProject, PROJECT_EXTENSION, encodeRuns } from './project-file.js?v=20261110-build708';
-import { SEGMENT_PRESET_ORDER, segmentState, segmentEditState, segmentNeedsVoxelMask, segmentEditGen, segmentExclusive, applyExclusiveRanges, commitExclusiveRanges, SEGMENT_PRESET_DEFAULTS, segmentShadeRanges, clearSegmentShadeRanges, requestShadeAuto, resetShadeAutoForDataset } from './segments.js?v=20261110-build708';
-import { shadeRangesToProject, shadeRangesFromProject } from './cap-shade.js?v=20261110-build708'; // the per-segment cut-face shading ranges the user set (saved in the project)
-import { materialKey } from './lighting.js?v=20261110-build708';
-import { FILTER_CATALOG_ORDER, addFilter, applyVolumeAfterFilterRebuild, invalidateSourceFilters, syncFilterControls, setFilterUnitControl, formatHU, applyFilterUnitRanges } from './filter-pipeline.js?v=20261110-build708';
-import { sourceRangeFromMetadata } from './dicom.js?v=20261110-build708';
-import { spacingCheckForProject, spacingWarningText, spacingWarningHtml as spacingHtml } from './slice-spacing.js?v=20261110-build708';
-import { sizeWarningHtml } from './vr-real-scale.js?v=20261110-build708';
-import { FILTER_UNITS, filterLegacyRange, resolveFilterParams } from './filter-units.js?v=20261110-build708';
-import { smoothingSync, applyDeviceSmoothing } from './settings.js?v=20261110-build708';
-import { setControlValue, applyCtRangeMode, removeSegmentPreset, addSegmentPreset, segmentControl, setControlChecked, clearAnalysisHighlight, scheduleSegment3D, updateSegmentOutputs, renderSegmentPresets, THIN_SLIDERS, configureThinSliders } from './segment-ui.js?v=20261110-build708';
-import { syncGpuVolumeEdits, gpuVolumeApplied, gpuVolumeTarget, gpuVolumePlanOptions, updateVolumeCacheControl, gpuVolumeDataSignature } from './gpu-volume-data.js?v=20261110-build708';
-import { renderAll, cancelSourceMprWarmup } from './mpr-render.js?v=20261110-build708';
-import { updateAnalysisEditorControls } from './edit-tools.js?v=20261110-build708';
-import { request3DRender } from './scene3d.js?v=20261110-build708';
-import { esc, fmt, isIPadRuntime, isTabletRuntime, niceCtStep, withTimeout } from './utils.js?v=20261110-build708';
-import { decode, prepareSourceMprCache, getDicomCodecModule, releaseDicomCodecWorkers, dicomCodecPoolSize } from './volume-io.js?v=20261110-build708';
-import { seriesNeedsNormalization, createFrameReader, normalizeSeries, releaseNormalizedExcept, NormalizeError, NORMALIZED_CAP_SMALL_DEVICE } from './dicom-normalize.js?v=20261110-build708';
-import { progress, clearMemoryFilterPreviewCache, surfaceEditsPending } from './rebuild-3d.js?v=20261110-build708';
-import { ensureMpr3DPreviewCache, syncMpr3DSliceSliders, syncMpr3DOverlayPresentation, disposeMprPlaneGroup } from './mpr3d-overlay.js?v=20261110-build708';
-import { tr } from './i18n.js?v=20261110-build708';
-import { setGpuComputeBackend, gpuFilterRuntime, gpuFilterPipeline } from './gpu-compute.js?v=20261110-build708';
+import { defaultSampleId } from './sample-registry.js?v=20261117-build738';
+import { SAMPLE_CACHE, sampleIndexUrl, sampleSliceUrl, sampleCacheKey, sampleSliceFileName, setKnownSamplePairs, memberIndexUrl, memberProjectUrl, memberSliceUrl, memberCacheKey } from './sample-sets.js?v=20261117-build738';
+import { samplePairsUrl, parseSamplePairs, readProjectDataset, probeSliceFile, findPartnerSeries } from './sample-pairs.js?v=20261117-build738';
+import { mark3DStale, mark3DCurrent } from './three-state.js?v=20261117-build738';
+import { updateVolumeFilterBadge, set3DBusy, gpuVolumeRefresh } from './three-status.js?v=20261117-build738';
+import { three3DIsReady, waitThree3DReady, analysisRegions, currentLanguage, current3DVolume, volume, activeSeries, threeRenderMode, sceneState, sourceVolume, setActiveId, setActiveSeries, activeId, setSourceVolume, setVolume, setThreeRenderMode, ipadGpuTargetSide, setResidentGpuUploadSeriesId, setResidentMprReadbackDisabled, residentGpuUploadSeriesId, gpuPrewarmScheduled, gpuPrewarmIndex, setGpuPrewarmScheduled, incGpuPrewarmIndex, setFilterOrder, setCtRangeMode, setCtRangeProfile, ctRangeProfile, incSourceRenderRevision, setThreeDCancelRequested, setCurrent3DVolume, setMemoryGpuPreviewActive, incResidentMprEpoch, ctRangeMode, filterOrder, threeDDirty } from './state.js?v=20261117-build738';
+import { footer, resetFilterBtn, wc, ww, surfaceSmoothEnabled, surfaceSmoothStrength, planes, spikeHoleStrength, spikeHoleThreshold, nlmStrength, nlmSearchRadius, nlmPatchRadius, anisotropicStrength, anisotropicIterations, smoothingType, gaussianStrength, spatialPasses, sigmoidStrength, sigmoidCenter, sigmoidWidth, bilateralStrength, bilateralSpatial, bilateralIntensity, bilateralPasses, tvWeight, tvIterations, unsharpRadius, unsharpAmount, unsharpThreshold, list, selected, prog, volumeAnalysisToggle, threeLabel, state, renderModeToggle, gaussianBtn, spikeHoleBtn, nlmBtn, anisotropicBtn, sigmoidBtn, bilateralBtn, tvBtn, unsharpBtn, filterAddSelect, filterAddButton, ctRangeAuto, ctRangeFull, $, progLabel, bar, anisotropicKappa, tvEps } from './ui-shell.js?v=20261117-build738';
+import { commentsForProject, loadProjectComments, markCommentsSaved } from './comments.js?v=20261117-build738';
+import { normalizeAnalysisLabel, setRegionLabel } from './analysis-label.js?v=20261117-build738';
+import { resetUserState } from './event-fresh.js?v=20261117-build738';
+import { segmentVisibilityPlan } from './event-mode.js?v=20261117-build738';
+import { measurementsForProject, loadProjectMeasurements, markMeasurementsSaved } from './measurements.js?v=20261117-build738';
+import { compareFingerprints, resolveProjectMatch, resolveProjectMatchAsync, legacySpacingUpgrade, datasetFingerprint, decodeRuns, packProject, PROJECT_EXTENSION, encodeRuns } from './project-file.js?v=20261117-build738';
+import { SEGMENT_PRESET_ORDER, segmentState, segmentEditState, segmentNeedsVoxelMask, segmentEditGen, segmentExclusive, applyExclusiveRanges, commitExclusiveRanges, SEGMENT_PRESET_DEFAULTS, segmentShadeRanges, clearSegmentShadeRanges, requestShadeAuto, resetShadeAutoForDataset } from './segments.js?v=20261117-build738';
+import { shadeRangesToProject, shadeRangesFromProject } from './cap-shade.js?v=20261117-build738'; // the per-segment cut-face shading ranges the user set (saved in the project)
+import { materialKey } from './lighting.js?v=20261117-build738';
+import { FILTER_CATALOG_ORDER, addFilter, applyVolumeAfterFilterRebuild, invalidateSourceFilters, syncFilterControls, setFilterUnitControl, formatHU, applyFilterUnitRanges } from './filter-pipeline.js?v=20261117-build738';
+import { sourceRangeFromMetadata } from './dicom.js?v=20261117-build738';
+import { spacingCheckForProject, spacingWarningText, spacingWarningHtml as spacingHtml } from './slice-spacing.js?v=20261117-build738';
+import { sizeWarningHtml } from './vr-real-scale.js?v=20261117-build738';
+import { FILTER_UNITS, filterLegacyRange, resolveFilterParams } from './filter-units.js?v=20261117-build738';
+import { smoothingSync, applyDeviceSmoothing } from './settings.js?v=20261117-build738';
+import { setControlValue, applyCtRangeMode, removeSegmentPreset, addSegmentPreset, segmentControl, setControlChecked, clearAnalysisHighlight, scheduleSegment3D, updateSegmentOutputs, renderSegmentPresets, THIN_SLIDERS, configureThinSliders } from './segment-ui.js?v=20261117-build738';
+import { syncGpuVolumeEdits, gpuVolumeApplied, gpuVolumeTarget, gpuVolumePlanOptions, updateVolumeCacheControl, gpuVolumeDataSignature } from './gpu-volume-data.js?v=20261117-build738';
+import { renderAll, cancelSourceMprWarmup } from './mpr-render.js?v=20261117-build738';
+import { updateAnalysisEditorControls } from './edit-tools.js?v=20261117-build738';
+import { request3DRender } from './scene3d.js?v=20261117-build738';
+import { esc, fmt, isIPadRuntime, isTabletRuntime, niceCtStep, withTimeout } from './utils.js?v=20261117-build738';
+import { decode, prepareSourceMprCache, getDicomCodecModule, releaseDicomCodecWorkers, dicomCodecPoolSize } from './volume-io.js?v=20261117-build738';
+import { seriesNeedsNormalization, createFrameReader, normalizeSeries, releaseNormalizedExcept, NormalizeError, NORMALIZED_CAP_SMALL_DEVICE } from './dicom-normalize.js?v=20261117-build738';
+import { progress, clearMemoryFilterPreviewCache, surfaceEditsPending } from './rebuild-3d.js?v=20261117-build738';
+import { ensureMpr3DPreviewCache, syncMpr3DSliceSliders, syncMpr3DOverlayPresentation, disposeMprPlaneGroup } from './mpr3d-overlay.js?v=20261117-build738';
+import { tr } from './i18n.js?v=20261117-build738';
+import { setGpuComputeBackend, gpuFilterRuntime, gpuFilterPipeline } from './gpu-compute.js?v=20261117-build738';
 import * as THREE from './vendor/three@0.186.0/build/three.webgpu.js';
-import { GPU_IDLE_PREWARM_KINDS } from './gpu-shaders.js?v=20261110-build708';
-import { filterState, currentFilterSignature } from './source-filters.js?v=20261110-build708';
-import { loadStat, loadStatTime } from './load-stats.js?v=20261110-build708'; // what the load did (cache hits, ms) for the VR switch report
-import { dispose } from './surface-mesh.js?v=20261110-build708';
-import { residentMprJobs } from './mpr-orthogonal.js?v=20261110-build708';
-import { ensureSegmentBaseRuns } from './segment-runs.js?v=20261110-build708';
-import { APP_VERSION, APP_BUILD } from './version.js?v=20261110-build708';
-import { askInline } from './inline-ask.js?v=20261110-build708';
-import { setBusySlot, reportBusyProgress, setBusyLabel } from './progress-modal.js?v=20261110-build708';
-import { analysisRegionsForProject, restoreAnalysisRegions, clearAllSegmentEdits, getAtlasProvenance, setAtlasProvenance } from './analysis-ops.js?v=20261110-build708';
-import { regionNameFromEntry, normalizeRegionAtlasId } from './region-name.js?v=20261110-build708';
-import { CHILD_PARENT_KEYS, childSegmentsForProject, childSrcFromEntry } from './child-segments.js?v=20261110-build708';
-import { installChildSegments, resetChildSegmentsForDataset } from './child-segments-ui.js?v=20261110-build708';
-import { resetLineProfileForDataset } from './line-profile-ui.js?v=20261110-build708';
-import { resetSegmentStyles, onDatasetChange } from './dataset-reset.js?v=20261110-build708';
+import { GPU_IDLE_PREWARM_KINDS } from './gpu-shaders.js?v=20261117-build738';
+import { filterState, currentFilterSignature } from './source-filters.js?v=20261117-build738';
+import { loadStat, loadStatTime } from './load-stats.js?v=20261117-build738'; // what the load did (cache hits, ms) for the VR switch report
+import { dispose } from './surface-mesh.js?v=20261117-build738';
+import { residentMprJobs } from './mpr-orthogonal.js?v=20261117-build738';
+import { ensureSegmentBaseRuns } from './segment-runs.js?v=20261117-build738';
+import { APP_VERSION, APP_BUILD } from './version.js?v=20261117-build738';
+import { askInline } from './inline-ask.js?v=20261117-build738';
+import { setBusySlot, reportBusyProgress, setBusyLabel } from './progress-modal.js?v=20261117-build738';
+import { analysisRegionsForProject, restoreAnalysisRegions, clearAllSegmentEdits, getAtlasProvenance, setAtlasProvenance } from './analysis-ops.js?v=20261117-build738';
+import { regionNameFromEntry, normalizeRegionAtlasId } from './region-name.js?v=20261117-build738';
+import { CHILD_PARENT_KEYS, childSegmentsForProject, childSrcFromEntry } from './child-segments.js?v=20261117-build738';
+import { installChildSegments, resetChildSegmentsForDataset } from './child-segments-ui.js?v=20261117-build738';
+import { restoreChildSegmentsState, restoreRegionState } from './event-restore.js?v=20261117-build738';
+import { resetLineProfileForDataset } from './line-profile-ui.js?v=20261117-build738';
+import { resetSegmentStyles, onDatasetChange } from './dataset-reset.js?v=20261117-build738';
 export function updateRenderModeControl(v=volume){
  updateVolumeFilterBadge();
  if(!renderModeToggle)return;
@@ -127,11 +129,15 @@ export function clear3DForSeriesChange(){
 // practice dataset hosted on this site (docs/demo/sample1, 512 DICOM slices
 // listed in index.json). Same-origin, so it also opens on a Meta Quest without typing a
 // URL. The browser HTTP cache keeps it for the next visit.
-export async function loadSampleDemo(setId=defaultSampleId()){
- loadPhase('練習データを取得中','practice data');progLabel.textContent='接続中…';bar.style.width='0%';
- const r=await fetch(sampleIndexUrl(setId),{credentials:'omit'});
+// the practice-data loading in three parts that take the set as an argument (src = {sliceUrl(name), cacheKey(name), fileName(name)}): the index (names), the slices (Files), and loadSampleDemo
+// below, which wires one plain set into them. Nothing here touches volume / activeSeries; the partner loading further down uses the same two functions.
+async function fetchSampleIndex(url){
+ const r=await fetch(url,{credentials:'omit'});
  if(!r.ok)throw new Error('Sample index: HTTP '+r.status);
  const names=(await r.json()).files||[];if(!names.length)throw new Error('Sample index is empty');
+ return names;
+}
+async function fetchSliceFiles(src,names,{onProgress=()=>{}}={}){
  // slices kept in Cache Storage (like the public demo), so a
  // second open reads them from disk instead of downloading 260 MB again;
  // cache problems fall back to the network
@@ -140,15 +146,90 @@ export async function loadSampleDemo(setId=defaultSampleId()){
  // the cache key does not contain the page path, so main and the
  // PR previews (same origin) share one copy; the write runs beside the read
  const puts=[];
- const lane=async()=>{while(next<names.length){const i=next++,url=new URL(sampleSliceUrl(setId,names[i]),location.href).href,key=sampleCacheKey(location.origin,setId,names[i]);
+ const lane=async()=>{while(next<names.length){const i=next++,url=new URL(src.sliceUrl(names[i]),location.href).href,key=src.cacheKey(names[i]);
   let res=null;try{res=cache?await cache.match(key):null}catch{res=null}
   if(res)cached++;
   else{res=await fetch(url,{credentials:'omit'});if(!res.ok)throw new Error(names[i]+': HTTP '+res.status);if(cache)puts.push(cache.put(key,res.clone()).catch(()=>{}))}
-  const b=await res.blob();bytes+=b.size;out[i]=new File([b],names[i]);done++;progress(done,names.length)}};
+  const b=await res.blob();bytes+=b.size;out[i]=new File([b],src.fileName(names[i]));done++;onProgress(done,names.length)}};
  await Promise.all(Array.from({length:6},lane));await Promise.all(puts);
+ return{files:out,bytes,cached,tSample};
+}
+// n738: the device's own copy of the two small files the last load of a practice dataset read from the site (index.json's names, project.vrlab's bytes), in a Cache Storage cache of its own. The loads
+// always read the site as before (nothing is served from this copy); it is read ONLY by the card marks of the event page (sampleDataSaved below, vr-view.js standardLevelCached with local), which must never go to the
+// network (the page shows / a card is pressed: no request for any other dataset). A copy that is missing or cannot be read = the mark cannot be judged = not shown. It is the version this device read last.
+const SAMPLE_LOCAL_CACHE='virtual-rodent-sample-local-v1';
+const localCopyKey=(origin,setId,file)=>new URL(sampleCacheKey(origin,setId,file),origin).href;
+export async function keepSampleLocalCopy(setId,file,bytes,{cacheStorage=globalThis.caches,origin=globalThis.location?.origin}={}){
+ try{if(!cacheStorage||!bytes)return;const cache=await withTimeout(cacheStorage.open(SAMPLE_LOCAL_CACHE),1500,null);if(cache)await cache.put(localCopyKey(origin,setId,file),new Response(bytes))}catch{/* no copy: the mark is not shown */}
+}
+// -> Uint8Array | null. Reads only: no cache is created, nothing is fetched.
+export async function sampleLocalCopy(setId,file,{cacheStorage=globalThis.caches,origin=globalThis.location?.origin}={}){
+ try{
+  if(!cacheStorage||!await cacheStorage.has(SAMPLE_LOCAL_CACHE))return null;
+  const cache=await withTimeout(cacheStorage.open(SAMPLE_LOCAL_CACHE),1500,null);if(!cache)return null;
+  const res=await cache.match(localCopyKey(origin,setId,file));return res?new Uint8Array(await res.arrayBuffer()):null;
+ }catch{return null}
+}
+// n738: are ALL the slices of practice dataset `setId` in Cache Storage (SAMPLE_CACHE, written by fetchSliceFiles above)? true only when every name of the dataset's index.json has its entry (a part of them is false); the names
+// are the device's copy of the index the last load read (sampleLocalCopy: never the network) unless `names` is given. A browser without Cache Storage, no such cache, no copy of the index, or an unknown set throws / returns false:
+// the caller shows nothing then. Reads only (a cache that does not exist is not created).
+export async function sampleDataSaved(setId,{cacheStorage=globalThis.caches,names=null,origin=globalThis.location?.origin}={}){
+ if(!cacheStorage||!await cacheStorage.has(SAMPLE_CACHE))return false;
+ const cache=await withTimeout(cacheStorage.open(SAMPLE_CACHE),1500,null);if(!cache)return false;
+ const have=new Set((await cache.keys()).map(r=>r.url));if(!have.size)return false;
+ let list=names;
+ if(!list){const b=await sampleLocalCopy(setId,'index.json',{cacheStorage,origin});if(!b)return false;list=JSON.parse(new TextDecoder().decode(b)).files||[]}
+ return list.length>0&&list.every(n=>have.has(new URL(sampleCacheKey(origin,setId,n),origin).href));
+}
+export async function loadSampleDemo(setId=defaultSampleId()){
+ loadPhase('練習データを取得中','practice data');progLabel.textContent='接続中…';bar.style.width='0%';
+ const names=await fetchSampleIndex(sampleIndexUrl(setId));
+ void keepSampleLocalCopy(setId,'index.json',new TextEncoder().encode(JSON.stringify({files:names}))); // n738: for the 「データ保存済み」 mark only (sampleDataSaved)
+ const {files:out,bytes,cached,tSample}=await fetchSliceFiles({sliceUrl:n=>sampleSliceUrl(setId,n),cacheKey:n=>sampleCacheKey(location.origin,setId,n),fileName:sampleSliceFileName},names,{onProgress:progress});
  loadStat('sampleFiles',names.length);loadStat('sampleCached',cached);loadStatTime('sampleMs',tSample);
  footer.textContent=tr('sampleDone')+' · '+names.length+' · '+fmt(bytes)+(cached?' · '+tr('sampleCached')+' '+cached:'');
  return out;
+}
+// ---- partner data (docs/sample-pairs.js): the second series of a dataset that has a partner folder. Read on demand only (nothing calls these while a dataset opens), no UI, no state:
+// they return what was found / the Files, and the caller decides what to do with them.
+let samplePairsRead=null;
+// docs/sample-pairs.json, read once (a missing / unreadable file = no partners at all)
+export function loadSamplePairs(){
+ return samplePairsRead||(samplePairsRead=(async()=>{
+  try{const r=await fetch(samplePairsUrl(),{credentials:'omit'});if(!r.ok)return{};const pairs=parseSamplePairs(await r.json());setKnownSamplePairs(pairs);return pairs}
+  catch{return{}}
+ })());
+}
+const partnerSource=(id,dir)=>({sliceUrl:n=>memberSliceUrl(id,dir,n),cacheKey:n=>memberCacheKey(location.origin,id,dir,n),fileName:sampleSliceFileName});
+// the partners of dataset `id` that really are a series of their own: [{id, dir, project, sub, names, firstFile}]. Reads sample-pairs.json, then per listed partner: its index.json, its .vrlab
+// (project.json inside) and the FIRST slice of each group of the index (nothing else). A partner that cannot be read or does not match its .vrlab (UID, slice count, rows x columns) is left out.
+export async function findSamplePartners(id){
+ const list=(await loadSamplePairs())[id]||[],found=[];
+ for(const {dir,project} of list){
+  try{
+   const names=await fetchSampleIndex(memberIndexUrl(id,dir));
+   const pr=await fetch(memberProjectUrl(id,dir),{credentials:'omit'});if(!pr.ok)continue;
+   const src=partnerSource(id,dir);
+   const pbytes=new Uint8Array(await pr.arrayBuffer()); // kept in the result: the .vrlab is read once (loadSamplePartnerProject hands it back)
+   const hit=await findPartnerSeries(names,readProjectDataset(pbytes),async name=>{
+    const file=(await fetchSliceFiles(src,[name])).files[0],meta=await probeSliceFile(file);
+    return meta&&{...meta,file};
+   });
+   if(hit)found.push({id,dir,project,...hit,projectBytes:pbytes});
+  }catch{/* this partner cannot be read: leave it out */}
+ }
+ return found;
+}
+// the slices of a partner found by findSamplePartners, as Files in index order (the first one is the file already read while checking). Throws when a slice cannot be read.
+export async function loadSamplePartnerFiles(partner,opts){
+ const {id,dir,names,firstFile}=partner,rest=await fetchSliceFiles(partnerSource(id,dir),firstFile?names.slice(1):names,opts);
+ return firstFile?[firstFile,...rest.files]:rest.files;
+}
+// the .vrlab of a partner found by findSamplePartners, as bytes (its segments and analysis results): the bytes read while it was checked, else read now. Throws when it cannot be read.
+export async function loadSamplePartnerProject(partner){
+ if(partner.projectBytes)return partner.projectBytes; // already read while the partner was checked
+ const {id,dir}=partner,r=await fetch(memberProjectUrl(id,dir),{credentials:'omit'});if(!r.ok)throw new Error('partner project: HTTP '+r.status);
+ return new Uint8Array(await r.arrayBuffer());
 }
 export const detectedSeries={list:[]};
 export function requestIPadSettingsTab(tab){
@@ -165,6 +246,14 @@ export function refreshSpacingWarning(){
  const badge=selected.querySelector('.ready-badge');
  if(badge)badge.insertAdjacentHTML('beforebegin',html);else selected.insertAdjacentHTML('beforeend',html);
 }
+// small series (<=256 MiB decoded, e.g. 256^3 / 128^3 crops, small atlas volumes) take the same source-backed GPU-volume path as large ones on EVERY runtime
+// (PC, Mac, iPad, Quest): the features that need the resident GPU volume (volume analysis, section cap in the volume view, VR / AR, the 3D C/S preview) only exist on that path.
+// Before, only a PC took it (Mac / iPad / Quest kept the in-memory decode): a small series opened on Quest had no volume rendering and "VR: open a DICOM series first".
+// The memory caps of the small devices are already applied to the GPU texture by gpuVolumePlanOptions() (a small series is far below them). Without a WebGPU device support() fails
+// and the series keeps the in-memory decode path, as before.
+// ONE open path: every series opens through openSourceBackedVolume, whatever its size and whether or not WebGPU is there (pixels come from the
+// files). Without WebGPU the page then uses the WebGL volume (webgl-volume.js) or the CPU routes that large series already use (MPR cache, CPU filters / regions / meshes).
+// The in-memory decode below (decode(), smallSeriesGpuVolume) is kept in place but is no longer reached; it is deleted in a separate change after the on-device tests.
 const ONE_OPEN_PATH=true;
 function smallSeriesGpuVolume(s){
  if(s.sourceBacked)return false;
@@ -430,7 +519,7 @@ export async function applyProject({project,files}){
  for(const e of project.analysis?.regions||[]){
   const keys=(e.segmentKeys||[]).filter(k=>SEGMENT_PRESET_ORDER.includes(k));if(!keys.length)continue;
   const bytes=files[e.runs];if(!bytes)throw new Error('missing '+e.runs);
-  analysis.push({key:e.key,segmentKeys:keys,color:Number(e.color),visible:e.visible!==false,selected:e.selected===true,merged:!!e.merged,groupId:e.groupId||null,label:normalizeAnalysisLabel(e.label)||undefined,name:regionNameFromEntry(e)||undefined,atlasId:normalizeRegionAtlasId(e.atlasId),runsBySlice:decodeRuns(bytes,dims)}); // the pinned label (projects before 523 have none)
+  analysis.push({key:e.key,segmentKeys:keys,color:Number(e.color),visible:e.visible!==false,hidden:e.hidden===true,selected:e.selected===true,merged:!!e.merged,groupId:e.groupId||null,label:normalizeAnalysisLabel(e.label)||undefined,name:regionNameFromEntry(e)||undefined,atlasId:normalizeRegionAtlasId(e.atlasId),runsBySlice:decodeRuns(bytes,dims)}); // the pinned label (projects before 523 have none)
  }
  setAtlasProvenance(project.atlasProvenance);
  // filters (replayed through the filter controls)
@@ -524,7 +613,9 @@ export function restoreProjectAnnotations(parsed){
   if(i<0)continue;
   const [e]=entries.splice(i,1);setRegionLabel(r,normalizeAnalysisLabel(e.label)); // no label in the file = unpinned
   {const nm=regionNameFromEntry(e);if(nm)r.name=nm;else delete r.name}
+  restoreRegionState(r,e); // (最初の状態に戻す = every saved state): the region's shown flag and colour too
  }
+ restoreChildSegmentsState(project.treeSegments); // the child segments: name, colour, shape shown, 色だけ消す, look, label (event-restore.js)
  // segment visibility: off first, then on (at most 4 shown); only what differs is touched (no needless 3D work)
  const plan=segmentVisibilityPlan(project.segments,segmentState,SEGMENT_PRESET_ORDER);
  for(const k of plan.off)setControlChecked(segmentControl('enabled',k),false);

@@ -3,6 +3,11 @@ import { readFileSync } from 'node:fs';
 import { gpuVendorKey, gpuAdapterVendorKey, gpuSplitDecision, gpuSplitCandidate, gpuSplitStatusParts, gpuIsVolumeLabel, gpuHybridStatusText, gpuStatusDetailed, webglDisplayGpu } from '../../docs/gpu-split.js';
 import { gpuPlatformOs, gpuEffectivePreference, gpuPreferenceSupported, gpuAdapterRequestOptions, gpuPreferenceInfoText, gpuEffectiveHybridMode, gpuHybridModeSupported } from '../../docs/gpu-preference.js';
 
+// GPU split (display Intel / compute NVIDIA hybrid on Linux only). Chrome 155 Linux allocates WebGPU shared images
+// (canvas, copyExternalImageToTexture, importExternalTexture) on the display GPU's VkDevice and imports them into Dawn's device
+// by opaque FD; on the NVIDIA device that import fails. Only that hybrid case is handled; single GPU, Mac and
+// iPad keep the single shared device of builds up to 515. gpu-split.js is pure and imported as is; the orchestration in
+// gpu-compute.js / scene-view.js is cut out of the sources (as in gpu-limit-caps.test.js) and run against fakes.
 const nav = (userAgent, platform, maxTouchPoints = 0) => ({ userAgent, platform, maxTouchPoints });
 const LINUX = nav('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/155 Safari/537.36', 'Linux x86_64');
 const WIN = nav('Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/155', 'Win32');

@@ -9,8 +9,8 @@
 // that another clipping section has cut away. A section whose intersection is outside the volume is skipped, never clamped.
 // Voxel rule: voxel i covers the fraction [i/n, (i+1)/n) of the box along its axis, so the index is floor(fraction * n); a point
 // outside [0,1) on any axis (the far face itself included) is NOT recorded: it is never moved into the volume.
-import { createComment, addComment, getComments, removeComment, restoreComment, updateCommentPosition, updateCommentColor, commentMatchesSeries } from './comments.js?v=20261110-build708';
-import { marchClassificationHitInfo } from './vr-pick.js?v=20261110-build708';
+import { createComment, addComment, getComments, removeComment, restoreComment, updateCommentPosition, updateCommentColor, commentMatchesSeries } from './comments.js?v=20261117-build738';
+import { marchClassificationHitInfo } from './vr-pick.js?v=20261117-build738';
 const T_MIN=1e-6,EDGE_EPS=1e-4;
 
 // t of the ray o + t*q on the plane, or null (parallel, or behind the origin)
@@ -245,6 +245,11 @@ export function resolveTriggerTarget(c={}){
  return c.canDrag?{kind:'empty',ref:null}:{kind:'none',ref:null};
 }
 
+// ---- a grab starts only where the hand's laser is on the thing ----
+// Both use the SAME hits as what is drawn: the volume hit is the one behind the laser's end dot (c.userData.volHit), the section is the one of the lit
+// (white) frame, i.e. resolveTriggerTarget kind 'section'. They are asked ONCE, when the grip / the trigger goes down; afterwards the hold goes on
+// by itself (the grab sets / the drag record), however the laser moves, until the button is released.
+// grip: the volume is taken only when this hand's laser is on (a shown segment of) the volume; rayOn = false: this hand has no laser (a hand pointing in 指差し mode)
 export const volumeGripAllowed=({rayOn=true,hit=null}={})=>!!rayOn&&!!hit;
 // trigger: the section this press may drag, from the target resolved at the press. {pl,rec} or null.
 //  - kind 'section' (frame band / number tag / the empty inside of a frame = the white glow): that section
@@ -389,6 +394,7 @@ export function createUndoStack({max=20}={}){
   push(op){if(!op)return;ops.push(op);if(ops.length>max)ops=ops.slice(ops.length-max)},
   pop(){return ops.length?ops.pop():null},
   clear(){ops=[]},
+  dropWhere(pred){ops=ops.filter(o=>!pred(o))}, // (the partner's steps go with the partner)
   get size(){return ops.length},
  };
 }

@@ -267,7 +267,7 @@ describe('marchStep (per-texture ray-march step)', () => {
     const src = readFileSync(new URL('../../docs/vr-view.js', import.meta.url), 'utf8');
     const ud = src.slice(src.indexOf('useData=i=>{'), src.indexOf('refreshEdits();', src.indexOf('useData=i=>{')));
     expect(ud).toContain('baseStep=marchStep(vd.halfExt,t.dims)');
-    expect(ud).toMatch(/material\.uniforms\.stepSize\.value=baseStep\*/);
+    expect(ud).toMatch(/material\.uniforms\.stepSize\.value=stepFor\(/); // stepFor = baseStep x the menu step choice x the rung
     expect(src).toContain('step:marchStep(vd.halfExt,vr.half.dims)'); // the half copy is made in the worker (vr-volume-prep.js), the step is set where it comes back (prepareVrData)
     expect(src).not.toMatch(/\*scale\*\.85/);
   });

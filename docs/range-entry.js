@@ -1,4 +1,15 @@
-import { clampRangeValue } from './utils.js?v=20261110-build708';
+// Slider wheel steps and typed values.
+//
+// Wheel: one mouse-wheel notch = one step of the slider (Shift: ten). A notch is a line / page event or a pixel event of
+// 50 px or more; smaller pixel events (trackpads) add up, one step per 42 px. Before 442 a notch moved about 1/110 of
+// the slider span (two ticks of span / 220), e.g. 40 HU on a CT range slider.
+//
+// Typing: a click / tap on the value shown next to a slider (the <output> in the slider's label) turns it into a number
+// field; Enter or leaving the field sets the slider (input + change, as a drag would), Escape cancels. A value outside
+// the slider's current span is clamped, except where a bounds hook widens it (the CT sliders: the data's full range).
+// Values shown 1-based ("257 / 512", slice positions) are typed 1-based; data-range-entry-invert marks a slider that runs
+// opposite to the value it shows.
+import { clampRangeValue } from './utils.js?v=20261117-build738';
 
 export const WHEEL_NOTCH_PX=50,WHEEL_SMOOTH_PX=42;
 // state {acc}: returns the signed number of steps for one wheel event (deltaMode 0 px, 1 line, 2 page)

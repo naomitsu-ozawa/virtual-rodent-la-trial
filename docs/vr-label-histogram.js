@@ -1,5 +1,23 @@
-import { HIST_MIN, HIST_BINS, HU_AXIS } from './histogram.js?v=20261110-build708';
-import { accToHist, createAcc, textureU16 } from './histogram-texture.js?v=20261110-build708';
+// VR HU分布: ONE histogram of the whole volume (x = HU, y = voxel count) whose every bin is a
+// stack of per-label counts, the label of a voxel being the one the VR volume really draws there. No guess: the label follows the very path the
+// VR shader takes for the data in use (vr-view.js segmentIndexAt), chosen by the caller from the live uniforms (vr-view.js histInput):
+//   - classification path (useCls: the <=256 grid, 詳細 cls on): P.cls (point-cls.js buildClsData, on the grid P.half || P.vd), per GPU slot one byte,
+//     >= 128 = inside. It already holds the segment's range in use (seg.min / max: the card priority of segment-exclusive.js applied), the
+//     processing mask (post-processing, edits, voxel takers above: vr-view.js buildEditMask) and the mask-only segments. The shader takes the FIRST
+//     shown slot whose byte is inside (segmentIndexFromQ).
+//   - HU path: the HU of the grid in use (P.vd or P.half) against each shown slot's range (segA = seg.min /
+//     max), a mask-only slot ignoring its range, and the processing mask texture (P.edit, on the 256 grid, sampled at the voxel centre with the
+//     texture's filter: trilinear, or nearest with 詳細 編集 nearest, >= 0.5 = allowed; off with 詳細 編集 off) - the first slot passing wins.
+//   - either way an analysis result (体積解析) colours that voxel when its colour belongs to the resolved slot's segment (regionColor: P.region =
+//     colour index 1..14 per voxel of the 256 grid, nearest; P.region.segs = the slot bits of each colour); no slot: unlabeled (gray).
+// Labels: 0 = unlabeled, 1 + s = segment of slot s (0..3), 5 + k = analysis colour k (0..13).
+// Counting: straight into HU bins, counts[label * HIST_BINS + lut[u16]] (lut = u16 -> HU bin, made once per pass with the same rounding
+// and clamping as histogram.js binValues), in a worker that gets one slice per message through a pool of transferred buffers; else on the main
+// thread in small row chunks. The main thread only copies slices (and turns 19 x 4096 bin counts into weighted histograms at the end).
+// Time slicing: before each unit of main-thread work (one slice copy, one chunk) the pass checks the time used in this frame plus the recent
+// cost of such a unit (EMA) against the frame budget and waits for the next frame first when it would not fit.
+import { HIST_MIN, HIST_BINS, HU_AXIS } from './histogram.js?v=20261117-build738';
+import { accToHist, createAcc, textureU16 } from './histogram-texture.js?v=20261117-build738';
 
 export const SLOTS = 4, REGION_COLORS = 14, LABELS = 1 + SLOTS + REGION_COLORS, UNLABELED = 0;
 export const UNLABELED_COLOR = '#8c969c';

@@ -1,9 +1,21 @@
-import { settings } from './app-settings.js?v=20261110-build708';
-import { tr } from './i18n.js?v=20261110-build708';
-import { TUTORIAL_MISSIONS, TUT_SAMPLE, TUT_INTRO, TUT_VOICE_PICK } from './tutorial-data.js?v=20261110-build708';
-import { createTutorialAudio } from './tutorial-audio.js?v=20261110-build708';
-import { createTutorialEngine } from './tutorial-engine.js?v=20261110-build708';
-import { EVENT_LEVELS } from './event-mode.js?v=20261110-build708';
+// チュートリアル 2D panel (設定 > 外観 switch -> a panel at the top of the データ panel, above the 体験会 level cards when both are on).
+// there is NO 2D panel at all (no list of steps, no current-step card n/N,
+// no 前へ / 次へ / このステップをスキップ / すべてスキップ / 最初から). The left pane keeps only 「体験会：レベルを選ぶ」. The tutorial is started by the topbar button 「チュートリアルを始める」 (or the Lv0 card) and goes on by the voice,
+// the lit buttons (the introduction) and, in VR / AR, the board of tutorial-vr.js. Every start is restartTutorial: from ステップ1, nothing resumed. continueTutorial is gone.
+// VR-ONLY: the tutorial is for VR/AR. The switch, the voice select and the panel appear only on a device where navigator.xr.isSessionSupported('immersive-vr') resolves true
+// (decided asynchronously; hidden until known; no navigator.xr / rejection / false = hidden). The saved setting is never rewritten.
+//
+// SHARED ENGINE: getTutorialEngine() is the ONE engine of the page. The VR module (tutorial-vr.js) must import it from here and never call createTutorialEngine itself:
+//   (import getTutorialEngine from this file)  const eng = getTutorialEngine();  eng.subscribe(snap => ...)
+// The instance is kept on globalThis.__vrlTutorialEngine, so it stays single even when the module is loaded under two ?v= URLs.
+// Signals: the first getTutorialEngine() also wires document/window 'vrl-tut-signal' ({detail:{kind,count?}}) to engine.onSignal (once; a signal seen on both is counted once).
+// A module that wires signals itself must set globalThis.__vrlTutSignalWired=true BEFORE the first getTutorialEngine() call.
+import { settings } from './app-settings.js?v=20261117-build738';
+import { tr } from './i18n.js?v=20261117-build738';
+import { TUTORIAL_MISSIONS, TUT_SAMPLE, TUT_INTRO, TUT_VOICE_PICK } from './tutorial-data.js?v=20261117-build738';
+import { createTutorialAudio } from './tutorial-audio.js?v=20261117-build738';
+import { createTutorialEngine } from './tutorial-engine.js?v=20261117-build738';
+import { EVENT_LEVELS } from './event-mode.js?v=20261117-build738';
 
 // the switch (設定 > 外観 > チュートリアル) off = the engine ignores every signal (nothing advances, nothing is saved); on again = as before
 // true while the tutorial UI is live (the switch is on AND the device supports VR): the Lv0 card of 体験会 acts as the tutorial only then (event-mode-ui.js)

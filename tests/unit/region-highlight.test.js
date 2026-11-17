@@ -86,12 +86,12 @@ describe('region-highlight: the wiring (source checks)', () => {
     expect(vr).not.toMatch(/a\[o\+3\]=c\[/);
   });
   it('vr-view.js: the table is rewritten only when the highlighted result changes', () => {
-    expect(vr).toContain('if(rid===highlightRid)return;highlightRid=rid;');
-    expect(vr).toContain('setRegionHighlight(hlTracker.update(hh,true))');
+    expect(vr).toContain('if(rid===highlightRid&&crid===highlightChildRid)return;highlightRid=rid;highlightChildRid=crid;');
+    expect(vr).toContain('setRegionHighlight(hlTracker.update(hh,true),childList.length?hlChildTracker.update(hc,true):0)');
   });
   it('vr-view.js: the pinned card (analysis state only) wins; the hover is any shown result under the laser, pinned or not', () => {
     expect(vr).toContain('pinOk=analysisOn()');
-    expect(vr).toContain('hover=hrid||0;');
+    expect(vr).toContain('for(const rid of x.userData.hrids)if(rid>0)hover=rid;else hoverC=rid;');
     expect(vr).not.toContain('hover=hrid&&!pins.has(hrid)');
   });
   it('comment-3d.js: the label hover drives the volume\'s temporary focus; released on every redraw check', () => {
