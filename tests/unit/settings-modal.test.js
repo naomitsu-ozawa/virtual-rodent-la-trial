@@ -44,6 +44,16 @@ describe('settings-ui: #settings-open always opens the real modal', () => {
   });
 });
 
+describe('設定 > 描画: 重なったラベルの奥側 (labelOverlap, the device setting shared with the VR menu)', () => {
+  const shell = SRC('ui-shell.js'), st = SRC('settings-ui.js');
+  it('the row is in the 描画 panel with the three modes, and is bound / synced like the other device settings', () => {
+    const render = shell.slice(shell.indexOf('data-settings-panel="render"'), shell.indexOf('data-settings-panel="cache"'));
+    expect(render).toContain('id="set-label-overlap"');
+    for (const v of ['keep', 'always', 'many']) expect(render).toContain('<option value="' + v + '" data-i18n=');
+    expect(st).toContain("bind('set-label-overlap','labelOverlap');"); expect(st).toContain("put('set-label-overlap',normalizeLabelOverlap(v.labelOverlap));");
+  });
+});
+
 describe('the rail 設定 entry and the dialog markup (source)', () => {
   const ws = SRC('workspace-ui.js'), shell = SRC('ui-shell.js'), st = SRC('settings-ui.js'), ev = SRC('event-mode-ui.js'), css = SRC('style.css');
   it('no prefs drawer panel, no embedded settings, no event-tab filter: the 設定 entry is a button that presses #settings-open', () => {

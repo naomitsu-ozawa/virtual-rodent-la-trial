@@ -1,15 +1,15 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { gpuStagesSupported, runGpuSourceFilters, gpuFilterRuntime, setGpuComputeBackend, addGpuStepTime } from './gpu-compute.js?v=20261110-build708';
-import { sourceVolume, filterOrder } from './state.js?v=20261110-build708';
-import { ww, spikeHoleStrength, spikeHoleThreshold, nlmStrength, nlmSearchRadius, nlmPatchRadius, anisotropicStrength, anisotropicKappa, anisotropicIterations, smoothingType, gaussianStrength, spatialPasses, sigmoidStrength, sigmoidCenter, sigmoidWidth, bilateralStrength, bilateralSpatial, bilateralIntensity, bilateralPasses, tvWeight, tvEps, tvIterations, unsharpRadius, unsharpAmount, unsharpThreshold } from './ui-shell.js?v=20261110-build708';
-import { frameYield, isTabletRuntime, isDesktopRuntime } from './utils.js?v=20261110-build708';
-import { isNativeDicomTransferSyntax } from './dicom.js?v=20261110-build708';
-import { storedLayout, readStored } from './stored-bits.js?v=20261110-build708';
-import { decodeSourceSlice, sourceSliceCache } from './volume-io.js?v=20261110-build708';
-import { cacheKey } from './gpu-volume-cache.js?v=20261110-build708';
-import { isCacheablePlane, planeCacheInfo, planeCacheKey, loadCachedPlane, storeCachedPlane, createPlaneWriteQueue, planeCacheStats, planeCacheProvider } from './plane-cache.js?v=20261110-build708';
-import { sourceFilterSignature as signatureOf, withSpacingWeights } from './filter-units.js?v=20261110-build708';
+import { gpuStagesSupported, runGpuSourceFilters, gpuFilterRuntime, setGpuComputeBackend, addGpuStepTime } from './gpu-compute.js?v=20261118-build743';
+import { sourceVolume, filterOrder } from './state.js?v=20261118-build743';
+import { ww, spikeHoleStrength, spikeHoleThreshold, nlmStrength, nlmSearchRadius, nlmPatchRadius, anisotropicStrength, anisotropicKappa, anisotropicIterations, smoothingType, gaussianStrength, spatialPasses, sigmoidStrength, sigmoidCenter, sigmoidWidth, bilateralStrength, bilateralSpatial, bilateralIntensity, bilateralPasses, tvWeight, tvEps, tvIterations, unsharpRadius, unsharpAmount, unsharpThreshold } from './ui-shell.js?v=20261118-build743';
+import { frameYield, isTabletRuntime, isDesktopRuntime } from './utils.js?v=20261118-build743';
+import { isNativeDicomTransferSyntax } from './dicom.js?v=20261118-build743';
+import { storedLayout, readStored } from './stored-bits.js?v=20261118-build743';
+import { decodeSourceSlice, sourceSliceCache } from './volume-io.js?v=20261118-build743';
+import { cacheKey } from './gpu-volume-cache.js?v=20261118-build743';
+import { isCacheablePlane, planeCacheInfo, planeCacheKey, loadCachedPlane, storeCachedPlane, createPlaneWriteQueue, planeCacheStats, planeCacheProvider } from './plane-cache.js?v=20261118-build743';
+import { sourceFilterSignature as signatureOf, withSpacingWeights } from './filter-units.js?v=20261118-build743';
 export const memoryFilterPreviewCache={map:new Map(),bytes:0};
 export const filterState={spikeHole:false,nlm:false,anisotropic:false,gaussian:false,sigmoid:false,bilateral:false,tv:false,unsharp:false};
 export function sourceSliceCacheLimit(){return isTabletRuntime()?192*1024*1024:256*1024*1024}
@@ -259,6 +259,9 @@ function planeCacheEnqueue(series,signature,p,idx,values){
 // each halo (gaussian x4: 16 slices read per 8 kept, 24 tiles per block).
 export function volumeBlockBudget(){
  const cap=Number(gpuFilterRuntime.device?.limits?.maxStorageBufferBindingSize)||128*1024*1024;
+ // 256 MB blocks made a Mac swap heavily (block, two GPU
+ // buffers, readback and copies are alive at once; Mac GPU memory is system
+ // RAM). 96 MB everywhere: ~15 kept slices of 1024x1024, no xy tiling.
  return Math.min(cap,96*1024*1024);
 }
 export function volumeBlockDepth(series){

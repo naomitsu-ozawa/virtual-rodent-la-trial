@@ -9,8 +9,14 @@ export const PLANE_COLORS = [0xf2d27a, 0x8ec5ff, 0xf5a3c7, 0x9be3b0, 0xc4a8ff, 0
 // the colour of the next plane: the first palette colour no plane uses (a palette of 10 for at most 10 planes: always one free)
 export const nextPlaneColor = usedColors => { const used = new Set(usedColors); return PLANE_COLORS.find(c => !used.has(c)) ?? PLANE_COLORS[0]; };
 
+// The frame (outline, arrow, number tag) is depth tested with the volume's written depth when the GPU occlusion is on (「実際に隠す」, vr-depth.js gpuOcclusionActive): the part of
+// the frame behind tissue is not drawn (no ghost). It stays on top (no depth test) while it is operable: lit = the laser is on its band / tag, or it is
+// grabbed / being dragged (the glow is shown then). Without the GPU occlusion (「薄くする」, no standard depth) it is always drawn on top, as before.
+// The frame lies ON the cut plane and the volume writes the cut face depth pushed behind the plane (vr-depth.js depthBias), so the part of the frame on the cut face passes the test.
 export const frameDepthTest = (occlusion, lit) => !!occlusion && !lit;
 
+// the arrow is drawn ONLY while its plane is lit (the laser on its band / tag) or grabbed,
+// always on top then (own material, no depth test), and short (ARROW_LEN m, was 0.09: the frame is 0.24 m wide). It fades in / out over ARROW_FADE_S instead of popping. arrowFade: the opacity 0..1 after dt seconds.
 export const ARROW_LEN = 0.04, ARROW_FADE_S = 0.15, ARROW_FLASH_MS = 1000; // ARROW_FLASH_MS: after 「切り口反転」 the arrow shows this long (the laser is on the menu, the plane is not lit)
 export const arrowFade = (op, lit, dt) => Math.min(1, Math.max(0, op + (lit ? 1 : -1) * Math.max(0, dt) / ARROW_FADE_S));
 // drawn when the one-side cut (settings.cut === 2) is on for a clipping plane and the fade has not run out
@@ -30,6 +36,20 @@ export function sectionPage(count, page = 0, per = SECTION_ROWS_PER_PAGE) {
 // the page that holds plane index i
 export const pageOfPlane = (i, per = SECTION_ROWS_PER_PAGE) => Math.max(0, Math.floor(i / per));
 
+// ---- delete a section by throwing it away, with a few seconds of 「元に戻す」 ----
+// Fling = release the trigger while the dragged section frame moves fast AWAY from the volume. Pure helpers: no three.js, no DOM (vr-view.js samples and applies the result).
+// what is measured is the FRAME (its centre in world metres), not the controller. A section is dragged by the laser and follows
+// the hand rigidly with the hand as the pivot (vr-point.js sectionFollowStep), usually 0.4-1 m down the laser: a throw is mostly a wrist flick, the controller itself moves
+// < 1 m/s while the frame sweeps at 3-6 m/s. And the outward axis starts at the volume centre and goes to the FRAME: the hand is between the viewer and the volume, so
+// "centre -> hand" pointed back at the viewer and every forward / sideways throw read as 'inward'.
+// Thresholds (named so they can be tuned on the headset; ?debug shows the measured values at each release):
+//   FLING_SPEED_MPS  1.0 m/s peak frame speed in the last FLING_WINDOW_MS (a careful drag moves the frame at 0.2-0.8 m/s, a throw at 2-6 m/s;: 1.5 -> 1.0: a
+//                    throw had to go back past the shoulder to delete)
+//   FLING_WINDOW_MS  200 ms before the release: the trigger is usually let go 50-150 ms after the fastest part of the flick
+//   FLING_MIN_SPAN_MS  30 ms: each speed is taken over at least this long (2-3 frames at 72-90 Hz) so one jittery frame cannot make a throw
+//   FLING_STALE_MS   120 ms: no frame sample this close to the release = no estimate (the release event comes one frame after the last sample; a heavy frame on Quest can take 30-60 ms)
+//   FLING_COS        0.26 = the velocity must be within ~75 degrees of the outward axis (volume centre -> the frame at the release): a push into the volume never deletes
+//   FLING_MIN_RADIUS_M  a frame closer than this to the volume centre has no usable outward axis: the head -> frame direction (away from the viewer) is used instead
 export const FLING_SPEED_MPS = 1.0, FLING_WINDOW_MS = 200, FLING_MIN_SPAN_MS = 30, FLING_STALE_MS = 120, FLING_COS = 0.26, FLING_MIN_RADIUS_M = 0.03;
 export const FLING_FADE_S = 0.3, FLING_MAX_FLY_MPS = 4, FLING_UNDO_MS = 5000; // fly-off / fade time, speed cap of the flying frame, how long 「元に戻す」 stays
 export const FLING_DEBUG_MS = 8000; // ?debug / デバッグモード: how long the measured values of the last release stay on screen
@@ -73,6 +93,10 @@ export function flingDecision({ v, from, center, head = null, blocked = false, m
   if (!axis) return { fling: false, reason: 'no-axis', speed, cos: 0 };
   return cos >= minCos ? { fling: true, reason: 'fling', speed, cos } : { fling: false, reason: 'inward', speed, cos };
 }
+// a section let go with the whole frame OUT OF VIEW is deleted whatever its speed / direction (thrown behind the shoulder; the loosened throw above still
+// decides inside the view). points: world points of the frame ({x,y,z}: its 4 corners, plus its centre so a frame held so close that it covers the view is never "out");
+// views: world -> clip matrices (16 numbers, column-major as three.js Matrix4.elements = projection * view) of the XR eyes. A point is in a view when it is in front of the eye and
+// inside the eye's frustum widened by `margin` (NDC: 0.1 = 10 % each side); near / far are not judged. No points or no views (no XR camera) = never out of view.
 export const OUT_OF_VIEW_MARGIN = 0.1;
 export function pointInView(p, m, margin = OUT_OF_VIEW_MARGIN) {
   const w = m[3] * p.x + m[7] * p.y + m[11] * p.z + m[15];

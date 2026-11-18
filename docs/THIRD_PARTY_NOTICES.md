@@ -6,7 +6,7 @@ The app loads **no code from any CDN or external host**. Every third-party libra
 
 | Package | Version | Licence | Used for |
 | --- | --- | --- | --- |
-| three | 0.186.0 | MIT | 3D rendering (WebGPU / WebGL) |
+| three | 0.187.0 | MIT | 3D rendering (WebGPU / WebGL) |
 | dicom-parser | 1.8.21 | MIT | DICOM parsing |
 | fflate | 0.8.2 | MIT | ZIP / deflate (project files, crop export) |
 | @cornerstonejs/dicom-image-loader | 5.10.8 | MIT | Compressed-DICOM decoders (RLE, JPEG baseline, JPEG lossless, JPEG-LS, JPEG 2000, HTJ2K); only `dist/esm/shared/decoders` is used |
@@ -16,12 +16,12 @@ The app loads **no code from any CDN or external host**. Every third-party libra
 | @cornerstonejs/codec-libjpeg-turbo-8bit | 1.2.4 | ISC in package.json, MIT text in its LICENSE file | JPEG baseline 8-bit codec (WebAssembly build of libjpeg-turbo) |
 | jpeg-lossless-decoder-js | 2.1.2 | MIT | JPEG lossless decoder (JavaScript) |
 
-### three 0.186.0
+### three 0.187.0
 
 - Licence: MIT
 - Source: https://github.com/mrdoob/three.js
 - Used for: 3D rendering (WebGPU / WebGL)
-- Files: `docs/vendor/three@0.186.0/build/three.core.js`, `three.module.js`, `three.webgpu.js` (the package files, unmodified)
+- Files: `docs/vendor/three@0.187.0/build/three.core.js`, `three.module.js`, `three.tsl.js`, `three.webgpu.js` (the package files, unmodified)
 
 ```text
 The MIT License

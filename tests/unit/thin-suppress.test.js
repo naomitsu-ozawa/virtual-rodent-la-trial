@@ -83,6 +83,8 @@ describe('thin-suppress', () => {
         expect([...suppressThinBox(seg, ext, w, h, d, sp, opts)]).toEqual([...suppressThinBoxEdt(seg, ext, w, h, d, sp, opts)]);
   });
 
+  // real data: the fat range lies below -500, so a fixed HU air threshold
+  // put all fat on the air side; air is now "below the segment"
   it('A uses the segment lower bound as the air threshold', () => {
     const w = 12, h = 12, n = w * h, values = new Float32Array(n).fill(-1000);
     for (let y = 2; y < 10; y++) for (let x = 2; x < 10; x++) values[y * w + x] = -700;

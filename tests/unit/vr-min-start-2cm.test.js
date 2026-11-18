@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { startHolderScale, tutorialHolderScale, scaleLimits, displayedLongM, realMagnification, clampScale, realHolderScale, isOversize, NORM_LONG, MIN_START_LONG_M } from '../../docs/vr-real-scale.js';
 
+// data whose real longest side is under 5 cm starts enlarged to 5 cm (VR start and "back to front"); 5 cm and above is unchanged.
 const FB = 0.165 / NORM_LONG;
 // the start as it was before this change
 const oldStart = (longMm, fb, mag = 1) => {

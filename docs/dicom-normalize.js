@@ -11,10 +11,11 @@
 // would be larger than the cap of a small device after normalisation.
 // Unit-tested in tests/unit/dicom-normalize.test.js.
 import dicomParser from './vendor/dicom-parser@1.8.21/index.js';
-import { COMPRESSED_DICOM_TRANSFER_SYNTAXES, encapsulatedFrameBytes, dicomImageFrameInfo } from './dicom.js?v=20261110-build708';
-import { DEFLATED_TS, RLE_TS, dicomInflater, rleDecodeFrame } from './dicom-native-codecs.js?v=20261110-build708';
+import { COMPRESSED_DICOM_TRANSFER_SYNTAXES, encapsulatedFrameBytes, dicomImageFrameInfo } from './dicom.js?v=20261118-build743';
+import { DEFLATED_TS, RLE_TS, dicomInflater, rleDecodeFrame } from './dicom-native-codecs.js?v=20261118-build743';
 
 export const NORMALIZED_TS = '1.2.840.10008.1.2.1'; // Explicit VR Little Endian
+// the cap of the normalised size on a Quest / tablet / phone (the Blobs live in RAM)
 export const NORMALIZED_CAP_SMALL_DEVICE = 512 * 1024 * 1024;
 export const DEFAULT_NORMALIZE_CONCURRENCY = 4;
 
