@@ -192,21 +192,21 @@ describe('renderer: the mask texture follows setEditRuns', () => {
     expect(editMaskBit(up.words, L, plane(4), 5, 2, 1)).toBe(true);
   });
   it('a re-sync with the same edits keeps the texture; a changed edit rebuilds it; clearing drops it', async () => {
-    const { r, log } = fakeRenderer(dims);
+    const { r, log } = fakeRenderer(dims), masks = () => log.textures.filter(t => t.desc.label === 'VRL edit mask'); // the mask textures only (the smoothed edit field, 'VRL edit field', is a texture of its own)
     r.setEditRuns(edits(), ORDER, v); await flush();
     r.setEditRuns(edits(), ORDER, v); await flush();
-    expect(log.textures).toHaveLength(1);
+    expect(masks()).toHaveLength(1);
     expect(r.editMaskUniform()[0]).toBeGreaterThan(0);
     const changed = edits(); changed.fat.runs = sliceRuns(2, { 0: [0, 0, 38], 1: [2, 10, 12] });
     r.setEditRuns(changed, ORDER, v);
-    expect(log.textures).toHaveLength(2);
-    expect(log.textures[0].destroy).toHaveBeenCalled();
+    expect(masks()).toHaveLength(2);
+    expect(masks()[0].destroy).toHaveBeenCalled();
     await flush();
     expect(r.editMaskUniform()[0]).toBeGreaterThan(0);
     r.setEditRuns({}, ORDER, v);
     expect(r.editMaskTexture).toBeNull();
     expect(r.editMaskUniform()).toEqual([0, 0]);
-    expect(log.textures[1].destroy).toHaveBeenCalled();
+    expect(masks()[1].destroy).toHaveBeenCalled();
   });
   it('row buffers replaced elsewhere (clearEditRuns) switch the shader back to the row search', async () => {
     const { r } = fakeRenderer(dims);
