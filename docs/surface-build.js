@@ -1,30 +1,30 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { mark3DStale, mark3DCurrent } from './three-state.js?v=20261110-build708';
-import { set3DBusy } from './three-status.js?v=20261110-build708';
-import { sceneState, deferAutomatic3D, threeDCancelRequested, currentLanguage, analysisEditTool, threeRenderMode, current3DVolume, volume, incSourceRenderRevision, sourceRenderRevision, sectionViewOpen, sectionViewPlane } from './state.js?v=20261110-build708';
-import { request3DRender } from './scene3d.js?v=20261110-build708';
-import { threeLabel, footer, surfaceSmoothStrength } from './ui-shell.js?v=20261110-build708';
-import { surfaceSmoothingActive } from './settings.js?v=20261110-build708';
-import { frameYield, isDesktopRuntime } from './utils.js?v=20261110-build708';
-import { gpuFilterRuntime, setGpuComputeBackend, ensureGpuFilterDevice, runGpuSourceFilters, gpuStagesSupported } from './gpu-compute.js?v=20261110-build708';
-import { setProcessingBusy } from './busy.js?v=20261110-build708';
-import { SEGMENT_PRESET_ORDER, segmentEditState, segmentEditActive, segmentState, segmentHasProcessedMask } from './segments.js?v=20261110-build708';
-import { isChildKey } from './segment-look.js?v=20261110-build708';
-import { dispose, buildEditableRunsGroup, geometryFromSourcePositions } from './surface-mesh.js?v=20261110-build708';
-import { SmoothedSurfaceStream, smoothChunkHalo } from './smooth-chunks.js?v=20261110-build708';
-import { smoothMethod } from './smooth-workers.js?v=20261110-build708';
+import { mark3DStale, mark3DCurrent } from './three-state.js?v=20261118-build743';
+import { set3DBusy } from './three-status.js?v=20261118-build743';
+import { sceneState, deferAutomatic3D, threeDCancelRequested, currentLanguage, analysisEditTool, threeRenderMode, current3DVolume, volume, incSourceRenderRevision, sourceRenderRevision, sectionViewOpen, sectionViewPlane } from './state.js?v=20261118-build743';
+import { request3DRender } from './scene3d.js?v=20261118-build743';
+import { threeLabel, footer, surfaceSmoothStrength } from './ui-shell.js?v=20261118-build743';
+import { surfaceSmoothingActive } from './settings.js?v=20261118-build743';
+import { frameYield, isDesktopRuntime } from './utils.js?v=20261118-build743';
+import { gpuFilterRuntime, setGpuComputeBackend, ensureGpuFilterDevice, runGpuSourceFilters, gpuStagesSupported } from './gpu-compute.js?v=20261118-build743';
+import { setProcessingBusy } from './busy.js?v=20261118-build743';
+import { SEGMENT_PRESET_ORDER, segmentEditState, segmentEditActive, segmentState, segmentHasProcessedMask } from './segments.js?v=20261118-build743';
+import { isChildKey } from './segment-look.js?v=20261118-build743';
+import { dispose, buildEditableRunsGroup, geometryFromSourcePositions } from './surface-mesh.js?v=20261118-build743';
+import { SmoothedSurfaceStream, smoothChunkHalo } from './smooth-chunks.js?v=20261118-build743';
+import { smoothMethod } from './smooth-workers.js?v=20261118-build743';
 // the GPU path of the surface smoothing registers itself with smooth-workers.js
-import './smooth-gpu.js?v=20261110-build708';
-import { renderAll } from './mpr-render.js?v=20261110-build708';
-import { getFinalSegmentRuns, decodeSourceSegmentMasks } from './segment-runs.js?v=20261110-build708';
-import * as THREE from './vendor/three@0.186.0/build/three.webgpu.js';
-import { createSurfaceMaterial } from './mesh-material.js?v=20261110-build708';
-import { updateSectionClipPlaneWorld } from './section-view.js?v=20261110-build708';
-import { makeVolume3DCoordinates, Float32FaceBuilder, appendSourceFacesFromCompactTile, makeSource3DCoordinates, appendSourceSliceFacesFast } from './mesh-geometry.js?v=20261110-build708';
-import { fitSourceTile, readMemoryRegion, sourceFilterStages, sourceFilterRuntime, sourceFilterHalo, readSourceRegion, runSourceFilterWorker } from './source-filters.js?v=20261110-build708';
-import { compactFaceFlags, valuesToFaceFlags } from './mask-ops.js?v=20261110-build708';
-import { meshCacheContext, runSurfaceCacheable, runSurfaceCacheKey, baseCacheKey, meshEntryInfo, loadCachedMeshes, storeBuiltMeshes, meshCacheStats } from './mesh-cache-apply.js?v=20261110-build708';
+import './smooth-gpu.js?v=20261118-build743';
+import { renderAll } from './mpr-render.js?v=20261118-build743';
+import { getFinalSegmentRuns, decodeSourceSegmentMasks } from './segment-runs.js?v=20261118-build743';
+import * as THREE from './vendor/three@0.187.0/build/three.webgpu.js';
+import { createSurfaceMaterial } from './mesh-material.js?v=20261118-build743';
+import { updateSectionClipPlaneWorld } from './section-view.js?v=20261118-build743';
+import { makeVolume3DCoordinates, Float32FaceBuilder, appendSourceFacesFromCompactTile, makeSource3DCoordinates, appendSourceSliceFacesFast } from './mesh-geometry.js?v=20261118-build743';
+import { fitSourceTile, readMemoryRegion, sourceFilterStages, sourceFilterRuntime, sourceFilterHalo, readSourceRegion, runSourceFilterWorker } from './source-filters.js?v=20261118-build743';
+import { compactFaceFlags, valuesToFaceFlags } from './mask-ops.js?v=20261118-build743';
+import { meshCacheContext, runSurfaceCacheable, runSurfaceCacheKey, baseCacheKey, meshEntryInfo, loadCachedMeshes, storeBuiltMeshes, meshCacheStats } from './mesh-cache-apply.js?v=20261118-build743';
 export function applySectionClippingMaterials(root=sceneState?.obj){
  if(!root||!sceneState)return;
  const active=sectionViewOpen&&!!sectionViewPlane&&sceneState.backend!=='WEBGPU';
@@ -163,6 +163,10 @@ export function setBaseSegmentSurfaceVisibility(key,visible,skip=null){
   if(Array.isArray(o.userData?.segmentRanges)&&Array.isArray(o.material))for(const r of o.userData.segmentRanges)if(r.key===key&&o.material[r.materialIndex])o.material[r.materialIndex].visible=visible;
  });
 }
+// whether the scene holds this segment's surface, and
+// showing / hiding it in place (its run surface when it has one, else its part of the base mesh) without a rebuild
+// a run surface of a scene that a rebuild replaced still has a parent (the disposed old scene): only one in the
+// current scene counts (it made a segment hidden through a rebuild "shown" with nothing on screen)
 export function inCurrentScene(o){for(let p=o;p;p=p.parent)if(p===sceneState?.obj)return true;return false}
 export function segmentHasSurface(key){
  if(!sceneState?.obj)return false;if(inCurrentScene(segmentEditState[key]?.surfaceGroup))return true;
@@ -175,6 +179,8 @@ export function setSegmentSurfaceShown(key,on){
  childSurfaceHooks.parentShown?.(key,on);
  const group=segmentEditState[key]?.surfaceGroup,live=inCurrentScene(group),regions=sceneState?.analysisMesh;
  if(live)group.visible=on;
+ // every other surface of the segment too (its part of the base mesh, a processed
+ // or edited mesh outside its run surface); the analysis region meshes are not the segment's surface
  const inside=(o,root)=>{for(let p=o;root&&p;p=p.parent)if(p===root)return true;return false};
  sceneState?.obj?.traverse?.(o=>{if(!o.isMesh||inside(o,group)||inside(o,regions))return;
   const vis=on&&!live&&!o.userData?.editSurface&&!segmentUsesRunSurface(key);
@@ -255,6 +261,10 @@ export async function render3DSourceBacked(v){
  const group=new THREE.Group();
  if(previous){group.position.copy(previous.position);group.quaternion.copy(previous.quaternion);group.scale.copy(previous.scale)}
  const active=SEGMENT_PRESET_ORDER.filter(key=>segmentState[key].active&&segmentState[key].enabled).map(key=>({key,seg:segmentState[key]}));
+ // a segment drawn as
+ // a run surface (processed or edited) is built once, by restoreEditedSegmentSurfaces after this build (its final runs,
+ // edits included), and is not streamed here: a second processed copy built here stayed on screen when the segment
+ // was hidden, and a raw HU-threshold copy was what stayed visible when the run surface failed
  const streamActive=active.filter(({key})=>!segmentUsesRunSurface(key,v));
  threeLabel.textContent=(sceneState.backend||'3D')+' · building…';set3DBusy(true,'3D構築中…');
  if(!active.length){
