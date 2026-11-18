@@ -17,7 +17,7 @@
 // A slot is one source of work ('three', 'processing', 'load', 'vr', ...).
 // counted slots pair on/off calls (nested callers); others: the last call wins.
 // The slot started last is the one shown.
-import { currentLanguage } from './state.js?v=20261118-build745';
+import { currentLanguage } from './state.js?v=20261118-build746';
 
 export const SHOW_DELAY=400,ESCAPE_MS=10000,CANCEL_GRACE=3000;
 
