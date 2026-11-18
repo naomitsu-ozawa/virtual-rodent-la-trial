@@ -1,3 +1,12 @@
+// VR flicker guard (safety). on Quest 3: the whole screen flickered at VR start. Whatever makes the picture alternate between two
+// states several times a second (the render path direct <-> offscreen, the render scale, the volume shader variant) is a photosensitivity hazard, so
+// every frame-to-frame choice that changes how the volume is drawn passes through a guard here:
+//  - createScaleGuard: the render scale in use. Hysteresis at the path boundary (direct at f = 1 <-> offscreen at f < 1): once direct, the
+//    offscreen path is taken only below LOW_BELOW; once offscreen, the direct path only at f = 1. And a flap limiter on top.
+//  - createFlapGuard: a generic limiter. A "flap" is a change that goes back (a categorical value returning to one it had within the window, or a
+//    number whose change reverses direction). More than maxFlaps flaps within windowMs freeze the value for holdMs (a categorical value then
+//    takes `fallback(proposed)`, which must draw every state correctly: variantFallback below). A steady change (a zoom) never freezes.
+// Pure (no THREE / DOM), unit-tested.
 export const LOW_BELOW = 0.9;         // direct path -> offscreen only when the scale falls below this (the cap's quantum is 1/32, its hysteresis 2/32)
 export const FLAP_MAX = 3;            // flaps allowed within FLAP_WINDOW_MS ...
 export const FLAP_WINDOW_MS = 1000;   // ... (at most ~3 Hz; photosensitive risk starts around 3 Hz)

@@ -17,6 +17,17 @@
 </style>
 </head>
 <body>
+<!--
+ VR feasibility check for Meta Quest (Quest 3 / 3S).
+ Standalone page, no app code. Reports what the browser offers for:
+  - WebGPU (the app's 3D renderer) and its limits
+  - WebXR immersive-vr
+  - WebGPU inside WebXR (XRGPUBinding) — decides whether the app's WebGPU
+    volume renderer can draw into VR directly, or a WebGL2 path is needed
+  - WebGL2 inside WebXR (the well-supported fallback)
+ The two buttons start a short VR session that only clears the view to a colour
+ (5 s), to prove a session really opens with each API.
+-->
 <h1>VR 対応チェック</h1>
 <p>Quest のブラウザでこのページを開き、下の表と 2 つのボタンの結果を送ってください。</p>
 <table id="t"></table>

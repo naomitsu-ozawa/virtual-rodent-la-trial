@@ -9,6 +9,8 @@ export const normalizeLabelHide = v => (v === 0 || v === '0' || v === false) ? L
 // GPU occlusion needs the standard depth mapping of the shader (z/w * 0.5 + 0.5): a logarithmic or reversed depth buffer would need another formula, so those fall back to the fade
 export const gpuOcclusionActive = (setting, caps) => normalizeLabelHide(setting) === LABEL_HIDE_REAL && !!caps && !caps.logarithmicDepthBuffer && !caps.reversedDepthBuffer;
 
+// the ghost pass: opacity factor of a part that is behind the tissue (the normal pass keeps the part in front). One constant for every ghosted object
+// (distance lines / leaders / labels, point markers + number chips).: 0.3 -> 0.15 (fainter). Pinned result labels have no ghost any more (they are hidden behind tissue).
 export const GHOST_ALPHA = 0.15;
 // a pinned result label whose base point is inside shown tissue and cannot be pushed out (vr-label-occlusion.js): card + leader opacity, drawn without a depth test
 export const EMBEDDED_ALPHA = 0.45;

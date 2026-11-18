@@ -195,3 +195,51 @@ export function contentKeyChanged(prev, segs, gridDims) {
   }
   return changed;
 }
+
+// the content box of ONE MORE volume (the partner of a sample pair, vr-view.js pairFrame) with the same steps as the primary's refreshContentBox, so that
+// the partner's rays that cross only air are discarded at once as well (boxC / boxH of its own uniforms; its object space; the shader's early discard needs no change).
+// createContentBox() makes the per-volume state; step(opts) once per frame (after the shader's shown set of the frame is written). It never blocks a frame: the same resumable
+// scan (segScanStep, 0.75 ms) and the same fail-safe (a box that provably still covers is kept, else the full box = boxH 0). opts:
+//  grid: { bricks, brickDims, dims } the rendered grid; halfExt: [x, y, z]; segA: the shader's segA (vec4 x 4: min, max, opacity, shown); editMaskOnly / dataMaskOnly: as segsFromUniforms
+//  slices: CT slices are drawn (planeCount > 0 && sliceOpacity > 0); air: sliceAir; sliceGrid: the grid the slices read (default grid); off: the 詳細 content box switch
+// Returns the reused { changed, on, c, h }: changed = the box differs from the last call's (write it to the uniforms); on = false: no content box (boxH 0 = the full box is marched).
+export function createContentBox() {
+  const st = {
+    scan: createSegScan(), key: new Float64Array(KEY_LEN).fill(NaN), segs: [{}, {}, {}, {}], shown: [{}, {}, {}, {}],
+    segLo: new Float64Array(3), segHi: new Float64Array(3), sliLo: new Float64Array(3), sliHi: new Float64Array(3), lo: new Float64Array(3), hi: new Float64Array(3),
+    out: { c: [0, 0, 0], h: [0, 0, 0] }, res: { changed: false, on: false, c: [0, 0, 0], h: [0, 0, 0] },
+    segOk: false, sl: null, air: NaN, dirty: true, off: null, idx: null, idxFor: null,
+  };
+  const write = (on, b) => {
+    const r = st.res; r.changed = true; r.on = on;
+    for (let a = 0; a < 3; a++) { r.c[a] = on ? b.c[a] : 0; r.h[a] = on ? b.h[a] : 0; }
+    return r;
+  };
+  st.step = function step({ grid, halfExt, segA, editMaskOnly = 0, dataMaskOnly = 0, slices = false, air = 0, sliceGrid = null, off = false }) {
+    const isOff = !!off || !grid?.bricks;
+    if (isOff !== st.off) { st.off = isOff; st.dirty = true; st.key.fill(NaN); st.segOk = false; st.sl = null; }
+    if (!isOff) {
+      const segs = segsFromUniforms(segA, editMaskOnly, st.segs, dataMaskOnly), a0 = slices ? +air : 0;
+      if (contentKeyChanged(st.key, segs, grid.dims)) { if (st.segOk && !segsSubset(segs, st.shown)) st.segOk = false; segScanStart(st.scan, grid, segs); st.dirty = true; }
+      if (!st.scan.done && segScanStep(st.scan)) {
+        if (st.scan.count >= 0) { st.segLo.set(st.scan.lo); st.segHi.set(st.scan.hi); for (let s = 0; s < 4; s++) Object.assign(st.shown[s], st.scan.segs[s]); st.segOk = true; } else st.segOk = false;
+        st.dirty = true;
+      }
+      if (slices !== st.sl || a0 !== st.air) {
+        st.sl = slices; st.air = a0; st.sliLo.fill(Infinity); st.sliHi.fill(-Infinity);
+        if (slices) { const sg = sliceGrid || grid; if (st.idxFor !== sg.bricks) { st.idx = sliceIndex(sg); st.idxFor = sg.bricks; } }
+        if (slices && st.idx) sliceRange(st.idx, a0, st.sliLo, st.sliHi);
+        st.dirty = true;
+      }
+    }
+    st.res.changed = false;
+    if (!st.dirty) return st.res;
+    st.dirty = false;
+    const sl = st.sl && !isOff;
+    if (isOff || !st.segOk || (sl && !st.idx)) return write(false);
+    for (let a = 0; a < 3; a++) { st.lo[a] = Math.min(st.segLo[a], sl ? st.sliLo[a] : Infinity); st.hi[a] = Math.max(st.segHi[a], sl ? st.sliHi[a] : -Infinity); }
+    const b = boxFromRange(halfExt, st.lo, st.hi, st.out);
+    return b.full || b.empty ? write(false) : write(true, b);
+  };
+  return st;
+}
