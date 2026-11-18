@@ -101,6 +101,6 @@ describe('the hit search beside a hidden part (CPU model of the shader)', () => 
       expect(R[1].skin).toBe(0); // the hit after a hidden part
       expect(R[2].skin).toBe(0); expect(R[2].plainSkin).toBe(0); expect(R[2].off).toBe(0); // every hit: none on a hidden part's skin, none off the shown body
       expect(R[2].hits).toBe(R[0].hits); expect(R[1].hits).toBe(R[0].hits); // the search only moves a hit inside its bracket: no hit is added or lost
-    }, 30_000); // 3 x 9000 rays through the CPU model: about 3 s on a workstation, over the 5 s default on a shared CI runner
+    });
   }
 });

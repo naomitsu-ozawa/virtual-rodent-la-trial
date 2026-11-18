@@ -1,19 +1,19 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { setAnalysisRegions, setAnalysisFocusedRegionId, setNextAnalysisRegionId, setNextAnalysisColorIndex, sceneState, analysisRegions, analysisFocusedRegionId, currentLanguage, volumeAnalysisBusy, volume, current3DVolume, activeSeries } from './state.js?v=20261117-build740';
-import { analysisSummary, analysisRegionList, analysisMergeButton, analysisClearButton, planes } from './ui-shell.js?v=20261117-build740';
-import { tr } from './i18n.js?v=20261117-build740';
-import { REGION_NAME_MAX, normalizeRegionName, regionDisplayName } from './region-name.js?v=20261117-build740';
-import { spacingWarningHtml } from './slice-spacing.js?v=20261117-build740';
-import { analysisRegionById, updateAnalysisEditorControls } from './edit-tools.js?v=20261117-build740';
-import { analysisColorCss, schedulePlaneRender } from './mpr-render.js?v=20261117-build740';
-import { analysisRegionShown, analysisRegionSegmentsShown, hiddenShapeCount, showAllHiddenShapes, onChildSegLookChange } from './segments.js?v=20261117-build740';
-import { buildShowToggles } from './region-toggles.js?v=20261117-build740';
-import { request3DRender } from './scene3d.js?v=20261117-build740';
-import { dispose } from './surface-mesh.js?v=20261117-build740';
-import { setRegionLabel, setRegionLabelOffset, hasOffset, clampVoxel, onAnalysisLabelsChange, surfaceAnchor, voxelFromLocal3d } from './analysis-label.js?v=20261117-build740';
-import { analysisRunsContain } from './run-length.js?v=20261117-build740';
-import { setRegionVisible, onRegionVisibleChange, regionVisible, regionHidden, setRegionHidden, onRegionHiddenChange } from './region-visibility.js?v=20261117-build740';
+import { setAnalysisRegions, setAnalysisFocusedRegionId, setNextAnalysisRegionId, setNextAnalysisColorIndex, sceneState, analysisRegions, analysisFocusedRegionId, currentLanguage, volumeAnalysisBusy, volume, current3DVolume, activeSeries } from './state.js?v=20261118-build745';
+import { analysisSummary, analysisRegionList, analysisMergeButton, analysisClearButton, planes } from './ui-shell.js?v=20261118-build745';
+import { tr } from './i18n.js?v=20261118-build745';
+import { REGION_NAME_MAX, normalizeRegionName, regionDisplayName } from './region-name.js?v=20261118-build745';
+import { spacingWarningHtml } from './slice-spacing.js?v=20261118-build745';
+import { analysisRegionById, updateAnalysisEditorControls } from './edit-tools.js?v=20261118-build745';
+import { analysisColorCss, schedulePlaneRender } from './mpr-render.js?v=20261118-build745';
+import { analysisRegionShown, analysisRegionSegmentsShown, hiddenShapeCount, showAllHiddenShapes, onChildSegLookChange } from './segments.js?v=20261118-build745';
+import { buildShowToggles } from './region-toggles.js?v=20261118-build745';
+import { request3DRender } from './scene3d.js?v=20261118-build745';
+import { dispose } from './surface-mesh.js?v=20261118-build745';
+import { setRegionLabel, setRegionLabelOffset, hasOffset, clampVoxel, onAnalysisLabelsChange, surfaceAnchor, voxelFromLocal3d } from './analysis-label.js?v=20261118-build745';
+import { analysisRunsContain } from './run-length.js?v=20261118-build745';
+import { setRegionVisible, onRegionVisibleChange, regionVisible, regionHidden, setRegionHidden, onRegionHiddenChange } from './region-visibility.js?v=20261118-build745';
 export function analysisRegionRepresentativeVoxel(region){
  if(!region?.runsBySlice)return null;
  const nonEmpty=[];for(let z=0;z<region.runsBySlice.length;z++)if(region.runsBySlice[z]?.length)nonEmpty.push(z);

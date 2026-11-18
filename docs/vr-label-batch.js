@@ -131,3 +131,45 @@ export function createLabelBatch(THREE, scene, { w, h, legWidth, legMinAngle }) 
     dispose() { for (const r of pool) killRun(r); pool.length = 0; regs.clear(); dummy?.dispose(); dummy = null; slots = 0; },
   };
 }
+
+// The WebGPU session's twin of createLabelBatch (the instanced GLSL shader above cannot run there): the same interface, but every card is its own plane mesh (MeshBasicMaterial, the card's own texture) and every leg a
+// line (LineBasicMaterial; the ribbon that turns to face the eye is left out): more draw calls, nothing else is different. lb.m = the card's Object3D (its matrixWorld is the world matrix), lb.line = the leg's two ends.
+export function createPlainLabelBatch(THREE, scene, { w, h }) {
+  const regs = new Map(); // lb -> { card, leg }
+  const stats = { draws: 0, cards: 0, legs: 0 };
+  const geo = new THREE.PlaneGeometry(w, h);
+  const make = lb => {
+    const card = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: lb.m.material.map, transparent: true, depthWrite: false, side: THREE.DoubleSide, toneMapped: false }));
+    card.matrixAutoUpdate = false; card.matrixWorldAutoUpdate = false; card.frustumCulled = false; card.raycast = () => {}; card.visible = false;
+    const lg = new THREE.BufferGeometry(); lg.setAttribute('position', new THREE.Float32BufferAttribute(6, 3));
+    const leg = new THREE.Line(lg, new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, depthWrite: false, toneMapped: false }));
+    leg.frustumCulled = false; leg.raycast = () => {}; leg.visible = false;
+    scene.add(card, leg);
+    return { card, leg };
+  };
+  return {
+    add(lb) { regs.set(lb, make(lb)); },
+    remove(lb) { const r = regs.get(lb); if (!r) return; regs.delete(lb); scene.remove(r.card, r.leg); r.card.material.dispose(); r.leg.geometry.dispose(); r.leg.material.dispose(); },
+    get size() { return regs.size; },
+    stats,
+    flush() {
+      let cards = 0, legs = 0;
+      for (const [lb, r] of regs) {
+        const m = lb.m, ln = lb.line;
+        r.card.visible = !!m.visible;
+        if (m.visible) {
+          m.updateWorldMatrix(true, false); r.card.matrix.copy(m.matrixWorld); r.card.matrixWorld.copy(m.matrixWorld); cards++;
+          const mat = r.card.material; mat.map = m.material.map; mat.opacity = m.material.opacity; mat.depthTest = !!m.material.depthTest; r.card.renderOrder = m.renderOrder;
+        }
+        r.leg.visible = !!ln.visible;
+        if (ln.visible) {
+          const p = ln.geometry.attributes.position.array, a = r.leg.geometry.attributes.position;
+          a.array.set(p.subarray(0, 6)); a.needsUpdate = true;
+          const c = ln.material.color, mat = r.leg.material; mat.color.setRGB(c.r, c.g, c.b); mat.opacity = ln.material.opacity; mat.depthTest = !!ln.material.depthTest; r.leg.renderOrder = ln.renderOrder; legs++;
+        }
+      }
+      stats.draws = cards + legs; stats.cards = cards; stats.legs = legs;
+    },
+    dispose() { for (const lb of [...regs.keys()]) this.remove(lb); geo.dispose(); },
+  };
+}

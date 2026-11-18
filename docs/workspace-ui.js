@@ -1,14 +1,14 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { set3DBusy } from './three-status.js?v=20261117-build740';
-import { updateRenderModeControl, clearResidentMprJobs, prepareResidentGpuVolume, activateMedicalVolume, setThreeVolumeOverlay } from './data-load.js?v=20261117-build740';
-import { appVersionBadge, planes, ipadGpuQualityControl, ipadGpuQuality, footer } from './ui-shell.js?v=20261117-build740';
-import { sceneState, volume, currentLanguage, ipadGpuTargetSide, setIpadGpuTargetSide, normalizeGpuSide, sourceVolume, threeRenderMode, setResidentMprReadbackDisabled, setThreeRenderMode } from './state.js?v=20261117-build740';
-import { updateMprCanvasPhysicalAspect, schedulePlaneRender } from './mpr-render.js?v=20261117-build740';
-import { request3DRender } from './scene3d.js?v=20261117-build740';
-import { applyLanguage } from './i18n.js?v=20261117-build740';
-import { isVrHeadsetRuntime, fmt } from './utils.js?v=20261117-build740';
-import { settings } from './app-settings.js?v=20261117-build740';
+import { set3DBusy } from './three-status.js?v=20261118-build745';
+import { updateRenderModeControl, clearResidentMprJobs, prepareResidentGpuVolume, activateMedicalVolume, setThreeVolumeOverlay } from './data-load.js?v=20261118-build745';
+import { appVersionBadge, planes, ipadGpuQualityControl, ipadGpuQuality, footer } from './ui-shell.js?v=20261118-build745';
+import { sceneState, volume, currentLanguage, ipadGpuTargetSide, setIpadGpuTargetSide, normalizeGpuSide, sourceVolume, threeRenderMode, setResidentMprReadbackDisabled, setThreeRenderMode } from './state.js?v=20261118-build745';
+import { updateMprCanvasPhysicalAspect, schedulePlaneRender } from './mpr-render.js?v=20261118-build745';
+import { request3DRender } from './scene3d.js?v=20261118-build745';
+import { applyLanguage } from './i18n.js?v=20261118-build745';
+import { isVrHeadsetRuntime, fmt } from './utils.js?v=20261118-build745';
+import { settings } from './app-settings.js?v=20261118-build745';
 export function initIPadWorkspaceUi(){
  const shell=document.querySelector('.app-shell'),workspace=document.querySelector('.workspace'),sidebar=document.querySelector('.sidebar'),sidebarScroll=document.querySelector('.sidebar-scroll'),viewer=document.querySelector('#viewer-grid'),topbar=document.querySelector('.topbar');
  if(!shell||!workspace||!sidebar||!sidebarScroll||!viewer||!topbar)return;

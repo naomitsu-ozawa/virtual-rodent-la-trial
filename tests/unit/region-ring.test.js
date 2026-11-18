@@ -21,7 +21,7 @@ describe('the ring items: one target = 2, a region and a child together = 4', ()
     const items = regionRingItems(ringState(null, mkChild({ colorOff: true })), text);
     expect(items.map(i => i.label)).toEqual(['色', '表示', '切り出す']); expect(items.map(i => i.id)).toEqual(['ccolor', 'cshape', 'cdetach']); expect(items.map(i => i.on)).toEqual([false, true, false]);
   });
-  it('a region and a child (they overlap under the laser): four items that say whose they are, in the agreed order', () => {
+  it('a region and a child (they overlap under the laser): four items that say whose they are, in a fixed order', () => {
     const items = regionRingItems(ringState({ id: 1, hidden: true }, mkChild({ visible: false })), text);
     expect(items.map(i => i.label)).toEqual(['領域の色', '領域の表示', '領域の切り出す', '子の色', '子の表示', '子の切り出す']); expect(items.map(i => i.id)).toEqual(['rcolor', 'rshape', 'rdetach', 'ccolor', 'cshape', 'cdetach']);
     expect(items.map(i => i.on)).toEqual([true, false, false, true, false, false]);
