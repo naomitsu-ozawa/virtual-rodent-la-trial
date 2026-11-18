@@ -6,26 +6,43 @@
 //   - below it the cards (one per dataset of event-mode.js EVENT_DATASETS) in an area that scrolls by itself
 // A card press opens the dataset through the page's own route ('vrl-event-sample' -> startSample), waits until the page is quiet, then prepares the VR data (prepareVrData + prepareVrGpu 'vr', the work of the
 // prepare panel) so that 「VRで見る」 starts with one press. Nothing is opened or prepared by itself when the page loads. With the mode off none of this exists (the elements go back where they were).
-import { tr } from './i18n.js?v=20261110-build708';
-import { EVENT_DATASETS, chooseEventLevel } from './event-mode.js?v=20261110-build708';
-import { eventCards, eventStatus, EVENT_STATUS_KEYS, openAndPrepare, waitForStandardOpen, createInflight } from './event-launcher-core.js?v=20261110-build708';
-import { settlePage } from './event-prepare-ui.js?v=20261110-build708';
-import { tutorialUiActive, restartTutorial } from './tutorial-ui.js?v=20261110-build708';
-import { sampleSliceUrl } from './sample-sets.js?v=20261110-build708';
-import { creditRows } from './sample-credit-ui.js?v=20261110-build708';
+import { tr } from './i18n.js?v=20261117-build740';
+import { EVENT_DATASETS, chooseEventLevel } from './event-mode.js?v=20261117-build740';
+import { eventCards, eventStatus, EVENT_STATUS_KEYS, openAndPrepare, waitForStandardOpen, createInflight } from './event-launcher-core.js?v=20261117-build740';
+import { settlePage } from './event-prepare-ui.js?v=20261117-build740';
+import { tutorialUiActive, restartTutorial } from './tutorial-ui.js?v=20261117-build740';
+import { sampleSliceUrl } from './sample-sets.js?v=20261117-build740';
+import { creditRows } from './sample-credit-ui.js?v=20261117-build740';
+import { sampleDataSaved } from './data-load.js?v=20261117-build740';
 
 const MOVED = ['tutorial-start-button', 'vr-view-button', 'ar-view-button'];
 const XR_CHECK_MS = 10000;
+const RECHECK_MS = 2000, RECHECK_MAX = 40; // n738: after the preparation the saves of the VR data go on in the background: the card asks again every RECHECK_MS (at most RECHECK_MAX times) until the entries are complete
 const wait = ms => new Promise(r => setTimeout(r, ms));
 
 // the VR module is loaded by app.js (its one loader, as for the settings > cache button): the page asks through an event, as 'vrl-event-prepare' does
 const askVrModule = doc => { const ev = new CustomEvent('vrl-vr-module', { detail: { done: null } }); doc.dispatchEvent(ev); return ev.detail.done ? Promise.resolve(ev.detail.done) : Promise.reject(new Error('the page did not answer vrl-vr-module')); };
 
-export function createEventLauncher({ doc = globalThis.document, g = globalThis, getVr = () => askVrModule(doc) } = {}) {
+// n738: the two marks of a card, judged by what is on the device now. Both read the real stores, nothing is guessed from a flag or a count; what cannot be judged (a throw, anything but true) is not shown.
+//   cached (「キャッシュ済み」, the card's frame colour + text): the standard VR data of the dataset is complete in IndexedDB, so a press prepares by transfer to the GPU only: vr-view.js standardLevelCached (the standard alias
+//     the same key as the VR entry / a data switch computes - project bytes, grid plan, preparation version -, both entries it points at, and a filtered level's 3D volume).
+//   saved (「データ保存済み」, a small tag): every slice of the dataset is in Cache Storage (data-load.js sampleDataSaved). The two are independent.
+// ids -> Set of the ids for which read(id) resolved to exactly true.
+export async function judgeSamples(ids, read) {
+  const out = new Set();
+  await Promise.all(ids.map(async id => { try { if (await read(id) === true) out.add(id); } catch { /* cannot be judged: not shown */ } }));
+  return out;
+}
+
+export function createEventLauncher({ doc = globalThis.document, g = globalThis, getVr = () => askVrModule(doc), getSaved = sampleDataSaved, getCached = null, recheckMs = RECHECK_MS, recheckMax = RECHECK_MAX } = {}) {
   let on = false, bar = null, statusEl = null, launcher = null, cardsEl = null;
   let phase = '', phaseSample = null, token = 0, vrMod = null, glow = false, wasReady = false; // glow = the top bar's VR / AR buttons pulse after the preparation finished
   const moved = [], inflight = createInflight();
   let held = 0; // other work that keeps the cards waiting (the データ panel's 最初の状態に戻す reopening the data)
+  // n738: the card marks. cachedSet / savedSet = the datasets judged so (see judgeSamples); tagEls = each card's two tags; ver = per mark and dataset, the newest judgement wins (an older one that ends later is dropped)
+  const cachedSet = new Set(), savedSet = new Set(), tagEls = new Map(), ver = { saved: new Map(), cached: new Map() };
+  let vrP = null; const vrOnce = () => vrP || (vrP = Promise.resolve(getVr()).catch(e => { vrP = null; throw e; })); // the VR module is asked once (the judgement and the preparation share it)
+  const cachedOf = getCached || (async id => (await vrOnce()).standardLevelCached(id, { local: true })); // local: the device's copy of the project file only - judging a card never sends a request
 
   const el = (tag, cls, key) => { const e = doc.createElement(tag); if (cls) e.className = cls; if (key) { e.dataset.i18n = key; e.textContent = tr(key); } return e; };
   const busy = () => phase === 'loading' || phase === 'preparing' || held > 0;
@@ -48,6 +65,9 @@ export function createEventLauncher({ doc = globalThis.document, g = globalThis,
     for (const c of cardsEl?.querySelectorAll('[data-event-sample]') || []) {
       const sel = c.dataset.eventSample === open;
       c.classList.toggle('is-selected', sel); c.setAttribute('aria-pressed', String(sel)); c.disabled = b;
+      const id = c.dataset.eventSample, hasC = cachedSet.has(id), hasS = savedSet.has(id), tg = tagEls.get(id);
+      c.parentNode?.classList?.toggle('is-cached', hasC); // n738: the frame colour (style.css: a selected / processing card keeps its own colour)
+      if (tg) { tg.cached.hidden = !hasC; tg.saved.hidden = !hasS; tg.box.hidden = !hasC && !hasS; }
     }
     cardsEl?.setAttribute('aria-busy', String(b));
     // the big 「VRで見る」「ARで見る」 buttons live only in the ready card (the AR one only while the top bar's AR button is shown)
@@ -70,13 +90,43 @@ export function createEventLauncher({ doc = globalThis.document, g = globalThis,
     if (!xrAvailable()) return false; // no VR / AR in this browser: there is nothing to prepare for
     if (stale()) return true;
     return inflight.run('vr', async () => {
-      const m = vrMod = await getVr();
+      const m = vrMod = await vrOnce();
       if (stale()) return true;
       const P = await m.prepareVrData(() => {});
       if (stale()) return true;
       await m.prepareVrGpuOnce(P, 'vr');
       return true;
     });
+  }
+
+  // ---- n738: the marks of the cards. Judged when the page shows, after a card press, after the VR preparation, and when the cache list removed something (vrl-cache-changed)
+  const xrOk = async () => { for (let t = 0; g.__vrlXrChecked !== true && t < XR_CHECK_MS; t += 200) await wait(200); return xrAvailable(); }; // a browser without VR / AR never prepares VR data: its cards are never 「キャッシュ済み」
+  async function judge(ids = EVENT_DATASETS.map(d => d.sample), which = ['saved', 'cached']) {
+    if (!on) return;
+    const run = async (kind, read, set, gate) => {
+      const vm = ver[kind], mine = new Map(ids.map(id => [id, (vm.get(id) || 0) + 1]));
+      for (const [id, v] of mine) vm.set(id, v);
+      let found = new Set();
+      try { if (!gate || await gate()) found = await judgeSamples(ids, read); } catch { /* none: not shown */ }
+      if (!on) return;
+      for (const id of ids) if (vm.get(id) === mine.get(id)) { if (found.has(id)) set.add(id); else set.delete(id); }
+      render();
+    };
+    await Promise.all([which.includes('saved') ? run('saved', getSaved, savedSet) : null, which.includes('cached') ? run('cached', cachedOf, cachedSet, xrOk) : null]);
+  }
+  // The re-ask has its own generation per dataset (NOT the press token: a press of another card or a VR / AR session start moves that on, and the saves of the VR data are still running then). It does not poll during an XR session
+  // (each ask reads the project file and opens IndexedDB): it waits for the session to end, the loop is bounded in both the asks and the waits.
+  const rg = new Map(), inSession = () => { try { return !!vrMod?.vrPreparedState?.().session; } catch { return false; } };
+  async function recheckCached(sample) {
+    const my = (rg.get(sample) || 0) + 1; rg.set(sample, my);
+    const live = () => on && rg.get(sample) === my;
+    for (let asks = 0, spins = 0; asks < recheckMax && spins < recheckMax * 6 && live(); spins++) {
+      if (inSession()) { await wait(recheckMs * 2); continue; }
+      await judge([sample], ['cached']); asks++;
+      if (!live()) return;
+      if (cachedSet.has(sample)) { void judge(undefined, ['cached']); return; } // the stores of this level may have pushed another level out: every card is judged once more
+      await wait(recheckMs);
+    }
   }
 
   // ---- a card (or 「チュートリアルを始める」) opens its dataset and goes on to prepare
@@ -90,8 +140,9 @@ export function createEventLauncher({ doc = globalThis.document, g = globalThis,
     phaseSample = d.sample; setPhase('loading');
     doc.dispatchEvent(ev);
     if (!ev.detail.done) { setPhase(''); return; }
+    let out = '';
     try {
-      const out = await openAndPrepare({
+      out = await openAndPrepare({
         open: () => ev.detail.done, settle: () => settlePage(g),
         standard: () => waitForStandardOpen({ sample: d.sample, read: () => g.__vrlStandardOpen, stop: () => my !== token }), // the standard-open record is set before the entry is stored (marked standard)
         prepare: async () => { if (!await prepareVr(() => my !== token)) throw Object.assign(new Error('no VR / AR'), { quiet: true }); },
@@ -102,6 +153,7 @@ export function createEventLauncher({ doc = globalThis.document, g = globalThis,
       if (!e?.quiet) console.warn('Event page: the data was opened but the VR preparation did not finish (the VR button prepares as usual)', e);
       if (my === token) setPhase('');
     }
+    if (on) { void judge([d.sample], ['saved']); if (out === 'ready' || out === 'stale') void recheckCached(d.sample); } // n738: the slices are saved by now; the VR data's saves may still be running
   }
   const onTutorialBegin = () => { const lv0 = EVENT_DATASETS.find(d => d.id === 'lv0'); if (on && lv0) void press(lv0, { tutorial: true }); };
 
@@ -124,6 +176,9 @@ export function createEventLauncher({ doc = globalThis.document, g = globalThis,
       const d = EVENT_DATASETS.find(x => x.sample === c.sample);
       btn.onclick = () => { if (d) void press(d); };
       card.append(btn);
+      const tags = el('div', 'event-card-tags'); tags.hidden = true; // n738: 「データ保存済み」 / 「キャッシュ済み」 (the latter is also the frame colour: .is-cached)
+      const tagSaved = el('span', 'event-card-tag is-saved', 'evCardSaved'), tagCached = el('span', 'event-card-tag is-cached', 'evCardCached'); tagSaved.hidden = tagCached.hidden = true;
+      tags.append(tagCached, tagSaved); card.append(tags); tagEls.set(c.sample, { box: tags, saved: tagSaved, cached: tagCached });
       card.onclick = e => { if (e.target === btn || btn.contains(e.target) || e.target.closest?.('a, summary, details, button')) return; if (!btn.disabled) btn.click(); }; // the card's padding / empty parts press the card as well; the credit link, 「詳細」 and the VR / AR buttons do not
       const go = el('div', 'event-card-go'); go.dataset.eventGo = c.sample; go.hidden = true; // pressing = pressing the top bar's own button
       for (const [id, key, flag] of [['vr-view-button', 'vrView', 'eventGoVr'], ['ar-view-button', 'arView', 'eventGoAr']]) {
@@ -168,13 +223,13 @@ export function createEventLauncher({ doc = globalThis.document, g = globalThis,
     }
     launcher = el('section', 'event-launcher'); launcher.id = 'event-launcher';
     cardsEl = buildCards(); launcher.append(cardsEl); workspace.append(launcher);
-    render();
+    render(); void judge();
     try { doc.dispatchEvent(new CustomEvent('vrl-event-layout', { detail: { on: true } })); } catch { /* none */ }
     return true;
   }
   function disable() {
     if (!on) return;
-    token++; on = false; g.__vrlEventLayout = false; phase = '';
+    token++; on = false; g.__vrlEventLayout = false; phase = ''; cachedSet.clear(); savedSet.clear(); tagEls.clear(); ver.saved.clear(); ver.cached.clear(); rg.clear();
     for (const { e, ph } of moved.splice(0)) { e.removeEventListener('click', stopGlow); ph.replaceWith(e); }
     glow = wasReady = false;
     // the tutorial button is mounted after the page started: it came into the bar without a place of its own; it goes before 「VRで見る」 again
@@ -187,6 +242,7 @@ export function createEventLauncher({ doc = globalThis.document, g = globalThis,
   }
 
   doc?.addEventListener?.('vrl-event-sample-open', () => refresh());
+  doc?.addEventListener?.('vrl-cache-changed', () => { if (on) void judge(); }); // n738: settings > cache removed entries
   // an XR session started (VR / AR pressed while the card flow was still running): the flow stops (the run token moves on), so nothing is prepared during the session
   doc?.addEventListener?.('vrl-tut-signal', e => {
     const k = e?.detail?.kind;

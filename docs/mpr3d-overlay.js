@@ -1,14 +1,14 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { volume, mpr3DWindowLutKey, mpr3DWindowLutTable, setMpr3DWindowLutKey, residentGpuUploadSeriesId, sceneState, threeRenderMode, mpr3DSurfaceOpacity, sectionViewOpen, sectionViewPlane, sectionAutoPlane, setSectionAutoPlane, sectionCapEnabled, sectionCapOpacity, sectionCapHatch, sectionSliceImageVisible, sectionShadeBright, sectionShadeContrast, sectionShadeMode } from './state.js?v=20261110-build708';
-import { shadeLumV, brightOf, contrastOf } from './cap-shade.js?v=20261110-build708'; // the cut face's shading when the slice image is hidden
-import { segmentById, segmentShadeRange, shadeDataRange } from './segments.js?v=20261110-build708';
-import { isChildKey } from './segment-look.js?v=20261110-build708';
-import { wc, ww, planes, mpr3DSliceSliders, $, mprVolumeOpacity, mprSurfaceOpacity } from './ui-shell.js?v=20261110-build708';
-import { sourceFilterStages, getFilteredSourceAxialBlock, getCachedSourceSlice, sourceFilterSignature } from './source-filters.js?v=20261110-build708';
-import { residentGpuMprAvailable } from './mpr-orthogonal.js?v=20261110-build708';
-import { frameYield } from './utils.js?v=20261110-build708';
-import { request3DRender } from './scene3d.js?v=20261110-build708';
+import { volume, mpr3DWindowLutKey, mpr3DWindowLutTable, setMpr3DWindowLutKey, residentGpuUploadSeriesId, sceneState, threeRenderMode, mpr3DSurfaceOpacity, sectionViewOpen, sectionViewPlane, sectionAutoPlane, setSectionAutoPlane, sectionCapEnabled, sectionCapOpacity, sectionCapHatch, sectionSliceImageVisible, sectionShadeBright, sectionShadeContrast, sectionShadeMode } from './state.js?v=20261117-build740';
+import { shadeLumV, brightOf, contrastOf } from './cap-shade.js?v=20261117-build740'; // the cut face's shading when the slice image is hidden
+import { segmentById, segmentShadeRange, shadeDataRange } from './segments.js?v=20261117-build740';
+import { isChildKey } from './segment-look.js?v=20261117-build740';
+import { wc, ww, planes, mpr3DSliceSliders, $, mprVolumeOpacity, mprSurfaceOpacity } from './ui-shell.js?v=20261117-build740';
+import { sourceFilterStages, getFilteredSourceAxialBlock, getCachedSourceSlice, sourceFilterSignature } from './source-filters.js?v=20261117-build740';
+import { residentGpuMprAvailable } from './mpr-orthogonal.js?v=20261117-build740';
+import { frameYield } from './utils.js?v=20261117-build740';
+import { request3DRender } from './scene3d.js?v=20261117-build740';
 import * as THREE from './vendor/three@0.186.0/build/three.webgpu.js';
 export const mpr3DVisibility={axes:true,axial:false,coronal:false,sagittal:false};
 export function restoreSectionAutoPlane(){
@@ -47,6 +47,7 @@ export function syncMpr3DSliceSliders(){
  for(const[p,el]of Object.entries(mpr3DSliceSliders)){
   if(!el)continue;const row=el.closest('.mpr3d-slice-row'),src=planes[p].slider,show=!!volume&&!!mpr3DVisibility[p];
   row?.classList.toggle('is-hidden',!show);any||=show;
+  // the 3D sliders run in the opposite direction to the 2D ones
   const inv=String(+src.max-(+src.value));if(el.max!==src.max)el.max=src.max;if(el.value!==inv)el.value=inv;
   const out=row?.querySelector('output');if(out)out.textContent=(+src.value+1)+' / '+(+src.max+1);
  }
@@ -87,6 +88,10 @@ export async function ensureMpr3DPreviewCache(){
  const coronal=new Uint8Array(h*dims.coronal[0]*dims.coronal[1]),sagittal=new Uint8Array(w*dims.sagittal[0]*dims.sagittal[1]);
  let fullSagittal16=null;
  if(canSource&&!stages.length&&!v.mprSagittalAll&&!v.mprSagittalDisplayAll){
+  // this full 16-bit sagittal copy had no limit on desktops; for the
+  // 1024x1024x1784 data it was 3.5 GB (memory ledger 'mpr 3568MB', swap).
+  // Only build it when small; sagittal planes otherwise come from the
+  // orthogonal plane cache as on iPad.
   const bytes=w*h*d*2,limit=(navigator.maxTouchPoints||0)>0?1024*1024*1024:512*1024*1024;
   if(bytes<=limit)try{fullSagittal16=new Uint16Array(w*h*d)}catch{}
  }
@@ -280,6 +285,11 @@ export function beginSharedMpr3DPreview(){
  return sharedPreview;
 }
 
+// the section face of the mesh view, composed as the GPU volume composes its section (medical-volume.js): the
+// cap where a shown segment holds the voxel (segment / result colour lightened by 0.22, stripes (u+v)*28 darkened to
+// 0.26, cap opacity), behind it the grey slice without segment tint at the 3D planes' opacity (断面不透明度（サーフェス）, as
+// the volume uses 断面不透明度（GPU）). It replaces the
+// tinted 2D image on the section plane while it matches the slice shown (setSectionCapColors, per frame while sliding).
 function composeSectionCap(entry){
  const colors=entry.capColors;if(!colors)return;
  const {w,h,pixels:src,gray,seg,val,keys}=colors,canvas=entry.capCanvas;
@@ -332,11 +342,16 @@ export function syncSectionCapPresentation(){
  for(const key of ['axial','coronal','sagittal']){
   const entry=sceneState?.mprPlaneEntries?.[key];if(!entry?.cap)continue;
   const section=!volumeMode&&sectionViewOpen&&sectionViewPlane===key;
+  // the last painted face stays up until the next slice's paint lands
+  // (a frame or an async source read later) instead of dropping to the 2D image in between; a plane that is not the
+  // section any more forgets its face, so a reopened section never shows an old slice
   if(!section)entry.capHas=false;
   const face=section&&entry.capHas;
   entry.cap.visible=face;entry.cap.material.opacity=1;
   // the tinted 2D image stays only as the fallback before the first face is painted
   if(section)entry.mesh.visible=!face&&!!mpr3DVisibility[key]&&sectionSliceImageVisible;
+  // the red section highlight is not drawn
+  // under the face (the GPU volume view has none either)
   if(section&&face&&entry.highlight)entry.highlight.visible=false;
  }
 }

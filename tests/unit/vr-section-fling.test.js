@@ -23,7 +23,7 @@ const X = { x: 1, y: 0, z: 0 };
 
 describe('fling constants', () => {
   it('named, tunable values', () => {
-    expect(FLING_SPEED_MPS).toBe(1.0); expect(FLING_WINDOW_MS).toBe(200); expect(FLING_STALE_MS).toBe(120); expect(FLING_MIN_SPAN_MS).toBe(30); expect(FLING_COS).toBe(0.26);
+    expect(FLING_SPEED_MPS).toBe(1.0); expect(FLING_WINDOW_MS).toBe(200); expect(FLING_STALE_MS).toBe(120); expect(FLING_MIN_SPAN_MS).toBe(30); expect(FLING_COS).toBe(0.26); // 1.5 m/s -> 1.0, 150 ms -> 200, 60 degrees -> ~75 expect(FLING_FADE_S).toBe(0.3); expect(FLING_UNDO_MS).toBe(5000);
   });
 });
 
@@ -242,7 +242,7 @@ describe('vr-view.js wiring (static)', () => {
   it('the bench keeps its immediate removePlane', () => { expect(src).toContain('removePlane(bench.tempPlane)'); });
   it('the snapshot of a deleted plane holds the resting position (snapPlaneCenterIntoBox, as a normal release), not the thrown one', () => {
     const t = src.slice(src.indexOf('const deleteSection='), src.indexOf('const restoreSection='));
-    expect(t).toContain('snapPlaneCenterIntoBox(pl.obj.position');
+    expect(t).toContain('intoBox(snapPlaneCenterIntoBox,pl.obj.position'); expect(t).toContain('planeOwnerPair(pl)'); // (stage 3: the box of the dataset that HOLDS the frame: its holder is passed)
     expect(t).toContain('position:rest');
     expect(t.indexOf('snapPlaneCenterIntoBox')).toBeLessThan(t.indexOf('startFly(pl,vel)'));
     expect(t).not.toContain('pl.obj.position.set'); // the flying frame is not moved back
