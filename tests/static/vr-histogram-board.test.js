@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 
+// the HU board drifted after the head (lazyFollow every frame) and could not be moved. It now behaves like a fixed
+// menu / help board: placed once in front, moved only by the grip, put back by 「正面へ」 (the 表示 tab button and the ring's home item).
 const src = readFileSync('docs/vr-view.js', 'utf8');
 
 describe('VR histogram board placement (vr-view.js)', () => {

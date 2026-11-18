@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { chamferDistanceBytes, buildDistanceBytes, combineClassificationDistance } from '../../docs/distance-field.js';
+import { euclideanDistanceBytes, buildDistanceBytes, combineClassificationDistance } from '../../docs/distance-field.js';
 
 // the VR sphere tracing jumps by (byte - 3) voxels, so the byte
 // must never exceed the true distance to the other class, and should not be
@@ -17,19 +17,48 @@ function trueDistance(inside,N){
   for(const p of other){const d=Math.hypot(p[0]-x,p[1]-y,p[2]-z);if(d<best)best=d}out[i]=best}
  return out;
 }
-describe('distance field (chamfer 3-4-5 lower bound)',()=>{
+// the byte is EXACTLY floor(Euclidean distance, in voxels, to the nearest seed voxel centre) (seed = a voxel with a 26-neighbour of the other class, the grid edge replicated), capped at 255;
+// brute force on a non-cubic grid with random blobs. This is the property the jump needs (never above the true distance) and, being exact, the one that makes the jumps as long as they can be.
+function bruteBytes(inside,[w,h,d]){
+ const at=(x,y,z)=>inside[(Math.min(d-1,Math.max(0,z))*h+Math.min(h-1,Math.max(0,y)))*w+Math.min(w-1,Math.max(0,x))]?1:0,seeds=[];
+ for(let z=0;z<d;z++)for(let y=0;y<h;y++)for(let x=0;x<w;x++){const v=at(x,y,z);let diff=false;
+  for(let k=-1;k<=1&&!diff;k++)for(let j=-1;j<=1&&!diff;j++)for(let i=-1;i<=1;i++)if(at(x+i,y+j,z+k)!==v){diff=true;break}
+  if(diff)seeds.push([x,y,z])}
+ const out=new Uint8Array(w*h*d);
+ for(let z=0;z<d;z++)for(let y=0;y<h;y++)for(let x=0;x<w;x++){let best=1e18;for(const s of seeds){const q=(s[0]-x)**2+(s[1]-y)**2+(s[2]-z)**2;if(q<best)best=q}
+  out[(z*h+y)*w+x]=Math.min(255,Math.floor(Math.sqrt(best)))}
+ return out;
+}
+describe('exact Euclidean distance bytes',()=>{
+ it('equals the brute-force floor(distance to the nearest seed) on non-cubic grids',()=>{
+  let seed=12345;const rnd=()=>(seed=(seed*1103515245+12345)&0x7fffffff)/0x7fffffff;
+  for(const dims of [[13,9,11],[8,16,5],[20,6,7]]){
+   const [w,h,d]=dims,inside=new Uint8Array(w*h*d);
+   for(let b=0;b<3;b++){const cx=rnd()*w,cy=rnd()*h,cz=rnd()*d,r=1.5+rnd()*3;for(let z=0;z<d;z++)for(let y=0;y<h;y++)for(let x=0;x<w;x++)if(Math.hypot(x-cx,y-cy,z-cz)<=r)inside[(z*h+y)*w+x]=1}
+   expect(Array.from(euclideanDistanceBytes(inside,dims))).toEqual(Array.from(bruteBytes(inside,dims)));
+  }
+ });
+ it('an empty and a full channel have no seed: 255 everywhere; a scratch set can be reused',()=>{
+  const dims=[6,5,4],n=120,scratch={D:new Int32Array(n),a:new Uint8Array(n),b:new Uint8Array(n),dil:new Uint8Array(n)};
+  expect(new Set(euclideanDistanceBytes(new Uint8Array(n),dims,scratch))).toEqual(new Set([255]));
+  expect(new Set(euclideanDistanceBytes(new Uint8Array(n).fill(1),dims,scratch))).toEqual(new Set([255]));
+  const half=new Uint8Array(n);for(let i=0;i<n/2;i++)half[i]=1;
+  expect(Array.from(euclideanDistanceBytes(half,dims,scratch))).toEqual(Array.from(bruteBytes(half,dims)));
+ });
+});
+describe('distance field (exact Euclidean distance to the seeds, floored: a lower bound)',()=>{
  it('never exceeds the true distance to the other class and is not far below it',()=>{
-  const N=24,inside=sphereVolume(N,7),bytes=chamferDistanceBytes(inside,[N,N,N]),truth=trueDistance(inside,N);
+  const N=24,inside=sphereVolume(N,7),bytes=euclideanDistanceBytes(inside,[N,N,N]),truth=trueDistance(inside,N);
   let worstRatio=1;
   for(let i=0;i<bytes.length;i++){
    expect(bytes[i]).toBeLessThanOrEqual(truth[i]+1e-9);
    if(truth[i]>=8)worstRatio=Math.min(worstRatio,bytes[i]/truth[i]);
   }
-  expect(worstRatio).toBeGreaterThan(0.55); // seeds sit one voxel inside the other class, then 0.9 and the floor
+  expect(worstRatio).toBeGreaterThan(0.55); // seeds sit one voxel inside the other class, then the floor
  });
  it('is zero on both sides of the boundary and grows away from it',()=>{
-  const N=16,inside=sphereVolume(N,5),bytes=chamferDistanceBytes(inside,[N,N,N]),c=(N-1)/2,at=(x,y,z)=>bytes[(z*N+y)*N+x];
-  expect(at(Math.round(c),Math.round(c),Math.round(c))).toBeGreaterThanOrEqual(2); // sphere centre (radius 5): seeds one voxel in, 0.9, floor
+  const N=16,inside=sphereVolume(N,5),bytes=euclideanDistanceBytes(inside,[N,N,N]),c=(N-1)/2,at=(x,y,z)=>bytes[(z*N+y)*N+x];
+  expect(at(Math.round(c),Math.round(c),Math.round(c))).toBeGreaterThanOrEqual(2); // sphere centre (radius 5): seeds one voxel in, floor
   expect(at(0,0,0)).toBeGreaterThan(3); // corner: outside, far
   // a voxel on the surface has a neighbour of the other class → 0
   let zeros=0;for(let i=0;i<bytes.length;i++)if(bytes[i]===0)zeros++;

@@ -53,6 +53,11 @@ h1{margin:0;font-size:clamp(23px,3vw,34px);line-height:1;letter-spacing:-.035em}
 .segment-tree-row.is-focused{border-color:rgb(var(--ui-blue-bd));background:rgb(var(--ui-blue-bg) / 0.92)}
 .segment-tree-row.is-off .segment-tree-name,.segment-tree-row.is-off .analysis-region-swatch{opacity:.45}
 .segment-tree-name{min-width:0;font-size:11px;color:rgb(var(--ui-t1));overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* the child rows are two lines so the name keeps the whole first line (swatch, name, ▸), the volume and the 色 / 表示 toggles are the second */
+.segment-child-tree .segment-tree-row{grid-template-columns:auto minmax(0,1fr) auto}
+.segment-child-tree .segment-tree-volume{grid-column:1/3}
+.segment-child-tree .segment-tree-more{justify-self:end}
+.segment-child-tree .segment-tree-detail{grid-column:1/-1}
 .segment-color{width:44px;height:32px;padding:0;border:1px solid rgb(var(--ui-b2));border-radius:7px;background:transparent}
 .segment-range{display:grid;grid-template-columns:58px 1fr auto;gap:7px;align-items:center;font-size:10px;color:rgb(var(--ui-t4))}
 .segment-range input[type="range"]{grid-column:1/-1;width:100%;min-height:34px}
@@ -318,6 +323,14 @@ h1{margin:0;font-size:clamp(23px,3vw,34px);line-height:1;letter-spacing:-.035em}
 .analysis-region-info strong{font-size:11px;color:rgb(var(--ui-t1))}
 .analysis-region-info span{font-size:9px;color:rgb(var(--ui-t4));font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .analysis-region-delete{border-color:rgb(var(--ui-red-bd));color:rgb(var(--ui-red-tx))}
+/* the 色 / 表示 toggles (region-toggles.js): pressed (on) = filled in the accent colour, released (off) = dashed outline, muted; the state is also in aria-pressed, never in the wording */
+.analysis-region-toggles{display:inline-flex;gap:4px;align-items:center}
+.analysis-region-toggle{min-width:32px;white-space:nowrap}
+.analysis-region-toggle[aria-pressed="true"]{border-color:rgb(var(--ui-blue-bd));background:rgb(var(--ui-blue-bg));color:rgb(var(--ui-blue-tx))}
+.analysis-region-toggle[aria-pressed="false"]{border-style:dashed;background:transparent;color:rgb(var(--ui-t4))}
+/* the list's header: the count, 「隠れ N」 and 「すべて表示」 */
+.analysis-summary-head{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;margin-bottom:7px}
+.analysis-summary-head .analysis-region-button{min-height:28px}
 @media(max-width:640px){.volume-analysis-panel{max-width:calc(100% - 20px)}.volume-analysis-result{min-width:min(310px,calc(100vw - 80px));max-width:calc(100vw - 80px)}.analysis-region-row{grid-template-columns:auto minmax(0,1fr) auto}.analysis-region-delete{grid-column:3}.analysis-region-button{padding:5px 6px}}
 
 .app-version-badge{
@@ -847,6 +860,9 @@ footer #footer:empty{display:none}
 .settings-cache-row{display:flex;justify-content:space-between;align-items:center;gap:8px;border:1px solid rgb(var(--ui-b1));border-radius:8px;padding:6px 8px}
 .settings-cache-text{min-width:0;font-size:12px;overflow-wrap:anywhere}
 .settings-cache-text small{color:rgb(var(--ui-t4))}
+/* the status lines changed height as their text changed (frame
+   times 4x/s), which resized the 3D view and its canvas on every update
+   (98 resizes in one drag on a Mac). Fixed heights, scroll inside. */
 .gpu-status-bar{height:calc(1.45em * 2 + 10px);overflow-y:auto;box-sizing:border-box}
 footer #footer{height:calc(1.5em * 2 + 10px);overflow-y:auto;box-sizing:border-box}
 footer #footer:empty{display:block}
@@ -1034,14 +1050,15 @@ html.vrl-ipad-ui .point-menu-btn{min-height:44px;min-width:64px;font-size:15px}
 .analysis-label-3d.is-lit,.analysis-label-3d.is-dragging{background:#ffe27a;color:#111;border-color:#fff!important;box-shadow:0 0 0 2px rgba(255,255,255,.9),0 0 10px 2px rgba(255,210,61,.85)}
 .analysis-label-3d.is-lit>span,.analysis-label-3d.is-dragging>span{color:#111;opacity:1}
 .vrl-ipad-ui .analysis-label-3d{font-size:12px;line-height:15px}
-.comment-lines-3d .analysis-leader-3d{stroke-width:1.2;stroke-opacity:.85}
-.comment-lines-3d .analysis-leader-3d.is-lit{stroke:#ffe27a!important;stroke-opacity:1;stroke-width:2}
+.comment-lines-3d .analysis-leader-3d{stroke-width:3;stroke-opacity:.9;stroke-linecap:round} /* the leg: thick, round ends, one unbroken stroke */
+.comment-lines-3d .analysis-leader-3d.is-lit{stroke:#ffe27a!important;stroke-opacity:1;stroke-width:4.5}
 .comment-lines-3d .analysis-anchor-3d{stroke:#fff;stroke-width:1;stroke-opacity:.9}
 .analysis-label-3d,.analysis-leader-3d{transition:opacity .15s}
-/* behind a volume = hidden completely (label, leader, anchor dot; a card being dragged stays); embedded in shown tissue and not pushed out = translucent; under a nearer overlapping card = hidden (a lit one always shows) */
-.analysis-label-3d.is-behind:not(.is-lit):not(.is-dragging),.analysis-leader-3d.is-behind:not(.is-lit),.comment-lines-3d .analysis-anchor-3d.is-behind:not(.is-lit){visibility:hidden}
+/* behind a volume = card and leader hidden completely (a card being dragged stays), the anchor dot translucent (.is-faint, 0.45: the dot is never hidden by tissue); embedded in shown tissue and not pushed out = translucent; under a nearer overlapping card = hidden, only in the modes that thin the overlapped cards (a lit one always shows) */
+.analysis-label-3d.is-behind:not(.is-lit):not(.is-dragging),.analysis-leader-3d.is-behind:not(.is-lit){visibility:hidden}
 .analysis-label-3d.is-faint:not(.is-lit):not(.is-dragging),.analysis-leader-3d.is-faint:not(.is-lit),.comment-lines-3d .analysis-anchor-3d.is-faint:not(.is-lit){opacity:.45}
 .analysis-label-3d.is-overlapped:not(.is-lit):not(.is-dragging),.analysis-leader-3d.is-overlapped:not(.is-lit),.comment-lines-3d .analysis-anchor-3d.is-overlapped:not(.is-lit){visibility:hidden}
+.comment-lines-3d .analysis-anchor-3d.is-covered{visibility:hidden} /* behind a nearer card: not drawn at all (even a lit one) */
 @media (prefers-reduced-motion:reduce){.analysis-label-3d,.analysis-leader-3d{transition:none}}
 .analysis-label-actions{display:flex;flex-wrap:wrap;gap:6px}
 .analysis-label-actions button{min-height:32px;border:1px solid rgb(var(--ui-b3));border-radius:7px;background:rgb(var(--ui-s2));color:rgb(var(--ui-t2));padding:5px 8px;font-size:10px;font-weight:750;cursor:pointer;pointer-events:auto}
@@ -1153,6 +1170,10 @@ html.vrl-ipad-ui .ipad-mode-split .viewer-grid[data-dock="split-full"]>.analysis
 .hu-line-3d-armed canvas{cursor:crosshair}
 @media (prefers-reduced-motion:reduce){.lp-live{animation:none}}
 
+/* one place per kind of control (workspace UI, PC + iPad; workspace-ui.js).
+   Top bar = files + VR/AR | preferences.  Left = tool rail + one panel with that tool's settings and results.
+   View bar = how the views look (screen, 2D plane, what 3D shows, 3D viewpoint).  The 3D view carries no buttons.
+   The 3D card's own analysis buttons stay in the DOM (the panel proxies click them) but are never shown. */
 html.vrl-ipad-ui #volume-analysis-toggle,
 html.vrl-ipad-ui #section-view-toggle,
 html.vrl-ipad-ui #seg-hist-toggle,
@@ -1171,6 +1192,10 @@ html.vrl-ipad-ui .ipad-workspace-toolbar .three-overlay-controls .tool-chip{
 }
 html.vrl-ipad-ui .ipad-workspace-toolbar .three-overlay-controls .tool-chip.is-active{background:rgb(var(--ui-blue-bg));border-color:rgb(var(--ui-blue-bd));color:rgb(var(--ui-blue-tx))}
 html.vrl-ipad-ui .ipad-workspace-toolbar .three-overlay-controls .tool-chip:disabled{opacity:.45}
+/* the 3D viewpoint buttons (roll / X / Y / Z / ?, scene-view.js) are a small overlay at the top right of the 3D pane,
+   not in the view bar.  The 3D card is hidden in 2D, so they are too.  The row lets pointer events through (rotate / pinch / drag
+   work between the buttons); only the buttons take them.  The 3D再構築 chip is bottom right, the 3D label top left, so the
+   top right is theirs: the slice sliders of .volume-analysis-panel start below them.  The cache delete button lives only in 設定. */
 html.vrl-ipad-ui .three-view-controls{top:8px!important;right:8px!important;bottom:auto!important;max-width:calc(100% - 16px);gap:6px!important;padding:0!important;border:0!important;border-radius:0!important;background:none!important;backdrop-filter:none!important;pointer-events:none!important;z-index:13}
 html.vrl-ipad-ui .three-view-controls button{pointer-events:auto;touch-action:manipulation;min-width:40px!important;height:40px!important;padding:0 8px!important;border-radius:9px!important;font-size:14px!important;font-weight:800!important}
 html.vrl-ipad-ui .three-view-controls .three-help-button{position:static!important;width:40px!important;border-radius:50%!important;font-size:16px!important}
@@ -1179,6 +1204,8 @@ html.vrl-ipad-ui .volume-analysis-panel{top:56px}
 html.vrl-ipad-ui #volume-cache-clear{display:none!important}
 html.vrl-ipad-ui .ipad-mode-2d .ws-3d-only{display:none!important}
 html.vrl-ipad-ui .ipad-mode-3d .ws-2d-only{display:none!important}
+/* the view bar wrapped to two rows on narrower screens; drop the group captions and trim the button padding so
+   every mode fits one row; the buttons keep their 40px height */
 @media (max-width:1366px){
   html.vrl-ipad-ui .ipad-workspace-toolbar{gap:6px}
   html.vrl-ipad-ui .ipad-workspace-toolbar .ws-cap[data-i18n="wsScreen"]{display:none}
@@ -1245,6 +1272,7 @@ html.vrl-ipad-ui .ws-pref-row>.ws-cap{font-size:12px;white-space:normal}
 html.vrl-ipad-ui .ws-pref-row .theme-quick,html.vrl-ipad-ui .ws-pref-row .theme-quick select,html.vrl-ipad-ui .ws-pref-row>button{width:100%;min-height:40px}
 @media (orientation:landscape){html.vrl-ipad-ui .sidebar>.ws-tool-rail>#ws-settings-entry{margin-top:auto}}
 html.vrl-ipad-ui .topbar{min-height:0}
+/* fewer modals — practice data opens in place, settings live in the 設定 panel, questions are asked in place */
 html.vrl-ipad-ui .ws-sample-picker{display:grid;grid-template-rows:0fr;visibility:hidden;transition:grid-template-rows .22s ease,visibility 0s linear .22s}
 html.vrl-ipad-ui .ws-sample-picker.is-open{grid-template-rows:1fr;visibility:visible;transition:grid-template-rows .22s ease,visibility 0s}
 html.vrl-ipad-ui .ws-sample-inner{min-height:0;overflow:hidden;display:grid;gap:6px}
@@ -1299,6 +1327,7 @@ html.vrl-ipad-ui .event-launcher{grid-column:2;grid-row:1}
 .event-cards{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr));gap:24px;align-content:start;padding:6px 6px 28px}
 .event-card{display:grid;gap:12px;align-content:start;min-width:0;position:relative;padding:16px;border-radius:20px;border:3px solid rgb(var(--ui-b2));background:rgb(var(--ui-s2));color:rgb(var(--ui-t2));cursor:pointer}
 .event-card:has(>.event-card-btn:hover:not(:disabled)){border-color:rgb(var(--ui-blue-bd2))}
+.event-card.is-cached{border-color:rgb(var(--ui-green-tx))}
 .event-card:has(>.event-card-btn.is-selected){border-color:rgb(var(--ui-blue-bd));background:rgb(var(--ui-blue-bg));color:rgb(var(--ui-blue-tx))}
 .event-card:has(>.event-card-btn:disabled){cursor:progress;opacity:.7}
 .event-card:has(>.event-card-btn.is-selected:disabled){opacity:1}
@@ -1311,6 +1340,13 @@ html.vrl-ipad-ui .event-launcher{grid-column:2;grid-row:1}
 .event-card-badge{padding:3px 14px;border-radius:99px;border:1px solid rgb(var(--ui-blue-bd));background:rgb(var(--ui-blue-bg));color:rgb(var(--ui-blue-tx));font-weight:700;font-size:20px}
 .event-card-name{font-size:24px;font-weight:700;line-height:1.3}
 .event-card-mission{font-size:18px;line-height:1.55}
+/* n738: the card's two marks. 「キャッシュ済み」 = the frame colour (.event-card.is-cached above: green text colour of the theme, readable on every theme; a hover / selected / processing card keeps its own colour, they come later or with a more specific selector) + this tag;
+   「データ保存済み」 = this tag only (neutral colours: the frame colour belongs to the cache mark) */
+.event-card-tags{display:flex;flex-wrap:wrap;gap:8px}
+.event-card-tags[hidden],.event-card-tag[hidden]{display:none!important}
+.event-card-tag{padding:2px 12px;border-radius:99px;border:1px solid rgb(var(--ui-b3));background:rgb(var(--ui-s4));color:rgb(var(--ui-t2));font-size:16px;font-weight:700;line-height:1.5}
+.event-card-tag.is-cached{border-color:rgb(var(--ui-green-tx));background:rgb(var(--ui-green-bg));color:rgb(var(--ui-green-tx))}
+.event-card:has(>.event-card-btn.is-selected) .event-card-tag{border-color:currentColor;background:transparent;color:inherit}
 .event-card-license{margin:0;font-size:15px;line-height:1.5;color:rgb(var(--ui-t3));overflow-wrap:anywhere;-webkit-user-select:text;user-select:text}
 .event-card-license a{color:inherit;font-weight:700;text-decoration:underline}
 .event-card-license summary{cursor:pointer;margin-top:2px}
@@ -1359,6 +1395,8 @@ button,a,img,svg{-webkit-user-drag:none}
 .sample-credit>div:first-child{font-weight:700}
 .sample-credit a{color:inherit;font-weight:700;text-decoration:underline}
 
+/* 設定 is one LARGE modal, normal and event mode. #settings-dialog is about 90vw x 90dvh (width capped on wide screens); its head stays, the body (event reset button,
+   外観 / 言語 rows, tabs, panes) scrolls inside it, so the modal never overflows the screen. Hit targets are laser-sized (Quest). Scoped to #settings-dialog: the tutorial voice dialog shares .settings-dialog. */
 #settings-dialog{width:min(90vw,1200px);max-width:calc(100vw - 16px);height:90vh;height:90dvh;max-height:calc(100vh - 16px);max-height:calc(100dvh - 16px);padding:0;box-sizing:border-box}
 #settings-dialog[open]{display:flex;flex-direction:column;overflow:hidden}
 #settings-dialog .settings-head{flex:0 0 auto;margin:0;padding:12px 20px;border-bottom:1px solid rgb(var(--ui-b1))}

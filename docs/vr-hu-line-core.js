@@ -2,7 +2,7 @@
 // The controller ray hit -> a voxel position of the shared model (hu-line-model.js), the update rate of the live panel, the panel's layout,
 // the plot geometry and the texts. The stateful part (three.js objects, the gesture, the sampling calls) is vr-hu-line.js.
 // also the VR self-check's HU線 scenario (below; the self-check runner has no DOM and no three.js either).
-import { registerVrSelfCheck } from './vr-self-check.js?v=20261110-build708';
+import { registerVrSelfCheck } from './vr-self-check.js?v=20261118-build744';
 
 // VR self-check scenario: the frame rate while a line is stretched, then the time of the full read after the release.
 // env.huLine (vr-view.js) = { beginDrag() -> '' | reason, moveTo(u), release(), reading(), cancel() }: a synthetic laser (no controller) drags a line
@@ -114,6 +114,9 @@ export function readErrorText(lang, e) {
   return (ja ? 'HU線の読み取りに失敗: ' : 'HU line read failed: ') + m.slice(0, 60);
 }
 
+// ---- the live panel (a canvas of PANEL_W x PANEL_H px) ----
+// world width 0.17 -> 0.30 m, read at about 0.85 m (the smallest 20 px text is
+// 1.2 cm tall, like the help board's 30 px). Height follows the aspect.
 export const PANEL_W = 512, PANEL_H = 300, PANEL_WORLD_W = 0.30;
 export function panelLayout(w = PANEL_W, h = PANEL_H) {
   const pad = 14, head = 44, statH = 84, gap = 8, axisL = 58, axisB = 22;
@@ -145,6 +148,10 @@ export function plotPoints(dist, values, n, rect, lo, hi, maxMm, out) {
   }
   return cnt;
 }
+// ---- the panel's moving parts are geometry, not canvas (frame dips while dragging, self-check HU線 p5 62.2 vs 64.8) ----
+// The canvas (background: frame, title, plot area, box labels) is redrawn only when its state changes (backgroundKey); the graph is a ribbon of
+// quads (ribbonInto) and the numbers are quads of a digit atlas (glyphsInto), both written into preallocated buffers. Pixel coordinates are those
+// of the PANEL_W x PANEL_H canvas; out positions are the panel mesh's local metres (x right, y up, z = zOff).
 export const PX_TO_M = PANEL_WORLD_W / PANEL_W, PANEL_WORLD_H = PANEL_WORLD_W * PANEL_H / PANEL_W;
 export const pxX = x => x * PX_TO_M - PANEL_WORLD_W / 2, pxY = y => PANEL_WORLD_H / 2 - y * PX_TO_M;
 export const GRAPH_MAX_POINTS = 4096; // the full read's sample cap (line-profile.js); plotPoints writes at most this many

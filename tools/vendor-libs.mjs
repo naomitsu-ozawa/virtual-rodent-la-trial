@@ -9,7 +9,7 @@
 //   * Every package is fetched with `npm pack <name>@<version>` and the tarball is checked against the pinned sha512
 //     integrity below (the same value npm records in package-lock.json for the packages that are also in the lock file).
 //   * three, fflate: the package's own ESM files are copied as they are (three: build/three.core.js, three.module.js,
-//     three.webgpu.js - the same files cdn.jsdelivr.net served for the URLs the app used before).
+//     three.tsl.js, three.webgpu.js - the same files cdn.jsdelivr.net served for the URLs the app used before).
 //   * dicom-parser has no ESM build (only a UMD file): a small esbuild bundle turns dist/dicomParser.min.js into an ES module
 //     with a default export (what esm.sh did on the fly). The `zlib` require of the UMD wrapper is the Node-only inflate path;
 //     it is mapped to an empty stub.
@@ -32,7 +32,7 @@ const VENDOR = join(REPO, 'docs/vendor');
 
 // name, version, npm integrity (sha512)
 export const PACKAGES = {
-  three: ['three', '0.186.0', 'sha512-cr/fIM2ddMSVbYVgkfD4jLJv7Fh/8ZTjvo+7gQeSVGUZHxpx9FDwoL5iC7hUz/LiRA8wMbqfnb90xKfm1/HHkQ=='],
+  three: ['three', '0.187.0', 'sha512-Qiu7R+Cmh8CstZsY1uJOSWnVlfo7ZtNLV7mF8Jltk3LB3AtDu9cRZlcnRKkAk8Y4z6KKw35z7Y7Urd7jWY8etA=='],
   dicomParser: ['dicom-parser', '1.8.21', 'sha512-lYCweHQDsC8UFpXErPlg86Px2A8bay0HiUY+wzoG3xv5GzgqVHU3lziwSc/Gzn7VV7y2KeP072SzCviuOoU02w=='],
   fflate: ['fflate', '0.8.2', 'sha512-cPJU47OaAoCbg0pBvzsgpTPhmhqI5eJjh/JIu8tPj5q+T7iLvW/JAYUqmE7KOB4R1ZyEhzBaIQpQpardBF5z8A=='],
   loader: ['@cornerstonejs/dicom-image-loader', '5.10.8', 'sha512-OBkaUv4YaNsk2hezl3XMrcKWs/QzL1HcS/3wzxe32j6FSRmTBO7QLrhUgH79R3nX+snBg9uJgr3QGR07I7KGOg=='],
@@ -73,9 +73,9 @@ export async function buildVendor(out) {
     const copy = (key, dir, from, to = from) => put(dir, to, readFileSync(join(pk[key], from)));
     const dirOf = key => `${PACKAGES[key][0].replace(/^@[^/]+\//, '')}@${PACKAGES[key][1]}`;
 
-    // ---- three: the three build files the app imports (three.webgpu.js and three.module.js both import ./three.core.js)
+    // ---- three: the three build files the app imports (three.webgpu.js and three.module.js import ./three.core.js; since 0.187 three.webgpu.js also imports ./three.tsl.js)
     const t = dirOf('three');
-    for (const f of ['build/three.core.js', 'build/three.module.js', 'build/three.webgpu.js', 'LICENSE']) copy('three', t, f);
+    for (const f of ['build/three.core.js', 'build/three.module.js', 'build/three.tsl.js', 'build/three.webgpu.js', 'LICENSE']) copy('three', t, f);
 
     // ---- fflate: the package's browser ESM build (single file, no imports)
     const f = dirOf('fflate');
