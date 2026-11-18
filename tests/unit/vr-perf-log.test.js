@@ -113,7 +113,7 @@ describe('the text (panel / copy / file)', () => {
     expect(t[4]).toContain('frame intervals');
     const h = t.findIndex(l => /^\s*t\s+fps\s+g1/.test(l));
     expect(h).toBeGreaterThan(0); expect(t.slice(h + 1)).toHaveLength(3);
-    expect(t[h]).toMatch(/vol\s+main\s+render\s+js\s+span\s+gap\s+oth\s+cpu\s+swd\s+f\s+per\s+cap\s+auto\s+lv\s+si\s+step\s+cov\s+w\s+h\s+size\s+menu\s+hz\s+fov/);
+    expect(t[h]).toMatch(/vol\s+main\s+render\s+js\s+span\s+gap\s+oth\s+cpu\s+swd\s+wake\s+pre\s+vlat\s+vdrop\s+f\s+per\s+cap\s+auto\s+lv\s+si\s+step\s+cov\s+w\s+h\s+size\s+menu\s+hz\s+fov/);
     expect(t[h + 1].trim().split(/\s+/)).toHaveLength(t[h].trim().split(/\s+/).length);
     expect(perfReport(sample('webgl'), {})).toContain('· WebGL ·');
     const w = sample('webgl'); w.meta['GPU timers'] = 'none (no GPU time)';
@@ -162,8 +162,70 @@ describe('the frame timeline columns: span / gap medians, oth, cpu / swd means',
   it('wiring: the frame end (marker, cpu, swd) runs after the main render, swd on every 4th frame one at a time; span / gap are taken with the volume ms', () => {
     expect(vr).toContain("perfLog.add('render',performance.now()-rc0); // the CPU ms of renderer.render() (WebGPU: with gxRender's bookkeeping)\n  if(gx)gxFrameEnd(fa0);");
     expect(vr).toContain("gx.vol?.volume.markFrame?.()"); expect(vr).toContain("perfLog.add('cpu',t1-fa0)");
-    expect(vr).toContain("if(!gxSwdBusy&&(gxS.rendered&3)===2){gxSwdBusy=true;gx.device.queue.onSubmittedWorkDone()");
+    expect(vr).toContain("if(!gxSwdBusy&&(gxS.rendered&3)===2){gxSwdBusy=true;const fn=frameNo;gx.device.queue.onSubmittedWorkDone()");
     expect(vr).toContain("perfLog.sample('span',v)"); expect(vr).toContain("perfLog.sample('gap',v)");
+  });
+});
+
+describe('the wake / pre / vlat columns (the wait inside the gap)', () => {
+  it('a row has their means; a second with no sample (and every WebGL second) has "-"; the summary has their medians, the report a line and a note', () => {
+    let clock = 1000; const log = createPerfLog({ kind: 'webgpu', now: () => clock, store: null });
+    log.add('wake', 2); log.add('wake', 4); log.add('pre', 1.2); log.add('vlat', 0.5); log.add('vlat', NaN); log.add('vlat', -1); // the last two are ignored
+    const r = log.row({ menu: 0 }, clock);
+    expect([r.wake, r.pre, r.vlat]).toEqual([3, 1.2, 0.5]);
+    clock = 2000; const r2 = log.row({ menu: 0 }, clock); expect([r2.wake, r2.pre, r2.vlat]).toEqual([null, null, null]);
+    for (let i = 3; i <= 5; i++) { clock = i * 1000; log.frame(clock - 500, BUDGET); log.frame(clock, BUDGET); log.add('wake', i); log.add('pre', 1); log.add('vlat', 2); log.row({ menu: 0 }, clock); }
+    const s = log.summary(); expect(s.pre).toBe(1); expect(s.vlat).toBe(2);
+    const t = perfReport(log, {}); expect(t).toContain('wake '); expect(t).toContain(' ms · pre 1 ms · vlat 2 ms');
+    for (const w of ['wake = ms from the moment queue.onSubmittedWorkDone', 'pre = ms from the start of the XR frame callback to the return of the volume pass submit', 'vlat = ms from the volume pass submit to queue.onSubmittedWorkDone minus that frame', 'a negative vlat is rounded to 0', 'recorded only for frames whose completion arrived before the next frame started', 'counted in vdrop']) expect(t, w).toContain(w);
+    const gl = createPerfLog({ kind: 'webgl', now: () => 1000, store: null }); const g = gl.row({ menu: 0, fps: 72 }, 1000); expect([g.wake, g.pre, g.vlat]).toEqual([null, null, null]);
+  });
+  it('vdrop: the share of vlat samples dropped at the CPU floor (GPU already done) is a column; dropped samples leave vlat unchanged', () => {
+    let clock = 1000; const log = createPerfLog({ kind: 'webgpu', now: () => clock, store: null });
+    log.add('vdrop', 1); log.add('vdrop', 0); log.add('vlat', 3);
+    const r = log.row({ menu: 0 }, clock); expect([r.vdrop, r.vlat]).toEqual([0.5, 3]);
+    expect(vr).toContain("if(p.d<=floor+0.5){perfLog.add('vdrop',1);return}perfLog.add('vdrop',0);");
+  });
+  it('wiring: pre is taken when the volume pass submit returns, vlat on every 4th frame (a phase of its own) sharing the one-at-a-time wait with swd, wake from the swd of the previous sampled frame to the next frame start', () => {
+    expect(vr).toContain("const tv=performance.now();perfLog.add('pre',tv-fa0);");
+    expect(vr).toContain("if(!gxSwdBusy&&(gxS.rendered&3)===3){");
+    expect(vr).toContain("gx.vol.volume.onFrameVolMs?.(ms=>{p.v=ms;fin()})"); expect(vr).toContain("perfLog.add('vlat',Math.max(0,p.d-p.v))"); expect(vr).toContain("if(p.d<=floor+0.5){perfLog.add('vdrop',1);return}"); expect(vr).toContain("if(gxVolPend)gxVolPend.t1=t1"); expect(vr).toContain("catch(e){gxSwdBusy=false;gxVolPend=null;");
+    expect(vr).toContain("perfLog.add('swd',n-t1);if(frameNo===fn)gxWakeAt=n");
+    expect(vr).toContain("if(gxWakeAt>0){if(fa0-gxWakeAt<1000)perfLog.add('wake',fa0-gxWakeAt);gxWakeAt=0}");
+    expect(vr.indexOf("gxVolSubmitted(fa0);")).toBeGreaterThan(vr.indexOf('gx.vol.draw({u:material.uniforms'));
+    expect(vr.indexOf("gxVolSubmitted(fa0);")).toBeLessThan(vr.indexOf('rs.low=true;rs.w=gx.vol.stats.w'));
+  });
+});
+
+describe('WebGPU: the volume pass is submitted before the bookkeeping that does not feed it', () => {
+  const loopAt = vr.indexOf(' renderer.setAnimationLoop(xrTs=>{'), draw = vr.indexOf('gx.vol.draw({u:material.uniforms');
+  const at = (needle, from = loopAt) => { const i = vr.indexOf(needle, from); expect(i, needle).toBeGreaterThan(from); return i; };
+  it('what decides the volume (hands, planes, uniforms, shown set, pair / part, render scale, region highlight) is before the submit; the HU line / hover / cards / markers bookkeeping is after it on WebGPU', () => {
+    for (const before of ['updatePress(c,nowF)', 'setRegionHighlight(hlTracker.update(', 'refreshContentBox();', 'skipTick();', 'pairFrame();', 'partFrame();', 'benchTick();', 'const kF=FOVEA_K[settings.foveation|0]??1', 'const f=benchOn?fRaw:scaleGuard.step(fRaw,nowG)'])
+      expect(at(before), before).toBeLessThan(draw);
+    const late = at('if(gx){lateHints();lateScale();lateHud();lateCards();lateMarks()}');
+    expect(late).toBeGreaterThan(draw);
+    expect(late).toBeLessThan(at('labelBatch.flush(renderer,camera);', draw)); expect(late).toBeLessThan(at('if(gx)gxRender();', draw));
+    const calls = vr.slice(loopAt, draw).match(/(if\(!gx\))?(lateHints|lateScale|lateHud|lateCards|lateMarks)\(\)/g) || []; // before the submit every call is guarded by !gx (WebGL)
+    expect(calls).toHaveLength(5); expect(calls.every(c => c.startsWith('if(!gx)'))).toBe(true);
+  });
+  it('WebGL keeps its order: lateHints / lateScale at their old places, lateHud at the old place (right after the controller loop), lateCards after the highlight (before the thumbstick scroll), lateMarks after benchTick; all three only when there is no gx', () => {
+    const hints = at('if(!gx)lateHints();'), scl = at('if(!gx)lateScale()'), hud = at('if(!gx)lateHud();'), cards = at('if(!gx)lateCards();'), scroll = at('// thumbstick scroll'), marks = at('if(!gx)lateMarks();');
+    expect(hints).toBeGreaterThan(at('tutVr.update(performance.now())')); expect(hints).toBeLessThan(at('placeHelpNow();')); // the guides read what the tutorial step set this frame
+    expect(scl).toBeGreaterThan(at('const cs=clampScale(holder.scale.x,lm)')); expect(scl).toBeLessThan(at('let tutHov=-1,hover=-1')); // after the scale is clamped, before the controller loop
+    expect(hud).toBeGreaterThan(at('c.userData.gate.update(')); expect(hud).toBeLessThan(at('{snFrame=undefined;'));
+    expect(cards).toBeGreaterThan(at('setRegionHighlight(hlTracker.update(')); expect(cards).toBeLessThan(scroll);
+    expect(marks).toBeGreaterThan(at('benchTick();')); expect(marks).toBeLessThan(at('data-resolution cap (vr-render-scale.js)'));
+  });
+  it('the late functions hold exactly the moved bookkeeping, fed by the loop through lf', () => {
+    const fn = (name, next) => vr.slice(vr.indexOf(' const ' + name + '=') , vr.indexOf(next));
+    const hints = fn('lateHints', ' const lateHud='), scl = fn('lateScale', ' const lateHints='), hud = fn('lateHud', ' const lateCards='), cards = fn('lateCards', ' const lateMarks='), marks = fn('lateMarks', ' renderer.setAnimationLoop(xrTs=>{');
+    for (const w of ['ctlHints.update(', 'edgeArrow.update(', 'boardArrow.update(', 'glowHelp.visible=']) expect(hints, w).toContain(w);
+    for (const w of ['scaleTag.setText(', 'scaleTag.place(holder,vrHalfExt,head)', 'scaleMenuKey=k']) expect(scl, w).toContain(w);
+    for (const w of ['huLine.update(lf.js0)', 'menu.setHover(hover)', 'help.setHover(tutHov)', 'hist.setAxisHover(', 'undoBtn.update(', 'flingDbg?.update(']) expect(hud, w).toContain(w);
+    for (const w of ['syncPins();', 'embedLabel(lb,occ,pinHeld.has(lb.rid))', 'thinPins(occ);', 'px.pins()']) expect(cards, w).toContain(w);
+    for (const w of ['updateHidden(nowH)', 'vpMarkers.update(', 'vpMeasure.update(', 'pt2.markers.update(', 'pt2.measure.update(']) expect(marks, w).toContain(w);
+    expect(vr).toContain('lf.js0=js0;lf.hover=hover;lf.tutHov=tutHov;lf.undoLit=undoLit;lf.histHov=histHov;lf.hoverIds=hoverIds;');
   });
 });
 

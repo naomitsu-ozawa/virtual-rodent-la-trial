@@ -2,7 +2,7 @@
 // (the three.js Data3DTexture objects stay the holders of the data, a GPUTexture is made from one on first use and again when its version changes), the volume render pass per eye,
 // the offscreen targets (colour + depth packed in rgba8, both eyes side by side, reduced scale and the periphery target), and the composite material (three.js NodeMaterial, TSL) that
 // puts the offscreen image into the headset's frame with the volume's depth. Plain WebGPU; three.js (the WebGPU build) is passed in.
-import { volumeWgsl, uniformLayout, BOX_VERTICES, VOLUME_BINDINGS } from './vr-wgsl-core.js?v=20261118-build747';
+import { volumeWgsl, uniformLayout, BOX_VERTICES, VOLUME_BINDINGS } from './vr-wgsl-core.js?v=20261118-build748';
 
 export const VRGPU_STORE_KEY = 'vrl-vr-gpu';
 // the choice of the page's 「WebGPUで開く」 button (kept per browser; no URL parameter: the public build's gate takes no unknown URL keys). Default: the WebGL view.
@@ -281,7 +281,7 @@ export function createVolumeGpu({ device, THREE, f16 = false, onTargetFreed = nu
     markTex: device.createTexture({ size: [1, 1, 1], format: 'rgba8unorm', usage: GPUTextureUsage.RENDER_ATTACHMENT }),
     seq: 0, cur: null, q: [], prev: null, gaps: [], spans: [],
   } : null;
-  const newRec = () => ({ id: ++ts.seq, pend: 0, vols: 0, b: null, e: null, bad: false, closed: false }); // one XR frame: b = first start, e = last end (BigInt ticks, ns), pend = readbacks still to come
+  const newRec = () => ({ id: ++ts.seq, pend: 0, vols: 0, b: null, e: null, bad: false, closed: false, vpend: 0, vms: 0, vbad: false, vcb: null }); // one XR frame: b = first start, e = last end (BigInt ticks, ns), pend = readbacks still to come
   if (ts) ts.cur = newRec();
   // the frames whose readbacks are all in, oldest first: a frame with every timestamp valid gives its span; its gap needs the frame before it to be valid too
   const finishFrames = () => {
@@ -306,6 +306,10 @@ export function createVolumeGpu({ device, THREE, f16 = false, onTargetFreed = nu
       rec.pend--; sl.busy = false; finishFrames();
     }).catch(() => { rec.bad = true; rec.pend--; sl.busy = false; finishFrames(); });
   };
+  // the volume passes of one XR frame have all been read back (performance record only): volDone is called per pass; the callback of onFrameVolMs gets the frame's volume GPU ms (the sum of its passes, as the vol column)
+  const volDone = rec => { if (--rec.vpend > 0 || !rec.vcb) return; const cb = rec.vcb; rec.vcb = null; if (!rec.vbad) cb(rec.vms); };
+  // cb(ms) once the volume passes drawn so far in the CURRENT frame (call after draw(), before markFrame()) have been read back; never called without a timer, when a pass was not timed or a read-back failed
+  const onFrameVolMs = cb => { if (!ts || !ts.cur || ts.cur.vpend === 0 || ts.cur.bad) return; ts.cur.vcb = cb; };
   const takeGpuMs = () => { if (!ts || !ts.count) return null; const r = { ms: ts.sumMs, n: ts.count }; ts.sumMs = 0; ts.count = 0; return r; };
   const takeFrameStats = () => { if (!ts || !(ts.spans.length || ts.gaps.length)) return null; const r = { gaps: ts.gaps, spans: ts.spans }; ts.gaps = []; ts.spans = []; return r; };
   // the end of this XR frame's GPU work (call after the frame's last submit, three.js' main render included): closes the frame record with a marker pass. No volume pass in the frame (nothing drawn) = no sample.
@@ -344,11 +348,11 @@ export function createVolumeGpu({ device, THREE, f16 = false, onTargetFreed = nu
     });
     pass.end();
     if (readback) enc.copyTextureToBuffer({ texture: target.color }, { buffer: readback.buffer, bytesPerRow: readback.bytesPerRow }, [readback.w, readback.h, 1]);
-    if (slot >= 0) { enc.resolveQuerySet(ts.qs, 2 * slot, 2, ts.resolve, 256 * slot); enc.copyBufferToBuffer(ts.resolve, 256 * slot, ts.slots[slot].buf, 0, 16); ts.slots[slot].busy = true; rec.pend++; rec.vols++; } // (a query resolve lands on a 256-byte offset)
+    if (slot >= 0) { enc.resolveQuerySet(ts.qs, 2 * slot, 2, ts.resolve, 256 * slot); enc.copyBufferToBuffer(ts.resolve, 256 * slot, ts.slots[slot].buf, 0, 16); ts.slots[slot].busy = true; rec.pend++; rec.vols++; rec.vpend++; } // (a query resolve lands on a 256-byte offset)
     device.queue.submit([enc.finish()]);
     if (slot >= 0) {
       const isLow = slot0 === 0;
-      readSlot(slot, rec, false, ms => { if (ms >= 0 && ms < 1000) { ts.sumMs += ms; if (isLow) ts.count++; } });
+      readSlot(slot, rec, false, ms => { if (ms >= 0 && ms < 1000) { ts.sumMs += ms; rec.vms += ms; if (isLow) ts.count++; } else rec.vbad = true; volDone(rec); });
     }
   };
 
@@ -358,7 +362,7 @@ export function createVolumeGpu({ device, THREE, f16 = false, onTargetFreed = nu
     for (const k of Object.keys(dummies)) dummies[k].destroy();
     if (ts) { try { ts.qs.destroy(); ts.resolve.destroy(); ts.slots.forEach(x => x.buf.destroy()); ts.markTex.destroy(); } catch { /* gone */ } }
   };
-  return { device, f16, layout, warm, pipeFor, gpuOf, copySlab, initTexture, getTarget, drawPass, dispose, takeGpuMs, takeFrameStats, markFrame, beginFrame, hasTimer: !!ts, poolSize: () => pool.length };
+  return { device, f16, layout, warm, pipeFor, gpuOf, copySlab, initTexture, getTarget, drawPass, dispose, takeGpuMs, takeFrameStats, onFrameVolMs, markFrame, beginFrame, hasTimer: !!ts, poolSize: () => pool.length };
 }
 
 // ---- the per-eye matrices of one volume pass: mvp = projection * view * model; origin = the eye in the volume's object space; lightOff = the shared headlight (lighting.js) in object space ----

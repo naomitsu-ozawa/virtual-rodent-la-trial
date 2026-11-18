@@ -305,6 +305,25 @@ describe('WebGPU: the frame\'s GPU timeline (span, gap) for the performance reco
   }));
 });
 
+describe('WebGPU: onFrameVolMs gives the volume GPU ms of the current frame once its read-backs are in (the performance record\'s vlat)', () => {
+  const draw = r => r.draw({ u: {}, cams: [eyeCam(640, 480)], model: new THREEG.Matrix4(), f: 1, fov: false, rects: null, variant: { cls4: false, events: false } });
+  it('is called with the sum of the frame\'s volume passes after the read-backs, not before, and once; a frame with nothing drawn never calls it', withGpuGlobals(async () => {
+    const { device } = timestampDevice([[10_000_000n, 17_500_000n], [17_600_000n, 17_700_000n]]);
+    const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1] });
+    const got = []; r.volume.onFrameVolMs(ms => got.push('none')); // nothing drawn yet in this frame: no call, ever
+    draw(r); r.volume.onFrameVolMs(ms => got.push(ms));
+    expect(got).toEqual([]); // the read-back is asynchronous
+    r.volume.markFrame(); await settle();
+    expect(got).toHaveLength(1); expect(got[0]).toBeCloseTo(7.5, 3);
+    r.dispose();
+  }));
+  it('without timestamp-query it never calls back (vlat stays "-")', withGpuGlobals(async () => {
+    const { device } = mockDevice(); const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1] });
+    let n = 0; draw(r); r.volume.onFrameVolMs(() => n++); r.volume.markFrame(); await settle();
+    expect(n).toBe(0); r.dispose();
+  }));
+});
+
 describe('WebGPU: the drawn region, its steps and the clip change', () => {
   it('bucketSize: steps of 64 up to 256, 128 up to 1024, 256 above; fitSlot keeps the held size while the need stays near it and never exceeds the full size', () => {
     expect([1, 64, 65, 256, 257, 1024, 1025, 2064].map(bucketSize)).toEqual([64, 64, 128, 256, 384, 1024, 1280, 2304]);

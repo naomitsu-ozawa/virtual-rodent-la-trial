@@ -6,7 +6,7 @@
 // A region AND a child under the laser at once (they overlap): four items, 領域の色 / 領域の表示 / 子の色 / 子の表示 (each says whose it is), the name of both in the middle. Layout: the top half = the region, the bottom half = the child; 色 left, 表示 right
 // (upper left = the region's 色, upper right = its 表示, lower left = the child's 色, lower right = its 表示: vr-ring.js wheelAngles(4, quad)).
 // The item states (on = lit) are what the user sees now: colour on, shape shown. Wording is fixed (never swapped with the state).
-import { regionVisible, regionHidden } from './region-visibility.js?v=20261118-build747';
+import { regionVisible, regionHidden } from './region-visibility.js?v=20261118-build748';
 
 // the ids of the items (the same in the one-target and the two-target ring, so one confirm handles both)
 export const RING_ITEM_IDS = Object.freeze(['rcolor', 'rshape', 'ccolor', 'cshape', 'rdetach', 'cdetach', 'pback']);
