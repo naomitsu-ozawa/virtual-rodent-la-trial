@@ -1,8 +1,36 @@
+// Non-overlapping segments (no voxel counted in two segments; priority = the order of the segment cards,
+// top first). Pure kernel + small state; segments.js holds the segment state.
+//
+// Each segment keeps the range the user set (userMin / userMax, what the sliders show); the range every view, the
+// runs, the analysis and the export use is seg.min / seg.max. With the mode 'priority' a segment's range is its user
+// range minus the ranges held by the ACTIVE segments above it in the card order (hidden-by-checkbox segments still
+// count, so hiding a card never moves another segment's voxels). 'off' = the user ranges as they are (overlaps allowed,
+// the behaviour before 438; projects saved before 438 load with it).
+//
+// Ranges are inclusive ([min, max], as every reader compares v >= min && v <= max); a range cut at a higher segment's
+// max b starts at the next float32 above b, so a filtered (non-integer) value can never fall into a gap between them.
+// When a higher range lies strictly inside a lower one, two pieces remain; the app holds one range per segment, so the
+// piece containing the middle of the user range is kept (else the larger) and the dropped piece is reported.
 const f32=new Float32Array(1),u32=new Uint32Array(f32.buffer);
 // next float32 above / below x (x finite)
 export function nextUp(x){f32[0]=x;if(f32[0]<=x){if(f32[0]===0){u32[0]=1}else if(f32[0]>0)u32[0]+=1;else u32[0]-=1}return f32[0]}
 export function nextDown(x){f32[0]=x;if(f32[0]>=x){if(f32[0]===0){u32[0]=0x80000001}else if(f32[0]>0)u32[0]-=1;else u32[0]+=1}return f32[0]}
 
+// segs: {key: {userMin, userMax, active, takes?, adds?}}; order: keys top → bottom.
+// Returns {key: {min, max, empty, dropped:[[a,b],…], sources:[key…], legacy:{min,max,empty,dropped}}}.
+//
+// (the higher segment wins, and what it adds or removes — Closing, hole filling, small-component
+// removal, air boundary, manual edits — also moves the segments below it, in every view): a segment is either
+//  - plain (takes !== false): nothing but its range decides its voxels, so the range itself is taken from the lower
+//    ones (min/max, as before);
+//  - a voxel taker (takes === false: it has post-processing or manual edits): its final voxels are subtracted from the
+//    lower segments voxel by voxel, so its range is NOT taken from them; the lower segment lists it in `sources`.
+// min/max are the range after the plain upper segments only. `sources` = the active upper segments whose final voxels
+// are subtracted from this one voxel by voxel: the voxel takers whose range overlaps this one's, or either side can ADD
+// voxels outside its range (adds: Closing or hole filling) — and when THIS segment adds, every active upper segment,
+// plain ones included, since what it adds may lie on any of them (the reference is the upper segment's final voxels,
+// so a plain upper segment's final voxels are its range minus its own sources). `legacy` = the old result
+// (every active upper segment taken by range), kept for the checks. With takes omitted every segment is plain.
 export function effectiveRanges(segs,order,mode){
  const out={},taken=[],legacyTaken=[],uppers=[];
  const cut=(s,list)=>{

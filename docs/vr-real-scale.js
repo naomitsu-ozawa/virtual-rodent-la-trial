@@ -51,6 +51,12 @@ export function realHolderScale(longMm) {
   return clampScale(realScaleOf(longMm), longMm);
 }
 
+// the scale when VR / AR starts (and on Home): 1x (real size). Oversize data -> fitted to 0.30 m (locked); unknown physical size
+// (no spacing) -> the old default fit (fallbackScale, 16.5 cm display), because there is no real size to show.
+// , moved to data: a dataset may start enlarged: `mag` is its sample.json vrInitialScale (sample-registry.js vrInitialScaleOf; 1 = real size, the default).
+// The registry's Lv0 bone (sample4) says 4 (x4 of the 2.56 cm bone is 10.2 cm; the two-hand pinch still has room up to the 0.30 m cap, x11.7). The scale tag / detail line read 「×4（実寸比）」.
+// No dataset is named in this file: with mag = 1 the result is exactly the real size start.
+// Data whose real longest side is under 5 cm starts enlarged to 5 cm (a larger vrInitialScale result wins; the limits are untouched, so it can still be pinched down to real size).
 export const MIN_START_LONG_M = 0.05;
 export function startHolderScale(longMm, fallbackScale, mag = 1) {
   const r = realHolderScale(longMm); // null: unknown physical size or oversize data -> the fit, whatever the magnification

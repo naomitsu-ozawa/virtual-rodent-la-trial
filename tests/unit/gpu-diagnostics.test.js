@@ -51,6 +51,7 @@ describe('error log', () => {
   it('never throws on odd values', () => { expect(() => { logGpuError('a', null); logGpuError('b', undefined); logGpuError('c', { get message() { throw new Error('x'); } }); }).not.toThrow(); });
 });
 
+// ---- a state like the Ubuntu hybrid machine, as gpuFilterRuntime holds it ----
 const dev = (limits = {}) => ({ limits: { maxBufferSize: 4294967296, maxStorageBufferBindingSize: 4294967292, ...limits }, features: new Set(['core-features-and-limits', 'timestamp-query']) });
 const nvidia = { info: { vendor: 'nvidia', architecture: 'ada', device: '', description: 'NVIDIA GeForce RTX 4070 Ti' }, isFallbackAdapter: false, limits: { maxBufferSize: 4294967296, maxTextureDimension3D: 2048 }, features: new Set(['core-features-and-limits']) };
 const request = { stored: 'auto', effective: 'auto', supported: true, option: { powerPreference: 'high-performance', featureLevel: 'core' }, optionIndex: 0 };

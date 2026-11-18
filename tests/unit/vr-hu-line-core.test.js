@@ -122,6 +122,8 @@ describe('vr-hu-line-core: live values from the VR texture copy (also with filte
     expect(textureMatchesMode(t, 'filtered')).toBe(true); expect(textureMatchesMode(t, 'raw')).toBe(false);
     expect(textureMatchesMode({ ...t, filtered: false }, 'raw')).toBe(true); expect(textureMatchesMode(null, 'raw')).toBe(false);
   });
+  // a mode-mismatched copy used to send the live values to the 2D caches, where every axial slice not
+  // cached is NaN; the line is a 3D line, so the copy is used anyway (approximate, labelled)
   it('an oblique line with a mode-mismatched texture gives zero NaN samples (both directions), approximate, unfiltered flagged', () => {
     const a = { i: 1, j: 2, k: 0 }, b = { i: 14, j: 9, k: 7 }, s = lineSamples(a, b, [0.5, 0.5, 1.2], 192);
     expect(new Set(Array.from(s.z, z => Math.round(z))).size).toBeGreaterThan(4); // crosses many axial slices
@@ -208,7 +210,7 @@ describe('vr-view.js wiring of the HU line (source guard; the file is a WebXR mo
     expect(m).not.toMatch(/\bc\.add\(panel\)|PANEL_POS|PANEL_TILT/); // never parented to a hand
     expect(m).toContain('function hidePanel() { panel.visible = panelOn = false; }'); // hiding keeps its place in the scene
     expect(src).toContain('scene.add(huLine.panel)');
-    expect(src).not.toMatch(/lazyFollow\(huLine\.panel/);
+    expect(src).not.toMatch(/lazyFollow\(huLine\.panel/); // fixed where placed (no auto-follow)
     expect(src).toContain("case'home':emit('home');markFront();bringVolumeFront();placeMenuNow();placeHelpNow();if(hist.isOpen)placeHistNow();placeHuNow();break;"); // quick ring 正面に戻す
     expect(src).toContain('()=>{markFront();bringVolumeFront();placeMenuNow();placeHelpNow();if(hist.isOpen)placeHistNow();placeHuNow();emit(\'home\')}'); // 表示 tab button
     expect(src).toContain('onPanelShow:()=>{if(!huPlaced&&poseAt)placeHuNow()}');
