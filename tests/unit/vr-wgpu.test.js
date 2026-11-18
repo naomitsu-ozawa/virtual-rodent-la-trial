@@ -257,6 +257,54 @@ describe('WebGPU: the passes draw a region of the eye, the viewport is that regi
   });
 });
 
+// the GPU timeline of a frame (performance record only): span = first volume pass start to the marker's end, gap = idle before the frame's first start
+const timestampDevice = script => { // script = [[begin, end], ...] in ns ticks, one per timed pass in the order the resolves are encoded
+  const { device, log } = mockDevice(); const marks = [];
+  device.features = new Set(['timestamp-query']); device.createQuerySet = () => ({ destroy() {} });
+  device.createBuffer = d => { const b = { d, vals: [0n, 0n], destroy() {}, mapAsync: async () => {}, getMappedRange: () => new BigUint64Array(b.vals).buffer, unmap() {} }; return b; };
+  device.createTexture = d => ({ d, destroy() {}, createView: () => ({}) });
+  const mk = device.createCommandEncoder; const queue = device.queue; let pending = [];
+  device.createCommandEncoder = () => { const e = mk(), bp = e.beginRenderPass; e.beginRenderPass = d => { if (d.timestampWrites && d.colorAttachments.length === 1) marks.push('marker'); return bp(d); }; e.resolveQuerySet = () => {}; e.copyBufferToBuffer = (_s, _o, dst) => { dst.vals = script.shift(); }; return e; };
+  queue.submit = () => {};
+  return { device, log, marks, pending };
+};
+const settle = () => new Promise(r => setTimeout(r, 0));
+describe('WebGPU: the frame\'s GPU timeline (span, gap) for the performance record, from the device\'s own timestamps', () => {
+  const draw = r => r.draw({ u: {}, cams: [eyeCam(640, 480)], model: new THREEG.Matrix4(), f: 1, fov: false, rects: null, variant: { cls4: false, events: false } });
+  it('span = the first volume pass start to the marker end, gap = the previous frame\'s marker end to this frame\'s first start; a frame with no volume pass is no sample and breaks the chain', withGpuGlobals(async () => {
+    const { device, marks } = timestampDevice([
+      [10_000_000n, 20_000_000n], [20_100_000n, 20_200_000n], // frame 1: vol 10 ms, marker end 20.2 ms -> span 10.2
+      [27_000_000n, 35_000_000n], [35_100_000n, 36_000_000n], // frame 2: first start 27 ms -> gap 6.8 ms after the marker end 20.2; span 9
+      [50_000_000n, 58_000_000n], [58_100_000n, 59_000_000n], // frame 4 (after a frame with nothing drawn): span 9, no gap
+    ]);
+    const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1] });
+    draw(r); r.volume.markFrame(); draw(r); r.volume.markFrame();
+    r.volume.markFrame(); // nothing drawn in this frame
+    draw(r); r.volume.markFrame();
+    await settle();
+    const st = r.volume.takeFrameStats();
+    expect(marks).toHaveLength(3); // no marker (and no timestamp slot) for the frame that drew nothing
+    expect(st.spans.map(x => +x.toFixed(3))).toEqual([10.2, 9, 9]);
+    expect(st.gaps.map(x => +x.toFixed(3))).toEqual([6.8]);
+    expect(r.volume.takeFrameStats()).toBeNull(); // taken once
+    r.dispose();
+  }));
+  it('without timestamp-query (the device has none) markFrame and takeFrameStats do nothing and no marker pass is made', withGpuGlobals(() => {
+    const { device, log } = mockDevice(); // features: none
+    const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1] });
+    draw(r); r.volume.markFrame();
+    expect(r.volume.takeFrameStats()).toBeNull(); expect(r.volume.takeGpuMs()).toBeNull(); expect(r.volume.hasTimer).toBe(false);
+    r.dispose();
+  }));
+  it('an unusable timestamp (zero, or the end before the start) makes that frame no sample', withGpuGlobals(async () => {
+    const { device } = timestampDevice([[0n, 0n], [1n, 2n], [10_000_000n, 20_000_000n], [20_100_000n, 20_200_000n]]);
+    const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1] });
+    draw(r); r.volume.markFrame(); draw(r); r.volume.markFrame(); await settle();
+    const st = r.volume.takeFrameStats(); expect(st.spans.map(x => +x.toFixed(3))).toEqual([10.2]); expect(st.gaps).toEqual([]);
+    r.dispose();
+  }));
+});
+
 describe('WebGPU: the drawn region, its steps and the clip change', () => {
   it('bucketSize: steps of 64 up to 256, 128 up to 1024, 256 above; fitSlot keeps the held size while the need stays near it and never exceeds the full size', () => {
     expect([1, 64, 65, 256, 257, 1024, 1025, 2064].map(bucketSize)).toEqual([64, 64, 128, 256, 384, 1024, 1280, 2304]);

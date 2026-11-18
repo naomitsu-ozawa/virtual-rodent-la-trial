@@ -113,7 +113,7 @@ describe('the text (panel / copy / file)', () => {
     expect(t[4]).toContain('frame intervals');
     const h = t.findIndex(l => /^\s*t\s+fps\s+g1/.test(l));
     expect(h).toBeGreaterThan(0); expect(t.slice(h + 1)).toHaveLength(3);
-    expect(t[h]).toMatch(/vol\s+main\s+render\s+js\s+f\s+per\s+cap\s+auto\s+lv\s+si\s+step\s+cov\s+w\s+h\s+size\s+menu\s+hz\s+fov/);
+    expect(t[h]).toMatch(/vol\s+main\s+render\s+js\s+span\s+gap\s+oth\s+cpu\s+swd\s+f\s+per\s+cap\s+auto\s+lv\s+si\s+step\s+cov\s+w\s+h\s+size\s+menu\s+hz\s+fov/);
     expect(t[h + 1].trim().split(/\s+/)).toHaveLength(t[h].trim().split(/\s+/).length);
     expect(perfReport(sample('webgl'), {})).toContain('· WebGL ·');
     const w = sample('webgl'); w.meta['GPU timers'] = 'none (no GPU time)';
@@ -130,6 +130,40 @@ describe('the text (panel / copy / file)', () => {
     const urlApi = { createObjectURL: () => 'blob:x', revokeObjectURL() {} };
     expect(saveGxDiagText('t', { build: '744', now: new Date(2026, 10, 18, 9, 15), doc, urlApi, name: 'vrl-vr-perf-webgl-744-20261118-0915.txt' })).toBe('vrl-vr-perf-webgl-744-20261118-0915.txt');
     expect(saveGxDiagText('t', { build: '744', now: new Date(2026, 10, 18, 9, 15), doc, urlApi })).toBe('vrl-vr-gpu-diag-744-20261118-0915.txt');
+  });
+});
+
+describe('the frame timeline columns: span / gap medians, oth, cpu / swd means', () => {
+  it('a row has the median span and gap of its second, oth = span - vol - main, the mean cpu and swd; a second with no sample has "-" (WebGL)', () => {
+    let clock = 1000; const log = createPerfLog({ kind: 'webgpu', now: () => clock, store: null });
+    for (const v of [9, 30, 10]) log.sample('span', v); for (const v of [6, 7, 100]) log.sample('gap', v);
+    log.add('vol', 10); log.add('main', 0.9); log.add('cpu', 4); log.add('cpu', 6); log.add('swd', 5);
+    const row = log.row({}, clock);
+    expect(row.span).toBe(10); expect(row.gap).toBe(7); expect(row.oth).toBe(-0.9); expect(row.cpu).toBe(5); expect(row.swd).toBe(5);
+    clock = 2000; const r2 = log.row({}, clock); // no samples: they start again
+    expect([r2.span, r2.gap, r2.oth, r2.cpu, r2.swd]).toEqual([null, null, null, null, null]);
+    const row3 = (() => { for (const v of [17, 17]) log.sample('span', v); log.add('vol', 10); log.add('main', 0.9); clock = 3000; return log.row({}, clock); })();
+    expect(row3.oth).toBe(6.1); expect(row3.gap).toBeNull();
+    log.sample('gap', NaN); log.sample('nope', 1); // ignored
+  });
+  it('the summary has their medians over the menu-closed rows, the report has the line and one note line each (English) for span / gap, oth, and cpu / swd', () => {
+    let clock = 0; const log = createPerfLog({ kind: 'webgpu', now: () => clock, store: null });
+    for (let i = 1; i <= 3; i++) { clock = i * 1000; log.frame(clock - 500, BUDGET); log.frame(clock, BUDGET); log.sample('span', 10 + i); log.sample('gap', 5 + i); log.add('cpu', 3); log.add('swd', 2); log.add('vol', 9); log.add('main', 1); log.row({ menu: 0 }, clock); }
+    const s = log.summary(); expect([s.span, s.gap, s.oth, s.cpu, s.swd]).toEqual([12, 7, 2, 3, 2]);
+    const t = perfReport(log, {});
+    expect(t).toContain('GPU timeline (WebGPU, menu closed): span 12 ms · gap 7 ms');
+    for (const w of ['span = ms from the first GPU start', 'gap = ms the GPU was idle', 'oth = span - vol - main', 'cpu = mean ms from the start of the XR frame callback', 'swd = mean ms from that submit']) expect(t, w).toContain(w);
+  });
+  it('the WebGL record is not broken: the new columns are "-" and the row still lines up with the header', () => {
+    let clock = 1000; const log = createPerfLog({ kind: 'webgl', now: () => clock, store: null }); log.add('vol', 2); log.row({ f: 1, menu: 0, fps: 72 }, clock);
+    const t = perfReport(log, {}).split('\n'), h = t.findIndex(l => /^\s*t\s+fps\s+g1/.test(l));
+    expect(t[h + 1].trim().split(/\s+/)).toHaveLength(t[h].trim().split(/\s+/).length);
+  });
+  it('wiring: the frame end (marker, cpu, swd) runs after the main render, swd on every 4th frame one at a time; span / gap are taken with the volume ms', () => {
+    expect(vr).toContain("perfLog.add('render',performance.now()-rc0); // the CPU ms of renderer.render() (WebGPU: with gxRender's bookkeeping)\n  if(gx)gxFrameEnd(fa0);");
+    expect(vr).toContain("gx.vol?.volume.markFrame?.()"); expect(vr).toContain("perfLog.add('cpu',t1-fa0)");
+    expect(vr).toContain("if(!gxSwdBusy&&(gxS.rendered&3)===2){gxSwdBusy=true;gx.device.queue.onSubmittedWorkDone()");
+    expect(vr).toContain("perfLog.sample('span',v)"); expect(vr).toContain("perfLog.sample('gap',v)");
   });
 });
 

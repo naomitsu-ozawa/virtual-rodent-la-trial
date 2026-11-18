@@ -1,10 +1,10 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { sectionViewPlane, volume, sectionViewReverse, sceneState, sectionViewOpen, sectionCapEnabled } from './state.js?v=20261118-build746';
-import { planes, sectionViewToggle, sectionViewResult, sectionPosition, sectionPositionValue, sectionReverse, sectionSliceImageControl, sectionCapEnabledControl, sectionCapOpacityControl, sectionCapHatchControl, sectionViewReadout } from './ui-shell.js?v=20261118-build746';
-import { syncSectionShadeUi } from './section-shade.js?v=20261118-build746';
+import { sectionViewPlane, volume, sectionViewReverse, sceneState, sectionViewOpen, sectionCapEnabled } from './state.js?v=20261118-build747';
+import { planes, sectionViewToggle, sectionViewResult, sectionPosition, sectionPositionValue, sectionReverse, sectionSliceImageControl, sectionCapEnabledControl, sectionCapOpacityControl, sectionCapHatchControl, sectionViewReadout } from './ui-shell.js?v=20261118-build747';
+import { syncSectionShadeUi } from './section-shade.js?v=20261118-build747';
 import * as THREE from './vendor/three@0.187.0/build/three.webgpu.js';
-import { tr } from './i18n.js?v=20261118-build746';
+import { tr } from './i18n.js?v=20261118-build747';
 export function sectionPlaneLabel(p){return p?p[0].toUpperCase()+p.slice(1):''}
 export function updateSectionViewUi(){
  if(!sectionViewToggle)return;

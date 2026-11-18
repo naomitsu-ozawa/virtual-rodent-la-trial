@@ -1,21 +1,21 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { volume, activeSeries, incNextSegmentMaskVolumeId, childSegments, analysisRegions } from './state.js?v=20261118-build746';
-import { isChildKey, childSegNormalizeName, childSegColorCss } from './segment-look.js?v=20261118-build746';
-import { childByKey, childKeysOf, childDisplayName, onChildSegChange, emitChildSegChange, setChildRuns } from './child-segments.js?v=20261118-build746';
-import { tr } from './i18n.js?v=20261118-build746';
-import { HU_AXIS, axisFor, valueStepOf } from './histogram.js?v=20261118-build746';
-import { hexRgb } from './utils.js?v=20261118-build746';
-import { settings } from './app-settings.js?v=20261118-build746';
-import { buildThresholdMask, morphMask, fillMaskHoles, removeSmallMaskComponents } from './mask-ops.js?v=20261118-build746';
-import { thinSuppressActive, suppressThinMask } from './thin-suppress.js?v=20261118-build746';
-import { effectiveRanges } from './segment-exclusive.js?v=20261118-build746';
-import { regionHidden, setRegionHidden } from './region-visibility.js?v=20261118-build746';
-import { maskFromAnalysisRuns, intersectRunArrays, subtractRunArrays } from './run-length.js?v=20261118-build746';
-import { sourceFilterStages } from './source-filters.js?v=20261118-build746';
-import { gpuSlotOrder, slotSignature } from './segment-slots.js?v=20261118-build746';
-import { segmentPresetDefaults } from './dataset-reset.js?v=20261118-build746';
-import { dataRangeOf, shadeRangeOf, moveShadeEnd, autoShadeRange, shadeSpanOf, createShadeAutoScheduler } from './cap-shade.js?v=20261118-build746';
+import { volume, activeSeries, incNextSegmentMaskVolumeId, childSegments, analysisRegions } from './state.js?v=20261118-build747';
+import { isChildKey, childSegNormalizeName, childSegColorCss } from './segment-look.js?v=20261118-build747';
+import { childByKey, childKeysOf, childDisplayName, onChildSegChange, emitChildSegChange, setChildRuns } from './child-segments.js?v=20261118-build747';
+import { tr } from './i18n.js?v=20261118-build747';
+import { HU_AXIS, axisFor, valueStepOf } from './histogram.js?v=20261118-build747';
+import { hexRgb } from './utils.js?v=20261118-build747';
+import { settings } from './app-settings.js?v=20261118-build747';
+import { buildThresholdMask, morphMask, fillMaskHoles, removeSmallMaskComponents } from './mask-ops.js?v=20261118-build747';
+import { thinSuppressActive, suppressThinMask } from './thin-suppress.js?v=20261118-build747';
+import { effectiveRanges } from './segment-exclusive.js?v=20261118-build747';
+import { regionHidden, setRegionHidden } from './region-visibility.js?v=20261118-build747';
+import { maskFromAnalysisRuns, intersectRunArrays, subtractRunArrays } from './run-length.js?v=20261118-build747';
+import { sourceFilterStages } from './source-filters.js?v=20261118-build747';
+import { gpuSlotOrder, slotSignature } from './segment-slots.js?v=20261118-build747';
+import { segmentPresetDefaults } from './dataset-reset.js?v=20261118-build747';
+import { dataRangeOf, shadeRangeOf, moveShadeEnd, autoShadeRange, shadeSpanOf, createShadeAutoScheduler } from './cap-shade.js?v=20261118-build747';
 // 'contrast' (造影領域) is the fifth preset; at most GPU_SEGMENT_SLOTS (4) are enabled at once (segment-slots.js)
 export const SEGMENT_PRESET_ORDER=['bone','soft','fat','lung','contrast'];
 export const segmentEditState=Object.fromEntries(SEGMENT_PRESET_ORDER.map(key=>[key,{baseRuns:null,baseSignature:'',keepRuns:null,excludeRuns:null,cutRuns:null,finalRuns:null,revision:0,undo:[],redo:[],surfaceGroup:null,rawCutSurface:false}]));
