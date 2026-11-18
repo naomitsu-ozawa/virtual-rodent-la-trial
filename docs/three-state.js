@@ -2,12 +2,12 @@
 // including the edit tools; kept apart from scene3d.js/three-status.js so
 // low-level modules never import edit-tools.js (no import cycles).
 // Depends only on the imports below; never imports from app.js.
-import { sceneState, threeRenderMode, volume, setThreeDDirty, setThreeDApplying, volumeAnalysisMode } from './state.js?v=20261110-build708';
-import { filter3DState, filterRebuild3D, volumeAnalysisToggle, sectionViewToggle, $ } from './ui-shell.js?v=20261110-build708';
-import { tr } from './i18n.js?v=20261110-build708';
-import { SEGMENT_PRESET_ORDER, segmentState } from './segments.js?v=20261110-build708';
-import { updateAnalysisEditorControls } from './edit-tools.js?v=20261110-build708';
-import { updateVolumeFilterBadge } from './three-status.js?v=20261110-build708';
+import { sceneState, threeRenderMode, volume, setThreeDDirty, setThreeDApplying, volumeAnalysisMode } from './state.js?v=20261118-build742';
+import { filter3DState, filterRebuild3D, volumeAnalysisToggle, sectionViewToggle, $ } from './ui-shell.js?v=20261118-build742';
+import { tr } from './i18n.js?v=20261118-build742';
+import { SEGMENT_PRESET_ORDER, segmentState } from './segments.js?v=20261118-build742';
+import { updateAnalysisEditorControls } from './edit-tools.js?v=20261118-build742';
+import { updateVolumeFilterBadge } from './three-status.js?v=20261118-build742';
 export function set3DState(mode){
  setThreeDDirty(mode==='stale');setThreeDApplying(mode==='updating');
  updateVolumeFilterBadge();
@@ -20,6 +20,7 @@ export function set3DState(mode){
  filterRebuild3D.dataset.i18n=actionKey;filterRebuild3D.textContent=tr(actionKey);
  filterRebuild3D.classList.toggle('is-cancel',mode==='updating');
  filterRebuild3D.disabled=!volume||mode==='current';
+ // the same action on the 3D view while it is stale
  const chip=rebuildChip();if(chip)chip.hidden=!volume||mode!=='stale';
  const volumeCurrent=threeRenderMode==='volume'&&!!sceneState?.medicalVolume?.active,hasSurface3D=mode==='current'&&!!sceneState?.obj&&threeRenderMode==='surface';
  if(volumeAnalysisToggle)volumeAnalysisToggle.disabled=volumeAnalysisMode?false:!(volumeCurrent||hasSurface3D);

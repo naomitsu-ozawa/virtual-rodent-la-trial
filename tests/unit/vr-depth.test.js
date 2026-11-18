@@ -127,7 +127,8 @@ describe('the fragment shader writes depth (source checks)', () => {
     expect(has(src, 'renderer.clear(true,true,false)')).toBe(true);
     expect(has(src, 'd=texture(depthImg,uv).r;')).toBe(true); expect(has(src, 'gl_FragDepth=d;')).toBe(true); // the depth of the sample that is shown (centre or periphery)
     expect(has(src, 'cu.depthImg.value=lowTarget.depthTexture')).toBe(true); expect(has(src, 'cu.depthImg2.value=periTarget.depthTexture')).toBe(true);
-    expect((src.match(/toneMapped:false,depthWrite:true,transparent:false/g) || []).length).toBe(2); // both composite materials (warm-up and session)
+    expect((src.match(/toneMapped:false,depthWrite:true,transparent:false/g) || []).length).toBe(3); // the composite materials: warm-up, session and the partner volume's (stage 2 of the sample pairs: same depth write, plus depthFunc LessDepth so that a pixel the primary's composite painted is not blended a second time)
+    expect(has(src, 'depthFunc:THREE.LessDepth')).toBe(true);
   });
 });
 
@@ -208,7 +209,7 @@ describe('GHOST_ALPHA and the pass rule', () => {
   });
   it('vr-view.js: pinned result labels (card + leader) have NO ghost (hidden behind tissue, vr-label-occlusion.js) and follow the setting; the hand labels are untouched', () => {
     expect(has(src, 'const makeLabel=(faces=null)=>{')).toBe(true); expect(has(src, 'lb=makeLabel();lb.rid=reg.id;pins.set(reg.id,lb)')).toBe(true);
-    expect(has(src, 'for(const lb of pins.values()){lb.lit=pinLit.has(lb.rid);embedLabel(lb,occ,pinHeld.has(lb.rid));placeLabel(lb)}thinPins(occ);for(const lb of pins.values())pinOcclusion(lb,lb.lit)')).toBe(true);
+    expect(has(src, 'for(const lb of pins.values()){lb.lit=pinLit.has(lb.rid);embedLabel(lb,occ,pinHeld.has(lb.rid));placeLabel(lb)}thinPins(occ);for(const lb of pins.values())pinOcclusion(lb,lb.lit||lb.glow)')).toBe(true);
     expect(has(src, 'const st=pinMaterialState(occlusionGpu(),lit,lb.trans);')).toBe(true); expect(has(src, 'lb.m.material.depthTest=st.depthTest;lb.line.material.depthTest=st.depthTest;lb.m.material.opacity=st.card;lb.line.material.opacity=st.line;')).toBe(true);
     expect(has(src, 'lb.mg')).toBe(false); expect(has(src, 'lb.lg')).toBe(false); expect(has(src, 'mg=new THREE.Mesh')).toBe(false);
     expect(has(src, 'const hoverLabelOf=c=>c.userData.hoverLabel||=Object.assign(makeLabel(hoverFaces),{hand:c});')).toBe(true);

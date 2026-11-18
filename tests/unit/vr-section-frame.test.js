@@ -43,7 +43,7 @@ describe('the section limit is 10', () => {
     expect(has(src, 'cutPlanes:{value:Array.from({length:MAX_SECTION_PLANES},()=>new THREE.Vector4(0,0,1,0))}')).toBe(true);
     expect(has(src, 'const MAX_PLANES=MAX_SECTION_PLANES')).toBe(true);
     expect(has(src, 'u.planeCount.value=n;u.planeCut.value=cutBits;')).toBe(true);
-    expect(has(src, 'u.cutPlanes.value[n].set(tmpN.x,tmpN.y,tmpN.z,tmpN.dot(tmpP));if(pl.cut&&settings.cut)cutBits|=1<<n;n++;')).toBe(true);
+    expect(has(src, 'u.cutPlanes.value[n].set(tmpN.x,tmpN.y,tmpN.z,tmpN.dot(tmpP));if(pOn)pairPl[n].set(1,0,0,PLANE_PARK_W);if(cutOn)cutBits|=1<<n}')).toBe(true); // (stage 3: a section of the partner is parked here, and the other way round; which dataset owns a section: pl.own, decided in this loop)
     expect(has(src, "case'section-add':return planes.length<MAX_PLANES&&sliceReady();")).toBe(true);
     expect(has(src, "case'section-add':if(planes.length<MAX_PLANES)addPlane(c);break;")).toBe(true);
     expect(has(src, 'if(planes.length>=MAX_PLANES){pulse(c,0.15,30);ui.flash=L.maxPlanes;')).toBe(true);
@@ -152,8 +152,8 @@ describe('the section frame under the depth occlusion', () => {
     expect(tagBehindTissue(true, null, 0.1)).toBe(false);
   });
   it('vr-view.js: a hidden tag does not take the laser (the band already loses to a nearer tissue hit by distance in resolveTriggerTarget); a held plane keeps its tag', () => {
-    expect(has(src, 'if(tab&&vh&&!draggedBy(tab.pl,null)&&tagBehindTissue(occlusionGpu(),tab.t,vh.distance,occEps))tab=null;')).toBe(true);
-    expect(has(src, 'if(vh&&(sh||tab)&&vrHalfExt&&vrDims&&mesh?.parent)')).toBe(true);
+    expect(has(src, 'if(tab&&vx&&!draggedBy(tab.pl,null)&&tagBehindTissue(occlusionGpu(),tab.t,vx.distance,occEps))tab=null;')).toBe(true);
+    expect(has(src, 'if(vx&&(sx||tab)&&vrHalfExt&&vrDims&&mesh?.parent)')).toBe(true);
     // the tag test comes after the tissue hit and before the target resolution
     expect(src.indexOf('tagBehindTissue(occlusionGpu()')).toBeGreaterThan(src.indexOf('c.userData.volHit=vh'));
     expect(src.indexOf('tagBehindTissue(occlusionGpu()')).toBeLessThan(src.indexOf('resolveTriggerTarget({board'));
