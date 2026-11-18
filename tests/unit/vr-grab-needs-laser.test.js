@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { volumeGripAllowed, pressDragSection, resolveTriggerTarget } from '../../docs/vr-point.js';
 
+// grabbing the volume with the grip and a section with the trigger starts only while THAT hand's laser is on it.
+// Once taken, the hold goes on until the release, wherever the laser goes.
 const src = readFileSync(new URL('../../docs/vr-view.js', import.meta.url), 'utf8');
 const sliceBetween = (a, b) => { const i = src.indexOf(a), j = src.indexOf(b, i + a.length); expect(i, a).toBeGreaterThanOrEqual(0); expect(j, b).toBeGreaterThan(i); return src.slice(i, j); };
 
