@@ -2,7 +2,7 @@
 // (the three.js Data3DTexture objects stay the holders of the data, a GPUTexture is made from one on first use and again when its version changes), the volume render pass per eye,
 // the offscreen targets (colour + depth packed in rgba8, both eyes side by side, reduced scale and the periphery target), and the composite material (three.js NodeMaterial, TSL) that
 // puts the offscreen image into the headset's frame with the volume's depth. Plain WebGPU; three.js (the WebGPU build) is passed in.
-import { volumeWgsl, uniformLayout, BOX_VERTICES, VOLUME_BINDINGS } from './vr-wgsl-core.js?v=20261118-build745';
+import { volumeWgsl, uniformLayout, BOX_VERTICES, VOLUME_BINDINGS } from './vr-wgsl-core.js?v=20261118-build746';
 
 export const VRGPU_STORE_KEY = 'vrl-vr-gpu';
 // the choice of the page's 「WebGPUで開く」 button (kept per browser; no URL parameter: the public build's gate takes no unknown URL keys). Default: the WebGL view.
@@ -46,6 +46,27 @@ export async function bindGxSession(renderer, session, onFail, alive = () => tru
 }
 // a renderer made here is let go: only one whose init() finished (dispose() of one that did not would run init() again through setAnimationLoop), and its async dispose is not left unhandled
 export function disposeGxRenderer(r) { try { if (r?.initialized) r.dispose()?.catch?.(() => {}); } catch { /* gone */ } }
+// The output of the WebGPU view without three.js' frame buffer. By default three.js (r187) draws the scene into an RGBA16F copy of the frame and encodes it to sRGB in a second pass per eye over the whole image
+// (needsFrameBufferTarget: the output colour space is not the working one). Here the output colour space is the working (linear) one, so the frame is drawn straight into the headset's image, and each material encodes its own
+// result to sRGB (the contextNode below: the same getOutput that three.js' XR layers use, three.webgpu.js XRManager). Consequences the callers rely on: (1) a material with a fragmentNode of its own (the composite) is NOT encoded,
+// it must write display values (decode 0); (2) a plain material's output is encoded, so values that are meant as display values (the dome's vertex colours) are decoded first; (3) blending happens on the encoded values.
+// Returns { materialSrgb, text }: text = the line of the diagnostic record. Nothing here throws: on a failure the renderer is left as three.js made it (the frame buffer pass).
+export function useMaterialSrgbOutput(renderer, THREE) {
+  const was = { outputColorSpace: renderer?.outputColorSpace, contextNode: renderer?.contextNode };
+  try {
+    const T = THREE.TSL, base = renderer.contextNode;
+    if (!T?.context || !T?.renderOutput || !base?.getFlowContextData) throw new Error('no context / renderOutput in this three.js build');
+    renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
+    renderer.contextNode = T.context({
+      getOutput: (outputNode, builder) => { const n = T.renderOutput(outputNode, THREE.NoToneMapping, THREE.SRGBColorSpace); n.premultipliedAlpha = builder.material.premultipliedAlpha; return n; },
+      ...base.getFlowContextData(),
+    });
+    return { materialSrgb: true, text: 'sRGB in each material (no frame buffer pass: output colour space linear, getOutput = renderOutput(NoToneMapping, sRGB))' };
+  } catch (e) {
+    try { renderer.outputColorSpace = was.outputColorSpace; renderer.contextNode = was.contextNode; } catch { /* gone */ }
+    return { materialSrgb: false, text: 'three.js frame buffer pass (sRGB over an RGBA16F copy; the material route failed: ' + gxErrorText(e).msg + ')' };
+  }
+}
 // the device is lost for another reason than our own destroy(): onLost(info) once
 export function watchDeviceLost(device, onLost) { device?.lost?.then(info => { if (info?.reason !== 'destroyed') onLost(info); }); }
 
@@ -65,6 +86,48 @@ const TEX_FORMATS = { // three.js format -> [GPU format, bytes per texel]
 };
 const upTo = (n, m) => Math.ceil(n / m) * m;
 const CHUNK_BYTES = 8 << 20;
+
+// ---- the drawn area of one eye: the volume pass draws only where the box can be seen, not the eye's whole image ----
+// Rects here are [x0, y0, x1, y1] in px of the eye's full-size image with y UP (eyeMetrics of vr-render-scale.js / foveaRect); regions are in px of the SCALED image with y DOWN (the top-left origin of the targets).
+// The steps a region's size is rounded up to: 64 px up to 256, 128 px up to 1024, 256 px above (a few sizes over a session: the pool of targets is keyed by size).
+export function bucketSize(n) { n = Math.max(1, Math.ceil(n)); return n <= 256 ? upTo(n, 64) : n <= 1024 ? upTo(n, 128) : upTo(n, 256); }
+// the size of a target slot for a needed size: the held one while it still holds the need and is not much bigger (a head that moves does not make a target every frame), else the next step; never beyond the full size
+export function fitSlot(need, held, full) {
+  need = Math.min(Math.max(1, Math.ceil(need)), full);
+  if (held && held <= full && need <= held && need * 1.6 >= held) return held;
+  return Math.min(bucketSize(need), full);
+}
+export const rectsMeet = (a, b) => [Math.max(a[0], b[0]), Math.max(a[1], b[1]), Math.min(a[2], b[2]), Math.min(a[3], b[3])]; // the common part (an empty one has x1 <= x0 or y1 <= y0)
+// the integer region of a y-up rect in the scaled image (Wu x Hu px, scale = Wu / W): the pixels whose centres can lie in the rect, plus `margin` px each side (the bilinear upscale), clipped to the image, at least 1 px
+export function scaledRegion(rect, H, scale, Wu, Hu, margin = 2) {
+  let x0 = Math.floor(rect[0] * scale) - margin, x1 = Math.ceil(rect[2] * scale) + margin, y0 = Math.floor((H - rect[3]) * scale) - margin, y1 = Math.ceil((H - rect[1]) * scale) + margin;
+  x0 = Math.min(Math.max(0, x0), Wu - 1); y0 = Math.min(Math.max(0, y0), Hu - 1);
+  x1 = Math.min(Wu, Math.max(x1, x0 + 1)); y1 = Math.min(Hu, Math.max(y1, y0 + 1));
+  return { x0, y0, x1, y1 };
+}
+// the clip-space change that lets one pass draw only a region of the eye's image into a target that is the size of the region: ndc' = a * ndc + b on x and y (z and w stay, so the depth is the same),
+// for the region [x0, x1) x [y0, y1) (scaled px, y down) of an image Wu x Hu. mvp' = T * mvp (T acts on the clip x / y: x' = ax x + bx w, y' = ay y + by w).
+export function regionClip(r, Wu, Hu) {
+  const rw = r.x1 - r.x0, rh = r.y1 - r.y0;
+  return { ax: Wu / rw, bx: (Wu - 2 * r.x0 - rw) / rw, ay: Hu / rh, by: 1 - Hu / rh + 2 * r.y0 / rh };
+}
+export function regionMvp(out, mvp, c) {
+  const e = mvp.elements, o = out.elements;
+  for (let k = 0; k < 4; k++) { const r0 = e[4 * k], r1 = e[4 * k + 1], r3 = e[4 * k + 3]; o[4 * k] = c.ax * r0 + c.bx * r3; o[4 * k + 1] = c.ay * r1 + c.by * r3; o[4 * k + 2] = e[4 * k + 2]; o[4 * k + 3] = r3; }
+  return out;
+}
+// the scissor rects (region px -> offset into the slot) that cover the region except an inner rect: up to four disjoint bands (top, bottom, left, right); the whole region when the inner rect is empty or outside.
+// inner = a y-up rect in full-size px (the part the periphery is never read in), shrunk here so that what the composite may still read is drawn. Returns [[x, y, w, h], ...] relative to the region's top-left.
+export function bandRects(r, inner, H, scale, shrink) {
+  const whole = [[0, 0, r.x1 - r.x0, r.y1 - r.y0]];
+  if (!inner) return whole;
+  const ex0 = Math.max(r.x0, Math.ceil((inner[0] + shrink) * scale)), ex1 = Math.min(r.x1, Math.floor((inner[2] - shrink) * scale));
+  const ey0 = Math.max(r.y0, Math.ceil((H - inner[3] + shrink) * scale)), ey1 = Math.min(r.y1, Math.floor((H - inner[1] - shrink) * scale));
+  if (ex1 <= ex0 || ey1 <= ey0) return whole;
+  const out = [], add = (x0, y0, x1, y1) => { if (x1 > x0 && y1 > y0) out.push([x0 - r.x0, y0 - r.y0, x1 - x0, y1 - y0]); };
+  add(r.x0, r.y0, r.x1, ey0); add(r.x0, ey1, r.x1, r.y1); add(r.x0, ey0, ex0, ey1); add(ex1, ey0, r.x1, ey1);
+  return out;
+}
 
 export function createVolumeGpu({ device, THREE, f16 = false, onTargetFreed = null, onShader = null }) {
   const layout = uniformLayout();
@@ -214,7 +277,8 @@ export function createVolumeGpu({ device, THREE, f16 = false, onTargetFreed = nu
     slots: Array.from({ length: TS_SLOTS }, () => ({ buf: device.createBuffer({ size: 16, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ }), busy: false })), sumMs: 0, count: 0,
   } : null;
   const takeGpuMs = () => { if (!ts || !ts.count) return null; const r = { ms: ts.sumMs, n: ts.count }; ts.sumMs = 0; ts.count = 0; return r; };
-  // one render pass into a target: every eye's viewport (x, y, w, h in target px) with its own uniforms. eyes[i] = { x, y, w, h, mvp, origin, lightOff }; variant = { cls4, events }
+  // one render pass into a target: every eye's viewport (vx, vy, vw, vh in target px; x, y, w, h when absent) with its own uniforms, drawn once per scissor rect (e.scissors, else x, y, w, h).
+  // eyes[i] = { x, y, w, h, vx, vy, vw, vh, scissors, mvp, origin, lightOff }; variant = { cls4, events }
   const drawPass = (target, eyes, u, variant, slot0, overrides = null, readback = null) => {
     const enc = device.createCommandEncoder();
     const slot = ts && !overrides ? ts.slots.findIndex(x => !x.busy) : -1; // the probe (overrides) and a pass with no free slot are not timed
@@ -229,8 +293,7 @@ export function createVolumeGpu({ device, THREE, f16 = false, onTargetFreed = nu
       packUniforms(u, { mvp: e.mvp, origin: e.origin, lightOff: e.lightOff, jumpOn, useSkip: (u.diag?.value | 0) === 4 ? 0 : u.useSkip?.value | 0, ...overrides }, slot0 + i);
       pass.setBindGroup(0, bindGroup(slot0 + i, u));
       pass.setViewport(e.vx ?? e.x, e.vy ?? e.y, e.vw ?? e.w, e.vh ?? e.h, 0, 1);
-      pass.setScissorRect(e.x, e.y, e.w, e.h);
-      pass.draw(36);
+      for (const sc of e.scissors || [[e.x, e.y, e.w, e.h]]) { pass.setScissorRect(sc[0], sc[1], sc[2], sc[3]); pass.draw(36); } // e.scissors: several rects (the periphery's bands), each inside the target
     });
     pass.end();
     if (readback) enc.copyTextureToBuffer({ texture: target.color }, { buffer: readback.buffer, bytesPerRow: readback.bytesPerRow }, [readback.w, readback.h, 1]);
@@ -270,16 +333,17 @@ export function eyeUniforms(THREE, model, sub, out = {}) {
 }
 
 // ---- the composite: a box mesh (the volume's box, back faces) whose material reads the offscreen colour + packed depth, upscales them (bilinear colour, nearest depth) inside the box and writes the volume's depth ----
-// TSL = THREE.TSL of the WebGPU build. The offscreen layout: eye i's image sits at x = i * stride (px of the target), scaled by `scale`; the periphery target (a lower scale, optional) is blended in outside the fovea rect.
+// TSL = THREE.TSL of the WebGPU build. The offscreen layout: eye i's slot starts at x = i * stride (px of the target) and holds the REGION of the eye's image that was drawn (where the box can be seen, scaled by `scale`;
+// reg = [x0, y0, w, h] in px of the scaled image, per eye); outside the region nothing was drawn (the composite writes nothing there). The periphery target (a lower scale, optional) is blended in outside the fovea rect.
 export function createComposite({ THREE, halfExt = [1, 1, 1], device }) {
   const T = THREE.TSL, { sRGBTransferEOTF, Fn, uniform, texture, vec2, vec3, vec4, float, If, Discard, screenCoordinate, cameraIndex, clamp, min, max, select, positionLocal, mix } = T;
   const mkExt = () => { const t = new THREE.ExternalTexture(null); t.minFilter = t.magFilter = THREE.LinearFilter; t.generateMipmaps = false; return t; };
   const mkNear = () => { const t = new THREE.ExternalTexture(null); t.minFilter = t.magFilter = THREE.NearestFilter; t.generateMipmaps = false; return t; };
   const u = {
     halfExt: uniform(new THREE.Vector3(...halfExt)),
-    inv1: uniform(new THREE.Vector2(1, 1)), scale1: uniform(1), stride1: uniform(1), used1: uniform(new THREE.Vector2(1, 1)),
-    inv2: uniform(new THREE.Vector2(1, 1)), scale2: uniform(1), stride2: uniform(1), used2: uniform(new THREE.Vector2(1, 1)),
-    decode: uniform(0), // 1 = three.js encodes the frame to sRGB at the end (the headset pass): the volume's display values are decoded first, so they come out unchanged (the WebGL volume writes them raw)
+    inv1: uniform(new THREE.Vector2(1, 1)), scale1: uniform(1), stride1: uniform(1), reg1a: uniform(new THREE.Vector4(0, 0, 1, 1)), reg1b: uniform(new THREE.Vector4(0, 0, 1, 1)),
+    inv2: uniform(new THREE.Vector2(1, 1)), scale2: uniform(1), stride2: uniform(1), reg2a: uniform(new THREE.Vector4(0, 0, 1, 1)), reg2b: uniform(new THREE.Vector4(0, 0, 1, 1)),
+    decode: uniform(0), // 1 = three.js encodes the frame to sRGB at the end (a frame buffer pass over the whole frame): the volume's display values are decoded first, so they come out unchanged (the WebGL volume writes them raw). 0 = the frame is not converted afterwards
     fovOn: uniform(0), rect0: uniform(new THREE.Vector4()), rect1: uniform(new THREE.Vector4()), band: uniform(1),
   };
   // before the first frame the nodes point at a 1 x 1 texture each (a binding needs a real GPUTexture)
@@ -289,19 +353,23 @@ export function createComposite({ THREE, halfExt = [1, 1, 1], device }) {
   const nodes = { c1: texture(first(false)), d1: texture(first(true)), c2: texture(first(false)), d2: texture(first(true)) };
   const eye = float(cameraIndex);
   const p = screenCoordinate.xy; // the pixel in the eye's own image (top-left origin)
-  const uvOf = (inv, scale, stride, used) => { // the sampling coordinate in the offscreen target
-    const x0 = eye.mul(stride), st = vec2(p.x.mul(scale).add(x0), p.y.mul(scale));
-    return vec2(clamp(st.x, x0.add(0.5), x0.add(used.x)), min(st.y, used.y)).mul(inv);
+  const isRight = eye.greaterThan(0.5);
+  // the sampling coordinate in the offscreen target (+ whether the pixel lies in the drawn region: a pixel outside it was not drawn, it is transparent)
+  const uvOf = (inv, scale, stride, regA, regB) => {
+    const reg = select(isRight, regB, regA), sx = p.x.mul(scale).sub(reg.x), sy = p.y.mul(scale).sub(reg.y);
+    const inside = sx.greaterThanEqual(0).and(sx.lessThanEqual(reg.z)).and(sy.greaterThanEqual(0)).and(sy.lessThanEqual(reg.w));
+    const uv = vec2(clamp(sx, 0.5, max(reg.z.sub(0.5), 0.5)).add(eye.mul(stride)), clamp(sy, 0.5, max(reg.w.sub(0.5), 0.5))).mul(inv);
+    return { uv, mask: select(inside, float(1), float(0)) };
   };
-  const uv1 = uvOf(u.inv1, u.scale1, u.stride1, u.used1), uv2 = uvOf(u.inv2, u.scale2, u.stride2, u.used2);
-  const rect = select(eye.greaterThan(0.5), u.rect1, u.rect0);
+  const q1 = uvOf(u.inv1, u.scale1, u.stride1, u.reg1a, u.reg1b), q2 = uvOf(u.inv2, u.scale2, u.stride2, u.reg2a, u.reg2b), uv1 = q1.uv, uv2 = q2.uv;
+  const rect = select(isRight, u.rect1, u.rect0);
   const wt = clamp(min(min(p.x.sub(rect.x), p.y.sub(rect.y)), min(rect.z.sub(p.x), rect.w.sub(p.y))).div(u.band), 0, 1);
   const decode = c => c.r.mul(255 * 65536).add(c.g.mul(255 * 256)).add(c.b.mul(255)).div(16777215);
   const colorNode = Fn(() => {
-    const c1 = nodes.c1.sample(uv1).toVar();
+    const c1 = nodes.c1.sample(uv1).mul(q1.mask).toVar();
     const out = vec4(c1).toVar();
     If(u.fovOn.greaterThan(0.5).and(wt.lessThan(1)), () => {
-      const c2 = nodes.c2.sample(uv2);
+      const c2 = nodes.c2.sample(uv2).mul(q2.mask);
       out.assign(select(wt.lessThanEqual(0), c2, mix(c2, c1, wt)));
     });
     If(out.a.lessThanEqual(0), () => { Discard(); });
@@ -326,16 +394,18 @@ export function createComposite({ THREE, halfExt = [1, 1, 1], device }) {
     if (!e) { e = nearestFilter ? mkNear() : mkExt(); e.sourceTexture = gpuTex; exts.set(gpuTex, e); }
     return e;
   };
-  // one frame's parameters: low / peri = { target (getTarget), scale, stride, usedW, usedH }
+  // one frame's parameters: low / peri = { target (getTarget), scale, stride, regs: [[x0, y0, w, h] of the left eye, of the right eye] (px of the scaled image) }. Without regs the region is the whole image (usedW x usedH), as before.
+  const regsOf = x => x.regs || [[0, 0, x.usedW, x.usedH], [0, 0, x.usedW, x.usedH]];
+  const setRegs = (a, b, regs) => { a.value.set(...regs[0]); b.value.set(...(regs[1] || regs[0])); };
   const update = ({ low, peri = null, fov = false, rects = null, band = 1, decode = false }) => {
     u.decode.value = decode ? 1 : 0;
     nodes.c1.value = extOf(low.target.color, false); nodes.d1.value = extOf(low.target.depth, true);
     if (!(fov && peri)) { nodes.c2.value = nodes.c1.value; nodes.d2.value = nodes.d1.value; } // no periphery pass this frame: the second pair is the first one's (it must not keep pointing at a target that may be let go of)
-    u.inv1.value.set(1 / low.target.w, 1 / low.target.h); u.scale1.value = low.scale; u.stride1.value = low.stride; u.used1.value.set(low.usedW - 0.5, low.usedH - 0.5);
+    u.inv1.value.set(1 / low.target.w, 1 / low.target.h); u.scale1.value = low.scale; u.stride1.value = low.stride; setRegs(u.reg1a, u.reg1b, regsOf(low));
     u.fovOn.value = fov && peri ? 1 : 0;
     if (fov && peri) {
       nodes.c2.value = extOf(peri.target.color, false); nodes.d2.value = extOf(peri.target.depth, true);
-      u.inv2.value.set(1 / peri.target.w, 1 / peri.target.h); u.scale2.value = peri.scale; u.stride2.value = peri.stride; u.used2.value.set(peri.usedW - 0.5, peri.usedH - 0.5);
+      u.inv2.value.set(1 / peri.target.w, 1 / peri.target.h); u.scale2.value = peri.scale; u.stride2.value = peri.stride; setRegs(u.reg2a, u.reg2b, regsOf(peri));
       u.rect0.value.set(...rects[0]); u.rect1.value.set(...(rects[1] || rects[0])); u.band.value = band;
     }
   };
@@ -351,43 +421,59 @@ export function createComposite({ THREE, halfExt = [1, 1, 1], device }) {
 
 // ---- the session's volume renderer: what the frame loop of vr-view.js calls (instead of the WebGL ray pass + composite) ----
 // draw(): one frame of the body volume for the cameras of the XR frame. f = the render scale of the centre (1 = the eye's full size, no offscreen reduction), fov / fp = the periphery pass
-// (a second target at scale fp, outside the centre rect), rects = the centre rect per eye in px of the eye image, y up (vr-render-scale.js foveaRect), band = the blend band in px.
+// (a second target at scale fp, only the bands around the centre rect), rects = the centre rect per eye in px of the eye image, y up (vr-render-scale.js foveaRect), band = the blend band in px.
+// boxes = the covered rect of the box per eye (eyeMetrics: x0 y0 x1 y1, px of the eye image, y up; the whole image when the box reaches the eye).: a pass draws only that rect (and, for the centre, only its part inside
+// the centre rect) into a target of that size, in steps (bucketSize); without boxes the whole eye image, as before.
 export function createVrVolumeRenderer({ THREE, device, f16 = false, halfExt = [1, 1, 1], onShader = null }) {
   const composite = createComposite({ THREE, halfExt, device });
   const volume = createVolumeGpu({ device, THREE, f16, onShader, onTargetFreed: t => composite.forget(t.color, t.depth) });
   const tmpEye = [{}, {}], tmpPeri = [{}, {}];
-  const stats = { w: 0, h: 0, lowW: 0, lowH: 0 };
+  const stats = { w: 0, h: 0, lowW: 0, lowH: 0, regions: null };
+  const held = { low: null, peri: null }; // the slot size of each pass (fitSlot keeps it while the need stays near it)
   const variantOf = u => ({ cls4: !!u.cls4Tex?.value?.isData3DTexture && u.cls4Tex.value.image?.width > 1, events: (u.planeCount?.value | 0) > 0 });
   let probeBuf = null;
-  const draw = ({ u, cams, model, f, fov = false, fp = f, rects = null, band = 1, variant = null, decode = false }) => {
+  const okRect = b => b && Number.isFinite(b.x0) && Number.isFinite(b.y0) && Number.isFinite(b.x1) && Number.isFinite(b.y1);
+  const draw = ({ u, cams, model, f, fov = false, fp = f, rects = null, band = 1, variant = null, decode = false, boxes = null }) => {
     volume.beginFrame();
     const n = Math.min(2, cams.length);
     const v0 = cams[0].viewport, W = Math.max(1, Math.round(v0.z)), H = Math.max(1, Math.round(v0.w));
     const vr = variant || variantOf(u);
-    const pass = (scale, bucket, scissors) => {
-      const Wu = Math.max(1, Math.ceil(W * scale)), Hu = Math.max(1, Math.ceil(H * scale)), stride = Wu + 2;
-      const target = volume.getTarget(stride * n, Hu);
+    const fovOn = !!(fov && rects);
+    const wholeEye = [0, 0, W, H];
+    const boxOf = i => (okRect(boxes?.[i]) ? [boxes[i].x0, boxes[i].y0, boxes[i].x1, boxes[i].y1] : wholeEye);
+    const rectOf = i => rects[i] || rects[0];
+    // one pass: want(i) = the y-up rect of eye i to cover, inner(i) = a y-up rect not drawn (or null), at `scale`
+    const pass = (name, scale, bucket, want, inner, shrink) => {
+      const Wu = Math.max(1, Math.ceil(W * scale)), Hu = Math.max(1, Math.ceil(H * scale));
+      const regs = [], regions = [];
+      let needW = 1, needH = 1;
+      for (let i = 0; i < n; i++) { const r = scaledRegion(want(i), H, scale, Wu, Hu); regions.push(r); needW = Math.max(needW, r.x1 - r.x0); needH = Math.max(needH, r.y1 - r.y0); }
+      const slotW = fitSlot(needW, held[name]?.w, Wu), slotH = fitSlot(needH, held[name]?.h, Hu);
+      held[name] = { w: slotW, h: slotH };
+      const stride = slotW + 2;
+      const target = volume.getTarget(stride * n, slotH);
       const eyes = [];
       for (let i = 0; i < n; i++) {
-        const e = eyeUniforms(THREE, model, cams[i], bucket[i]);
-        const vx = i * stride, vy = 0; // the viewport is the whole eye's image (the same mapping as the periphery pass and as the WebGL pass); only the scissor is the centre rect
-        let x = vx, y = vy, w = Wu, h = Hu;
-        if (scissors) { // the centre rect only (1 px margin for the bilinear upscale), image px, y flipped to the top-left origin
-          const R = scissors[i] || scissors[0], x0 = Math.max(0, Math.floor(R[0] * scale) - 1), x1 = Math.min(Wu, Math.ceil(R[2] * scale) + 1);
-          const y0 = Math.max(0, Math.floor((H - R[3]) * scale) - 1), y1 = Math.min(Hu, Math.ceil((H - R[1]) * scale) + 1);
-          x += x0; y = y0; w = Math.max(1, x1 - x0); h = Math.max(1, y1 - y0);
-        }
-        eyes.push({ x, y, w, h, vx, vy, vw: Wu, vh: Hu, mvp: e.mvp, origin: e.origin, lightOff: e.lightOff });
+        const e = eyeUniforms(THREE, model, cams[i], bucket[i]), r = regions[i], rw = r.x1 - r.x0, rh = r.y1 - r.y0;
+        const mvp = regionMvp(bucket[i].rmvp ||= new THREE.Matrix4(), e.mvp, regionClip(r, Wu, Hu)); // the region of the eye's image fills the viewport below (the same pixels as the whole image would have; the depth is unchanged)
+        const vx = i * stride;
+        eyes.push({ x: vx, y: 0, w: rw, h: rh, vx, vy: 0, vw: rw, vh: rh, scissors: bandRects(r, inner?.(i) ?? null, H, scale, shrink).map(c => [vx + c[0], c[1], c[2], c[3]]), mvp, origin: e.origin, lightOff: e.lightOff });
+        regs.push([r.x0, r.y0, rw, rh]);
       }
-      return { target, eyes, scale, stride, usedW: Wu, usedH: Hu };
+      return { target, eyes, scale, stride, regs, usedW: slotW, usedH: slotH };
     };
-    const low = pass(f, tmpEye, fov ? rects : null);
+    // the centre (or the whole picture): the box's rect, in the fovea mode only its part inside the centre rect
+    const low = pass('low', f, tmpEye, i => (fovOn ? rectsMeet(boxOf(i), rectOf(i)) : boxOf(i)), null, 0);
     volume.drawPass(low.target, low.eyes, u, vr, 0);
     let peri = null;
-    if (fov) { peri = pass(fp, tmpPeri, null); volume.drawPass(peri.target, peri.eyes, u, vr, 2); }
-    const topLeft = rects ? rects.map(R => [R[0], H - R[3], R[2], H - R[1]]) : null;
-    composite.update({ low, peri, fov, rects: topLeft, band, decode });
-    stats.w = W; stats.h = H; stats.lowW = low.usedW; stats.lowH = low.usedH;
+    if (fovOn) { // the periphery: the box's rect at the lower scale, only outside the centre rect shrunk by the blend band (what the composite reads from it) and the bilinear margin
+      peri = pass('peri', fp, tmpPeri, boxOf, i => rectOf(i), band + Math.ceil(2 / Math.max(fp, 0.05)) + 1);
+      volume.drawPass(peri.target, peri.eyes, u, vr, 2);
+    }
+    const topLeft = fovOn ? rects.map(R => [R[0], H - R[3], R[2], H - R[1]]) : null;
+    composite.update({ low, peri, fov: fovOn, rects: topLeft, band, decode });
+    stats.w = W; stats.h = H; stats.lowW = low.regs[0][2]; stats.lowH = low.regs[0][3];
+    stats.regions = { low: low.regs.map(r => [r[2], r[3]]), slot: [low.usedW, low.usedH], peri: peri ? peri.regs.map(r => [r[2], r[3]]) : null, periSlot: peri ? [peri.usedW, peri.usedH] : null, scale: f, periScale: peri ? fp : null };
     return stats;
   };
   // the samples-per-ray probe (diag 5) of one eye into a 48 x 48 image, read back (the result arrives later): resolves to the rgba bytes

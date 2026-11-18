@@ -7,7 +7,7 @@ import * as THREE from 'three';
 import * as THREEG from 'three/webgpu';
 import { WgslReflect } from 'wgsl_reflect/wgsl_reflect.module.js';
 import { volumeWgsl, uniformLayout, UNIFORM_FIELDS, BOX_VERTICES, VOLUME_BINDINGS } from '../../docs/vr-wgsl-core.js';
-import { vrGpuRequested, eyeUniforms, createVrVolumeRenderer, createComposite, releaseXrLoop, disposeGxRenderer, gxDataValue, gxDataRow, stopRenderLoop, bindGxSession, failGxSession, watchDeviceLost, createGxDiag, gxDiagReport, gxDiagFileName, saveGxDiagText, gxErrorText, watchGxErrors, gxSessionValues, gxFrameValues, gxEscapeHeld, startGxHeartbeat, gxShaderInfo, GX_DIAG_KEY } from '../../docs/vr-wgpu.js';
+import { vrGpuRequested, eyeUniforms, createVrVolumeRenderer, createComposite, releaseXrLoop, disposeGxRenderer, gxDataValue, gxDataRow, stopRenderLoop, bindGxSession, failGxSession, watchDeviceLost, createGxDiag, gxDiagReport, gxDiagFileName, saveGxDiagText, gxErrorText, watchGxErrors, gxSessionValues, gxFrameValues, gxEscapeHeld, startGxHeartbeat, gxShaderInfo, GX_DIAG_KEY, useMaterialSrgbOutput, bucketSize, fitSlot, scaledRegion, regionClip, regionMvp, bandRects } from '../../docs/vr-wgpu.js';
 import { createPlainLabelBatch } from '../../docs/vr-label-batch.js';
 
 const read = f => readFileSync(new URL('../../docs/' + f, import.meta.url), 'utf8');
@@ -153,7 +153,7 @@ describe('vr-view.js wiring (static)', () => {
     expect(vr).toContain('renderer=makeGlRenderer();'); // the WebGPU session was refused: the WebGL one opens in the same click
   });
   it('the WebGPU frame branch: the WGSL pass per eye, then the composite in the main render; the WebGL branches are unchanged below it', () => {
-    expect(vr).toContain('gx.vol.draw({u:material.uniforms,cams,model:mesh.matrixWorld,f:Math.min(1,f),fov,fp,rects:rsFov,band:rsFov[0][4],variant:{cls4:cls4On,events:material.uniforms.planeCount.value>0},decode:renderer.currentColorSpace===THREE.SRGBColorSpace});');
+    expect(vr).toContain('gx.vol.draw({u:material.uniforms,cams,model:mesh.matrixWorld,f:Math.min(1,f),fov,fp,rects:rsFov,band:rsFov[0][4],variant:{cls4:cls4On,events:material.uniforms.planeCount.value>0},decode:renderer.currentColorSpace===THREE.SRGBColorSpace,boxes:xrCam?rsEyes:null});');
     expect(vr).toContain('}else if(f<1&&lowTarget){');
     expect(vr).toContain('else if(!gx)hideFreeCompile(');
   });
@@ -205,31 +205,140 @@ const withGpuGlobals = fn => async () => {
 const eyeCam = (W, H) => ({ viewport: { z: W, w: H }, projectionMatrix: new THREEG.Matrix4(), matrixWorldInverse: new THREEG.Matrix4(), matrixWorld: new THREEG.Matrix4() });
 const nodeTextures = comp => ['c1', 'd1', 'c2', 'd2'].map(k => comp.nodes[k].value.sourceTexture);
 
-describe('WebGPU: the viewport is the whole eye, only the scissor is the centre (A2)', () => {
-  it('with the periphery pass on, the centre pass has the eye\'s full viewport and a smaller scissor inside it; the periphery pass has both full', withGpuGlobals(() => {
+describe('WebGPU: the passes draw a region of the eye, the viewport is that region and the scissors are what is drawn (A2)', () => {
+  it('with the periphery pass on and no box given, the centre pass is the centre rect, the periphery pass is the eye minus four bands around the inner rect', withGpuGlobals(() => {
     const { device, log } = mockDevice();
     const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1] });
     r.draw({ u: {}, cams: [eyeCam(1000, 1000), eyeCam(1000, 1000)], model: new THREEG.Matrix4(), f: 0.5, fov: true, fp: 0.25, rects: [[300, 300, 700, 700]], band: 1, variant: { cls4: false, events: false } });
-    // low pass (stride = 500 + 2): eyes 0 and 1; then the periphery pass (250 px eyes, stride 252)
-    expect(log.viewports.slice(0, 2)).toEqual([[0, 0, 500, 500, 0, 1], [502, 0, 500, 500, 0, 1]]);
+    // centre pass: x 0.5 -> 150..350 with the 2 px margin = 148..352 (204 px), slot 256 (the step), stride 258
+    expect(log.viewports.slice(0, 2)).toEqual([[0, 0, 204, 204, 0, 1], [258, 0, 204, 204, 0, 1]]);
+    expect(log.scissors.slice(0, 2)).toEqual([[0, 0, 204, 204], [258, 0, 204, 204]]);
+    // periphery (250 px eyes, stride 252): the inner rect shrunk by band + bilinear margin (10 px) = 78..172 px; the bands are top, bottom, left, right of it
     expect(log.viewports.slice(2, 4)).toEqual([[0, 0, 250, 250, 0, 1], [252, 0, 250, 250, 0, 1]]);
-    expect(log.scissors[0]).toEqual([149, 149, 202, 202]); // the centre rect x 0.5 with the 1 px margin, y flipped to the top-left origin
-    expect(log.scissors[1]).toEqual([502 + 149, 149, 202, 202]);
-    expect(log.scissors.slice(2, 4)).toEqual(log.viewports.slice(2, 4).map(v => v.slice(0, 4)));
-    for (let i = 0; i < 2; i++) { const v = log.viewports[i], sc = log.scissors[i]; expect(sc[2] * sc[3]).toBeLessThan(v[2] * v[3]); expect(sc[0]).toBeGreaterThanOrEqual(v[0]); expect(sc[0] + sc[2]).toBeLessThanOrEqual(v[0] + v[2]); }
+    expect(log.scissors.slice(2, 6)).toEqual([[0, 0, 250, 78], [0, 172, 250, 78], [0, 78, 78, 94], [172, 78, 78, 94]]);
+    expect(log.scissors.slice(6, 10)).toEqual([[252, 0, 250, 78], [252, 172, 250, 78], [252, 78, 78, 94], [252 + 172, 78, 78, 94]]);
+    for (let i = 0; i < log.scissors.length; i++) { const sc = log.scissors[i], vp = log.viewports[i < 2 ? i : i < 6 ? 2 : 3]; expect(sc[0]).toBeGreaterThanOrEqual(vp[0]); expect(sc[1] + sc[3]).toBeLessThanOrEqual(vp[1] + vp[3]); }
     r.dispose();
   }));
-  it('without the periphery pass viewport and scissor are the eye\'s full image', withGpuGlobals(() => {
+  it('without the periphery pass and no box given, viewport and scissor are the eye\'s full image (the same as before)', withGpuGlobals(() => {
     const { device, log } = mockDevice();
     const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1] });
     r.draw({ u: {}, cams: [eyeCam(640, 480)], model: new THREEG.Matrix4(), f: 1, fov: false, rects: null, variant: { cls4: false, events: false } });
     expect(log.viewports).toEqual([[0, 0, 640, 480, 0, 1]]); expect(log.scissors).toEqual([[0, 0, 640, 480]]);
     r.dispose();
   }));
-  it('the host passes viewport and scissor separately (the WebGL pass of vr-view.js sets the viewport to the eye and the scissor to the centre rect)', () => {
+  it('the box\'s rect limits the pass: only that part of the eye is the viewport and the scissor (y up in the rect, y down in the target), at the scale of the pass', withGpuGlobals(() => {
+    const { device, log } = mockDevice();
+    const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1] });
+    const st = r.draw({ u: {}, cams: [eyeCam(1000, 800), eyeCam(1000, 800)], model: new THREEG.Matrix4(), f: 0.5, boxes: [{ x0: 400, y0: 300, x1: 600, y1: 420 }, { x0: 380, y0: 300, x1: 580, y1: 420 }], variant: { cls4: false, events: false } });
+    // eye 0: x 200..300 +-2 = 198..302 (104 px), y (800-420)*0.5 = 190 .. (800-300)*0.5 = 250 +-2 = 188..252 (64 px)
+    expect(log.viewports[0]).toEqual([0, 0, 104, 64, 0, 1]);
+    expect(log.scissors[0]).toEqual([0, 0, 104, 64]);
+    expect(log.viewports[1][2]).toBe(104); expect(log.viewports[1][0]).toBe(128 + 2); // stride = the slot (128, the step above 104) + 2
+    expect(st.regions.low).toEqual([[104, 64], [104, 64]]); expect(st.regions.slot).toEqual([128, 64]); expect(st.w).toBe(1000); expect(st.h).toBe(800);
+    r.dispose();
+  }));
+  it('a box that reaches the eye (the whole image) or a missing / broken rect draws the whole image with the identity transform; an empty rect draws a sliver (the margin), never nothing or a negative size', withGpuGlobals(() => {
+    const { device, log } = mockDevice();
+    const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1] });
+    const cams = [eyeCam(640, 480)], model = new THREEG.Matrix4(), v = { cls4: false, events: false };
+    r.draw({ u: {}, cams, model, f: 1, boxes: [{ x0: 0, y0: 0, x1: 640, y1: 480 }], variant: v });
+    r.draw({ u: {}, cams, model, f: 1, boxes: [{ x0: NaN, y0: 0, x1: 1, y1: 1 }], variant: v });
+    expect(log.viewports).toEqual([[0, 0, 640, 480, 0, 1], [0, 0, 640, 480, 0, 1]]);
+    log.viewports.length = 0; log.scissors.length = 0;
+    r.draw({ u: {}, cams, model, f: 1, boxes: [{ x0: 700, y0: 100, x1: 700, y1: 100 }], variant: v }); // off to the right, no area
+    expect(log.viewports[0][2]).toBe(1); expect(log.viewports[0][3]).toBeGreaterThanOrEqual(1); expect(log.scissors[0].slice(2, 4)).toEqual(log.viewports[0].slice(2, 4)); // 1 px wide at the edge, the margin in y
+    r.dispose();
+  }));
+  it('the host passes viewport and the scissors separately (the WebGL pass of vr-view.js sets the viewport to the eye and the scissor to the centre rect)', () => {
     expect(host).toContain('pass.setViewport(e.vx ?? e.x, e.vy ?? e.y, e.vw ?? e.w, e.vh ?? e.h, 0, 1);');
-    expect(host).toContain('pass.setScissorRect(e.x, e.y, e.w, e.h);');
+    expect(host).toContain('for (const sc of e.scissors || [[e.x, e.y, e.w, e.h]]) { pass.setScissorRect(sc[0], sc[1], sc[2], sc[3]); pass.draw(36); }');
     expect(vr).toContain('lowTarget.viewport.set(x,y,vw,vh);'); expect(vr).toContain('lowTarget.scissor.set(sx,sy,');
+  });
+});
+
+describe('WebGPU: the drawn region, its steps and the clip change', () => {
+  it('bucketSize: steps of 64 up to 256, 128 up to 1024, 256 above; fitSlot keeps the held size while the need stays near it and never exceeds the full size', () => {
+    expect([1, 64, 65, 256, 257, 1024, 1025, 2064].map(bucketSize)).toEqual([64, 64, 128, 256, 384, 1024, 1280, 2304]);
+    expect(fitSlot(100, null, 2064)).toBe(128);
+    expect(fitSlot(110, 128, 2064)).toBe(128); expect(fitSlot(90, 128, 2064)).toBe(128); expect(fitSlot(120, 128, 2064)).toBe(128); // stays
+    expect(fitSlot(129, 128, 2064)).toBe(192); // grows at once
+    expect(fitSlot(40, 128, 2064)).toBe(64); // 40 * 1.6 = 64 < 128: shrinks to the step of the need
+    expect(fitSlot(2100, null, 2064)).toBe(2064); expect(fitSlot(5000, 2300, 2064)).toBe(2064); expect(fitSlot(2064, 2304, 2064)).toBe(2064); // never beyond the image
+  });
+  it('scaledRegion: the pixels whose centres can lie in the rect plus the margin, clipped to the image, at least 1 px, y flipped', () => {
+    expect(scaledRegion([100, 200, 300, 400], 1000, 0.5, 500, 500, 2)).toEqual({ x0: 48, y0: 298, x1: 152, y1: 402 });
+    expect(scaledRegion([0, 0, 1000, 1000], 1000, 0.5, 500, 500)).toEqual({ x0: 0, y0: 0, x1: 500, y1: 500 });
+    const e = scaledRegion([2000, 0, 2000, 0], 1000, 1, 1000, 1000, 2); expect(e.x1 - e.x0).toBeGreaterThanOrEqual(1); expect(e.x1).toBeLessThanOrEqual(1000); expect(e.x0).toBeLessThan(1000);
+    const z = scaledRegion([-50, -50, -10, -10], 1000, 1, 1000, 1000, 0); expect(z.x0).toBe(0); expect(z.x1 - z.x0).toBe(1); expect(z.y1 - z.y0).toBeGreaterThanOrEqual(1);
+  });
+  it('regionClip + regionMvp: the region fills the viewport and every pixel of it lands on the same pixel as in the whole image; z and w (the depth) are unchanged', () => {
+    const Wu = 500, Hu = 400, reg = { x0: 120, y0: 60, x1: 300, y1: 250 }, rw = 180, rh = 190;
+    const c = regionClip(reg, Wu, Hu), M = new THREEG.Matrix4().makePerspective(-0.9, 0.7, 0.5, -0.6, 0.1, 50).multiply(new THREEG.Matrix4().makeTranslation(0.2, -0.1, -2));
+    const out = regionMvp(new THREEG.Matrix4(), M, c);
+    const clip = (m, v) => { const q = new THREEG.Vector4(...v, 1).applyMatrix4(m); return q; };
+    for (const v of [[0.1, 0.2, -1], [-0.4, 0.3, -3], [0.5, -0.5, -1.5]]) {
+      const a = clip(M, v), b = clip(out, v);
+      expect(b.z).toBeCloseTo(a.z, 9); expect(b.w).toBeCloseTo(a.w, 9);
+      // the pixel in the eye's whole (scaled) image, and in the target slot of the region: framebuffer x = (ndc + 1) / 2 * size, y down = (1 - ndc) / 2 * size
+      const px = (a.x / a.w + 1) / 2 * Wu, py = (1 - a.y / a.w) / 2 * Hu;
+      const tx = (b.x / b.w + 1) / 2 * rw, ty = (1 - b.y / b.w) / 2 * rh;
+      expect(tx).toBeCloseTo(px - reg.x0, 6); expect(ty).toBeCloseTo(py - reg.y0, 6);
+    }
+    const whole = regionClip({ x0: 0, y0: 0, x1: Wu, y1: Hu }, Wu, Hu); expect(whole.ax).toBe(1); expect(whole.ay).toBe(1); expect(whole.bx).toBeCloseTo(0, 12); expect(whole.by).toBeCloseTo(0, 12);
+  });
+  it('bandRects: four disjoint bands around the inner rect (shrunk by band + margin), or the whole region when the inner rect is empty or outside', () => {
+    const r = { x0: 0, y0: 0, x1: 100, y1: 100 };
+    const b = bandRects(r, [40, 40, 60, 60], 100, 1, 0); // inner 40..60 both ways (y up = y down here)
+    expect(b).toEqual([[0, 0, 100, 40], [0, 60, 100, 40], [0, 40, 40, 20], [60, 40, 40, 20]]);
+    const cells = new Set(); for (const [x, y, w, h] of b) for (let i = x; i < x + w; i++) for (let j = y; j < y + h; j++) { expect(cells.has(i + ',' + j)).toBe(false); cells.add(i + ',' + j); }
+    expect(cells.size).toBe(100 * 100 - 20 * 20); // everything but the inner rect, nothing twice
+    expect(bandRects(r, [40, 40, 60, 60], 100, 1, 15)).toEqual([[0, 0, 100, 100]]); // shrunk to nothing
+    expect(bandRects(r, [200, 200, 300, 300], 100, 1, 0)).toEqual([[0, 0, 100, 100]]); // outside the region
+    expect(bandRects(r, null, 100, 1, 0)).toEqual([[0, 0, 100, 100]]);
+    expect(bandRects({ x0: 20, y0: 30, x1: 70, y1: 90 }, [0, 0, 50, 50], 100, 1, 0)[0]).toEqual([0, 0, 50, 20]); // partly overlapping region: bands are relative to the region's top-left (y 30..50 is the inner rect's top part)
+  });
+  it('a head that moves does not make a target every frame: the sizes of a moving box stay within a few steps (the pool is not churned)', withGpuGlobals(() => {
+    const { device, log } = mockDevice();
+    const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1] });
+    for (let k = 0; k < 300; k++) {
+      const w = 150 + 60 * Math.sin(k / 9) + k % 7, h = 120 + 40 * Math.cos(k / 11) + k % 5, x0 = 300 + 80 * Math.sin(k / 13);
+      r.draw({ u: {}, cams: [eyeCam(1000, 1000), eyeCam(1000, 1000)], model: new THREEG.Matrix4(), f: 1, boxes: [{ x0, y0: 400, x1: x0 + w, y1: 400 + h }, { x0: x0 - 10, y0: 400, x1: x0 + w - 10, y1: 400 + h }], variant: { cls4: false, events: false } });
+    }
+    expect(log.textures.filter(t => t.desc.format === 'rgba8unorm' && t.desc.usage & 4).length).toBeLessThanOrEqual(2 * 6); // colour + depth for at most 6 sizes over 300 frames
+    r.dispose();
+  }));
+  it('the composite reads the eye\'s own region (per eye) and writes nothing outside it', withGpuGlobals(() => {
+    const { device } = mockDevice();
+    const comp = createComposite({ THREE: THREEG, device, halfExt: [1, 1, 1] });
+    const t = device.createTexture({}), d = device.createTexture({});
+    comp.update({ low: { target: { color: t, depth: d, w: 256, h: 128 }, scale: 0.5, stride: 130, regs: [[10, 20, 100, 60], [12, 22, 90, 50]] } });
+    expect(comp.u.reg1a.value.toArray()).toEqual([10, 20, 100, 60]); expect(comp.u.reg1b.value.toArray()).toEqual([12, 22, 90, 50]);
+    comp.update({ low: { target: { color: t, depth: d, w: 256, h: 128 }, scale: 1, stride: 130, usedW: 64, usedH: 32 } }); // the old form: the whole image
+    expect(comp.u.reg1a.value.toArray()).toEqual([0, 0, 64, 32]); expect(comp.u.reg1b.value.toArray()).toEqual([0, 0, 64, 32]);
+    expect(host).toContain('const inside = sx.greaterThanEqual(0).and(sx.lessThanEqual(reg.z)).and(sy.greaterThanEqual(0)).and(sy.lessThanEqual(reg.w));');
+    expect(host).toContain('nodes.c1.sample(uv1).mul(q1.mask)');
+    comp.dispose();
+  }));
+  it('B: at 100 % (f = 1) the periphery pass still runs when asked (fov): the centre at full size inside the centre rect, the bands around it at the periphery scale; the box limits both', withGpuGlobals(() => {
+    const { device, log } = mockDevice();
+    const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1] });
+    const st = r.draw({ u: {}, cams: [eyeCam(1000, 1000)], model: new THREEG.Matrix4(), f: 1, fov: true, fp: 0.5, rects: [[300, 300, 700, 700]], band: 5, boxes: [{ x0: 100, y0: 100, x1: 900, y1: 900 }], variant: { cls4: false, events: false } });
+    expect(st.regions.scale).toBe(1); expect(st.regions.periScale).toBe(0.5);
+    expect(st.regions.low[0]).toEqual([404, 404]); // the centre rect 300..700 + 2 px each side at full size (not the box's 800)
+    expect(st.regions.peri[0]).toEqual([404, 404]); // the box 100..900 at half size = 50..450 + 2 px each side
+    expect(log.viewports[0]).toEqual([0, 0, 404, 404, 0, 1]); expect(log.viewports[1]).toEqual([0, 0, 404, 404, 0, 1]);
+    // the periphery's bands leave the inner rect (300..700 shrunk by 5 + 4 + 1 = 10 -> 310..690 -> 155..345 at half size) undrawn: four scissors, none inside it
+    const bands = log.scissors.slice(1); expect(bands).toHaveLength(4);
+    const area = bands.reduce((a, b) => a + b[2] * b[3], 0); expect(area).toBe(404 * 404 - (345 - 155) * (345 - 155));
+    r.dispose();
+  }));
+  it('B: vr-view.js asks for the periphery at 100 % in the WebGPU view only (gx), the conditions of the WebGL view (f < 1) and the guard / benchmark conditions are as before', () => {
+    expect(vr).toContain('fovRaw=(f<1||gx)&&foveaWorth(rs.outside,rs.cover,kF,rs.per<1)&&!bench.active&&!anBench.active&&!!xrCam&&xrCam.cameras.length>0,fov=(f<1||gx)&&fovGuard.step(fovRaw,nowG),fp=fov?f*kF:f;');
+  });
+  it('vr-view.js: the box rects of this frame go to the pass and the record gets the drawn size once a second', () => {
+    expect(vr).toContain("gxD.d.values['drawn region']={eye:[rs.w,rs.h],...gx.vol.stats.regions};");
+    expect(vr).toContain('boxes:xrCam?rsEyes:null');
   });
 });
 
@@ -568,5 +677,42 @@ describe('WebGPU diagnostics: the save button of the page panel (the same text a
     expect(body).toContain('navigator.clipboard?.writeText(text)');
     expect(body).toContain('row.append(copy,save,close,msg)');
     expect(body).toContain("diag?(ja?'WebGPU版VRの診断情報（「コピー」で全文をコピーできます）':'WebGPU VR diagnostics (Copy takes the full text)')");
+  });
+});
+
+describe('WebGPU: the output is encoded inside each material, three.js\' frame buffer pass is not used (C)', () => {
+  const getter = name => Object.getOwnPropertyDescriptor(THREEG.Renderer.prototype, name).get;
+  const fakeRenderer = () => ({ outputColorSpace: THREEG.SRGBColorSpace, contextNode: THREEG.TSL.context({}) });
+  it('the renderer\'s output colour space becomes the working one, so three.js needs no frame buffer target (checked with three.js\' own getters)', () => {
+    const r = fakeRenderer();
+    expect(getter('needsFrameBufferTarget').call({ currentToneMapping: THREEG.NoToneMapping, currentColorSpace: r.outputColorSpace })).toBe(true); // the control: sRGB output = the frame buffer pass
+    const out = useMaterialSrgbOutput(r, THREEG);
+    expect(out.materialSrgb).toBe(true); expect(out.text).toMatch(/each material/);
+    expect(r.outputColorSpace).toBe(THREEG.LinearSRGBColorSpace);
+    const cur = getter('currentColorSpace').call({ isOutputTarget: true, outputColorSpace: r.outputColorSpace });
+    expect(getter('needsFrameBufferTarget').call({ currentToneMapping: THREEG.NoToneMapping, currentColorSpace: cur })).toBe(false);
+    expect(cur === THREEG.SRGBColorSpace).toBe(false); // vr-view.js' decode flag (currentColorSpace === sRGB) is false: the composite writes display values as they are
+  });
+  it('the contextNode encodes every material\'s output to sRGB without tone mapping and keeps its premultiplied alpha (three.js\' own XR layer getOutput)', () => {
+    const r = fakeRenderer(); useMaterialSrgbOutput(r, THREEG);
+    expect(r.contextNode.isContextNode).toBe(true);
+    for (const pm of [true, false]) {
+      const n = r.contextNode.value.getOutput(THREEG.TSL.vec4(1, 0.5, 0.25, 1), { material: { premultipliedAlpha: pm } });
+      expect(n.isRenderOutputNode).toBe(true); expect(n._toneMapping).toBe(THREEG.NoToneMapping); expect(n.outputColorSpace).toBe(THREEG.SRGBColorSpace); expect(n.premultipliedAlpha).toBe(pm);
+    }
+  });
+  it('a renderer without the pieces is left as it was and the record says so', () => {
+    const r = { outputColorSpace: THREEG.SRGBColorSpace, contextNode: {} };
+    const out = useMaterialSrgbOutput(r, THREEG);
+    expect(out.materialSrgb).toBe(false); expect(out.text).toMatch(/frame buffer pass/);
+    expect(r.outputColorSpace).toBe(THREEG.SRGBColorSpace); expect(r.contextNode).toEqual({});
+  });
+  it('vr-view.js: the output is set right after the renderer\'s init, it goes into the record, the dome is still decoded (its plain material is encoded by the contextNode) and the WebGL renderer is untouched', () => {
+    expect(vr).toContain("await r.init();gxD.stage('renderer init');const out=useMaterialSrgbOutput(r,THREEG);gxD.value('output path',out.text);");
+    expect(vr).toContain('makeBackground(!!gx,!!gx&&(gx.out?.materialSrgb||renderer.currentColorSpace===THREE.SRGBColorSpace))');
+    expect(vr).toContain('decode:renderer.currentColorSpace===THREE.SRGBColorSpace'); // unchanged: false once the output colour space is linear, true if the material route failed and three.js' pass encodes
+    expect(vr.match(/useMaterialSrgbOutput\(/g)).toHaveLength(1);
+    expect(vr.match(/outputColorSpace\s*=/g)).toBeNull(); // nothing in the page sets it
+    expect(host).toContain('export function useMaterialSrgbOutput(renderer, THREE)');
   });
 });

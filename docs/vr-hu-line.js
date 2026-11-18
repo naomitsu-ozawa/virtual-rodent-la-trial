@@ -18,15 +18,15 @@
 // (live / final / reading / failed / mode / language: vr-hu-line-core.js backgroundKey). The graph is a ribbon of quads and the numbers (length,
 // axis lo / hi, the axis length, mean / min / max) are quads of one small digit atlas, children of the panel mesh; a sample rewrites only their
 // vertex buffers (preallocated, the used part uploaded), and a number field is rewritten only when its text changed.
-import { getHuLine, setHuLine, clearHuLine, onHuLineChange } from './hu-line-model.js?v=20261118-build745';
-import { lineSamples, sampleLine, profileStats } from './line-profile.js?v=20261118-build745';
-import { liveProfile, LIVE_MAX_SAMPLES } from './hu-line-live.js?v=20261118-build745';
-import { getHuMode, onHuModeChange, resolveHuMode } from './effective-hu.js?v=20261118-build745';
-import { readEffectiveSlice, rawHuVolume, peekEffectiveReaders } from './effective-hu-source.js?v=20261118-build745';
-import { sourceFilterStages } from './source-filters.js?v=20261118-build745';
-import { frameYield } from './utils.js?v=20261118-build745';
-import { HAPTIC } from './vr-point.js?v=20261118-build745';
-import { createHuPanelGate, HU_MIN_LENGTH_VOXELS, voxelToLocalInto, voxelDistanceMm, sameGrid, liveFromTexture, readErrorText, PANEL_W, PANEL_H, PANEL_WORLD_W, panelLayout, huRange, plotPoints, panelTexts, huMenuTexts, backgroundKey, ribbonInto, quadIndex, atlasLayout, glyphsInto, GRAPH_MAX_POINTS, GLYPHS } from './vr-hu-line-core.js?v=20261118-build745';
+import { getHuLine, setHuLine, clearHuLine, onHuLineChange } from './hu-line-model.js?v=20261118-build746';
+import { lineSamples, sampleLine, profileStats } from './line-profile.js?v=20261118-build746';
+import { liveProfile, LIVE_MAX_SAMPLES } from './hu-line-live.js?v=20261118-build746';
+import { getHuMode, onHuModeChange, resolveHuMode } from './effective-hu.js?v=20261118-build746';
+import { readEffectiveSlice, rawHuVolume, peekEffectiveReaders } from './effective-hu-source.js?v=20261118-build746';
+import { sourceFilterStages } from './source-filters.js?v=20261118-build746';
+import { frameYield } from './utils.js?v=20261118-build746';
+import { HAPTIC } from './vr-point.js?v=20261118-build746';
+import { createHuPanelGate, HU_MIN_LENGTH_VOXELS, voxelToLocalInto, voxelDistanceMm, sameGrid, liveFromTexture, readErrorText, PANEL_W, PANEL_H, PANEL_WORLD_W, panelLayout, huRange, plotPoints, panelTexts, huMenuTexts, backgroundKey, ribbonInto, quadIndex, atlasLayout, glyphsInto, GRAPH_MAX_POINTS, GLYPHS } from './vr-hu-line-core.js?v=20261118-build746';
 
 // the self-check's HU線 scenario (HU_LINE_SELF_CHECK) is in vr-hu-line-core.js (registered when that module loads); its hooks here are
 // setArmed(on, quiet), isReading(), snapshot() and restoreState(s) (vr-view.js builds selfCheck.env.huLine from them)
