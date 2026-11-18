@@ -26,6 +26,7 @@ export const SETTINGS_DEFAULTS={
  tutorialMode:false,  // チュートリアル (設定 > 外観): the 2D panel (tutorial-ui.js) + the VR help board carousel (tutorial-vr.js); only the settings switch turns it on; coexists with eventMode
  tutorialVoice:'F1',   // the tutorial's spoken guide: 'F1' (女性の声) / 'M1' (男性の声,: chosen in the dialog after 「チュートリアルを始める」) / 'off' (音声なし) (tutorial-audio.js reads it)
  handRay:'standard',    // the hand's laser in VR (hand tracking only): 'standard' (標準: the system's ray as it is) / 'point' (指差し: only while pointing, along the index finger); 設定 > 描画 and the VR menu's 表示 tab
+ labelOverlap:'keep',   // 重なったラベルの奥側 (設定 > 描画 and the VR menu's 解析 tab, PC and VR): 'keep' (消さない, default) / 'always' (常に消す) / 'many' (15枚以上のときだけ消す); the rule: analysis-label.js
  gpuPreference:'auto'  // GPU for WebGPU: 'auto' (as before) / 'high-performance' / 'low-power'; honoured only on Linux / Windows (gpu-preference.js), applies after a reload
 };
 // pixel budgets (MP) per interaction tier / at rest; 'max' = no budget
@@ -36,6 +37,7 @@ let values={...SETTINGS_DEFAULTS};
 try{const raw=globalThis.localStorage?.getItem(KEY);if(raw)values={...values,...JSON.parse(raw)}}catch{}
 // the hand laser's modes are 'standard' / 'point' (vr-hand.js HAND_RAY_MODES); a value stored by-638 ('home' ホーム方式) or 634-636 ('between' 指先, 'wrist' 手のひら) or anything else reads as 'standard'
 if(!['standard','point'].includes(values.handRay))values.handRay='standard';
+if(!['keep','always','many'].includes(values.labelOverlap))values.labelOverlap='keep'; // the modes of analysis-label.js LABEL_OVERLAP_MODES (this module has no imports)
 export const TUTORIAL_VOICES=Object.freeze(['F1','M1','off']);
 // pure; applied to the stored values at load and on every set()
 export function sanitizeTutorialSettings(v){

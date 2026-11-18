@@ -5,7 +5,7 @@ import * as THREE from 'three';
 const src = readFileSync(new URL('../../docs/vr-view.js', import.meta.url), 'utf8');
 const grab = re => { const m = re.exec(src); if (!m) throw new Error('not found: ' + re); return m[0]; };
 const defaultsLine = grab(/const DEFAULTS=\{cap:1,[^\n]*\};/), looksLine = grab(/const LASER_COLOR=[^\n]*\nconst LASER_LOOKS=[^\n]*\n/), laserFn = grab(/const makeLaser=\(\)=>\{[\s\S]*?return r\};/);
-const make = () => new Function('THREE', 'DEFAULT_WHEEL', 'LABEL_HIDE_DEFAULT', `${defaultsLine}\n${looksLine}\n${laserFn}\nreturn {DEFAULTS,laserLookOf,LASER_LOOKS,LASER_COLOR,makeLaser};`)(THREE, [1, 2, 3], 1);
+const make = () => new Function('THREE', 'DEFAULT_WHEEL', 'LABEL_HIDE_DEFAULT', 'gx', `${defaultsLine}\n${looksLine}\n${laserFn}\nreturn {DEFAULTS,laserLookOf,LASER_LOOKS,LASER_COLOR,makeLaser};`)(THREE, [1, 2, 3], 1, null); // gx: the WebGPU session's state (null = the WebGL session these tests are about)
 
 describe('laser style setting', () => {
   const { DEFAULTS, laserLookOf } = make();
