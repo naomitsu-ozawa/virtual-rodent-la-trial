@@ -1,4 +1,10 @@
-import { tr } from './i18n.js?v=20261110-build708';
+// In-place questions instead of the browser's confirm() / alert().
+//   askInline(text, opts)  -> Promise<boolean>: a banner with two buttons at the top of a panel (default: the データ panel,
+//                             which is brought to the front); Escape = cancel. Without the workspace UI: window.confirm.
+//   armConfirm(btn, run)   -> a destructive button asks in place: the 1st press arms it (label "もう一度押すと…"),
+//                             a 2nd press within ARM_MS runs it; otherwise it falls back to its own label.
+//   noteInline(el, text)   -> a short note right after el that fades out by itself (instead of alert()).
+import { tr } from './i18n.js?v=20261118-build744';
 
 export const ARM_MS = 4000, NOTE_MS = 3500;
 

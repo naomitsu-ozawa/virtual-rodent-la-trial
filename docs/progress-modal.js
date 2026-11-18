@@ -1,4 +1,23 @@
-import { currentLanguage } from './state.js?v=20261110-build708';
+// One progress modal for every long operation (the progress of
+// filters, 3D rebuild, CT value settings, loading, analysis, VR preparation was
+// shown in different places; show it in one modal in the middle of the screen,
+// 2D or 3D alike, and use it for every future operation as well).
+//
+// Rules: an operation that ends within SHOW_DELAY is never shown; while
+// the modal is shown, input is blocked (the work is heavy); a button stops it:
+// 中断 when the operation has a cancel path, otherwise, after ESCAPE_MS, 閉じる
+// (the work goes on, only the modal goes away) so a stuck operation can never
+// lock the page.
+//
+// API — every long operation goes through here (directly or through the
+// adapters set3DBusy / setProcessingBusy / busy / progress):
+//   setBusySlot(name, on, {label, cancel, counted})  start / update / end a slot
+//   reportBusyProgress(name|null, done, total, detail) bar and detail line
+//     (null: the slot shown on top)
+// A slot is one source of work ('three', 'processing', 'load', 'vr', ...).
+// counted slots pair on/off calls (nested callers); others: the last call wins.
+// The slot started last is the one shown.
+import { currentLanguage } from './state.js?v=20261118-build744';
 
 export const SHOW_DELAY=400,ESCAPE_MS=10000,CANCEL_GRACE=3000;
 

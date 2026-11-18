@@ -1,16 +1,16 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { indexedGeometryFromTrianglePositions, makeSource3DCoordinates, makeVolume3DCoordinates, Float32FaceBuilder, appendAnalysisRunBoundaryFaces } from './mesh-geometry.js?v=20261110-build708';
-import * as THREE from './vendor/three@0.186.0/build/three.webgpu.js';
-import { createSurfaceMaterial } from './mesh-material.js?v=20261110-build708';
-import { list, surfaceSmoothStrength } from './ui-shell.js?v=20261110-build708';
-import { segmentState, segmentEditState, segmentById } from './segments.js?v=20261110-build708';
-import { isChildKey } from './segment-look.js?v=20261110-build708';
-import { surfaceSmoothingActive } from './settings.js?v=20261110-build708';
-import { frameYield } from './utils.js?v=20261110-build708';
-import { constrainedSmoothPositions, constrainedSmoothSchedule } from './constrained-smooth.js?v=20261110-build708';
-import { smoothChunkHalo, createSeamLinker, OrderedChunkSmoother } from './smooth-chunks.js?v=20261110-build708';
-import { smoothMethod } from './smooth-workers.js?v=20261110-build708';
+import { indexedGeometryFromTrianglePositions, makeSource3DCoordinates, makeVolume3DCoordinates, Float32FaceBuilder, appendAnalysisRunBoundaryFaces } from './mesh-geometry.js?v=20261118-build744';
+import * as THREE from './vendor/three@0.187.0/build/three.webgpu.js';
+import { createSurfaceMaterial } from './mesh-material.js?v=20261118-build744';
+import { list, surfaceSmoothStrength } from './ui-shell.js?v=20261118-build744';
+import { segmentState, segmentEditState, segmentById, childDrawLook } from './segments.js?v=20261118-build744';
+import { isChildKey } from './segment-look.js?v=20261118-build744';
+import { surfaceSmoothingActive } from './settings.js?v=20261118-build744';
+import { frameYield } from './utils.js?v=20261118-build744';
+import { constrainedSmoothPositions, constrainedSmoothSchedule } from './constrained-smooth.js?v=20261118-build744';
+import { smoothChunkHalo, createSeamLinker, OrderedChunkSmoother } from './smooth-chunks.js?v=20261118-build744';
+import { smoothMethod } from './smooth-workers.js?v=20261118-build744';
 // ignoreCut: runs that are not the segment itself (an analysis region), so the
 // segment's raw cut faces do not apply
 // slices of the neighbouring chunks smoothed with a chunk: smoothChunkHalo
@@ -31,11 +31,19 @@ export function runSurfaceRoute(v){
 }
 export async function buildEditableRunsGroup(v,runs,key,shouldContinue=null,forceRaw=false,ignoreCut=false){
  // a child segment (key 's<id>') is drawn like a segment of its own: its colour / opacity (segments.js segmentById), no edit state
- const seg=isChildKey(key)?segmentById(key):segmentState[key],st=segmentEditState[key],smooth=!forceRaw&&surfaceSmoothingActive(),hasRawCut=!ignoreCut&&!!(st?.rawCutSurface&&st?.cutRuns);
+ const seg=isChildKey(key)?(g=>g&&{...g,color:childDrawLook(key).color})(segmentById(key)):segmentState[key],st=segmentEditState[key],smooth=!forceRaw&&surfaceSmoothingActive(),hasRawCut=!ignoreCut&&!!(st?.rawCutSurface&&st?.cutRuns);
  // no one-piece isosurface any more (a blurred field and marching tetrahedra, then Taubin): every run surface is
  // the voxel faces, smoothed by the constrained smoothing (constrained-smooth.js) chunk by chunk
  const coords=v.sourceBacked?makeSource3DCoordinates(v.series):makeVolume3DCoordinates(v),group=new THREE.Group(),builder=new Float32FaceBuilder(),limit=runSurfaceChunkLimit(smooth),pinnedKeys=hasRawCut?new Set():null;
  const params=surfaceMaterialParams(seg,key,smooth);
+ // with strong smoothing the chunks were merged and smoothed once at the end (consolidate)
+ // each chunk was smoothed on its own, so the
+ // open edge where a chunk ended shrank away from the next chunk's. A chunk is now smoothed with HALO slices of the
+ // neighbouring chunks on both sides and keeps only its own slices' triangles: the shared edge lies inside both smoothed
+ // meshes and gets (nearly) the same position from either side
+ // at every strength (no merge any more), and the seam copy gives the first plane of a chunk the positions the
+ // previous chunk gave it: the chunks meet bit for bit (a watertight STL)
+ // (the chunks are smoothed side by side in the worker pool and added in order: OrderedChunkSmoother)
  const perChunkSmooth=smooth,halo=perChunkSmooth?smoothChunkHalo(+surfaceSmoothStrength.value):0;
  const addMesh=(geometry,z)=>{const mesh=new THREE.Mesh(geometry,createSurfaceMaterial(params,key));mesh.name='edited_segment_'+key+'_'+z;mesh.userData.segmentKey=key;mesh.userData.editSurface=true;mesh.userData.displayScale=coords.scale;group.add(mesh)};
  const smoother=perChunkSmooth?new OrderedChunkSmoother({strength:+surfaceSmoothStrength.value,coords,seams:createSeamLinker(),onGeometry:addMesh,isCurrent:shouldContinue}):null;

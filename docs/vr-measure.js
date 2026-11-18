@@ -5,12 +5,16 @@
 // distance is being made, the START point with a pulsing ring and the hint 「終点のポイントを選んでください」 next to it.
 // vr-view.js calls createVrMeasure(THREE, scene) -> { update, probes, pickLabel, dragLabel, dispose } every frame and does everything else (the flow, haptics, undo) itself; the state is
 // measurements.js (the same for the PC / iPad). The value follows the points: it is recomputed from their voxels each frame (a point being moved included, preview).
-import { getComments, getMarkersShown, commentMatchesSeries, commentTarget } from './comments.js?v=20261110-build708';
-import { getMeasurements, setLabelOffset, distanceMm, measureLabel } from './measurements.js?v=20261110-build708';
-import { nearLabelWorld, stepDelta, offsetFromDelta, LINE_SAMPLES, probeKey, fadeAlpha, approachAlpha, OCCLUDED_ALPHA } from './measure-label.js?v=20261110-build708';
-import { voxelToLocal } from './vr-point.js?v=20261110-build708';
-import { GHOST_ALPHA, occludedPass } from './vr-depth.js?v=20261110-build708';
+import { getComments, getMarkersShown, commentMatchesSeries, commentTarget } from './comments.js?v=20261118-build744';
+import { getMeasurements, setLabelOffset, distanceMm, measureLabel } from './measurements.js?v=20261118-build744';
+import { nearLabelWorld, stepDelta, offsetFromDelta, LINE_SAMPLES, probeKey, fadeAlpha, approachAlpha, OCCLUDED_ALPHA } from './measure-label.js?v=20261118-build744';
+import { voxelToLocal } from './vr-point.js?v=20261118-build744';
+import { GHOST_ALPHA, occludedPass } from './vr-depth.js?v=20261118-build744';
 export const VR_MEASURE_COLOR=0xffd23d,MEASURE_LABEL_W_M=0.045,MEASURE_LABEL_H_M=0.0132,MEASURE_HINT_W_M=0.2,MEASURE_HINT_H_M=0.026;
+// The hint 「終点のポイントを選んでください」 used to sit right above the START point, on top of everything (no depth test, opaque): in front of the very points the visitor has to aim at.
+// Now it is HEAD-LOCKED at the top edge of the view (HINT_ELEV rad above the gaze, HINT_DIST m away, facing the eyes), drawn at HINT_ALPHA, and after HINT_FADE_AFTER_MS it fades
+// (over HINT_FADE_MS) to HINT_FADED_ALPHA: still readable when looked at, never in front of the target. The pulsing ring at the start point stays the cue for WHERE the distance starts.
+// Without a gaze direction (update({gaze}) missing) it falls back to a place above the start point, but with the same transparency and fade.
 export const HINT_DIST_M=0.7,HINT_ELEV=0.5,HINT_ALPHA=0.6,HINT_FADED_ALPHA=0.28,HINT_FADE_AFTER_MS=3000,HINT_FADE_MS=1200;
 // pure: the hint's opacity after elapsedMs on screen
 export function hintAlpha(elapsedMs){const t=Math.min(1,Math.max(0,((+elapsedMs||0)-HINT_FADE_AFTER_MS)/HINT_FADE_MS));return HINT_ALPHA+(HINT_FADED_ALPHA-HINT_ALPHA)*t}
@@ -25,6 +29,9 @@ export function hintPlace(head,gaze){
  const c=Math.cos(HINT_ELEV),sn=Math.sin(HINT_ELEV);
  return{x:head.x+(f.x*c+u.x*sn)*HINT_DIST_M,y:head.y+(f.y*c+u.y*sn)*HINT_DIST_M,z:head.z+(f.z*c+u.z*sn)*HINT_DIST_M};
 }
+// the head-locked place ended up far away / outside the view. The hint now floats just above the controller that placed the START point (HINT_HAND_UP_M above its
+// grip, facing the eyes, HINT_HAND_SCALE of the full size: readable at arm's length) and follows that controller; same translucency and fade, and it is never hit-tested (it is not in the probe list), so it cannot
+// block the laser or the next target. No controller pose (update({handPos}) missing): the head-locked place above, then the place above the start point, as before.
 export const HINT_HAND_UP_M=0.09,HINT_HAND_SCALE=0.7;
 // pure: the world place of the hand-following hint, or null without a usable hand position {x,y,z}
 export function hintHandPlace(hand){
@@ -60,12 +67,12 @@ export function createVrMeasure(THREE,scene,deps={getComments,getMarkersShown,ge
   const ghost=ghostMesh?addGhost(mesh,Object.assign(mesh.material.clone(),{depthFunc:THREE.GreaterDepth,depthTest:true,depthWrite:false,opacity:GHOST_ALPHA,visible:false})):null; // a child of the label: moves, scales and hides with it
   return{mesh,canvas,tex,text:null,lit:false,ghost};
  };
- const drawText=(lb,text,font,lit=false)=>{
+ const drawText=(lb,text,font,lit=false,fit=false)=>{
   if(lb.text===text&&lb.lit===lit)return;lb.text=text;lb.lit=lit; // the canvas is redrawn (and re-uploaded) only when the text or the lit state changes
   const c=lb.canvas,ctx=c.getContext('2d');ctx.clearRect(0,0,c.width,c.height);
   ctx.fillStyle=lit?'#ffe27a':'rgba(17,23,27,.92)';ctx.beginPath();ctx.roundRect(3,3,c.width-6,c.height-6,c.height/2.4);ctx.fill();
   ctx.lineWidth=lit?7:5;ctx.strokeStyle=lit?'#ffffff':'#ffd23d';ctx.stroke();
-  ctx.fillStyle=lit?'#111111':'#ffffff';ctx.font=font;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(text,c.width/2,c.height/2+2);
+  ctx.fillStyle=lit?'#111111':'#ffffff';ctx.font=font;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(text,c.width/2,c.height/2+2,...(fit?[c.width-36]:[])); // fit: a long text (the hint of a pair, 「…（<name>の点）」) shrinks to the label; the other labels are drawn as they were
   lb.tex.needsUpdate=true;
  };
  const disposeLabel=lb=>{scene.remove(lb.mesh);lb.tex.dispose();lb.mesh.material.dispose();lb.ghost?.material.dispose()};
@@ -136,7 +143,7 @@ export function createVrMeasure(THREE,scene,deps={getComments,getMarkersShown,ge
      if(start.id!==startId){start.id=startId;start.t0=now} // another start point: the hint is read again (full strength, then fades)
      a.set(S.local.x,S.local.y,S.local.z);mesh.localToWorld(a);
      start.ring.position.copy(a);start.ring.scale.setScalar(r0*0.4*(2.1+0.9*pulsePhase(now)));
-     drawText(start.hint,hint,'bold 30px system-ui,sans-serif');
+     drawText(start.hint,hint,'bold 30px system-ui,sans-serif',false,true);
      const hh=hintHandPlace(handPos),hp=hh||hintPlace(head,gaze);
      {const hk=hh?HINT_HAND_SCALE:1;start.hint.mesh.scale.set(MEASURE_HINT_W_M*hk,MEASURE_HINT_H_M*hk,1)} // keep the plane's real width x height (a uniform setScalar made it a 0.7 m square: the 512x64 text stretched into vertical streaks)
      if(hp)start.hint.mesh.position.set(hp.x,hp.y,hp.z);else start.hint.mesh.position.set(a.x,a.y+0.045+r0,a.z);

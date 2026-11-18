@@ -32,7 +32,7 @@ describe('the datasets of the event page: ONE list', () => {
     // the three consumers are written against EVENT_DATASETS, not against a list of their own
     expect(SRC('event-launcher-core.js')).toContain('eventCards(datasets = EVENT_DATASETS');
     expect(SRC('event-prepare-ui.js')).toContain('EVENT_DATASETS.map(d =>');
-    expect(SRC('vr-view.js')).toContain('const dsList=eventModeOn()?EVENT_DATASETS:EVENT_LEVELS;');
+    expect(SRC('vr-view.js')).toContain('const dsList=levelSwitchTargets(globalThis.__vrlOpenSample);'); // the in-VR switch lists only the datasets that have a level (event-mode.js levelSwitchTargets)
     expect(SRC('event-launcher.js')).toContain('eventCards()');
   });
 });
@@ -77,15 +77,15 @@ describe('the in-VR data switch', () => {
     expect(levelSwitchItems(name, o, o).find(i => i.sample === o)).toMatchObject({ on: true, armed: true, label: 'smp.' + o + '.name' });
     expect(levelSwitchItems(name, null, null, EVENT_LEVELS).map(i => i.sample)).toEqual(LEVEL_IDS);
     const vr = SRC('vr-view.js');
-    expect(vr).toContain('levelSwitchItems(tr,globalThis.__vrlOpenSample,datasetForSample(al)?.id??null,dsList)'); // the full menu's データ tab: every dataset ...
-    expect(vr).toContain('const dsList=eventModeOn()?EVENT_DATASETS:EVENT_LEVELS;'); // ... with the event mode on only (off: the four levels, as before)
-    expect(vr).toContain('levelForSample(swapArmedId())?.id??null,EVENT_LEVELS),busy:ui.swapBusy'); // the row of the かんたん menu: unchanged
+    expect(vr).toContain('levelSwitchItems(tr,globalThis.__vrlOpenSample,datasetForSample(al)?.id??null,dsList)'); // the full menu's データ tab: only the levels (a dataset without a level is no target; see vr-level-switch.test.js) ...
+    expect(vr).toContain('const dsList=levelSwitchTargets(globalThis.__vrlOpenSample);'); // ... event mode on or off
+    expect(vr).toContain('levelForSample(swapArmedId())?.id??null,levelSwitchTargets(globalThis.__vrlOpenSample)),busy:ui.swapBusy'); // the row of the かんたん menu: the levels, as before
     expect(vr).toContain('const dEnd=y0+150+dsList.length*96;'); // the lines under the rows follow the number of rows
     expect(vr).toContain('const levelNameOf=id=>{const l=datasetForSample(id);return l?datasetLabel(l,tr):String(id)};');
   });
   it('the existing mechanism is the one used: two presses (resetPress), the swapBusy lock, runDataSwap - nothing new for the marmoset', () => {
     const vr = SRC('vr-view.js');
-    expect(vr).toContain('const swapPress=setId=>{\n  if(ui.swapBusy||!setId)return;');
+    expect(vr).toContain('const swapPress=setId=>{\n  if(ui.swapBusy||!setId||!canSwitchData(globalThis.__vrlOpenSample,setId))return;'); // level data to level data only
     expect(vr).toContain('void swapData(setId)');
     expect(vr).toContain('r=await runDataSwap(env,setId,gen)');
     expect(vr).toContain('chooseEventLevel(lv?lv.id:null)'); // a dataset that is not a level chooses none
@@ -528,5 +528,135 @@ describe('the views are not drawn while the page is on, and the layout is not an
     const ui = SRC('event-mode-ui.js');
     expect(ui).toContain("if(on&&!panel)mount();else if(!on&&panel){");
     expect(ui).toContain('if(!launcher.enable())return;');
+  });
+});
+
+// ---- n738: the two marks of a card. 「キャッシュ済み」 (the frame colour + a tag: the VR data of the dataset is complete on the device) and 「データ保存済み」 (a tag: every slice is in Cache Storage). They are judged
+// from what the device holds (the readers are injected: the real ones are vr-view.js standardLevelCached and data-load.js sampleDataSaved), so each one is independent of the other.
+describe('n738: the card marks (fake DOM)', () => {
+  let mod;
+  beforeAll(async () => { installDomStub(); mod = await importApp('event-launcher'); });
+  const ID = { lv0: ORDER[0], lv1: ORDER[1], lv2: ORDER[2] };
+  // a device: what is held in IndexedDB (VR data complete) and in Cache Storage (every slice) per dataset; a launcher is a "page load" on it
+  const device = () => ({ vr: new Set(), data: new Set(), vrReads: 0 });
+  const load = (dev, extra = {}) => {
+    const dom = fakeDom(), g = { __vrlXrChecked: true, __vrlVolumeReady: true, __vrlStandardOpen: null };
+    const launcher = mod.createEventLauncher({ doc: dom.doc, g, getVr: async () => ({}), getSaved: async id => dev.data.has(id), getCached: async id => { dev.vrReads++; return dev.vr.has(id); }, recheckMs: 5, ...extra });
+    return { ...dom, g, launcher };
+  };
+  const cardOf = (t, sample) => t.doc.getElementById('event-cards').querySelector('[data-event-sample="' + sample + '"]').parentNode;
+  const marks = (t, sample) => { const c = cardOf(t, sample), tag = k => c.querySelectorAll('.event-card-tag').find(e => e.className.split(/\s+/).includes(k)); return { cached: c.className.split(/\s+/).includes('is-cached'), cachedTag: !tag('is-cached').hidden, savedTag: !tag('is-saved').hidden, tags: !c.querySelectorAll('.event-card-tags')[0].hidden }; };
+  const settled = () => new Promise(r => setTimeout(r, 30));
+
+  it('the default cached reader asks the VR module with local: true (the device\'s copy of the project file only: judging a card sends no request for any dataset)', async () => {
+    const dom = fakeDom(), g = { __vrlXrChecked: true, __vrlVolumeReady: true, __vrlStandardOpen: null }, asked = [];
+    const launcher = mod.createEventLauncher({ doc: dom.doc, g, getVr: async () => ({ standardLevelCached: async (id, opt) => { asked.push([id, opt]); return false; } }), getSaved: async () => false });
+    launcher.enable(); await settled();
+    expect(asked.map(a => a[0]).sort()).toEqual([...ORDER].sort());
+    for (const [, opt] of asked) expect(opt).toEqual({ local: true });
+  });
+  it('a card has the two tags (hidden until judged) with the new texts, in both languages; nothing is shown for a dataset with nothing on the device', async () => {
+    expect(I18N.ja.evCardCached).toBe('キャッシュ済み'); expect(I18N.en.evCardCached).toBe('Cached');
+    expect(I18N.ja.evCardSaved).toBe('データ保存済み'); expect(I18N.en.evCardSaved).toBe('Data saved');
+    const t = load(device()); t.launcher.enable(); await settled();
+    for (const id of ORDER) expect(marks(t, id)).toEqual({ cached: false, cachedTag: false, savedTag: false, tags: false });
+    const c = cardOf(t, ID.lv0);
+    const tg = c.querySelectorAll('.event-card-tag'); expect(tg.map(e => e.dataset.i18n).sort()).toEqual(['evCardCached', 'evCardSaved']); expect(tg.every(e => e.hidden)).toBe(true);
+  });
+  it('the two are independent: only the VR data -> the frame + 「キャッシュ済み」 only; only the slices -> 「データ保存済み」 only; both -> both', async () => {
+    const dev = device(); dev.vr.add(ID.lv0); dev.data.add(ID.lv1); dev.vr.add(ID.lv2); dev.data.add(ID.lv2);
+    const t = load(dev); t.launcher.enable(); await settled();
+    expect(marks(t, ID.lv0)).toEqual({ cached: true, cachedTag: true, savedTag: false, tags: true });
+    expect(marks(t, ID.lv1)).toEqual({ cached: false, cachedTag: false, savedTag: true, tags: true });
+    expect(marks(t, ID.lv2)).toEqual({ cached: true, cachedTag: true, savedTag: true, tags: true });
+    for (const id of ORDER.filter(i => !Object.values(ID).includes(i))) expect(marks(t, id).tags).toBe(false); // nothing saved: neither mark
+  });
+  it('a page load (reload) after the VR preparation of a card: its frame and 「キャッシュ済み」 come back from the stores, not from the earlier session', async () => {
+    const dev = device(), calls = [];
+    const t1 = load(dev, { getVr: async () => ({ prepareVrData: async () => ({ key: 'k' }), prepareVrGpuOnce: async () => { dev.vr.add(ID.lv1); dev.data.add(ID.lv1); }, vrReady: () => true }) });
+    t1.doc.addEventListener('vrl-event-sample', e => { calls.push(e.detail.sampleSet); t1.g.__vrlOpenSample = e.detail.sampleSet; t1.g.__vrlStandardOpen = { id: e.detail.sampleSet, sig: 's' }; e.detail.done = Promise.resolve(); });
+    t1.launcher.enable(); await settled(); expect(marks(t1, ID.lv1).tags).toBe(false);
+    cardOf(t1, ID.lv1).querySelectorAll('[data-event-sample]')[0].onclick();
+    await vi.waitFor(() => expect(t1.launcher.phase).toBe('ready'), { timeout: 8000 });
+    await vi.waitFor(() => expect(marks(t1, ID.lv1)).toEqual({ cached: true, cachedTag: true, savedTag: true, tags: true }), { timeout: 3000 }); // judged again after ready
+    const t2 = load(dev); t2.launcher.enable(); await settled(); // the reload: a new page on the same device
+    expect(marks(t2, ID.lv1)).toEqual({ cached: true, cachedTag: true, savedTag: true, tags: true });
+    expect(marks(t2, ID.lv0)).toEqual({ cached: false, cachedTag: false, savedTag: false, tags: false });
+    expect(calls).toEqual([ID.lv1]);
+  }, 15000);
+  it('after the preparation the saves of the VR data may still be running: the card asks again until the entries are complete (and stops when they are)', async () => {
+    const dev = device(); let n = 0;
+    const t = load(dev, { getVr: async () => ({ prepareVrData: async () => ({}), prepareVrGpuOnce: async () => {}, vrReady: () => true }), getCached: async id => { n++; return n >= 4 && id === ID.lv0; } });
+    t.doc.addEventListener('vrl-event-sample', e => { t.g.__vrlOpenSample = e.detail.sampleSet; t.g.__vrlStandardOpen = { id: e.detail.sampleSet, sig: 's' }; e.detail.done = Promise.resolve(); });
+    t.launcher.enable(); await settled(); const before = n;
+    cardOf(t, ID.lv0).querySelectorAll('[data-event-sample]')[0].onclick();
+    await vi.waitFor(() => expect(marks(t, ID.lv0).cached).toBe(true), { timeout: 8000 });
+    const seen = n; await new Promise(r => setTimeout(r, 120)); expect(n).toBe(seen); expect(before).toBeLessThan(seen); // no more asking once it is cached
+  }, 15000);
+  it('the re-ask does not die with the press token: card -> ready -> 「VRで見る」 (vr-start) while the saves run, or another card pressed -> the mark still appears when the entries are complete', async () => {
+    const dev = device(); let on = false;
+    const mk = t => { t.doc.addEventListener('vrl-event-sample', e => { t.g.__vrlOpenSample = e.detail.sampleSet; t.g.__vrlStandardOpen = { id: e.detail.sampleSet, sig: 's' }; e.detail.done = Promise.resolve(); }); };
+    const t = load(dev, { getVr: async () => ({ prepareVrData: async () => ({}), prepareVrGpuOnce: async () => {}, vrReady: () => true }), getCached: async id => on && dev.vr.has(id) }); mk(t);
+    t.launcher.enable(); await settled();
+    cardOf(t, ID.lv0).querySelectorAll('[data-event-sample]')[0].onclick();
+    await vi.waitFor(() => expect(t.launcher.phase).toBe('ready'), { timeout: 8000 });
+    t.doc.dispatchEvent(new CustomEvent('vrl-tut-signal', { detail: { kind: 'vr-start' } })); // the session starts: the press token moves on
+    await settled(); expect(marks(t, ID.lv0).cached).toBe(false);
+    on = true; dev.vr.add(ID.lv0); // the saves finish
+    await vi.waitFor(() => expect(marks(t, ID.lv0).cached).toBe(true), { timeout: 3000 });
+    // another card pressed while the first one's saves run
+    dev.vr.clear(); on = false; await settled(); t.doc.dispatchEvent(new CustomEvent('vrl-cache-changed')); await settled();
+    cardOf(t, ID.lv1).querySelectorAll('[data-event-sample]')[0].onclick();
+    await vi.waitFor(() => expect(t.launcher.phase).toBe('ready'), { timeout: 8000 });
+    cardOf(t, ID.lv2).querySelectorAll('[data-event-sample]')[0].onclick(); await settled();
+    on = true; dev.vr.add(ID.lv1);
+    await vi.waitFor(() => expect(marks(t, ID.lv1).cached).toBe(true), { timeout: 3000 });
+  }, 20000);
+  it('during an XR session the re-ask waits (no reading of the stores); it goes on when the session has ended', async () => {
+    const dev = device(); let session = true, asks = 0;
+    const t = load(dev, { getVr: async () => ({ prepareVrData: async () => ({}), prepareVrGpuOnce: async () => {}, vrReady: () => true, vrPreparedState: () => ({ session }) }), getCached: async id => { asks++; return dev.vr.has(id); } });
+    t.doc.addEventListener('vrl-event-sample', e => { t.g.__vrlOpenSample = e.detail.sampleSet; t.g.__vrlStandardOpen = { id: e.detail.sampleSet, sig: 's' }; e.detail.done = Promise.resolve(); });
+    t.launcher.enable(); await settled();
+    cardOf(t, ID.lv0).querySelectorAll('[data-event-sample]')[0].onclick();
+    await vi.waitFor(() => expect(t.launcher.phase).toBe('ready'), { timeout: 8000 });
+    await settled(); const during = asks; await new Promise(r => setTimeout(r, 80)); expect(asks).toBe(during); // the page-show judgement is done; none while the session runs
+    session = false; dev.vr.add(ID.lv0);
+    await vi.waitFor(() => expect(marks(t, ID.lv0).cached).toBe(true), { timeout: 3000 });
+  }, 20000);
+  it('removing entries from the cache list (vrl-cache-changed) judges again: the frame and the tag of the removed data go, the other stays; the slices\' tag is not touched by it', async () => {
+    const dev = device(); dev.vr.add(ID.lv0); dev.vr.add(ID.lv1); dev.data.add(ID.lv0);
+    const t = load(dev); t.launcher.enable(); await settled();
+    expect(marks(t, ID.lv0).cached).toBe(true); expect(marks(t, ID.lv1).cached).toBe(true);
+    dev.vr.delete(ID.lv0); t.doc.dispatchEvent(new CustomEvent('vrl-cache-changed')); await settled();
+    expect(marks(t, ID.lv0)).toEqual({ cached: false, cachedTag: false, savedTag: true, tags: true }); expect(marks(t, ID.lv1).cached).toBe(true);
+    dev.vr.clear(); t.doc.dispatchEvent(new CustomEvent('vrl-cache-changed')); await settled();
+    expect(marks(t, ID.lv1)).toEqual({ cached: false, cachedTag: false, savedTag: false, tags: false });
+  });
+  it('what cannot be judged is not shown: a reader that throws or answers anything but true; a browser without VR / AR has no 「キャッシュ済み」', async () => {
+    const t = load(device(), { getSaved: async () => { throw new Error('offline'); }, getCached: async () => 'yes' }); t.launcher.enable(); await settled();
+    for (const id of ORDER) expect(marks(t, id).tags).toBe(false);
+    const dev = device(); dev.vr.add(ID.lv0); dev.data.add(ID.lv0);
+    const noXr = load(dev); noXr.vrB.hidden = true; noXr.arB.hidden = true; noXr.launcher.enable(); await settled();
+    expect(marks(noXr, ID.lv0)).toEqual({ cached: false, cachedTag: false, savedTag: true, tags: true }); expect(dev.vrReads).toBe(0);
+  });
+  it('the default readers are the real ones: vr-view.js standardLevelCached (through the one VR module the page asks for) and data-load.js sampleDataSaved', async () => {
+    const ui = SRC('event-launcher.js'); expect(ui).toContain('(await vrOnce()).standardLevelCached(id, { local: true })'); expect(ui).toContain('getSaved = sampleDataSaved');
+    expect(SRC('data-load.js')).toContain('export async function sampleDataSaved(setId,');
+    expect(SRC('settings-ui.js').match(/notifyCacheChanged\(\)/g).length).toBe(3); // the delete button, the clear button, the prune
+  });
+  it('a stale judgement that ends later does not overwrite a newer one', async () => {
+    const dev = device(); let slow = true; const gate = {};
+    const t = load(dev, { getSaved: async id => { if (id === ID.lv0 && slow) { slow = false; await new Promise(r => { gate.go = r; }); return true; } return dev.data.has(id); } });
+    t.launcher.enable(); await settled(); // first judgement waits on lv0's slices
+    t.doc.dispatchEvent(new CustomEvent('vrl-cache-changed')); await settled(); // a newer one: lv0 not saved
+    gate.go(); await settled();
+    expect(marks(t, ID.lv0).savedTag).toBe(false);
+  });
+  it('the frame colour: a selected / processing card keeps its own colour over the cache colour (style.css)', () => {
+    const css = readFileSync(new URL('../../docs/style.css', import.meta.url), 'utf8');
+    const i = css.indexOf('.event-card.is-cached{'), j = css.indexOf('.event-card:has(>.event-card-btn.is-selected){');
+    expect(i).toBeGreaterThan(0); expect(j).toBeGreaterThan(i); // the selected rule comes later and is more specific
+    expect(css.slice(i, css.indexOf('}', i))).toContain('border-color:rgb(var(--ui-green-tx))'); // a theme variable: defined in every theme of themes.css
+    const themes = readFileSync(new URL('../../docs/themes.css', import.meta.url), 'utf8'); expect((themes.match(/--ui-green-tx:/g) || []).length).toBeGreaterThanOrEqual(6);
   });
 });

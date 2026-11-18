@@ -4,6 +4,10 @@ import { MedicalVolumeRenderer, volumeShader, volumePickShader } from '../../doc
 import * as MV from '../../docs/medical-volume.js';
 import { readFileSync } from 'node:fs';
 
+// a segment whose mask can hold voxels outside its HU range (Closing / hole filling added them, the rule is
+// that the 3D volume agrees with 2D) is decided by the mask alone. The renderer flags it with bit 4+s of the keep word
+// (editRows[1]); the shaders test that bit before the HU range. These tests pin the encoding and that every membership test
+// goes through it.
 globalThis.GPUBufferUsage ??= { STORAGE: 0x80, COPY_DST: 0x8 };
 function fakeRenderer(textureDims) {
   const written = [];
@@ -56,7 +60,7 @@ describe('shaders: membership tests honour the mask-only bit', () => {
     expect(vr).toMatch(/\(\(editMaskOnly>>s\)&1\)==1\|\|\(v>=a\.x&&v<=a\.y\)/);
     // the classification builder moved to point-cls.js (shared with the PC 3D point markers)
     const cls = readFileSync(new URL('../../docs/point-cls.js', import.meta.url), 'utf8');
-    expect(cls).toMatch(/else if\(maskOnly&&f<191\)f=191/);
+    expect(cls).toMatch(/if\(maskOnly\)f=mb>=128\?Math\.min\(mb,Math\.max\(f,191\)\):mb;/); // n730 (rat brain voxel look): for a 0 \/ 255 mask byte this is the old "inside: f at least 191, outside: 0"
   });
 });
 

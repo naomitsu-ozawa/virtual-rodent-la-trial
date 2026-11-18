@@ -28,7 +28,7 @@ describe('vr-view.js: sections are no longer grabbed (one-handed redesign, stage
     expect(grip).not.toMatch(/plane|Plane/);
   });
   it('the trigger uses the pure functions of vr-point.js', () => {
-    for (const w of ['resolveTriggerTarget(', 'createTriggerPress()', 'dragShouldStart(', 'sectionFollowStart(', 'sectionFollowStep(', 'snapPlaneCenterIntoBox(', 'DRAG_RECORD', 'createHoverPulse(', 'only:idx']) expect(src.includes(w), w).toBe(true);
+    for (const w of ['resolveTriggerTarget(', 'createTriggerPress()', 'dragShouldStart(', 'sectionFollowStart(', 'sectionFollowStep(', 'snapPlaneCenterIntoBox', 'DRAG_RECORD', 'createHoverPulse(', 'only:idx']) expect(src.includes(w), w).toBe(true);
   });
 });
 
@@ -76,7 +76,7 @@ describe('vr-view.js: review fixes (F1-F9)', () => {
   });
   it('F6: a move to the same place pushes no undo', () => { expect(src).toContain('the same place: nothing to undo'); });
   it('F7 / F8: the selected point is checked, a stale drag ends at the press', () => {
-    expect(src).toContain("getComments().some(x=>x.id===pr.res.ref.id))selectPoint");
+    expect(src).toContain("ptFind(pr.res.ref.id))selectPoint");
     expect(src).toMatch(/addEventListener\('selectstart',e=>\{\s*(?:if\(isHand\(c\.userData\.source\)&&\(!e\.handPinch\|\|handIn\.grabbing\(c\)\|\|handIn\.fistLike\(c\)\)\)return;[^\n]*\n\s*)?endDrag\(c\);/); // a hand inside a fist first
   });
 });

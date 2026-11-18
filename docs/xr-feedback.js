@@ -1,3 +1,7 @@
+// the busy state of the VR / AR
+// buttons and a line of text on the page for the current step, from the press until the headset shows the
+// view - cleared on failure, close of the prepare panel and the end of the session. Pure DOM, no imports.
+// steps: loading (module) / prepare (data, text = the phase) / starting (session requested) / running
 const fmt=(t,v)=>t.replace(/\{(\w+)\}/g,(_,k)=>v[k]??'');
 const MSG={loading:'vrStepLoading',starting:'vrStepStarting',running:'vrStepRunning'},BTN={loading:'vrBtnBusy',prepare:'vrBtnBusy',starting:'vrBtnStarting',running:'vrBtnRunning'};
 export function createXrFeedback({buttons,footer,tr}){
