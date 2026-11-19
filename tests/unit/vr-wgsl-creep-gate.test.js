@@ -107,6 +107,24 @@ describe('the creep gate: the result of a ray does not change', () => {
       if (opt.jumpOn !== false) { expect(tot.omittedSet).toBeGreaterThan(0); expect(tot.rdGated).toBeLessThan(tot.rd); expect(tot.isoHits).toBeGreaterThan(20); }
     });
   }
+  // the display of the WebGPU renderer runs with useSkip 0 (docs/vr-wgpu.js passExtra): every sample the skip would have answered is read instead. A ray must end with the same hit (bracket, prevF,
+  // hitNb, hitIso), the same samples and the same end with the skip on (gated) and off; only the creep steps and skipTex reads go (to 0).
+  for (const [name, opt] of [['step 1.5', { stp: 1.5 }], ['step 1.0', { stp: 1.0 }], ['step 0.7', { stp: 0.7 }]]) {
+    it(name + ': useSkip 0 (the WebGPU display) gives the same hit, samples and end as the gated skip', () => {
+      const rand = rng(777); let hits = 0, creep = 0, isoAfterCreep = 0;
+      for (let g = 0; g < 4; g++) {
+        const data = makeGrid(rand, 3 + g * 2), grid = { data, bits: buildSkipOccupancy({ data, dims: DIMS, chan: [0, 1, -1, -1], mask: 0b11 }) };
+        for (let i = 0; i < 700; i++) {
+          const ray = makeRay(rand), on = march(grid, ray, 'gated', opt), off = march(grid, ray, 'gated', { ...opt, useSkip: false });
+          expect(off.out).toEqual(on.out);
+          expect(off.st.jumps).toBe(on.st.jumps); expect(off.st.creep).toBe(0); expect(off.st.skipRd).toBe(0);
+          if (on.out.hit) { hits++; if (on.out.hit.iso && on.st.creep > 0) isoAfterCreep++; }
+          creep += on.st.creep;
+        }
+      }
+      expect(hits).toBeGreaterThan(300); expect(creep).toBeGreaterThan(1000); expect(isoAfterCreep).toBeGreaterThan(20); // the skip was taken, and iso hits whose prevF may come from the lazy fetch
+    });
+  }
   it('the model is tied to the shader: the shader gates by `chk`, set from dd after the override, false at the start and after a jump', () => {
     const t = volumeWgsl();
     expect(t).toContain('var chk=false;'); expect(t).toContain('if(skipOn&&chk){'); expect(t).toContain('chk=dd<2.7;'); expect(t).toContain('if(dd>=2.7){let nextJ=');

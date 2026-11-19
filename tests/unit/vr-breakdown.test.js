@@ -7,7 +7,7 @@ import * as THREEG from 'three/webgpu';
 import { WgslReflect } from 'wgsl_reflect/wgsl_reflect.module.js';
 import { volumeWgsl, ABLATIONS, COUNTER_FIELDS, uniformLayout } from '../../docs/vr-wgsl-core.js';
 import { createVrVolumeRenderer, regionClip, regionMvp, gxShaderInfo } from '../../docs/vr-wgpu.js';
-import { createVolBreakdown, createPerfLog, perfReport, BD_VARIANTS, BD_SPECS } from '../../docs/vr-perf-log.js';
+import { createVolBreakdown, createPerfLog, perfReport, BD_VARIANTS, BD_SPECS, BD_PROBE_FIELDS, BD_NEAR_R } from '../../docs/vr-perf-log.js';
 
 const read = f => readFileSync(new URL('../../docs/' + f, import.meta.url), 'utf8');
 const vr = read('vr-view.js'), host = read('vr-wgpu.js');
@@ -34,6 +34,7 @@ const DISPLAY_HASHES = [
   [true, true, false, 'f2a350e6d48888861cf5a5688ad8a2889bbc196b71552f013875b70cc07b6b97'],
   [true, true, true, '126b209ed29237876db28eeb31e5b8aa8b3ad561d9213da11fac7906fc57032c'],
 ];
+const NF = COUNTER_FIELDS.length; // u32 per probe pixel
 const BASES = []; for (const f16 of [false, true]) for (const cls4 of [false, true]) for (const events of [false, true]) BASES.push({ f16, cls4, events });
 
 describe('WGSL: the display variants are the text below, character for character (a change of the display text changes these hashes: update them on purpose)', () => {
@@ -62,7 +63,7 @@ describe('WGSL: the creep gate', () => {
     expect(a).toBeGreaterThan(0); expect(j).toBeGreaterThan(a); // the jump comes after the assignment: a jump leaves chk false
     expect(t.indexOf('if(skipOn&&chk){')).toBeLessThan(t.indexOf('var q=textureSampleLevel(clsTex,smp,tcS,0.0)'));
   });
-  it('the counting twin and the ablations take the same gate (their anchors still hold), noCreep (useSkip 0) keeps skipOn false', () => {
+  it('the counting twin and the ablations take the same gate (their anchors still hold), the display text keeps skipOn from useSkip (the host passes 0)', () => {
     for (const v of [{ counters: true }, ...ABLATIONS.map(abl => ({ abl })), ...ABLATIONS.map(abl => ({ abl, counters: true }))]) {
       const t = volumeWgsl(v);
       expect(t, JSON.stringify(v)).toContain('if(skipOn&&chk){'); expect(t).toContain('chk=dd<2.7;');
@@ -91,16 +92,20 @@ describe('WGSL: the breakdown variants (abl, counters)', () => {
     expect(uniformLayout().fields.map(f => f.name)).toContain('pad1');
     expect(vr).not.toMatch(/pad1\s*:\s*\{?\s*value/);
   });
-  it('counters: a storage buffer in group 1 (writable, fragment), eight u32 a pixel from the position, no discard left, every counter has its place', () => {
+  it('counters: a storage buffer in group 1 (writable, fragment), COUNTER_FIELDS.length u32 a pixel from the position, no discard left, every counter has its place', () => {
     const t = volumeWgsl({ counters: true });
     expect(t).toContain('@group(1) @binding(0) var<storage,read_write> cnt:array<u32>;');
     const r = new WgslReflect(t);
     const g1 = r.getBindGroups()[1]; expect(g1).toHaveLength(1); expect(g1[0].name).toBe('cnt');
     expect(t).not.toContain('discard;'); expect(base).toContain('discard;');
     expect(t).toContain('fn fsMain(in:VOut)->FOut{'); expect(t).toContain('@fragment fn fs(in:VOut)->FOut{');
-    expect(t).toContain('(u32(in.pos.y)*CNT_W+u32(in.pos.x))*8u');
-    expect(COUNTER_FIELDS).toHaveLength(8);
+    expect(t).toContain('(u32(in.pos.y)*CNT_W+u32(in.pos.x))*' + NF + 'u');
+    expect(COUNTER_FIELDS).toHaveLength(14); expect(BD_PROBE_FIELDS).toEqual(COUNTER_FIELDS);
     for (const x of ['gIters+=1u', 'gCreep+=1u', 'gJumps+=1u', 'gSkipRd+=1u', 'gClsRd+=1u', 'gRefRd+=1u', 'gGradRd+=6u', 'gOut=1u', 'gOut=3u', 'gOut=4u']) expect(t, x).toContain(x);
+    // the approach counts: read from dd before the jumpOn override (so a run without jumps still measures the field), at the first sample within 4 / 8 / 16; the display text has none of it
+    expect(t).toContain('cntNear(dd);if(u.jumpOn==0){dd=0.0;}\n  chk=dd<2.7;'); expect(t).toContain('if(gN4==0u&&dd<=4.0){gN4=gIters;gJ4=gJumps;}'); expect(t).toContain('if(gN8==0u&&dd<=8.0){gN8=gIters;gJ8=gJumps;}'); expect(t).toContain('if(gN16==0u&&dd<=16.0){gN16=gIters;gJ16=gJumps;}');
+    expect(t).toContain('cnt[b+8u]=gN4;cnt[b+9u]=gJ4;cnt[b+10u]=gN8;cnt[b+11u]=gJ8;cnt[b+12u]=gN16;cnt[b+13u]=gJ16;'); expect(COUNTER_FIELDS.slice(8)).toEqual(['near4Steps', 'near4Jumps', 'near8Steps', 'near8Jumps', 'near16Steps', 'near16Jumps']);
+    expect(base).not.toContain('cntNear'); expect(base).not.toContain('gN4');
     expect(t.split('gClsRd+=1u').length - 1).toBe(2); expect(t.split('gRefRd+=1u').length - 1).toBe(2);
     expect(r.entry.fragment.map(e => e.name)).toEqual(['fs']);
   });
@@ -114,14 +119,14 @@ describe('WGSL: the breakdown variants (abl, counters)', () => {
 
 describe('the collector (createVolBreakdown)', () => {
   const feed = (vb, name, ratio, n, low = 10) => { for (let i = 0; i < n; i++) vb.add(name, ratio * low, low); };
-  it('R_v is the median ratio, M the median low pass ms, est = (R_same - R_v) x M, noCreep / noJump come out negative', () => {
+  it('R_v is the median ratio, M the median low pass ms, est = (R_same - R_v) x M, withCreep / noJump come out negative', () => {
     const vb = createVolBreakdown();
-    feed(vb, 'same', 1, 5); feed(vb, 'box', 0.2, 5); feed(vb, 'simple', 0.7, 5); feed(vb, 'noGrad', 0.9, 5); feed(vb, 'noRefine', 0.85, 5); feed(vb, 'noShade', 0.95, 5); feed(vb, 'noCreep', 1.2, 5); feed(vb, 'noJump', 1.5, 5);
+    feed(vb, 'same', 1, 5); feed(vb, 'box', 0.2, 5); feed(vb, 'simple', 0.7, 5); feed(vb, 'noGrad', 0.9, 5); feed(vb, 'noRefine', 0.85, 5); feed(vb, 'noShade', 0.95, 5); feed(vb, 'withCreep', 1.2, 5); feed(vb, 'noJump', 1.5, 5);
     const s = vb.summary();
     expect(s.M).toBeCloseTo(10); expect(s.nLow).toBe(40);
     expect(s.variants.same).toMatchObject({ n: 5, est: null }); expect(s.variants.same.R).toBeCloseTo(1);
     expect(s.variants.box.est).toBeCloseTo(8); expect(s.variants.noGrad.est).toBeCloseTo(1); expect(s.variants.noRefine.est).toBeCloseTo(1.5); expect(s.variants.noShade.est).toBeCloseTo(0.5);
-    expect(s.variants.noCreep.est).toBeCloseTo(-2); expect(s.variants.noJump.est).toBeCloseTo(-5);
+    expect(s.variants.withCreep.est).toBeCloseTo(-2); expect(s.variants.noJump.est).toBeCloseTo(-5);
     // split: fixed = R_box x M, march = (R_simple - R_box) x M - shading, refine / gradient / shading = est; sum against M
     expect(s.split.fixed).toBeCloseTo(2); expect(s.split.shading).toBeCloseTo(0.5); expect(s.split.march).toBeCloseTo(4.5); expect(s.split.refine).toBeCloseTo(1.5); expect(s.split.gradient).toBeCloseTo(1);
     expect(s.split.sum).toBeCloseTo(9.5); expect(s.split.pct).toBeCloseTo(95);
@@ -155,8 +160,8 @@ describe('the collector (createVolBreakdown)', () => {
   });
   it('the report section: the lines of the spec, the low share from the vol column of the recorded rows, notes in English, no filtering by the menu', () => {
     const log = createPerfLog({ kind: 'webgpu', now: () => 0, store: null }); const vb = log.vb = createVolBreakdown(); vb.seconds = 30.2;
-    for (const [v, r] of [['same', 1], ['box', 0.3], ['simple', 0.6], ['noGrad', 0.9], ['noRefine', 0.9], ['noShade', 0.9], ['noCreep', 1.1], ['noJump', 1.2]]) for (let i = 0; i < 4; i++) vb.add(v, r * 5, 5);
-    const c = new Uint32Array(64 * 64 * 8); for (let i = 0; i < 64 * 64; i++) { c[i * 8] = i % 4 === 0 ? 1 : 2; c[i * 8 + 1] = 5 + (i % 9); c[i * 8 + 5] = 5; }
+    for (const [v, r] of [['same', 1], ['box', 0.3], ['simple', 0.6], ['noGrad', 0.9], ['noRefine', 0.9], ['noShade', 0.9], ['withCreep', 1.1], ['noJump', 1.2]]) for (let i = 0; i < 4; i++) vb.add(v, r * 5, 5);
+    const c = new Uint32Array(64 * 64 * NF); for (let i = 0; i < 64 * 64; i++) { c[i * NF] = i % 4 === 0 ? 1 : 2; c[i * NF + 1] = 5 + (i % 9); c[i * NF + 5] = 5; }
     vb.addProbe('whole', c, 64, 64); vb.addProbe('native', c, 64, 64);
     log.row({ menu: 1, rec: 1, fps: 40 }, 1000); log.rows[0].vol = 10; // a row with the menu open is used as well
     const t = perfReport(log, {}).split('\n'), i = t.indexOf('-- vol breakdown (recording, paired shadow passes)');
@@ -169,17 +174,17 @@ describe('the collector (createVolBreakdown)', () => {
     expect(notes.join('\n')).toMatch(/shadow pass/); expect(notes.join('\n')).toMatch(/8 x 8 pixels, an approximation of a GPU wave/); expect(notes.join('\n')).toMatch(/span, gap, swd and fps of those rows are disturbed/); expect(notes.join('\n')).not.toMatch(/[぀-ヿ一-鿿]/);
   });
   it('probe blocks: 8 x 8 pixels, max / mean of the work per block, mixed = hit and non-hit in one block', () => {
-    const w = 16, h = 8, c = new Uint32Array(w * h * 8);
-    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const o = (y * w + x) * 8; c[o] = 2; c[o + 1] = x < 8 ? 10 : 10; }
-    for (let y = 0; y < 8; y++) for (let x = 0; x < 4; x++) c[(y * w + x) * 8] = 1; // the left block: half hits (mixed)
-    c[(3 * w + 12) * 8 + 1] = 90; // the right block: one heavy pixel: max 90, mean (63 x 10 + 90) / 64
+    const w = 16, h = 8, c = new Uint32Array(w * h * NF);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const o = (y * w + x) * NF; c[o] = 2; c[o + 1] = x < 8 ? 10 : 10; }
+    for (let y = 0; y < 8; y++) for (let x = 0; x < 4; x++) c[(y * w + x) * NF] = 1; // the left block: half hits (mixed)
+    c[(3 * w + 12) * NF + 1] = 90; // the right block: one heavy pixel: max 90, mean (63 x 10 + 90) / 64
     const vb = createVolBreakdown(); expect(vb.addProbe('native', c, w, h)).toBe(true);
     const n = vb.summary().probes.native;
     expect(n.blocks).toBe(2); expect(n.mixedShare).toBeCloseTo(0.5);
     expect(n.blockMax.median).toBeCloseTo((1 + 90 / ((63 * 10 + 90) / 64)) / 2); expect(n.outcome.hit).toBeCloseTo(32 / 128);
   });
   it('probe whole by outcome: the steps (mean / p95), jumps, creep and skipTex reads per pixel of the hit pixels and of the pass pixels, after the probe whole line; other outcomes are left out', () => {
-    const w = 8, h = 8, c = new Uint32Array(w * h * 8), put = (i, oc, iters, creep, jumps, skip) => { const o = i * 8; c[o] = oc; c[o + 1] = iters; c[o + 2] = creep; c[o + 3] = jumps; c[o + 4] = skip; };
+    const w = 8, h = 8, c = new Uint32Array(w * h * NF), put = (i, oc, iters, creep, jumps, skip) => { const o = i * NF; c[o] = oc; c[o + 1] = iters; c[o + 2] = creep; c[o + 3] = jumps; c[o + 4] = skip; };
     put(0, 1, 10, 1, 2, 5); put(1, 1, 20, 3, 4, 7); put(2, 2, 100, 0, 6, 9); put(3, 3, 999, 99, 99, 99); put(4, 4, 7, 7, 7, 7);
     const vb = createVolBreakdown(); expect(vb.addProbe('whole', c, w, h)).toBe(true);
     const bo = vb.summary().probes.whole.byOutcome;
@@ -187,22 +192,47 @@ describe('the collector (createVolBreakdown)', () => {
     expect(bo.pass).toMatchObject({ px: 1, jumps: 6, creep: 0, skip: 9 }); expect(bo.pass.steps).toEqual({ mean: 100, p95: 100 });
     const t = vb.lines(), i = t.findIndex(l => l.startsWith('probe whole: windows 1'));
     expect(t[i + 1]).toBe('probe whole by outcome: hit steps mean/p95 15.0/20 · jumps 3.0 · creep 2.0 · skipTex 6.0 | pass steps mean/p95 100.0/100 · jumps 6.0 · creep 0.0 · skipTex 9.0');
-    expect(t[i + 2]).toMatch(/^probe native: /);
+    expect(t[i + 3]).toMatch(/^probe native: /);
     // no pass pixel: "-" for it; no probe at all: the line says so (no NaN)
-    const c2 = new Uint32Array(64 * 64 * 8); c2[0] = 1; c2[1] = 4;
+    const c2 = new Uint32Array(64 * 64 * NF); c2[0] = 1; c2[1] = 4;
     const v2 = createVolBreakdown(); v2.addProbe('whole', c2, 64, 64); expect(v2.lines().some(l => l.endsWith('| pass -'))).toBe(true);
     const l0 = createVolBreakdown().lines().join('\n'); expect(l0).toContain('probe whole by outcome: - (no probe read back)'); expect(l0).not.toMatch(/NaN|undefined/);
   });
+  it('probe approach: per outcome and per R (4 / 8 / 16) the mean steps / jumps to the first sample within R over the rays that came within it, and the share of the pass rays that never did; the line follows the by-outcome line', () => {
+    expect(BD_NEAR_R).toEqual([4, 8, 16]);
+    const w = 8, h = 8, c = new Uint32Array(w * h * NF), at = n => 8 + 2 * n, put = (i, oc, near) => { const o = i * NF; c[o] = oc; c[o + 1] = 30; near.forEach((x, k) => { if (x) { c[o + at(k)] = x[0]; c[o + at(k) + 1] = x[1]; } }); };
+    put(0, 1, [[3, 1], [2, 0], [1, 0]]); put(1, 1, [[5, 3], [4, 2], [2, 1]]); // hits: R=4: 4/2 steps/jumps, R=8: 3/1, R=16: 1.5/0.5
+    put(2, 2, [[10, 4], [6, 3], [4, 2]]); put(3, 2, [null, [8, 4], [4, 2]]); put(4, 2, [null, null, [6, 3]]); put(5, 2, [null, null, null]); // pass: R=4 one of four reached (10/4, never 75 %), R=8 two (7/3.5, never 50 %), R=16 three (4.67/2.33, never 25 %)
+    put(6, 3, [[99, 99], [99, 99], [99, 99]]); // other outcomes are left out
+    const vb = createVolBreakdown(); expect(vb.addProbe('whole', c, w, h)).toBe(true);
+    const bo = vb.summary().probes.whole.byOutcome;
+    expect(bo.hit.near.map(x => [x.R, x.reached, x.steps, x.jumps, x.never])).toEqual([[4, 2, 4, 2, 0], [8, 2, 3, 1, 0], [16, 2, 1.5, 0.5, 0]]);
+    expect(bo.pass.near.map(x => [x.R, x.reached, x.never])).toEqual([[4, 1, 0.75], [8, 2, 0.5], [16, 3, 0.25]]);
+    expect(bo.pass.near[0]).toMatchObject({ steps: 10, jumps: 4 }); expect(bo.pass.near[1]).toMatchObject({ steps: 7, jumps: 3.5 }); expect(bo.pass.near[2].steps).toBeCloseTo(14 / 3); expect(bo.pass.near[2].jumps).toBeCloseTo(7 / 3);
+    const t = vb.lines(), i = t.findIndex(l => l.startsWith('probe whole by outcome:'));
+    expect(t[i + 1]).toBe('probe approach (steps/jumps to the first sample within R voxels of a surface): R=4 hit steps/jumps 4.0/2.0 pass 10.0/4.0 never 75% | R=8 hit steps/jumps 3.0/1.0 pass 7.0/3.5 never 50% | R=16 hit steps/jumps 1.5/0.5 pass 4.7/2.3 never 25%');
+    expect(t[i + 2]).toMatch(/^probe native: /);
+    // two windows add up; no pass pixel and no probe: "-" (no NaN)
+    vb.addProbe('whole', c, w, h); expect(vb.summary().probes.whole.byOutcome.pass.near[0]).toMatchObject({ reached: 2, never: 0.75 }); // the share stays the same, the sums double
+    const c2 = new Uint32Array(64 * 64 * NF); c2[0] = 1; c2[1] = 4; c2[8] = 2; c2[9] = 1; const v2 = createVolBreakdown(); v2.addProbe('whole', c2, 64, 64);
+    expect(v2.lines().find(l => l.startsWith('probe approach'))).toBe('probe approach (steps/jumps to the first sample within R voxels of a surface): R=4 hit steps/jumps 2.0/1.0 pass - never - | R=8 hit steps/jumps - pass - never - | R=16 hit steps/jumps - pass - never -');
+    const l0 = createVolBreakdown().lines().join('\n'); expect(l0).toContain('probe approach (steps/jumps to the first sample within R voxels of a surface): - (no probe read back)'); expect(l0).not.toMatch(/NaN|undefined/);
+  });
+  it('the report notes say what the approach counts mean (English, no filter by the menu)', () => {
+    const log = createPerfLog({ kind: 'webgpu', now: () => 0, store: null }); log.vb = createVolBreakdown(); log.vb.seconds = 1;
+    const t = perfReport(log, {}); expect(t).toMatch(/note: probe approach = [^\n]*first sample with a surface distance <= R voxels[^\n]*never = the share of the pass rays/); expect(t).toMatch(/upper bound of what starting the ray near the surface/);
+    expect(t).toMatch(/note: ratio = [^\n]*withCreep turns it on \(useSkip 1 over the display's 0\)[^\n]*negative est of withCreep = the ms the creep skip adds/);
+  });
   it('an uncovered pixel (outcome 0) is no pixel; a bad kind or a short array is refused; the rows of WebGL line up with the heading with the rec column "-"', () => {
-    const vb = createVolBreakdown(); expect(vb.addProbe('whole', new Uint32Array(64 * 64 * 8), 64, 64)).toBe(true); expect(vb.summary().probes.whole).toBeNull();
+    const vb = createVolBreakdown(); expect(vb.addProbe('whole', new Uint32Array(64 * 64 * NF), 64, 64)).toBe(true); expect(vb.summary().probes.whole).toBeNull();
     expect(vb.addProbe('x', new Uint32Array(8), 1, 1)).toBe(false); expect(vb.addProbe('whole', new Uint32Array(8), 64, 64)).toBe(false);
     const log = createPerfLog({ kind: 'webgl', now: () => 1000, store: null }); log.row({ menu: 0, fps: 72 }, 1000);
     const t = perfReport(log, {}).split('\n'), h = t.findIndex(l => /^\s*t\s+fps\s+g1/.test(l));
     expect(t[h]).toMatch(/fov\s+rec$/); expect(t[h + 1].length).toBe(t[h].length); expect(t[h + 1]).toMatch(/\s-$/); expect(t.join('\n')).not.toContain('-- vol breakdown');
   });
   it('the table of variants: the eight, in the order they run, with the program / uniform change each needs', () => {
-    expect(BD_VARIANTS).toEqual(['same', 'box', 'simple', 'noGrad', 'noRefine', 'noShade', 'noCreep', 'noJump']);
-    expect(BD_SPECS.box.overrides).toEqual({ diag: 1 }); expect(BD_SPECS.simple.overrides).toEqual({ diag: 3 }); expect(BD_SPECS.noCreep.overrides).toEqual({ useSkip: 0 }); expect(BD_SPECS.noJump.overrides).toEqual({ jumpOn: 0 });
+    expect(BD_VARIANTS).toEqual(['same', 'box', 'simple', 'noGrad', 'noRefine', 'noShade', 'withCreep', 'noJump']);
+    expect(BD_SPECS.box.overrides).toEqual({ diag: 1 }); expect(BD_SPECS.simple.overrides).toEqual({ diag: 3 }); expect(BD_SPECS.withCreep.overrides).toEqual({ useSkip: 1 }); expect(BD_SPECS.noJump.overrides).toEqual({ jumpOn: 0 });
     expect([BD_SPECS.noGrad.abl, BD_SPECS.noRefine.abl, BD_SPECS.noShade.abl]).toEqual(['grad', 'refine', 'shade']); expect(BD_SPECS.same.abl).toBeUndefined(); expect(BD_SPECS.same.overrides).toBeUndefined();
   });
 });
@@ -233,8 +263,9 @@ const mockGpu = (script, { timestamps = true } = {}) => {
   });
   return { device, log };
 };
-const drawLow = r => r.draw({ u: {}, cams: [eyeCam(640, 480), eyeCam(640, 480)], model: new THREEG.Matrix4(), f: 0.5, fov: false, rects: null, variant: { cls4: false, events: false } });
-const frame = (r, { shadow = null } = {}) => { drawLow(r); return r.volume.markFrame(); };
+const drawLow = (r, u = {}) => r.draw({ u, cams: [eyeCam(640, 480), eyeCam(640, 480)], model: new THREEG.Matrix4(), f: 0.5, fov: false, rects: null, variant: { cls4: false, events: false } });
+const frame = (r, { u = {} } = {}) => { drawLow(r, u); return r.volume.markFrame(); };
+const HOST_SKIP_ON = () => ({ useSkip: { value: 1 } }), HOST_SKIP_OFF = () => ({ useSkip: { value: 0 } }); // the session's uniforms: the host's own creep-skip switch (the bits describe the texture) on / off
 
 describe('host: nothing is made for the breakdown until it is begun, and the display programs are the display text', () => {
   it('a drawn frame makes no breakdown resource (buffers, textures, queries, bind group layouts, pipelines): the count after drawing equals the count before the first frame is drawn', withGpu(async () => {
@@ -324,6 +355,29 @@ describe('host: the shadow pass', () => {
     const g2 = mockGpu([[0n, 0n], [20_100_000n, 20_200_000n], [30_000_000n, 36_000_000n]]); const r2 = createVrVolumeRenderer({ THREE: THREEG, device: g2.device, halfExt: [1, 1, 1] }); const got2 = []; await begin(r2, (...a) => got2.push(a));
     const rec2 = frame(r2); r2.breakdown.shadow(rec2, BD_SPECS.same); await settle(); expect(got2).toEqual([]); r2.dispose();
   }));
+  it('the display passes of this renderer run with useSkip 0 whatever the host\'s switch is (the creep skip is cut; the output is the same, see vr-skip-occupancy.js); withCreep turns it on over that, only while the host\'s bits are valid', withGpu(async () => {
+    const { device, log } = mockGpu([[10_000_000n, 20_000_000n], [20_100_000n, 20_200_000n], [30_000_000n, 36_000_000n], [40_000_000n, 50_000_000n], [50_100_000n, 50_200_000n], [60_000_000n, 66_000_000n], [70_000_000n, 76_000_000n], [80_000_000n, 86_000_000n]]);
+    const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1] });
+    const got = []; await begin(r, (n, s, l) => got.push([n, s, l]));
+    const sk = uniformLayout().fields.find(f => f.name === 'useSkip').offset / 4, isU = w => w.data.length === uniformLayout().byteSize / 4;
+    // the host's switch is on: the low pass still gets 0, the shadow of 'same' 0, withCreep 1
+    let n0 = log.writes.length; const rec = frame(r, { u: HOST_SKIP_ON() });
+    expect(log.writes.slice(n0).filter(isU).map(w => w.data[sk])).toEqual([0, 0]);
+    n0 = log.writes.length; expect(r.breakdown.shadow(rec, BD_SPECS.same)).toBe(true); expect(log.writes.slice(n0).filter(isU).map(w => w.data[sk])).toEqual([0, 0]);
+    n0 = log.writes.length; expect(r.breakdown.shadow(rec, BD_SPECS.withCreep)).toBe(true); expect(log.writes.slice(n0).filter(isU).map(w => w.data[sk])).toEqual([1, 1]);
+    // the host's switch is off (the bits are not valid): the display is the same, withCreep has no program for this frame (null: stepped past), no pass is made for it
+    n0 = log.writes.length; const rec2 = frame(r, { u: HOST_SKIP_OFF() });
+    expect(log.writes.slice(n0).filter(isU).map(w => w.data[sk])).toEqual([0, 0]);
+    const np = log.passes.length; expect(r.breakdown.shadow(rec2, BD_SPECS.withCreep)).toBeNull(); expect(log.passes.length).toBe(np);
+    expect(r.breakdown.shadow(rec2, BD_SPECS.same)).toBe(true);
+    r.dispose();
+  }));
+  it('diag 4 (the host\'s own off switch for the creep skip) keeps withCreep out as well', withGpu(async () => {
+    const { device } = mockGpu([[1n, 2n], [3n, 4n]]);
+    const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1] }); await begin(r, () => {});
+    const rec = frame(r, { u: { useSkip: { value: 1 }, diag: { value: 4 } } }); expect(r.breakdown.shadow(rec, BD_SPECS.withCreep)).toBeNull();
+    r.dispose();
+  }));
   it('no free timer slot, an unknown record or a frame without a snapshot: nothing is submitted (the caller does not advance its variant)', withGpu(async () => {
     const { device, log } = mockGpu([[1n, 2n], [3n, 4n], [5n, 6n], [7n, 8n], [9n, 10n], [11n, 12n], [13n, 14n], [15n, 16n]]);
     const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1] });
@@ -342,10 +396,10 @@ describe('host: the shadow pass', () => {
     const got = []; const res = await begin(r, (n, s, l) => got.push(n)); expect(res.failed).toHaveLength(1);
     let vi = 0; const results = [];
     for (let i = 0; i < 30; i++) { // the view's rule: step on unless 'not now' (false)
-      const rec = frame(r); const spec = BD_SPECS[BD_VARIANTS[vi % BD_VARIANTS.length]]; const x = r.breakdown.shadow(rec, spec); results.push([spec.name, x]); if (x !== false) vi++; await settle();
+      const rec = frame(r, { u: HOST_SKIP_ON() }); const spec = BD_SPECS[BD_VARIANTS[vi % BD_VARIANTS.length]]; const x = r.breakdown.shadow(rec, spec); results.push([spec.name, x]); if (x !== false) vi++; await settle();
     }
     expect(results.find(([n]) => n === 'noRefine')[1]).toBeNull();
-    for (const n of ['noCreep', 'noJump', 'noGrad', 'noShade', 'same']) expect(got.includes(n), n).toBe(true);
+    for (const n of ['withCreep', 'noJump', 'noGrad', 'noShade', 'same']) expect(got.includes(n), n).toBe(true);
     expect(got).not.toContain('noRefine');
     r.dispose();
   }));
@@ -377,11 +431,11 @@ describe('host: the counting probe', () => {
     frame(r); const nPass = log.passes.length, nCmd = log.cmds.length;
     const p1 = r.breakdown.probe({}, 'whole'), p2 = r.breakdown.probe({}, 'whole'); // the second: the first is still reading
     const [a, b] = await Promise.all([p1, p2]);
-    expect(b).toBeNull(); expect(a.kind).toBe('whole'); expect(a.w).toBe(64); expect(a.counters).toBeInstanceOf(Uint32Array); expect(a.counters.length).toBe(64 * 64 * 8);
+    expect(b).toBeNull(); expect(a.kind).toBe('whole'); expect(a.w).toBe(64); expect(a.counters).toBeInstanceOf(Uint32Array); expect(a.counters.length).toBe(64 * 64 * NF);
     const pass = log.passes[nPass]; expect(log.passes).toHaveLength(nPass + 1);
     expect(pass.viewports).toEqual([[0, 0, 64, 64, 0, 1]]); expect(pass.scissors).toEqual([[0, 0, 64, 64]]); expect(pass.d.timestampWrites).toBeUndefined();
     expect(pass.groups[1]).toBeTruthy(); expect(pass.groups[0]).toBeTruthy();
-    const cmds = log.cmds.slice(nCmd); expect(cmds.indexOf('clear')).toBeLessThan(cmds.indexOf('pass')); expect(cmds.indexOf('pass')).toBeLessThan(cmds.indexOf('copyB' + 64 * 64 * 8 * 4));
+    const cmds = log.cmds.slice(nCmd); expect(cmds.indexOf('clear')).toBeLessThan(cmds.indexOf('pass')); expect(cmds.indexOf('pass')).toBeLessThan(cmds.indexOf('copyB' + 64 * 64 * NF * 4));
     expect(pass.d.colorAttachments[0].view.t.d.size).toEqual([64, 64, 1]);
     const again = await r.breakdown.probe({}, 'native'); expect(again.kind).toBe('native'); // free again after the read
     r.dispose();
@@ -406,6 +460,15 @@ describe('host: the counting probe', () => {
     const { device } = mockGpu([]); const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1] });
     expect(await r.breakdown.probe({}, 'whole')).toBeNull(); r.dispose();
   }));
+});
+
+describe('WebGPU display: the creep skip is cut by the uniform, the text is untouched (static)', () => {
+  it('passExtra gives useSkip 0 (a literal, not the session\'s value); the WebGL material and the WGSL text are not involved', () => {
+    expect(host).toMatch(/const passExtra = u => \(\{ jumpOn: [^\n]*, useSkip: 0 \}\);/);
+    expect(host).not.toMatch(/useSkip: \(u\.diag/);
+    expect(volumeWgsl()).toContain('let skipOn=u.useSkip>0&&u.diag!=4;'); // the text still honours the uniform
+    expect(vr).toContain('uniform int useSkip;'); expect(vr).toContain('u.useSkip.value=r?r.use:0;'); // the WebGL path and the host's switch are as before
+  });
 });
 
 describe('vr-view.js wiring (static)', () => {
