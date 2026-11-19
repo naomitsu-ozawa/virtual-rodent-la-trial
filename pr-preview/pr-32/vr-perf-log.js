@@ -8,10 +8,11 @@ export const PERF_MAX_ROWS = 600; // 10 minutes of rows
 export const PERF_MIRROR_STALLS = 30; // the last stall lines the localStorage mirror keeps
 export const PERF_MAX_STALLS = 60; // the stall lines kept (the newest; older ones are counted in stallsDropped)
 const COUNTS = ['mk', 'tg', 'slotc', 'perc']; // per-second counts of what the WebGPU renderer made / changed: mk = targets + tile textures + bind groups made, tg = targets made, slotc = slot size changes, perc = periphery pass on / off switches
-const MEANS = ['vol', 'main', 'js', 'render', 'cpu', 'swd', 'wake', 'pre', 'vlat', 'vdrop']; // the per-frame ms, averaged over the second
+const MEANS = ['vol', 'main', 'js', 'render', 'cpu', 'swd', 'wake', 'pre', 'vlat', 'vdrop', 'late', 'lpx']; // the per-frame ms, averaged over the second
 const MEDIANS = ['span', 'gap']; // the per-frame ms, the median of the second (WebGPU: the frame's GPU span and the GPU idle before it)
 const median = a => { const v = a.filter(x => Number.isFinite(x)).sort((p, q) => p - q); if (!v.length) return null; const m = v.length >> 1; return v.length & 1 ? v[m] : (v[m - 1] + v[m]) / 2; };
 export const perfMedian = median;
+export const IP_BIN_MS = 0.5, IP_BINS = 512; // the frame-interval frequency table (ip95): bins of 0.5 ms up to 256 ms (the last bin takes everything longer)
 // which interval a frame gap is: 0 = one refresh period (up to 1.5 of the budget), 1 = two (up to 2.5), 2 = three or more
 export const gapBucket = (dtMs, budgetMs) => { const r = dtMs / Math.max(1, budgetMs); return r < 1.5 ? 0 : r < 2.5 ? 1 : 2; };
 const r1 = v => (Number.isFinite(v) ? Math.round(v * 10) / 10 : null);
@@ -21,16 +22,21 @@ export function createPerfLog({ kind = 'webgl', mode = 'vr', now = () => perform
   let lastTs = null, rowAt = t0, savedAt = t0, frames = 0, gaps = [0, 0, 0], dropped = 0;
   let gmax = 0, hmax = 0, mvp = 0, mvr = 0, lastSpan = null, lastVol = null, stallsDropped = 0; // the second's longest gap, most hands holding, summed movement (cm, deg); the latest span / vol read back
   const cnt = { mk: 0, tg: 0, slotc: 0, perc: 0 }, since = { mk: 0, tg: 0, slotc: 0, perc: 0 }; // the second's counts / those since the previous frame callback started (the stall's cause)
+  const ipBins = new Uint16Array(IP_BINS); let ipN = 0; // the second's frame intervals as a frequency table (no array made per frame)
+  let gfixOn = 0, fmin = Infinity, fsum = 0, fn = 0; // the second's: a guard held the scale / periphery (0 / 1), the lowest and the sum of the scale f over the frames
   const stalls = []; // one entry per frame interval of two or more periods (up to PERF_MAX_STALLS)
   const acc = Object.fromEntries(MEANS.map(k => [k, { s: 0, n: 0 }])), smp = Object.fromEntries(MEDIANS.map(k => [k, []]));
   const rows = [], meta = {}; // meta: free text lines about the session (which GPU timers existed, ...) for the header of the report
   // one frame of the app's loop (ts = the frame's time in ms, budgetMs = 1000 / target Hz): the gap since the previous frame goes into the interval counts
   // hold = how many hands hold the volume now, cov = covered px (both only read: no allocation here)
-  const frame = (ts, budgetMs, hold = 0, cov = null) => {
+  // gfix = 1 when the flicker guard holds the scale or the periphery now (only read)
+  const frame = (ts, budgetMs, hold = 0, cov = null, gfix = 0) => {
     frames++;
     if (hold > hmax) hmax = hold;
+    if (gfix) gfixOn = 1;
     if (lastTs !== null && ts > lastTs) {
       const g = ts - lastTs, b = gapBucket(g, budgetMs); gaps[b]++; if (g > gmax) gmax = g;
+      ipBins[Math.min(IP_BINS - 1, (g / IP_BIN_MS) | 0)]++; ipN++;
       if (b >= 1) { // a frame interval of two or more periods: one line (the flags are what happened in the callback of the frame before: since the previous frame() call)
         if (stalls.length >= PERF_MAX_STALLS) { stalls.shift(); stallsDropped++; }
         stalls.push({ t: r1((ts - t0) / 1000), gap: r1(g), span: lastSpan, vol: lastVol, hold, slot: since.slotc > 0 ? 1 : 0, tg: since.tg > 0 ? 1 : 0, per: since.perc > 0 ? 1 : 0, cov: Number.isFinite(cov) ? Math.round(cov) : null });
@@ -44,6 +50,15 @@ export function createPerfLog({ kind = 'webgl', mode = 'vr', now = () => perform
   const move = (cm, deg) => { if (Number.isFinite(cm) && cm >= 0) mvp += cm; if (Number.isFinite(deg) && deg >= 0) mvr += deg; };
   // a ms value (n = how many frames it stands for: a sum taken over n frames)
   const add = (k, ms, n = 1) => { const a = acc[k]; if (a && Number.isFinite(ms) && ms >= 0 && n > 0) { a.s += ms; a.n += n; if (k === 'vol') lastVol = r2(ms / n); } };
+  // the render scale f of this frame (min / mean of the second)
+  const fval = f => { if (Number.isFinite(f) && f > 0) { if (f < fmin) fmin = f; fsum += f; fn++; } };
+  // p95 of the second's frame intervals (ms) from the frequency table; null with no interval
+  const ip95 = () => {
+    if (!ipN) return null;
+    const need = Math.ceil(ipN * 0.95); let c = 0;
+    for (let i = 0; i < IP_BINS; i++) { c += ipBins[i]; if (c >= need) return i === IP_BINS - 1 ? r1(gmax) : r1((i + 0.5) * IP_BIN_MS); }
+    return r1(gmax);
+  };
   // one per-frame ms value of a median column (span, gap)
   const sample = (k, ms) => { const a = smp[k]; if (a && Number.isFinite(ms) && a.length < 1000) { a.push(ms); if (k === 'span') lastSpan = r2(ms); } };
   // the localStorage mirror: every few seconds, not every row (the string of 600 rows is not made once a second)
@@ -59,12 +74,14 @@ export function createPerfLog({ kind = 'webgl', mode = 'vr', now = () => perform
     for (const k of MEANS) x[k] = acc[k].n ? r2(acc[k].s / acc[k].n) : null;
     for (const k of MEDIANS) x[k] = r2(median(smp[k]));
     x.oth = Number.isFinite(x.span) && Number.isFinite(x.vol) && Number.isFinite(x.main) ? r2(x.span - x.vol - x.main) : null; // the GPU work in the span that neither the volume pass nor three.js' main render timer covers (the second's median span minus the second's mean vol and main)
+    x.gfix = gfixOn; x.fmin = fn ? Math.round(fmin * 1000) / 1000 : null; x.favg = fn ? Math.round(fsum / fn * 1000) / 1000 : null; x.ip95 = ip95(); // guard held (0 / 1), the second's lowest / mean scale f, p95 of the frame intervals (ms)
     x.hold = hmax; x.mv = r1(mvp * 1000 / el); x.mvr = r1(mvr * 1000 / el); x.imax = gmax > 0 ? r1(gmax) : null; // hands holding (the second's most), the volume's movement (cm/s, deg/s; held or not), the longest frame interval (ms)
     for (const k of ['mk', 'slotc', 'perc']) x[k] = kind === 'webgpu' ? cnt[k] : null; // WebGPU only
     for (const k of Object.keys(snap)) { const v = snap[k]; x[k] = typeof v === 'number' ? (Number.isInteger(v) ? v : Number.isFinite(v) ? Math.round(v * 1000) / 1000 : null) : v; } // fractions to 3 decimals
     if (rows.length >= maxRows) { rows.shift(); dropped++; }
     rows.push(x);
-    rowAt = at; frames = 0; gaps = [0, 0, 0]; gmax = hmax = mvp = mvr = 0; for (const k of COUNTS) cnt[k] = 0; for (const k of MEANS) { acc[k].s = 0; acc[k].n = 0; } for (const k of MEDIANS) smp[k].length = 0;
+    if (!smp.span.length) lastSpan = null; // a second with no span: the stall lines do not carry an old one (the fine timers run only while recording)
+    rowAt = at; frames = 0; gaps = [0, 0, 0]; gmax = hmax = mvp = mvr = 0; gfixOn = 0; fmin = Infinity; fsum = fn = 0; ipBins.fill(0); ipN = 0; for (const k of COUNTS) cnt[k] = 0; for (const k of MEANS) { acc[k].s = 0; acc[k].n = 0; } for (const k of MEDIANS) smp[k].length = 0;
     save(at);
     return x;
   };
@@ -75,9 +92,9 @@ export function createPerfLog({ kind = 'webgl', mode = 'vr', now = () => perform
     const recLeft = rows.filter(r => !r.menu && r.rec && r.fps > 0).length;
     return { rows: rows.length, closedRows: closed.length, recLeft, dropped, fps: pick('fps'), vol: pick('vol'), main: pick('main'), render: pick('render'), js: pick('js'), span: pick('span'), gap: pick('gap'), oth: pick('oth'), cpu: pick('cpu'), swd: pick('swd'), wake: pick('wake'), pre: pick('pre'), vlat: pick('vlat'), vdrop: pick('vdrop'), f: pick('f'), step: pick('step'), g1: closed.reduce((s, r) => s + r.g1, 0), g2: closed.reduce((s, r) => s + r.g2, 0), g3: closed.reduce((s, r) => s + r.g3, 0) };
   };
-  return { kind, mode, rows, stalls, meta, get dropped() { return dropped; }, get stallsDropped() { return stallsDropped; }, frame, count, move, add, sample, row, save, flush, summary };
+  return { kind, mode, rows, stalls, meta, get dropped() { return dropped; }, get stallsDropped() { return stallsDropped; }, frame, fval, count, move, add, sample, row, get lastDrops() { const r = rows[rows.length - 1]; return r ? r.g2 + r.g3 : null; }, save, flush, summary };
 }
-const COLS = [['t', 4], ['fps', 5], ['g1', 4], ['g2', 3], ['g3', 3], ['vol', 6], ['main', 6], ['render', 6], ['js', 6], ['span', 6], ['gap', 6], ['oth', 6], ['cpu', 6], ['swd', 6], ['wake', 6], ['pre', 6], ['vlat', 6], ['vdrop', 6], ['f', 5], ['per', 5], ['cap', 5], ['auto', 4], ['lv', 5], ['si', 3], ['step', 5], ['cov', 8], ['w', 5], ['h', 5], ['size', 6], ['menu', 4], ['hz', 4], ['fov', 4], ['rec', 3], ['hold', 4], ['mv', 6], ['mvr', 6], ['imax', 6], ['mk', 3], ['slotc', 5], ['perc', 4]];
+const COLS = [['t', 4], ['fps', 5], ['g1', 4], ['g2', 3], ['g3', 3], ['vol', 6], ['main', 6], ['render', 6], ['js', 6], ['span', 6], ['gap', 6], ['oth', 6], ['cpu', 6], ['swd', 6], ['wake', 6], ['pre', 6], ['vlat', 6], ['vdrop', 6], ['f', 5], ['per', 5], ['cap', 5], ['auto', 4], ['lv', 5], ['si', 3], ['step', 5], ['cov', 8], ['w', 5], ['h', 5], ['size', 6], ['menu', 4], ['hz', 4], ['fov', 4], ['rec', 3], ['hold', 4], ['mv', 6], ['mvr', 6], ['imax', 6], ['mk', 3], ['slotc', 5], ['perc', 4], ['hset', 5], ['hk', 5], ['gfix', 4], ['mlow', 4], ['tab', 3], ['fmin', 6], ['favg', 6], ['late', 5], ['ip95', 6], ['lpx', 8]];
 const STALL_COLS = [['t', 6], ['gap', 6], ['span', 6], ['vol', 6], ['hold', 4], ['slot', 4], ['tg', 3], ['per', 3], ['cov', 8]];
 const cell = (v, w) => String(v === null || v === undefined ? '-' : (typeof v === 'boolean' ? +v : v)).padStart(w);
 // the text of the page panel / the copy button / the saved file: the header, the summary, then the rows
@@ -97,11 +114,14 @@ export function perfReport(p, { build = '', ua = '', hz = null } = {}) {
   L.push('note: cpu = mean ms from the start of the XR frame callback to the end of the last submit (the marker\'s included); swd = mean ms from that submit to queue.onSubmittedWorkDone (sampled every 4th frame, one at a time).');
   L.push('note: wake = ms from the moment queue.onSubmittedWorkDone of the previous sampled frame returned to the start of the next XR frame callback (sampled with swd: every 4th frame; recorded only for frames whose completion arrived before the next frame started, i.e. the GPU kept up); pre = ms from the start of the XR frame callback to the return of the volume pass submit; vlat = ms from the volume pass submit to queue.onSubmittedWorkDone minus that frame\'s volume GPU ms (every 4th frame, one wait at a time, shared with swd). The completion promise resolves only after the frame callback returns, so the value has the CPU time up to the end of the callback as its floor: samples at that floor (GPU already done) are left out and counted in vdrop (share of samples dropped); a negative vlat is rounded to 0. WebGL: "-".');
   L.push('note: vlat / vdrop from build 749 on are not comparable with build 748 and earlier (the first frame end after the submit is kept as the end of the CPU time; before, a later frame end could overwrite it).');
+  if (p.kind === 'webgpu') L.push('note: WebGPU fine timers: span / gap / oth, main (three.js\' timestamps) and swd / wake / vlat / vdrop / late are taken only while the breakdown recording (detail tab) is prepared or runs, so a "-" in these columns in the other seconds means not measured; swd / wake / vlat / vdrop / late only while it is prepared (the recording\'s shadow passes would disturb them, as before), span / gap / main in the preparation and the recording. The summary leaves out the rows with rec = 1 (a second with a recording frame in it, the second the recording ends in included) and the rows with the menu open, so its GPU timeline / main figures are mostly "-": only the preparation rows with the menu closed are left, and those show only swd / wake / vlat / vdrop and span / gap / main of the preparation. The values of the recording rows stay in the rows below; the vol breakdown section does not summarise span / gap / main. vol (the volume pass\'s timestamp) and pre / cpu / render / js are taken in every second.');
   if (p.vb) for (const t of volBreakdownReport(p)) L.push(t);
   L.push('note: hold = the most hands holding the volume in that second (0 / 1 / 2; the volume or its pair partner, not a section or a board); mv / mvr = how far the volume moved in that second, cm/s of its world position and deg/s of its world rotation, whether held or not (scale changes are not in it); imax = the longest frame interval of the second in ms.');
   L.push('note: mk = offscreen targets + tile textures + bind groups made in that second; slotc = times a pass\'s target slot size changed; perc = times the periphery pass switched on or off (WebGPU only; WebGL "-").');
+  L.push('note: hset = the held-scale setting of the WebGPU view in that second (the factor the slider is set to, 0.5-0.95; 0 = the setting is off); hk = the lowest factor really applied to the render scale in that second (1 = never lowered; compare with hset while hold > 0).');
+  L.push('note: gfix = 1 when the flicker guard (scale or periphery) held its value at any frame of that second; mlow = the setting "simplify while held" (1 on, 0 off; WebGPU only); tab = the menu tab open ("-" = menu closed); fmin / favg = the lowest / mean render scale f over the frames of the second (f in the row is the last frame\'s); late = share 0-1 of the sampled onSubmittedWorkDone (every 4th frame, as wake) that returned after the next frame callback had started (taken only while the recording is prepared, as swd; "-" in the other seconds); ip95 = p95 of the frame intervals of the second in ms (a frequency table of 0.5 ms bins); lpx = mean px per frame the low pass drew (sum of its scissor rects over the eyes; WebGPU only, "-" otherwise).');
   L.push('note: stall lines (after the rows): one per frame interval of about two periods or more (over 1.5 periods), the newest ' + PERF_MAX_STALLS + '. t = s since the start, gap = the interval in ms, span / vol = the latest GPU span / volume ms read back when it ended (a read-back may lag a few frames: it is the frame before only roughly; "-" = none yet), hold = hands holding, slot / tg / per = 1 when a slot size changed / a target was made / the periphery switched during the frame before the gap, cov = covered px.');
-  L.push('-- rows, one a second (t s; g1 / g2 / g3 = frame intervals of 1 / 2 / 3+ periods; vol / main = GPU ms, render = render() CPU ms, js = JS ms, span / gap / oth = GPU ms (see the notes), cpu / swd / wake / pre / vlat = CPU ms, vdrop = share 0-1 (see the notes); f = scale, per = periphery scale, cap = data cap, auto = auto quality on, lv = auto level, si = auto step index, step = voxels, cov = covered px, w / h = XR size, size = view scale, menu = open, fov = fixed foveation, rec = 1 while the volume breakdown was recording (WebGPU only; see its notes); hold / mv / mvr / imax / mk / slotc / perc = see the notes))');
+  L.push('-- rows, one a second (t s; g1 / g2 / g3 = frame intervals of 1 / 2 / 3+ periods; vol / main = GPU ms, render = render() CPU ms, js = JS ms, span / gap / oth = GPU ms (see the notes), cpu / swd / wake / pre / vlat = CPU ms, vdrop = share 0-1 (see the notes); f = scale, per = periphery scale, cap = data cap, auto = auto quality on, lv = auto level, si = auto step index, step = voxels, cov = covered px, w / h = XR size, size = view scale, menu = open, fov = fixed foveation, rec = 1 while the volume breakdown was recording (WebGPU only; see its notes); hold / mv / mvr / imax / mk / slotc / perc / hset / hk / gfix / mlow / tab / fmin / favg / late / ip95 / lpx = see the notes))');
   L.push(COLS.map(([k, w]) => k.padStart(w)).join(' '));
   for (const r of p.rows) L.push(COLS.map(([k, w]) => cell(r[k], w)).join(' '));
   const st = p.stalls || [];

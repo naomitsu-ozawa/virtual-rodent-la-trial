@@ -1,25 +1,25 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { segmentState, segmentNeedsGlobalMask, sourceMprMemoryView, sourceMemoryUsable, getProcessedSegmentMask, segmentEditState, segmentSourcesOf, segmentSourceSignature, segmentHasManualEditsUpstream, segmentEditGen, segmentKeyOf, segmentAddsVoxels } from './segments.js?v=20261119-build755';
-import { activeId, filterRebuildRevision, current3DVolume, volume, currentLanguage, childSegments } from './state.js?v=20261119-build755';
-import { sourceFilterRuntime, sourceFilterSignature, sourceFilterStages, sourceFilterHalo, readSourceRegion, runSourceFilterWorker, fitSourceTile, getCachedSourceSlice } from './source-filters.js?v=20261119-build755';
-import { gpuOpenRuns, gpuCounts, gpuStepTimes, gpuRunInfo, addGpuStepTime, ensureGpuFilterDevice, gpuValidationScope, setGpuComputeBackend, runGpuSourceFilters, gpuFilterRuntime, gpuStagesSupported, beginGpuBufferRetention, endGpuBufferRetention } from './gpu-compute.js?v=20261119-build755';
-import { isNativeDicomTransferSyntax } from './dicom.js?v=20261119-build755';
-import { extractSourceThresholdRuns } from './medical-volume.js?v=20261119-build755';
-import { valuesToSegmentBits } from './mask-ops.js?v=20261119-build755';
-import { state } from './ui-shell.js?v=20261119-build755';
+import { segmentState, segmentNeedsGlobalMask, sourceMprMemoryView, sourceMemoryUsable, getProcessedSegmentMask, segmentEditState, segmentSourcesOf, segmentSourceSignature, segmentHasManualEditsUpstream, segmentEditGen, segmentKeyOf, segmentAddsVoxels } from './segments.js?v=20261119-build756';
+import { activeId, filterRebuildRevision, current3DVolume, volume, currentLanguage, childSegments } from './state.js?v=20261119-build756';
+import { sourceFilterRuntime, sourceFilterSignature, sourceFilterStages, sourceFilterHalo, readSourceRegion, runSourceFilterWorker, fitSourceTile, getCachedSourceSlice } from './source-filters.js?v=20261119-build756';
+import { gpuOpenRuns, gpuCounts, gpuStepTimes, gpuRunInfo, addGpuStepTime, ensureGpuFilterDevice, gpuValidationScope, setGpuComputeBackend, runGpuSourceFilters, gpuFilterRuntime, gpuStagesSupported, beginGpuBufferRetention, endGpuBufferRetention } from './gpu-compute.js?v=20261119-build756';
+import { isNativeDicomTransferSyntax } from './dicom.js?v=20261119-build756';
+import { extractSourceThresholdRuns } from './medical-volume.js?v=20261119-build756';
+import { valuesToSegmentBits } from './mask-ops.js?v=20261119-build756';
+import { state } from './ui-shell.js?v=20261119-build756';
 import dicomParser from './vendor/dicom-parser@1.8.21/index.js';
-import { storedLayout, readStored } from './stored-bits.js?v=20261119-build755';
-import { analysisRunsVoxelCount, unionRunArrays, maskToAnalysisRuns, postprocessSourceRuns, thinSuppressSourceRuns, intersectRunArrays, subtractRunArrays } from './run-length.js?v=20261119-build755';
-import { frameYield } from './utils.js?v=20261119-build755';
-import { BODY_MIN_HU } from './thin-suppress.js?v=20261119-build755';
-import { setProcessingBusy } from './busy.js?v=20261119-build755';
-import { reportBusyProgress } from './progress-modal.js?v=20261119-build755';
-import { segmentRunsCacheKey, segmentRunsCacheInfo, loadCachedSegmentRuns, storeCachedSegmentRuns } from './run-cache.js?v=20261119-build755';
-import { loadStatAdd } from './load-stats.js?v=20261119-build755';
-import { hashHex } from './vr-prep-cache.js?v=20261119-build755'; // a content hash for the key (the upstream manual edits) //: cache hits of a load, for the VR switch report
-import { isChildKey } from './segment-look.js?v=20261119-build755';
-import { childByKey } from './child-segments.js?v=20261119-build755';
+import { storedLayout, readStored } from './stored-bits.js?v=20261119-build756';
+import { analysisRunsVoxelCount, unionRunArrays, maskToAnalysisRuns, postprocessSourceRuns, thinSuppressSourceRuns, intersectRunArrays, subtractRunArrays } from './run-length.js?v=20261119-build756';
+import { frameYield } from './utils.js?v=20261119-build756';
+import { BODY_MIN_HU } from './thin-suppress.js?v=20261119-build756';
+import { setProcessingBusy } from './busy.js?v=20261119-build756';
+import { reportBusyProgress } from './progress-modal.js?v=20261119-build756';
+import { segmentRunsCacheKey, segmentRunsCacheInfo, loadCachedSegmentRuns, storeCachedSegmentRuns } from './run-cache.js?v=20261119-build756';
+import { loadStatAdd } from './load-stats.js?v=20261119-build756';
+import { hashHex } from './vr-prep-cache.js?v=20261119-build756'; // a content hash for the key (the upstream manual edits) //: cache hits of a load, for the VR switch report
+import { isChildKey } from './segment-look.js?v=20261119-build756';
+import { childByKey } from './child-segments.js?v=20261119-build756';
 export async function processSourceRegionMasks(series,target,stages,key,revision,segments){
  const halo=sourceFilterHalo(stages),x0=Math.max(0,target.x-halo),y0=Math.max(0,target.y-halo),z0=Math.max(0,target.z-halo),x1=Math.min(series.columns,target.x+target.width+halo),y1=Math.min(series.rows,target.y+target.height+halo),z1=Math.min(series.slices.length,target.z+target.depth+halo);
  const box={x:x0,y:y0,z:z0,width:x1-x0,height:y1-y0,depth:z1-z0},data=await readSourceRegion(series,box,revision,true);
