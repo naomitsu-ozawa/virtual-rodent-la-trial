@@ -1,13 +1,10 @@
-// The creep gate of the GLSL march (docs/vr-view.js, the opaque tight loops with and without events): the skipTex lookup is made only while `chk` (the previous sample was read with dd < 2.7, or crept); not at the ray start, not right after a jump.
+// The creep gate of the WGSL march (docs/vr-wgsl-core.js): the skipTex lookup is made only while `chk` (the previous sample was read with dd < 2.7, or crept); not at the ray start, not right after a jump.
 // A CPU model of the march loop (the skip, the read, the jump, the hit bracket, the lazy prevF) is run on a synthetic classification grid with the skip bits of vr-skip-occupancy.js, once with the check at every
-// sample (the march without the gate) and once gated: a ray must end with the same hit (bracket, prevF, hitNb, hitIso), the same samples and the same end. The counts of creep steps and skipTex reads are the
-// only thing that may differ (creep falls by exactly the omitted samples whose bit was set). CI has no GPU: this checks the logic of the change, the shader text is tied to it by the last test.
+// sample (the text before the gate) and once gated: a ray must end with the same hit (bracket, prevF, hitNb, hitIso), the same samples and the same end. The counts of creep steps and skipTex reads are the
+// only thing that may differ (creep falls by exactly the omitted samples whose bit was set). CI has no GPU: this checks the logic of the change, the shader text is tied to it by vr-breakdown.test.js.
 import { describe, it, expect } from 'vitest';
 import { buildSkipOccupancy, skipGrid } from '../../docs/vr-skip-occupancy.js';
-import { readFileSync } from 'node:fs';
-
-const src = readFileSync(new URL('../../docs/vr-view.js', import.meta.url), 'utf8');
-const count = (text, part) => text.split(part).length - 1;
+import { volumeWgsl } from '../../docs/vr-wgsl-core.js';
 
 const rng = seed => () => { seed = (seed + 0x6D2B79F5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
 const N = 24, DIMS = [N, N, N], SEG_OFF = 1.0e9;
@@ -26,7 +23,7 @@ function makeGrid(rand, nSpheres) {
   return data;
 }
 
-// the model of one ray; gate = 'always' (the check at every sample: the march without the gate) | 'gated' (only while chk)
+// the model of one ray; gate = 'always' (the check at every sample: the text before) | 'gated' (only while chk)
 function march(grid, ray, gate, o = {}) {
   const { data, bits } = grid, stp = o.stp, useSkip = o.useSkip !== false, jumpOn = o.jumpOn !== false, refine = true;
   const [bx, by] = skipGrid(DIMS);
@@ -48,7 +45,7 @@ function march(grid, ray, gate, o = {}) {
     const sb = fl.map(v => v >> 2), sl = fl.map(v => v & 3), sbit = sl[0] + (sl[1] << 2) + (sl[2] << 4), blk = (sb[2] * by + sb[1]) * bx + sb[0];
     return { sb, set: ((bits[blk * 2 + (sbit < 32 ? 0 : 1)] >>> (sbit & 31)) & 1) !== 0 };
   };
-  let t = ray.t0, previousT = t, lastIndex = -1, iters = 0, prevValid = false, prevF = 0, prevSkip = false, skBlk = null, chk = false, hit = null;
+  let k = 0, t = ray.t0, previousT = t, lastIndex = -1, iters = 0, prevValid = false, prevF = 0, prevSkip = false, skBlk = null, chk = false, hit = null;
   const st = { creep: 0, jumps: 0, skipRd: 0, omittedSet: 0, omitted: 0 };
   for (let iter = 0; iter < 4096; iter++) {
     if (t > ray.endT) break;
@@ -57,13 +54,13 @@ function march(grid, ray, gate, o = {}) {
       const b = bitAt(t);
       if (b) {
         if (!skBlk || b.sb.some((v, k) => v !== skBlk[k])) { skBlk = b.sb; st.skipRd++; }
-        if (b.set) { st.creep++; prevValid = true; prevSkip = true; lastIndex = -1; previousT = t; t += stp; continue; }
+        if (b.set) { st.creep++; prevValid = true; prevSkip = true; lastIndex = -1; previousT = t; k++; t = ray.t0 + k * stp; continue; }
       }
     } else if (useSkip) { st.omitted++; const b = bitAt(t); if (b && b.set) st.omittedSet++; } // statistics only: what the check would have found
     const q = fetch(pos(t)); let dd = q[3] * 255;
     if (!jumpOn) dd = 0;
     chk = dd < 2.7;
-    if (dd >= 2.7) { const nextJ = t + stp * Math.max(1, Math.floor((dd - 1.8) / stp)); st.jumps++; previousT = nextJ - stp * 0.05; prevValid = false; t = nextJ; continue; }
+    if (dd >= 2.7) { const m = Math.max(1, Math.floor((dd - 1.8) / stp)), nextJ = ray.t0 + (k + m) * stp; st.jumps++; previousT = nextJ - stp * 0.05; prevValid = false; k += m; t = nextJ; continue; }
     const f = fOf(q); let idx = -1, curF = -1;
     for (let s = 0; s < 4; s++) if (f[s] >= 0) { idx = s; curF = f[s]; break; }
     if (idx !== lastIndex) {
@@ -75,7 +72,7 @@ function march(grid, ray, gate, o = {}) {
       lastIndex = idx;
     }
     prevSkip = false; prevValid = true; prevF = idx >= 0 ? curF : Math.max(...f);
-    previousT = t; t += stp;
+    previousT = t; k++; t = ray.t0 + k * stp;
   }
   return { out: { hit, iters, t, lastIndex, prevValid, previousT }, st };
 }
@@ -110,11 +107,26 @@ describe('the creep gate: the result of a ray does not change', () => {
       if (opt.jumpOn !== false) { expect(tot.omittedSet).toBeGreaterThan(0); expect(tot.rdGated).toBeLessThan(tot.rd); expect(tot.isoHits).toBeGreaterThan(20); }
     });
   }
-  it('the model is tied to the shader: the GLSL gates both opaque marches (no events / events) by `chk`, set from dd after the overrides and before the jump, false at the ray start', () => {
-    expect(count(src, 'bool chk=false;')).toBe(1);
-    expect(count(src, 'if(useSkip>0&&chk){')).toBe(2);
-    expect(count(src, 'if(useSkip>0){')).toBe(0);
-    expect(count(src, '   chk=dd<2.7;\n   // a jump is never shorter than a normal step\n   if(dd>=2.7){float nextJ=')).toBe(2);
-    expect(count(src, 'chk=')).toBe(3); // the declaration and the two assignments only: no path sets chk true by itself
+  // the display of the WebGPU renderer runs with useSkip 0 (docs/vr-wgpu.js passExtra): every sample the skip would have answered is read instead. A ray must end with the same hit (bracket, prevF,
+  // hitNb, hitIso), the same samples and the same end with the skip on (gated) and off; only the creep steps and skipTex reads go (to 0).
+  for (const [name, opt] of [['step 1.5', { stp: 1.5 }], ['step 1.0', { stp: 1.0 }], ['step 0.7', { stp: 0.7 }]]) {
+    it(name + ': useSkip 0 (the WebGPU display) gives the same hit, samples and end as the gated skip', () => {
+      const rand = rng(777); let hits = 0, creep = 0, isoAfterCreep = 0;
+      for (let g = 0; g < 4; g++) {
+        const data = makeGrid(rand, 3 + g * 2), grid = { data, bits: buildSkipOccupancy({ data, dims: DIMS, chan: [0, 1, -1, -1], mask: 0b11 }) };
+        for (let i = 0; i < 700; i++) {
+          const ray = makeRay(rand), on = march(grid, ray, 'gated', opt), off = march(grid, ray, 'gated', { ...opt, useSkip: false });
+          expect(off.out).toEqual(on.out);
+          expect(off.st.jumps).toBe(on.st.jumps); expect(off.st.creep).toBe(0); expect(off.st.skipRd).toBe(0);
+          if (on.out.hit) { hits++; if (on.out.hit.iso && on.st.creep > 0) isoAfterCreep++; }
+          creep += on.st.creep;
+        }
+      }
+      expect(hits).toBeGreaterThan(300); expect(creep).toBeGreaterThan(1000); expect(isoAfterCreep).toBeGreaterThan(20); // the skip was taken, and iso hits whose prevF may come from the lazy fetch
+    });
+  }
+  it('the model is tied to the shader: the shader gates by `chk`, set from dd after the override, false at the start and after a jump; t is the grid point t0 + k * step (the model makes it the same way)', () => {
+    const t = volumeWgsl();
+    expect(t).toContain('var chk=false;'); expect(t).toContain('if(skipOn&&chk){'); expect(t).toContain('chk=dd<2.7;'); expect(t).toContain('if(dd>=2.7){let m=');
   });
 });

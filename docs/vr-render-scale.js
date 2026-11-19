@@ -166,6 +166,58 @@ export const pairComposites = (primaryOnly, partnerOnly) => (primaryOnly ? COMP_
 // the threshold). A volume that fits in the rect (max zoom at arm's length) is drawn by the centre pass alone.
 export const foveaWorth = (outside, cover, k, wasOn = false) => k < 1 && cover > 0 && outside / cover > k * k * (wasOn ? 1.05 : 1.25);
 
+// While the volume is held in a hand (moved / turned / scaled) the WebGPU view draws it a little coarser; it goes back when the hold ends (after HOLD_RELEASE_MS, see createHoldGate).
+// The factor multiplies the render scale in use (the auto ladder's / manual scale, already under the data-resolution cap), so it lowers the CENTRE rect and
+// the periphery together (the periphery pass runs at f x FOVEA_K: its ratio to the centre does not change). HOLD_SCALE = 0.8 per axis (the default of the menu setting) = 0.64 of the rays of the volume pass (about -36 % of its
+// GPU time; design estimate, to be checked on the Quest 3). Why this much by default: a held volume moves with the hand, so its image slips over the retina and the
+// eye resolves less than at rest; at the cap the centre keeps PPV_CENTER x 0.8 = 1.04 rendered pixels per voxel, i.e. still one pixel per voxel of the data (only the far
+// corner of the box, PPV_FAR 1.0, falls to 0.8).
+// The menu slider (settings.moveLowK) picks the factor from HOLD_MIN .. HOLD_MAX in steps of HOLD_STEP. The factor is applied AFTER the scale guard (vr-view.js), so the guard's direct-path rounding
+// (LOW_BELOW 0.9 of vr-flicker-guard.js: a scale of 0.9 or more is taken as 1) never sees it and every value in the range takes effect. The top, 0.95, is the mildest cut (1 = no cut is the setting's off);
+// the bottom, 0.5, is the same as the lowest auto floor (最低 50 %); below 0.77 (1 / PPV_CENTER) the centre has fewer rendered pixels than voxels, which is what the setting is for (a stronger cut, not a safe default).
+export const HOLD_SCALE = 0.8;
+export const HOLD_MIN = 0.5, HOLD_MAX = 0.95, HOLD_STEP = 0.05;
+// a stored / given value -> a valid factor: rounded to HOLD_STEP, clamped to HOLD_MIN .. HOLD_MAX; not a number -> HOLD_SCALE
+export const holdScaleValue = v => {
+  v = typeof v === 'number' ? v : (typeof v === 'string' && v.trim() !== '' ? +v : NaN);
+  if (!Number.isFinite(v)) return HOLD_SCALE;
+  return Math.round(Math.round(Math.min(HOLD_MAX, Math.max(HOLD_MIN, v)) / HOLD_STEP) * HOLD_STEP * 100) / 100; // 2 decimals: no 0.7000000000000001
+};
+
+// the situations in which the hold factor may apply at all (the rest restores the full scale at once, without any delay). Every condition is the user-visible state of this frame:
+//  enabled = the menu setting (on by default); webgpu = the WebGPU view only (the WebGL drawing is not touched); live = the session is running;
+//  recording = the volume breakdown is being prepared / recorded (it measures at the scale in use without the hold); bench = a benchmark (sets its own scales).
+export const holdAllowed = ({ enabled = true, webgpu = false, live = true, recording = false, bench = false } = {}) => !!(enabled && webgpu && live && !recording && !bench);
+
+// the factor for this frame (1 = no change). heldTracked = how many hands / controllers hold the volume AND are still tracked / connected (a hand whose tracking is lost, or a controller that is
+// gone, no longer counts); scale = the menu's value (holdScaleValue: out of range is clamped, not a number gives HOLD_SCALE).
+export const holdScaleOf = ({ enabled = true, webgpu = false, live = true, heldTracked = 0, recording = false, bench = false, scale = HOLD_SCALE } = {}) =>
+  holdAllowed({ enabled, webgpu, live, recording, bench }) && heldTracked > 0 ? holdScaleValue(scale) : 1;
+
+// Grab / release must not make the picture alternate (photosensitivity, see vr-flicker-guard.js): the hold has a state of its own with two timers, and the scale guard does not count it.
+//  - the hold goes OFF only HOLD_RELEASE_MS after the last frame a hand held (a short loss of tracking, a grip that opens for a moment and closes again: the reduced scale stays);
+//  - once OFF it stays off at least HOLD_MIN_OFF_MS before it can go ON again.
+// So the scale changes by the hold at most twice in any HOLD_RELEASE_MS + HOLD_MIN_OFF_MS = 1 s (<= 2 Hz, under the 3 Hz of the scale guard), however fast the hands grab and let go.
+// allowed = false (setting off, session over, breakdown, benchmark; holdAllowed) restores at once (no timer).
+export const HOLD_RELEASE_MS = 600, HOLD_MIN_OFF_MS = 400;
+export function createHoldGate({ releaseMs = HOLD_RELEASE_MS, minOffMs = HOLD_MIN_OFF_MS } = {}) {
+  let on = false, lastHeld = -Infinity, changedAt = -Infinity;
+  return {
+    step(held, now, { allowed = true } = {}) {
+      if (!allowed) { if (on) { on = false; changedAt = now; } lastHeld = -Infinity; return false; }
+      if (held) lastHeld = now;
+      if (on) { if (!held && now - lastHeld >= releaseMs) { on = false; changedAt = now; } }
+      else if (held && now - changedAt >= minOffMs) { on = true; changedAt = now; }
+      return on;
+    },
+    get on() { return on; },
+    reset() { on = false; lastHeld = -Infinity; changedAt = -Infinity; },
+  };
+}
+
+// the scale with the factor applied (never below CAP_MIN; factor 1 returns f itself)
+export const applyHoldScale = (f, k) => (k < 1 ? Math.max(CAP_MIN, f * k) : f);
+
 const pct = v => Math.round(v * 100) + '%';
 // the quality readout: the mode (100 % / 70 % / 50 % / auto x %) and, when the data-resolution cap renders fewer pixels, the effective scale
 // e.g. 「100%（データ解像度・実効 41%）」 / 「自動 70%（データ解像度・実効 41%）」
