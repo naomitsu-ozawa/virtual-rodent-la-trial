@@ -2,7 +2,8 @@
 // (the three.js Data3DTexture objects stay the holders of the data, a GPUTexture is made from one on first use and again when its version changes), the volume render pass per eye,
 // the offscreen targets (colour + depth packed in rgba8, both eyes side by side, reduced scale and the periphery target), and the composite material (three.js NodeMaterial, TSL) that
 // puts the offscreen image into the headset's frame with the volume's depth. Plain WebGPU; three.js (the WebGPU build) is passed in.
-import { volumeWgsl, uniformLayout, BOX_VERTICES, VOLUME_BINDINGS, COUNTER_FIELDS, PROXY, PROXY_FIELDS, PROXY_BINDINGS, PROXY_DIFF_BINDINGS, proxyWgsl, proxyDiffWgsl } from './vr-wgsl-core.js?v=20261119-build754';
+import { volumeWgsl, uniformLayout, BOX_VERTICES, VOLUME_BINDINGS, COUNTER_FIELDS, PROXY, PROXY_FIELDS, PROXY_BINDINGS, PROXY_DIFF_BINDINGS, proxyWgsl, proxyDiffWgsl } from './vr-wgsl-core.js?v=20261119-build755';
+import { FOVEA_K } from './vr-render-scale.js?v=20261119-build755';
 
 export const VRGPU_STORE_KEY = 'vrl-vr-gpu';
 // the choice of the page's 「WebGPUで開く」 button (kept per browser; no URL parameter: the public build's gate takes no unknown URL keys). Default: the WebGL view.
@@ -226,7 +227,8 @@ export function createVolumeGpu({ device, THREE, f16 = false, onTargetFreed = nu
   let proxyDummy = null;
   const proxyDummyTex = () => proxyDummy ||= device.createTexture({ size: [1, 1, 1], format: 'r32float', usage: GPUTextureUsage.TEXTURE_BINDING });
 
-  // ---- offscreen targets: a pool keyed by size (a few sizes over a session; the scale changes by steps), colour + packed depth ----
+  // ---- small offscreen targets on demand: a pool keyed by size (the 48 x 48 probe's), colour + packed depth; the two passes' own targets are fixedTarget (below) ----
+  const counts = { target: 0, tex: 0, group: 0, slot: 0, peri: 0 }; // running totals of what was made (the performance record reads the differences once a frame: target = offscreen target, tex = tile texture, group = bind group; slot / peri are counted by createVrVolumeRenderer)
   const pool = [];
   let frameNo = 0; // a target used in this frame is never let go in it
   const beginFrame = () => { frameNo++; };
@@ -235,7 +237,7 @@ export function createVolumeGpu({ device, THREE, f16 = false, onTargetFreed = nu
     let t = pool.find(x => x.w === W && x.h === H);
     if (!t) {
       const mk = () => device.createTexture({ size: [W, H, 1], format: 'rgba8unorm', usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC });
-      t = { w: W, h: H, color: mk(), depth: mk(), stamp: 0 };
+      t = { w: W, h: H, color: mk(), depth: mk(), stamp: 0 }; counts.target++;
       t.colorView = t.color.createView(); t.depthView = t.depth.createView();
       pool.push(t);
       // the least recently used sizes go first while the pool holds more than ~200 MB (colour + packed depth, 4 + 4 bytes a texel) or 8 sizes; the one just made and the last used stay
@@ -245,6 +247,27 @@ export function createVolumeGpu({ device, THREE, f16 = false, onTargetFreed = nu
     t.stamp = performance.now(); t.frame = frameNo;
     return t;
   };
+
+  // ---- the two pass targets: the centre / whole-picture pass ('low') and the periphery pass ('peri') each have ONE target, made at the largest size the pass can need and kept (a region that grows or shrinks, in whatever step, only
+  // changes which part of it the pass draws and the composite reads: the viewport / scissors / the composite's uv; nothing is made, destroyed or bound again; the way the WebGL view's offscreen targets are).
+  // slotW x slotH = the largest slot of one eye (px of the pass's scaled image); the target holds two eyes side by side, a slot being at most that wide plus the 2 px gap (stride = slot + 2), so it is (slotW + 2) x 2 wide. It is made larger
+  // only when a pass asks for a slot bigger than any before (the eye's size changed: not expected within a session); the old one goes through onTargetFreed first. Not part of the pool (the pool's limit never lets one of these go).
+  const fixed = new Map();
+  // exact = true (the periphery's target when the foveation setting changes): the target is made again at exactly this size, smaller or larger than the one before (otherwise it only ever grows).
+  const fixedTarget = (name, slotW, slotH, exact = false) => {
+    let t = fixed.get(name);
+    if (t && (exact ? t.slotW === slotW && t.slotH === slotH : t.slotW >= slotW && t.slotH >= slotH)) return t;
+    if (t && !exact) { slotW = Math.max(slotW, t.slotW); slotH = Math.max(slotH, t.slotH); }
+    const W = upTo((slotW + 2) * 2, 64), H = upTo(slotH, 64);
+    const mk = () => device.createTexture({ size: [W, H, 1], format: 'rgba8unorm', usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC });
+    const n = { w: W, h: H, slotW, slotH, color: mk(), depth: mk(), stamp: 0 };
+    n.colorView = n.color.createView(); n.depthView = n.depth.createView();
+    fixed.set(name, n); counts.target++;
+    if (t) { onTargetFreed?.(t); t.color.destroy(); t.depth.destroy(); t.dead = true; }
+    return n;
+  };
+  // a pass without a target (the periphery pass when the setting uses none): the old one goes through onTargetFreed first; a pass that asks again makes it again
+  const dropTarget = name => { const t = fixed.get(name); if (!t) return; fixed.delete(name); onTargetFreed?.(t); t.color.destroy(); t.depth.destroy(); t.dead = true; };
 
   // ---- the uniforms ----
   const put = (fd, v, fArr = uF, iArr = uI) => {
@@ -280,6 +303,7 @@ export function createVolumeGpu({ device, THREE, f16 = false, onTargetFreed = nu
     let g = groups.get(ids)?.g;
     if (!g) {
       if (groups.size > 32) groups.clear();
+      counts.group++;
       g = device.createBindGroup({ layout: bgl, entries: [
         { binding: VOLUME_BINDINGS.uniforms, resource: { buffer: ubufOf(index) } },
         ...[VOLUME_BINDINGS.vol, VOLUME_BINDINGS.cls, VOLUME_BINDINGS.cls4, VOLUME_BINDINGS.skip, VOLUME_BINDINGS.edit, VOLUME_BINDINGS.slice].map((binding, i) => ({ binding, resource: tex[i].createView({ dimension: '3d' }) })),
@@ -320,11 +344,11 @@ export function createVolumeGpu({ device, THREE, f16 = false, onTargetFreed = nu
   // the pass may use the pre-pass when: a display variant without section planes, the jumps are on (their validity of the distance field is the pre-pass's too: distInCls, useCls), the session's probe (diag 5) is not the pass, and the textures it reads are on the GPU
   const proxyUsable = (u, variant, base, overrides) => !variant.events && base.jumpOn === 1 && (u.planeCount?.value | 0) === 0 && (u.diag?.value | 0) !== 5 && (overrides?.diag | 0) !== 5
     && !!gpuOf(u.clsTex?.value) && (!variant.cls4 || !!gpuOf(u.cls4Tex?.value));
-  // the tiles of both eyes side by side: (columns per eye x eyes) x rows; a few sizes over a session (the slot sizes step), the least recently used go first
+  // the tiles of both eyes side by side: (columns per eye x 2 eyes) x rows of the target's largest slot; the least recently used go first
   const pxTexture = (cols, rows) => {
     let t = px.pool.find(x => x.cols === cols && x.rows === rows);
     if (!t) {
-      t = { cols, rows, gpu: device.createTexture({ size: [cols, rows, 1], format: 'r32float', usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING }), stamp: 0, frame: 0 };
+      t = { cols, rows, gpu: device.createTexture({ size: [cols, rows, 1], format: 'r32float', usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING }), stamp: 0, frame: 0 }; counts.tex++;
       px.pool.push(t);
       while (px.pool.length > 6) { const old = px.pool.filter(x => x !== t && x.frame !== frameNo).sort((a, b) => a.stamp - b.stamp)[0]; if (!old) break; px.pool.splice(px.pool.indexOf(old), 1); dropGroups(old.gpu); old.gpu.destroy(); }
     }
@@ -337,6 +361,7 @@ export function createVolumeGpu({ device, THREE, f16 = false, onTargetFreed = nu
     let e = groups.get(key);
     if (!e) {
       if (groups.size > 32) groups.clear();
+      counts.group++;
       e = { ids, g: device.createBindGroup({ layout: pxLayouts().bgl, entries: [
         { binding: PROXY_BINDINGS.params, resource: { buffer: px.ubuf } }, { binding: PROXY_BINDINGS.cls, resource: cls.createView({ dimension: '3d' }) }, { binding: PROXY_BINDINGS.cls4, resource: c4.createView({ dimension: '3d' }) },
         { binding: PROXY_BINDINGS.sampler, resource: linear }, { binding: PROXY_BINDINGS.out, resource: tex.createView() },
@@ -355,7 +380,7 @@ export function createVolumeGpu({ device, THREE, f16 = false, onTargetFreed = nu
     for (const fd of pxLayout.fields) put(fd, fd.name in ex ? ex[fd.name] : u[fd.name]?.value, px.f, px.i);
     px.ubuf ||= device.createBuffer({ size: pxLayout.byteSize, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
     device.queue.writeBuffer(px.ubuf, 0, px.ab);
-    const tex = pxTexture(info.tilesPerEye * n, info.tilesY);
+    const tex = pxTexture(info.texCols ?? info.tilesPerEye * n, info.texRows ?? info.tilesY); // the tiles' texture is made once for the largest slot (texCols x texRows); a smaller slot uses its top-left part
     const pass = enc.beginComputePass(tsw ? { timestampWrites: tsw } : {});
     pass.setPipeline(pxPipe(cls4)); pass.setBindGroup(0, pxGroup(u, cls4, tex));
     pass.dispatchWorkgroups(Math.ceil(info.tilesPerEye * n / PROXY.tile), Math.ceil(info.tilesY / PROXY.tile));
@@ -610,7 +635,8 @@ export function createVolumeGpu({ device, THREE, f16 = false, onTargetFreed = nu
         ] });
       }
       enc.clearBuffer(d.cnt);
-      const cp = enc.beginComputePass(); cp.setPipeline(d.pipe); cp.setBindGroup(0, d.group); cp.dispatchWorkgroups(Math.ceil(W / 8), Math.ceil(H / 8)); cp.end();
+      let cw = 1, ch = 1; for (const e of s.eyes) { cw = Math.max(cw, e.vx + e.vw); ch = Math.max(ch, e.vy + e.vh); } // only the part the passes drew (the scratch targets are the largest size now; both are cleared, so outside it they agree)
+      const cp = enc.beginComputePass(); cp.setPipeline(d.pipe); cp.setBindGroup(0, d.group); cp.dispatchWorkgroups(Math.ceil(Math.min(W, cw) / 8), Math.ceil(Math.min(H, ch) / 8)); cp.end();
       enc.copyBufferToBuffer(d.cnt, 0, d.rb, 0, 4);
       d.busy = true;
     }
@@ -652,13 +678,14 @@ export function createVolumeGpu({ device, THREE, f16 = false, onTargetFreed = nu
   const dispose = () => {
     endBreakdown();
     for (const t of pool) { t.color.destroy(); t.depth.destroy(); }
-    pool.length = 0; boxBuf.destroy(); ubufs.forEach(b => b.destroy());
+    for (const t of fixed.values()) { t.color.destroy(); t.depth.destroy(); }
+    fixed.clear(); pool.length = 0; boxBuf.destroy(); ubufs.forEach(b => b.destroy());
     for (const k of Object.keys(dummies)) dummies[k].destroy();
     for (const t of px.pool) t.gpu.destroy();
     px.pool.length = 0; px.ubuf?.destroy(); proxyDummy?.destroy();
     if (ts) { try { ts.qs.destroy(); ts.resolve.destroy(); ts.slots.forEach(x => x.buf.destroy()); ts.markTex.destroy(); } catch { /* gone */ } }
   };
-  return { device, f16, layout, warm, pipeFor, gpuOf, copySlab, initTexture, getTarget, drawPass, dispose, takeGpuMs, takeFrameStats, onFrameVolMs, markFrame, beginFrame, hasTimer: !!ts, poolSize: () => pool.length,
+  return { counts, device, f16, layout, warm, pipeFor, gpuOf, copySlab, initTexture, getTarget, fixedTarget, dropTarget, drawPass, dispose, takeGpuMs, takeFrameStats, onFrameVolMs, markFrame, beginFrame, hasTimer: !!ts, poolSize: () => pool.length,
     beginBreakdown, endBreakdown, bdActive, bdSnapshot, shadowPass, probeCounters };
 }
 
@@ -738,7 +765,7 @@ export function createComposite({ THREE, halfExt = [1, 1, 1], device }) {
     if (!e) { e = nearestFilter ? mkNear() : mkExt(); e.sourceTexture = gpuTex; exts.set(gpuTex, e); }
     return e;
   };
-  // one frame's parameters: low / peri = { target (getTarget), scale, stride, regs: [[x0, y0, w, h] of the left eye, of the right eye] (px of the scaled image) }. Without regs the region is the whole image (usedW x usedH), as before.
+  // one frame's parameters: low / peri = { target (fixedTarget: one per pass, made once), scale, stride, regs: [[x0, y0, w, h] of the left eye, of the right eye] (px of the scaled image) }. Without regs the region is the whole image (usedW x usedH), as before.
   const regsOf = x => x.regs || [[0, 0, x.usedW, x.usedH], [0, 0, x.usedW, x.usedH]];
   const setRegs = (a, b, regs) => { a.value.set(...regs[0]); b.value.set(...(regs[1] || regs[0])); };
   const update = ({ low, peri = null, fov = false, rects = null, band = 1, decode = false }) => {
@@ -767,25 +794,34 @@ export function createComposite({ THREE, halfExt = [1, 1, 1], device }) {
 // draw(): one frame of the body volume for the cameras of the XR frame. f = the render scale of the centre (1 = the eye's full size, no offscreen reduction), fov / fp = the periphery pass
 // (a second target at scale fp, only the bands around the centre rect), rects = the centre rect per eye in px of the eye image, y up (vr-render-scale.js foveaRect), band = the blend band in px.
 // boxes = the covered rect of the box per eye (eyeMetrics: x0 y0 x1 y1, px of the eye image, y up; the whole image when the box reaches the eye).: a pass draws only that rect (and, for the centre, only its part inside
-// the centre rect) into a target of that size, in steps (bucketSize); without boxes the whole eye image, as before.
+// the centre rect) into a part of the pass's target of that size, in steps (bucketSize); without boxes the whole eye image, as before.: the two targets are made once, at the first draw (both eyes at the largest scale), and a region only changes
+// the part of them that is drawn and read.
 export function createVrVolumeRenderer({ THREE, device, f16 = false, halfExt = [1, 1, 1], onShader = null }) {
   const composite = createComposite({ THREE, halfExt, device });
   const volume = createVolumeGpu({ device, THREE, f16, onShader, onTargetFreed: t => composite.forget(t.color, t.depth) });
   const tmpEye = [{}, {}], tmpPeri = [{}, {}];
   const stats = { w: 0, h: 0, lowW: 0, lowH: 0, regions: null };
   const held = { low: null, peri: null }; // the slot size of each pass (fitSlot keeps it while the need stays near it)
+  const scaleMax = { low: 1, peri: Math.max(...FOVEA_K.filter(k => k < 1)) }; // the largest scale a pass is drawn at (the caller's f is at most 1, the periphery's f x the setting's FOVEA_K below 1): what its target is made for.: the periphery's follows the setting (draw's periK; 0 = the setting has no periphery pass: no target)
+  let periSet = null; // the periphery scale cap the target was made for (null before the first frame)
   const variantOf = u => ({ cls4: !!u.cls4Tex?.value?.isData3DTexture && u.cls4Tex.value.image?.width > 1, events: (u.planeCount?.value | 0) > 0 });
-  let probeBuf = null;
+  let probeBuf = null, periSeen = null;
   const bdLow = { r: null, Wu: 1, Hu: 1, variant: null, ok: false }; // the left eye's drawn region of the last low pass while the breakdown records (eyes' matrices stay in tmpEye[0])
   const bdMat = new THREE.Matrix4();
   const okRect = b => b && Number.isFinite(b.x0) && Number.isFinite(b.y0) && Number.isFinite(b.x1) && Number.isFinite(b.y1);
-  const draw = ({ u, cams, model, f, fov = false, fp = f, rects = null, band = 1, variant = null, decode = false, boxes = null }) => {
+  const draw = ({ u, cams, model, f, fov = false, fp = f, rects = null, band = 1, variant = null, decode = false, boxes = null, periK = null }) => {
     volume.beginFrame();
     const n = Math.min(2, cams.length);
     const v0 = cams[0].viewport, W = Math.max(1, Math.round(v0.z)), H = Math.max(1, Math.round(v0.w));
     const vr = variant || variantOf(u);
     const fovOn = !!(fov && rects);
+    if (periSeen !== null && periSeen !== fovOn) volume.counts.peri++; periSeen = fovOn; // the periphery pass switched on / off
     const wholeEye = [0, 0, W, H];
+    // periK = the foveation setting's FOVEA_K (below 1: the periphery pass's largest scale; 1: no periphery pass, no target); without it (older callers) the largest FOVEA_K below 1. The periphery's target is made again only when this changes (a menu action), never for a hold or a head move.
+    const periCap = periK === null ? Math.max(...FOVEA_K.filter(k => k < 1)) : periK < 1 ? Math.max(0, periK) : 0, periChanged = periSet !== null && periSet !== periCap;
+    periSet = periCap; scaleMax.peri = periCap; if (periChanged) held.peri = null;
+    volume.fixedTarget('low', Math.ceil(W * scaleMax.low), Math.ceil(H * scaleMax.low)); // the targets at the first frame (the pass below only asks again, for the same size)
+    if (periCap > 0) volume.fixedTarget('peri', Math.ceil(W * periCap), Math.ceil(H * periCap), periChanged); else if (periChanged) volume.dropTarget('peri');
     const boxOf = i => (okRect(boxes?.[i]) ? [boxes[i].x0, boxes[i].y0, boxes[i].x1, boxes[i].y1] : wholeEye);
     const rectOf = i => rects[i] || rects[0];
     // one pass: want(i) = the y-up rect of eye i to cover, inner(i) = a y-up rect not drawn (or null), at `scale`
@@ -795,9 +831,10 @@ export function createVrVolumeRenderer({ THREE, device, f16 = false, halfExt = [
       let needW = 1, needH = 1;
       for (let i = 0; i < n; i++) { const r = scaledRegion(want(i), H, scale, Wu, Hu); regions.push(r); needW = Math.max(needW, r.x1 - r.x0); needH = Math.max(needH, r.y1 - r.y0); }
       const slotW = fitSlot(needW, held[name]?.w, Wu), slotH = fitSlot(needH, held[name]?.h, Hu);
+      if (held[name] && (held[name].w !== slotW || held[name].h !== slotH)) volume.counts.slot++; // the slot size changed (only the part of the target that is drawn and read changes; no target is made)
       held[name] = { w: slotW, h: slotH };
       const stride = slotW + 2;
-      const target = volume.getTarget(stride * n, slotH);
+      const target = volume.fixedTarget(name, Math.ceil(W * Math.max(scale, scaleMax[name])), Math.ceil(H * Math.max(scale, scaleMax[name]))); // one target per pass, the largest an eye can need (the pass's scale cap; the slot below is a part of it)
       const tilesPerEye = Math.ceil(slotW / PROXY.tile), tilesY = Math.ceil(slotH / PROXY.tile); // the pre-pass's tiles: eye i's tile columns start at i * tilesPerEye (the slot, not the region, sets them)
       const eyes = [];
       for (let i = 0; i < n; i++) {
@@ -808,7 +845,7 @@ export function createVrVolumeRenderer({ THREE, device, f16 = false, halfExt = [
           pxOrg: [vx - PROXY.tile * i * tilesPerEye, 0] }); // pxOrg: (pixel of the target - pxOrg) / 8 = the pixel's tile in the pre-pass's texture
         regs.push([r.x0, r.y0, rw, rh]);
       }
-      return { target, eyes, scale, stride, regs, usedW: slotW, usedH: slotH, px: { tilesPerEye, tilesY } };
+      return { target, eyes, scale, stride, regs, usedW: slotW, usedH: slotH, px: { tilesPerEye, tilesY, texCols: Math.ceil(target.slotW / PROXY.tile) * 2, texRows: Math.ceil(target.slotH / PROXY.tile) } };
     };
     // the centre (or the whole picture): the box's rect, in the fovea mode only its part inside the centre rect
     const low = pass('low', f, tmpEye, i => (fovOn ? rectsMeet(boxOf(i), rectOf(i)) : boxOf(i)), null, 0);
