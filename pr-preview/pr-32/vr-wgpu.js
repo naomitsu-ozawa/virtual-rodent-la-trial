@@ -2,7 +2,7 @@
 // (the three.js Data3DTexture objects stay the holders of the data, a GPUTexture is made from one on first use and again when its version changes), the volume render pass per eye,
 // the offscreen targets (colour + depth packed in rgba8, both eyes side by side, reduced scale and the periphery target), and the composite material (three.js NodeMaterial, TSL) that
 // puts the offscreen image into the headset's frame with the volume's depth. Plain WebGPU; three.js (the WebGPU build) is passed in.
-import { volumeWgsl, uniformLayout, BOX_VERTICES, VOLUME_BINDINGS } from './vr-wgsl-core.js?v=20261118-build748';
+import { volumeWgsl, uniformLayout, BOX_VERTICES, VOLUME_BINDINGS } from './vr-wgsl-core.js?v=20261119-build749';
 
 export const VRGPU_STORE_KEY = 'vrl-vr-gpu';
 // the choice of the page's 「WebGPUで開く」 button (kept per browser; no URL parameter: the public build's gate takes no unknown URL keys). Default: the WebGL view.
@@ -143,16 +143,24 @@ export function createVolumeGpu({ device, THREE, f16 = false, onTargetFreed = nu
   const nearest = device.createSampler({ magFilter: 'nearest', minFilter: 'nearest', addressModeU: 'clamp-to-edge', addressModeV: 'clamp-to-edge', addressModeW: 'clamp-to-edge' });
   const boxBuf = device.createBuffer({ size: BOX_VERTICES.byteLength, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
   device.queue.writeBuffer(boxBuf, 0, BOX_VERTICES);
-  const ubufs = [0, 1, 2, 3].map(() => device.createBuffer({ size: layout.byteSize, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST }));
+  const mkUbuf = () => device.createBuffer({ size: layout.byteSize, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+  const ubufs = [0, 1, 2, 3].map(mkUbuf);
+  const ubufOf = i => ubufs[i] || (ubufs[i] = mkUbuf()); // frames 4..6 (the breakdown's shadow passes and counting probe) are made on first use
   const uAb = new ArrayBuffer(layout.byteSize), uF = new Float32Array(uAb), uI = new Int32Array(uAb);
   const pipes = new Map(), pipePending = new Map();
   const makeModule = v => { const m = device.createShaderModule({ code: volumeWgsl({ f16, ...v }) }); try { onShader?.(m, { f16, ...v }); } catch { /* diagnostics only */ } return m; }; // onShader: the session's diagnostics read the compiler's messages
+  let pipeLayoutCnt = null, bglCnt = null; // the counting variants (abl / counters of the performance record's breakdown) have a second bind group: the storage buffer the counts go to
+  const cntLayouts = () => {
+    bglCnt ||= device.createBindGroupLayout({ entries: [{ binding: 0, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'storage' } }] });
+    pipeLayoutCnt ||= device.createPipelineLayout({ bindGroupLayouts: [bgl, bglCnt] });
+    return { bglCnt, pipeLayoutCnt };
+  };
   const pipeDesc = v => {
     const module = makeModule(v);
-    return { layout: pipeLayout, vertex: { module, entryPoint: 'vs', buffers: [{ arrayStride: 12, attributes: [{ shaderLocation: 0, offset: 0, format: 'float32x3' }] }] },
+    return { layout: v.counters ? cntLayouts().pipeLayoutCnt : pipeLayout, vertex: { module, entryPoint: 'vs', buffers: [{ arrayStride: 12, attributes: [{ shaderLocation: 0, offset: 0, format: 'float32x3' }] }] },
       fragment: { module, entryPoint: 'fs', targets: [{ format: 'rgba8unorm' }, { format: 'rgba8unorm' }] }, primitive: { topology: 'triangle-list', cullMode: 'front', frontFace: 'ccw' } };
   };
-  const vkey = v => (v.cls4 ? 'c4' : 'c3') + (v.events ? 'e' : 'n');
+  const vkey = v => (v.cls4 ? 'c4' : 'c3') + (v.events ? 'e' : 'n') + (v.abl ? '-' + v.abl : '') + (v.counters ? '-cnt' : '');
   // compiled ahead (the session start waits for these): the four variants a session can ask for (four stored segments x a section on or off)
   const warm = async (variants = [{ cls4: false, events: false }, { cls4: false, events: true }]) => {
     await Promise.all(variants.map(async v => { const k = vkey(v); if (!pipes.has(k)) { const p = await device.createRenderPipelineAsync(pipeDesc(v)); pipes.set(k, p); } }));
@@ -241,11 +249,16 @@ export function createVolumeGpu({ device, THREE, f16 = false, onTargetFreed = nu
     else if (fd.n === 16) { const m = v.elements || v; for (let i = 0; i < 16; i++) F[at + i] = m[i]; }
     else { F[at] = v.x ?? v[0] ?? 0; F[at + 1] = v.y ?? v[1] ?? 0; if (fd.n > 2) F[at + 2] = v.z ?? v[2] ?? 0; if (fd.n > 3) F[at + 3] = v.w ?? v[3] ?? 0; }
   };
-  const packUniforms = (u, extra, index) => {
+  const fillUniforms = (u, extra) => {
     uF.fill(0);
     for (const fd of layout.fields) put(fd, fd.name in extra ? extra[fd.name] : u[fd.name]?.value);
-    device.queue.writeBuffer(ubufs[index], 0, uAb);
   };
+  const packUniforms = (u, extra, index) => {
+    fillUniforms(u, extra);
+    device.queue.writeBuffer(ubufOf(index), 0, uAb);
+  };
+  // the values of the uniforms every volume pass of the session gets besides the eye's matrices (the jump and skip switches follow the diagnostics); `overrides` of a pass go over them
+  const passExtra = u => ({ jumpOn: (u.distInCls?.value > 0 && u.useCls?.value > 0 && (u.diag?.value | 0) !== 4) ? 1 : 0, useSkip: (u.diag?.value | 0) === 4 ? 0 : u.useSkip?.value | 0 });
 
   // the bind group of the textures in use (rebuilt when one of them is another GPUTexture)
   const groups = new Map();
@@ -258,7 +271,7 @@ export function createVolumeGpu({ device, THREE, f16 = false, onTargetFreed = nu
     if (!g) {
       if (groups.size > 32) groups.clear();
       g = device.createBindGroup({ layout: bgl, entries: [
-        { binding: VOLUME_BINDINGS.uniforms, resource: { buffer: ubufs[index] } },
+        { binding: VOLUME_BINDINGS.uniforms, resource: { buffer: ubufOf(index) } },
         ...[VOLUME_BINDINGS.vol, VOLUME_BINDINGS.cls, VOLUME_BINDINGS.cls4, VOLUME_BINDINGS.skip, VOLUME_BINDINGS.edit, VOLUME_BINDINGS.slice].map((binding, i) => ({ binding, resource: tex[i].createView({ dimension: '3d' }) })),
         { binding: VOLUME_BINDINGS.sampler, resource: linear }, { binding: VOLUME_BINDINGS.samplerEdit, resource: editNearest ? nearest : linear },
       ] });
@@ -281,7 +294,7 @@ export function createVolumeGpu({ device, THREE, f16 = false, onTargetFreed = nu
     markTex: device.createTexture({ size: [1, 1, 1], format: 'rgba8unorm', usage: GPUTextureUsage.RENDER_ATTACHMENT }),
     seq: 0, cur: null, q: [], prev: null, gaps: [], spans: [],
   } : null;
-  const newRec = () => ({ id: ++ts.seq, pend: 0, vols: 0, b: null, e: null, bad: false, closed: false, vpend: 0, vms: 0, vbad: false, vcb: null }); // one XR frame: b = first start, e = last end (BigInt ticks, ns), pend = readbacks still to come
+  const newRec = () => ({ id: ++ts.seq, pend: 0, vols: 0, b: null, e: null, bad: false, closed: false, vpend: 0, vms: 0, vbad: false, vcb: null, lowMs: null, pairs: null, shadowed: false }); // one XR frame: b = first start, e = last end (BigInt ticks, ns), pend = readbacks still to come
   if (ts) ts.cur = newRec();
   // the frames whose readbacks are all in, oldest first: a frame with every timestamp valid gives its span; its gap needs the frame before it to be valid too
   const finishFrames = () => {
@@ -291,7 +304,7 @@ export function createVolumeGpu({ device, THREE, f16 = false, onTargetFreed = nu
       const span = Number(r.e - r.b) / 1e6;
       if (!(span < 1000)) { ts.prev = null; continue; }
       ts.spans.push(span);
-      if (ts.prev && ts.prev.id === r.id - 1) { const g = Number(r.b - ts.prev.e) / 1e6; if (g > -5 && g < 1000) ts.gaps.push(g); }
+      if (ts.prev && ts.prev.id === r.id - 1 && !ts.prev.shadowed) { const g = Number(r.b - ts.prev.e) / 1e6; if (g > -5 && g < 1000) ts.gaps.push(g); }
       ts.prev = r;
     }
   };
@@ -314,55 +327,189 @@ export function createVolumeGpu({ device, THREE, f16 = false, onTargetFreed = nu
   const takeFrameStats = () => { if (!ts || !(ts.spans.length || ts.gaps.length)) return null; const r = { gaps: ts.gaps, spans: ts.spans }; ts.gaps = []; ts.spans = []; return r; };
   // the end of this XR frame's GPU work (call after the frame's last submit, three.js' main render included): closes the frame record with a marker pass. No volume pass in the frame (nothing drawn) = no sample.
   const markFrame = () => {
-    if (!ts) return;
+    if (!ts) return null;
     const rec = ts.cur; ts.cur = newRec();
     ts.q.push(rec); if (ts.q.length > 16) { ts.q.shift(); ts.prev = null; }
     const slot = rec.vols > 0 ? ts.slots.findIndex(x => !x.busy) : -1;
-    if (slot < 0) { if (rec.vols > 0) rec.bad = true; rec.closed = true; finishFrames(); return; }
+    if (slot < 0) { if (rec.vols > 0) rec.bad = true; rec.closed = true; finishFrames(); return rec; }
     const enc = device.createCommandEncoder();
     enc.beginRenderPass({ timestampWrites: { querySet: ts.qs, beginningOfPassWriteIndex: 2 * slot, endOfPassWriteIndex: 2 * slot + 1 }, colorAttachments: [{ view: ts.markTex.createView(), loadOp: 'clear', storeOp: 'discard', clearValue: { r: 0, g: 0, b: 0, a: 0 } }] }).end();
     enc.resolveQuerySet(ts.qs, 2 * slot, 2, ts.resolve, 256 * slot); enc.copyBufferToBuffer(ts.resolve, 256 * slot, ts.slots[slot].buf, 0, 16);
     ts.slots[slot].busy = true; rec.pend++; rec.closed = true;
     device.queue.submit([enc.finish()]);
     readSlot(slot, rec, true, null);
+    return rec; // the record this call closed (the breakdown's shadow pass is paired with it)
   };
   // one render pass into a target: every eye's viewport (vx, vy, vw, vh in target px; x, y, w, h when absent) with its own uniforms, drawn once per scissor rect (e.scissors, else x, y, w, h).
-  // eyes[i] = { x, y, w, h, vx, vy, vw, vh, scissors, mvp, origin, lightOff }; variant = { cls4, events }
-  const drawPass = (target, eyes, u, variant, slot0, overrides = null, readback = null) => {
+  // eyes[i] = { x, y, w, h, vx, vy, vw, vh, scissors, mvp, origin, lightOff }; variant = { cls4, events }; overrides = uniform values that replace the session's (a diagnostic pass).
+  // o (optional, the performance record's breakdown only): timed = whether the pass takes a timestamp slot of the frame record (default: not when it has overrides, as before),
+  // pipeline = a pipeline of its own, tsw = timestampWrites of its own, group1 = a second bind group, before(enc) / after(enc) = commands encoded before / after the pass.
+  const drawPass = (target, eyes, u, variant, slot0, overrides = null, readback = null, o = null) => {
+    const timed = o?.timed ?? !overrides;
     const enc = device.createCommandEncoder();
-    const slot = ts && !overrides ? ts.slots.findIndex(x => !x.busy) : -1; // the probe (overrides) and a pass with no free slot are not timed
-    const rec = ts && !overrides ? ts.cur : null; // the frame this pass belongs to (a pass that is not timed makes the frame's span / gap unusable)
+    const slot = ts && timed ? ts.slots.findIndex(x => !x.busy) : -1; // the probe (overrides) and a pass with no free slot are not timed
+    const rec = ts && timed ? ts.cur : null; // the frame this pass belongs to (a pass that is not timed makes the frame's span / gap unusable)
     if (rec && slot < 0) rec.bad = true;
-    const pass = enc.beginRenderPass({ ...(slot >= 0 ? { timestampWrites: { querySet: ts.qs, beginningOfPassWriteIndex: 2 * slot, endOfPassWriteIndex: 2 * slot + 1 } } : {}), colorAttachments: [
+    o?.before?.(enc);
+    const tsw = o?.tsw ?? (slot >= 0 ? { querySet: ts.qs, beginningOfPassWriteIndex: 2 * slot, endOfPassWriteIndex: 2 * slot + 1 } : null);
+    const pass = enc.beginRenderPass({ ...(tsw ? { timestampWrites: tsw } : {}), colorAttachments: [
       { view: target.colorView, loadOp: 'clear', storeOp: 'store', clearValue: { r: 0, g: 0, b: 0, a: 0 } },
       { view: target.depthView, loadOp: 'clear', storeOp: 'store', clearValue: { r: 0, g: 0, b: 0, a: 0 } },
     ] });
-    pass.setPipeline(pipeFor(variant));
+    pass.setPipeline(o?.pipeline ?? pipeFor(variant));
     pass.setVertexBuffer(0, boxBuf);
-    const jumpOn = (u.distInCls?.value > 0 && u.useCls?.value > 0 && (u.diag?.value | 0) !== 4) ? 1 : 0;
+    if (o?.group1) pass.setBindGroup(1, o.group1);
+    const base = passExtra(u);
     eyes.forEach((e, i) => {
-      packUniforms(u, { mvp: e.mvp, origin: e.origin, lightOff: e.lightOff, jumpOn, useSkip: (u.diag?.value | 0) === 4 ? 0 : u.useSkip?.value | 0, ...overrides }, slot0 + i);
+      packUniforms(u, { mvp: e.mvp, origin: e.origin, lightOff: e.lightOff, ...base, ...overrides }, slot0 + i);
       pass.setBindGroup(0, bindGroup(slot0 + i, u));
       pass.setViewport(e.vx ?? e.x, e.vy ?? e.y, e.vw ?? e.w, e.vh ?? e.h, 0, 1);
       for (const sc of e.scissors || [[e.x, e.y, e.w, e.h]]) { pass.setScissorRect(sc[0], sc[1], sc[2], sc[3]); pass.draw(36); } // e.scissors: several rects (the periphery's bands), each inside the target
     });
     pass.end();
     if (readback) enc.copyTextureToBuffer({ texture: target.color }, { buffer: readback.buffer, bytesPerRow: readback.bytesPerRow }, [readback.w, readback.h, 1]);
+    o?.after?.(enc);
     if (slot >= 0) { enc.resolveQuerySet(ts.qs, 2 * slot, 2, ts.resolve, 256 * slot); enc.copyBufferToBuffer(ts.resolve, 256 * slot, ts.slots[slot].buf, 0, 16); ts.slots[slot].busy = true; rec.pend++; rec.vols++; rec.vpend++; } // (a query resolve lands on a 256-byte offset)
     device.queue.submit([enc.finish()]);
     if (slot >= 0) {
       const isLow = slot0 === 0;
-      readSlot(slot, rec, false, ms => { if (ms >= 0 && ms < 1000) { ts.sumMs += ms; rec.vms += ms; if (isLow) ts.count++; } else rec.vbad = true; volDone(rec); });
+      readSlot(slot, rec, false, ms => { if (ms >= 0 && ms < 1000) { ts.sumMs += ms; rec.vms += ms; if (isLow) { ts.count++; rec.lowMs = ms; lowDone(rec); } } else { rec.vbad = true; if (isLow) { rec.lowMs = -1; lowDone(rec); } } volDone(rec); });
     }
   };
 
+  // ---- the volume breakdown (performance record only; nothing here exists until beginBreakdown, the button of the detail tab) ----
+  // Method A, shadow passes: after a frame's marker pass (markFrame) one more pass draws the frame's low pass again, the same eyes, regions and scissors, with the eye uniforms the low pass had, into scratch targets that
+  // are never shown; its variant takes a step out (abl: another program text; overrides: another uniform value). Its GPU ms comes from a query set of its own and is paired with the same frame's low pass ms (rec.lowMs):
+  // the callback gets (name, shadowMs, lowMs). The shadow ms is not added to sumMs / rec.vms / rec.vols / rec.vpend (the vol column and the frame's span are the session's own). The frame after a shadow pass has no gap sample.
+  // Method B, the counting probe: a 64 x 64 pass of the counting variant (counters) writes eight u32 per pixel into a storage buffer that is read back, one probe at a time (probeCounters).
+  const BD_SLOTS = 4, BD_PROBE = 64, BD_PROBE_BYTES = BD_PROBE * BD_PROBE * 8 * 4;
+  let bd = null;
+  const finPair = p => {
+    if (p.done || p.shadow === null || p.low === null) return;
+    p.done = true;
+    if (p.shadow >= 0 && p.low > 0) { try { p.cb?.(p.name, p.shadow, p.low); } catch { /* the page's callback */ } }
+  };
+  const lowDone = rec => { if (!rec.pairs) return; for (const p of rec.pairs) { p.low = rec.lowMs; finPair(p); } };
+  // variant = the display variant in use ({cls4, events}): the abl variants and the counting variant of it are compiled now (async). Resolves { shadow, probe, failed: [text, ...] }; a variant that fails to compile is left out and listed.
+  const beginBreakdown = async (variant, onShadow) => {
+    endBreakdown();
+    const b = bd = { variant: { cls4: !!variant.cls4, events: !!variant.events }, onShadow, pipes: new Map(), snap: { rec: null, target: null, variant: null, eyes: [], ab: [new Int32Array(layout.byteSize / 4), new Int32Array(layout.byteSize / 4)], bg: [null, null] }, tgt: null, shadowOk: !!ts, probeOk: false, probe: null, qs: null, resolve: null, slots: [], tmp: new Int32Array(layout.byteSize / 4), failed: [] };
+    if (ts) {
+      b.qs = device.createQuerySet({ type: 'timestamp', count: 2 * BD_SLOTS });
+      b.resolve = device.createBuffer({ size: 256 * BD_SLOTS, usage: GPUBufferUsage.QUERY_RESOLVE | GPUBufferUsage.COPY_SRC });
+      b.slots = Array.from({ length: BD_SLOTS }, () => ({ buf: device.createBuffer({ size: 16, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ }), busy: false }));
+    }
+    const jobs = ['grad', 'refine', 'shade'].map(abl => ({ v: { ...b.variant, abl }, what: 'abl ' + abl })).concat([{ v: { ...b.variant, counters: true }, what: 'counters' }]);
+    await Promise.all(jobs.map(async j => {
+      try { const p = await device.createRenderPipelineAsync(pipeDesc(j.v)); if (bd === b) b.pipes.set(vkey(j.v), p); }
+      catch (e) { b.failed.push(j.what + ': ' + String(e?.message ?? e).slice(0, 160)); }
+    }));
+    if (bd !== b) return null; // ended while compiling
+    if (b.pipes.has(vkey({ ...b.variant, counters: true }))) {
+      const mk = () => device.createTexture({ size: [BD_PROBE, BD_PROBE, 1], format: 'rgba8unorm', usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC });
+      const t = { w: BD_PROBE, h: BD_PROBE, color: mk(), depth: mk() }; t.colorView = t.color.createView(); t.depthView = t.depth.createView();
+      const cnt = device.createBuffer({ size: BD_PROBE_BYTES, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST });
+      b.probe = { target: t, cnt, rb: device.createBuffer({ size: BD_PROBE_BYTES, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ }), busy: false,
+        group: device.createBindGroup({ layout: cntLayouts().bglCnt, entries: [{ binding: 0, resource: { buffer: cnt } }] }) };
+      b.probeOk = true;
+    }
+    return { shadow: b.shadowOk && ['grad', 'refine', 'shade'].every(a => b.pipes.has(vkey({ ...b.variant, abl: a }))), probe: b.probeOk, failed: b.failed.slice() };
+  };
+  function endBreakdown() {
+    const b = bd; if (!b) return; bd = null;
+    const kill = x => { try { x?.destroy(); } catch { /* gone */ } };
+    kill(b.qs); kill(b.resolve); b.slots.forEach(x => kill(x.buf)); kill(b.tgt?.color); kill(b.tgt?.depth);
+    if (b.probe) { kill(b.probe.target.color); kill(b.probe.target.depth); kill(b.probe.cnt); kill(b.probe.rb); }
+    for (const i of [4, 5, 6]) { kill(ubufs[i]); ubufs[i] = undefined; for (const k of [...groups.keys()]) if (k.endsWith(':' + i)) groups.delete(k); } // the bind groups made on those buffers go with them (a second recording must not bind a destroyed buffer)
+    ubufs.length = Math.min(ubufs.length, 4);
+    bglCnt = null; pipeLayoutCnt = null; // (layouts and pipelines have no destroy: they are let go for the garbage collector)
+  }
+  const bdActive = () => !!bd;
+  // after the low pass of the frame (same frame, before markFrame): what the shadow pass needs of it (geometry, the packed uniforms of each eye as the low pass had them, the textures' bind groups)
+  const bdSnapshot = (target, eyes, u, variant) => {
+    const b = bd; if (!b || !ts) return;
+    const s = b.snap, base = passExtra(u);
+    s.rec = ts.cur; s.target = target; s.variant = variant; s.eyes.length = 0;
+    eyes.forEach((e, i) => {
+      if (i > 1) return;
+      s.eyes.push({ x: e.x, y: e.y, w: e.w, h: e.h, vx: e.vx ?? e.x, vy: e.vy ?? e.y, vw: e.vw ?? e.w, vh: e.vh ?? e.h, scissors: (e.scissors || [[e.x, e.y, e.w, e.h]]).map(c => c.slice()) });
+      fillUniforms(u, { mvp: e.mvp, origin: e.origin, lightOff: e.lightOff, ...base });
+      s.ab[i].set(uI); s.bg[i] = bindGroup(4 + i, u);
+    });
+  };
+  // one shadow pass for the record closed by markFrame; spec = { name, abl, overrides }. true = submitted; false = not now (no timer slot free, no snapshot of this frame: try again later);
+  // null = this variant has no program for the display variant in use (its compile failed, or the display variant changed since the recording began: it will not come back, the caller steps past it)
+  const shadowPass = (rec, spec) => {
+    const b = bd, s = b?.snap;
+    if (!b || !b.shadowOk || !rec || s.rec !== rec || rec.vols === 0 || !s.target || !s.eyes.length) return false;
+    const pipeline = spec.abl ? b.pipes.get(vkey({ ...s.variant, abl: spec.abl })) : pipes.get(vkey(s.variant)); // never compiled here: a variant the display changed to meanwhile is skipped
+    if (!pipeline) return null;
+    const sl = b.slots.findIndex(x => !x.busy);
+    if (sl < 0) return false;
+    const W = s.target.w, H = s.target.h; // scratch targets of exactly the low target's size (another size would change the clear / store work)
+    if (!b.tgt || b.tgt.w !== W || b.tgt.h !== H) {
+      if (b.tgt) { b.tgt.color.destroy(); b.tgt.depth.destroy(); }
+      const mk = () => device.createTexture({ size: [W, H, 1], format: 'rgba8unorm', usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC });
+      b.tgt = { w: W, h: H, color: mk(), depth: mk() }; b.tgt.colorView = b.tgt.color.createView(); b.tgt.depthView = b.tgt.depth.createView();
+    }
+    const enc = device.createCommandEncoder();
+    const pass = enc.beginRenderPass({ timestampWrites: { querySet: b.qs, beginningOfPassWriteIndex: 2 * sl, endOfPassWriteIndex: 2 * sl + 1 }, colorAttachments: [
+      { view: b.tgt.colorView, loadOp: 'clear', storeOp: 'store', clearValue: { r: 0, g: 0, b: 0, a: 0 } },
+      { view: b.tgt.depthView, loadOp: 'clear', storeOp: 'store', clearValue: { r: 0, g: 0, b: 0, a: 0 } },
+    ] });
+    pass.setPipeline(pipeline);
+    pass.setVertexBuffer(0, boxBuf);
+    s.eyes.forEach((e, i) => {
+      b.tmp.set(s.ab[i]);
+      for (const [k, v] of Object.entries(spec.overrides || {})) { const fd = layout.fields.find(f => f.name === k); if (fd) b.tmp[fd.offset / 4] = v | 0; }
+      device.queue.writeBuffer(ubufOf(4 + i), 0, b.tmp);
+      pass.setBindGroup(0, s.bg[i]);
+      pass.setViewport(e.vx, e.vy, e.vw, e.vh, 0, 1);
+      for (const sc of e.scissors) { pass.setScissorRect(sc[0], sc[1], sc[2], sc[3]); pass.draw(36); }
+    });
+    pass.end();
+    enc.resolveQuerySet(b.qs, 2 * sl, 2, b.resolve, 256 * sl); enc.copyBufferToBuffer(b.resolve, 256 * sl, b.slots[sl].buf, 0, 16);
+    b.slots[sl].busy = true;
+    device.queue.submit([enc.finish()]);
+    rec.shadowed = true;
+    const p = { name: spec.name, shadow: null, low: rec.lowMs, done: false, cb: b.onShadow };
+    (rec.pairs ||= []).push(p);
+    const slot = b.slots[sl];
+    slot.buf.mapAsync(GPUMapMode.READ).then(() => {
+      const a = new BigUint64Array(slot.buf.getMappedRange().slice(0)); slot.buf.unmap(); slot.busy = false;
+      const ms = Number(a[1] - a[0]) / 1e6;
+      p.shadow = a[0] !== 0n && a[1] >= a[0] && ms < 1000 ? ms : -1;
+      finPair(p);
+    }).catch(() => { slot.busy = false; p.shadow = -1; finPair(p); });
+    if (p.low !== null) finPair(p);
+    return true;
+  };
+  // the counting probe: eye = { mvp, origin, lightOff } of the 64 x 64 window (the caller made the matrix); resolves the Uint32Array (64 x 64 x 8: COUNTER_FIELDS per pixel, 0 where nothing was covered) or null
+  const probeCounters = async (u, eye, variant, rec = null) => { // rec = the frame record just closed (markFrame): the frame after it has no gap sample, as after a shadow pass
+    const b = bd, pr = b?.probe;
+    if (!pr || pr.busy) return null;
+    const pipeline = b.pipes.get(vkey({ ...b.variant, counters: true }));
+    if (!pipeline || vkey(variant) !== vkey(b.variant)) return null;
+    pr.busy = true;
+    try {
+      if (rec) rec.shadowed = true;
+      drawPass(pr.target, [{ x: 0, y: 0, w: BD_PROBE, h: BD_PROBE, mvp: eye.mvp, origin: eye.origin, lightOff: eye.lightOff }], u, variant, 6, null, null,
+        { timed: false, pipeline, group1: pr.group, before: enc => enc.clearBuffer(pr.cnt), after: enc => enc.copyBufferToBuffer(pr.cnt, 0, pr.rb, 0, BD_PROBE_BYTES) });
+      await pr.rb.mapAsync(GPUMapMode.READ);
+      const out = new Uint32Array(pr.rb.getMappedRange().slice(0)); pr.rb.unmap();
+      return out;
+    } finally { pr.busy = false; }
+  };
+
   const dispose = () => {
+    endBreakdown();
     for (const t of pool) { t.color.destroy(); t.depth.destroy(); }
     pool.length = 0; boxBuf.destroy(); ubufs.forEach(b => b.destroy());
     for (const k of Object.keys(dummies)) dummies[k].destroy();
     if (ts) { try { ts.qs.destroy(); ts.resolve.destroy(); ts.slots.forEach(x => x.buf.destroy()); ts.markTex.destroy(); } catch { /* gone */ } }
   };
-  return { device, f16, layout, warm, pipeFor, gpuOf, copySlab, initTexture, getTarget, drawPass, dispose, takeGpuMs, takeFrameStats, onFrameVolMs, markFrame, beginFrame, hasTimer: !!ts, poolSize: () => pool.length };
+  return { device, f16, layout, warm, pipeFor, gpuOf, copySlab, initTexture, getTarget, drawPass, dispose, takeGpuMs, takeFrameStats, onFrameVolMs, markFrame, beginFrame, hasTimer: !!ts, poolSize: () => pool.length,
+    beginBreakdown, endBreakdown, bdActive, bdSnapshot, shadowPass, probeCounters };
 }
 
 // ---- the per-eye matrices of one volume pass: mvp = projection * view * model; origin = the eye in the volume's object space; lightOff = the shared headlight (lighting.js) in object space ----
@@ -479,6 +626,8 @@ export function createVrVolumeRenderer({ THREE, device, f16 = false, halfExt = [
   const held = { low: null, peri: null }; // the slot size of each pass (fitSlot keeps it while the need stays near it)
   const variantOf = u => ({ cls4: !!u.cls4Tex?.value?.isData3DTexture && u.cls4Tex.value.image?.width > 1, events: (u.planeCount?.value | 0) > 0 });
   let probeBuf = null;
+  const bdLow = { r: null, Wu: 1, Hu: 1, variant: null, ok: false }; // the left eye's drawn region of the last low pass while the breakdown records (eyes' matrices stay in tmpEye[0])
+  const bdMat = new THREE.Matrix4();
   const okRect = b => b && Number.isFinite(b.x0) && Number.isFinite(b.y0) && Number.isFinite(b.x1) && Number.isFinite(b.y1);
   const draw = ({ u, cams, model, f, fov = false, fp = f, rects = null, band = 1, variant = null, decode = false, boxes = null }) => {
     volume.beginFrame();
@@ -512,6 +661,10 @@ export function createVrVolumeRenderer({ THREE, device, f16 = false, halfExt = [
     // the centre (or the whole picture): the box's rect, in the fovea mode only its part inside the centre rect
     const low = pass('low', f, tmpEye, i => (fovOn ? rectsMeet(boxOf(i), rectOf(i)) : boxOf(i)), null, 0);
     volume.drawPass(low.target, low.eyes, u, vr, 0);
+    if (volume.bdActive()) { // the performance record's breakdown is recording: what its shadow pass and its native-pitch probe need of this frame's low pass
+      try { volume.bdSnapshot(low.target, low.eyes, u, vr); } catch (e) { console.warn('WebGPU breakdown snapshot:', e); } // never lets the frame's drawing throw
+      bdLow.r = low.regs[0]; bdLow.Wu = Math.max(1, Math.ceil(W * f)); bdLow.Hu = Math.max(1, Math.ceil(H * f)); bdLow.variant = vr; bdLow.ok = n > 0;
+    }
     let peri = null;
     if (fovOn) { // the periphery: the box's rect at the lower scale, only outside the centre rect shrunk by the blend band (what the composite reads from it) and the bilinear margin
       peri = pass('peri', fp, tmpPeri, boxOf, i => rectOf(i), band + Math.ceil(2 / Math.max(fp, 0.05)) + 1);
@@ -538,13 +691,33 @@ export function createVrVolumeRenderer({ THREE, device, f16 = false, halfExt = [
       return out;
     } finally { probeBuf.busy = false; }
   };
+  // the performance record's breakdown (see createVolumeGpu): begin(variant, onShadow) before, shadow(rec, spec) / probe(u, kind) while it records, end() after.
+  // probe windows (left eye, 64 x 64 px): 'whole' = the eye's whole image shrunk into the window (the distribution of the work), 'native' = the centre of the region the low pass drew, at the pass's own pixel pitch (how the heavy pixels lie together)
+  const breakdown = {
+    begin: (variant, onShadow) => volume.beginBreakdown(variant, onShadow),
+    end: () => volume.endBreakdown(),
+    shadow: (rec, spec) => volume.shadowPass(rec, spec),
+    probe: async (u, kind, rec = null) => {
+      if (!bdLow.ok || !bdLow.variant) return null;
+      const e0 = tmpEye[0];
+      if (!e0.mvp || !e0.origin) return null;
+      let mvp = e0.mvp;
+      if (kind === 'native') {
+        const r = bdLow.r; if (!r) return null;
+        const wx0 = Math.max(0, Math.min(Math.max(0, bdLow.Wu - 64), Math.floor(r[0] + (r[2] - 64) / 2))), wy0 = Math.max(0, Math.min(Math.max(0, bdLow.Hu - 64), Math.floor(r[1] + (r[3] - 64) / 2)));
+        mvp = regionMvp(bdMat, e0.mvp, regionClip({ x0: wx0, y0: wy0, x1: wx0 + 64, y1: wy0 + 64 }, bdLow.Wu, bdLow.Hu));
+      }
+      const counters = await volume.probeCounters(u, { mvp, origin: e0.origin, lightOff: e0.lightOff }, bdLow.variant, rec);
+      return counters ? { kind, counters, w: 64, h: 64 } : null;
+    },
+  };
   // every texture the uniforms point at goes to the GPU now (not on the first drawn frame); the programs are made too
   const preload = async (u, variants) => {
     for (const k of ['vol', 'clsTex', 'cls4Tex', 'skipTex', 'editTex', 'sliceVol']) volume.gpuOf(u[k]?.value);
     await volume.warm(variants);
   };
   const dispose = () => { composite.dispose(); volume.dispose(); try { probeBuf?.buffer.destroy(); } catch { /* gone */ } };
-  return { volume, composite, draw, probe, preload, dispose, material: composite.material, stats };
+  return { volume, composite, draw, probe, preload, dispose, breakdown, material: composite.material, stats };
 }
 
 // ---- the WebGPU session's diagnostic record (the trial: what happened in a session the headset showed black) ----
@@ -702,7 +875,7 @@ export function startGxHeartbeat({ session, diag, state, now = () => performance
 }
 // the compiler's messages of one WGSL module into the record (errors and warnings, the first few), keyed by its variant
 export function gxShaderInfo(diag, module, v) {
-  const key = 'wgsl ' + (v.f16 ? 'f16 ' : '') + (v.cls4 ? 'c4' : 'c3') + (v.events ? 'e' : 'n');
+  const key = 'wgsl ' + (v.f16 ? 'f16 ' : '') + (v.cls4 ? 'c4' : 'c3') + (v.events ? 'e' : 'n') + (v.abl ? ' abl-' + v.abl : '') + (v.counters ? ' counters' : ''); // the breakdown's variants have keys of their own (they must not replace the display variant's entry)
   const p = module?.getCompilationInfo?.();
   if (!p?.then) { diag.value(key, 'no getCompilationInfo'); return; }
   p.then(info => {

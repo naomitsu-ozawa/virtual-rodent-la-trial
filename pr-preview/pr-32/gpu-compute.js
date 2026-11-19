@@ -1,17 +1,17 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { installGpuLedger } from './mem-ledger.js?v=20261118-build748';
-import { gpuSplitCandidate, gpuSplitDecision, gpuVendorKey, gpuAdapterVendorKey, gpuSplitStatusParts, gpuHybridStatusText, gpuStatusDetailed, webglDisplayGpu } from './gpu-split.js?v=20261118-build748';
-import { gpuPlatformOs, gpuEffectivePreference, gpuPreferenceSupported, gpuAdapterRequestOptions, gpuPreferenceInfoText, gpuEffectiveHybridMode } from './gpu-preference.js?v=20261118-build748';
-import { setGpuPrewarmIndex, setGpuPrewarmScheduled, sceneState } from './state.js?v=20261118-build748';
+import { installGpuLedger } from './mem-ledger.js?v=20261119-build749';
+import { gpuSplitCandidate, gpuSplitDecision, gpuVendorKey, gpuAdapterVendorKey, gpuSplitStatusParts, gpuHybridStatusText, gpuStatusDetailed, webglDisplayGpu } from './gpu-split.js?v=20261119-build749';
+import { gpuPlatformOs, gpuEffectivePreference, gpuPreferenceSupported, gpuAdapterRequestOptions, gpuPreferenceInfoText, gpuEffectiveHybridMode } from './gpu-preference.js?v=20261119-build749';
+import { setGpuPrewarmIndex, setGpuPrewarmScheduled, sceneState } from './state.js?v=20261119-build749';
 import * as THREE from './vendor/three@0.187.0/build/three.webgpu.js';
-import { normalizeVrlWgsl, gpuFilterShader, GPU_PREWARM_KINDS, gaussianPassKernel, AIRDIST_X_MAX_N } from './gpu-shaders.js?v=20261118-build748';
-import { spacingParams, spacingRatios, bilateralRadii, nlmRadii, unsharpAxes } from './filter-units.js?v=20261118-build748';
-import { isDesktopRuntime, frameYield } from './utils.js?v=20261118-build748';
-import { runsSliceToMask } from './run-length.js?v=20261118-build748';
-import { status } from './ui-shell.js?v=20261118-build748';
-import { updateLinuxWebgpuNote } from './linux-webgpu-note.js?v=20261118-build748';
-import { logGpuError } from './gpu-diagnostics.js?v=20261118-build748';
+import { normalizeVrlWgsl, gpuFilterShader, GPU_PREWARM_KINDS, gaussianPassKernel, AIRDIST_X_MAX_N } from './gpu-shaders.js?v=20261119-build749';
+import { spacingParams, spacingRatios, bilateralRadii, nlmRadii, unsharpAxes } from './filter-units.js?v=20261119-build749';
+import { isDesktopRuntime, frameYield } from './utils.js?v=20261119-build749';
+import { runsSliceToMask } from './run-length.js?v=20261119-build749';
+import { status } from './ui-shell.js?v=20261119-build749';
+import { updateLinuxWebgpuNote } from './linux-webgpu-note.js?v=20261119-build749';
+import { logGpuError } from './gpu-diagnostics.js?v=20261119-build749';
 export const gpuFilterRuntime={device:null,adapter:null,initPromise:null,disabled:false,pipelines:new Map(),warned:false,lastBackend:'CPU',lastError:'',adapterLabel:'',retryAfter:0,initAttempts:0,bufferPool:new Map(),bufferPoolBytes:0,sharedRendererDevice:false,workgroupSize:128,lastShaderKind:'',split:null,renderDevice:null,renderError:'',renderInfo:'',pendingCompute:null};
 export function gpuAdapterLabel(adapter){
  try{

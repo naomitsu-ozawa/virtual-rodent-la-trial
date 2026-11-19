@@ -6,7 +6,7 @@
 // the sample pair's second volume, the general (non-combined) loop and the HU path.
 // The ray: the box is drawn with its back faces (like the WebGL program), vPos is the back-face point, the ray starts at the eye (origin, object space).
 // Output: colour 0 = the premultiplied colour, colour 1 = the depth of the first thing shown (NDC z, 24 bit in rgb) for the composite.
-import { lightingWGSL } from './lighting.js?v=20261118-build748';
+import { lightingWGSL } from './lighting.js?v=20261119-build749';
 
 // ---- the uniform buffer: one struct, every member laid out by the WGSL rules (vec3 = 16-aligned, 12 bytes; arrays of vec4 only) ----
 // [name, type, count]; the packer (vr-wgpu.js) writes by this table, the struct text is made from it, a unit test checks both against wgsl_reflect
@@ -61,7 +61,7 @@ export const BOX_VERTICES = (() => { // 12 triangles, counter-clockwise seen fro
 
 // the WGSL of one variant. f16: shader-f16 is on (the per-step values qc / f0..f3 / curF in half precision, the 0.5 test stays exact because q - 0.5 is taken in f32 first);
 // cls4: the fourth segment's classes come from cls4Tex; events: the section planes / slices / cut face code is compiled (a session without a section leaves it out)
-export function volumeWgsl({ f16 = false, cls4 = false, events = true } = {}) {
+function volumeWgslBase({ f16, cls4, events }) {
   const C4 = (e, tc) => (cls4 ? `${e}.a=textureSampleLevel(cls4Tex,smp,clamp(${tc},vec3<f32>(0.0),vec3<f32>(0.999999)),0.0).r;` : '');
   const EV = s => (events ? s : '');
   const FM = f16 ? 'f16' : 'f32', FM4 = 'vec4<' + FM + '>'; // the half-precision type of the per-step values (written out: no alias)
@@ -362,4 +362,59 @@ ${EV(` while(nextSlice<nSlice&&acc.a<=ACC_STOP){
  return fo;
 }
 `;
+}
+
+// ---- the variants of the performance record's volume breakdown (docs/vr-wgpu.js: shadow passes and the counting probe); the display pipelines never use them ----
+// They are made from the text of the display variant by exact substitutions (every anchor must occur exactly the expected number of times, else this throws), so the display text itself is not touched:
+// abl 'grad' = no gradient (n = -dir, the search stays), 'refine' = no surface search (hi = hitHi, no fetches), 'shade' = no shading maths (lit = segC; the normal still feeds the result through a term
+// that is 0 at run time, f32(u.pad1), so the gradient and the search are not removed by the optimiser), counters = a twin that counts (see COUNTER_FIELDS) into a storage buffer instead of discarding.
+export const ABLATIONS = ['grad', 'refine', 'shade'];
+// the eight u32 a counting pixel writes (index in the pixel's record); a pixel the pass did not cover keeps 0 (the buffer is cleared before the pass)
+export const COUNTER_FIELDS = ['outcome', 'iters', 'creep', 'jumps', 'skipReads', 'clsReads', 'refineReads', 'gradReads'];
+export const COUNTER_OUTCOME = { none: 0, hit: 1, pass: 2, accstop: 3, discard: 4 }; // 0 = not covered; hit = the ray ended on a surface; pass = marched to its end with nothing; accstop = stopped at the opacity limit; discard = left before the march (outside the box / content / section)
+export const COUNTER_BINDING = { group: 1, binding: 0 };
+const sub = (t, from, to, n = 1) => {
+  const parts = t.split(from);
+  if (parts.length - 1 !== n) throw new Error('volumeWgsl: anchor found ' + (parts.length - 1) + ' times, expected ' + n + ': ' + from.slice(0, 60));
+  return parts.join(to);
+};
+const cut = (t, from, to) => {
+  const i = t.indexOf(from), j = i < 0 ? -1 : t.indexOf(to, i + from.length);
+  if (i < 0 || j < 0 || t.indexOf(from, i + 1) >= 0) throw new Error('volumeWgsl: region not found: ' + from.slice(0, 60));
+  return t.slice(0, i) + t.slice(j);
+};
+function ablate(t, abl, counters) {
+  if (abl && !ABLATIONS.includes(abl)) throw new Error('volumeWgsl: unknown abl ' + abl);
+  if (abl === 'grad') t = sub(t, 'if(!hitSimple){if(onFace){n=entryFaceNormal(o,dir);}else{n=gradientAtS(tc,idx);}}', 'if(!hitSimple){if(onFace){n=entryFaceNormal(o,dir);}}');
+  else if (abl === 'refine') t = cut(t, '  if(hitSimple){}\n  else if(hitIso){', '  let hp=o+dir*hi;');
+  else if (abl === 'shade') t = sub(t, 'let shade=vrlShade(nn,viewDir,u.lightOff,vrlDepth01(hi,o,u.halfExt),select(0.0,1.0,later),u.segM[idx].xyz);', 'let shade=vec2<f32>(1.0+f32(u.pad1)*(nn.x+nn.y+nn.z+viewDir.x+viewDir.y+viewDir.z),0.0);');
+  if (counters) {
+    t = sub(t, 'var<private> gInv:vec3<f32>=vec3<f32>(1.0);\n', 'var<private> gInv:vec3<f32>=vec3<f32>(1.0);\n'
+      + 'var<private> gOut:u32=2u;var<private> gIters:u32=0u;var<private> gCreep:u32=0u;var<private> gJumps:u32=0u;var<private> gSkipRd:u32=0u;var<private> gClsRd:u32=0u;var<private> gRefRd:u32=0u;var<private> gGradRd:u32=0u;\n'
+      + 'const CNT_W:u32=64u;\n@group(1) @binding(0) var<storage,read_write> cnt:array<u32>;\n');
+    t = sub(t, 'if(acc.a<0.004){discard;return fo;}', 'if(acc.a<0.004){return fo;}');
+    const early = t.split('discard;').length - 1;
+    if (early < 3 || early > 4) throw new Error('volumeWgsl: ' + early + ' early discards');
+    t = t.split('discard;').join('gOut=4u;');
+    t = sub(t, 'iters++;', 'iters++;gIters+=1u;');
+    t = sub(t, 'prevValid=true;prevSkip=true;lastIndex=-1;', 'gCreep+=1u;prevValid=true;prevSkip=true;lastIndex=-1;');
+    t = sub(t, 'jumpLen+=nextJ-t;', 'jumpLen+=nextJ-t;gJumps+=1u;');
+    t = sub(t, 'skBlk=sb;skBits=textureLoad(skipTex,sb,0).rg;', 'skBlk=sb;gSkipRd+=1u;skBits=textureLoad(skipTex,sb,0).rg;');
+    t = sub(t, 'var q=textureSampleLevel(clsTex,smp,tcS,0.0);var dd=q.a*255.0;', 'gClsRd+=1u;var q=textureSampleLevel(clsTex,smp,tcS,0.0);var dd=q.a*255.0;');
+    t = sub(t, 'var qp=textureSampleLevel(clsTex,smp,cl(tcO+tcD*previousT),0.0);', 'gClsRd+=1u;var qp=textureSampleLevel(clsTex,smp,cl(tcO+tcD*previousT),0.0);');
+    t = sub(t, 'let qm=clsAt(tcO+tcD*mid);', 'gRefRd+=1u;let qm=clsAt(tcO+tcD*mid);', abl === 'refine' ? 0 : 2);
+    t = sub(t, 'let d=1.0/max(u.texDims,vec3<f32>(1.0));\n', 'gGradRd+=6u;let d=1.0/max(u.texDims,vec3<f32>(1.0));\n');
+    t = sub(t, 'let e0=textureSampleLevel(editTex,smpE,tq,0.0);', 'gGradRd+=1u;let e0=textureSampleLevel(editTex,smpE,tq,0.0);');
+    t = sub(t, 'let ep=textureSampleLevel(editTex,smpE,cl(tc+o),0.0);', 'gGradRd+=2u;let ep=textureSampleLevel(editTex,smpE,cl(tc+o),0.0);');
+    t = sub(t, 'depthMark(hi,1.0);', 'gOut=1u;depthMark(hi,1.0);');
+    t = sub(t, 'if(acc.a>ACC_STOP){hitEnd=true;}', 'if(acc.a>ACC_STOP){hitEnd=true;if(gOut!=1u){gOut=3u;}}');
+    t = sub(t, '@fragment fn fs(in:VOut)->FOut{', 'fn fsMain(in:VOut)->FOut{');
+    t += '@fragment fn fs(in:VOut)->FOut{\n let fo=fsMain(in);\n let b=(u32(in.pos.y)*CNT_W+u32(in.pos.x))*8u;\n cnt[b]=gOut;cnt[b+1u]=gIters;cnt[b+2u]=gCreep;cnt[b+3u]=gJumps;cnt[b+4u]=gSkipRd;cnt[b+5u]=gClsRd;cnt[b+6u]=gRefRd;cnt[b+7u]=gGradRd;\n return fo;\n}\n';
+  }
+  return t.replace(/(\/\/ VR \/ AR volume pass \(WGSL\), variant [^\n]*)\n/, '$1 abl=' + (abl || 'none') + ' counters=' + counters + '\n');
+}
+// the WGSL of one variant; abl / counters only for the performance record's breakdown (see above): with the defaults the text is the display variant's, character for character
+export function volumeWgsl({ f16 = false, cls4 = false, events = true, abl = '', counters = false } = {}) {
+  const t = volumeWgslBase({ f16, cls4, events });
+  return abl || counters ? ablate(t, abl, counters) : t;
 }
