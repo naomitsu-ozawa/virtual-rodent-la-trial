@@ -2,7 +2,7 @@
 // (the three.js Data3DTexture objects stay the holders of the data, a GPUTexture is made from one on first use and again when its version changes), the volume render pass per eye,
 // the offscreen targets (colour + depth packed in rgba8, both eyes side by side, reduced scale and the periphery target), and the composite material (three.js NodeMaterial, TSL) that
 // puts the offscreen image into the headset's frame with the volume's depth. Plain WebGPU; three.js (the WebGPU build) is passed in.
-import { volumeWgsl, uniformLayout, BOX_VERTICES, VOLUME_BINDINGS } from './vr-wgsl-core.js?v=20261119-build749';
+import { volumeWgsl, uniformLayout, BOX_VERTICES, VOLUME_BINDINGS } from './vr-wgsl-core.js?v=20261119-build750';
 
 export const VRGPU_STORE_KEY = 'vrl-vr-gpu';
 // the choice of the page's 「WebGPUで開く」 button (kept per browser; no URL parameter: the public build's gate takes no unknown URL keys). Default: the WebGL view.

@@ -1,14 +1,14 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { volume, mpr3DWindowLutKey, mpr3DWindowLutTable, setMpr3DWindowLutKey, residentGpuUploadSeriesId, sceneState, threeRenderMode, mpr3DSurfaceOpacity, sectionViewOpen, sectionViewPlane, sectionAutoPlane, setSectionAutoPlane, sectionCapEnabled, sectionCapOpacity, sectionCapHatch, sectionSliceImageVisible, sectionShadeBright, sectionShadeContrast, sectionShadeMode } from './state.js?v=20261119-build749';
-import { shadeLumV, brightOf, contrastOf } from './cap-shade.js?v=20261119-build749'; // the cut face's shading when the slice image is hidden
-import { segmentById, segmentShadeRange, shadeDataRange } from './segments.js?v=20261119-build749';
-import { isChildKey } from './segment-look.js?v=20261119-build749';
-import { wc, ww, planes, mpr3DSliceSliders, $, mprVolumeOpacity, mprSurfaceOpacity } from './ui-shell.js?v=20261119-build749';
-import { sourceFilterStages, getFilteredSourceAxialBlock, getCachedSourceSlice, sourceFilterSignature } from './source-filters.js?v=20261119-build749';
-import { residentGpuMprAvailable } from './mpr-orthogonal.js?v=20261119-build749';
-import { frameYield } from './utils.js?v=20261119-build749';
-import { request3DRender } from './scene3d.js?v=20261119-build749';
+import { volume, mpr3DWindowLutKey, mpr3DWindowLutTable, setMpr3DWindowLutKey, residentGpuUploadSeriesId, sceneState, threeRenderMode, mpr3DSurfaceOpacity, sectionViewOpen, sectionViewPlane, sectionAutoPlane, setSectionAutoPlane, sectionCapEnabled, sectionCapOpacity, sectionCapHatch, sectionSliceImageVisible, sectionShadeBright, sectionShadeContrast, sectionShadeMode } from './state.js?v=20261119-build750';
+import { shadeLumV, brightOf, contrastOf } from './cap-shade.js?v=20261119-build750'; // the cut face's shading when the slice image is hidden
+import { segmentById, segmentShadeRange, shadeDataRange } from './segments.js?v=20261119-build750';
+import { isChildKey } from './segment-look.js?v=20261119-build750';
+import { wc, ww, planes, mpr3DSliceSliders, $, mprVolumeOpacity, mprSurfaceOpacity } from './ui-shell.js?v=20261119-build750';
+import { sourceFilterStages, getFilteredSourceAxialBlock, getCachedSourceSlice, sourceFilterSignature } from './source-filters.js?v=20261119-build750';
+import { residentGpuMprAvailable } from './mpr-orthogonal.js?v=20261119-build750';
+import { frameYield } from './utils.js?v=20261119-build750';
+import { request3DRender } from './scene3d.js?v=20261119-build750';
 import * as THREE from './vendor/three@0.187.0/build/three.webgpu.js';
 export const mpr3DVisibility={axes:true,axial:false,coronal:false,sagittal:false};
 export function restoreSectionAutoPlane(){

@@ -1,24 +1,24 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { mark3DStale } from './three-state.js?v=20261119-build749';
-import { $, footer, threeLabel, ctRangeAuto, ctRangeFull, wc, ww, sigmoidCenter, wcVal, wwVal, sigmoidCenterValue, segmentControls, segmentAddSelect, segmentAddButton } from './ui-shell.js?v=20261119-build749';
-import { sceneState, analysisRegions, childSegments, analysisFocusedRegionId, setAnalysisRegions, setAnalysisFocusedRegionId, setNextAnalysisRegionId, setNextAnalysisColorIndex, volume, segmentRenderTimer, incSourceRenderRevision, threeRenderMode, ctRangeMode, ctRangeProfile, setCtRangeMode, sourceVolume } from './state.js?v=20261119-build749';
-import { dispose } from './surface-mesh.js?v=20261119-build749';
-import { request3DRender } from './scene3d.js?v=20261119-build749';
-import { renderAnalysisResults, setAnalysisFocusedRegion, onAnalysisResultsRendered, removeAnalysisRegion } from './analysis-results.js?v=20261119-build749';
-import { setRegionVisible, setRegionHidden, regionVisible, regionHidden } from './region-visibility.js?v=20261119-build749';
-import { buildShowToggles } from './region-toggles.js?v=20261119-build749';
-import { regionChipTitle } from './region-name.js?v=20261119-build749';
-import { buildSegmentTree, treeDefaultExpanded } from './segment-tree.js?v=20261119-build749';
-import { buildSegmentLookControls } from './segment-tree-ui.js?v=20261119-build749';
-import { childDisplayName, getFocusedChildKey, setFocusedChildKey, childVolumeMm3 } from './child-segments.js?v=20261119-build749';
-import { onChildSegmentsChange, addChildSegmentFromSelectedRegions, focusChildSegment } from './child-segments-ui.js?v=20261119-build749';
-import { analysisRegionSegmentsShown, segmentEditState, segmentEditGen, SEGMENT_PRESET_ORDER, segmentState, segmentExclusive, commitExclusiveRanges, gpuSegmentSignature, setChildLook, onChildSegLookChange } from './segments.js?v=20261119-build749';
-import { canEnableSegment } from './segment-slots.js?v=20261119-build749';
-import { tr } from './i18n.js?v=20261119-build749';
-import { niceCtStep, formatCtValue } from './utils.js?v=20261119-build749';
-import { syncGpuVolumeEdits } from './gpu-volume-data.js?v=20261119-build749';
-import { renderAll, analysisColorCss } from './mpr-render.js?v=20261119-build749';
+import { mark3DStale } from './three-state.js?v=20261119-build750';
+import { $, footer, threeLabel, ctRangeAuto, ctRangeFull, wc, ww, sigmoidCenter, wcVal, wwVal, sigmoidCenterValue, segmentControls, segmentAddSelect, segmentAddButton } from './ui-shell.js?v=20261119-build750';
+import { sceneState, analysisRegions, childSegments, analysisFocusedRegionId, setAnalysisRegions, setAnalysisFocusedRegionId, setNextAnalysisRegionId, setNextAnalysisColorIndex, volume, segmentRenderTimer, incSourceRenderRevision, threeRenderMode, ctRangeMode, ctRangeProfile, setCtRangeMode, sourceVolume } from './state.js?v=20261119-build750';
+import { dispose } from './surface-mesh.js?v=20261119-build750';
+import { request3DRender } from './scene3d.js?v=20261119-build750';
+import { renderAnalysisResults, setAnalysisFocusedRegion, onAnalysisResultsRendered, removeAnalysisRegion } from './analysis-results.js?v=20261119-build750';
+import { setRegionVisible, setRegionHidden, regionVisible, regionHidden } from './region-visibility.js?v=20261119-build750';
+import { buildShowToggles } from './region-toggles.js?v=20261119-build750';
+import { regionChipTitle } from './region-name.js?v=20261119-build750';
+import { buildSegmentTree, treeDefaultExpanded } from './segment-tree.js?v=20261119-build750';
+import { buildSegmentLookControls } from './segment-tree-ui.js?v=20261119-build750';
+import { childDisplayName, getFocusedChildKey, setFocusedChildKey, childVolumeMm3 } from './child-segments.js?v=20261119-build750';
+import { onChildSegmentsChange, addChildSegmentFromSelectedRegions, focusChildSegment } from './child-segments-ui.js?v=20261119-build750';
+import { analysisRegionSegmentsShown, segmentEditState, segmentEditGen, SEGMENT_PRESET_ORDER, segmentState, segmentExclusive, commitExclusiveRanges, gpuSegmentSignature, setChildLook, onChildSegLookChange } from './segments.js?v=20261119-build750';
+import { canEnableSegment } from './segment-slots.js?v=20261119-build750';
+import { tr } from './i18n.js?v=20261119-build750';
+import { niceCtStep, formatCtValue } from './utils.js?v=20261119-build750';
+import { syncGpuVolumeEdits } from './gpu-volume-data.js?v=20261119-build750';
+import { renderAll, analysisColorCss } from './mpr-render.js?v=20261119-build750';
 // a pointer drag on a card's ⋮⋮ handle (mouse and touch alike)
 // moves the card live; on release the new card order becomes the priority (segment-exclusive.js) and every segment
 // whose range in use changed is recomputed
