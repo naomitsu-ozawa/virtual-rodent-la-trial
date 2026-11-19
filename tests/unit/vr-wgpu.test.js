@@ -259,14 +259,14 @@ describe('WebGPU: the passes draw a region of the eye, the viewport is that regi
 
 // the GPU timeline of a frame (performance record only): span = first volume pass start to the marker's end, gap = idle before the frame's first start
 const timestampDevice = script => { // script = [[begin, end], ...] in ns ticks, one per timed pass in the order the resolves are encoded
-  const { device, log } = mockDevice(); const marks = [];
+  const { device, log } = mockDevice(); const marks = [], resolves = { n: 0 };
   device.features = new Set(['timestamp-query']); device.createQuerySet = () => ({ destroy() {} });
   device.createBuffer = d => { const b = { d, vals: [0n, 0n], destroy() {}, mapAsync: async () => {}, getMappedRange: () => new BigUint64Array(b.vals).buffer, unmap() {} }; return b; };
   device.createTexture = d => ({ d, destroy() {}, createView: () => ({}) });
   const mk = device.createCommandEncoder; const queue = device.queue; let pending = [];
-  device.createCommandEncoder = () => { const e = mk(), bp = e.beginRenderPass; e.beginRenderPass = d => { if (d.timestampWrites && d.colorAttachments.length === 1) marks.push('marker'); return bp(d); }; e.resolveQuerySet = () => {}; e.copyBufferToBuffer = (_s, _o, dst) => { dst.vals = script.shift(); }; return e; };
+  device.createCommandEncoder = () => { const e = mk(), bp = e.beginRenderPass; e.beginRenderPass = d => { if (d.timestampWrites && d.colorAttachments.length === 1) marks.push('marker'); return bp(d); }; e.resolveQuerySet = () => { resolves.n++; }; e.copyBufferToBuffer = (_s, _o, dst) => { dst.vals = script.shift(); }; return e; };
   queue.submit = () => {};
-  return { device, log, marks, pending };
+  return { device, log, marks, pending, resolves };
 };
 const settle = () => new Promise(r => setTimeout(r, 0));
 describe('WebGPU: the frame\'s GPU timeline (span, gap) for the performance record, from the device\'s own timestamps', () => {
@@ -302,6 +302,35 @@ describe('WebGPU: the frame\'s GPU timeline (span, gap) for the performance reco
     draw(r); r.volume.markFrame(); draw(r); r.volume.markFrame(); await settle();
     const st = r.volume.takeFrameStats(); expect(st.spans.map(x => +x.toFixed(3))).toEqual([10.2]); expect(st.gaps).toEqual([]);
     r.dispose();
+  }));
+});
+
+describe('WebGPU: markFrame(false), the page is not recording: no marker pass, the volume pass keeps its own timestamp', () => {
+  const draw = r => r.draw({ u: {}, cams: [eyeCam(640, 480)], model: new THREEG.Matrix4(), f: 1, fov: false, rects: null, variant: { cls4: false, events: false } });
+  it('makes no marker pass (no resolve / copy / read-back for it) and no span / gap; vol (takeGpuMs) and onFrameVolMs still work; the first recorded frame after it has a span and no gap', withGpuGlobals(async () => {
+    const { device, marks, resolves } = timestampDevice([[10_000_000n, 17_500_000n], [20_000_000n, 30_000_000n], [30_100_000n, 30_200_000n]]);
+    const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1] });
+    const got = []; draw(r); r.volume.onFrameVolMs(ms => got.push(ms));
+    expect(r.volume.markFrame(false)).toBeNull(); await settle();
+    expect(marks).toHaveLength(0); expect(resolves.n).toBe(1); /* the volume pass's own resolve only */ expect(got).toHaveLength(1); expect(got[0]).toBeCloseTo(7.5, 3); expect(r.volume.takeFrameStats()).toBeNull();
+    draw(r); r.volume.markFrame(); await settle(); // now recording
+    expect(marks).toHaveLength(1); expect(resolves.n).toBe(3); // + the volume pass and the marker of the recorded frame
+    const st = r.volume.takeFrameStats(); expect(st.spans.map(x => +x.toFixed(3))).toEqual([10.2]); expect(st.gaps).toEqual([]);
+    const g = r.volume.takeGpuMs(); expect(g.n).toBe(2); expect(g.ms).toBeCloseTo(17.5, 3);
+    r.dispose();
+  }));
+  it('the timestamp slots do not run out over many unrecorded frames (the volume pass slots are freed by their read-backs)', withGpuGlobals(async () => {
+    const { device, marks, resolves } = timestampDevice(Array.from({ length: 42 }, (_, i) => (i < 41 ? [1_000_000n, 2_000_000n] : [3_000_000n, 3_100_000n])));
+    const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1] });
+    for (let i = 0; i < 40; i++) { draw(r); r.volume.markFrame(false); await settle(); }
+    expect(r.volume.takeGpuMs().n).toBe(40); expect(marks).toHaveLength(0); expect(resolves.n).toBe(40);
+    draw(r); r.volume.markFrame(); await settle(); expect(marks).toHaveLength(1); expect(resolves.n).toBe(42); // a free slot is found for the marker
+    r.dispose();
+  }));
+  it('the default (no argument) is the recording path: a marker pass per frame, as before', withGpuGlobals(async () => {
+    const { device, marks } = timestampDevice([[10_000_000n, 20_000_000n], [20_100_000n, 20_200_000n]]);
+    const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1] });
+    draw(r); r.volume.markFrame(); await settle(); expect(marks).toHaveLength(1); r.dispose();
   }));
 });
 

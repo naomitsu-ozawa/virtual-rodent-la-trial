@@ -161,8 +161,8 @@ describe('the frame timeline columns: span / gap medians, oth, cpu / swd means',
   });
   it('wiring: the frame end (marker, cpu, swd) runs after the main render, swd on every 4th frame one at a time; span / gap are taken with the volume ms', () => {
     expect(vr).toContain("perfLog.add('render',performance.now()-rc0); // the CPU ms of renderer.render() (WebGPU: with gxRender's bookkeeping)\n  if(gx)gxFrameEnd(fa0);");
-    expect(vr).toContain("gx.vol?.volume.markFrame?.()"); expect(vr).toContain("perfLog.add('cpu',t1-fa0)");
-    expect(vr).toContain("if(!gxRec.on&&!gxSwdBusy&&(gxS.rendered&3)===2){gxSwdBusy=true;const fn=frameNo;gx.device.queue.onSubmittedWorkDone()");
+    expect(vr).toContain("gx.vol?.volume.markFrame?.(gxMeasure())"); expect(vr).toContain("perfLog.add('cpu',t1-fa0)");
+    expect(vr).toContain("if(gxMeasure()&&!gxRec.on&&!gxSwdBusy&&(gxS.rendered&3)===2){gxSwdBusy=true;const fn=frameNo;gx.device.queue.onSubmittedWorkDone()");
     expect(vr).toContain("perfLog.sample('span',v)"); expect(vr).toContain("perfLog.sample('gap',v)");
   });
 });
@@ -194,10 +194,10 @@ describe('the wake / pre / vlat columns (the wait inside the gap)', () => {
   });
   it('wiring: pre is taken when the volume pass submit returns, vlat on every 4th frame (a phase of its own) sharing the one-at-a-time wait with swd, wake from the swd of the previous sampled frame to the next frame start', () => {
     expect(vr).toContain("const tv=performance.now();perfLog.add('pre',tv-fa0);");
-    expect(vr).toContain("if(!gxRec.on&&!gxSwdBusy&&(gxS.rendered&3)===3){");
+    expect(vr).toContain("if(gxMeasure()&&!gxRec.on&&!gxSwdBusy&&(gxS.rendered&3)===3){");
     expect(vr).toContain("gx.vol.volume.onFrameVolMs?.(ms=>{p.v=ms;fin()})"); expect(vr).toContain("perfLog.add('vlat',Math.max(0,p.d-p.v))"); expect(vr).toContain("if(p.d<=floor+0.5){perfLog.add('vdrop',1);return}"); expect(vr).toContain("if(gxVolPend&&gxVolPend.t1===null)gxVolPend.t1=t1"); expect(vr).not.toContain("if(gxVolPend)gxVolPend.t1=t1"); expect(vr).toContain("catch(e){gxSwdBusy=false;gxVolPend=null;");
-    expect(vr).toContain("perfLog.add('swd',n-t1);if(frameNo===fn)gxWakeAt=n");
-    expect(vr).toContain("if(gxWakeAt>0){if(!gxRec.on&&fa0-gxWakeAt<1000)perfLog.add('wake',fa0-gxWakeAt);gxWakeAt=0}");
+    expect(vr).toContain("perfLog.add('swd',n-t1);if(frameNo===fn){gxWakeAt=n;perfLog.add('late',0)}else perfLog.add('late',1)");
+    expect(vr).toContain("if(gxWakeAt>0){if(gxMeasure()&&!gxRec.on&&fa0-gxWakeAt<1000)perfLog.add('wake',fa0-gxWakeAt);gxWakeAt=0}");
     expect(vr.indexOf("gxVolSubmitted(fa0);")).toBeGreaterThan(vr.indexOf('gx.vol.draw({u:material.uniforms'));
     expect(vr.indexOf("gxVolSubmitted(fa0);")).toBeLessThan(vr.indexOf('rs.low=true;rs.w=gx.vol.stats.w'));
   });
@@ -207,7 +207,7 @@ describe('WebGPU: the volume pass is submitted before the bookkeeping that does 
   const loopAt = vr.indexOf(' renderer.setAnimationLoop(xrTs=>{'), draw = vr.indexOf('gx.vol.draw({u:material.uniforms');
   const at = (needle, from = loopAt) => { const i = vr.indexOf(needle, from); expect(i, needle).toBeGreaterThan(from); return i; };
   it('what decides the volume (hands, planes, uniforms, shown set, pair / part, render scale, region highlight) is before the submit; the HU line / hover / cards / markers bookkeeping is after it on WebGPU', () => {
-    for (const before of ['updatePress(c,nowF)', 'setRegionHighlight(hlTracker.update(', 'refreshContentBox();', 'skipTick();', 'pairFrame();', 'partFrame();', 'benchTick();', 'const kF=FOVEA_K[settings.foveation|0]??1', 'const f=benchOn?fRaw:scaleGuard.step(fRaw,nowG)'])
+    for (const before of ['updatePress(c,nowF)', 'setRegionHighlight(hlTracker.update(', 'refreshContentBox();', 'skipTick();', 'pairFrame();', 'partFrame();', 'benchTick();', 'const kF=FOVEA_K[settings.foveation|0]??1', 'const fG=benchOn?fRaw:scaleGuard.step(fRaw,nowG)'])
       expect(at(before), before).toBeLessThan(draw);
     const late = at('if(gx){lateHints();lateScale();lateHud();lateCards();lateMarks()}');
     expect(late).toBeGreaterThan(draw);
@@ -243,13 +243,13 @@ describe('the wiring in vr-view.js (the drawing is not changed)', () => {
     expect(vr).toContain("import { createPerfLog, perfReport, perfFileName, createVolBreakdown, BD_VARIANTS, BD_SPECS } from './vr-perf-log.js?v=");
   });
   it('the loop feeds it: frame gap, JS ms, render() CPU ms around the unchanged render line, the GPU ms of both paths, the row once a second', () => {
-    expect(vr).toContain('perfLog.frame(xrTs||performance.now(),1000/Math.max(1,targetRate()||72),grabbing.size,rs.cover);');
+    expect(vr).toContain('perfLog.frame(xrTs||performance.now(),1000/Math.max(1,targetRate()||72),grabbing.size,rs.cover,(scaleGuard.frozenAt(fa0)||fovGuard.frozenAt(fa0))?1:0);');
     expect(vr).toContain("perfLog.add('js',jm)");
     expect(vr).toContain("const rc0=performance.now();\n  if(gx)gxRender();else timed('main',()=>renderer.render(scene,camera));\n  perfLog.add('render',performance.now()-rc0);");
     expect(vr).toContain('ctrl[kind]+=ms;ctrlN[kind]++;perfLog.add(kind,ms)'); // WebGL: the timer query's vol / main
     expect(vr).toContain("perfLog.add('vol',gt.ms,gt.n)"); // WebGPU: the volume pass's timestamp
     expect(vr).toContain('perfLog.row({f:rs.eff,per:rs.per,cap:rs.cap,auto:auto?1:0,lv:aq.level,si:aq.stepIdx,step:');
-    expect(vr).toContain('menu:ui.open?1:0,hz:targetRate(),fov:fovX,...(gx?{rec:gxRec.on?1:0}:{})},now)');
+    expect(vr).toContain("menu:ui.open?1:0,hz:targetRate(),fov:fovX,tab:ui.open?ui.tab:'-',mlow:gx?(settings.moveLow?1:0):null,...(gx?{rec:(gxRec.on||gxRec.sec)?1:0,hset:settings.moveLow?holdScaleValue(settings.moveLowK):0,hk:hkMin}:{})},now);hkMin=1;gxRec.sec=0}");
   });
   it('WebGPU main render GPU ms: three tracks timestamps, resolved every 4th frame one at a time, into the record only (never into the auto quality)', () => {
     expect(vr).toContain('forceWebGL:false,trackTimestamp:true});');
@@ -259,7 +259,67 @@ describe('the wiring in vr-view.js (the drawing is not changed)', () => {
     expect(body).toContain("perfLog.add('main',ms)");
     expect(body).toContain('gxTsBusy=false');
     expect(body).not.toMatch(/ctrl\.main|ctrlN\.main|sums\.main/);
-    expect(vr).toContain('let gxTsBusy=false;');
+    expect(vr).toContain('let gxTsBusy=false,gxMainOn=false,gxMainSkip=false;');
+  });
+  it('the fine timers run only while the breakdown recording is prepared or runs (gxMeasure); the volume timestamps (vol, which the auto quality display reads) run always', () => {
+    const m = vr.match(/const gxMeasure=\(\)=>[^;]+;/); expect(m).not.toBeNull();
+    const measure = (phase, on) => new Function('gxRec', m[0] + 'return gxMeasure();')({ phase, on });
+    expect([['idle', false], ['prep', false], ['rec', true], ['done', false]].map(([p, o]) => measure(p, o))).toEqual([false, true, true, false]);
+    // three's main-render timestamps: the backend flag follows gxMeasure; a device without them (mainTs false) is never touched; a switch on drops the first resolve
+    const b = vr.match(/\{const want=!!gx\.mainTs&&gxMeasure\(\);if\(want!==gxMainOn\)\{[^}]+\}\}/); expect(b).not.toBeNull();
+    const run = (mainTs, phases) => {
+      const renderer = { backend: { trackTimestamp: false } }, gx = { mainTs }, st = { on: false, skip: false }, seen = [];
+      for (const [phase, on] of phases) { const gxRec = { phase, on }; new Function('gx', 'gxRec', 'renderer', 'st', 'const gxMeasure=()=>gxRec.phase===\'prep\'||gxRec.on;let gxMainOn=st.on,gxMainSkip=st.skip;' + b[0] + 'st.on=gxMainOn;st.skip=gxMainSkip;')(gx, gxRec, renderer, st); seen.push([renderer.backend.trackTimestamp, st.skip]); }
+      return seen;
+    };
+    expect(run(true, [['idle', false], ['prep', false], ['rec', true], ['rec', true], ['done', false], ['idle', false]])).toEqual([[false, false], [true, true], [true, true], [true, true], [false, true], [false, true]]);
+    expect(run(false, [['prep', false], ['rec', true]])).toEqual([[false, false], [false, false]]);
+    expect(vr).toContain('mainTs=!!r.backend?.trackTimestamp;if(mainTs)r.backend.trackTimestamp=false;'); // switched off right after init; the renderer is still made with it on (the device's capability decides)
+    const i = vr.indexOf('const gxRender=()=>{'), body = vr.slice(i, vr.indexOf('renderer.setAnimationLoop(xrTs=>', i));
+    expect(body).toContain('if(gxMainOn&&!gxTsBusy&&(gxS.rendered&3)===0)'); expect(body).toContain('if(gxMainSkip){gxMainSkip=false;return}');
+    expect(vr).toMatch(/\n    \{const gt=gx\.vol\.volume\.takeGpuMs\(\);if\(gt\)\{sums\.vol\+=gt\.ms;counts\.vol\+=gt\.n;ctrl\.vol\+=freeVolMs\(gt\.ms,holdKA\);/); // vol is read with no recording condition
+  });
+  it('a stall line carries the latest span only while spans are being read back: a second without one clears it', () => {
+    let clock = 0; const log = createPerfLog({ kind: 'webgpu', now: () => clock, store: null });
+    log.sample('span', 9); clock = 1000; log.row({ menu: 0 }, clock);
+    log.frame(1100, BUDGET); log.frame(1300, BUDGET); // a stall in the second that has span samples of the previous second: still the latest one
+    expect(log.stalls[0].span).toBe(9);
+    clock = 2000; log.row({ menu: 0 }, clock); // this second had no span sample
+    log.frame(2400, BUDGET); expect(log.stalls[1].span).toBeNull();
+  });
+  it('a second with a recording frame in it gets rec = 1, also the second the recording ends in; a second without one stays rec = 0', () => {
+    const vr = readFileSync(new URL('../../docs/vr-view.js', import.meta.url), 'utf8');
+    expect(vr).toContain('if(gxRec.on)gxRec.sec=1;');
+    const fe = vr.match(/const gxFrameEnd=fa0=>\{\n  let frec=null;\n  (if\(gxRec\.on\)gxRec\.sec=1;)/); expect(fe).not.toBeNull();
+    const rowRec = vr.match(/rec:\(gxRec\.on\|\|gxRec\.sec\)\?1:0/); expect(rowRec).not.toBeNull();
+    expect(vr).toContain('hkMin=1;gxRec.sec=0}');
+    // seconds: [frames' gxRec.on values], then gxRec.on at the row write
+    const run = seconds => { const gxRec = { on: false, sec: 0 }, out = []; for (const [frames, onAtRow] of seconds) { for (const on of frames) { gxRec.on = on; new Function('gxRec', fe[1])(gxRec); } gxRec.on = onAtRow; out.push((gxRec.on || gxRec.sec) ? 1 : 0); gxRec.sec = 0; } return out; };
+    expect(run([[[false, false], false], [[false, true, true], true], [[true, true], true], [[true, true, false], false], [[false, false], false]])).toEqual([0, 1, 1, 1, 0]);
+  });
+  it('the summary note says what the fine columns hold: preparation and recording rows only, the summary leaves recording and menu rows out', () => {
+    let clock = 0; const log = createPerfLog({ kind: 'webgpu', now: () => clock, store: null }); clock = 1000; log.row({ menu: 0 }, clock);
+    const t = perfReport(log, {});
+    expect(t).toContain('The summary leaves out the rows with rec = 1');
+    expect(t).toContain('the rows with the menu open');
+    expect(t).toContain('are mostly "-"');
+    expect(t).toContain('The values of the recording rows stay in the rows below; the vol breakdown section does not summarise span / gap / main.');
+    expect(t).not.toContain('often "-"'); expect(t).not.toContain('the recording rows are summarised in the vol breakdown section');
+  });
+  it('the WebGPU notes say that late, like swd / wake / vlat / vdrop, is taken only while the recording is prepared', () => {
+    let clock = 0; const log = createPerfLog({ kind: 'webgpu', now: () => clock, store: null }); clock = 1000; log.row({ menu: 0 }, clock);
+    const t = perfReport(log, {});
+    expect(t).toContain('swd / wake / vlat / vdrop / late only while it is prepared');
+    expect(t).toContain('and swd / wake / vlat / vdrop / late are taken only while the breakdown recording');
+    expect(t).toContain('(taken only while the recording is prepared, as swd; "-" in the other seconds)');
+  });
+  it('the record says which columns are taken only while recording (WebGPU)', () => {
+    let clock = 0; const log = createPerfLog({ kind: 'webgpu', now: () => clock, store: null }); clock = 1000; log.row({ menu: 0 }, clock);
+    expect(perfReport(log, {})).toContain('WebGPU fine timers: span / gap / oth, main');
+    const gl = createPerfLog({ kind: 'webgl', now: () => clock, store: null }); expect(perfReport(gl, {})).not.toContain('WebGPU fine timers');
+    const r = log.rows[0]; expect([r.span, r.gap, r.oth, r.main, r.swd, r.wake, r.vlat, r.vdrop]).toEqual([null, null, null, null, null, null, null, null]); // not measured = "-"
+    const t = perfReport(log, {}).split('\n'), h = t.findIndex(l => /^\s*t\s+fps\s+g1/.test(l)); const cells = t[h + 1].trim().split(/\s+/), cols = t[h].trim().split(/\s+/);
+    for (const k of ['span', 'gap', 'oth', 'main', 'swd', 'wake', 'vlat', 'vdrop']) expect(cells[cols.indexOf(k)]).toBe('-');
   });
   it('the auto quality is still driven by what it was (the record only reads: no aq call and no uniform is written by the perf lines)', () => {
     for (const line of vr.split('\n').filter(l => l.includes('perfLog.'))) expect(line).not.toMatch(/aq\.(update|anticipate|set\w+)\(|\.value\s*=[^=]|stepSize\.value=|setFoveation/);
@@ -299,7 +359,7 @@ describe('the hold / movement / stall columns', () => {
     let clock = 0; const st = memStore(), log = createPerfLog({ kind: 'webgpu', now: () => clock, store: st, saveEveryMs: 0 });
     log.frame(0, BUDGET, 1, 9); log.frame(BUDGET * 3, BUDGET, 1, 9); clock = 1000; log.row({ menu: 0, f: 1 }, clock);
     const t = perfReport(log, {}).split('\n'), h = t.findIndex(l => /^\s*t\s+fps\s+g1/.test(l));
-    expect(t[h]).toMatch(/rec\s+hold\s+mv\s+mvr\s+imax\s+mk\s+slotc\s+perc$/);
+    expect(t[h]).toMatch(/rec\s+hold\s+mv\s+mvr\s+imax\s+mk\s+slotc\s+perc\s+hset\s+hk\s+gfix\s+mlow\s+tab\s+fmin\s+favg\s+late\s+ip95\s+lpx$/);
     expect(t[h + 1].trim().split(/\s+/)).toHaveLength(t[h].trim().split(/\s+/).length);
     const s = t.findIndex(l => l.startsWith('-- stalls'));
     expect(s).toBeGreaterThan(h + 1); expect(t[s]).toContain('1 ');
@@ -307,6 +367,25 @@ describe('the hold / movement / stall columns', () => {
     expect(t[s + 2].trim().split(/\s+/)).toHaveLength(9);
     const all = t.join('\n'); for (const w of ['note: hold = the most hands', 'note: mk = offscreen targets', 'note: stall lines']) expect(all, w).toContain(w);
     expect(JSON.parse(st.m.get(PERF_KEY + '-webgpu')).stalls).toHaveLength(1);
+  });
+  it('columns: gfix, fmin / favg, late, ip95 (a frequency table), lpx, and lastDrops', () => {
+    let clock = 0; const log = createPerfLog({ kind: 'webgpu', now: () => clock, store: null });
+    let t = 0; for (let i = 0; i < 18; i++) { t += 14; log.frame(t, BUDGET, 0, 0, i === 5 ? 1 : 0); }
+    t += 28; log.frame(t, BUDGET); t += 42; log.frame(t, BUDGET); // a 2-period and a 3-period interval
+    for (const f of [1, 0.5, 0.75]) log.fval(f);
+    log.add('late', 0); log.add('late', 1); log.add('late', 1); log.add('lpx', 1000); log.add('lpx', 3000);
+    clock = 1000; const r = log.row({ tab: 4, mlow: 1 }, clock);
+    expect(r).toMatchObject({ gfix: 1, fmin: 0.5, favg: 0.75, late: 0.67, lpx: 2000, tab: 4, mlow: 1, g2: 1, g3: 1 });
+    expect(r.ip95).toBe(42.3); expect(log.lastDrops).toBe(2); // 19 intervals: the 19th (42 ms) is the 95th percentile (the middle of its 0.5 ms bin)
+    const r2 = log.row({ tab: '-' }, 2000);
+    expect(r2).toMatchObject({ gfix: 0, fmin: null, favg: null, late: null, lpx: null, ip95: null, tab: '-' }); expect(log.lastDrops).toBe(0);
+    const text = perfReport(log, {}); expect(text).toContain('note: gfix = 1 when the flicker guard');
+  });
+  it('wiring: the guard state, f, late, lpx and the drops beside the fps are fed without making objects', () => {
+    expect(vr).toContain('scaleGuard.frozenAt(fa0)||fovGuard.frozenAt(fa0)'); expect(vr).toContain('perfLog.fval(f)');
+    expect(vr).toContain("perfLog.add('late',0)"); expect(vr).toContain("perfLog.add('late',1)");
+    expect(vr).toContain("perfLog.add('lpx',lp)"); expect(vr).toContain("(ja?'落ち ':'drops ')+perfLog.lastDrops");
+    const wg = readFileSync(new URL('../../docs/vr-wgpu.js', import.meta.url), 'utf8'); expect(wg).toContain('stats.lowPx = lowPx');
   });
   it('wiring: vr-wgpu.js counts what it makes, vr-view.js feeds the differences once a frame (no object made) and the volume movement after the render', () => {
     const wg = readFileSync(new URL('../../docs/vr-wgpu.js', import.meta.url), 'utf8');

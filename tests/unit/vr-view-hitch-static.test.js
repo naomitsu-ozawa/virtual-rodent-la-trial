@@ -37,7 +37,7 @@ describe('vr-view.js: the closed menu costs nothing once a second (V1)', () => {
 describe('vr-view.js: the no-jump interim of a rebuild does not lock the auto-quality ladder low', () => {
   it('samples taken while a shown segment waits for its texture (useDist off) are dropped', () => {
     expect(loop).toContain('const comboInterim=!!comboT?.rb?.busy&&!!uA&&!uA.useDist.value;');
-    expect(loop).toContain('if(!comboInterim){const r=aq.update({volMs,mainMs,interval,budget,ctx:ctxKey,cover:rs.cover});');
+    expect(loop).toContain('if(!comboInterim){const r=aq.update({volMs,mainMs,interval,budget,ctx:ctxKey,cover:rs.cover,held:heldWin});');
     expect(loop.match(/aq\.update\(/g)).toHaveLength(1);
   });
   it('distInCls is part of the context key, so the return of the jumps clears a lock taken meanwhile', () => {

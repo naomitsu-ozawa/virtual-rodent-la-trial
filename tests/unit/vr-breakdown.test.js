@@ -282,7 +282,7 @@ describe('the collector (createVolBreakdown)', () => {
     expect(vb.addProbe('x', new Uint32Array(8), 1, 1)).toBe(false); expect(vb.addProbe('whole', new Uint32Array(8), 64, 64)).toBe(false);
     const log = createPerfLog({ kind: 'webgl', now: () => 1000, store: null }); log.row({ menu: 0, fps: 72 }, 1000);
     const t = perfReport(log, {}).split('\n'), h = t.findIndex(l => /^\s*t\s+fps\s+g1/.test(l));
-    expect(t[h]).toMatch(/fov\s+rec\s+hold\s+mv\s+mvr\s+imax\s+mk\s+slotc\s+perc$/); expect(t[h + 1].length).toBe(t[h].length); expect(t[h + 1]).toMatch(/\s-$/); expect(t.join('\n')).not.toContain('-- vol breakdown');
+    expect(t[h]).toMatch(/fov\s+rec\s+hold\s+mv\s+mvr\s+imax\s+mk\s+slotc\s+perc\s+hset\s+hk\s+gfix\s+mlow\s+tab\s+fmin\s+favg\s+late\s+ip95\s+lpx$/); expect(t[h + 1].length).toBe(t[h].length); expect(t[h + 1]).toMatch(/\s-$/); expect(t.join('\n')).not.toContain('-- vol breakdown');
   });
   it('the table of variants: the nine, in the order they run, with the program / uniform change each needs (noJump leaves the pre-pass out too: it needs the jumps; noProxy only the pre-pass, and its turn runs the proxy comparison)', () => {
     expect(BD_VARIANTS).toEqual(['same', 'box', 'simple', 'noGrad', 'noRefine', 'noShade', 'withCreep', 'noJump', 'noProxy']);
@@ -533,15 +533,15 @@ describe('vr-view.js wiring (static)', () => {
   const rec = vr.slice(a, b);
   it('the shadow pass is thrown after markFrame, in phase 1 of 4 frames; the probe in phase 3 (never in the shadow\'s frame) once a second, whichever way the menu is', () => {
     expect(a).toBeGreaterThan(0); expect(b).toBeGreaterThan(a);
-    expect(vr.indexOf('frec=gx.vol?.volume.markFrame?.()')).toBeGreaterThan(0);
-    expect(vr.indexOf('gxRecFrame(frec,t1)')).toBeGreaterThan(vr.indexOf('frec=gx.vol?.volume.markFrame?.()'));
+    expect(vr.indexOf('frec=gx.vol?.volume.markFrame?.(gxMeasure())')).toBeGreaterThan(0);
+    expect(vr.indexOf('gxRecFrame(frec,t1)')).toBeGreaterThan(vr.indexOf('frec=gx.vol?.volume.markFrame?.(gxMeasure())'));
     expect(rec).toContain('const ph=gxS.rendered&3;'); expect(rec).toContain('if(ph===1){try{if(gx.vol.breakdown.shadow(frec,BD_SPECS[BD_VARIANTS[gxRec.vi%BD_VARIANTS.length]])!==false)gxRec.vi++}');
     expect(rec).toContain('else if(ph===3&&tn-gxRec.probeAt>=1000){'); expect(rec).not.toMatch(/ui\.open|ui\.tab/);
     expect(vr.indexOf('gxFrameEnd(fa0);\n  if(shotRequested')).toBeGreaterThan(0); // after the main render and the record's render line, as before
   });
   it('while it records: no swd, no vlat, no wake sample; rows carry rec 1 (WebGPU only); the first press only starts it; the benchmarks are not started with it and it does not start with them', () => {
-    expect(vr).toContain('if(!gxRec.on&&!gxSwdBusy&&(gxS.rendered&3)===2){'); expect(vr).toContain('if(!gxRec.on&&!gxSwdBusy&&(gxS.rendered&3)===3){'); expect(vr).toContain('if(!gxRec.on&&fa0-gxWakeAt<1000)');
-    expect(vr).toContain('...(gx?{rec:gxRec.on?1:0}:{})');
+    expect(vr).toContain('if(gxMeasure()&&!gxRec.on&&!gxSwdBusy&&(gxS.rendered&3)===2){'); expect(vr).toContain('if(gxMeasure()&&!gxRec.on&&!gxSwdBusy&&(gxS.rendered&3)===3){'); expect(vr).toContain('if(gxMeasure()&&!gxRec.on&&fa0-gxWakeAt<1000)');
+    expect(vr).toContain('...(gx?{rec:(gxRec.on||gxRec.sec)?1:0,');
     expect(vr).toContain("if(!gx?.vol||!gx.ready||gxRec.phase!=='idle'||bench.active||anBench.active||!mesh||!material)return;");
     expect(vr).toContain("const startAnBench=()=>{if(anBench.active||bench.active||!mesh||gxRec.phase==='prep'||gxRec.on)return;"); expect(vr).toContain("if(bench.active||!mesh||gxRec.phase==='prep'||gxRec.on)return;");
   });
@@ -557,7 +557,7 @@ describe('vr-view.js wiring (static)', () => {
     for (const y of ['y0+200', 'y0+290', 'y0+380', 'y0+470', 'y0+560', 'y0+650', 'y0+740', 'y0+830']) expect(vr).toContain(y);
   });
   it('while it is prepared or records the auto quality does not move (the picture stays); a throw in it never stops the frame loop or the drawing', () => {
-    expect(vr).toContain("autoFrames++;const nowA=performance.now();\n   if(gxRec.phase==='prep'||gxRec.on){autoFrames=0;autoAt=nowA;ctrl.vol=ctrl.main=0;ctrlN.vol=ctrlN.main=0}");
+    expect(vr).toContain("autoFrames++;const nowA=performance.now();\n   if(gxRec.phase==='prep'||gxRec.on){autoFrames=0;heldWin=false;autoAt=nowA;ctrl.vol=ctrl.main=0;ctrlN.vol=ctrlN.main=0}");
     expect(vr).toContain("{try{gxRecFrame(frec,t1)}catch(e){console.warn('WebGPU breakdown:',e)}}");
     expect(host).toContain('try { volume.bdSnapshot(low.target, low.eyes, u, vr, lowDraw?.proxy ?? null); } catch (e) {');
   });

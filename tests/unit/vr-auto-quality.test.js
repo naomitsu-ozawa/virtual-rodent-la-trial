@@ -295,7 +295,7 @@ describe('auto quality settles with a constant screen coverage (no self-feedback
   }
   it('vr-view.js passes the screen coverage, not the rendered pixels', () => {
     const src = readFileSync(new URL('../../docs/vr-view.js', import.meta.url), 'utf8');
-    expect(src).toMatch(/aq\.update\(\{[^}]*cover:rs\.cover\}\)/);
+    expect(src).toMatch(/aq\.update\(\{[^}]*cover:rs\.cover(,held:heldWin)?\}\)/);
     expect(src).not.toMatch(/cover:rs\.cover\*/);
   });
 });
@@ -591,7 +591,7 @@ describe('the volume time measured while the volume is held', () => {
   });
   it('vr-view.js feeds the ladder freeVolMs(volume time, holdK) and leaves the other values and the performance record alone', async () => {
     const view = readFileSync(new URL('../../docs/vr-view.js', import.meta.url), 'utf8');
-    expect(view).toContain("ctrl.vol+=freeVolMs(gt.ms,holdK);ctrlN.vol+=gt.n;perfLog.add('vol',gt.ms,gt.n)");
+    expect(view).toContain("ctrl.vol+=freeVolMs(gt.ms,holdKA);ctrlN.vol+=gt.n;perfLog.add('vol',gt.ms,gt.n)");
     expect(view).toContain('sums.vol+=gt.ms;counts.vol+=gt.n;');
     expect(view).toContain('freeVolMs } from \'./vr-auto-quality.js');
   });

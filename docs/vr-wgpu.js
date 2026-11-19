@@ -2,8 +2,8 @@
 // (the three.js Data3DTexture objects stay the holders of the data, a GPUTexture is made from one on first use and again when its version changes), the volume render pass per eye,
 // the offscreen targets (colour + depth packed in rgba8, both eyes side by side, reduced scale and the periphery target), and the composite material (three.js NodeMaterial, TSL) that
 // puts the offscreen image into the headset's frame with the volume's depth. Plain WebGPU; three.js (the WebGPU build) is passed in.
-import { volumeWgsl, uniformLayout, BOX_VERTICES, VOLUME_BINDINGS, COUNTER_FIELDS, PROXY, PROXY_FIELDS, PROXY_BINDINGS, PROXY_DIFF_BINDINGS, proxyWgsl, proxyDiffWgsl } from './vr-wgsl-core.js?v=20261119-build755';
-import { FOVEA_K } from './vr-render-scale.js?v=20261119-build755';
+import { volumeWgsl, uniformLayout, BOX_VERTICES, VOLUME_BINDINGS, COUNTER_FIELDS, PROXY, PROXY_FIELDS, PROXY_BINDINGS, PROXY_DIFF_BINDINGS, proxyWgsl, proxyDiffWgsl } from './vr-wgsl-core.js?v=20261119-build756';
+import { FOVEA_K } from './vr-render-scale.js?v=20261119-build756';
 
 export const VRGPU_STORE_KEY = 'vrl-vr-gpu';
 // the choice of the page's 「WebGPUで開く」 button (kept per browser; no URL parameter: the public build's gate takes no unknown URL keys). Default: the WebGL view.
@@ -66,6 +66,33 @@ export function useMaterialSrgbOutput(renderer, THREE) {
   } catch (e) {
     try { renderer.outputColorSpace = was.outputColorSpace; renderer.contextNode = was.contextNode; } catch { /* gone */ }
     return { materialSrgb: false, text: 'three.js frame buffer pass (sRGB over an RGBA16F copy; the material route failed: ' + gxErrorText(e).msg + ')' };
+  }
+}
+// the depth of the headset's image is not stored (the WebGPU view only). three.js (r187, WebGPUBackend.finishRender) draws an XR frame as one render pass per eye (layered render of an array camera) into its own depth array
+// texture, and stores that depth at the end of each pass (the store op is Store whenever the target is not multisampled). Nothing reads it: the projection layer is made without a depth format (ignoreDepthValues: the compositor
+// takes no depth), the volume's low / peri / shadow passes (below) have colour attachments of their own and are not touched, the composite and the labels only depth-test inside this pass, and the next frame clears the depth first.
+// The hook sits on the backend instance's finishRender (node_modules / vendor three.js is not edited): just before the passes are begun it sets depthStoreOp = 'discard' on the layer descriptors of the XR render target when this frame
+// clears the depth (depthLoadOp 'clear'; a frame that loads the depth of the last one keeps the store). The last stage of a multi-stage layer (a framebuffer copy in between) is the one three.js gives the op to, the stages before keep Store.
+// Returns { installed, text } (text = the line of the diagnostic record). Nothing here throws: on a failure (no backend, another three.js build) the renderer keeps three.js' own store op.
+export function discardXrDepth(renderer) {
+  try {
+    const backend = renderer?.backend, xr = renderer?.xr;
+    if (typeof backend?.finishRender !== 'function' || typeof backend.get !== 'function' || !xr) throw new Error('no backend.finishRender / get or xr on this renderer');
+    if (backend._vrlXrDepthDiscard) return { installed: true, text: backend._vrlXrDepthDiscard };
+    const orig = backend.finishRender;
+    backend.finishRender = function (renderContext) {
+      try {
+        const target = xr._xrRenderTarget, data = renderContext?.renderTarget === target && target ? this.get(renderContext) : null;
+        if (data && Array.isArray(data.arrayCameraRenderStages) && Array.isArray(data.layerDescriptors)) { // the layered XR pass of this frame (finishRender takes its array-camera branch)
+          for (const ld of data.layerDescriptors) { const da = ld?.depthStencilAttachment; if (da) da.depthStoreOp = da.depthLoadOp === 'clear' && !da.depthReadOnly ? 'discard' : 'store'; } // written every frame: three.js keeps the layer descriptors, so a frame that loads the depth after one that cleared it must not keep the last frame's op
+        }
+      } catch { /* the store op stays three.js' own */ }
+      return orig.apply(this, arguments);
+    };
+    backend._vrlXrDepthDiscard = "XR depth: not stored (depthStoreOp 'discard' on the per-eye passes of three.js' XR target, the other passes keep their ops)";
+    return { installed: true, text: backend._vrlXrDepthDiscard };
+  } catch (e) {
+    return { installed: false, text: 'XR depth: stored as three.js does (the hook failed: ' + gxErrorText(e).msg + ')' };
   }
 }
 // the device is lost for another reason than our own destroy(): onLost(info) once
@@ -434,8 +461,10 @@ export function createVolumeGpu({ device, THREE, f16 = false, onTargetFreed = nu
   const takeGpuMs = () => { if (!ts || !ts.count) return null; const r = { ms: ts.sumMs, n: ts.count }; ts.sumMs = 0; ts.count = 0; return r; };
   const takeFrameStats = () => { if (!ts || !(ts.spans.length || ts.gaps.length)) return null; const r = { gaps: ts.gaps, spans: ts.spans }; ts.gaps = []; ts.spans = []; return r; };
   // the end of this XR frame's GPU work (call after the frame's last submit, three.js' main render included): closes the frame record with a marker pass. No volume pass in the frame (nothing drawn) = no sample.
-  const markFrame = () => {
+  // record = false (the page is not recording the breakdown): no marker pass, no resolve / copy / read-back for the frame's timeline; only the frame record is rotated (the volume passes' own slots and takeGpuMs / onFrameVolMs are not touched), returns null
+  const markFrame = (record = true) => {
     if (!ts) return null;
+    if (!record) { ts.cur = newRec(); ts.prev = null; return null; }
     const rec = ts.cur; ts.cur = newRec();
     ts.q.push(rec); if (ts.q.length > 16) { ts.q.shift(); ts.prev = null; }
     const slot = rec.vols > 0 ? ts.slots.findIndex(x => !x.busy) : -1;
@@ -800,7 +829,7 @@ export function createVrVolumeRenderer({ THREE, device, f16 = false, halfExt = [
   const composite = createComposite({ THREE, halfExt, device });
   const volume = createVolumeGpu({ device, THREE, f16, onShader, onTargetFreed: t => composite.forget(t.color, t.depth) });
   const tmpEye = [{}, {}], tmpPeri = [{}, {}];
-  const stats = { w: 0, h: 0, lowW: 0, lowH: 0, regions: null };
+  const stats = { w: 0, h: 0, lowW: 0, lowH: 0, lowPx: 0, regions: null };
   const held = { low: null, peri: null }; // the slot size of each pass (fitSlot keeps it while the need stays near it)
   const scaleMax = { low: 1, peri: Math.max(...FOVEA_K.filter(k => k < 1)) }; // the largest scale a pass is drawn at (the caller's f is at most 1, the periphery's f x the setting's FOVEA_K below 1): what its target is made for.: the periphery's follows the setting (draw's periK; 0 = the setting has no periphery pass: no target)
   let periSet = null; // the periphery scale cap the target was made for (null before the first frame)
@@ -861,6 +890,7 @@ export function createVrVolumeRenderer({ THREE, device, f16 = false, halfExt = [
     }
     const topLeft = fovOn ? rects.map(R => [R[0], H - R[3], R[2], H - R[1]]) : null;
     composite.update({ low, peri, fov: fovOn, rects: topLeft, band, decode });
+    let lowPx = 0; for (const e of low.eyes) for (const c of e.scissors) lowPx += c[2] * c[3]; stats.lowPx = lowPx; // px the low pass drew (its scissor rects, all eyes)
     stats.w = W; stats.h = H; stats.lowW = low.regs[0][2]; stats.lowH = low.regs[0][3];
     stats.regions = { low: low.regs.map(r => [r[2], r[3]]), slot: [low.usedW, low.usedH], peri: peri ? peri.regs.map(r => [r[2], r[3]]) : null, periSlot: peri ? [peri.usedW, peri.usedH] : null, scale: f, periScale: peri ? fp : null };
     return stats;
