@@ -15,15 +15,15 @@
 //   - MPR planes and the 3D C/S preview are NOT read back from here (hasResident / hasPreview are false): the page uses the MPR cache (CPU) for them
 // Switch: ?webglvolume=0 turns it off (the page then shows the surface view only, as before), ?webglvolume=1 turns it on; WEBGL_VOLUME_DEFAULT is the default.
 import * as THREE from './vendor/three@0.187.0/build/three.module.js';
-import { volumeTexturePlan, reduceSliceArea, packedRgSlice, packCtSlice } from './medical-volume.js?v=20261119-build749';
-import { computeBricksOf, buildEditMaskOf, buildRegionIndexOf, buildChildIndexOf, packIndexRg, BRICK, smoothEditMaskOf } from './vr-volume-prep.js?v=20261119-build749';
-import { PART_FIELD, runEditMaskField } from './vr-part-view.js?v=20261119-build749';
-import { gpuRunsForTexture } from './gpu-runs.js?v=20261119-build749';
-import { MATERIALS, materialKey, materialVec } from './lighting.js?v=20261119-build749';
-import { MAX_SECTION_PLANES } from './vr-section-frame.js?v=20261119-build749';
-import { SHADE_BRIGHT_DEFAULT, SHADE_CONTRAST_DEFAULT, brightOf, contrastOf } from './cap-shade.js?v=20261119-build749';
-import { pickRay, hiddenTestOf } from './webgl-volume-pick.js?v=20261119-build749';
-import { regionLutAlpha, regionLutHiddenSlots } from './region-visibility.js?v=20261119-build749';
+import { volumeTexturePlan, reduceSliceArea, packedRgSlice, packCtSlice } from './medical-volume.js?v=20261119-build750';
+import { computeBricksOf, buildEditMaskOf, buildRegionIndexOf, buildChildIndexOf, packIndexRg, BRICK, smoothEditMaskOf } from './vr-volume-prep.js?v=20261119-build750';
+import { PART_FIELD, runEditMaskField } from './vr-part-view.js?v=20261119-build750';
+import { gpuRunsForTexture } from './gpu-runs.js?v=20261119-build750';
+import { MATERIALS, materialKey, materialVec } from './lighting.js?v=20261119-build750';
+import { MAX_SECTION_PLANES } from './vr-section-frame.js?v=20261119-build750';
+import { SHADE_BRIGHT_DEFAULT, SHADE_CONTRAST_DEFAULT, brightOf, contrastOf } from './cap-shade.js?v=20261119-build750';
+import { pickRay, hiddenTestOf } from './webgl-volume-pick.js?v=20261119-build750';
+import { regionLutAlpha, regionLutHiddenSlots } from './region-visibility.js?v=20261119-build750';
 
 export const WEBGL_VOLUME_DEFAULT = true;
 export const webglVolumeEnabled = (search = typeof location !== 'undefined' ? location.search : '', m = /[?&]webglvolume=(\d)(&|$)/.exec(search || '')) => (m ? m[1] !== '0' : WEBGL_VOLUME_DEFAULT); // one line: the public gate reads a URL key from the line that reads location.search

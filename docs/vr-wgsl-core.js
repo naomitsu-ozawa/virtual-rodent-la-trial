@@ -6,7 +6,7 @@
 // the sample pair's second volume, the general (non-combined) loop and the HU path.
 // The ray: the box is drawn with its back faces (like the WebGL program), vPos is the back-face point, the ray starts at the eye (origin, object space).
 // Output: colour 0 = the premultiplied colour, colour 1 = the depth of the first thing shown (NDC z, 24 bit in rgb) for the composite.
-import { lightingWGSL } from './lighting.js?v=20261119-build749';
+import { lightingWGSL } from './lighting.js?v=20261119-build750';
 
 // ---- the uniform buffer: one struct, every member laid out by the WGSL rules (vec3 = 16-aligned, 12 bytes; arrays of vec4 only) ----
 // [name, type, count]; the packer (vr-wgpu.js) writes by this table, the struct text is made from it, a unit test checks both against wgsl_reflect
@@ -243,6 +243,7 @@ ${EV(` if(u.sliceOpacity>0.0){
  let t0=t;var jumpLen=0.0;var hitEnd=false;
  var prevValid=false;var prevF=0.0;
  var prevSkip=false;var skBlk=vec3<i32>(-1);var skBits=vec2<u32>(0u);
+ var chk=false; // the creep check is made only while the ray is near a surface (see below): false at the ray start and after a jump
  var hitIdx=-1;var hitLo=0.0;var hitHi=0.0;var hitF0=0.0;var hitF1=0.0;var hitIso=false;var hitSimple=false;var hitNb=6;
  // per-ray constants: one-hot channel selectors per segment (no dynamic indexing of the fetched vector inside the march); a disabled segment's offset is SEG_OFF
  var sel0=${FM4}(0.0);var sel1=${FM4}(0.0);var sel2=${FM4}(0.0);var sel3=${FM4}(0.0);var off0=SEG_OFF;var off1=SEG_OFF;var off2=SEG_OFF;var off3=SEG_OFF;
@@ -270,7 +271,11 @@ ${EV(`  // slices up to t + step, then the cut face, then the sample (the order 
   }
 `)}
   // the creep skip: the sample's trilinear footprint is the dual cell fl..fl+1; its bit says "outside every shown segment, alpha <= 2": no fetch, no jump, move on (prevF is fetched at previousT only if a hit follows)
-  if(skipOn){
+  // The bit is looked up only when chk: the previous sample was read with dd < 2.7 (no jump: near a surface) or was a creep step. At the ray start and right after a jump (the 4^3 block has changed, so
+  // the lookup would cost a dependent skipTex read before the cls read) the sample is read as usual. Exactness (the contract of vr-skip-occupancy.js: a set bit means the read would find no segment and
+  // dd <= 2, no jump): a sample read instead of skipped sets lastIndex = -1, prevValid = true, previousT = t, t += stp, exactly as the skip does; only prevSkip / prevF differ, and prevSkip = true only
+  // makes the hit path fetch prevF at previousT, the same sample, so a hit, its bracket (hitLo, hitHi), hitNb, hitIso and the secant's outside value are those of the skip
+  if(skipOn&&chk){
    let pp=(tcO+tcD*t)*u.texDims-vec3<f32>(0.5);let fl=floor(pp);let fr=pp-fl;
    if(all(fr>vec3<f32>(1.0/64.0))&&all(fr<vec3<f32>(63.0/64.0))&&all(fl>=vec3<f32>(0.0))&&all(fl<u.texDims-vec3<f32>(1.0))){
     let sc=vec3<i32>(fl);let sb=sc>>vec3<u32>(2u);
@@ -288,6 +293,7 @@ ${EV(`  // slices up to t + step, then the cut face, then the sample (the order 
    if(max(max(dot(qfc,sel0)-off0,dot(qfc,sel1)-off1),max(dot(qfc,sel2)-off2,dot(qfc,sel3)-off3))>=${FM}(0.0)){dd=0.0;}
   }
   if(u.jumpOn==0){dd=0.0;}
+  chk=dd<2.7;
   // a jump is never shorter than a normal step; it lands on the same t0 + k * step grid
   if(dd>=2.7){let nextJ=t+stp*max(1.0,floor((dd-1.8)*jkA/stp));jumpLen+=nextJ-t;previousT=nextJ-stp*0.05;prevValid=false;t=nextJ;continue;}
   ${C4('q', 'tcS')}

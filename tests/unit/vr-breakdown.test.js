@@ -12,8 +12,8 @@ import { createVolBreakdown, createPerfLog, perfReport, BD_VARIANTS, BD_SPECS } 
 const read = f => readFileSync(new URL('../../docs/' + f, import.meta.url), 'utf8');
 const vr = read('vr-view.js'), host = read('vr-wgpu.js');
 const sha = t => createHash('sha256').update(t).digest('hex');
-// sha256 of the display variants' text as built before the breakdown existed (the previous build): [f16, cls4, events, hash]
-const DISPLAY_HASHES = [
+// sha256 of the display variants' text before the creep check was gated (the text of and 749, which are the same): [f16, cls4, events, hash]
+const DISPLAY_HASHES_BEFORE_GATE = [
   [false, false, false, '83f53706ab37b1bbd239df0e2851cb4ea654e71fd2c37bdd822e0fece2628915'],
   [false, false, true, '26e8fa1442b8272987ce7cf8c8d67c6af53657aa12aa1d62c553e6f58d28ac75'],
   [false, true, false, '9ac3b204fb37b1df9cdb8245d80ec900ac90037ab2aecf40542707278470cf10'],
@@ -23,14 +23,52 @@ const DISPLAY_HASHES = [
   [true, true, false, '1cc6f7c1bd81a9fbe6ee1ab04fb76b064f4898e641d602f38f47c98bea110d87'],
   [true, true, true, '7ce8ffdf17bcc99f4332f65c8ef35d76c3a4904aeb9b93595a9b01a00923e448'],
 ];
+// sha256 of the display variants' text now (the creep check is looked up only while chk: see the gate tests below): [f16, cls4, events, hash]
+const DISPLAY_HASHES = [
+  [false, false, false, '7e15da7195e22d9e136804b51b4139a9acc5d5ab03a7a464cc6ffb7250f9b7d7'],
+  [false, false, true, '4e2025d308c8880b282b342c126a322e2a3b6f78edd24179b6bcdf52175d51ee'],
+  [false, true, false, '09dfb5e60b9653b5d9ce61c4618a850ea50dc958d25593aa3be4f3c6bccb13a6'],
+  [false, true, true, '0f589a63f8533f11c15bdcd26f0b7f644cc8b047dda33504d0a14c47ddc2c481'],
+  [true, false, false, '0db5ebd0444672779c6cb479ea56ceb283c0a057eb08992ea257160c30855464'],
+  [true, false, true, '5485e6c08b714899f863f2952edb4af04a15d211706c265e661dd5c035cfd3fa'],
+  [true, true, false, 'f2a350e6d48888861cf5a5688ad8a2889bbc196b71552f013875b70cc07b6b97'],
+  [true, true, true, '126b209ed29237876db28eeb31e5b8aa8b3ad561d9213da11fac7906fc57032c'],
+];
 const BASES = []; for (const f16 of [false, true]) for (const cls4 of [false, true]) for (const events of [false, true]) BASES.push({ f16, cls4, events });
 
-describe('WGSL: the display variants are the text of, character for character', () => {
+describe('WGSL: the display variants are the text below, character for character (a change of the display text changes these hashes: update them on purpose)', () => {
   it.each(DISPLAY_HASHES)('f16=%s cls4=%s events=%s', (f16, cls4, events, hash) => {
     expect(sha(volumeWgsl({ f16, cls4, events }))).toBe(hash);
     expect(sha(volumeWgsl({ f16, cls4, events, abl: '', counters: false }))).toBe(hash);
   });
   it('the defaults of volumeWgsl are the display variant with the section code (as before)', () => { expect(volumeWgsl()).toBe(volumeWgsl({ f16: false, cls4: false, events: true })); });
+});
+
+// the creep gate: the display text differs from the text before it only by these edits (the old text is made back from the new one and must hash to the old value)
+const ungate = t => t
+  .replace(' var chk=false; // the creep check is made only while the ray is near a surface (see below): false at the ray start and after a jump\n', '')
+  .replace(/  \/\/ The bit is looked up only when chk[\s\S]*?those of the skip\n/, '')
+  .replace('if(skipOn&&chk){', 'if(skipOn){').replace('  chk=dd<2.7;\n', '');
+describe('WGSL: the creep gate', () => {
+  it.each(DISPLAY_HASHES_BEFORE_GATE)('f16=%s cls4=%s events=%s: without the gate edits the text is the one before', (f16, cls4, events, hash) => {
+    const t = volumeWgsl({ f16, cls4, events });
+    expect(t).toContain('if(skipOn&&chk){'); expect(t).toContain('  chk=dd<2.7;\n'); expect(t).toContain(' var chk=false;');
+    expect(sha(ungate(t))).toBe(hash);
+  });
+  it('the check is made at most where the previous sample was read near a surface: chk is set from dd right after the override and before the jump, never set by a jump, and starts false', () => {
+    const t = volumeWgsl();
+    expect(t.split('chk=').length - 1).toBe(2); // the declaration and the one assignment
+    const a = t.indexOf('if(u.jumpOn==0){dd=0.0;}\n  chk=dd<2.7;\n'), j = t.indexOf('if(dd>=2.7){let nextJ=');
+    expect(a).toBeGreaterThan(0); expect(j).toBeGreaterThan(a); // the jump comes after the assignment: a jump leaves chk false
+    expect(t.indexOf('if(skipOn&&chk){')).toBeLessThan(t.indexOf('var q=textureSampleLevel(clsTex,smp,tcS,0.0)'));
+  });
+  it('the counting twin and the ablations take the same gate (their anchors still hold), noCreep (useSkip 0) keeps skipOn false', () => {
+    for (const v of [{ counters: true }, ...ABLATIONS.map(abl => ({ abl })), ...ABLATIONS.map(abl => ({ abl, counters: true }))]) {
+      const t = volumeWgsl(v);
+      expect(t, JSON.stringify(v)).toContain('if(skipOn&&chk){'); expect(t).toContain('chk=dd<2.7;');
+    }
+    expect(volumeWgsl()).toContain('let skipOn=u.useSkip>0&&u.diag!=4;');
+  });
 });
 
 describe('WGSL: the breakdown variants (abl, counters)', () => {
@@ -139,6 +177,21 @@ describe('the collector (createVolBreakdown)', () => {
     const n = vb.summary().probes.native;
     expect(n.blocks).toBe(2); expect(n.mixedShare).toBeCloseTo(0.5);
     expect(n.blockMax.median).toBeCloseTo((1 + 90 / ((63 * 10 + 90) / 64)) / 2); expect(n.outcome.hit).toBeCloseTo(32 / 128);
+  });
+  it('probe whole by outcome: the steps (mean / p95), jumps, creep and skipTex reads per pixel of the hit pixels and of the pass pixels, after the probe whole line; other outcomes are left out', () => {
+    const w = 8, h = 8, c = new Uint32Array(w * h * 8), put = (i, oc, iters, creep, jumps, skip) => { const o = i * 8; c[o] = oc; c[o + 1] = iters; c[o + 2] = creep; c[o + 3] = jumps; c[o + 4] = skip; };
+    put(0, 1, 10, 1, 2, 5); put(1, 1, 20, 3, 4, 7); put(2, 2, 100, 0, 6, 9); put(3, 3, 999, 99, 99, 99); put(4, 4, 7, 7, 7, 7);
+    const vb = createVolBreakdown(); expect(vb.addProbe('whole', c, w, h)).toBe(true);
+    const bo = vb.summary().probes.whole.byOutcome;
+    expect(bo.hit).toMatchObject({ px: 2, jumps: 3, creep: 2, skip: 6 }); expect(bo.hit.steps).toEqual({ mean: 15, p95: 20 });
+    expect(bo.pass).toMatchObject({ px: 1, jumps: 6, creep: 0, skip: 9 }); expect(bo.pass.steps).toEqual({ mean: 100, p95: 100 });
+    const t = vb.lines(), i = t.findIndex(l => l.startsWith('probe whole: windows 1'));
+    expect(t[i + 1]).toBe('probe whole by outcome: hit steps mean/p95 15.0/20 · jumps 3.0 · creep 2.0 · skipTex 6.0 | pass steps mean/p95 100.0/100 · jumps 6.0 · creep 0.0 · skipTex 9.0');
+    expect(t[i + 2]).toMatch(/^probe native: /);
+    // no pass pixel: "-" for it; no probe at all: the line says so (no NaN)
+    const c2 = new Uint32Array(64 * 64 * 8); c2[0] = 1; c2[1] = 4;
+    const v2 = createVolBreakdown(); v2.addProbe('whole', c2, 64, 64); expect(v2.lines().some(l => l.endsWith('| pass -'))).toBe(true);
+    const l0 = createVolBreakdown().lines().join('\n'); expect(l0).toContain('probe whole by outcome: - (no probe read back)'); expect(l0).not.toMatch(/NaN|undefined/);
   });
   it('an uncovered pixel (outcome 0) is no pixel; a bad kind or a short array is refused; the rows of WebGL line up with the heading with the rec column "-"', () => {
     const vb = createVolBreakdown(); expect(vb.addProbe('whole', new Uint32Array(64 * 64 * 8), 64, 64)).toBe(true); expect(vb.summary().probes.whole).toBeNull();

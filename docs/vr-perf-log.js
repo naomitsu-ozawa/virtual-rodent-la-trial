@@ -97,7 +97,8 @@ export const BD_PROBE_FIELDS = ['outcome', 'iters', 'creep', 'jumps', 'skipReads
 const BD_OUTCOMES = ['hit', 'pass', 'accstop', 'discard']; // outcome value 1..4 (0 = the pixel was not covered)
 const BD_BLOCK = 8; // 8 x 8 pixels stand in for a GPU wave
 const quantile = (a, q) => { const v = a.filter(x => Number.isFinite(x)).sort((x, y) => x - y); if (!v.length) return null; const i = (v.length - 1) * q, lo = Math.floor(i), hi = Math.ceil(i); return v[lo] + (v[hi] - v[lo]) * (i - lo); };
-const newProbeAgg = () => ({ windows: 0, px: 0, steps: [], sums: { iters: 0, creep: 0, jumps: 0, skipReads: 0, clsReads: 0, refineReads: 0, gradReads: 0 }, outcome: [0, 0, 0, 0], blocks: 0, blockRatio: [], mixed: 0 });
+const newOutcomeAgg = () => ({ px: 0, steps: [], iters: 0, jumps: 0, creep: 0, skipReads: 0 }); // one outcome's share of the probe (hit, pass): its steps, jumps, creep steps and skipTex reads
+const newProbeAgg = () => ({ windows: 0, px: 0, steps: [], by: [newOutcomeAgg(), newOutcomeAgg()], sums: { iters: 0, creep: 0, jumps: 0, skipReads: 0, clsReads: 0, refineReads: 0, gradReads: 0 }, outcome: [0, 0, 0, 0], blocks: 0, blockRatio: [], mixed: 0 });
 export function createVolBreakdown() {
   const ratios = Object.fromEntries(BD_VARIANTS.map(v => [v, []])), lows = [], probes = { whole: newProbeAgg(), native: newProbeAgg() };
   // one shadow pass of `variant`: its GPU ms and the same frame's low pass GPU ms (both > 0 and finite, else it is not a sample)
@@ -116,6 +117,7 @@ export function createVolBreakdown() {
       if (oc < 1 || oc > 4) continue;
       a.px++; a.outcome[oc - 1]++;
       if (a.steps.length < 200000) a.steps.push(counters[o + 1]);
+      if (oc <= 2) { const b = a.by[oc - 1]; b.px++; if (b.steps.length < 200000) b.steps.push(counters[o + 1]); b.iters += counters[o + 1]; b.jumps += counters[o + 3]; b.creep += counters[o + 2]; b.skipReads += counters[o + 4]; }
       a.sums.iters += counters[o + 1]; a.sums.creep += counters[o + 2]; a.sums.jumps += counters[o + 3]; a.sums.skipReads += counters[o + 4]; a.sums.clsReads += counters[o + 5]; a.sums.refineReads += counters[o + 6]; a.sums.gradReads += counters[o + 7];
       const work = counters[o + 1] + counters[o + 6] + counters[o + 7], b = (y / BD_BLOCK | 0) * Math.ceil(w / BD_BLOCK) + (x / BD_BLOCK | 0);
       bn[b]++; if (oc === 1) bh[b]++; bs[b] += work; if (work > bm[b]) bm[b] = work;
@@ -128,12 +130,19 @@ export function createVolBreakdown() {
     }
     return true;
   };
+  // the per-pixel means of one outcome (null where no pixel ended so) and the 95th percentile of its steps
+  const outcomeSummary = b => {
+    if (!b.px) return null;
+    const st = b.steps.slice().sort((x, y) => x - y);
+    return { px: b.px, steps: { mean: b.iters / b.px, p95: st[Math.min(st.length - 1, Math.ceil(0.95 * st.length) - 1)] }, jumps: b.jumps / b.px, creep: b.creep / b.px, skip: b.skipReads / b.px };
+  };
   const probeSummary = a => {
     if (!a.windows || !a.px) return null;
     const m = k => a.sums[k] / a.px, st = a.steps.slice().sort((x, y) => x - y), pq = q => st[Math.min(st.length - 1, Math.ceil(q * st.length) - 1)];
     return { windows: a.windows, px: a.px / a.windows, steps: { mean: m('iters'), p50: pq(0.5), p95: pq(0.95), max: st[st.length - 1] }, creep: m('creep'), jumps: m('jumps'),
       reads: { skip: m('skipReads'), cls: m('clsReads'), refine: m('refineReads'), grad: m('gradReads') },
       outcome: Object.fromEntries(BD_OUTCOMES.map((k, i) => [k, a.outcome[i] / a.px])),
+      byOutcome: Object.fromEntries(['hit', 'pass'].map((k, i) => [k, outcomeSummary(a.by[i])])),
       blocks: a.blocks, blockMax: a.blockRatio.length ? { median: quantile(a.blockRatio, 0.5), p90: quantile(a.blockRatio, 0.9) } : null, mixedShare: a.blocks ? a.mixed / a.blocks : null };
   };
   // R_v = the median ratio of a variant, M = the median of the real low pass ms of these frames; the cost of a step = (R_same - R_v) x M
@@ -163,6 +172,8 @@ export function createVolBreakdown() {
     L.push(w ? 'probe whole: windows ' + w.windows + ' · px ' + Math.round(w.px) + ' · steps mean/p50/p95/max ' + [f1(w.steps.mean), w.steps.p50, w.steps.p95, w.steps.max].join('/') + ' · creep ' + f1(w.creep) + ' · jumps ' + f1(w.jumps)
       + ' · reads per px skipTex/cls/refine/grad ' + [w.reads.skip, w.reads.cls, w.reads.refine, w.reads.grad].map(f1).join('/') + ' · outcome hit/pass/accstop/discard ' + BD_OUTCOMES.map(k => Math.round(w.outcome[k] * 100)).join('/') + ' %'
       : 'probe whole: - (no probe read back)');
+    const bo = o => (o ? 'steps mean/p95 ' + f1(o.steps.mean) + '/' + o.steps.p95 + ' · jumps ' + f1(o.jumps) + ' · creep ' + f1(o.creep) + ' · skipTex ' + f1(o.skip) : '-');
+    L.push(w ? 'probe whole by outcome: hit ' + bo(w.byOutcome.hit) + ' | pass ' + bo(w.byOutcome.pass) : 'probe whole by outcome: - (no probe read back)');
     L.push(n ? 'probe native: windows ' + n.windows + ' · blocks ' + n.blocks + ' · block max/mean median/p90 ' + (n.blockMax ? f2(n.blockMax.median) + '/' + f2(n.blockMax.p90) : '-') + ' · mixed hit blocks share ' + f2(n.mixedShare)
       : 'probe native: - (no probe read back)');
     return L;
