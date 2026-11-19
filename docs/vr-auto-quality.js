@@ -42,6 +42,9 @@ export const JUMP = 1.3, JUMP_SAMPLES = 4, JUMP_SCALE = 0.5;
 // Recovery is the normal ladder. Scale constant, shrinking or growing slowly: no effect at all.
 export const GROW_SCALE = 1.12, GROW_WINDOW = 300, GROW_MAX_DROP = 0.6, GROW_SPACING = 30, GROW_RING = 16;
 
+// while a hand / controller holds the volume the WebGPU view draws it at holdK (< 1, vr-render-scale.js HOLD_SCALE) of the ladder's scale, so the volume pass measured then is about holdK^2 of what the ladder's own level costs.
+// The ladder's rise prediction (predict) takes the measured time as the present level's, so it is fed the time as it would be without the hold: ms / holdK^2. holdK = 1 (WebGL, not held, setting off): the value as it is.
+export const freeVolMs = (ms, holdK) => (holdK > 0 && holdK < 1 ? ms / (holdK * holdK) : ms);
 export const autoFloor = idx => AUTO_FLOORS[idx] ?? AUTO_FLOORS[0];
 
 export function createAutoQuality({ min = AUTO_FLOORS[0], baseStep = 0, f = AUTO_MAX } = {}) {

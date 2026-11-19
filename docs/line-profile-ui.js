@@ -11,23 +11,23 @@
 //   at most 192 samples from data already in memory, about 13 Hz, never blocking); on release the full read replaces it.
 // - The 3D analysis overlay is pointer-events:none (style.css); the dock re-enables it. Interactive elements here also stop the pointer
 //   events so the 3D view does not rotate (the Phase 1 lesson).
-import { volume, currentLanguage } from './state.js?v=20261119-build754';
-import { planes } from './ui-shell.js?v=20261119-build754';
-import { tr } from './i18n.js?v=20261119-build754';
-import { frameYield } from './utils.js?v=20261119-build754';
-import { sourceFilterStages, sourceFilterSignature } from './source-filters.js?v=20261119-build754';
-import { getHuMode, onHuModeChange, effectiveHuSignature, huModeToggle } from './effective-hu.js?v=20261119-build754';
-import { readEffectiveSlice, rawHuVolume, filtersActive } from './effective-hu-source.js?v=20261119-build754';
-import { setExtraOverlayPainter, requestOverlayDraw } from './crosshair-ui.js?v=20261119-build754';
-import { clientToFraction, voxelFromPlanePoint, planePointFromVoxel, sliceIndexFor, formatHu } from './crosshair.js?v=20261119-build754';
-import { distanceMm, formatMm } from './measurements.js?v=20261119-build754';
-import { rebinHist, windowBins } from './histogram.js?v=20261119-build754';
-import { dataAxis } from './segments.js?v=20261119-build754';
-import { lineSamples, sampleLine, profileStats, nearestSample } from './line-profile.js?v=20261119-build754';
-import { getHuLine, setHuLine, clearHuLine, onHuLineChange, getHuLineHover, setHuLineHover, onHuLineHoverChange, isHuLineDeferred, onHuLineDeferChange, lineOnPlane, planeFraction, voxelOnSlice } from './hu-line-model.js?v=20261119-build754';
-import { liveProfile, createLiveScheduler } from './hu-line-live.js?v=20261119-build754';
-import { peekEffectiveReaders } from './effective-hu-source.js?v=20261119-build754';
-import { isHuLine3dArmed, setHuLine3dArmed, onHuLine3dArmedChange, huLine3dAvailable } from './hu-line-3d.js?v=20261119-build754';
+import { volume, currentLanguage } from './state.js?v=20261119-build755';
+import { planes } from './ui-shell.js?v=20261119-build755';
+import { tr } from './i18n.js?v=20261119-build755';
+import { frameYield } from './utils.js?v=20261119-build755';
+import { sourceFilterStages, sourceFilterSignature } from './source-filters.js?v=20261119-build755';
+import { getHuMode, onHuModeChange, effectiveHuSignature, huModeToggle } from './effective-hu.js?v=20261119-build755';
+import { readEffectiveSlice, rawHuVolume, filtersActive } from './effective-hu-source.js?v=20261119-build755';
+import { setExtraOverlayPainter, requestOverlayDraw } from './crosshair-ui.js?v=20261119-build755';
+import { clientToFraction, voxelFromPlanePoint, planePointFromVoxel, sliceIndexFor, formatHu } from './crosshair.js?v=20261119-build755';
+import { distanceMm, formatMm } from './measurements.js?v=20261119-build755';
+import { rebinHist, windowBins } from './histogram.js?v=20261119-build755';
+import { dataAxis } from './segments.js?v=20261119-build755';
+import { lineSamples, sampleLine, profileStats, nearestSample } from './line-profile.js?v=20261119-build755';
+import { getHuLine, setHuLine, clearHuLine, onHuLineChange, getHuLineHover, setHuLineHover, onHuLineHoverChange, isHuLineDeferred, onHuLineDeferChange, lineOnPlane, planeFraction, voxelOnSlice } from './hu-line-model.js?v=20261119-build755';
+import { liveProfile, createLiveScheduler } from './hu-line-live.js?v=20261119-build755';
+import { peekEffectiveReaders } from './effective-hu-source.js?v=20261119-build755';
+import { isHuLine3dArmed, setHuLine3dArmed, onHuLine3dArmedChange, huLine3dAvailable } from './hu-line-3d.js?v=20261119-build755';
 
 const PLOT_H = 130, HIST_H = 90, PAD = { l: 38, r: 8, t: 12, b: 20 }, DRAG_PX = 6;
 const st = {

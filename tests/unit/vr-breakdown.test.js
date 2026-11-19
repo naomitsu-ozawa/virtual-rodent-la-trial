@@ -282,7 +282,7 @@ describe('the collector (createVolBreakdown)', () => {
     expect(vb.addProbe('x', new Uint32Array(8), 1, 1)).toBe(false); expect(vb.addProbe('whole', new Uint32Array(8), 64, 64)).toBe(false);
     const log = createPerfLog({ kind: 'webgl', now: () => 1000, store: null }); log.row({ menu: 0, fps: 72 }, 1000);
     const t = perfReport(log, {}).split('\n'), h = t.findIndex(l => /^\s*t\s+fps\s+g1/.test(l));
-    expect(t[h]).toMatch(/fov\s+rec$/); expect(t[h + 1].length).toBe(t[h].length); expect(t[h + 1]).toMatch(/\s-$/); expect(t.join('\n')).not.toContain('-- vol breakdown');
+    expect(t[h]).toMatch(/fov\s+rec\s+hold\s+mv\s+mvr\s+imax\s+mk\s+slotc\s+perc$/); expect(t[h + 1].length).toBe(t[h].length); expect(t[h + 1]).toMatch(/\s-$/); expect(t.join('\n')).not.toContain('-- vol breakdown');
   });
   it('the table of variants: the nine, in the order they run, with the program / uniform change each needs (noJump leaves the pre-pass out too: it needs the jumps; noProxy only the pre-pass, and its turn runs the proxy comparison)', () => {
     expect(BD_VARIANTS).toEqual(['same', 'box', 'simple', 'noGrad', 'noRefine', 'noShade', 'withCreep', 'noJump', 'noProxy']);

@@ -166,6 +166,24 @@ export const pairComposites = (primaryOnly, partnerOnly) => (primaryOnly ? COMP_
 // the threshold). A volume that fits in the rect (max zoom at arm's length) is drawn by the centre pass alone.
 export const foveaWorth = (outside, cover, k, wasOn = false) => k < 1 && cover > 0 && outside / cover > k * k * (wasOn ? 1.05 : 1.25);
 
+// While the volume is held in a hand (moved / turned / scaled) the WebGPU view draws it a little coarser; it goes back at once when the hold ends.
+// HOLD_SCALE multiplies the render scale in use (the auto ladder's / manual scale, already under the data-resolution cap), so it lowers the CENTRE rect and
+// the periphery together (the periphery pass runs at f x FOVEA_K: its ratio to the centre does not change). 0.8 per axis = 0.64 of the rays of the volume pass (about -36 % of its
+// GPU time; design estimate, to be checked on the Quest 3). Why this much and no more: a held volume moves with the hand, so its image slips over the retina and the
+// eye resolves less than at rest; at the cap the centre keeps PPV_CENTER x 0.8 = 1.04 rendered pixels per voxel, i.e. still one pixel per voxel of the data (only the far
+// corner of the box, PPV_FAR 1.0, falls to 0.8). It stays below LOW_BELOW (0.9) of vr-flicker-guard.js so that the scale guard does not swallow it.
+export const HOLD_SCALE = 0.8;
+
+// the factor for this frame (1 = no change). Every condition is the user-visible state of this frame, nothing is remembered between frames:
+//  enabled = the menu setting (on by default); webgpu = the WebGPU view only (the WebGL drawing is not touched); live = the session is running;
+//  heldTracked = how many hands / controllers hold the volume AND are still tracked / connected (a hand whose tracking is lost, or a controller that is gone, no longer counts);
+//  recording = the volume breakdown is being prepared / recorded (it measures at the scale in use without the hold); bench = a benchmark (sets its own scales).
+export const holdScaleOf = ({ enabled = true, webgpu = false, live = true, heldTracked = 0, recording = false, bench = false } = {}) =>
+  enabled && webgpu && live && heldTracked > 0 && !recording && !bench ? HOLD_SCALE : 1;
+
+// the scale with the factor applied (never below CAP_MIN; factor 1 returns f itself)
+export const applyHoldScale = (f, k) => (k < 1 ? Math.max(CAP_MIN, f * k) : f);
+
 const pct = v => Math.round(v * 100) + '%';
 // the quality readout: the mode (100 % / 70 % / 50 % / auto x %) and, when the data-resolution cap renders fewer pixels, the effective scale
 // e.g. 「100%（データ解像度・実効 41%）」 / 「自動 70%（データ解像度・実効 41%）」

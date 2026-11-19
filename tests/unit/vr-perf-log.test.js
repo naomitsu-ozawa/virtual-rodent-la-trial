@@ -1,7 +1,7 @@
 // The VR performance record (docs/vr-perf-log.js) and its wiring in vr-view.js: the same rows for the WebGL and the WebGPU session, a ring buffer, the summary of the menu-closed stretch, the file names.
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { createPerfLog, perfReport, perfFileName, gapBucket, perfMedian, PERF_KEY, PERF_MAX_ROWS, PERF_MIRROR_ROWS } from '../../docs/vr-perf-log.js';
+import { createPerfLog, perfReport, perfFileName, gapBucket, perfMedian, PERF_KEY, PERF_MAX_ROWS, PERF_MIRROR_ROWS, PERF_MAX_STALLS } from '../../docs/vr-perf-log.js';
 import { saveGxDiagText } from '../../docs/vr-wgpu.js';
 
 const vr = readFileSync(new URL('../../docs/vr-view.js', import.meta.url), 'utf8');
@@ -112,7 +112,7 @@ describe('the text (panel / copy / file)', () => {
     expect(t[3]).toContain('median fps'); expect(t[3]).toContain('volume GPU 7 ms'); expect(t[3]).toContain('main GPU - ms');
     expect(t[4]).toContain('frame intervals');
     const h = t.findIndex(l => /^\s*t\s+fps\s+g1/.test(l));
-    expect(h).toBeGreaterThan(0); expect(t.slice(h + 1)).toHaveLength(3);
+    expect(h).toBeGreaterThan(0); expect(t.slice(h + 1, t.findIndex(l => l.startsWith('-- stalls')))).toHaveLength(3);
     expect(t[h]).toMatch(/vol\s+main\s+render\s+js\s+span\s+gap\s+oth\s+cpu\s+swd\s+wake\s+pre\s+vlat\s+vdrop\s+f\s+per\s+cap\s+auto\s+lv\s+si\s+step\s+cov\s+w\s+h\s+size\s+menu\s+hz\s+fov\s+rec/);
     expect(t[h + 1].trim().split(/\s+/)).toHaveLength(t[h].trim().split(/\s+/).length);
     expect(perfReport(sample('webgl'), {})).toContain('· WebGL ·');
@@ -243,7 +243,7 @@ describe('the wiring in vr-view.js (the drawing is not changed)', () => {
     expect(vr).toContain("import { createPerfLog, perfReport, perfFileName, createVolBreakdown, BD_VARIANTS, BD_SPECS } from './vr-perf-log.js?v=");
   });
   it('the loop feeds it: frame gap, JS ms, render() CPU ms around the unchanged render line, the GPU ms of both paths, the row once a second', () => {
-    expect(vr).toContain('perfLog.frame(xrTs||performance.now(),1000/Math.max(1,targetRate()||72));');
+    expect(vr).toContain('perfLog.frame(xrTs||performance.now(),1000/Math.max(1,targetRate()||72),grabbing.size,rs.cover);');
     expect(vr).toContain("perfLog.add('js',jm)");
     expect(vr).toContain("const rc0=performance.now();\n  if(gx)gxRender();else timed('main',()=>renderer.render(scene,camera));\n  perfLog.add('render',performance.now()-rc0);");
     expect(vr).toContain('ctrl[kind]+=ms;ctrlN[kind]++;perfLog.add(kind,ms)'); // WebGL: the timer query's vol / main
@@ -263,5 +263,57 @@ describe('the wiring in vr-view.js (the drawing is not changed)', () => {
   });
   it('the auto quality is still driven by what it was (the record only reads: no aq call and no uniform is written by the perf lines)', () => {
     for (const line of vr.split('\n').filter(l => l.includes('perfLog.'))) expect(line).not.toMatch(/aq\.(update|anticipate|set\w+)\(|\.value\s*=[^=]|stepSize\.value=|setFoveation/);
+  });
+});
+
+describe('the hold / movement / stall columns', () => {
+  it('a row has the most hands holding, the movement per second, the longest frame interval and the WebGPU counts; they start again every second; WebGL has "-" for the counts', () => {
+    let clock = 0; const log = createPerfLog({ kind: 'webgpu', now: () => clock, store: null });
+    log.frame(0, BUDGET, 0, 100); log.frame(14, BUDGET, 1, 100); log.frame(70, BUDGET, 2, 100); log.frame(84, BUDGET, 1, 100); // gaps 14, 56, 14
+    log.count('mk', 3); log.count('tg', 1); log.count('slotc'); log.count('perc', 2); log.count('nope', 5); log.count('mk', -1);
+    log.move(0.5, 10); log.move(0.5, 5); log.move(NaN, -1);
+    clock = 500; const r = log.row({ menu: 0 }, clock); // 0.5 s: the movement is scaled to a second
+    expect([r.hold, r.imax, r.mk, r.slotc, r.perc]).toEqual([2, 56, 3, 1, 2]);
+    expect([r.mv, r.mvr]).toEqual([2, 30]);
+    clock = 1500; const r2 = log.row({ menu: 0 }, clock);
+    expect([r2.hold, r2.mv, r2.mvr, r2.imax, r2.mk, r2.slotc, r2.perc]).toEqual([0, 0, 0, null, 0, 0, 0]);
+    const gl = createPerfLog({ kind: 'webgl', now: () => 1000, store: null }); gl.frame(0, BUDGET, 1); gl.count('mk', 4);
+    const g = gl.row({ menu: 0, fps: 72 }, 1000); expect([g.hold, g.mk, g.slotc, g.perc]).toEqual([1, null, null, null]);
+  });
+  it('a frame interval over 1.5 periods is a stall line with the latest span / vol, the hands, the flags of the frame before and the cov; a normal one is not; the newest are kept up to the maximum', () => {
+    let clock = 0; const log = createPerfLog({ kind: 'webgpu', now: () => clock, store: null });
+    log.frame(0, BUDGET, 0, 5); log.sample('span', 9.456); log.add('vol', 12, 2);
+    log.count('slotc'); log.count('tg'); log.count('mk', 2);
+    log.frame(BUDGET * 2, BUDGET, 2, 12345.6); // two periods
+    log.frame(BUDGET * 3, BUDGET, 2, 1); // one period: no line
+    log.frame(BUDGET * 6, BUDGET, 1, 7); // three periods, nothing made before it
+    expect(log.stalls).toHaveLength(2);
+    expect(log.stalls[0]).toEqual({ t: 0, gap: 27.8, span: 9.46, vol: 6, hold: 2, slot: 1, tg: 1, per: 0, cov: 12346 });
+    expect(log.stalls[1]).toMatchObject({ gap: 41.7, hold: 1, slot: 0, tg: 0, per: 0, cov: 7 });
+    let t = 0; const big = createPerfLog({ now: () => clock, store: null });
+    for (let i = 0; i < PERF_MAX_STALLS + 5; i++) { t += BUDGET * 3; big.frame(t, BUDGET, 0, i); }
+    big.frame(0, BUDGET); // a non-increasing time is no interval
+    expect(big.stalls).toHaveLength(PERF_MAX_STALLS); expect(big.stallsDropped).toBe(4); expect(big.stalls.at(-1).cov).toBe(PERF_MAX_STALLS + 4);
+  });
+  it('the report has the columns in its header (rows line up), the stall section and the notes; the mirror carries the last stalls', () => {
+    let clock = 0; const st = memStore(), log = createPerfLog({ kind: 'webgpu', now: () => clock, store: st, saveEveryMs: 0 });
+    log.frame(0, BUDGET, 1, 9); log.frame(BUDGET * 3, BUDGET, 1, 9); clock = 1000; log.row({ menu: 0, f: 1 }, clock);
+    const t = perfReport(log, {}).split('\n'), h = t.findIndex(l => /^\s*t\s+fps\s+g1/.test(l));
+    expect(t[h]).toMatch(/rec\s+hold\s+mv\s+mvr\s+imax\s+mk\s+slotc\s+perc$/);
+    expect(t[h + 1].trim().split(/\s+/)).toHaveLength(t[h].trim().split(/\s+/).length);
+    const s = t.findIndex(l => l.startsWith('-- stalls'));
+    expect(s).toBeGreaterThan(h + 1); expect(t[s]).toContain('1 ');
+    expect(t[s + 1]).toMatch(/^\s*t\s+gap\s+span\s+vol\s+hold\s+slot\s+tg\s+per\s+cov$/);
+    expect(t[s + 2].trim().split(/\s+/)).toHaveLength(9);
+    const all = t.join('\n'); for (const w of ['note: hold = the most hands', 'note: mk = offscreen targets', 'note: stall lines']) expect(all, w).toContain(w);
+    expect(JSON.parse(st.m.get(PERF_KEY + '-webgpu')).stalls).toHaveLength(1);
+  });
+  it('wiring: vr-wgpu.js counts what it makes, vr-view.js feeds the differences once a frame (no object made) and the volume movement after the render', () => {
+    const wg = readFileSync(new URL('../../docs/vr-wgpu.js', import.meta.url), 'utf8');
+    for (const w of ['counts.target++', 'counts.tex++', 'counts.group++', 'volume.counts.slot++', 'volume.counts.peri++', 'return { counts, device']) expect(wg, w).toContain(w);
+    expect((wg.match(/counts\.group\+\+/g) || []).length).toBe(2);
+    expect(vr).toContain("perfLog.count('mk',d)"); expect(vr).toContain("perfLog.count('slotc',ds)"); expect(vr).toContain("perfLog.count('perc',dp)");
+    expect(vr).toContain('perfLog.move(pmP.distanceTo(pmP0)*100,pmQ.angleTo(pmQ0)*57.29578)');
+    expect(vr.indexOf('perfLog.move(')).toBeGreaterThan(vr.indexOf('if(gx)gxFrameEnd(fa0);'));
   });
 });

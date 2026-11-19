@@ -49,12 +49,12 @@ const proxyU = (over = {}) => {
 const draw = (r, u, extra = {}) => r.draw({ u, cams: [eyeCam(640, 480), eyeCam(640, 480)], model: new THREEG.Matrix4(), f: 0.5, fov: false, rects: null, variant: { cls4: false, events: false }, ...extra });
 const frameOf = (r, u, extra) => { draw(r, u, extra); return r.volume.markFrame(); };
 const begin = (r, cb) => r.breakdown.begin({ cls4: false, events: false }, cb);
-// the region of the mock frame: 640 x 480 eyes at scale 0.5 -> 320 x 240 per eye, the slot 320 x 240, stride 322; tiles: 40 per eye, 30 rows
-const TILES = { perEye: 40, rows: 30 };
+// the region of the mock frame: 640 x 480 eyes at scale 0.5 -> 320 x 240 per eye, the slot 320 x 240, stride 322; tiles: 40 per eye, 30 rows (dispatched,: the tiles' texture is made once for the target's largest slot: 640 x 480 -> 80 per eye, 60 rows)
+const TILES = { perEye: 40, rows: 30, texCols: 160, texRows: 60 };
 const bind9 = g => g.d.entries.find(e => e.binding === VOLUME_BINDINGS.proxy).resource.t;
 
 describe('host: the low pass runs the pre-pass first, with the tiles it reads', () => {
-  it('a compute pass is encoded before the low render pass (one submit), dispatched over both eyes\' tiles, with a timestamp slot of its own; the tiles are r32float (storage + binding), (40 x 2) x 30', withGpu(async () => {
+  it('a compute pass is encoded before the low render pass (one submit), dispatched over both eyes\' tiles, with a timestamp slot of its own; the tiles are r32float (storage + binding), (80 x 2) x 60: the tiles of the largest slot, the pass dispatches (40 x 2) x 30 of the used slot', withGpu(async () => {
     const { device, log } = mockGpu([[1_000_000n, 3_000_000n], [3_000_000n, 13_000_000n], [13_100_000n, 13_200_000n]]);
     const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1] });
     const rec = frameOf(r, proxyU());
@@ -67,8 +67,8 @@ describe('host: the low pass runs the pre-pass first, with the tiles it reads', 
     const low = log.passes[0];
     expect(c.d.timestampWrites.querySet).toBe(low.d.timestampWrites.querySet); // one query set, two different slots
     expect([c.d.timestampWrites.beginningOfPassWriteIndex, c.d.timestampWrites.endOfPassWriteIndex]).not.toEqual([low.d.timestampWrites.beginningOfPassWriteIndex, low.d.timestampWrites.endOfPassWriteIndex]);
-    const tiles = log.textures.find(t => t.d.format === 'r32float' && t.d.size[0] === 80);
-    expect(tiles.d.size).toEqual([TILES.perEye * 2, TILES.rows, 1]); expect(tiles.d.usage & 16).toBe(16); expect(tiles.d.usage & 1).toBe(1); // STORAGE_BINDING | TEXTURE_BINDING
+    const tiles = log.textures.find(t => t.d.format === 'r32float' && t.d.size[0] === TILES.texCols);
+    expect(tiles.d.size).toEqual([TILES.texCols, TILES.texRows, 1]); expect(tiles.d.usage & 16).toBe(16); expect(tiles.d.usage & 1).toBe(1); // STORAGE_BINDING | TEXTURE_BINDING
     expect(bind9(low.groups[0])).toBe(tiles); expect(bind9(low.groups[1] ?? low.groups[0])).toBe(tiles); // the volume pass reads the texture the compute pass writes
     expect(c.groups[0].d.entries.find(e => e.binding === 4).resource.t).toBe(tiles); // the compute writes the same texture
     await settle(); expect(rec.lowMs).toBeCloseTo(10); r.dispose();
@@ -120,11 +120,11 @@ describe('host: the low pass runs the pre-pass first, with the tiles it reads', 
     expect(r.volume.takeFrameStats().spans.map(x => +x.toFixed(3))).toEqual([12.2]); // from the compute pass's start to the marker's end
     r.dispose();
   }));
-  it('the tiles are a pool by size (a frame of the same size reuses its texture) and dispose lets them go', withGpu(async () => {
+  it('the tiles are one texture for the session (a frame reuses it) and dispose lets it go', withGpu(async () => {
     const { device, log } = mockGpu([[1n, 2n], [3n, 4n], [5n, 6n], [7n, 8n], [9n, 10n], [11n, 12n]]);
     const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1] }); const u = proxyU();
     frameOf(r, u); const n = log.textures.filter(t => t.d.format === 'r32float').length; frameOf(r, u);
-    const tiles = log.textures.filter(t => t.d.format === 'r32float' && t.d.size[0] === 80); expect(tiles).toHaveLength(1); expect(log.computePasses).toHaveLength(2);
+    const tiles = log.textures.filter(t => t.d.format === 'r32float' && t.d.size[0] === TILES.texCols); expect(tiles).toHaveLength(1); expect(log.computePasses).toHaveLength(2);
     expect(log.textures.filter(t => t.d.format === 'r32float').length).toBe(n);
     r.dispose(); expect(tiles[0].destroyed).toBe(true);
   }));
@@ -135,7 +135,7 @@ describe('host: the breakdown\'s shadow passes carry the low pass\'s pre-pass (p
     const { device, log } = mockGpu([[1n, 2n], [3n, 4n], [5n, 6n], [7n, 8n], [9n, 10n], [11n, 12n], [13n, 14n]]);
     const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1] });
     const got = []; await begin(r, (...a) => got.push(a));
-    const rec = frameOf(r, proxyU()); const tiles = log.textures.find(t => t.d.format === 'r32float' && t.d.size[0] === 80);
+    const rec = frameOf(r, proxyU()); const tiles = log.textures.find(t => t.d.format === 'r32float' && t.d.size[0] === TILES.texCols);
     const pxOf = (spec, i = 0) => { const n0 = log.writes.length, np = log.passes.length; const x = r.breakdown.shadow(rec, spec); const w = log.writes.slice(n0).filter(isMain); return { x, w, passes: log.passes.slice(np) }; };
     let o = pxOf(BD_SPECS.same); expect(o.x).toBe(true);
     expect(o.w.map(x => x.data[at('proxyOn')])).toEqual([1, 1]); expect(o.w.map(x => x.data[at('proxyOrg')])).toEqual([0, 2]); expect(bind9(o.passes[0].groups[0])).toBe(tiles);
@@ -162,7 +162,7 @@ describe('host: the breakdown\'s shadow passes carry the low pass\'s pre-pass (p
     expect(on.viewports).toEqual(off.viewports); expect(on.scissors).toEqual(off.scissors); expect(on.draws).toBe(off.draws); expect(on.pipeline).toBe(off.pipeline);
     expect(on.d.colorAttachments[0].view.t).not.toBe(off.d.colorAttachments[0].view.t);
     expect(bind9(on.groups[0])).toBe(bind9(off.groups[0])); expect(on.groups[0]).not.toBe(off.groups[0]); // the same tiles, other uniform buffers
-    const cp = log.computePasses[nc]; expect(cp).toBeTruthy(); expect(cp.dispatches).toEqual([[Math.ceil(704 / 8), Math.ceil(256 / 8)]]); // the scratch targets' size (2 x 322 -> 704, 240 -> 256)
+    const cp = log.computePasses[nc]; expect(cp).toBeTruthy(); expect(cp.dispatches).toEqual([[Math.ceil(642 / 8), Math.ceil(240 / 8)]]); // the part the passes drew, not the scratch targets' size
     const ent = cp.groups[0].d.entries; expect(ent.map(e => e.binding)).toEqual([0, 1, 2, 3, 4]);
     expect(ent[0].resource.t).toBe(off.d.colorAttachments[0].view.t); expect(ent[1].resource.t).toBe(off.d.colorAttachments[1].view.t); expect(ent[2].resource.t).toBe(on.d.colorAttachments[0].view.t); expect(ent[3].resource.t).toBe(on.d.colorAttachments[1].view.t); expect(ent[4].resource.buffer).toBe(cnt);
     expect(log.cmds.slice(-4)).toEqual(['clear', 'cpass', 'copyB4', 'submit']);

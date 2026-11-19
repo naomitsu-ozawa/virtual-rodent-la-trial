@@ -153,7 +153,7 @@ describe('vr-view.js wiring (static)', () => {
     expect(vr).toContain('renderer=makeGlRenderer();'); // the WebGPU session was refused: the WebGL one opens in the same click
   });
   it('the WebGPU frame branch: the WGSL pass per eye, then the composite in the main render; the WebGL branches are unchanged below it', () => {
-    expect(vr).toContain('gx.vol.draw({u:material.uniforms,cams,model:mesh.matrixWorld,f:Math.min(1,f),fov,fp,rects:rsFov,band:rsFov[0][4],variant:{cls4:cls4On,events:material.uniforms.planeCount.value>0},decode:renderer.currentColorSpace===THREE.SRGBColorSpace,boxes:xrCam?rsEyes:null});');
+    expect(vr).toContain('gx.vol.draw({u:material.uniforms,cams,model:mesh.matrixWorld,f:Math.min(1,f),fov,fp,periK:kF,rects:rsFov,band:rsFov[0][4],variant:{cls4:cls4On,events:material.uniforms.planeCount.value>0},decode:renderer.currentColorSpace===THREE.SRGBColorSpace,boxes:xrCam?rsEyes:null});');
     expect(vr).toContain('}else if(f<1&&lowTarget){');
     expect(vr).toContain('else if(!gx)hideFreeCompile(');
   });

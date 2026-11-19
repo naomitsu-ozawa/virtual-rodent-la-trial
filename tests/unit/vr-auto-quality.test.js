@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { eyeMetrics, capFromPpv, nextCap } from '../../docs/vr-render-scale.js';
 const I = () => [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
-import { createAutoQuality, autoFloor, STEP_LEVELS, AUTO_FLOORS, AUTO_MID, GROW_SCALE, GROW_MAX_DROP, marchStep, STEP_VOXELS } from '../../docs/vr-auto-quality.js';
+import { createAutoQuality, autoFloor, STEP_LEVELS, AUTO_FLOORS, AUTO_MID, GROW_SCALE, GROW_MAX_DROP, marchStep, STEP_VOXELS, freeVolMs } from '../../docs/vr-auto-quality.js';
 
 const BUDGET = 1000 / 72;
 // mocked GPU timings: the volume pass costs `unit` ms at f = 1 and step 1; it scales with f^2 and 1/step; the rest of the frame is `rest` ms
@@ -551,5 +551,48 @@ describe('hovering at the near boundary (inside hysteresis)', () => {
     expect(ta).toEqual(tb); expect(ta[1]).toBeLessThan(1);          // down within two windows (1 s): DOWN_N
     // and at the boundary: the entry (a real jump of the covered pixels) lowers the level on the first over window
     const h = hover({ hysteresis: true, K: 300 }); expect(Math.min(...h.fs.slice(6 * FPS))).toBeLessThan(h.fs[6 * FPS - 1]);
+  });
+});
+
+describe('the volume time measured while the volume is held', () => {
+  const HOLD = 0.8, UNIT = 14, REST = 2, T = (f) => REST + UNIT * f * f; // the cost of a level when released (volume pass UNIT ms at f = 1)
+  it('freeVolMs: / holdK^2 below 1, the value itself (bit for bit) at 1 and for a missing / invalid holdK', () => {
+    expect(freeVolMs(6.4, 0.8)).toBeCloseTo(10, 12); expect(freeVolMs(3.2, 0.5)).toBeCloseTo(12.8, 12);
+    for (const k of [1, undefined, NaN, 0, -1, 1.2]) expect(Object.is(freeVolMs(7.123456789, k), 7.123456789)).toBe(true);
+    expect(freeVolMs(0, 0.8)).toBe(0);
+  });
+  // the ladder at f = 0.6; the volume pass is measured while held (at HOLD x its scale), or as it is fed
+  const hold = feed => {
+    const aq = createAutoQuality({ f: 0.6 }); let worst = 0;
+    for (let i = 0; i < 80; i++) {
+      const volHeld = UNIT * (aq.f * HOLD) ** 2 * STEP_LEVELS[0] / STEP_LEVELS[aq.stepIdx];
+      aq.update({ volMs: feed(volHeld), mainMs: REST, interval: BUDGET, budget: BUDGET });
+      worst = Math.max(worst, REST + UNIT * aq.f * aq.f * STEP_LEVELS[0] / STEP_LEVELS[aq.stepIdx]); // what the frame costs once released, at the level the ladder now holds
+    }
+    return { aq, worst };
+  };
+  it('the model: fed the held time as it is, the ladder rises to a level whose released cost is over the budget; fed freeVolMs of it, it never does', () => {
+    expect(hold(v => v).worst).toBeGreaterThan(BUDGET * 0.9);
+    const ok = hold(v => freeVolMs(v, HOLD)); expect(ok.worst).toBeLessThanOrEqual(BUDGET * 0.9 + 1e-9);
+    expect(ok.aq.f).toBeGreaterThan(0.6); // it still rises where the released cost allows (not stuck low)
+  });
+  it('holdK = 1: the same states as before, sample by sample', () => {
+    const a = createAutoQuality({ f: 0.6 }), b = createAutoQuality({ f: 0.6 });
+    for (let i = 0; i < 80; i++) {
+      const v = 14 * (a.f ** 2), w = 14 * (b.f ** 2);
+      a.update({ volMs: v, mainMs: 2, interval: BUDGET, budget: BUDGET }); b.update({ volMs: freeVolMs(w, 1), mainMs: 2, interval: BUDGET, budget: BUDGET });
+      expect(b.state).toEqual(a.state);
+    }
+  });
+  it('a held volume that is too heavy even held still lowers the level (the converted time is over the budget)', () => {
+    const aq = createAutoQuality({ f: 0.9 });
+    for (let i = 0; i < 12; i++) aq.update({ volMs: freeVolMs(40 * (aq.f * HOLD) ** 2, HOLD), mainMs: REST, interval: BUDGET, budget: BUDGET });
+    expect(aq.f).toBeLessThan(0.9);
+  });
+  it('vr-view.js feeds the ladder freeVolMs(volume time, holdK) and leaves the other values and the performance record alone', async () => {
+    const view = readFileSync(new URL('../../docs/vr-view.js', import.meta.url), 'utf8');
+    expect(view).toContain("ctrl.vol+=freeVolMs(gt.ms,holdK);ctrlN.vol+=gt.n;perfLog.add('vol',gt.ms,gt.n)");
+    expect(view).toContain('sums.vol+=gt.ms;counts.vol+=gt.n;');
+    expect(view).toContain('freeVolMs } from \'./vr-auto-quality.js');
   });
 });
