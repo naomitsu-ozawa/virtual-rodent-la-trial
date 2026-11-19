@@ -1,0 +1,397 @@
+// The WebGPU volume breakdown of the performance record (one 30 s recording from the detail tab): the WGSL variants (the display text is unchanged), the shadow passes and the counting probe of vr-wgpu.js
+// (driven with a mock device: CI has no GPU), the pure collector and report section of vr-perf-log.js, and the wiring in vr-view.js (static).
+import { describe, it, expect, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import * as THREEG from 'three/webgpu';
+import { WgslReflect } from 'wgsl_reflect/wgsl_reflect.module.js';
+import { volumeWgsl, ABLATIONS, COUNTER_FIELDS, uniformLayout } from '../../docs/vr-wgsl-core.js';
+import { createVrVolumeRenderer, regionClip, regionMvp, gxShaderInfo } from '../../docs/vr-wgpu.js';
+import { createVolBreakdown, createPerfLog, perfReport, BD_VARIANTS, BD_SPECS } from '../../docs/vr-perf-log.js';
+
+const read = f => readFileSync(new URL('../../docs/' + f, import.meta.url), 'utf8');
+const vr = read('vr-view.js'), host = read('vr-wgpu.js');
+const sha = t => createHash('sha256').update(t).digest('hex');
+// sha256 of the display variants' text as built before the breakdown existed (the previous build): [f16, cls4, events, hash]
+const DISPLAY_HASHES = [
+  [false, false, false, '83f53706ab37b1bbd239df0e2851cb4ea654e71fd2c37bdd822e0fece2628915'],
+  [false, false, true, '26e8fa1442b8272987ce7cf8c8d67c6af53657aa12aa1d62c553e6f58d28ac75'],
+  [false, true, false, '9ac3b204fb37b1df9cdb8245d80ec900ac90037ab2aecf40542707278470cf10'],
+  [false, true, true, '1fa0b6fc627c4b189747779b3711f0152c04d5ddb93093cd1b3b02d4e9c1f9a6'],
+  [true, false, false, 'f9eccad985aa2f6a8a3816c5cd423c41b03da0cb2bec05d04d587a18fe406e51'],
+  [true, false, true, '7604c1c693c81282bd7288f58e2a3f7c2857c3b485e292aafdfcada6699e361f'],
+  [true, true, false, '1cc6f7c1bd81a9fbe6ee1ab04fb76b064f4898e641d602f38f47c98bea110d87'],
+  [true, true, true, '7ce8ffdf17bcc99f4332f65c8ef35d76c3a4904aeb9b93595a9b01a00923e448'],
+];
+const BASES = []; for (const f16 of [false, true]) for (const cls4 of [false, true]) for (const events of [false, true]) BASES.push({ f16, cls4, events });
+
+describe('WGSL: the display variants are the text of, character for character', () => {
+  it.each(DISPLAY_HASHES)('f16=%s cls4=%s events=%s', (f16, cls4, events, hash) => {
+    expect(sha(volumeWgsl({ f16, cls4, events }))).toBe(hash);
+    expect(sha(volumeWgsl({ f16, cls4, events, abl: '', counters: false }))).toBe(hash);
+  });
+  it('the defaults of volumeWgsl are the display variant with the section code (as before)', () => { expect(volumeWgsl()).toBe(volumeWgsl({ f16: false, cls4: false, events: true })); });
+});
+
+describe('WGSL: the breakdown variants (abl, counters)', () => {
+  const base = volumeWgsl({ events: true });
+  it.each(BASES.flatMap(b => [...ABLATIONS.map(abl => ({ ...b, abl })), { ...b, counters: true }]))('%o is read by wgsl_reflect, keeps the entry points and differs from the display text', v => {
+    const t = volumeWgsl(v);
+    expect(t).not.toMatch(/undefined|NaN|\$\{/);
+    const r = new WgslReflect(t);
+    expect(r.entry.vertex.map(e => e.name)).toEqual(['vs']); expect(r.entry.fragment.map(e => e.name)).toEqual(['fs']);
+    expect(t).not.toBe(volumeWgsl({ f16: v.f16, cls4: v.cls4, events: v.events }));
+  });
+  it('abl grad: no gradient fetch call (n stays -dir), the search stays; abl refine: no surface search; abl shade: no shading call, the normal still feeds the result through f32(u.pad1)', () => {
+    const g = volumeWgsl({ abl: 'grad' }), rf = volumeWgsl({ abl: 'refine' }), sh = volumeWgsl({ abl: 'shade' });
+    expect(base).toContain('n=gradientAtS(tc,idx);'); expect(g).not.toContain('n=gradientAtS(tc,idx);'); expect(g).toContain('entryFaceNormal(o,dir)'); expect(g).toContain('if(hitSimple){}');
+    expect(base).toContain('two secant guesses'); expect(rf).not.toContain('two secant guesses'); expect(rf).not.toContain('clsAt(tcO+tcD*mid)'); expect(rf).toContain('let hp=o+dir*hi;'); expect(rf).toContain('n=gradientAtS(tc,idx);');
+    expect(base).toContain('vrlShade(nn,viewDir'); expect(sh).not.toContain('vrlShade(nn,viewDir'); expect(sh).toContain('f32(u.pad1)'); expect(sh).toContain('nn.x+nn.y+nn.z'); expect(sh).toContain('let lit=u.segC[idx].rgb*shade.x+vec3<f32>(shade.y);');
+    expect(base).not.toContain('f32(u.pad1)');
+  });
+  it('pad1 is 0 at run time: the packer never gets a value for it (it is in no uniforms object of the session)', () => {
+    expect(uniformLayout().fields.map(f => f.name)).toContain('pad1');
+    expect(vr).not.toMatch(/pad1\s*:\s*\{?\s*value/);
+  });
+  it('counters: a storage buffer in group 1 (writable, fragment), eight u32 a pixel from the position, no discard left, every counter has its place', () => {
+    const t = volumeWgsl({ counters: true });
+    expect(t).toContain('@group(1) @binding(0) var<storage,read_write> cnt:array<u32>;');
+    const r = new WgslReflect(t);
+    const g1 = r.getBindGroups()[1]; expect(g1).toHaveLength(1); expect(g1[0].name).toBe('cnt');
+    expect(t).not.toContain('discard;'); expect(base).toContain('discard;');
+    expect(t).toContain('fn fsMain(in:VOut)->FOut{'); expect(t).toContain('@fragment fn fs(in:VOut)->FOut{');
+    expect(t).toContain('(u32(in.pos.y)*CNT_W+u32(in.pos.x))*8u');
+    expect(COUNTER_FIELDS).toHaveLength(8);
+    for (const x of ['gIters+=1u', 'gCreep+=1u', 'gJumps+=1u', 'gSkipRd+=1u', 'gClsRd+=1u', 'gRefRd+=1u', 'gGradRd+=6u', 'gOut=1u', 'gOut=3u', 'gOut=4u']) expect(t, x).toContain(x);
+    expect(t.split('gClsRd+=1u').length - 1).toBe(2); expect(t.split('gRefRd+=1u').length - 1).toBe(2);
+    expect(r.entry.fragment.map(e => e.name)).toEqual(['fs']);
+  });
+  it('the display variants have no storage binding and no group 1', () => { expect(base).not.toContain('@group(1)'); expect(new WgslReflect(base).getBindGroups()).toHaveLength(1); });
+  it('an unknown abl is an error, and the header comment of a variant says which it is', () => {
+    expect(() => volumeWgsl({ abl: 'nope' })).toThrow();
+    expect(volumeWgsl({ abl: 'grad' })).toContain('events=true abl=grad counters=false');
+    expect(volumeWgsl({ counters: true, f16: true })).toMatch(/^enable f16;\n\/\/ VR \/ AR volume pass \(WGSL\), variant f16=true cls4=false events=true abl=none counters=true\n/);
+  });
+});
+
+describe('the collector (createVolBreakdown)', () => {
+  const feed = (vb, name, ratio, n, low = 10) => { for (let i = 0; i < n; i++) vb.add(name, ratio * low, low); };
+  it('R_v is the median ratio, M the median low pass ms, est = (R_same - R_v) x M, noCreep / noJump come out negative', () => {
+    const vb = createVolBreakdown();
+    feed(vb, 'same', 1, 5); feed(vb, 'box', 0.2, 5); feed(vb, 'simple', 0.7, 5); feed(vb, 'noGrad', 0.9, 5); feed(vb, 'noRefine', 0.85, 5); feed(vb, 'noShade', 0.95, 5); feed(vb, 'noCreep', 1.2, 5); feed(vb, 'noJump', 1.5, 5);
+    const s = vb.summary();
+    expect(s.M).toBeCloseTo(10); expect(s.nLow).toBe(40);
+    expect(s.variants.same).toMatchObject({ n: 5, est: null }); expect(s.variants.same.R).toBeCloseTo(1);
+    expect(s.variants.box.est).toBeCloseTo(8); expect(s.variants.noGrad.est).toBeCloseTo(1); expect(s.variants.noRefine.est).toBeCloseTo(1.5); expect(s.variants.noShade.est).toBeCloseTo(0.5);
+    expect(s.variants.noCreep.est).toBeCloseTo(-2); expect(s.variants.noJump.est).toBeCloseTo(-5);
+    // split: fixed = R_box x M, march = (R_simple - R_box) x M - shading, refine / gradient / shading = est; sum against M
+    expect(s.split.fixed).toBeCloseTo(2); expect(s.split.shading).toBeCloseTo(0.5); expect(s.split.march).toBeCloseTo(4.5); expect(s.split.refine).toBeCloseTo(1.5); expect(s.split.gradient).toBeCloseTo(1);
+    expect(s.split.sum).toBeCloseTo(9.5); expect(s.split.pct).toBeCloseTo(95);
+  });
+  it('the median and the quartiles of a ratio come from the samples (a middle sample does not move the median)', () => {
+    const vb = createVolBreakdown(); for (const r of [1, 2, 3, 4, 100]) vb.add('same', r, 1);
+    const x = vb.summary().variants.same; expect(x.R).toBe(3); expect(x.q1).toBe(2); expect(x.q3).toBe(4); expect(x.n).toBe(5);
+  });
+  it('no sample: "-" everywhere (no NaN, no 0), also for a variant that has none while the others have', () => {
+    const vb = createVolBreakdown(); const empty = vb.lines().join('\n');
+    expect(empty).not.toMatch(/NaN|undefined|Infinity/); expect(empty).toContain('abl box n=0 ratio - (IQR -) · est -'); expect(empty).toContain('low pass median - ms (0) · low share of vol -'); expect(empty).toContain('split: fixed(box) - ');
+    expect(empty).toContain('probe whole: -'); expect(empty).toContain('probe native: -');
+    vb.add('same', 5, 5); const l = vb.lines().join('\n'); expect(l).toContain('abl same n=1 ratio 1.00'); expect(l).toContain('abl noJump n=0 ratio - (IQR -) · est -'); expect(l).toContain('split: fixed(box) - ');
+  });
+  it('a sample with a bad ms is no sample (zero low pass, negative or non-finite shadow, unknown variant)', () => {
+    const vb = createVolBreakdown();
+    expect([vb.add('same', 1, 0), vb.add('same', -1, 5), vb.add('same', NaN, 5), vb.add('same', 1, Infinity), vb.add('nope', 1, 5)]).toEqual([false, false, false, false, false]);
+    expect(vb.add('same', 5, 5)).toBe(true); expect(vb.summary().nLow).toBe(1);
+  });
+  it('the shadow ms never reaches the log\'s own columns (vol stays empty)', () => {
+    const log = createPerfLog({ kind: 'webgpu', now: () => 1000, store: null }); log.vb = createVolBreakdown(); log.vb.add('same', 7, 7);
+    const row = log.row({ menu: 0, rec: 1 }, 1000); expect(row.vol).toBeNull(); expect(row.rec).toBe(1);
+  });
+  it('the summary leaves the recorded rows out (their GPU is loaded by the shadow passes) and says how many; without a recording it is as before', () => {
+    const log = createPerfLog({ kind: 'webgpu', now: () => 0, store: null });
+    log.row({ menu: 0, rec: 0, fps: 72 }, 1000); log.row({ menu: 0, rec: 0, fps: 70 }, 2000); log.row({ menu: 0, rec: 1, fps: 30 }, 3000); log.row({ menu: 1, rec: 1, fps: 30 }, 4000);
+    const s = log.summary(); expect(s.closedRows).toBe(2); expect(s.recLeft).toBe(1); expect(s.fps).toBe(71);
+    expect(perfReport(log, {})).toContain('-- summary (rows with the menu closed: 2 of 4, 1 rows of the breakdown recording left out)');
+    const plain = createPerfLog({ kind: 'webgpu', now: () => 0, store: null }); plain.row({ menu: 0, rec: 0, fps: 72 }, 1000);
+    expect(perfReport(plain, {})).toContain('-- summary (rows with the menu closed: 1 of 1)');
+  });
+  it('the report section: the lines of the spec, the low share from the vol column of the recorded rows, notes in English, no filtering by the menu', () => {
+    const log = createPerfLog({ kind: 'webgpu', now: () => 0, store: null }); const vb = log.vb = createVolBreakdown(); vb.seconds = 30.2;
+    for (const [v, r] of [['same', 1], ['box', 0.3], ['simple', 0.6], ['noGrad', 0.9], ['noRefine', 0.9], ['noShade', 0.9], ['noCreep', 1.1], ['noJump', 1.2]]) for (let i = 0; i < 4; i++) vb.add(v, r * 5, 5);
+    const c = new Uint32Array(64 * 64 * 8); for (let i = 0; i < 64 * 64; i++) { c[i * 8] = i % 4 === 0 ? 1 : 2; c[i * 8 + 1] = 5 + (i % 9); c[i * 8 + 5] = 5; }
+    vb.addProbe('whole', c, 64, 64); vb.addProbe('native', c, 64, 64);
+    log.row({ menu: 1, rec: 1, fps: 40 }, 1000); log.rows[0].vol = 10; // a row with the menu open is used as well
+    const t = perfReport(log, {}).split('\n'), i = t.indexOf('-- vol breakdown (recording, paired shadow passes)');
+    expect(i).toBeGreaterThan(0);
+    expect(t[i + 1]).toBe('rec 30 s · shadow every 4th frame · low pass median 5.00 ms (32) · low share of vol 0.50');
+    expect(t[i + 2]).toMatch(/^abl same n=4 ratio 1\.00 \(IQR 1\.00-1\.00\) · est -$/); expect(t[i + 3]).toMatch(/^abl box n=4 ratio 0\.30 \(IQR 0\.30-0\.30\) · est 3\.5 ms$/);
+    expect(t.slice(i, i + 14).some(l => l.startsWith('split: fixed(box) 1.5 ms · march '))).toBe(true);
+    expect(t.some(l => l.startsWith('probe whole: windows 1 · px 4096 · steps mean/p50/p95/max '))).toBe(true); expect(t.some(l => /^probe native: windows 1 · blocks 64 · block max\/mean median\/p90 /.test(l))).toBe(true);
+    const notes = t.filter((l, k) => k > i && l.startsWith('note: ')); expect(notes.length).toBeGreaterThanOrEqual(5);
+    expect(notes.join('\n')).toMatch(/shadow pass/); expect(notes.join('\n')).toMatch(/8 x 8 pixels, an approximation of a GPU wave/); expect(notes.join('\n')).toMatch(/span, gap, swd and fps of those rows are disturbed/); expect(notes.join('\n')).not.toMatch(/[぀-ヿ一-鿿]/);
+  });
+  it('probe blocks: 8 x 8 pixels, max / mean of the work per block, mixed = hit and non-hit in one block', () => {
+    const w = 16, h = 8, c = new Uint32Array(w * h * 8);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const o = (y * w + x) * 8; c[o] = 2; c[o + 1] = x < 8 ? 10 : 10; }
+    for (let y = 0; y < 8; y++) for (let x = 0; x < 4; x++) c[(y * w + x) * 8] = 1; // the left block: half hits (mixed)
+    c[(3 * w + 12) * 8 + 1] = 90; // the right block: one heavy pixel: max 90, mean (63 x 10 + 90) / 64
+    const vb = createVolBreakdown(); expect(vb.addProbe('native', c, w, h)).toBe(true);
+    const n = vb.summary().probes.native;
+    expect(n.blocks).toBe(2); expect(n.mixedShare).toBeCloseTo(0.5);
+    expect(n.blockMax.median).toBeCloseTo((1 + 90 / ((63 * 10 + 90) / 64)) / 2); expect(n.outcome.hit).toBeCloseTo(32 / 128);
+  });
+  it('an uncovered pixel (outcome 0) is no pixel; a bad kind or a short array is refused; the rows of WebGL line up with the heading with the rec column "-"', () => {
+    const vb = createVolBreakdown(); expect(vb.addProbe('whole', new Uint32Array(64 * 64 * 8), 64, 64)).toBe(true); expect(vb.summary().probes.whole).toBeNull();
+    expect(vb.addProbe('x', new Uint32Array(8), 1, 1)).toBe(false); expect(vb.addProbe('whole', new Uint32Array(8), 64, 64)).toBe(false);
+    const log = createPerfLog({ kind: 'webgl', now: () => 1000, store: null }); log.row({ menu: 0, fps: 72 }, 1000);
+    const t = perfReport(log, {}).split('\n'), h = t.findIndex(l => /^\s*t\s+fps\s+g1/.test(l));
+    expect(t[h]).toMatch(/fov\s+rec$/); expect(t[h + 1].length).toBe(t[h].length); expect(t[h + 1]).toMatch(/\s-$/); expect(t.join('\n')).not.toContain('-- vol breakdown');
+  });
+  it('the table of variants: the eight, in the order they run, with the program / uniform change each needs', () => {
+    expect(BD_VARIANTS).toEqual(['same', 'box', 'simple', 'noGrad', 'noRefine', 'noShade', 'noCreep', 'noJump']);
+    expect(BD_SPECS.box.overrides).toEqual({ diag: 1 }); expect(BD_SPECS.simple.overrides).toEqual({ diag: 3 }); expect(BD_SPECS.noCreep.overrides).toEqual({ useSkip: 0 }); expect(BD_SPECS.noJump.overrides).toEqual({ jumpOn: 0 });
+    expect([BD_SPECS.noGrad.abl, BD_SPECS.noRefine.abl, BD_SPECS.noShade.abl]).toEqual(['grad', 'refine', 'shade']); expect(BD_SPECS.same.abl).toBeUndefined(); expect(BD_SPECS.same.overrides).toBeUndefined();
+  });
+});
+
+// ---- the host, driven with a mock device ----
+const GPU_GLOBALS = () => {
+  vi.stubGlobal('GPUShaderStage', { VERTEX: 1, FRAGMENT: 2 }); vi.stubGlobal('GPUBufferUsage', { VERTEX: 1, COPY_DST: 2, UNIFORM: 4, QUERY_RESOLVE: 8, COPY_SRC: 16, MAP_READ: 32, STORAGE: 64 });
+  vi.stubGlobal('GPUTextureUsage', { TEXTURE_BINDING: 1, COPY_DST: 2, RENDER_ATTACHMENT: 4, COPY_SRC: 8 }); vi.stubGlobal('GPUMapMode', { READ: 1 });
+};
+const withGpu = fn => async () => { GPU_GLOBALS(); try { await fn(); } finally { vi.unstubAllGlobals(); } };
+const settle = () => new Promise(r => setTimeout(r, 0));
+const eyeCam = (W, H) => ({ viewport: { z: W, w: H }, projectionMatrix: new THREEG.Matrix4(), matrixWorldInverse: new THREEG.Matrix4(), matrixWorld: new THREEG.Matrix4() });
+// a device with timestamp-query: script = [[begin, end] ns ticks, ...] in the order the resolves are encoded (low pass, marker, shadow, ...); the log keeps the passes and the commands in the order of encoding
+const mockGpu = (script, { timestamps = true } = {}) => {
+  const log = { passes: [], cmds: [], buffers: [], textures: [], writes: [], queries: 0, shaders: [], pipelines: [], bindGroups: [], layouts: 0 };
+  const device = { features: new Set(timestamps ? ['timestamp-query'] : []), limits: {} };
+  device.queue = { writeBuffer: (b, off, data) => { log.writes.push({ b, data: new Int32Array(ArrayBuffer.isView(data) ? data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) : data.slice(0)) }); }, writeTexture() {}, submit: l => { log.cmds.push('submit'); } };
+  device.createQuerySet = d => { log.queries++; return { d, destroy() {} }; };
+  device.createBuffer = d => { const b = { d, vals: [0n, 0n], destroyed: false, destroy() { b.destroyed = true; }, mapAsync: async () => {}, getMappedRange: () => (d.size > 16 ? new Uint32Array(d.size / 4).buffer : new BigUint64Array(b.vals).buffer), unmap() {} }; log.buffers.push(b); return b; };
+  device.createTexture = d => { const t = { d, destroyed: false, destroy() { t.destroyed = true; }, createView: () => ({ t }) }; log.textures.push(t); return t; };
+  device.createSampler = () => ({}); device.createBindGroupLayout = () => { log.layouts++; return {}; }; device.createPipelineLayout = () => ({});
+  device.createShaderModule = d => { log.shaders.push(d.code); return {}; };
+  device.createRenderPipeline = d => { const p = { d }; log.pipelines.push(p); return p; }; device.createRenderPipelineAsync = async d => { const p = { d }; log.pipelines.push(p); return p; };
+  device.createBindGroup = d => { const g = { d }; log.bindGroups.push(g); return g; };
+  device.createCommandEncoder = () => ({
+    beginRenderPass: d => { const p = { d, pipeline: null, groups: {}, viewports: [], scissors: [], draws: 0 }; log.passes.push(p); log.cmds.push('pass'); return { setPipeline: x => { p.pipeline = x; }, setVertexBuffer() {}, setBindGroup: (i, g) => { p.groups[i] = g; }, setViewport: (...a) => p.viewports.push(a), setScissorRect: (...a) => p.scissors.push(a), draw: () => { p.draws++; }, end() {} }; },
+    resolveQuerySet() {}, copyBufferToBuffer: (_s, _o, dst, _d, n) => { if (n === 16) dst.vals = script.shift(); log.cmds.push('copyB' + n); }, clearBuffer: () => log.cmds.push('clear'), copyTextureToBuffer() {}, finish: () => ({}),
+  });
+  return { device, log };
+};
+const drawLow = r => r.draw({ u: {}, cams: [eyeCam(640, 480), eyeCam(640, 480)], model: new THREEG.Matrix4(), f: 0.5, fov: false, rects: null, variant: { cls4: false, events: false } });
+const frame = (r, { shadow = null } = {}) => { drawLow(r); return r.volume.markFrame(); };
+
+describe('host: nothing is made for the breakdown until it is begun, and the display programs are the display text', () => {
+  it('a drawn frame makes no breakdown resource (buffers, textures, queries, bind group layouts, pipelines): the count after drawing equals the count before the first frame is drawn', withGpu(async () => {
+    const { device, log } = mockGpu([[1n, 2n], [3n, 4n]]);
+    const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1] });
+    const before = { b: log.buffers.length, q: log.queries, l: log.layouts };
+    frame(r); frame(r); await settle();
+    expect(log.buffers).toHaveLength(before.b); expect(log.queries).toBe(before.q); expect(log.layouts).toBe(before.l);
+    expect(log.pipelines).toHaveLength(1); expect(log.shaders).toEqual([volumeWgsl({ f16: false, cls4: false, events: false })]);
+    expect(r.volume.bdActive()).toBe(false);
+    r.dispose();
+  }));
+  it('warm() makes only the display variants it is asked for (same keys as before), pipeFor of one gives the same program again', withGpu(async () => {
+    const { device, log } = mockGpu([]);
+    const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1] });
+    await r.volume.warm(); expect(log.pipelines).toHaveLength(2); expect(log.shaders).toEqual([volumeWgsl({ cls4: false, events: false }), volumeWgsl({ cls4: false, events: true })]);
+    const n = log.pipelines.length; r.volume.pipeFor({ cls4: false, events: true }); r.volume.pipeFor({ cls4: false, events: false }); expect(log.pipelines).toHaveLength(n);
+    r.dispose();
+  }));
+  it('the compiler messages of a breakdown variant have a key of their own in the diagnostics', async () => {
+    const d = { values: {}, value(k, v) { this.values[k] = v; }, stage() {}, error() {} }; const mod = { getCompilationInfo: async () => ({ messages: [] }) };
+    gxShaderInfo(d, mod, { f16: false, cls4: false, events: true }); gxShaderInfo(d, mod, { f16: false, cls4: false, events: true, abl: 'shade' }); gxShaderInfo(d, mod, { f16: false, cls4: false, events: true, counters: true });
+    await settle(); expect(Object.keys(d.values)).toEqual(['wgsl c3e', 'wgsl c3e abl-shade', 'wgsl c3e counters']);
+  });
+});
+
+describe('host: the shadow pass', () => {
+  const begin = async (r, onShadow) => { const res = await r.breakdown.begin({ cls4: false, events: false }, onShadow); return res; };
+  it('begin compiles the three abl variants and the counting variant asynchronously (not the display pipelines again) and reports what it has', withGpu(async () => {
+    const { device, log } = mockGpu([]);
+    const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1] });
+    const res = await begin(r, () => {});
+    expect(res).toEqual({ shadow: true, probe: true, failed: [] });
+    expect(log.shaders).toHaveLength(4);
+    expect(log.shaders.slice(0, 3).map(t => /abl=(\w+) counters=false/.exec(t)[1])).toEqual(ABLATIONS); expect(log.shaders[3]).toContain('counters=true');
+    expect(log.shaders).toEqual([...ABLATIONS.map(abl => volumeWgsl({ events: false, abl })), volumeWgsl({ events: false, counters: true })]);
+    expect(log.pipelines).toHaveLength(4); // no display pipeline among them (a draw makes those)
+    r.dispose();
+  }));
+  it('a variant that does not compile is left out and listed; without timestamp-query no shadow pass is made but the probe is still available', withGpu(async () => {
+    const { device } = mockGpu([]); const real = device.createRenderPipelineAsync; let k = 0; device.createRenderPipelineAsync = async d => { if (++k === 2) throw new Error('compile error x'); return real(d); };
+    const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1] });
+    const res = await begin(r, () => {}); expect(res.shadow).toBe(false); expect(res.probe).toBe(true); expect(res.failed).toHaveLength(1); expect(res.failed[0]).toContain('compile error x');
+    r.dispose();
+    const g = mockGpu([], { timestamps: false }); const r2 = createVrVolumeRenderer({ THREE: THREEG, device: g.device, halfExt: [1, 1, 1] });
+    const res2 = await begin(r2, () => {}); expect(res2.shadow).toBe(false); expect(res2.probe).toBe(true);
+    const rec = frame(r2); expect(r2.breakdown.shadow(rec, BD_SPECS.same)).toBe(false); r2.dispose();
+  }));
+  it('the shadow pass comes after the marker pass, draws the low pass again (same viewports and scissors) into targets of its own with its own timestamps and uniform slots; its ms is paired with the same frame\'s low pass ms and is not in the vol, span or gap numbers', withGpu(async () => {
+    // order of the resolves: low pass of frame 1, its marker, its shadow, low pass of frame 2, its marker
+    const { device, log } = mockGpu([[10_000_000n, 20_000_000n], [20_100_000n, 20_200_000n], [30_000_000n, 34_000_000n], [50_000_000n, 60_000_000n], [60_100_000n, 60_200_000n]]);
+    const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1] });
+    const got = []; await begin(r, (n, s, l) => got.push([n, s, l]));
+    const rec1 = frame(r); // frame 1
+    expect(log.passes.map(p => p.d.colorAttachments?.length)).toEqual([2, 1]); // low (2 targets), marker
+    const used = log.passes.length;
+    expect(r.breakdown.shadow(rec1, BD_SPECS.noGrad)).toBe(true);
+    const low = log.passes[0], marker = log.passes[1], sh = log.passes[used];
+    expect(log.passes.indexOf(sh)).toBeGreaterThan(log.passes.indexOf(marker)); // after markFrame
+    expect(sh.viewports).toEqual(low.viewports); expect(sh.scissors).toEqual(low.scissors); expect(sh.draws).toBe(low.draws);
+    expect(sh.pipeline).not.toBe(low.pipeline);
+    expect(sh.d.timestampWrites.querySet).not.toBe(low.d.timestampWrites.querySet);
+    expect(sh.d.colorAttachments.map(a => a.storeOp)).toEqual(['store', 'store']); expect(sh.d.colorAttachments.map(a => a.loadOp)).toEqual(['clear', 'clear']);
+    expect(sh.d.colorAttachments[0].view.t).not.toBe(low.d.colorAttachments[0].view.t); expect(sh.d.colorAttachments[1].view.t).not.toBe(low.d.colorAttachments[1].view.t);
+    expect(sh.d.colorAttachments[0].view.t.d.size).toEqual(low.d.colorAttachments[0].view.t.d.size); // exactly the low target's size
+    expect(sh.groups[0]).not.toBe(low.groups[0]); // its own uniform slot (bind group on the buffers 4 / 5)
+    await settle();
+    expect(got).toHaveLength(1); expect(got[0][0]).toBe('noGrad'); expect(got[0][1]).toBeCloseTo(4); expect(got[0][2]).toBeCloseTo(10);
+    const rec2 = frame(r); await settle();
+    const gm = r.volume.takeGpuMs(); expect(gm.n).toBe(2); expect(gm.ms).toBeCloseTo(20); // the vol numbers: the two low passes only
+    const st = r.volume.takeFrameStats();
+    expect(st.spans.map(x => +x.toFixed(3))).toEqual([10.2, 10.2]); expect(st.gaps).toEqual([]); // the frame after the shadow pass has no gap sample
+    expect(rec2.vms).toBeCloseTo(10); expect(rec1.vms).toBeCloseTo(10); expect(rec1.vols).toBe(1); expect(rec1.lowMs).toBeCloseTo(10);
+    r.dispose();
+  }));
+  it('the pair completes whichever read-back comes first, and a failed low pass makes no pair; the overrides of a variant are in the uniforms of the shadow pass, not in the low pass\'s', withGpu(async () => {
+    const { device, log } = mockGpu([[10_000_000n, 20_000_000n], [20_100_000n, 20_200_000n], [30_000_000n, 36_000_000n]]);
+    const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1] });
+    const got = []; await begin(r, (n, s, l) => got.push([n, s, l]));
+    const rec = frame(r); const nWrites = log.writes.length;
+    expect(r.breakdown.shadow(rec, BD_SPECS.box)).toBe(true);
+    const diag = uniformLayout().fields.find(f => f.name === 'diag').offset / 4;
+    const w = log.writes.slice(nWrites).filter(x => x.data.length === uniformLayout().byteSize / 4); expect(w).toHaveLength(2); expect(w.map(x => x.data[diag])).toEqual([1, 1]);
+    expect(log.writes.slice(0, nWrites).filter(x => x.data.length === uniformLayout().byteSize / 4).map(x => x.data[diag])).toEqual([0, 0]);
+    await settle(); expect(got).toEqual([['box', 6, 10]]);
+    r.dispose();
+    const g2 = mockGpu([[0n, 0n], [20_100_000n, 20_200_000n], [30_000_000n, 36_000_000n]]); const r2 = createVrVolumeRenderer({ THREE: THREEG, device: g2.device, halfExt: [1, 1, 1] }); const got2 = []; await begin(r2, (...a) => got2.push(a));
+    const rec2 = frame(r2); r2.breakdown.shadow(rec2, BD_SPECS.same); await settle(); expect(got2).toEqual([]); r2.dispose();
+  }));
+  it('no free timer slot, an unknown record or a frame without a snapshot: nothing is submitted (the caller does not advance its variant)', withGpu(async () => {
+    const { device, log } = mockGpu([[1n, 2n], [3n, 4n], [5n, 6n], [7n, 8n], [9n, 10n], [11n, 12n], [13n, 14n], [15n, 16n]]);
+    const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1] });
+    expect(r.breakdown.shadow({}, BD_SPECS.same)).toBe(false); // not begun
+    await begin(r, () => {});
+    expect(r.breakdown.shadow({}, BD_SPECS.same)).toBe(false); // a record that is not the snapshot's
+    const rec = frame(r); const n = log.passes.length;
+    for (let i = 0; i < 4; i++) expect(r.breakdown.shadow(rec, BD_SPECS.same)).toBe(true); // 4 slots busy: the mock's maps resolve later
+    expect(r.breakdown.shadow(rec, BD_SPECS.same)).toBe(false); expect(log.passes.length).toBe(n + 4);
+    r.dispose();
+  }));
+  it('a variant that has no program is stepped past (null), a busy timer is retried (false): the rotation of the view never stalls on a variant that failed to compile', withGpu(async () => {
+    const { device } = mockGpu(Array.from({ length: 40 }, (_, i) => [BigInt(1000 * i + 1), BigInt(1000 * i + 500)]));
+    const real = device.createRenderPipelineAsync; let k = 0; device.createRenderPipelineAsync = async d => { if (++k === 2) throw new Error('refine did not compile'); return real(d); };
+    const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1] });
+    const got = []; const res = await begin(r, (n, s, l) => got.push(n)); expect(res.failed).toHaveLength(1);
+    let vi = 0; const results = [];
+    for (let i = 0; i < 30; i++) { // the view's rule: step on unless 'not now' (false)
+      const rec = frame(r); const spec = BD_SPECS[BD_VARIANTS[vi % BD_VARIANTS.length]]; const x = r.breakdown.shadow(rec, spec); results.push([spec.name, x]); if (x !== false) vi++; await settle();
+    }
+    expect(results.find(([n]) => n === 'noRefine')[1]).toBeNull();
+    for (const n of ['noCreep', 'noJump', 'noGrad', 'noShade', 'same']) expect(got.includes(n), n).toBe(true);
+    expect(got).not.toContain('noRefine');
+    r.dispose();
+  }));
+  it('end() lets every resource of the recording go, drops the bind groups made on the shadow / probe buffers, and a second recording makes new ones', withGpu(async () => {
+    const { device, log } = mockGpu(Array.from({ length: 8 }, (_, i) => [BigInt(i * 1000 + 1), BigInt(i * 1000 + 2)]));
+    const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1] });
+    await begin(r, () => {}); const rec = frame(r); r.breakdown.shadow(rec, BD_SPECS.same); await settle();
+    const nb = log.buffers.length;
+    r.breakdown.end(); expect(r.volume.bdActive()).toBe(false);
+    const alive = log.buffers.filter(b => !b.destroyed); // what stays: the session's own (box, uniform 0-3, query resolve, the slots)
+    expect(log.buffers.length - alive.length).toBeGreaterThanOrEqual(2 + 4 + 2); // ubufs 4 / 5, query resolve, 4 slots, probe buffers
+    const groupsBefore = log.bindGroups.length;
+    await begin(r, () => {}); const rec2 = frame(r); r.breakdown.shadow(rec2, BD_SPECS.same);
+    expect(log.bindGroups.length).toBeGreaterThan(groupsBefore); // the shadow bind groups were made again (not the destroyed ones from the cache)
+    expect(nb).toBeGreaterThan(0); r.dispose();
+  }));
+  it('shadow pass code never touches the session\'s timer sums (static): no sumMs, vms, vols or vpend between the shadow and the probe functions', () => {
+    const a = host.indexOf('const shadowPass ='), b = host.indexOf('const probeCounters ='); expect(a).toBeGreaterThan(0); expect(b).toBeGreaterThan(a);
+    const body = host.slice(a, b); expect(body).not.toMatch(/sumMs|\.vms|vpend|volDone|ts\.count|\.vols\s*(\+\+|\+=)/);
+    const c = host.indexOf('const bdSnapshot ='); expect(host.slice(c, a)).not.toMatch(/sumMs|\.vms|vpend/);
+  });
+});
+
+describe('host: the counting probe', () => {
+  it('a 64 x 64 pass with its own targets, buffer, uniform slot and bind group layout: the buffer is cleared before it and copied after it; the result is the u32 array; one at a time; not timed', withGpu(async () => {
+    const { device, log } = mockGpu([[1n, 2n]]);
+    const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1] });
+    await r.breakdown.begin({ cls4: false, events: false }, () => {});
+    frame(r); const nPass = log.passes.length, nCmd = log.cmds.length;
+    const p1 = r.breakdown.probe({}, 'whole'), p2 = r.breakdown.probe({}, 'whole'); // the second: the first is still reading
+    const [a, b] = await Promise.all([p1, p2]);
+    expect(b).toBeNull(); expect(a.kind).toBe('whole'); expect(a.w).toBe(64); expect(a.counters).toBeInstanceOf(Uint32Array); expect(a.counters.length).toBe(64 * 64 * 8);
+    const pass = log.passes[nPass]; expect(log.passes).toHaveLength(nPass + 1);
+    expect(pass.viewports).toEqual([[0, 0, 64, 64, 0, 1]]); expect(pass.scissors).toEqual([[0, 0, 64, 64]]); expect(pass.d.timestampWrites).toBeUndefined();
+    expect(pass.groups[1]).toBeTruthy(); expect(pass.groups[0]).toBeTruthy();
+    const cmds = log.cmds.slice(nCmd); expect(cmds.indexOf('clear')).toBeLessThan(cmds.indexOf('pass')); expect(cmds.indexOf('pass')).toBeLessThan(cmds.indexOf('copyB' + 64 * 64 * 8 * 4));
+    expect(pass.d.colorAttachments[0].view.t.d.size).toEqual([64, 64, 1]);
+    const again = await r.breakdown.probe({}, 'native'); expect(again.kind).toBe('native'); // free again after the read
+    r.dispose();
+  }));
+  it('the native window is the centre of the left eye\'s region at the low pass\'s own pixel pitch (the region transform of the low pass), the whole window the eye\'s own matrix', withGpu(async () => {
+    const { device, log } = mockGpu([[1n, 2n]]);
+    const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1] });
+    await r.breakdown.begin({ cls4: false, events: false }, () => {});
+    const cam = eyeCam(640, 480); r.draw({ u: {}, cams: [cam, eyeCam(640, 480)], model: new THREEG.Matrix4(), f: 0.5, fov: false, rects: null, variant: { cls4: false, events: false } });
+    const mvpOf = w => new Float32Array(w.data.buffer, 0, 16);
+    const nW = log.writes.length; await r.breakdown.probe({}, 'whole');
+    const whole = log.writes.slice(nW).find(w => w.data.length === uniformLayout().byteSize / 4); const id = new THREEG.Matrix4().elements;
+    expect(Array.from(mvpOf(whole))).toEqual(id);
+    const nW2 = log.writes.length; await r.breakdown.probe({}, 'native');
+    const nat = log.writes.slice(nW2).find(w => w.data.length === uniformLayout().byteSize / 4);
+    // the low pass drew the whole 320 x 240 scaled image (no box given): a 64 x 64 window at (128, 88)
+    const want = regionMvp(new THREEG.Matrix4(), new THREEG.Matrix4(), regionClip({ x0: 128, y0: 88, x1: 192, y1: 152 }, 320, 240)).elements;
+    Array.from(mvpOf(nat)).forEach((v, i) => expect(v).toBeCloseTo(want[i], 5));
+    r.dispose();
+  }));
+  it('without a begun breakdown (or a frame drawn since) the probe gives nothing', withGpu(async () => {
+    const { device } = mockGpu([]); const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1] });
+    expect(await r.breakdown.probe({}, 'whole')).toBeNull(); r.dispose();
+  }));
+});
+
+describe('vr-view.js wiring (static)', () => {
+  const a = vr.indexOf(' const GX_REC_MS=30000;'), b = vr.indexOf(' const gxVolSubmitted=');
+  const rec = vr.slice(a, b);
+  it('the shadow pass is thrown after markFrame, in phase 1 of 4 frames; the probe in phase 3 (never in the shadow\'s frame) once a second, whichever way the menu is', () => {
+    expect(a).toBeGreaterThan(0); expect(b).toBeGreaterThan(a);
+    expect(vr.indexOf('frec=gx.vol?.volume.markFrame?.()')).toBeGreaterThan(0);
+    expect(vr.indexOf('gxRecFrame(frec,t1)')).toBeGreaterThan(vr.indexOf('frec=gx.vol?.volume.markFrame?.()'));
+    expect(rec).toContain('const ph=gxS.rendered&3;'); expect(rec).toContain('if(ph===1){try{if(gx.vol.breakdown.shadow(frec,BD_SPECS[BD_VARIANTS[gxRec.vi%BD_VARIANTS.length]])!==false)gxRec.vi++}');
+    expect(rec).toContain('else if(ph===3&&tn-gxRec.probeAt>=1000){'); expect(rec).not.toMatch(/ui\.open|ui\.tab/);
+    expect(vr.indexOf('gxFrameEnd(fa0);\n  if(shotRequested')).toBeGreaterThan(0); // after the main render and the record's render line, as before
+  });
+  it('while it records: no swd, no vlat, no wake sample; rows carry rec 1 (WebGPU only); the first press only starts it; the benchmarks are not started with it and it does not start with them', () => {
+    expect(vr).toContain('if(!gxRec.on&&!gxSwdBusy&&(gxS.rendered&3)===2){'); expect(vr).toContain('if(!gxRec.on&&!gxSwdBusy&&(gxS.rendered&3)===3){'); expect(vr).toContain('if(!gxRec.on&&fa0-gxWakeAt<1000)');
+    expect(vr).toContain('...(gx?{rec:gxRec.on?1:0}:{})');
+    expect(vr).toContain("if(!gx?.vol||!gx.ready||gxRec.phase!=='idle'||bench.active||anBench.active||!mesh||!material)return;");
+    expect(vr).toContain("const startAnBench=()=>{if(anBench.active||bench.active||!mesh||gxRec.phase==='prep'||gxRec.on)return;"); expect(vr).toContain("if(bench.active||!mesh||gxRec.phase==='prep'||gxRec.on)return;");
+  });
+  it('it does not write the diagnostics setting and leaves stage marks for its start and end; the 30 s run on the frame clock', () => {
+    expect(rec).not.toContain('settings.diag'); expect(rec).not.toMatch(/saveSettings|applyQuality|setTimeout/);
+    expect(rec).toContain("gxD.stage('breakdown start'"); expect(rec).toContain("gxD.stage('breakdown end'"); expect(rec).toContain('tn>=gxRec.until');
+  });
+  it('the button: detail tab only, WebGPU only, at y0+920 (the rows above keep their places), ja / en texts for the three states', () => {
+    expect(vr).toContain("btn(X,y0+920,MENU_W-2*X,txt,ph!=='idle',()=>gxRecStart(),{size:28,disabled:ph!=='idle'})");
+    const i = vr.indexOf("btn(X,y0+920,MENU_W-2*X,txt"), s = vr.slice(vr.lastIndexOf('}else if(ui.tab===4){', i), i + 200);
+    expect(s).toContain('if(gx){const ph=gxRec.phase');
+    for (const t of ["'準備中'", "'Preparing'", "'記録中 残り'+sec+'秒'", "'Recording '+sec+' s left'", "'記録済み'", "'Recorded'", "'内訳を記録（30秒）'", "'Record breakdown (30 s)'"]) expect(s).toContain(t);
+    for (const y of ['y0+200', 'y0+290', 'y0+380', 'y0+470', 'y0+560', 'y0+650', 'y0+740', 'y0+830']) expect(vr).toContain(y);
+  });
+  it('while it is prepared or records the auto quality does not move (the picture stays); a throw in it never stops the frame loop or the drawing', () => {
+    expect(vr).toContain("autoFrames++;const nowA=performance.now();\n   if(gxRec.phase==='prep'||gxRec.on){autoFrames=0;autoAt=nowA;ctrl.vol=ctrl.main=0;ctrlN.vol=ctrlN.main=0}");
+    expect(vr).toContain("{try{gxRecFrame(frec,t1)}catch(e){console.warn('WebGPU breakdown:',e)}}");
+    expect(host).toContain('try { volume.bdSnapshot(low.target, low.eyes, u, vr); } catch (e) {');
+  });
+  it('the volume pass of the frame is called as before; the snapshot of the low pass is the renderer\'s (host), only while a recording runs', () => {
+    expect(host).toContain('volume.drawPass(low.target, low.eyes, u, vr, 0);\n    if (volume.bdActive()) {');
+    expect(host).toContain('for (const sc of e.scissors || [[e.x, e.y, e.w, e.h]]) { pass.setScissorRect(sc[0], sc[1], sc[2], sc[3]); pass.draw(36); }');
+    expect(host).toContain('const timed = o?.timed ?? !overrides;');
+    expect(vr).toContain('gx.vol.breakdown.begin(variant,'); expect(vr).toContain('if(gx){gxRec.gen++;gxRec.on=false;try{gx.vol?.dispose()}');
+  });
+});

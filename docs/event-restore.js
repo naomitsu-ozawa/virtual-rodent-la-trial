@@ -2,12 +2,12 @@
 // Pure of the DOM; called by data-load.js restoreProjectAnnotations. Children of the open data are matched with the project's treeSegments entries in the file's order, each entry taking the first unused child with its parentKey
 // (a child added or deleted since is not rebuilt here: that is a structural change the VR menu does not offer). Per child: name, colour, shape shown (visible), 色だけ消す (colorOff) and the pinned label (with its place).
 // Per region: colour flag (visible), shape flag (hidden), colour; its label and name are put back by the caller as before.
-import { childSegments } from './state.js?v=20261118-build748';
-import { CHILD_PARENT_KEYS } from './child-segments.js?v=20261118-build748';
-import { setChildLook } from './segments.js?v=20261118-build748';
-import { childLabelItem } from './child-labels.js?v=20261118-build748';
-import { setRegionLabel, normalizeAnalysisLabel } from './analysis-label.js?v=20261118-build748';
-import { setRegionVisible, setRegionHidden } from './region-visibility.js?v=20261118-build748';
+import { childSegments } from './state.js?v=20261119-build749';
+import { CHILD_PARENT_KEYS } from './child-segments.js?v=20261119-build749';
+import { setChildLook } from './segments.js?v=20261119-build749';
+import { childLabelItem } from './child-labels.js?v=20261119-build749';
+import { setRegionLabel, normalizeAnalysisLabel } from './analysis-label.js?v=20261119-build749';
+import { setRegionVisible, setRegionHidden } from './region-visibility.js?v=20261119-build749';
 export function restoreChildSegmentsState(entries, list = childSegments) {
   const used = new Set();
   for (const e of Array.isArray(entries) ? entries : []) {
