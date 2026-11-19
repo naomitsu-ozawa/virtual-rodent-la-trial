@@ -45,7 +45,7 @@ function march(grid, ray, gate, o = {}) {
     const sb = fl.map(v => v >> 2), sl = fl.map(v => v & 3), sbit = sl[0] + (sl[1] << 2) + (sl[2] << 4), blk = (sb[2] * by + sb[1]) * bx + sb[0];
     return { sb, set: ((bits[blk * 2 + (sbit < 32 ? 0 : 1)] >>> (sbit & 31)) & 1) !== 0 };
   };
-  let t = ray.t0, previousT = t, lastIndex = -1, iters = 0, prevValid = false, prevF = 0, prevSkip = false, skBlk = null, chk = false, hit = null;
+  let k = 0, t = ray.t0, previousT = t, lastIndex = -1, iters = 0, prevValid = false, prevF = 0, prevSkip = false, skBlk = null, chk = false, hit = null;
   const st = { creep: 0, jumps: 0, skipRd: 0, omittedSet: 0, omitted: 0 };
   for (let iter = 0; iter < 4096; iter++) {
     if (t > ray.endT) break;
@@ -54,13 +54,13 @@ function march(grid, ray, gate, o = {}) {
       const b = bitAt(t);
       if (b) {
         if (!skBlk || b.sb.some((v, k) => v !== skBlk[k])) { skBlk = b.sb; st.skipRd++; }
-        if (b.set) { st.creep++; prevValid = true; prevSkip = true; lastIndex = -1; previousT = t; t += stp; continue; }
+        if (b.set) { st.creep++; prevValid = true; prevSkip = true; lastIndex = -1; previousT = t; k++; t = ray.t0 + k * stp; continue; }
       }
     } else if (useSkip) { st.omitted++; const b = bitAt(t); if (b && b.set) st.omittedSet++; } // statistics only: what the check would have found
     const q = fetch(pos(t)); let dd = q[3] * 255;
     if (!jumpOn) dd = 0;
     chk = dd < 2.7;
-    if (dd >= 2.7) { const nextJ = t + stp * Math.max(1, Math.floor((dd - 1.8) / stp)); st.jumps++; previousT = nextJ - stp * 0.05; prevValid = false; t = nextJ; continue; }
+    if (dd >= 2.7) { const m = Math.max(1, Math.floor((dd - 1.8) / stp)), nextJ = ray.t0 + (k + m) * stp; st.jumps++; previousT = nextJ - stp * 0.05; prevValid = false; k += m; t = nextJ; continue; }
     const f = fOf(q); let idx = -1, curF = -1;
     for (let s = 0; s < 4; s++) if (f[s] >= 0) { idx = s; curF = f[s]; break; }
     if (idx !== lastIndex) {
@@ -72,7 +72,7 @@ function march(grid, ray, gate, o = {}) {
       lastIndex = idx;
     }
     prevSkip = false; prevValid = true; prevF = idx >= 0 ? curF : Math.max(...f);
-    previousT = t; t += stp;
+    previousT = t; k++; t = ray.t0 + k * stp;
   }
   return { out: { hit, iters, t, lastIndex, prevValid, previousT }, st };
 }
@@ -125,8 +125,8 @@ describe('the creep gate: the result of a ray does not change', () => {
       expect(hits).toBeGreaterThan(300); expect(creep).toBeGreaterThan(1000); expect(isoAfterCreep).toBeGreaterThan(20); // the skip was taken, and iso hits whose prevF may come from the lazy fetch
     });
   }
-  it('the model is tied to the shader: the shader gates by `chk`, set from dd after the override, false at the start and after a jump', () => {
+  it('the model is tied to the shader: the shader gates by `chk`, set from dd after the override, false at the start and after a jump; t is the grid point t0 + k * step (the model makes it the same way)', () => {
     const t = volumeWgsl();
-    expect(t).toContain('var chk=false;'); expect(t).toContain('if(skipOn&&chk){'); expect(t).toContain('chk=dd<2.7;'); expect(t).toContain('if(dd>=2.7){let nextJ=');
+    expect(t).toContain('var chk=false;'); expect(t).toContain('if(skipOn&&chk){'); expect(t).toContain('chk=dd<2.7;'); expect(t).toContain('if(dd>=2.7){let m=');
   });
 });

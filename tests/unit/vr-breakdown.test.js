@@ -23,8 +23,8 @@ const DISPLAY_HASHES_BEFORE_GATE = [
   [true, true, false, '1cc6f7c1bd81a9fbe6ee1ab04fb76b064f4898e641d602f38f47c98bea110d87'],
   [true, true, true, '7ce8ffdf17bcc99f4332f65c8ef35d76c3a4904aeb9b93595a9b01a00923e448'],
 ];
-// sha256 of the display variants' text now (the creep check is looked up only while chk: see the gate tests below): [f16, cls4, events, hash]
-const DISPLAY_HASHES = [
+// sha256 of the display variants' text of to 752 (the creep check gated, t accumulated by t += step): [f16, cls4, events, hash]
+const DISPLAY_HASHES_BEFORE_GRID = [
   [false, false, false, '7e15da7195e22d9e136804b51b4139a9acc5d5ab03a7a464cc6ffb7250f9b7d7'],
   [false, false, true, '4e2025d308c8880b282b342c126a322e2a3b6f78edd24179b6bcdf52175d51ee'],
   [false, true, false, '09dfb5e60b9653b5d9ce61c4618a850ea50dc958d25593aa3be4f3c6bccb13a6'],
@@ -33,6 +33,17 @@ const DISPLAY_HASHES = [
   [true, false, true, '5485e6c08b714899f863f2952edb4af04a15d211706c265e661dd5c035cfd3fa'],
   [true, true, false, 'f2a350e6d48888861cf5a5688ad8a2889bbc196b71552f013875b70cc07b6b97'],
   [true, true, true, '126b209ed29237876db28eeb31e5b8aa8b3ad561d9213da11fac7906fc57032c'],
+];
+// sha256 of the display variants' text now (t = t0 + k * step, made in one place at the top of the loop: see the grid tests below): [f16, cls4, events, hash]
+const DISPLAY_HASHES = [
+  [false, false, false, '141dcd4f08128c6164aa69cb6640d847f1e5c0214a419652eb6cbcea57153f71'],
+  [false, false, true, '33ed1741f9293f0289248566c95082bf10492dfd631e07970bc07bb4cd06587d'],
+  [false, true, false, '065682466a4b75abb5e4e3467e61c1bbf0dd013e96afa2544c7810900369ad8a'],
+  [false, true, true, 'a65919fd999419c6e9514d4ba1380f57cd7e79402b0b80e9593a57549324c4a6'],
+  [true, false, false, 'bf518adfae55016ef26ee811069fcb581a31c93e96ae41841a42a7899c4450e6'],
+  [true, false, true, '240d75dcb83ac5008be7182091dfbaf9ddd6c2c6bb294ad0e2f55143b788ddd8'],
+  [true, true, false, '704c4c22307c0e6a352f3db6b09dcafa953c93f715d1ded6577af3f31f3e8caa'],
+  [true, true, true, '3b29b78671df07485cde255bae38a0d4cd3d25b7644fbe2ea56a9370ec1fae27'],
 ];
 const NF = COUNTER_FIELDS.length; // u32 per probe pixel
 const BASES = []; for (const f16 of [false, true]) for (const cls4 of [false, true]) for (const events of [false, true]) BASES.push({ f16, cls4, events });
@@ -45,6 +56,24 @@ describe('WGSL: the display variants are the text below, character for character
   it('the defaults of volumeWgsl are the display variant with the section code (as before)', () => { expect(volumeWgsl()).toBe(volumeWgsl({ f16: false, cls4: false, events: true })); });
 });
 
+// the grid: the display text differs from the text of to 752 only by these edits (the old text is made back from the new one and must hash to the old value)
+const ungrid = t => t
+  .replace('let t0=t;var k=0; // the ray\'s sample grid: every sample is t0 + k * stp (one expression, made at the top of the loop); a step is k++, a jump is k += m\n var jumpLen=0.0;', 'let t0=t;var jumpLen=0.0;')
+  .replace('  let t=t0+f32(k)*stp;\n  if(t>endT', '  if(t>endT')
+  .replace('lastIndex=ci;previousT=t;k++;continue;', 'lastIndex=ci;previousT=t;t+=stp;continue;')
+  .replace('lastIndex=-1;previousT=t;k++;continue;}', 'lastIndex=-1;previousT=t;t+=stp;continue;}')
+  .replace('  // a jump is never shorter than a normal step (m >= 1); it lands on the same t0 + k * step grid\n  if(dd>=2.7){let m=max(1,i32(floor((dd-1.8)*jkA/stp)));let nextJ=t0+f32(k+m)*stp;jumpLen+=nextJ-t;previousT=nextJ-stp*0.05;prevValid=false;k+=m;continue;}',
+    '  // a jump is never shorter than a normal step; it lands on the same t0 + k * step grid\n  if(dd>=2.7){let nextJ=t+stp*max(1.0,floor((dd-1.8)*jkA/stp));jumpLen+=nextJ-t;previousT=nextJ-stp*0.05;prevValid=false;t=nextJ;continue;}')
+  .replace('  previousT=t;k++;\n }\n if(hitIdx>=0){', '  previousT=t;t+=stp;\n }\n if(hitIdx>=0){')
+  .replace('previousT = t, k++ (the next grid point), exactly as the skip does', 'previousT = t, t += stp, exactly as the skip does');
+describe('WGSL: the grid (t = t0 + k * step)', () => {
+  it.each(DISPLAY_HASHES_BEFORE_GRID)('f16=%s cls4=%s events=%s: without the grid edits the text is the one of to 752', (f16, cls4, events, hash) => {
+    const t = volumeWgsl({ f16, cls4, events });
+    expect(t).toContain('  let t=t0+f32(k)*stp;\n'); expect(t).not.toContain('t+=stp');
+    expect(sha(ungrid(t))).toBe(hash);
+  });
+});
+
 // the creep gate: the display text differs from the text before it only by these edits (the old text is made back from the new one and must hash to the old value)
 const ungate = t => t
   .replace(' var chk=false; // the creep check is made only while the ray is near a surface (see below): false at the ray start and after a jump\n', '')
@@ -54,12 +83,12 @@ describe('WGSL: the creep gate', () => {
   it.each(DISPLAY_HASHES_BEFORE_GATE)('f16=%s cls4=%s events=%s: without the gate edits the text is the one before', (f16, cls4, events, hash) => {
     const t = volumeWgsl({ f16, cls4, events });
     expect(t).toContain('if(skipOn&&chk){'); expect(t).toContain('  chk=dd<2.7;\n'); expect(t).toContain(' var chk=false;');
-    expect(sha(ungate(t))).toBe(hash);
+    expect(sha(ungate(ungrid(t)))).toBe(hash);
   });
   it('the check is made at most where the previous sample was read near a surface: chk is set from dd right after the override and before the jump, never set by a jump, and starts false', () => {
     const t = volumeWgsl();
     expect(t.split('chk=').length - 1).toBe(2); // the declaration and the one assignment
-    const a = t.indexOf('if(u.jumpOn==0){dd=0.0;}\n  chk=dd<2.7;\n'), j = t.indexOf('if(dd>=2.7){let nextJ=');
+    const a = t.indexOf('if(u.jumpOn==0){dd=0.0;}\n  chk=dd<2.7;\n'), j = t.indexOf('if(dd>=2.7){let m=');
     expect(a).toBeGreaterThan(0); expect(j).toBeGreaterThan(a); // the jump comes after the assignment: a jump leaves chk false
     expect(t.indexOf('if(skipOn&&chk){')).toBeLessThan(t.indexOf('var q=textureSampleLevel(clsTex,smp,tcS,0.0)'));
   });
