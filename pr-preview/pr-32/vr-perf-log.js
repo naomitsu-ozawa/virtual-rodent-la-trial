@@ -87,12 +87,13 @@ export function perfFileName(kind, build, now = new Date()) {
 // ---- the volume breakdown (WebGPU, one 30 s recording started from the detail tab; vr-wgpu.js shadow passes and counting probe) ----
 // The shadow passes are throw-away copies of a frame's low pass with one step taken out; `add` gets each one's GPU ms and the same frame's real low pass ms. This is a pure collector (no DOM, no GPU): it never touches the log's own columns.
 // How each variant of the eight is made (the host reads this table): abl = another program text (docs/vr-wgsl-core.js ablate), overrides = another uniform value.
-export const BD_VARIANTS = ['same', 'box', 'simple', 'noGrad', 'noRefine', 'noShade', 'withCreep', 'noJump'];
+export const BD_VARIANTS = ['same', 'box', 'simple', 'noGrad', 'noRefine', 'noShade', 'withCreep', 'noJump', 'noProxy'];
 export const BD_SPECS = {
   same: { name: 'same' }, box: { name: 'box', overrides: { diag: 1 } }, simple: { name: 'simple', overrides: { diag: 3 } },
   noGrad: { name: 'noGrad', abl: 'grad' }, noRefine: { name: 'noRefine', abl: 'refine' }, noShade: { name: 'noShade', abl: 'shade' },
   withCreep: { name: 'withCreep', overrides: { useSkip: 1 } }, // the display runs without the creep skip (useSkip 0); this pass turns it on (the host skips it when its bits are not valid)
-  noJump: { name: 'noJump', overrides: { jumpOn: 0 } },
+  noJump: { name: 'noJump', overrides: { jumpOn: 0, proxyOn: 0 } }, // the pre-pass needs the jumps (its start is safe only with them): without jumps it is off too, so this pass leaves out both
+  noProxy: { name: 'noProxy', overrides: { proxyOn: 0 }, proxy: true }, // the pre-pass off over the display's (the host makes no pass when the frame's low pass did not use it; its turn also runs the proxy comparison: see add('proxyDiff'))
 };
 export const BD_PROBE_FIELDS = ['outcome', 'iters', 'creep', 'jumps', 'skipReads', 'clsReads', 'refineReads', 'gradReads', 'near4Steps', 'near4Jumps', 'near8Steps', 'near8Jumps', 'near16Steps', 'near16Jumps']; // the u32 of a probe pixel (docs/vr-wgsl-core.js COUNTER_FIELDS)
 const BD_STRIDE = BD_PROBE_FIELDS.length;
@@ -104,8 +105,12 @@ const newOutcomeAgg = () => ({ px: 0, steps: [], iters: 0, jumps: 0, creep: 0, s
 const newProbeAgg = () => ({ windows: 0, px: 0, steps: [], by: [newOutcomeAgg(), newOutcomeAgg()], sums: { iters: 0, creep: 0, jumps: 0, skipReads: 0, clsReads: 0, refineReads: 0, gradReads: 0 }, outcome: [0, 0, 0, 0], blocks: 0, blockRatio: [], mixed: 0 });
 export function createVolBreakdown() {
   const ratios = Object.fromEntries(BD_VARIANTS.map(v => [v, []])), lows = [], probes = { whole: newProbeAgg(), native: newProbeAgg() };
+  const proxy = { cmp: 0, differ: 0, max: 0, total: 0, ms: [] }; // the pre-pass: comparisons made (on vs off, same region, uniforms and tiles), how many had a differing pixel, the largest count, the pixels compared; the compute pass's ms
   // one shadow pass of `variant`: its GPU ms and the same frame's low pass GPU ms (both > 0 and finite, else it is not a sample)
+  // Two more kinds come through the same callback (the host's onShadow of the breakdown): ('proxyDiff', pixels that differ, pixels compared) and ('proxyMs', the pre-pass compute pass's ms, 1)
   const add = (variant, shadowMs, lowMs) => {
+    if (variant === 'proxyDiff') { if (!Number.isFinite(shadowMs) || !(lowMs > 0) || shadowMs < 0) return false; proxy.cmp++; if (shadowMs > 0) proxy.differ++; proxy.max = Math.max(proxy.max, shadowMs); proxy.total = Math.max(proxy.total, lowMs); return true; }
+    if (variant === 'proxyMs') { if (!Number.isFinite(shadowMs) || shadowMs < 0) return false; if (proxy.ms.length < 4000) proxy.ms.push(shadowMs); return true; }
     if (!ratios[variant] || !Number.isFinite(shadowMs) || !Number.isFinite(lowMs) || shadowMs < 0 || !(lowMs > 0)) return false;
     ratios[variant].push(shadowMs / lowMs); lows.push(lowMs);
     return true;
@@ -152,7 +157,7 @@ export function createVolBreakdown() {
   };
   // R_v = the median ratio of a variant, M = the median of the real low pass ms of these frames; the cost of a step = (R_same - R_v) x M
   const summary = () => {
-    const M = median(lows), R = {}, out = { M, nLow: lows.length, variants: {}, split: null, probes: { whole: probeSummary(probes.whole), native: probeSummary(probes.native) } };
+    const M = median(lows), R = {}, out = { M, nLow: lows.length, variants: {}, split: null, probes: { whole: probeSummary(probes.whole), native: probeSummary(probes.native) }, proxy: { comparisons: proxy.cmp, withDifference: proxy.differ, maxDiffPx: proxy.max, pixels: proxy.total, computeMs: median(proxy.ms), computeN: proxy.ms.length } };
     for (const v of BD_VARIANTS) R[v] = median(ratios[v]);
     for (const v of BD_VARIANTS) {
       const q1 = quantile(ratios[v], 0.25), q3 = quantile(ratios[v], 0.75);
@@ -170,7 +175,14 @@ export function createVolBreakdown() {
   const lines = ({ volMs = null } = {}) => {
     const s = summary(), L = [];
     L.push('rec ' + (Number.isFinite(api.seconds) ? Math.round(api.seconds) : '-') + ' s · shadow every 4th frame · low pass median ' + f2(s.M) + ' ms (' + s.nLow + ') · low share of vol ' + (s.M !== null && volMs > 0 ? f2(s.M / volMs) : '-'));
-    for (const v of BD_VARIANTS) { const x = s.variants[v]; L.push('abl ' + v + ' n=' + x.n + ' ratio ' + f2(x.R) + ' (IQR ' + (x.q1 === null ? '-' : f2(x.q1) + '-' + f2(x.q3)) + ') · est ' + (x.est === null ? '-' : f1(x.est) + ' ms')); }
+    const pc = s.proxy.computeMs;
+    for (const v of BD_VARIANTS) {
+      const x = s.variants[v];
+      L.push('abl ' + v + ' n=' + x.n + ' ratio ' + f2(x.R) + ' (IQR ' + (x.q1 === null ? '-' : f2(x.q1) + '-' + f2(x.q3)) + ') · est ' + (x.est === null ? '-' : f1(x.est) + ' ms')
+        + (v === 'noProxy' && x.est !== null ? ' · the pre-pass saves ' + f1(-x.est) + ' ms in the volume pass' + (pc !== null ? ', ' + f1(-x.est - pc) + ' ms after its own compute' : '') : ''));
+    }
+    L.push('proxy diff px: ' + (s.proxy.comparisons ? 'max ' + s.proxy.maxDiffPx + ' of ' + s.proxy.pixels + ' px · ' + s.proxy.withDifference + ' of ' + s.proxy.comparisons + ' comparisons had a differing pixel' : '- (no comparison made: the low pass did not use the pre-pass, or no read-back)')
+      + ' · pre-pass compute median ' + (pc !== null ? f2(pc) + ' ms (' + s.proxy.computeN + ')' : '-'));
     const sp = s.split;
     L.push(sp ? 'split: fixed(box) ' + f1(sp.fixed) + ' ms · march ' + f1(sp.march) + ' ms · refine ' + f1(sp.refine) + ' ms · gradient ' + f1(sp.gradient) + ' ms · shading ' + f1(sp.shading) + ' ms · sum ' + f1(sp.sum) + ' ms vs low ' + f1(s.M) + ' ms (' + Math.round(sp.pct) + ' %)' : 'split: fixed(box) - · march - · refine - · gradient - · shading - · sum vs low -');
     const w = s.probes.whole, n = s.probes.native;
@@ -196,6 +208,8 @@ export function volBreakdownReport(p) {
   L.push(...vb.lines({ volMs: median(rec.map(r => r.vol)) }));
   L.push('note: a shadow pass is the frame\'s low pass drawn once more after the frame\'s marker pass (same eyes, region, scissors and uniforms, into scratch targets that are never shown) with one step taken out; its GPU ms comes from a timestamp pair of its own and is not part of the vol column or of span. Variants run in turn, one shadow pass every 4th frame.');
   L.push('note: ratio = shadow ms / the same frame\'s low pass ms (median per variant, IQR = quartiles); "same" is the control (expected near 1). M = median low pass ms of the recording. est = (R_same - R_variant) x M ms: what the variant leaves out (positive = the variant is faster than the display); the display runs without the creep skip, withCreep turns it on (useSkip 1 over the display\'s 0) and noJump leaves out the distance jumps: a negative est of withCreep = the ms the creep skip adds, i.e. what leaving it out of the display saves; a negative est of noJump = the ms the jumps save. A withCreep pass is made only while the host\'s skip bits are valid for the texture. A "-" = no sample.');
+  L.push('note: noProxy = the display with the pre-pass off (proxyOn 0: the volume pass starts every ray at its own start, the tiles are not read): a negative est = the ms the pre-pass saves in the volume pass (the line says so); the pre-pass compute pass is not part of the low pass ms, its median ms is on the proxy line, so "after its own compute" is the net saving. noJump leaves the pre-pass out too (it needs the jumps). A frame whose low pass did not use the pre-pass (sections, no distance field) makes no noProxy pass and no comparison.');
+  L.push('note: proxy diff px = the pixels whose colour or packed depth differ between the low pass drawn with the pre-pass on and off: the noProxy turn draws both into scratch targets (same region, uniforms and tiles) and a small compute counts the differing pixels (4 bytes are read back; the probe windows are not used). The expected value is 0 on every comparison; max = the largest count, of = the pixels compared.');
   L.push('note: split: fixed = R_box x M (box = nothing but the per-pixel start: diag 1); refine / gradient / shading = est of noRefine / noGrad / noShade; march = (R_simple - R_box) x M - shading (simple = diag 3: no surface search, no gradient, the shading maths kept); sum = the five against M ("sum vs low", additive steps give 100 %).');
   L.push('note: probe = a 64 x 64 window of the left eye, alternately every second: whole = the eye\'s whole image shrunk into the window (the spread of the work), native = the centre of the region the low pass drew, at the pass\'s own pixel pitch (how the heavy pixels lie together). The counts per pixel come from a counting twin of the display program (steps = loop iterations; reads per px = fetches of skipTex / clsTex in the march, with the re-read of the previous sample / in the surface search / in the gradient; creep, jumps = how often; the display runs without the creep skip, so the counting twin runs without it too and its creep and skipTex counts are 0).');
   L.push('note: probe approach = per outcome (hit / pass) of the whole-image probe window: the loop iterations (steps) and jumps a ray used until its first sample with a surface distance <= R voxels, R = 4 / 8 / 16 (the distance byte dd the march jumps by, in grid-index units = voxels of the texture, read before the jumps switch; the sample itself counts as a step, the jumps are those made before it), the mean over the rays that did come within R; never = the share of the pass rays none of whose samples came within R. Counts only; it changes nothing that is drawn. It is a rough upper bound of what starting the ray near the surface (and ending it where nothing is left) could save: the steps before the first sample within R, and the pass rays that never come near a surface at all.');
