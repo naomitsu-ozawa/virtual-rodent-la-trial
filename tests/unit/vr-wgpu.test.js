@@ -64,7 +64,7 @@ describe('uniform layout: the packer writes where the shader reads', () => {
   });
   it('the uniform names the packer reads from the session\'s uniforms object exist there (volumeUniforms of vr-view.js)', () => {
     const decl = /const volumeUniforms=\(vd,full,settings\)=>\(\{[\s\S]*?\}\);\n/.exec(vr)[0];
-    const perEye = new Set(['mvp', 'origin', 'lightOff', 'jumpOn', 'pad0', 'pad1', 'pad2']); // made per eye / per pass by the host
+    const perEye = new Set(['mvp', 'origin', 'lightOff', 'jumpOn', 'proxyOn', 'proxyOrg', 'pad1']); // made per eye / per pass by the host
     for (const f of UNIFORM_FIELDS.map(x => x[0]).filter(n => !perEye.has(n))) expect(decl, f).toMatch(new RegExp('\\b' + f + ':\\{value'));
   });
 });
@@ -192,14 +192,14 @@ const mockDevice = () => {
   const device = {
     features: new Set(), queue: { writeBuffer() {}, writeTexture() {}, submit() {} },
     createBindGroupLayout: () => ({}), createPipelineLayout: () => ({}), createSampler: () => ({}), createBuffer: () => ({ destroy() {} }), createShaderModule: () => ({}),
-    createRenderPipeline: () => ({}), createRenderPipelineAsync: async () => ({}), createTexture: mkTex,
+    createRenderPipeline: () => ({}), createRenderPipelineAsync: async () => ({}), createComputePipeline: () => ({}), createComputePipelineAsync: async () => ({}), createTexture: mkTex,
     createBindGroup: d => ({ d }), createCommandEncoder: () => ({ beginRenderPass: () => pass, finish: () => ({}), copyTextureToBuffer() {} }),
   };
   return { device, log };
 };
 const withGpuGlobals = fn => async () => {
-  vi.stubGlobal('GPUShaderStage', { VERTEX: 1, FRAGMENT: 2 }); vi.stubGlobal('GPUBufferUsage', { VERTEX: 1, COPY_DST: 2, UNIFORM: 4, QUERY_RESOLVE: 8, COPY_SRC: 16, MAP_READ: 32 });
-  vi.stubGlobal('GPUTextureUsage', { TEXTURE_BINDING: 1, COPY_DST: 2, RENDER_ATTACHMENT: 4, COPY_SRC: 8 }); vi.stubGlobal('GPUMapMode', { READ: 1 });
+  vi.stubGlobal('GPUShaderStage', { VERTEX: 1, FRAGMENT: 2, COMPUTE: 4 }); vi.stubGlobal('GPUBufferUsage', { VERTEX: 1, COPY_DST: 2, UNIFORM: 4, QUERY_RESOLVE: 8, COPY_SRC: 16, MAP_READ: 32 });
+  vi.stubGlobal('GPUTextureUsage', { TEXTURE_BINDING: 1, COPY_DST: 2, RENDER_ATTACHMENT: 4, COPY_SRC: 8, STORAGE_BINDING: 16 }); vi.stubGlobal('GPUMapMode', { READ: 1 });
   try { await fn(); } finally { vi.unstubAllGlobals(); }
 };
 const eyeCam = (W, H) => ({ viewport: { z: W, w: H }, projectionMatrix: new THREEG.Matrix4(), matrixWorldInverse: new THREEG.Matrix4(), matrixWorld: new THREEG.Matrix4() });
@@ -682,7 +682,7 @@ describe('WebGPU diagnostics: the heartbeat (a frame loop of its own on the sess
     const { device } = mockDevice(); const seen = [];
     const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1], onShader: (m, v) => seen.push(v) });
     await r.preload({}, [{ cls4: false, events: false }, { cls4: true, events: true }]);
-    expect(seen).toEqual([{ f16: false, cls4: false, events: false }, { f16: false, cls4: true, events: true }]);
+    expect(seen).toEqual([{ f16: false, cls4: false, events: false }, { f16: false, cls4: true, events: true }, { proxy: true, cls4: false }]); // the display variants, then the pre-pass of the first (a section variant has none)
     r.dispose();
   }));
 });

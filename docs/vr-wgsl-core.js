@@ -6,7 +6,7 @@
 // the sample pair's second volume, the general (non-combined) loop and the HU path.
 // The ray: the box is drawn with its back faces (like the WebGL program), vPos is the back-face point, the ray starts at the eye (origin, object space).
 // Output: colour 0 = the premultiplied colour, colour 1 = the depth of the first thing shown (NDC z, 24 bit in rgb) for the composite.
-import { lightingWGSL } from './lighting.js?v=20261119-build753';
+import { lightingWGSL } from './lighting.js?v=20261119-build754';
 
 // ---- the uniform buffer: one struct, every member laid out by the WGSL rules (vec3 = 16-aligned, 12 bytes; arrays of vec4 only) ----
 // [name, type, count]; the packer (vr-wgpu.js) writes by this table, the struct text is made from it, a unit test checks both against wgsl_reflect
@@ -26,11 +26,11 @@ export const UNIFORM_FIELDS = [
   ['sliceWindow', 'vec2f'], ['sliceAir', 'f32'], ['sliceTint', 'f32'],
   ['sliceOpacity', 'f32'], ['sliceSegOnly', 'f32'], ['ctShade', 'f32'], ['ctShadeBright', 'f32'],
   ['ctShadeContrast', 'f32'], ['planeCount', 'i32'], ['planeCut', 'i32'], ['capOn', 'i32'],
-  ['jumpOn', 'i32'], ['pad0', 'i32'], ['pad1', 'i32'], ['pad2', 'i32'],
+  ['jumpOn', 'i32'], ['proxyOn', 'i32'], ['proxyOrg', 'vec2i'], ['pad1', 'i32'],
 ];
 const TYPES = {
   f32: { a: 4, s: 4, n: 1, k: 'f', wgsl: 'f32' }, i32: { a: 4, s: 4, n: 1, k: 'i', wgsl: 'i32' },
-  vec2f: { a: 8, s: 8, n: 2, k: 'f', wgsl: 'vec2<f32>' }, vec3f: { a: 16, s: 12, n: 3, k: 'f', wgsl: 'vec3<f32>' },
+  vec2f: { a: 8, s: 8, n: 2, k: 'f', wgsl: 'vec2<f32>' }, vec2i: { a: 8, s: 8, n: 2, k: 'i', wgsl: 'vec2<i32>' }, vec3f: { a: 16, s: 12, n: 3, k: 'f', wgsl: 'vec3<f32>' },
   vec4f: { a: 16, s: 16, n: 4, k: 'f', wgsl: 'vec4<f32>' }, vec4i: { a: 16, s: 16, n: 4, k: 'i', wgsl: 'vec4<i32>' },
   mat4x4f: { a: 16, s: 64, n: 16, k: 'f', wgsl: 'mat4x4<f32>' },
 };
@@ -50,8 +50,9 @@ export function uniformLayout(fields = UNIFORM_FIELDS) {
 export const uniformStruct = (fields = UNIFORM_FIELDS) =>
   'struct U{\n' + fields.map(([name, type, count]) => ' ' + name + ':' + (count ? 'array<' + TYPES[type].wgsl + ',' + count + '>' : TYPES[type].wgsl) + ',').join('\n') + '\n};\n';
 
-// bindings of the volume pass (one bind group): 0 uniforms, 1 vol (rg8 HU), 2 clsTex (combined), 3 cls4Tex, 4 skipTex (rg32uint), 5 editTex, 6 sliceVol (rg8 HU, the 512 grid), 7 sampler (linear), 8 sampler of editTex (linear or nearest, the 詳細 setting)
-export const VOLUME_BINDINGS = { uniforms: 0, vol: 1, cls: 2, cls4: 3, skip: 4, edit: 5, slice: 6, sampler: 7, samplerEdit: 8 };
+// bindings of the volume pass (one bind group): 0 uniforms, 1 vol (rg8 HU), 2 clsTex (combined), 3 cls4Tex, 4 skipTex (rg32uint), 5 editTex, 6 sliceVol (rg8 HU, the 512 grid), 7 sampler (linear), 8 sampler of editTex (linear or nearest, the 詳細 setting),
+// 9 proxyTex (r32float, one value per 8 x 8 pixel tile: the pre-pass's tA, read with textureLoad; a 1 x 1 dummy in a pass that has no pre-pass)
+export const VOLUME_BINDINGS = { uniforms: 0, vol: 1, cls: 2, cls4: 3, skip: 4, edit: 5, slice: 6, sampler: 7, samplerEdit: 8, proxy: 9 };
 export const BOX_VERTICES = (() => { // 12 triangles, counter-clockwise seen from outside; the pass draws the back faces (cull front)
   const q = (a, b, c, d) => [a, b, c, a, c, d], V = (x, y, z) => [x, y, z];
   const p = [V(-1, -1, -1), V(1, -1, -1), V(1, 1, -1), V(-1, 1, -1), V(-1, -1, 1), V(1, -1, 1), V(1, 1, 1), V(-1, 1, 1)];
@@ -64,6 +65,7 @@ export const BOX_VERTICES = (() => { // 12 triangles, counter-clockwise seen fro
 function volumeWgslBase({ f16, cls4, events }) {
   const C4 = (e, tc) => (cls4 ? `${e}.a=textureSampleLevel(cls4Tex,smp,clamp(${tc},vec3<f32>(0.0),vec3<f32>(0.999999)),0.0).r;` : '');
   const EV = s => (events ? s : '');
+  const PX = s => (events ? '' : s); // the pre-pass start: not in a variant with section planes (those run the march from k = 0, the text of)
   const FM = f16 ? 'f16' : 'f32', FM4 = 'vec4<' + FM + '>'; // the half-precision type of the per-step values (written out: no alias)
   return `${f16 ? 'enable f16;\n' : ''}// VR / AR volume pass (WGSL), variant f16=${f16} cls4=${cls4} events=${events}
 const SEG_OFF=${f16 ? 'f16(4.0)' : '1.0e9'};
@@ -84,6 +86,7 @@ ${uniformStruct()}
 @group(0) @binding(6) var sliceVol:texture_3d<f32>;
 @group(0) @binding(7) var smp:sampler;
 @group(0) @binding(8) var smpE:sampler;
+@group(0) @binding(9) var proxyTex:texture_2d<f32>;
 ${lightingWGSL()}
 struct VOut{@builtin(position) pos:vec4<f32>,@location(0) vPos:vec3<f32>};
 @vertex fn vs(@location(0) p:vec3<f32>)->VOut{
@@ -241,7 +244,15 @@ ${EV(` if(u.sliceOpacity>0.0){
 `)}
  var previousT=t;var lastIndex=-1;var acc=vec4<f32>(0.0);var iters=0;
  let t0=t;var k=0; // the ray's sample grid: every sample is t0 + k * stp (one expression, made at the top of the loop); a step is k++, a jump is k += m
- var jumpLen=0.0;var hitEnd=false;
+${PX(` // the pre-pass: proxyTex holds, per 8 x 8 pixel tile, tA = the eye distance below which no sample inside the box, of any ray of the tile, lies in a shown segment (PROXY_WGSL below).
+ // tA past the end of the ray: no sample can be inside, the loop is not run (the result of a ray that hits nothing); else the march starts one grid point before the one tA falls on: k = floor((tA - t0) / stp) - 1, never below 0.
+ // t0, faceT and faceEnd above are the ray's own and stay: only k moves (a start after t0 is past the entry sample, so faceT never applies there).
+ var emptyRay=false;
+ if(u.proxyOn==1){
+  let tA=textureLoad(proxyTex,(vec2<i32>(in.pos.xy)-u.proxyOrg)/8,0).r;
+  if(tA>endT){emptyRay=true;}else if(tA>t0){k=max(0,i32(floor((tA-t0)/stp))-1);}
+ }
+`)} var jumpLen=0.0;var hitEnd=false;
  var prevValid=false;var prevF=0.0;
  var prevSkip=false;var skBlk=vec3<i32>(-1);var skBits=vec2<u32>(0u);
  var chk=false; // the creep check is made only while the ray is near a surface (see below): false at the ray start and after a jump
@@ -253,7 +264,7 @@ ${EV(` if(u.sliceOpacity>0.0){
  {let c=u.clsChan[2];if(c>=0&&u.segA[2].w>0.5){sel2[c]=${FM}(1.0);off2=${FM}(0.0);}}
  {let c=u.clsChan[3];if(c>=0&&u.segA[3].w>0.5){sel3[c]=${FM}(1.0);off3=${FM}(0.0);}}
  let skipOn=u.useSkip>0&&u.diag!=4;
- for(var iter=0;iter<4096;iter++){
+ for(var iter=${events ? '0' : 'select(0,4096,emptyRay)'};iter<4096;iter++){
   let t=t0+f32(k)*stp;
   if(t>endT||acc.a>ACC_STOP){break;}
   iters++;
@@ -429,4 +440,102 @@ function ablate(t, abl, counters) {
 export function volumeWgsl({ f16 = false, cls4 = false, events = true, abl = '', counters = false } = {}) {
   const t = volumeWgslBase({ f16, cls4, events });
   return abl || counters ? ablate(t, abl, counters) : t;
+}
+
+// ---- the pre-pass: per 8 x 8 pixel tile of the low pass, one cone marched from the eye, as a compute pass before the volume pass ----
+// Output (one r32float per tile, tiles of both eyes side by side): tA = the eye distance s such that every sample inside the box, of every ray through a pixel centre of the tile, at a distance below tA, lies outside every shown segment
+// (3.0e38 = the whole tile is empty). The volume pass starts a ray one grid point before the one tA falls on, and does not march a ray whose tA is past its end. Nothing but the start moves: the ray's samples, jumps, hit and search are the march's own.
+// The cone: its axis a = the mean of the four corner pixel centres' directions, its chord coefficient c = the largest |corner direction - a| + epsTheta (a ray at angle th from the axis is 2 sin(th/2) <= c * s from it at distance s).
+// A step from the axis point x = o + s a: outside the box the march has no samples, so every sample within (distance of x to the box) - slack - c s is empty of segments; inside, the class vector at the box point nearest to x
+// (the clamp: the grid clamps to its edge) is read once, and when no shown slot is inside (class < 0.5 - classMargin) the field's distance dd gives a ball of (dd - ddMargin - slack) voxelMin around it (ddMargin = the jump's 1.8). h = the larger of the two
+// reaches; h < hMin voxelMin stops (tA = s), else s += h. The union of the intervals [s - h, s + h] covers [0, tA) because a ray's sample at distance sigma lies within c s + |sigma - s| of x. Reads: the combined texture (class + distance alpha) and cls4Tex, as the march does.
+// Constants shared by the shader text and by the CPU model of tests/unit/vr-wgsl-proxy.test.js.
+export const PROXY = { tile: 8, epsTheta: 1.0e-4, ddMargin: 1.8, slack: 0.05, hMin: 0.25, maxIt: 128, classMargin: 0.002, empty: 3.0e38 };
+// per frame, written by the host: both eyes' inverse region matrices and origins, the region sizes in px, the tiles' layout (tilesPerEye columns per eye, tilesY rows), the grid constants of the volume pass
+export const PROXY_FIELDS = [
+  ['inv0', 'mat4x4f'], ['inv1', 'mat4x4f'],
+  ['org0', 'vec3f'], ['w0', 'i32'], ['org1', 'vec3f'], ['w1', 'i32'],
+  ['halfExt', 'vec3f'], ['nEyes', 'i32'],
+  ['voxelMin', 'f32'], ['h0', 'i32'], ['h1', 'i32'], ['tilesPerEye', 'i32'],
+  ['clsChan', 'vec4i'], ['segOn', 'vec4i'],
+  ['tilesY', 'i32'],
+];
+export const PROXY_BINDINGS = { params: 0, cls: 1, cls4: 2, sampler: 3, out: 4 };
+// the direction of the ray through the centre of pixel (px, py) of a w x h region, in object space: the point at NDC z 0.5 (never the near / far plane, which can be at infinity) through the inverse of the region's mvp, minus the eye.
+// inv = the inverse of the volume pass's mvp (column-major, 16); org = the eye in object space. The WGSL twin is dirAt in proxyWgsl (a test ties the two).
+export function proxyPixelDir(inv, org, px, py, w, h) {
+  const nx = (px + 0.5) / w * 2 - 1, ny = 1 - (py + 0.5) / h * 2, v = [nx, ny, 0.5, 1], c = [0, 0, 0, 0];
+  for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) c[i] += inv[j * 4 + i] * v[j];
+  const d = [c[0] / c[3] - org[0], c[1] / c[3] - org[1], c[2] / c[3] - org[2]], l = Math.hypot(...d);
+  return d.map(x => x / l);
+}
+export function proxyWgsl({ cls4 = false } = {}) {
+  const C = PROXY, F = x => (Number.isInteger(x) ? x.toFixed(1) : String(x));
+  return `// VR / AR volume pre-pass (WGSL), cls4=${cls4}: one cone per ${C.tile} x ${C.tile} pixel tile (see docs/vr-wgsl-core.js PROXY)
+${uniformStruct(PROXY_FIELDS)}
+@group(0) @binding(0) var<uniform> p:U;
+@group(0) @binding(1) var clsTex:texture_3d<f32>;
+@group(0) @binding(2) var cls4Tex:texture_3d<f32>;
+@group(0) @binding(3) var smp:sampler;
+@group(0) @binding(4) var tilesOut:texture_storage_2d<r32float,write>;
+fn texCoord(q:vec3<f32>)->vec3<f32>{let g=0.5/p.halfExt;return vec3<f32>(q.x*g.x+0.5,0.5-q.y*g.y,q.z*g.z+0.5);}
+fn cl(tc:vec3<f32>)->vec3<f32>{return clamp(tc,vec3<f32>(0.0),vec3<f32>(0.999999));}
+fn eyeOrg(e:i32)->vec3<f32>{if(e==1){return p.org1;}return p.org0;}
+fn dirAt(e:i32,px:f32,py:f32,w:f32,h:f32)->vec3<f32>{
+ let nx=(px+0.5)/w*2.0-1.0;let ny=1.0-(py+0.5)/h*2.0;
+ var m=p.inv0;if(e==1){m=p.inv1;}
+ let c=m*vec4<f32>(nx,ny,0.5,1.0);
+ return normalize(c.xyz/c.w-eyeOrg(e));
+}
+fn anyInside(q:vec4<f32>)->bool{
+ for(var s=0;s<4;s++){let c=p.clsChan[s];if(c>=0&&p.segOn[s]!=0&&q[c]>=0.5-${F(C.classMargin)}){return true;}}
+ return false;
+}
+fn cone(e:i32,lx:i32,ty:i32,w:i32,h:i32)->f32{
+ let x0=f32(lx*${C.tile});let y0=f32(ty*${C.tile});let x1=f32(min(w,lx*${C.tile}+${C.tile})-1);let y1=f32(min(h,ty*${C.tile}+${C.tile})-1);
+ let fw=f32(w);let fh=f32(h);
+ let d00=dirAt(e,x0,y0,fw,fh);let d10=dirAt(e,x1,y0,fw,fh);let d01=dirAt(e,x0,y1,fw,fh);let d11=dirAt(e,x1,y1,fw,fh);
+ let o=eyeOrg(e);let a=normalize(d00+d10+d01+d11);
+ let ch=max(max(length(d00-a),length(d10-a)),max(length(d01-a),length(d11-a)))+${F(C.epsTheta)};
+ let he=p.halfExt;let vm=p.voxelMin;let far=length(o)+length(he);
+ var s=0.0;
+ for(var it=0;it<${C.maxIt};it++){
+  if(s>far){return ${C.empty.toExponential(1)};}
+  let x=o+a*s;let xc=clamp(x,-he,he);let dBox=length(x-xc);let rC=s*ch;
+  var hh=dBox-${F(C.slack)}*vm-rC;
+  var q=textureSampleLevel(clsTex,smp,cl(texCoord(xc)),0.0);let dd=q.a*255.0;
+  ${cls4 ? 'q.a=textureSampleLevel(cls4Tex,smp,cl(texCoord(xc)),0.0).r;' : ''}
+  if(!anyInside(q)){let rho=(dd-${F(C.ddMargin)}-${F(C.slack)})*vm;hh=max(hh,rho-dBox-rC);}
+  if(hh<${F(C.hMin)}*vm){return s;}
+  s+=hh;
+ }
+ return s;
+}
+@compute @workgroup_size(${C.tile},${C.tile}) fn main(@builtin(global_invocation_id) g:vec3<u32>){
+ let tx=i32(g.x);let ty=i32(g.y);
+ if(tx>=p.tilesPerEye*p.nEyes||ty>=p.tilesY){return;}
+ let e=tx/p.tilesPerEye;let lx=tx-e*p.tilesPerEye;
+ var w=p.w0;var h=p.h0;if(e==1){w=p.w1;h=p.h1;}
+ var res=0.0;
+ if(lx*${C.tile}<w&&ty*${C.tile}<h){res=cone(e,lx,ty,w,h);}
+ textureStore(tilesOut,vec2<i32>(tx,ty),vec4<f32>(res,0.0,0.0,0.0));
+}
+`;
+}
+// the proxy comparison of the performance record: the number of pixels whose colour or packed depth differ between two render targets of the same size (atomicAdd into one u32; the host reads 4 bytes back)
+export const PROXY_DIFF_BINDINGS = { colorA: 0, depthA: 1, colorB: 2, depthB: 3, count: 4 };
+export function proxyDiffWgsl() {
+  return `// VR / AR volume pre-pass comparison (WGSL): pixels where colour or depth differ between two targets
+@group(0) @binding(0) var cA:texture_2d<f32>;
+@group(0) @binding(1) var dA:texture_2d<f32>;
+@group(0) @binding(2) var cB:texture_2d<f32>;
+@group(0) @binding(3) var dB:texture_2d<f32>;
+@group(0) @binding(4) var<storage,read_write> cnt:atomic<u32>;
+@compute @workgroup_size(8,8) fn main(@builtin(global_invocation_id) g:vec3<u32>){
+ let d=textureDimensions(cA);
+ if(g.x>=d.x||g.y>=d.y){return;}
+ let p=vec2<i32>(g.xy);
+ if(any(textureLoad(cA,p,0)!=textureLoad(cB,p,0))||any(textureLoad(dA,p,0)!=textureLoad(dB,p,0))){atomicAdd(&cnt,1u);}
+}
+`;
 }

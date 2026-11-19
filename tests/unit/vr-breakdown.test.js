@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import * as THREEG from 'three/webgpu';
 import { WgslReflect } from 'wgsl_reflect/wgsl_reflect.module.js';
-import { volumeWgsl, ABLATIONS, COUNTER_FIELDS, uniformLayout } from '../../docs/vr-wgsl-core.js';
+import { volumeWgsl, ABLATIONS, COUNTER_FIELDS, uniformLayout, proxyWgsl, proxyDiffWgsl } from '../../docs/vr-wgsl-core.js';
 import { createVrVolumeRenderer, regionClip, regionMvp, gxShaderInfo } from '../../docs/vr-wgpu.js';
 import { createVolBreakdown, createPerfLog, perfReport, BD_VARIANTS, BD_SPECS, BD_PROBE_FIELDS, BD_NEAR_R } from '../../docs/vr-perf-log.js';
 
@@ -34,8 +34,8 @@ const DISPLAY_HASHES_BEFORE_GRID = [
   [true, true, false, 'f2a350e6d48888861cf5a5688ad8a2889bbc196b71552f013875b70cc07b6b97'],
   [true, true, true, '126b209ed29237876db28eeb31e5b8aa8b3ad561d9213da11fac7906fc57032c'],
 ];
-// sha256 of the display variants' text now (t = t0 + k * step, made in one place at the top of the loop: see the grid tests below): [f16, cls4, events, hash]
-const DISPLAY_HASHES = [
+// sha256 of the display variants' text of (t = t0 + k * step, made in one place at the top of the loop: see the grid tests below; before the pre-pass start): [f16, cls4, events, hash]
+const DISPLAY_HASHES_BEFORE_PROXY = [
   [false, false, false, '141dcd4f08128c6164aa69cb6640d847f1e5c0214a419652eb6cbcea57153f71'],
   [false, false, true, '33ed1741f9293f0289248566c95082bf10492dfd631e07970bc07bb4cd06587d'],
   [false, true, false, '065682466a4b75abb5e4e3467e61c1bbf0dd013e96afa2544c7810900369ad8a'],
@@ -45,9 +45,26 @@ const DISPLAY_HASHES = [
   [true, true, false, '704c4c22307c0e6a352f3db6b09dcafa953c93f715d1ded6577af3f31f3e8caa'],
   [true, true, true, '3b29b78671df07485cde255bae38a0d4cd3d25b7644fbe2ea56a9370ec1fae27'],
 ];
+// sha256 of the display variants' text now: [f16, cls4, events, hash]
+const DISPLAY_HASHES = [
+  [false, false, false, 'bfdf339e6832bd1ae6ed2af7e816161786f7bb47881240b8a9bae0cdf0b6f16c'],
+  [false, false, true, '6ef5e400841ff248c3e0345ca3d6ad3c1a924246def919570e5db9ae20a5b194'],
+  [false, true, false, '64431c184cb0dc0cd5e8d486e93491813879182419bc0c5ebe736dcf9c79bf99'],
+  [false, true, true, 'e11d6a1302d874ccfc46491491c6607826d66cc97998abc80c0e9bf163ac2b08'],
+  [true, false, false, '152437d63dcb85ee204f0624a77139b0f67b377999cc6f6369f851cf7bfe6f96'],
+  [true, false, true, '63a932e79eec80d541eb78d56ba30dbf33b274fdc6ddcb8ba8da1c37271576c6'],
+  [true, true, false, '836bb5fc9ce52abd77ae4c369b8c72a585ee8bb3fed6c04551a161c6fae3ff8c'],
+  [true, true, true, '5926bc54a1dd50409f1d9f4ef0e824c72fe523aff9ea298daf38f07bb24d476b'],
+];
 const NF = COUNTER_FIELDS.length; // u32 per probe pixel
 const BASES = []; for (const f16 of [false, true]) for (const cls4 of [false, true]) for (const events of [false, true]) BASES.push({ f16, cls4, events });
 
+// the pre-pass: the display text of differs from the text of only by these edits (the old text is made back from the new one and must hash to the old value)
+const unproxy = t => t
+  .replace(' jumpOn:i32,\n proxyOn:i32,\n proxyOrg:vec2<i32>,\n pad1:i32,\n};', ' jumpOn:i32,\n pad0:i32,\n pad1:i32,\n pad2:i32,\n};')
+  .replace('@group(0) @binding(9) var proxyTex:texture_2d<f32>;\n', '')
+  .replace(/ \/\/ the pre-pass \(build 754\)[\s\S]*?k=max\(0,i32\(floor\(\(tA-t0\)\/stp\)\)-1\);\}\n \}\n/, '')
+  .replace('for(var iter=select(0,4096,emptyRay);iter<4096;iter++){', 'for(var iter=0;iter<4096;iter++){');
 describe('WGSL: the display variants are the text below, character for character (a change of the display text changes these hashes: update them on purpose)', () => {
   it.each(DISPLAY_HASHES)('f16=%s cls4=%s events=%s', (f16, cls4, events, hash) => {
     expect(sha(volumeWgsl({ f16, cls4, events }))).toBe(hash);
@@ -66,11 +83,19 @@ const ungrid = t => t
     '  // a jump is never shorter than a normal step; it lands on the same t0 + k * step grid\n  if(dd>=2.7){let nextJ=t+stp*max(1.0,floor((dd-1.8)*jkA/stp));jumpLen+=nextJ-t;previousT=nextJ-stp*0.05;prevValid=false;t=nextJ;continue;}')
   .replace('  previousT=t;k++;\n }\n if(hitIdx>=0){', '  previousT=t;t+=stp;\n }\n if(hitIdx>=0){')
   .replace('previousT = t, k++ (the next grid point), exactly as the skip does', 'previousT = t, t += stp, exactly as the skip does');
+describe('WGSL: the pre-pass start', () => {
+  it.each(DISPLAY_HASHES_BEFORE_PROXY)('f16=%s cls4=%s events=%s: without the pre-pass edits the text is the one of', (f16, cls4, events, hash) => {
+    const t = volumeWgsl({ f16, cls4, events });
+    expect(sha(unproxy(t))).toBe(hash);
+    if (events) expect(t).not.toContain('emptyRay'); else { expect(t).toContain('var emptyRay=false;'); expect(t).toContain('if(u.proxyOn==1){'); }
+    expect(t).toContain('@group(0) @binding(9) var proxyTex:texture_2d<f32>;');
+  });
+});
 describe('WGSL: the grid (t = t0 + k * step)', () => {
   it.each(DISPLAY_HASHES_BEFORE_GRID)('f16=%s cls4=%s events=%s: without the grid edits the text is the one of to 752', (f16, cls4, events, hash) => {
     const t = volumeWgsl({ f16, cls4, events });
     expect(t).toContain('  let t=t0+f32(k)*stp;\n'); expect(t).not.toContain('t+=stp');
-    expect(sha(ungrid(t))).toBe(hash);
+    expect(sha(ungrid(unproxy(t)))).toBe(hash);
   });
 });
 
@@ -83,7 +108,7 @@ describe('WGSL: the creep gate', () => {
   it.each(DISPLAY_HASHES_BEFORE_GATE)('f16=%s cls4=%s events=%s: without the gate edits the text is the one before', (f16, cls4, events, hash) => {
     const t = volumeWgsl({ f16, cls4, events });
     expect(t).toContain('if(skipOn&&chk){'); expect(t).toContain('  chk=dd<2.7;\n'); expect(t).toContain(' var chk=false;');
-    expect(sha(ungate(ungrid(t)))).toBe(hash);
+    expect(sha(ungate(ungrid(unproxy(t))))).toBe(hash);
   });
   it('the check is made at most where the previous sample was read near a surface: chk is set from dd right after the override and before the jump, never set by a jump, and starts false', () => {
     const t = volumeWgsl();
@@ -259,24 +284,24 @@ describe('the collector (createVolBreakdown)', () => {
     const t = perfReport(log, {}).split('\n'), h = t.findIndex(l => /^\s*t\s+fps\s+g1/.test(l));
     expect(t[h]).toMatch(/fov\s+rec$/); expect(t[h + 1].length).toBe(t[h].length); expect(t[h + 1]).toMatch(/\s-$/); expect(t.join('\n')).not.toContain('-- vol breakdown');
   });
-  it('the table of variants: the eight, in the order they run, with the program / uniform change each needs', () => {
-    expect(BD_VARIANTS).toEqual(['same', 'box', 'simple', 'noGrad', 'noRefine', 'noShade', 'withCreep', 'noJump']);
-    expect(BD_SPECS.box.overrides).toEqual({ diag: 1 }); expect(BD_SPECS.simple.overrides).toEqual({ diag: 3 }); expect(BD_SPECS.withCreep.overrides).toEqual({ useSkip: 1 }); expect(BD_SPECS.noJump.overrides).toEqual({ jumpOn: 0 });
+  it('the table of variants: the nine, in the order they run, with the program / uniform change each needs (noJump leaves the pre-pass out too: it needs the jumps; noProxy only the pre-pass, and its turn runs the proxy comparison)', () => {
+    expect(BD_VARIANTS).toEqual(['same', 'box', 'simple', 'noGrad', 'noRefine', 'noShade', 'withCreep', 'noJump', 'noProxy']);
+    expect(BD_SPECS.box.overrides).toEqual({ diag: 1 }); expect(BD_SPECS.simple.overrides).toEqual({ diag: 3 }); expect(BD_SPECS.withCreep.overrides).toEqual({ useSkip: 1 }); expect(BD_SPECS.noJump.overrides).toEqual({ jumpOn: 0, proxyOn: 0 }); expect(BD_SPECS.noProxy.overrides).toEqual({ proxyOn: 0 }); expect(BD_SPECS.noProxy.proxy).toBe(true); expect(BD_SPECS.noProxy.abl).toBeUndefined();
     expect([BD_SPECS.noGrad.abl, BD_SPECS.noRefine.abl, BD_SPECS.noShade.abl]).toEqual(['grad', 'refine', 'shade']); expect(BD_SPECS.same.abl).toBeUndefined(); expect(BD_SPECS.same.overrides).toBeUndefined();
   });
 });
 
 // ---- the host, driven with a mock device ----
 const GPU_GLOBALS = () => {
-  vi.stubGlobal('GPUShaderStage', { VERTEX: 1, FRAGMENT: 2 }); vi.stubGlobal('GPUBufferUsage', { VERTEX: 1, COPY_DST: 2, UNIFORM: 4, QUERY_RESOLVE: 8, COPY_SRC: 16, MAP_READ: 32, STORAGE: 64 });
-  vi.stubGlobal('GPUTextureUsage', { TEXTURE_BINDING: 1, COPY_DST: 2, RENDER_ATTACHMENT: 4, COPY_SRC: 8 }); vi.stubGlobal('GPUMapMode', { READ: 1 });
+  vi.stubGlobal('GPUShaderStage', { VERTEX: 1, FRAGMENT: 2, COMPUTE: 4 }); vi.stubGlobal('GPUBufferUsage', { VERTEX: 1, COPY_DST: 2, UNIFORM: 4, QUERY_RESOLVE: 8, COPY_SRC: 16, MAP_READ: 32, STORAGE: 64 });
+  vi.stubGlobal('GPUTextureUsage', { TEXTURE_BINDING: 1, COPY_DST: 2, RENDER_ATTACHMENT: 4, COPY_SRC: 8, STORAGE_BINDING: 16 }); vi.stubGlobal('GPUMapMode', { READ: 1 });
 };
 const withGpu = fn => async () => { GPU_GLOBALS(); try { await fn(); } finally { vi.unstubAllGlobals(); } };
 const settle = () => new Promise(r => setTimeout(r, 0));
 const eyeCam = (W, H) => ({ viewport: { z: W, w: H }, projectionMatrix: new THREEG.Matrix4(), matrixWorldInverse: new THREEG.Matrix4(), matrixWorld: new THREEG.Matrix4() });
 // a device with timestamp-query: script = [[begin, end] ns ticks, ...] in the order the resolves are encoded (low pass, marker, shadow, ...); the log keeps the passes and the commands in the order of encoding
 const mockGpu = (script, { timestamps = true } = {}) => {
-  const log = { passes: [], cmds: [], buffers: [], textures: [], writes: [], queries: 0, shaders: [], pipelines: [], bindGroups: [], layouts: 0 };
+  const log = { passes: [], cmds: [], buffers: [], textures: [], writes: [], queries: 0, shaders: [], pipelines: [], bindGroups: [], layouts: 0, computePipelines: [], computePasses: [] };
   const device = { features: new Set(timestamps ? ['timestamp-query'] : []), limits: {} };
   device.queue = { writeBuffer: (b, off, data) => { log.writes.push({ b, data: new Int32Array(ArrayBuffer.isView(data) ? data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) : data.slice(0)) }); }, writeTexture() {}, submit: l => { log.cmds.push('submit'); } };
   device.createQuerySet = d => { log.queries++; return { d, destroy() {} }; };
@@ -284,10 +309,12 @@ const mockGpu = (script, { timestamps = true } = {}) => {
   device.createTexture = d => { const t = { d, destroyed: false, destroy() { t.destroyed = true; }, createView: () => ({ t }) }; log.textures.push(t); return t; };
   device.createSampler = () => ({}); device.createBindGroupLayout = () => { log.layouts++; return {}; }; device.createPipelineLayout = () => ({});
   device.createShaderModule = d => { log.shaders.push(d.code); return {}; };
+  device.createComputePipeline = d => { const p = { d, compute: true }; log.computePipelines.push(p); return p; }; device.createComputePipelineAsync = async d => device.createComputePipeline(d);
   device.createRenderPipeline = d => { const p = { d }; log.pipelines.push(p); return p; }; device.createRenderPipelineAsync = async d => { const p = { d }; log.pipelines.push(p); return p; };
   device.createBindGroup = d => { const g = { d }; log.bindGroups.push(g); return g; };
   device.createCommandEncoder = () => ({
     beginRenderPass: d => { const p = { d, pipeline: null, groups: {}, viewports: [], scissors: [], draws: 0 }; log.passes.push(p); log.cmds.push('pass'); return { setPipeline: x => { p.pipeline = x; }, setVertexBuffer() {}, setBindGroup: (i, g) => { p.groups[i] = g; }, setViewport: (...a) => p.viewports.push(a), setScissorRect: (...a) => p.scissors.push(a), draw: () => { p.draws++; }, end() {} }; },
+    beginComputePass: d => { const p = { d, pipeline: null, groups: {}, dispatches: [], at: log.cmds.length }; log.computePasses.push(p); log.cmds.push('cpass'); return { setPipeline: x => { p.pipeline = x; }, setBindGroup: (i, g) => { p.groups[i] = g; }, dispatchWorkgroups: (...a) => p.dispatches.push(a), end() {} }; },
     resolveQuerySet() {}, copyBufferToBuffer: (_s, _o, dst, _d, n) => { if (n === 16) dst.vals = script.shift(); log.cmds.push('copyB' + n); }, clearBuffer: () => log.cmds.push('clear'), copyTextureToBuffer() {}, finish: () => ({}),
   });
   return { device, log };
@@ -310,7 +337,8 @@ describe('host: nothing is made for the breakdown until it is begun, and the dis
   it('warm() makes only the display variants it is asked for (same keys as before), pipeFor of one gives the same program again', withGpu(async () => {
     const { device, log } = mockGpu([]);
     const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1] });
-    await r.volume.warm(); expect(log.pipelines).toHaveLength(2); expect(log.shaders).toEqual([volumeWgsl({ cls4: false, events: false }), volumeWgsl({ cls4: false, events: true })]);
+    await r.volume.warm(); expect(log.pipelines).toHaveLength(2); expect(log.shaders).toEqual([volumeWgsl({ cls4: false, events: false }), volumeWgsl({ cls4: false, events: true }), proxyWgsl({ cls4: false })]); // the pre-pass of the section-free variant only
+    expect(log.computePipelines).toHaveLength(1);
     const n = log.pipelines.length; r.volume.pipeFor({ cls4: false, events: true }); r.volume.pipeFor({ cls4: false, events: false }); expect(log.pipelines).toHaveLength(n);
     r.dispose();
   }));
@@ -328,9 +356,9 @@ describe('host: the shadow pass', () => {
     const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1] });
     const res = await begin(r, () => {});
     expect(res).toEqual({ shadow: true, probe: true, failed: [] });
-    expect(log.shaders).toHaveLength(4);
+    expect(log.shaders).toHaveLength(5); // the three abl variants, the counting twin and the proxy comparison's compute
     expect(log.shaders.slice(0, 3).map(t => /abl=(\w+) counters=false/.exec(t)[1])).toEqual(ABLATIONS); expect(log.shaders[3]).toContain('counters=true');
-    expect(log.shaders).toEqual([...ABLATIONS.map(abl => volumeWgsl({ events: false, abl })), volumeWgsl({ events: false, counters: true })]);
+    expect(log.shaders).toEqual([...ABLATIONS.map(abl => volumeWgsl({ events: false, abl })), volumeWgsl({ events: false, counters: true }), proxyDiffWgsl()]); expect(log.computePipelines).toHaveLength(1);
     expect(log.pipelines).toHaveLength(4); // no display pipeline among them (a draw makes those)
     r.dispose();
   }));
@@ -531,10 +559,11 @@ describe('vr-view.js wiring (static)', () => {
   it('while it is prepared or records the auto quality does not move (the picture stays); a throw in it never stops the frame loop or the drawing', () => {
     expect(vr).toContain("autoFrames++;const nowA=performance.now();\n   if(gxRec.phase==='prep'||gxRec.on){autoFrames=0;autoAt=nowA;ctrl.vol=ctrl.main=0;ctrlN.vol=ctrlN.main=0}");
     expect(vr).toContain("{try{gxRecFrame(frec,t1)}catch(e){console.warn('WebGPU breakdown:',e)}}");
-    expect(host).toContain('try { volume.bdSnapshot(low.target, low.eyes, u, vr); } catch (e) {');
+    expect(host).toContain('try { volume.bdSnapshot(low.target, low.eyes, u, vr, lowDraw?.proxy ?? null); } catch (e) {');
   });
   it('the volume pass of the frame is called as before; the snapshot of the low pass is the renderer\'s (host), only while a recording runs', () => {
-    expect(host).toContain('volume.drawPass(low.target, low.eyes, u, vr, 0);\n    if (volume.bdActive()) {');
+    expect(host).toContain('const lowDraw = volume.drawPass(low.target, low.eyes, u, vr, 0, null, null, { proxy: low.px });');
+    expect(host).toContain('\n    if (volume.bdActive()) {');
     expect(host).toContain('for (const sc of e.scissors || [[e.x, e.y, e.w, e.h]]) { pass.setScissorRect(sc[0], sc[1], sc[2], sc[3]); pass.draw(36); }');
     expect(host).toContain('const timed = o?.timed ?? !overrides;');
     expect(vr).toContain('gx.vol.breakdown.begin(variant,'); expect(vr).toContain('if(gx){gxRec.gen++;gxRec.on=false;try{gx.vol?.dispose()}');
