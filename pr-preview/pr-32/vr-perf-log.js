@@ -87,17 +87,20 @@ export function perfFileName(kind, build, now = new Date()) {
 // ---- the volume breakdown (WebGPU, one 30 s recording started from the detail tab; vr-wgpu.js shadow passes and counting probe) ----
 // The shadow passes are throw-away copies of a frame's low pass with one step taken out; `add` gets each one's GPU ms and the same frame's real low pass ms. This is a pure collector (no DOM, no GPU): it never touches the log's own columns.
 // How each variant of the eight is made (the host reads this table): abl = another program text (docs/vr-wgsl-core.js ablate), overrides = another uniform value.
-export const BD_VARIANTS = ['same', 'box', 'simple', 'noGrad', 'noRefine', 'noShade', 'noCreep', 'noJump'];
+export const BD_VARIANTS = ['same', 'box', 'simple', 'noGrad', 'noRefine', 'noShade', 'withCreep', 'noJump'];
 export const BD_SPECS = {
   same: { name: 'same' }, box: { name: 'box', overrides: { diag: 1 } }, simple: { name: 'simple', overrides: { diag: 3 } },
   noGrad: { name: 'noGrad', abl: 'grad' }, noRefine: { name: 'noRefine', abl: 'refine' }, noShade: { name: 'noShade', abl: 'shade' },
-  noCreep: { name: 'noCreep', overrides: { useSkip: 0 } }, noJump: { name: 'noJump', overrides: { jumpOn: 0 } },
+  withCreep: { name: 'withCreep', overrides: { useSkip: 1 } }, // the display runs without the creep skip (useSkip 0); this pass turns it on (the host skips it when its bits are not valid)
+  noJump: { name: 'noJump', overrides: { jumpOn: 0 } },
 };
-export const BD_PROBE_FIELDS = ['outcome', 'iters', 'creep', 'jumps', 'skipReads', 'clsReads', 'refineReads', 'gradReads']; // the eight u32 of a probe pixel (docs/vr-wgsl-core.js COUNTER_FIELDS)
+export const BD_PROBE_FIELDS = ['outcome', 'iters', 'creep', 'jumps', 'skipReads', 'clsReads', 'refineReads', 'gradReads', 'near4Steps', 'near4Jumps', 'near8Steps', 'near8Jumps', 'near16Steps', 'near16Jumps']; // the u32 of a probe pixel (docs/vr-wgsl-core.js COUNTER_FIELDS)
+const BD_STRIDE = BD_PROBE_FIELDS.length;
+export const BD_NEAR_R = [4, 8, 16]; // the approach radii in voxels (grid-index units of the distance bytes); the field pair of R is 8 + 2 * index
 const BD_OUTCOMES = ['hit', 'pass', 'accstop', 'discard']; // outcome value 1..4 (0 = the pixel was not covered)
 const BD_BLOCK = 8; // 8 x 8 pixels stand in for a GPU wave
 const quantile = (a, q) => { const v = a.filter(x => Number.isFinite(x)).sort((x, y) => x - y); if (!v.length) return null; const i = (v.length - 1) * q, lo = Math.floor(i), hi = Math.ceil(i); return v[lo] + (v[hi] - v[lo]) * (i - lo); };
-const newOutcomeAgg = () => ({ px: 0, steps: [], iters: 0, jumps: 0, creep: 0, skipReads: 0 }); // one outcome's share of the probe (hit, pass): its steps, jumps, creep steps and skipTex reads
+const newOutcomeAgg = () => ({ px: 0, steps: [], iters: 0, jumps: 0, creep: 0, skipReads: 0, near: BD_NEAR_R.map(() => ({ n: 0, steps: 0, jumps: 0 })) }); // one outcome's share of the probe (hit, pass): its steps, jumps, creep steps and skipTex reads; near[i] = the rays that came within BD_NEAR_R[i] of a surface (count, sums of their steps and jumps up to that sample)
 const newProbeAgg = () => ({ windows: 0, px: 0, steps: [], by: [newOutcomeAgg(), newOutcomeAgg()], sums: { iters: 0, creep: 0, jumps: 0, skipReads: 0, clsReads: 0, refineReads: 0, gradReads: 0 }, outcome: [0, 0, 0, 0], blocks: 0, blockRatio: [], mixed: 0 });
 export function createVolBreakdown() {
   const ratios = Object.fromEntries(BD_VARIANTS.map(v => [v, []])), lows = [], probes = { whole: newProbeAgg(), native: newProbeAgg() };
@@ -107,17 +110,17 @@ export function createVolBreakdown() {
     ratios[variant].push(shadowMs / lowMs); lows.push(lowMs);
     return true;
   };
-  // one counting probe window: counters = Uint32Array(w * h * 8) (BD_PROBE_FIELDS per pixel; outcome 0 = not covered); kind = 'whole' | 'native'
+  // one counting probe window: counters = Uint32Array(w * h * BD_PROBE_FIELDS.length) (BD_PROBE_FIELDS per pixel; outcome 0 = not covered); kind = 'whole' | 'native'
   const addProbe = (kind, counters, w, h) => {
-    const a = probes[kind]; if (!a || !counters || !(w > 0) || !(h > 0) || counters.length < w * h * 8) return false;
+    const a = probes[kind]; if (!a || !counters || !(w > 0) || !(h > 0) || counters.length < w * h * BD_STRIDE) return false;
     a.windows++;
     const nb = Math.ceil(w / BD_BLOCK) * Math.ceil(h / BD_BLOCK), bn = new Uint16Array(nb), bh = new Uint16Array(nb), bs = new Float64Array(nb), bm = new Float64Array(nb);
     for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-      const o = (y * w + x) * 8, oc = counters[o];
+      const o = (y * w + x) * BD_STRIDE, oc = counters[o];
       if (oc < 1 || oc > 4) continue;
       a.px++; a.outcome[oc - 1]++;
       if (a.steps.length < 200000) a.steps.push(counters[o + 1]);
-      if (oc <= 2) { const b = a.by[oc - 1]; b.px++; if (b.steps.length < 200000) b.steps.push(counters[o + 1]); b.iters += counters[o + 1]; b.jumps += counters[o + 3]; b.creep += counters[o + 2]; b.skipReads += counters[o + 4]; }
+      if (oc <= 2) { const b = a.by[oc - 1]; b.px++; if (b.steps.length < 200000) b.steps.push(counters[o + 1]); b.iters += counters[o + 1]; b.jumps += counters[o + 3]; b.creep += counters[o + 2]; b.skipReads += counters[o + 4]; BD_NEAR_R.forEach((_, i) => { const st = counters[o + 8 + 2 * i]; if (st > 0) { const nr = b.near[i]; nr.n++; nr.steps += st; nr.jumps += counters[o + 9 + 2 * i]; } }); }
       a.sums.iters += counters[o + 1]; a.sums.creep += counters[o + 2]; a.sums.jumps += counters[o + 3]; a.sums.skipReads += counters[o + 4]; a.sums.clsReads += counters[o + 5]; a.sums.refineReads += counters[o + 6]; a.sums.gradReads += counters[o + 7];
       const work = counters[o + 1] + counters[o + 6] + counters[o + 7], b = (y / BD_BLOCK | 0) * Math.ceil(w / BD_BLOCK) + (x / BD_BLOCK | 0);
       bn[b]++; if (oc === 1) bh[b]++; bs[b] += work; if (work > bm[b]) bm[b] = work;
@@ -134,7 +137,9 @@ export function createVolBreakdown() {
   const outcomeSummary = b => {
     if (!b.px) return null;
     const st = b.steps.slice().sort((x, y) => x - y);
-    return { px: b.px, steps: { mean: b.iters / b.px, p95: st[Math.min(st.length - 1, Math.ceil(0.95 * st.length) - 1)] }, jumps: b.jumps / b.px, creep: b.creep / b.px, skip: b.skipReads / b.px };
+    // near = per radius: the rays that came within R of a surface: their mean steps / jumps up to the first such sample (null = none did) and never = the share of this outcome's rays that never did
+    const near = BD_NEAR_R.map((R, i) => { const x = b.near[i]; return { R, reached: x.n, steps: x.n ? x.steps / x.n : null, jumps: x.n ? x.jumps / x.n : null, never: (b.px - x.n) / b.px }; });
+    return { px: b.px, steps: { mean: b.iters / b.px, p95: st[Math.min(st.length - 1, Math.ceil(0.95 * st.length) - 1)] }, jumps: b.jumps / b.px, creep: b.creep / b.px, skip: b.skipReads / b.px, near };
   };
   const probeSummary = a => {
     if (!a.windows || !a.px) return null;
@@ -174,6 +179,9 @@ export function createVolBreakdown() {
       : 'probe whole: - (no probe read back)');
     const bo = o => (o ? 'steps mean/p95 ' + f1(o.steps.mean) + '/' + o.steps.p95 + ' · jumps ' + f1(o.jumps) + ' · creep ' + f1(o.creep) + ' · skipTex ' + f1(o.skip) : '-');
     L.push(w ? 'probe whole by outcome: hit ' + bo(w.byOutcome.hit) + ' | pass ' + bo(w.byOutcome.pass) : 'probe whole by outcome: - (no probe read back)');
+    const ap = (o, i) => (o && o.near[i].steps !== null ? f1(o.near[i].steps) + '/' + f1(o.near[i].jumps) : '-');
+    L.push(w ? 'probe approach (steps/jumps to the first sample within R voxels of a surface): ' + BD_NEAR_R.map((R, i) => 'R=' + R + ' hit steps/jumps ' + ap(w.byOutcome.hit, i) + ' pass ' + ap(w.byOutcome.pass, i) + ' never ' + (w.byOutcome.pass ? Math.round(w.byOutcome.pass.near[i].never * 100) + '%' : '-')).join(' | ')
+      : 'probe approach (steps/jumps to the first sample within R voxels of a surface): - (no probe read back)');
     L.push(n ? 'probe native: windows ' + n.windows + ' · blocks ' + n.blocks + ' · block max/mean median/p90 ' + (n.blockMax ? f2(n.blockMax.median) + '/' + f2(n.blockMax.p90) : '-') + ' · mixed hit blocks share ' + f2(n.mixedShare)
       : 'probe native: - (no probe read back)');
     return L;
@@ -187,9 +195,10 @@ export function volBreakdownReport(p) {
   const rec = (p.rows || []).filter(r => r.rec === 1), L = ['-- vol breakdown (recording, paired shadow passes)'];
   L.push(...vb.lines({ volMs: median(rec.map(r => r.vol)) }));
   L.push('note: a shadow pass is the frame\'s low pass drawn once more after the frame\'s marker pass (same eyes, region, scissors and uniforms, into scratch targets that are never shown) with one step taken out; its GPU ms comes from a timestamp pair of its own and is not part of the vol column or of span. Variants run in turn, one shadow pass every 4th frame.');
-  L.push('note: ratio = shadow ms / the same frame\'s low pass ms (median per variant, IQR = quartiles); "same" is the control (expected near 1). M = median low pass ms of the recording. est = (R_same - R_variant) x M ms: what the variant leaves out; noCreep / noJump leave out a saving (the creep skip, the distance jumps), so their est is negative = the ms those save. A "-" = no sample.');
+  L.push('note: ratio = shadow ms / the same frame\'s low pass ms (median per variant, IQR = quartiles); "same" is the control (expected near 1). M = median low pass ms of the recording. est = (R_same - R_variant) x M ms: what the variant leaves out (positive = the variant is faster than the display); the display runs without the creep skip, withCreep turns it on (useSkip 1 over the display\'s 0) and noJump leaves out the distance jumps: a negative est of withCreep = the ms the creep skip adds, i.e. what leaving it out of the display saves; a negative est of noJump = the ms the jumps save. A withCreep pass is made only while the host\'s skip bits are valid for the texture. A "-" = no sample.');
   L.push('note: split: fixed = R_box x M (box = nothing but the per-pixel start: diag 1); refine / gradient / shading = est of noRefine / noGrad / noShade; march = (R_simple - R_box) x M - shading (simple = diag 3: no surface search, no gradient, the shading maths kept); sum = the five against M ("sum vs low", additive steps give 100 %).');
-  L.push('note: probe = a 64 x 64 window of the left eye, alternately every second: whole = the eye\'s whole image shrunk into the window (the spread of the work), native = the centre of the region the low pass drew, at the pass\'s own pixel pitch (how the heavy pixels lie together). The counts per pixel come from a counting twin of the display program (steps = loop iterations; reads per px = fetches of skipTex / clsTex in the march, with the re-read of the previous sample / in the surface search / in the gradient; creep, jumps = how often).');
+  L.push('note: probe = a 64 x 64 window of the left eye, alternately every second: whole = the eye\'s whole image shrunk into the window (the spread of the work), native = the centre of the region the low pass drew, at the pass\'s own pixel pitch (how the heavy pixels lie together). The counts per pixel come from a counting twin of the display program (steps = loop iterations; reads per px = fetches of skipTex / clsTex in the march, with the re-read of the previous sample / in the surface search / in the gradient; creep, jumps = how often; the display runs without the creep skip, so the counting twin runs without it too and its creep and skipTex counts are 0).');
+  L.push('note: probe approach = per outcome (hit / pass) of the whole-image probe window: the loop iterations (steps) and jumps a ray used until its first sample with a surface distance <= R voxels, R = 4 / 8 / 16 (the distance byte dd the march jumps by, in grid-index units = voxels of the texture, read before the jumps switch; the sample itself counts as a step, the jumps are those made before it), the mean over the rays that did come within R; never = the share of the pass rays none of whose samples came within R. Counts only; it changes nothing that is drawn. It is a rough upper bound of what starting the ray near the surface (and ending it where nothing is left) could save: the steps before the first sample within R, and the pass rays that never come near a surface at all.');
   L.push('note: blocks are 8 x 8 pixels, an approximation of a GPU wave (the real wave size is not known): block max/mean = the largest work of the block over its mean (work = steps + search reads + gradient reads, covered pixels only), median and 90th percentile over the blocks; mixed hit blocks = blocks with both pixels that end on a hit and pixels that do not, as a share of the blocks with a covered pixel.');
   L.push('note: rows with rec = 1 were recorded while the breakdown ran: its shadow passes and probes load the GPU and its recording does not sample swd / vlat / wake, so span, gap, swd and fps of those rows are disturbed (the frame after a shadow pass has no gap sample); the summary above leaves them out, and the auto quality does not change while it records. This section does not follow the menu state (it uses every recorded pass).');
   return L;

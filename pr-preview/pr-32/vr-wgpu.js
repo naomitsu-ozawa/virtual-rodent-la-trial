@@ -2,7 +2,7 @@
 // (the three.js Data3DTexture objects stay the holders of the data, a GPUTexture is made from one on first use and again when its version changes), the volume render pass per eye,
 // the offscreen targets (colour + depth packed in rgba8, both eyes side by side, reduced scale and the periphery target), and the composite material (three.js NodeMaterial, TSL) that
 // puts the offscreen image into the headset's frame with the volume's depth. Plain WebGPU; three.js (the WebGPU build) is passed in.
-import { volumeWgsl, uniformLayout, BOX_VERTICES, VOLUME_BINDINGS } from './vr-wgsl-core.js?v=20261119-build750';
+import { volumeWgsl, uniformLayout, BOX_VERTICES, VOLUME_BINDINGS, COUNTER_FIELDS } from './vr-wgsl-core.js?v=20261119-build752';
 
 export const VRGPU_STORE_KEY = 'vrl-vr-gpu';
 // the choice of the page's 「WebGPUで開く」 button (kept per browser; no URL parameter: the public build's gate takes no unknown URL keys). Default: the WebGL view.
@@ -257,8 +257,11 @@ export function createVolumeGpu({ device, THREE, f16 = false, onTargetFreed = nu
     fillUniforms(u, extra);
     device.queue.writeBuffer(ubufOf(index), 0, uAb);
   };
-  // the values of the uniforms every volume pass of the session gets besides the eye's matrices (the jump and skip switches follow the diagnostics); `overrides` of a pass go over them
-  const passExtra = u => ({ jumpOn: (u.distInCls?.value > 0 && u.useCls?.value > 0 && (u.diag?.value | 0) !== 4) ? 1 : 0, useSkip: (u.diag?.value | 0) === 4 ? 0 : u.useSkip?.value | 0 });
+  // the values of the uniforms every volume pass of the session gets besides the eye's matrices (the jump switch follows the diagnostics); `overrides` of a pass go over them.
+  // useSkip is 0 for every pass of this renderer: the creep skip (the skipTex lookup) only omits reads that would find nothing (the contract of vr-skip-occupancy.js), so the image is the same either way,
+  // and on the headset the lookup was measured to cost more than the reads it saves (the breakdown's creep pair). The host's own switch (u.useSkip: the bits describe the texture exactly) is kept apart as skipHostOn; the breakdown's withCreep pass uses it.
+  const skipHostOn = u => ((u.diag?.value | 0) !== 4 && (u.useSkip?.value | 0) > 0) ? 1 : 0;
+  const passExtra = u => ({ jumpOn: (u.distInCls?.value > 0 && u.useCls?.value > 0 && (u.diag?.value | 0) !== 4) ? 1 : 0, useSkip: 0 });
 
   // the bind group of the textures in use (rebuilt when one of them is another GPUTexture)
   const groups = new Map();
@@ -381,8 +384,8 @@ export function createVolumeGpu({ device, THREE, f16 = false, onTargetFreed = nu
   // Method A, shadow passes: after a frame's marker pass (markFrame) one more pass draws the frame's low pass again, the same eyes, regions and scissors, with the eye uniforms the low pass had, into scratch targets that
   // are never shown; its variant takes a step out (abl: another program text; overrides: another uniform value). Its GPU ms comes from a query set of its own and is paired with the same frame's low pass ms (rec.lowMs):
   // the callback gets (name, shadowMs, lowMs). The shadow ms is not added to sumMs / rec.vms / rec.vols / rec.vpend (the vol column and the frame's span are the session's own). The frame after a shadow pass has no gap sample.
-  // Method B, the counting probe: a 64 x 64 pass of the counting variant (counters) writes eight u32 per pixel into a storage buffer that is read back, one probe at a time (probeCounters).
-  const BD_SLOTS = 4, BD_PROBE = 64, BD_PROBE_BYTES = BD_PROBE * BD_PROBE * 8 * 4;
+  // Method B, the counting probe: a 64 x 64 pass of the counting variant (counters) writes COUNTER_FIELDS.length u32 per pixel into a storage buffer that is read back, one probe at a time (probeCounters).
+  const BD_SLOTS = 4, BD_PROBE = 64, BD_PROBE_BYTES = BD_PROBE * BD_PROBE * COUNTER_FIELDS.length * 4;
   let bd = null;
   const finPair = p => {
     if (p.done || p.shadow === null || p.low === null) return;
@@ -429,7 +432,7 @@ export function createVolumeGpu({ device, THREE, f16 = false, onTargetFreed = nu
   const bdSnapshot = (target, eyes, u, variant) => {
     const b = bd; if (!b || !ts) return;
     const s = b.snap, base = passExtra(u);
-    s.rec = ts.cur; s.target = target; s.variant = variant; s.eyes.length = 0;
+    s.rec = ts.cur; s.target = target; s.variant = variant; s.eyes.length = 0; s.skipHostOn = skipHostOn(u);
     eyes.forEach((e, i) => {
       if (i > 1) return;
       s.eyes.push({ x: e.x, y: e.y, w: e.w, h: e.h, vx: e.vx ?? e.x, vy: e.vy ?? e.y, vw: e.vw ?? e.w, vh: e.vh ?? e.h, scissors: (e.scissors || [[e.x, e.y, e.w, e.h]]).map(c => c.slice()) });
@@ -444,6 +447,8 @@ export function createVolumeGpu({ device, THREE, f16 = false, onTargetFreed = nu
     if (!b || !b.shadowOk || !rec || s.rec !== rec || rec.vols === 0 || !s.target || !s.eyes.length) return false;
     const pipeline = spec.abl ? b.pipes.get(vkey({ ...s.variant, abl: spec.abl })) : pipes.get(vkey(s.variant)); // never compiled here: a variant the display changed to meanwhile is skipped
     if (!pipeline) return null;
+    const wantsCreep = (spec.overrides?.useSkip | 0) > 0; // withCreep: the creep skip over the display's 0, only where the host's bits are valid for the texture (else the pass would read a dummy skipTex): no program, the caller steps past it
+    if (wantsCreep && !s.skipHostOn) return null;
     const sl = b.slots.findIndex(x => !x.busy);
     if (sl < 0) return false;
     const W = s.target.w, H = s.target.h; // scratch targets of exactly the low target's size (another size would change the clear / store work)
@@ -484,7 +489,7 @@ export function createVolumeGpu({ device, THREE, f16 = false, onTargetFreed = nu
     if (p.low !== null) finPair(p);
     return true;
   };
-  // the counting probe: eye = { mvp, origin, lightOff } of the 64 x 64 window (the caller made the matrix); resolves the Uint32Array (64 x 64 x 8: COUNTER_FIELDS per pixel, 0 where nothing was covered) or null
+  // the counting probe: eye = { mvp, origin, lightOff } of the 64 x 64 window (the caller made the matrix); resolves the Uint32Array (64 x 64 x COUNTER_FIELDS.length: COUNTER_FIELDS per pixel, 0 where nothing was covered) or null
   const probeCounters = async (u, eye, variant, rec = null) => { // rec = the frame record just closed (markFrame): the frame after it has no gap sample, as after a shadow pass
     const b = bd, pr = b?.probe;
     if (!pr || pr.busy) return null;
