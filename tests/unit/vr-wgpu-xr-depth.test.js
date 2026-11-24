@@ -88,7 +88,7 @@ describe('WebGPU: the XR passes do not store the depth', () => {
     expect(() => m3.b.finishRender(m3.ctx)).not.toThrow();
   });
   it('the passes of the volume (vr-wgpu.js) are not changed: their depth is a colour attachment that stays "store", and the only depthStoreOp in the file is the hook\'s', () => {
-    expect(host.match(/\{ view: [\w.]+\.depthView, loadOp: 'clear', storeOp: 'store'/g)).toHaveLength(3); // low / peri target, the breakdown's shadow and probe passes
+    expect(host.match(/\{ view: [\w.]+\.depthView, loadOp: 'clear', storeOp: 'store'/g)).toHaveLength(5); // low / peri target, the breakdown's shadow and probe passes, and the specCfg shadow pass's two (the specialised and the generic copy)
     const hook = host.slice(host.indexOf('// the depth of the headset'), host.indexOf('// the device is lost for another reason'));
     expect(host.replace(hook, '')).not.toMatch(/depthStoreOp|depthStencilAttachment/);
     expect(host.replace(hook, '').match(/storeOp: 'discard'/g)).toHaveLength(1); // the frame marker's colour attachment, as before

@@ -237,7 +237,7 @@ describe('WebGPU: the volume pass is submitted before the bookkeeping that does 
 
 describe('the wiring in vr-view.js (the drawing is not changed)', () => {
   it('one record per session, WebGL and WebGPU alike; the WebGL session shows the panel at its end (the WebGPU one from the diagnostics listener)', () => {
-    expect(vr).toContain("perfLog=createPerfLog({kind:gx?'webgpu':'webgl',mode});");
+    expect(vr).toContain("perfLog=createPerfLog({kind:gx?'webgpu':'webgl',mode,saveEveryMs:Infinity});"); // E0: the mirror is written at the end / when hidden, not every 5 s
     expect(vr).toContain("if(!gxD)session.addEventListener('end',()=>{perfLog.flush();const pl=perfLog;setTimeout(()=>showGxDiagPanel(ja,null,pl),0)},{once:true});");
     expect(vr).toContain("perfLog.meta['GPU timers']=gx?'volume '+(gx.vol?.volume.hasTimer");
     expect(vr).toContain("import { createPerfLog, perfReport, perfFileName, createVolBreakdown, BD_VARIANTS, BD_SPECS } from './vr-perf-log.js?v=");

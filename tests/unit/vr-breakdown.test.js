@@ -7,6 +7,7 @@ import * as THREEG from 'three/webgpu';
 import { WgslReflect } from 'wgsl_reflect/wgsl_reflect.module.js';
 import { volumeWgsl, ABLATIONS, COUNTER_FIELDS, uniformLayout, proxyWgsl, proxyDiffWgsl } from '../../docs/vr-wgsl-core.js';
 import { createVrVolumeRenderer, regionClip, regionMvp, gxShaderInfo } from '../../docs/vr-wgpu.js';
+import { MARCH_VARIANTS, marchWgsl } from '../../docs/vr-wgpu-coarse-march.js';
 import { createVolBreakdown, createPerfLog, perfReport, BD_VARIANTS, BD_SPECS, BD_PROBE_FIELDS, BD_NEAR_R, defineBdVariant } from '../../docs/vr-perf-log.js';
 
 const read = f => readFileSync(new URL('../../docs/' + f, import.meta.url), 'utf8');
@@ -237,7 +238,7 @@ describe('the collector (createVolBreakdown)', () => {
     expect(i).toBeGreaterThan(0);
     expect(t[i + 1]).toBe('rec 30 s · shadow every 4th frame · low pass median 5.00 ms (32) · low share of vol 0.50');
     expect(t[i + 2]).toMatch(/^abl same n=4 ratio 1\.00 \(IQR 1\.00-1\.00\) · est -$/); expect(t[i + 3]).toMatch(/^abl box n=4 ratio 0\.30 \(IQR 0\.30-0\.30\) · est 3\.5 ms$/);
-    expect(t.slice(i, i + 14).some(l => l.startsWith('split: fixed(box) 1.5 ms · march '))).toBe(true);
+    expect(t.slice(i, i + 60).some(l => l.startsWith('split: fixed(box) 1.5 ms · march '))) /* (60: the variants' lines and the comparison lines of every group come before it) */.toBe(true);
     expect(t.some(l => l.startsWith('probe whole: windows 1 · px 4096 · steps mean/p50/p95/max '))).toBe(true); expect(t.some(l => /^probe native: windows 1 · blocks 64 · block max\/mean median\/p90 /.test(l))).toBe(true);
     const notes = t.filter((l, k) => k > i && l.startsWith('note: ')); expect(notes.length).toBeGreaterThanOrEqual(5);
     expect(notes.join('\n')).toMatch(/shadow pass/); expect(notes.join('\n')).toMatch(/8 x 8 pixels, an approximation of a GPU wave/); expect(notes.join('\n')).toMatch(/span, gap, swd and fps of those rows are disturbed/); expect(notes.join('\n')).not.toMatch(/[぀-ヿ一-鿿]/);
@@ -299,8 +300,8 @@ describe('the collector (createVolBreakdown)', () => {
     const t = perfReport(log, {}).split('\n'), h = t.findIndex(l => /^\s*t\s+fps\s+g1/.test(l));
     expect(t[h]).toMatch(/fov\s+rec\s+hold\s+mv\s+mvr\s+imax\s+mk\s+slotc\s+perc\s+hset\s+hk\s+gfix\s+mlow\s+tab\s+fmin\s+favg\s+late\s+ip95\s+lpx$/); expect(t[h + 1].length).toBe(t[h].length); expect(t[h + 1]).toMatch(/\s-$/); expect(t.join('\n')).not.toContain('-- vol breakdown');
   });
-  it('the table of variants: the nine, in the order they run, with the program / uniform change each needs (noJump leaves the pre-pass out too: it needs the jumps; noProxy only the pre-pass, and its turn runs the proxy comparison)', () => {
-    expect(BD_VARIANTS).toEqual(['same', 'box', 'simple', 'noGrad', 'noRefine', 'noShade', 'withCreep', 'noJump', 'noProxy']);
+  it('the table of variants: the ten (and the march variants of vr-wgpu-coarse-march.js and the coarse-grid pre-pass variants of vr-wgpu-coarse-proxy.js, then the compute-march variants after them), in the order they run, with the program / uniform change each needs (noJump leaves the pre-pass out too: it needs the jumps; noProxy only the pre-pass, and its turn runs the proxy comparison)', () => {
+    { const ten = ['same', 'box', 'simple', 'noGrad', 'specCfg', 'noRefine', 'noShade', 'withCreep', 'noJump', 'noProxy']; expect(BD_VARIANTS.filter(v => ten.includes(v))).toEqual(ten); const march = ['distSplit', 'march2', 'march2c4']; expect(BD_VARIANTS.filter(v => march.includes(v))).toEqual(march); expect(BD_VARIANTS.indexOf('distSplit')).toBeGreaterThan(BD_VARIANTS.indexOf('noProxy')); const coarse = ['proxyTB', 'proxyCoarse8', 'proxyCoarse']; expect(BD_VARIANTS.filter(v => coarse.includes(v))).toEqual(coarse); /* (the coarse-grid pre-pass variants: tests/unit/vr-wgpu-coarse-proxy.test.js) */ const cs = ['cs', 'csHit', 'csWave', 'csTile', 'csShare', 'csTileSg', 'csShareSg']; expect(BD_VARIANTS.filter(v => cs.includes(v))).toEqual(cs); /* (the compute-march variants: tests/unit/vr-wgsl-cs.test.js) */ } expect(BD_SPECS.specCfg.spec).toBe(true); expect(BD_SPECS.specCfg.overrides).toBeUndefined(); // (A4: the program of the display built with the settings as pipeline constants; tests/unit/vr-wgsl-spec.test.js)
     expect(BD_SPECS.box.overrides).toEqual({ diag: 1 }); expect(BD_SPECS.simple.overrides).toEqual({ diag: 3 }); expect(BD_SPECS.withCreep.overrides).toEqual({ useSkip: 1 }); expect(BD_SPECS.noJump.overrides).toEqual({ jumpOn: 0, proxyOn: 0 }); expect(BD_SPECS.noProxy.overrides).toEqual({ proxyOn: 0 }); expect(BD_SPECS.noProxy.proxy).toBe(true); expect(BD_SPECS.noProxy.abl).toBeUndefined();
     expect([BD_SPECS.noGrad.abl, BD_SPECS.noRefine.abl, BD_SPECS.noShade.abl]).toEqual(['grad', 'refine', 'shade']); expect(BD_SPECS.same.abl).toBeUndefined(); expect(BD_SPECS.same.overrides).toBeUndefined();
   });
@@ -361,13 +362,14 @@ describe('the collector: the steps of a ray in four places (to tA / approach / n
 describe('the table of variants: one place to add one (defineBdVariant), the pixel comparison of any variant', () => {
   const withVariant = (spec, fn) => { defineBdVariant(spec); try { fn(); } finally { delete BD_SPECS[spec.name]; BD_VARIANTS.splice(BD_VARIANTS.indexOf(spec.name), 1); } };
   it('a defined variant is in BD_VARIANTS (the order it was defined in) and BD_SPECS, appears in the report as an "abl" line and in the collector; a name is defined once; the nine stay as they were', () => {
-    expect(BD_VARIANTS).toEqual(['same', 'box', 'simple', 'noGrad', 'noRefine', 'noShade', 'withCreep', 'noJump', 'noProxy']);
+    const nine = ['same', 'box', 'simple', 'noGrad', 'noRefine', 'noShade', 'withCreep', 'noJump', 'noProxy'], before = BD_VARIANTS.length;
+    expect(BD_VARIANTS.filter(v => nine.includes(v))).toEqual(nine); // (the nine are in this order; the variants of the other groups are registered between them by their own defineBdVariant calls)
     withVariant({ name: 'spec', abl: 'grad', diff: true }, () => {
       expect(BD_VARIANTS.at(-1)).toBe('spec'); expect(BD_SPECS.spec).toEqual({ name: 'spec', abl: 'grad', diff: true });
       expect(() => defineBdVariant({ name: 'spec' })).toThrow(/already defined/); expect(() => defineBdVariant({})).toThrow();
       const vb = createVolBreakdown(); expect(vb.add('spec', 4, 5)).toBe(true); expect(vb.summary().variants.spec.n).toBe(1); expect(vb.lines().some(l => l.startsWith('abl spec n=1 '))).toBe(true);
     });
-    expect(BD_VARIANTS).toHaveLength(9); expect(BD_SPECS.spec).toBeUndefined();
+    expect(BD_VARIANTS).toHaveLength(before); expect(BD_SPECS.spec).toBeUndefined();
     expect(BD_SPECS.noProxy.diff).toBe(true); expect(BD_SPECS.noJump.diff).toBeUndefined(); expect(BD_SPECS.same.diff).toBeUndefined();
   });
   it('a diff variant counts comparisons: max pixels of one, pixels compared, comparisons with a differing pixel, the largest colour channel and depth byte difference; the line says so', () => {
@@ -458,10 +460,10 @@ describe('host: the shadow pass', () => {
     const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1] });
     const res = await begin(r, () => {});
     expect(res).toEqual({ shadow: true, probe: true, failed: [] });
-    expect(log.shaders).toHaveLength(5); // the three abl variants, the counting twin and the proxy comparison's compute
+    expect(log.shaders).toHaveLength(8); // the three abl variants, the counting twin, the three march variants (vr-wgpu-coarse-march.js) and the proxy comparison's compute
     expect(log.shaders.slice(0, 3).map(t => /abl=(\w+) counters=false/.exec(t)[1])).toEqual(ABLATIONS); expect(log.shaders[3]).toContain('counters=true');
-    expect(log.shaders).toEqual([...ABLATIONS.map(abl => volumeWgsl({ events: false, abl })), volumeWgsl({ events: false, counters: true }), proxyDiffWgsl()]); expect(log.computePipelines).toHaveLength(1);
-    expect(log.pipelines).toHaveLength(4); // no display pipeline among them (a draw makes those)
+    expect(log.shaders).toEqual([...ABLATIONS.map(abl => volumeWgsl({ events: false, abl })), volumeWgsl({ events: false, counters: true }), ...Object.keys(MARCH_VARIANTS).map(k => marchWgsl(volumeWgsl({ events: false }), k)), proxyDiffWgsl()]); expect(log.computePipelines).toHaveLength(1);
+    expect(log.pipelines).toHaveLength(7); // no display pipeline among them (a draw makes those)
     r.dispose();
   }));
   it('a variant that does not compile is left out and listed; without timestamp-query no shadow pass is made but the probe is still available', withGpu(async () => {
@@ -651,9 +653,9 @@ describe('vr-view.js wiring (static)', () => {
     expect(rec).not.toContain('settings.diag'); expect(rec).not.toMatch(/saveSettings|applyQuality|setTimeout/);
     expect(rec).toContain("gxD.stage('breakdown start'"); expect(rec).toContain("gxD.stage('breakdown end'"); expect(rec).toContain('tn>=gxRec.until');
   });
-  it('the button: detail tab only, WebGPU only, at y0+920 (the rows above keep their places), ja / en texts for the three states', () => {
-    expect(vr).toContain("btn(X,y0+920,MENU_W-2*X,txt,ph!=='idle',()=>gxRecStart(),{size:28,disabled:ph!=='idle'})");
-    const i = vr.indexOf("btn(X,y0+920,MENU_W-2*X,txt"), s = vr.slice(vr.lastIndexOf('}else if(ui.tab===4){', i), i + 200);
+  it('the button: detail tab only, WebGPU only, at y0+1020 (the rows above keep their places), ja / en texts for the three states', () => {
+    expect(vr).toContain("btn(X,y0+1020,(MENU_W-2*X-40)/3,txt,ph!=='idle',()=>gxRecStart(),{size:28,disabled:ph!=='idle'})");
+    const i = vr.indexOf("btn(X,y0+1020,(MENU_W-2*X-40)/3,txt"), s = vr.slice(vr.lastIndexOf('}else if(ui.tab===4){', i), i + 200);
     expect(s).toContain('if(gx){const ph=gxRec.phase');
     for (const t of ["'準備中'", "'Preparing'", "'記録中 残り'+sec+'秒'", "'Recording '+sec+' s left'", "'記録済み'", "'Recorded'", "'内訳を記録（30秒）'", "'Record breakdown (30 s)'"]) expect(s).toContain(t);
     for (const y of ['y0+200', 'y0+290', 'y0+380', 'y0+470', 'y0+560', 'y0+650', 'y0+740', 'y0+830']) expect(vr).toContain(y);

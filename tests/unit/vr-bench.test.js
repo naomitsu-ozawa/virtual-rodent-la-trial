@@ -399,14 +399,17 @@ describe('the isolation switches', () => {
     expect(iso.apply('iso')).toMatchObject({ timers: false, span: false, diagSave: false, perfSave: false, menu: 'closed' });
     iso.reset(); expect(iso.state).toEqual({ mode: 'default', ...ISO_MODES.default }); iso.apply('nope'); expect(iso.state.mode).toBe('default'); expect(seen).toEqual(['std', 'asis', 'iso', 'default', 'default']);
   });
-  it('the diagnostics heartbeat writes to the store once a second as always; with saveOn false it does not (and the count of writes is readable)', () => {
-    const mk = () => { const ls = []; const cbs = []; const s = { ended: 0, inputSources: [], requestAnimationFrame(cb) { cbs.push(cb); return 1; }, end() { return Promise.resolve(); }, frame() { const l = cbs.splice(0); for (const cb of l) cb(0, { getViewerPose: () => null }); } }; return { s, ls }; };
-    for (const [off, writes] of [[false, 3], [true, 0]]) {
-      const { s } = mk(); let t = 0; const sets = []; const store = { setItem: (k) => sets.push(k) };
+  it('the diagnostics heartbeat does not write once a second (E0); it writes when the page is hidden; with saveOn false it does not (and the count of writes is readable)', () => {
+    const mk = () => { const cbs = []; const s = { ended: 0, inputSources: [], requestAnimationFrame(cb) { cbs.push(cb); return 1; }, end() { return Promise.resolve(); }, frame() { const l = cbs.splice(0); for (const cb of l) cb(0, { getViewerPose: () => null }); } }; return { s }; };
+    const mkDoc = () => { const fns = []; return { visibilityState: 'visible', addEventListener: (_t, f) => fns.push(f), removeEventListener() {}, fire() { for (const f of fns) f(); } }; };
+    for (const [off, writes] of [[false, 1], [true, 0]]) {
+      const { s } = mk(); let t = 0; const sets = []; const store = { setItem: (k) => sets.push(k) }; const doc = mkDoc();
       const diag = createGxDiag({ store, now: () => t }); const st = { bound: true, rendered: 0 };
-      const hb = startGxHeartbeat({ session: s, diag, state: () => st, now: () => t, stallFrames: 1e9, ...(off ? { saveOn: () => false } : {}) });
+      const hb = startGxHeartbeat({ session: s, diag, state: () => st, now: () => t, stallFrames: 1e9, doc, ...(off ? { saveOn: () => false } : {}) });
       const base = sets.length;
       for (let i = 1; i <= 3; i++) { t = i * 1000; s.frame(); }
+      expect(sets.length - base).toBe(0); // no save once a second
+      doc.visibilityState = 'hidden'; doc.fire();
       expect(sets.length - base).toBe(writes); expect(diag.saves).toBe(base + writes); hb.stop();
     }
   });
