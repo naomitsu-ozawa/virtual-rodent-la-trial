@@ -22,6 +22,8 @@ export const SETTINGS_DEFAULTS={
  surfaceSmoothStrength:'0.60', // device default of its strength slider (0-6), same rule
  vrHighp:false,        // 設定 > デバッグ (debug-flags.js):: true = VR drawing in 32 bit, the same as ?vrprec=highp (read at page load; default 16 bit)
  vrNoSkip:false,       // 設定 > デバッグ (debug-flags.js):: true = the VR creep skip is off, (read when a VR session starts; default off = skip on)
+ gxWait3:false,        // 設定 > デバッグ (debug-flags.js): true = the WebGPU view waits 3 ms after the volume submit on every 8th frame (read when a VR session starts; default off)
+ gxLayerUsage:false,   // 設定 > デバッグ (debug-flags.js): true = the WebGPU view's projection layer is made with a textureUsage, the trial launch (read when a VR session starts; default off)
  eventMode:false,     // 体験会モード (設定 > 外観): level choice in the データ panel + the level's mission on the VR help board (event-mode-ui.js)
  tutorialMode:false,  // チュートリアル (設定 > 外観): the 2D panel (tutorial-ui.js) + the VR help board carousel (tutorial-vr.js); only the settings switch turns it on; coexists with eventMode
  tutorialVoice:'F1',   // the tutorial's spoken guide: 'F1' (女性の声) / 'M1' (男性の声,: chosen in the dialog after 「チュートリアルを始める」) / 'off' (音声なし) (tutorial-audio.js reads it)

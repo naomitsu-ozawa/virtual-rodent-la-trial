@@ -1,11 +1,11 @@
 // The controls of one CHILD SEGMENT (a segment added under a preset card in the tree): name, colour, the 3D name label pin and delete.
 // child = inherits, like an analysis region row: no opacity / material / cut-face shading range here: they are the PARENT preset's. Everything reads / writes the ONE segment interface (segments.js segmentById / setChildLook), so VR and the browser stay one state.
-import { segmentById, setChildLook, onChildSegLookChange } from './segments.js?v=20261119-build756';
-import { CHILD_SEG_NAME_MAX } from './segment-look.js?v=20261119-build756';
-import { childByKey } from './child-segments.js?v=20261119-build756';
-import { childLabelItem } from './child-labels.js?v=20261119-build756';
-import { setRegionLabelOffset, hasOffset, onAnalysisLabelsChange } from './analysis-label.js?v=20261119-build756';
-import { tr } from './i18n.js?v=20261119-build756';
+import { segmentById, setChildLook, onChildSegLookChange } from './segments.js?v=20261124-build757';
+import { CHILD_SEG_NAME_MAX } from './segment-look.js?v=20261124-build757';
+import { childByKey } from './child-segments.js?v=20261124-build757';
+import { childLabelItem } from './child-labels.js?v=20261124-build757';
+import { setRegionLabelOffset, hasOffset, onAnalysisLabelsChange } from './analysis-label.js?v=20261124-build757';
+import { tr } from './i18n.js?v=20261124-build757';
 
 // the actions the page injects (app.js: deleteChild(key)), so that this module imports nothing of the 3D code
 let actions = { deleteChild: null };

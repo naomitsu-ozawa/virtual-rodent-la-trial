@@ -6,7 +6,7 @@
 // the sample pair's second volume, the general (non-combined) loop and the HU path.
 // The ray: the box is drawn with its back faces (like the WebGL program), vPos is the back-face point, the ray starts at the eye (origin, object space).
 // Output: colour 0 = the premultiplied colour, colour 1 = the depth of the first thing shown (NDC z, 24 bit in rgb) for the composite.
-import { lightingWGSL } from './lighting.js?v=20261119-build756';
+import { lightingWGSL } from './lighting.js?v=20261124-build757';
 
 // ---- the uniform buffer: one struct, every member laid out by the WGSL rules (vec3 = 16-aligned, 12 bytes; arrays of vec4 only) ----
 // [name, type, count]; the packer (vr-wgpu.js) writes by this table, the struct text is made from it, a unit test checks both against wgsl_reflect
@@ -390,7 +390,11 @@ ${EV(` while(nextSlice<nSlice&&acc.a<=ACC_STOP){
 export const ABLATIONS = ['grad', 'refine', 'shade'];
 // the u32 a counting pixel writes (COUNTER_FIELDS.length of them; index in the pixel's record); a pixel the pass did not cover keeps 0 (the buffer is cleared before the pass)
 // near4 / near8 / near16 (Steps, Jumps) = the approach: at the first sample whose distance byte dd (grid-index units = voxels of the texture; read before the jumpOn override) is <= R, the loop iterations used so far (this sample included) and the jumps made before it; 0 steps = no sample of the ray came within R
-export const COUNTER_FIELDS = ['outcome', 'iters', 'creep', 'jumps', 'skipReads', 'clsReads', 'refineReads', 'gradReads', 'near4Steps', 'near4Jumps', 'near8Steps', 'near8Jumps', 'near16Steps', 'near16Jumps'];
+// The place counts (appended, so the indices above stay): toTA = the loop iterations whose grid index k lies before the index the pre-pass would start the ray at (all of them for a ray the pre-pass calls empty; 0 when the tile of the pixel is not known to the twin
+// or the pass runs with the pre-pass on, which starts there); last4Steps / last8Steps / last16Steps = the iteration number (1-based, the sample counted) of the LAST sample whose distance byte dd was <= R (0 = none); with near<R>Steps (the first one) they cut the ray into approach / near / tail (vr-perf-log.js).
+export const COUNTER_FIELDS = ['outcome', 'iters', 'creep', 'jumps', 'skipReads', 'clsReads', 'refineReads', 'gradReads', 'near4Steps', 'near4Jumps', 'near8Steps', 'near8Jumps', 'near16Steps', 'near16Jumps', 'toTA', 'last4Steps', 'last8Steps', 'last16Steps'];
+// group 1 binding 1 of the counting twin (one uniform, 8 f32): sc = (sx, sy, ox, oy): the probe pixel p reads the tile of the low pass's region pixel floor(p * (sx, sy)) + (ox, oy) (the window's place in the region); lim = (w, h, mode, 0): the region's size in px (a pixel outside it has no tile: tA 0 = the ray starts as it would without the pre-pass), mode 1 = the host bound the display's tiles (proxyTex, the same tiles the low pass read) and the twin may read tA, 0 = no tiles
+export const COUNTER_CFG_BINDING = { group: 1, binding: 1, floats: 8 };
 export const COUNTER_OUTCOME = { none: 0, hit: 1, pass: 2, accstop: 3, discard: 4 }; // 0 = not covered; hit = the ray ended on a surface; pass = marched to its end with nothing; accstop = stopped at the opacity limit; discard = left before the march (outside the box / content / section)
 export const COUNTER_BINDING = { group: 1, binding: 0 };
 const sub = (t, from, to, n = 1) => {
@@ -412,13 +416,19 @@ function ablate(t, abl, counters) {
     t = sub(t, 'var<private> gInv:vec3<f32>=vec3<f32>(1.0);\n', 'var<private> gInv:vec3<f32>=vec3<f32>(1.0);\n'
       + 'var<private> gOut:u32=2u;var<private> gIters:u32=0u;var<private> gCreep:u32=0u;var<private> gJumps:u32=0u;var<private> gSkipRd:u32=0u;var<private> gClsRd:u32=0u;var<private> gRefRd:u32=0u;var<private> gGradRd:u32=0u;\n'
       + 'var<private> gN4:u32=0u;var<private> gJ4:u32=0u;var<private> gN8:u32=0u;var<private> gJ8:u32=0u;var<private> gN16:u32=0u;var<private> gJ16:u32=0u;\n'
-      + 'fn cntNear(dd:f32){if(gN4==0u&&dd<=4.0){gN4=gIters;gJ4=gJumps;}if(gN8==0u&&dd<=8.0){gN8=gIters;gJ8=gJumps;}if(gN16==0u&&dd<=16.0){gN16=gIters;gJ16=gJumps;}}\n'
+      + 'var<private> gA:u32=0u;var<private> gKs:i32=0;var<private> gL4:u32=0u;var<private> gL8:u32=0u;var<private> gL16:u32=0u;\n'
+      + 'fn cntNear(dd:f32){if(gN4==0u&&dd<=4.0){gN4=gIters;gJ4=gJumps;}if(gN8==0u&&dd<=8.0){gN8=gIters;gJ8=gJumps;}if(gN16==0u&&dd<=16.0){gN16=gIters;gJ16=gJumps;}if(dd<=4.0){gL4=gIters;}if(dd<=8.0){gL8=gIters;}if(dd<=16.0){gL16=gIters;}}\n'
+      + 'struct CntCfg{sc:vec4<f32>,lim:vec4<f32>};\n@group(1) @binding(1) var<uniform> cntCfg:CntCfg;\n'
+      + 'fn cntTileA(p:vec2<f32>)->f32{\n if(cntCfg.lim.z<0.5){return 0.0;}\n let q=vec2<i32>(floor(p*cntCfg.sc.xy))+vec2<i32>(cntCfg.sc.zw);\n if(q.x<0||q.y<0||q.x>=i32(cntCfg.lim.x)||q.y>=i32(cntCfg.lim.y)){return 0.0;}\n return textureLoad(proxyTex,q/8,0).r;\n}\n'
       + 'const CNT_W:u32=64u;\n@group(1) @binding(0) var<storage,read_write> cnt:array<u32>;\n');
     t = sub(t, 'if(acc.a<0.004){discard;return fo;}', 'if(acc.a<0.004){return fo;}');
     const early = t.split('discard;').length - 1;
     if (early < 3 || early > 4) throw new Error('volumeWgsl: ' + early + ' early discards');
     t = t.split('discard;').join('gOut=4u;');
-    t = sub(t, 'iters++;', 'iters++;gIters+=1u;');
+    t = sub(t, 'iters++;', 'iters++;gIters+=1u;if(k<gKs){gA+=1u;}');
+    // the pre-pass start of the twin: the tile comes from cntTileA (the window's place in the low pass's region: the display's own tiles, bound by the host), tA is read in every run (toTA needs it with the pre-pass off); only proxyOn == 1 moves k, exactly as the display text does
+    const PXSTART = ' if(u.proxyOn==1){\n  let tA=textureLoad(proxyTex,(vec2<i32>(in.pos.xy)-u.proxyOrg)/8,0).r;\n  if(tA>endT){emptyRay=true;}else if(tA>t0){k=max(0,i32(floor((tA-t0)/stp))-1);}\n }\n';
+    if (t.includes(PXSTART)) t = sub(t, PXSTART, ' {\n  let tA=cntTileA(in.pos.xy);var kS=0;var em=false;\n  if(tA>endT){em=true;}else if(tA>t0){kS=max(0,i32(floor((tA-t0)/stp))-1);}\n  if(cntCfg.lim.z>0.5){gKs=select(kS,1073741824,em);}\n  if(u.proxyOn==1){if(em){emptyRay=true;}else{k=kS;}}\n }\n'); // (a text without the pre-pass start, the section variant, has no toTA: 0)
     t = sub(t, 'prevValid=true;prevSkip=true;lastIndex=-1;', 'gCreep+=1u;prevValid=true;prevSkip=true;lastIndex=-1;');
     t = sub(t, 'jumpLen+=nextJ-t;', 'jumpLen+=nextJ-t;gJumps+=1u;');
     t = sub(t, 'if(u.jumpOn==0){dd=0.0;}', 'cntNear(dd);if(u.jumpOn==0){dd=0.0;}'); // the approach counts read the distance the march jumps by, before the jumpOn override
@@ -432,7 +442,7 @@ function ablate(t, abl, counters) {
     t = sub(t, 'depthMark(hi,1.0);', 'gOut=1u;depthMark(hi,1.0);');
     t = sub(t, 'if(acc.a>ACC_STOP){hitEnd=true;}', 'if(acc.a>ACC_STOP){hitEnd=true;if(gOut!=1u){gOut=3u;}}');
     t = sub(t, '@fragment fn fs(in:VOut)->FOut{', 'fn fsMain(in:VOut)->FOut{');
-    t += '@fragment fn fs(in:VOut)->FOut{\n let fo=fsMain(in);\n let b=(u32(in.pos.y)*CNT_W+u32(in.pos.x))*'+COUNTER_FIELDS.length+'u;\n cnt[b]=gOut;cnt[b+1u]=gIters;cnt[b+2u]=gCreep;cnt[b+3u]=gJumps;cnt[b+4u]=gSkipRd;cnt[b+5u]=gClsRd;cnt[b+6u]=gRefRd;cnt[b+7u]=gGradRd;cnt[b+8u]=gN4;cnt[b+9u]=gJ4;cnt[b+10u]=gN8;cnt[b+11u]=gJ8;cnt[b+12u]=gN16;cnt[b+13u]=gJ16;\n return fo;\n}\n';
+    t += '@fragment fn fs(in:VOut)->FOut{\n let fo=fsMain(in);\n let b=(u32(in.pos.y)*CNT_W+u32(in.pos.x))*'+COUNTER_FIELDS.length+'u;\n cnt[b]=gOut;cnt[b+1u]=gIters;cnt[b+2u]=gCreep;cnt[b+3u]=gJumps;cnt[b+4u]=gSkipRd;cnt[b+5u]=gClsRd;cnt[b+6u]=gRefRd;cnt[b+7u]=gGradRd;cnt[b+8u]=gN4;cnt[b+9u]=gJ4;cnt[b+10u]=gN8;cnt[b+11u]=gJ8;cnt[b+12u]=gN16;cnt[b+13u]=gJ16;cnt[b+14u]=gA;cnt[b+15u]=gL4;cnt[b+16u]=gL8;cnt[b+17u]=gL16;\n return fo;\n}\n';
   }
   return t.replace(/(\/\/ VR \/ AR volume pass \(WGSL\), variant [^\n]*)\n/, '$1 abl=' + (abl || 'none') + ' counters=' + counters + '\n');
 }
@@ -522,20 +532,27 @@ fn cone(e:i32,lx:i32,ty:i32,w:i32,h:i32)->f32{
 }
 `;
 }
-// the proxy comparison of the performance record: the number of pixels whose colour or packed depth differ between two render targets of the same size (atomicAdd into one u32; the host reads 4 bytes back)
+// the comparison of the performance record's variants (docs/vr-perf-log.js BD_SPECS, diff / proxy): the pixels whose colour or packed depth differ between two render targets of the same size, and by how much
+// (cnt, 4 u32: [0] = pixels that differ (colour or packed depth), [1] = the largest colour channel difference (0..255, rgba8), [2] = the largest difference of a byte of the packed depth (0..255; a packed byte is no magnitude: it only says "not equal"), [3] = pixels whose colour differs); the host reads 16 bytes back
 export const PROXY_DIFF_BINDINGS = { colorA: 0, depthA: 1, colorB: 2, depthB: 3, count: 4 };
+export const DIFF_FIELDS = ['pixels', 'maxColor', 'maxDepthByte', 'colorPixels'];
 export function proxyDiffWgsl() {
-  return `// VR / AR volume pre-pass comparison (WGSL): pixels where colour or depth differ between two targets
+  return `// VR / AR volume variant comparison (WGSL): pixels where colour or depth differ between two targets, and the largest colour channel difference
 @group(0) @binding(0) var cA:texture_2d<f32>;
 @group(0) @binding(1) var dA:texture_2d<f32>;
 @group(0) @binding(2) var cB:texture_2d<f32>;
 @group(0) @binding(3) var dB:texture_2d<f32>;
-@group(0) @binding(4) var<storage,read_write> cnt:atomic<u32>;
+@group(0) @binding(4) var<storage,read_write> cnt:array<atomic<u32>,4>;
+fn chan(a:vec4<f32>,b:vec4<f32>)->u32{let d=abs(a-b)*255.0;return u32(round(max(max(d.x,d.y),max(d.z,d.w))));}
 @compute @workgroup_size(8,8) fn main(@builtin(global_invocation_id) g:vec3<u32>){
  let d=textureDimensions(cA);
  if(g.x>=d.x||g.y>=d.y){return;}
  let p=vec2<i32>(g.xy);
- if(any(textureLoad(cA,p,0)!=textureLoad(cB,p,0))||any(textureLoad(dA,p,0)!=textureLoad(dB,p,0))){atomicAdd(&cnt,1u);}
+ let ca=textureLoad(cA,p,0);let cb=textureLoad(cB,p,0);let da=textureLoad(dA,p,0);let db=textureLoad(dB,p,0);
+ let cd=any(ca!=cb);let dd=any(da!=db);
+ if(cd||dd){atomicAdd(&cnt[0],1u);}
+ if(cd){atomicAdd(&cnt[3],1u);atomicMax(&cnt[1],max(chan(ca,cb),1u));}
+ if(dd){atomicMax(&cnt[2],max(chan(da,db),1u));}
 }
 `;
 }

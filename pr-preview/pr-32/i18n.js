@@ -1,6 +1,6 @@
 // Extracted verbatim from app.js by tools/extract-module.mjs.
 // Depends only on the imports below; never imports from app.js (no cycles).
-import { currentLanguage, setCurrentLanguage } from './state.js?v=20261119-build756';
+import { currentLanguage, setCurrentLanguage } from './state.js?v=20261124-build757';
 export const I18N={
  ja:{
   subtitle:'マウス・実験動物画像のためのブラウザDICOM CTビューワー',
@@ -44,6 +44,8 @@ export const I18N={
   dbgVrPrec:'VR描画を32ビット精度に戻す（画質確認用）',dbgVrPrecNote:'ふだんは16ビット精度で軽く描きます。見た目の違いを確かめたいときだけオンにします。',
   dbgReloadNote:'再読み込みで反映される設定を変えました。',dbgReload:'再読み込み',dbgReset:'テスト設定を元に戻す',
   dbgVrNoSkip:'VRの空き領域スキップを切る（速さの比較用）',dbgVrNoSkipNote:'ふだんは、表面のすぐ外側の空き領域を読み飛ばして軽く描きます（絵は同じです）。オンにすると読み飛ばしを止めます。VR の詳細メニューでも切り替えられます。',dbgApplyVr:'VRに入り直すと反映',
+  dbgGxWait3:'WebGPU VR：提出の後に3ms待つ（診断用）',dbgGxWait3Note:'ブラウザが提出した処理をいつGPUへ送るかを調べるための設定です。8コマに1回、ボリュームの描画を提出した直後に3ms待ち、GPUが終わるまでの時間を比べて記録に出します。絵は同じです。ふだんは切です。',
+  dbgGxLayerUsage:'WebGPU VR：テクスチャ用途つきで試しの起動（診断用）',dbgGxLayerUsageNote:'ふだんのWebGPU表示は、ヘッドセット用のレイヤーを用途つきでもう1枚だけ試しに作って捨てます。1つのセッションで2枚作れないときにオンにすると、実際のレイヤー自体を用途つきで作ります（絵は同じです。作れなければ今のレイヤーを使います）。ふだんは切です。',
   evHintSection:'断面：B/Y',evHintMove:'動かす：スティック上下',evHintToggle:'表示切り替え：A/X 長押しでメニュー',evHintMark:'印：トリガー',evHintDistance:'距離：印を長押し→距離',
   evSimple:'かんたん',evShow:'表示',evHide:'非表示',evMode:'モード',evModePoint:'ポイントモード',evModeAnalysis:'解析モード',evModeHintPoint:'トリガーを短く押すと印（ポイント）を記録',evModeHintAnalysis:'レーザーで解析結果の名前を表示、トリガーで固定',evAllSettings:'すべての設定',evExitVr:'VRを終了',evExitAr:'ARを終了',evReset:'最初の状態に戻す',evResetAgain:'もう一度押すとリセット',evResetDone:'最初の状態に戻しました',evPairWith:'{name}と並べる',evPairStop:'並べるのをやめる',
   // チュートリアル (tutorial-data.js / tutorial-engine.js)
@@ -91,6 +93,8 @@ export const I18N={
   dbgVrPrec:'Go back to 32-bit VR rendering (image check)',dbgVrPrecNote:'VR normally draws in lighter 16-bit precision. Turn this on only to compare the picture.',
   dbgReloadNote:'You changed a setting that applies after a reload.',dbgReload:'Reload',dbgReset:'Reset test settings',
   dbgVrNoSkip:'Turn off the VR empty-space skip (speed comparison)',dbgVrNoSkipNote:'VR normally skips the empty space just outside a surface to draw faster (the picture is the same). Turn this on to stop the skipping. The VR details menu switches it too.',dbgApplyVr:'applies when you enter VR again',
+  dbgGxWait3:'WebGPU VR: Wait 3 ms after the draw is submitted (diagnosis)',dbgGxWait3Note:'For finding out when the browser sends the submitted work to the GPU. On every 8th frame the view waits 3 ms right after the volume pass is submitted, and the record compares the time until the GPU finishes. The picture is the same. Off normally.',
+  dbgGxLayerUsage:'WebGPU VR: Trial launch with a texture usage (diagnosis)',dbgGxLayerUsageNote:'The WebGPU view normally also tries to make a second, trial headset layer with extra texture usages and discards it. Turn this on if the session cannot hold two layers: the real layer is then made with the usage (the picture is the same; the plain layer is used when that fails).',
   evHintSection:'Section: B/Y',evHintMove:'Move: stick up / down',evHintToggle:'Show / hide: hold A/X for the menu',evHintMark:'Mark: trigger',evHintDistance:'Distance: hold a mark → Distance',
   evSimple:'Simple',evShow:'Show',evHide:'Hide',evMode:'Mode',evModePoint:'Point mode',evModeAnalysis:'Analysis mode',evModeHintPoint:'A short trigger press records a point (mark)',evModeHintAnalysis:'Laser on a result shows its name, trigger pins it',evAllSettings:'All settings',evExitVr:'Exit VR',evExitAr:'Exit AR',evReset:'Reset to start',evResetAgain:'Press again to reset',evResetDone:'Back to the starting state',evPairWith:'Place beside {name}',evPairStop:'Stop placing side by side',
   // tutorial (tutorial-data.js / tutorial-engine.js)
