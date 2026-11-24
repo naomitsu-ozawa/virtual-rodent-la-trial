@@ -1,12 +1,16 @@
 // The record of the WebGPU view's "direct draw" trial (vr-wgpu-direct.js): how many frames drew the centre of the volume straight into the headset's eye image, what the check found, and why the path was off.
 // Pure (no DOM, no GPU, no three.js). vr-view.js feeds it (frame / check / note / takeRow) and the performance report prints it (directReport, called from perfReport in vr-perf-log.js).
 // Nothing here changes what is drawn.
+export const CHECK_ROWS = 400; // the check lines kept for the report (the totals cover every check)
+// the classes of pixels the comparison counts (key of a check's result, the label in the report); colour / depth / covered are the first three counters of the comparison, the others tell how large and where the differences are
+export const CHECK_CLASSES = [['covered', 'covered in either'], ['colour', 'colour differs'], ['depth', 'depth differs (covered)'], ['covA', 'A covers'], ['covB', 'B covers'], ['both', 'both cover'], ['c1', 'colour differs by exactly 1'], ['d2', 'depth differs by 1..2 (both covered)'], ['d256', 'depth differs by 256 or more (both covered)'], ['edge', 'differs within 2 px of the rect edge'], ['aFront', 'A nearer (both covered)'], ['bFront', 'B nearer (both covered)'], ['shift', 'differs but equals B with A shifted by 1 px']];
 const r1 = v => (Number.isFinite(v) ? Math.round(v * 10) / 10 : null);
 
 export function createDirectLog() {
   const tot = { frames: 0, used: 0, asked: 0, miss: 0 }; // frames the loop drew / drew with the direct path / asked for it (switch on, f = 1) / asked but the path could not be recorded (miss)
   const sec = { used: 0, miss: 0 };
-  const chk = { n: 0, px: 0, covered: 0, colour: 0, depth: 0, bad: 0, frames: 0, lines: [] }; // the check: checks made, pixels compared, pixels covered by the volume, pixels whose colour / depth differ, checks with a difference
+  const chk = { n: 0, px: 0, covered: 0, colour: 0, depth: 0, bad: 0, frames: 0, cmaxMax: 0, dmaxMax: 0, sum: {}, nz: {}, rows: [], omitted: 0 }; // the check: checks made, pixels compared, pixels covered by the volume, pixels whose colour / depth differ, checks with a difference; cmaxMax / dmaxMax = the largest colour / depth difference of any check; sum[k] = the pixels of class k summed over the checks, nz[k] = the checks in which class k was not empty; rows = one entry per check (the first CHECK_ROWS)
+  for (const [k] of CHECK_CLASSES) { chk.sum[k] = 0; chk.nz[k] = 0; }
   const notes = {}; // free text lines (the state of the path: installed, pipeline compiled, why it is off)
   let state = null;
   // one drawn frame: asked = the switch was on and the loop asked for the path; used = the frame's centre went through it; miss = asked, but the volume renderer used the offscreen path (not ready / not allowed)
@@ -14,11 +18,16 @@ export function createDirectLog() {
     tot.frames++;
     if (asked) { tot.asked++; if (used) { tot.used++; sec.used++; } else { tot.miss++; sec.miss++; } }
   };
-  // the result of one check (vr-wgpu-direct.js check): total = pixels of the compared rect, covered = pixels with colour alpha > 0 in either image, colour / depth = pixels that differ
-  const check = r => {
+  // the result of one check (vr-wgpu-direct.js check): total = pixels of the compared rect, covered = pixels with colour alpha > 0 in either image, colour / depth = pixels that differ, the others as CHECK_CLASSES / cmax / dmax;
+  // ctx = { t, per, hold } from the page (the time in the recording, the render scale's per, the hold factor), only printed
+  const check = (r, ctx) => {
     if (!r || !(r.total > 0)) return;
     chk.n++; chk.px += r.total; chk.covered += r.covered | 0; chk.colour += r.colour | 0; chk.depth += r.depth | 0;
-    if ((r.colour | 0) > 0 || (r.depth | 0) > 0) { chk.bad++; if (chk.lines.length < 20) chk.lines.push(r.text || ('colour ' + (r.colour | 0) + ' depth ' + (r.depth | 0) + ' of ' + r.total)); }
+    const bad = (r.colour | 0) > 0 || (r.depth | 0) > 0;
+    if (bad) chk.bad++;
+    chk.cmaxMax = Math.max(chk.cmaxMax, r.cmax | 0); chk.dmaxMax = Math.max(chk.dmaxMax, r.dmax | 0);
+    for (const [k] of CHECK_CLASSES) { const v = r[k] | 0; chk.sum[k] += v; if (v > 0) chk.nz[k]++; }
+    if (chk.rows.length < CHECK_ROWS) chk.rows.push({ ...ctx, ...r }); else chk.omitted++;
   };
   const note = (k, text) => { if (text === null || text === undefined) delete notes[k]; else notes[k] = String(text); };
   const setState = s => { state = s; };
@@ -38,7 +47,19 @@ export function directReport(p) {
   if (d.state) L.push('state: ' + d.state);
   L.push('frames: ' + t.frames + ' drawn, ' + t.asked + ' asked for the direct path (switch on and scale 1), ' + t.used + ' went through it, ' + t.miss + ' asked but drawn by the offscreen path (not ready / not allowed / not recorded)');
   L.push('check (only while the breakdown records; eye 0, the same camera, the reference = the current centre pass drawn again over the same rect, against the direct material drawn into a scratch image; whatever the switch is): ' + c.n + ' checks, ' + c.px + ' px compared (' + c.covered + ' px covered by the volume), colour differs in ' + c.colour + ' px, depth differs in ' + c.depth + ' px, ' + c.bad + ' checks with a difference');
-  for (const l of c.lines) L.push('  check with a difference: ' + l);
+  if (c.n) {
+    L.push('check totals: largest colour difference of any check ' + c.cmaxMax + ' (0..255), largest depth difference of any check ' + c.dmaxMax + ' (24-bit units)');
+    for (const [k, label] of CHECK_CLASSES) L.push('  ' + label + ': ' + c.sum[k] + ' px in total, in ' + c.nz[k] + ' of ' + c.n + ' checks');
+    L.push('-- direct draw checks (one line per check, the first ' + CHECK_ROWS + (c.omitted ? '; ' + c.omitted + ' more checks are in the totals only' : '') + '; t = s in the recording, per / hold = the render scale\'s per and the hold factor; note# / chk# = the frame the centre pass was noted in / the frame of the check; D = the compared rect, R = the centre pass\' region, WxH = the eye image, pre = the proxy pre-pass, orgA / orgB = proxyOrg of A (centre pass) / B (direct material); cmax / dmax = the largest colour / depth difference; A / B / both = pixels covered; c1 / d2 / d256 / edge / Af / Bf / sh = the classes above)');
+    for (const r of c.rows) {
+      const cell = v => (v === null || v === undefined || (typeof v === 'number' && !Number.isFinite(v)) ? '-' : String(v));
+      const rc = a => (Array.isArray(a) ? a.join(',') : '-');
+      L.push('  chk t=' + cell(r1(r.t)) + ' per=' + cell(r1(r.per)) + ' hold=' + cell(r.hold === null || r.hold === undefined ? r.hold : Math.round(r.hold * 100) / 100) + ' note#' + cell(r.noteNo) + ' chk#' + cell(r.checkNo)
+        + ' D=' + rc(r.D) + ' R=' + rc(r.region) + ' ' + cell(r.W) + 'x' + cell(r.H) + ' pre=' + (r.pre ? 1 : 0) + ' orgA=' + rc(r.orgA) + ' orgB=' + rc(r.orgB)
+        + ' | col ' + (r.colour | 0) + ' dep ' + (r.depth | 0) + ' of ' + (r.covered | 0) + ' cmax ' + (r.cmax | 0) + ' dmax ' + (r.dmax | 0) + ' A ' + (r.covA | 0) + ' B ' + (r.covB | 0) + ' both ' + (r.both | 0)
+        + ' c1 ' + (r.c1 | 0) + ' d2 ' + (r.d2 | 0) + ' d256 ' + (r.d256 | 0) + ' edge ' + (r.edge | 0) + ' Af ' + (r.aFront | 0) + ' Bf ' + (r.bFront | 0) + ' sh ' + (r.shift | 0) + ' (' + (r.total | 0) + ' px)');
+    }
+  }
   L.push('note: the check compares the volume\'s colour (quantised to 8 bit as the composite sees it) and the packed 24-bit depth, pixel for pixel; the blend into the eye image, the depth test and the frag_depth write of the real path are not part of it (not checked).');
   L.push('note: with the direct path on, vol = the pre-pass and the band of the centre pass only (the centre march is inside three.js\' eye pass: it is in main); compare span (the frame\'s GPU timeline) and the frame intervals between a recording with the switch off and one with it on. The breakdown\'s shadow passes are not taken in a direct frame.');
   const rows = (p.rows || []).filter(r => r.dir !== null && r.dir !== undefined);

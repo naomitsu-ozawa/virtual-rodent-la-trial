@@ -11,8 +11,8 @@
 //     as the performance record counts them) and how far the head moved.
 //  2. createFrameRing: the last 2000 frames, one record each, with what happened in that frame interval; windows around the frames over 30 ms are kept for the report.
 //  3. createIsolation: the switches of the isolation run (volume timestamps and their read-back, the menu's once-a-second redraw, the diagnostics' heartbeat save, the performance record's 5 s save).
-import { gapBucket } from './vr-perf-log.js?v=20261124-build759';
-import { MAX_LONG_M, NORM_LONG } from './vr-real-scale.js?v=20261124-build759';
+import { gapBucket } from './vr-perf-log.js?v=20261124-build760';
+import { MAX_LONG_M, NORM_LONG } from './vr-real-scale.js?v=20261124-build760';
 
 export const BENCH_DISCARD_MS = 2000; // the first 2 s of every segment are left out of its numbers
 export const BENCH_SEGMENT_MS = 45000; // one segment (a scene in one period)
@@ -195,16 +195,32 @@ export function benchReportLines(runs, { kind = 'webgl', build = '', hz = null }
 // ---- the frame ring: the last 2000 frames ----
 export const RING_SIZE = 2000;
 export const RING_SLOW_MS = 30; // an interval longer than this is a slow frame: the frames around it are kept
-export const RING_COUNTERS = ['menu', 'tex', 'dsave', 'psave', 'mk', 'maps']; // running totals the host passes each frame (the ring keeps the difference since the previous frame)
+export const RING_COUNTERS = ['menu', 'tex', 'dsave', 'psave', 'mk', 'maps', 'fv', 'pz', 'pms']; // running totals the host passes each frame (the ring keeps the difference since the previous frame)
 // menu = menu / help / mission board canvases redrawn, tex = canvas textures uploaded (the boards and the toast: the places that count it), dsave / psave = the diagnostics' / the performance record's localStorage writes,
-// mk = objects the WebGPU renderer made (targets + tile textures + bind groups), maps = timestamp read-backs (mapAsync) started
+// mk = objects the WebGPU renderer made (targets + tile textures + bind groups), maps = timestamp read-backs (mapAsync) started,
+// fv = heavy draws the foveation check submitted (vr-wgpu-caps.js rec.foveaDraws), pz = getViewerPose calls of the session's heartbeat (vr-wgpu.js startGxHeartbeat stats), pms = the ms those calls took
 export const BENCH_COUNT = { menu: 0, tex: 0 }; // incremented by vr-view.js where a board canvas is redrawn / a canvas texture is flagged for upload
-const RING_STATE = ['hold', 'f', 'per', 'cov'];
+// values of the frame itself (taken as given, NaN = none): hold / f / per / cov = the view's state; ph = the phase of the breakdown recording (0 before it is prepared, 1 from its preparation to the release of its resources,
+// 2 after); ml = the longest timestamp mapAsync (call -> resolved) that completed in the interval (ms); gd = (GPU start gap - CPU submit gap) between two successive measured frames (ms); vol = the volume GPU ms of the
+// frame that was read back; lag = the ms from the XR frame time (the callback's argument) to the start of the callback
+const RING_STATE = ['hold', 'f', 'per', 'cov', 'ph', 'ml', 'gd', 'vol', 'lag'];
+// the session's table, kept for ALL frames (not only the ring's): ph (0 pre, 1 rec, 2 post) x since (frames since the interval the foveation check last drew in: 0..15, 16 = later or never) x measured (maps > 0)
+// -> frames, intervals over 21 ms, over 30 ms. And per phase the values of dt / cov / vol / ml / gd / lag, kept as a uniform sample of at most RING_SAMPLES (exact below that) for the medians and p95
+export const RING_PHASES = ['pre', 'rec', 'post'], RING_SINCE = 17, RING_SAMPLES = 4096, RING_SERIES = ['dt', 'cov', 'vol', 'ml', 'gd', 'lag'];
 export function createFrameRing({ size = RING_SIZE, slowMs = RING_SLOW_MS, before = 3, after = 3, maxWindows = 40 } = {}) {
   const cols = {}; for (const k of ['dt', 'cb', 'pre', ...RING_COUNTERS, 'heap', ...RING_STATE]) cols[k] = new Float32Array(size);
   const tt = new Float64Array(size);
   let n = 0, lastTs = null, pendCb = NaN, pendPre = NaN, prevHeap = 0, slow = 0, windowsDropped = 0, pend = null;
   const prev = {}; for (const k of RING_COUNTERS) prev[k] = null;
+  const agg = new Uint32Array(RING_PHASES.length * RING_SINCE * 2 * 3); let since = RING_SINCE - 1, seed = 20261124;
+  const smp = {}; for (const k of RING_SERIES) smp[k] = RING_PHASES.map(() => ({ buf: new Float32Array(RING_SAMPLES), seen: 0 }));
+  const addSample = (k, ph, v) => { // a uniform sample of everything seen (reservoir; the generator is fixed, so a run is reproducible)
+    if (!Number.isFinite(v)) return;
+    const o = smp[k][ph];
+    if (o.seen < RING_SAMPLES) o.buf[o.seen] = v;
+    else { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; const j = Math.floor(seed / 4294967296 * (o.seen + 1)); if (j < RING_SAMPLES) o.buf[j] = v; }
+    o.seen++;
+  };
   const windows = [];
   const rec = abs => { // the record of absolute index abs as a plain object (reporting only)
     const i = abs % size, o = { n: abs, t: tt[i] };
@@ -229,6 +245,12 @@ export function createFrameRing({ size = RING_SIZE, slowMs = RING_SLOW_MS, befor
       for (const k of RING_COUNTERS) { const v = c[k] ?? 0; cols[k][i] = prev[k] === null ? 0 : Math.max(0, v - prev[k]); prev[k] = v; }
       cols.heap[i] = prevHeap > 0 && heap > 0 ? Math.max(0, prevHeap - heap) / 1024 : 0; prevHeap = heap; // KB the JS heap shrank by since the previous frame (a garbage collection)
       for (const k of RING_STATE) cols[k][i] = Number.isFinite(c[k]) ? c[k] : NaN;
+      { // the session's table (all frames)
+        since = cols.fv[i] > 0 ? 0 : Math.min(since + 1, RING_SINCE - 1);
+        const ph = Number.isFinite(c.ph) ? Math.min(RING_PHASES.length - 1, Math.max(0, c.ph | 0)) : 0, a = ((ph * RING_SINCE + since) * 2 + (cols.maps[i] > 0 ? 1 : 0)) * 3;
+        agg[a]++; if (dt > 21) agg[a + 1]++; if (dt > 30) agg[a + 2]++;
+        addSample('dt', ph, dt); addSample('cov', ph, cols.cov[i]); addSample('vol', ph, cols.vol[i]); addSample('ml', ph, cols.ml[i]); addSample('gd', ph, cols.gd[i]); addSample('lag', ph, cols.lag[i]);
+      }
       if (dt > slowMs) { slow++; if (pend) pend.to = n + after; else pend = { from: n - before, to: n + after }; }
       n++;
       if (pend && n - 1 >= pend.to) finalize();
@@ -237,6 +259,13 @@ export function createFrameRing({ size = RING_SIZE, slowMs = RING_SLOW_MS, befor
     records() { const a = []; for (let i = lo(); i < n; i++) a.push(rec(i)); return a; },
     // the windows kept (a window still waiting for its frames after is included as far as it goes)
     allWindows() { const w = windows.slice(); if (pend) { const x = copyWindow(pend.from, pend.to); if (x.length) w.push(x); } return w; },
+    // the session's table: cells [{ ph, since, mp, n, o21, o30 }] (only those with frames) and per phase the values' { n (seen), used (in the sample), med, p95 } for each of RING_SERIES
+    session() {
+      const cells = [];
+      for (let ph = 0; ph < RING_PHASES.length; ph++) for (let sn = 0; sn < RING_SINCE; sn++) for (let mp = 0; mp < 2; mp++) { const a = ((ph * RING_SINCE + sn) * 2 + mp) * 3; if (agg[a]) cells.push({ ph, since: sn, mp, n: agg[a], o21: agg[a + 1], o30: agg[a + 2] }); }
+      const phases = RING_PHASES.map((name, ph) => { const o = { name }; for (const k of RING_SERIES) { const m = smp[k][ph], v = Array.from(m.buf.subarray(0, Math.min(m.seen, RING_SAMPLES))).sort((x, y) => x - y); o[k] = { n: m.seen, used: v.length, med: v.length ? r2(median(v)) : null, p95: v.length ? r2(quantile(v, 0.95)) : null }; } return o; });
+      return { cells, phases };
+    },
     stats() { const s = statsOf(Array.from(cols.dt.subarray(0, Math.min(n, size)))); return { frames: Math.min(n, size), total: n, slow, windowsDropped, slowMs, ...(s ? { med: r2(s.med), p95: r2(s.p95), p99: r2(s.p99), max: r2(s.max) } : {}) }; },
   };
   return api;
@@ -253,12 +282,42 @@ export function createLongTaskWatcher({ PO = globalThis.PerformanceObserver } = 
 }
 export const readHeapBytes = () => { try { return globalThis.performance?.memory?.usedJSHeapSize || 0; } catch { return 0; } };
 
-const RING_COLS = [['n', 6], ['t', 8], ['dt', 6], ['cb', 5], ['pre', 5], ['menu', 4], ['tex', 3], ['ds', 3], ['ps', 3], ['mk', 3], ['mp', 3], ['gc', 6], ['hold', 4], ['f', 5], ['cov', 8], ['lt', 5], ['flag', 4]];
+const RING_COLS = [['n', 6], ['t', 8], ['dt', 6], ['cb', 5], ['pre', 5], ['menu', 4], ['tex', 3], ['ds', 3], ['ps', 3], ['mk', 3], ['mp', 3], ['gc', 6], ['hold', 4], ['f', 5], ['cov', 8], ['lt', 5], ['fv', 3], ['pz', 3], ['pm', 5], ['ml', 5], ['gd', 6], ['lag', 5], ['flag', 4]];
+// the session table of the ring (all frames of the session, whatever the ring still holds): frames, intervals over 21 / 30 ms by phase x frames since the foveation check's last draw x measured frame; then per phase the medians
+export function sessionTableLines(sess) {
+  const L = [], f = v => (v === null || v === undefined ? '-' : String(v));
+  const tot = sess.cells.reduce((n, c) => n + c.n, 0);
+  L.push('-- foveation check x frame intervals, all ' + tot + ' frames of the session (not only the ring): ph = pre (before the breakdown is prepared) / rec (from its preparation to the release of its resources) / post; since = frames after the interval the check last drew in (0 = that interval, 15 = the 15th after, none = later or never); mp = a measured frame (timestamp read-backs started); n = frames, >21 / >30 = intervals over 21 / 30 ms');
+  L.push('ph    since   | mp=0:       n   >21   >30 | mp>0:       n   >21   >30');
+  for (let ph = 0; ph < sess.phases.length; ph++) for (let sn = 0; sn < RING_SINCE; sn++) {
+    const a = sess.cells.find(c => c.ph === ph && c.since === sn && c.mp === 0), b = sess.cells.find(c => c.ph === ph && c.since === sn && c.mp === 1);
+    if (!a && !b) continue;
+    const cell = c => (c ? String(c.n).padStart(8) + String(c.o21).padStart(6) + String(c.o30).padStart(6) : ''.padStart(20, ' '));
+    L.push(sess.phases[ph].name.padEnd(6) + (sn === RING_SINCE - 1 ? 'none' : String(sn)).padEnd(8) + '| ' + '     ' + cell(a) + ' |      ' + cell(b));
+  }
+  for (const p of sess.phases) {
+    const x = p.dt; if (!x.n) continue;
+    const m = k => { const q = p[k]; return q.n ? f(q.med) + ' / ' + f(q.p95) + ' (n ' + q.n + (q.used < q.n ? ', sample ' + q.used : '') + ')' : '-'; };
+    L.push('ph ' + p.name + ': median / p95 · dt ' + m('dt') + ' · cov ' + m('cov') + ' · vol ' + m('vol') + ' · ml ' + m('ml') + ' · gd ' + m('gd') + ' · lag ' + m('lag'));
+  }
+  return L;
+}
+// what the breakdown recording left behind, dumped three times (its preparation starts / its resources are let go / 10 s after that): list = [{ at, t (ms, page clock), every (the volume timestamps one frame in n), slots, slotsBusy,
+// bd (the breakdown object exists), track (three.js' trackTimestamp), groups / pipes / ubufs (the renderer's bind groups / pipelines / uniform buffers), heap (JS heap bytes) }]; the text is made when the record is saved
+export function leftoverReportLines(list, { sinceMs = 0 } = {}) {
+  const L = [];
+  L.push('-- what the breakdown recording leaves behind (dumped when its preparation starts, when its resources are let go, and 10 s after that): ' + (list.length ? list.length + ' dump(s)' : 'no recording in this session'));
+  if (!list.length) return L;
+  const v = x => (x === undefined || x === null ? '-' : String(x));
+  for (const o of list) L.push('  ' + o.at.padEnd(12) + ' t ' + ((o.t - sinceMs) / 1000).toFixed(2) + ' s · timestamps every ' + v(o.every) + ' · measuring slots busy ' + v(o.slotsBusy) + ' of ' + v(o.slots) + ' · breakdown object ' + (o.bd ? 'yes' : 'no') + ' · three.js trackTimestamp ' + v(o.track) + ' · bind groups ' + v(o.groups) + ' · pipelines ' + v(o.pipes) + ' · uniform buffers ' + v(o.ubufs) + ' · JS heap ' + (o.heap > 0 ? (o.heap / 1048576).toFixed(1) + ' MB' : '-'));
+  return L;
+}
 // the ring's text: its numbers, then the windows around the slow frames (the frame over the limit is marked *)
 export function ringReportLines(ring, { longTasks = null, sinceMs = 0 } = {}) {
   const st = ring.stats(), L = [];
   L.push('-- frame ring: the last ' + st.frames + ' of ' + st.total + ' frames' + (st.med !== undefined ? ' · interval median ' + st.med + ' · p95 ' + st.p95 + ' · p99 ' + st.p99 + ' · max ' + st.max + ' ms' : '') + ' · ' + st.slow + ' intervals over ' + st.slowMs + ' ms in the session' + (longTasks ? ' · long tasks ' + (longTasks.supported ? longTasks.tasks.length + ' seen' : 'not available here') : ''));
-  L.push('note: a record is the frame interval that ENDS at that frame (t = s since the session start; dt = the interval in ms); cb / pre = the callback that ran just before it (total CPU ms; start to the volume pass submit); the counts are what happened in that interval: menu = board canvases redrawn, tex = canvas textures flagged for upload (boards and toast only), ds / ps = diagnostics / performance-record localStorage writes, mk = objects the WebGPU renderer made, mp = timestamp read-backs (mapAsync) started, gc = KB the JS heap shrank by (garbage collection; "-" = none or no heap reading), hold = hands holding, f = render scale, cov = covered px, lt = ms of long tasks (>50 ms main-thread tasks) overlapping the interval. Flags: * = the slow frame, H = the hands holding changed from the row above, F = the render scale changed by more than 0.01, P = the periphery scale changed (the periphery pass switched on / off or its factor changed).');
+  L.push('note: a record is the frame interval that ENDS at that frame (t = s since the session start; dt = the interval in ms); cb / pre = the callback that ran just before it (total CPU ms; start to the volume pass submit); the counts are what happened in that interval: menu = board canvases redrawn, tex = canvas textures flagged for upload (boards and toast only), ds / ps = diagnostics / performance-record localStorage writes, mk = objects the WebGPU renderer made, mp = timestamp read-backs (mapAsync) started, gc = KB the JS heap shrank by (garbage collection; "-" = none or no heap reading), hold = hands holding, f = render scale, cov = covered px, lt = ms of long tasks (>50 ms main-thread tasks) overlapping the interval, fv = heavy draws the foveation check made, pz / pm = poses the heartbeat read (count / ms) (fv / pz / pm are those of the previous frame: the heartbeat tick runs before the app callback in a frame, so what it did in frame N-1 is what slowed the interval ending at N), ml = the longest timestamp mapAsync that completed (ms), gd = GPU start gap minus CPU submit gap between two successive measured frames (ms), lag = the callback start minus the XR frame time (ms; "-" = none). Flags: * = the slow frame, H = the hands holding changed from the row above, F = the render scale changed by more than 0.01, P = the periphery scale changed (the periphery pass switched on / off or its factor changed).');
+  L.push(...sessionTableLines(ring.session()));
   const ws = ring.allWindows();
   L.push('-- slow frames: ' + ws.length + ' window(s) of ' + ring.before + ' frames before and ' + ring.after + ' after an interval over ' + st.slowMs + ' ms' + (st.windowsDropped ? ' (' + st.windowsDropped + ' older windows dropped)' : ''));
   L.push(RING_COLS.map(([k, w]) => k.padStart(w)).join(' '));
@@ -270,7 +329,8 @@ export function ringReportLines(ring, { longTasks = null, sinceMs = 0 } = {}) {
       const prevR = i > 0 ? w[i - 1] : null, lt = longTasks?.supported ? longTasks.overlap(r.t - r.dt, r.t) : NaN;
       const marks = (r.dt > st.slowMs ? '*' : ' ') + (prevR && prevR.hold !== r.hold ? 'H' : ' ') + (prevR && Number.isFinite(r.f) && Math.abs(prevR.f - r.f) > 0.01 ? 'F' : ' ') + (prevR && Number.isFinite(r.per) && Number.isFinite(prevR.per) && Math.abs(prevR.per - r.per) > 0.01 ? 'P' : ' ');
       L.push([String(r.n).padStart(6), ((r.t - sinceMs) / 1000).toFixed(2).padStart(8), num(r.dt, 1).padStart(6), num(r.cb, 1).padStart(5), num(r.pre, 1).padStart(5), nz(r.menu).padStart(4), nz(r.tex).padStart(3), nz(r.dsave).padStart(3), nz(r.psave).padStart(3), nz(r.mk).padStart(3), nz(r.maps).padStart(3),
-        (r.heap > 0 ? Math.round(r.heap) + 'K' : '-').padStart(6), num(r.hold).padStart(4), num(r.f, 2).padStart(5), num(r.cov).padStart(8), (lt > 0 ? lt.toFixed(0) : '-').padStart(5), marks.padStart(4)].join(' '));
+        (r.heap > 0 ? Math.round(r.heap) + 'K' : '-').padStart(6), num(r.hold).padStart(4), num(r.f, 2).padStart(5), num(r.cov).padStart(8), (lt > 0 ? lt.toFixed(0) : '-').padStart(5),
+        nz(r.fv).padStart(3), nz(r.pz).padStart(3), (r.pms > 0 ? r.pms.toFixed(1) : '-').padStart(5), num(r.ml, 1).padStart(5), num(r.gd, 1).padStart(6), num(r.lag, 1).padStart(5), marks.padStart(4)].join(' '));
     });
   });
   return L;

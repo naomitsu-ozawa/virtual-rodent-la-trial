@@ -15,7 +15,7 @@
 //
 // Exactness: the composite hands the blender the centre pass' colour at 8 bit per channel and its depth at 24 bit (the packed depth, decoded as the composite does); the wrapper quantises both in the same way, so the eye image
 // gets the same values. A pixel of the rect is the pixel of the centre pass at the same eye pixel (render scale 1: the centre pass' region is the eye image's pixels); the pre-pass' tiles are the centre pass' own (same texture).
-import { volumeWgsl, VOLUME_BINDINGS, PROXY } from './vr-wgsl-core.js?v=20261124-build759';
+import { volumeWgsl, VOLUME_BINDINGS, PROXY } from './vr-wgsl-core.js?v=20261124-build760';
 
 export const DIRECT_MIN_PX = 16; // a rect smaller than this (either side) is not worth a path of its own: the offscreen path draws it
 const intersect = (a, b) => ({ x0: Math.max(a.x0, b.x0), y0: Math.max(a.y0, b.y0), x1: Math.min(a.x1, b.x1), y1: Math.min(a.y1, b.y1) });
@@ -55,7 +55,11 @@ export function directFragmentWgsl(text, { check = false } = {}) {
 }
 
 // the comparison of the check: two pairs of images (colour, packed depth), pixel (x, y) of the rect: A at (x - org.x, y - org.y) (the centre pass' region image), B at (x, y) (the eye-sized image of the direct material).
-// cnt[0] = pixels whose colour differs, cnt[1] = pixels covered (alpha > 0 in either) whose packed depth differs, cnt[2] = pixels covered.
+// cnt (16 u32; colour = the 8-bit values of the rgba8unorm image, depth = the packed 24-bit value r * 65536 + g * 256 + b; "covered" = alpha > 0; "both" = covered in A and in B; "differs" = the colour differs, or the pixel is covered and its packed depth differs):
+// [0] colour differs  [1] covered and depth differs  [2] covered in either  [3] largest colour difference (0..255, over the 4 channels)  [4] largest depth difference (both covered)
+// [5] A covers  [6] B covers  [7] both cover  [8] colour difference of exactly 1 (largest channel)  [9] both covered, depth difference 1..2  [10] both covered, depth difference >= 256
+// [11] differs, within 2 px of the rect's edge  [12] both covered, A nearer (smaller depth)  [13] both covered, B nearer  [14] differs, but equal to B once A is read one pixel up / down / left / right (the neighbour clamped into the rect)
+export const DIRECT_DIFF_COUNTERS = 16;
 export const DIRECT_DIFF_BINDINGS = { colorA: 0, depthA: 1, colorB: 2, depthB: 3, count: 4, params: 5 };
 export function directDiffWgsl() {
   return `// the direct draw's check: colour / depth differences between the centre pass' image and the direct material's image over one rect
@@ -66,14 +70,44 @@ struct P{rect:vec4<i32>,org:vec2<i32>,pad:vec2<i32>};
 @group(0) @binding(3) var depB:texture_2d<f32>;
 @group(0) @binding(4) var<storage,read_write> cnt:array<atomic<u32>>;
 @group(0) @binding(5) var<uniform> pr:P;
+fn q8(v:vec4<f32>)->vec4<i32>{return vec4<i32>(round(v*255.0));}
+fn d24(v:vec4<f32>)->i32{let t=vec3<i32>(round(v.rgb*255.0));return t.x*65536+t.y*256+t.z;}
 @compute @workgroup_size(8,8)
 fn main(@builtin(global_invocation_id) g:vec3<u32>){
  let p=pr.rect.xy+vec2<i32>(g.xy);
  if(p.x>=pr.rect.z||p.y>=pr.rect.w){return;}
  let a=textureLoad(colA,p-pr.org,0);let b=textureLoad(colB,p,0);
  let da=textureLoad(depA,p-pr.org,0);let db=textureLoad(depB,p,0);
- if(a.a>0.0||b.a>0.0){atomicAdd(&cnt[2],1u);if(any(da.rgb!=db.rgb)){atomicAdd(&cnt[1],1u);}}
- if(any(a!=b)){atomicAdd(&cnt[0],1u);}
+ let ai=q8(a);let bi=q8(b);let cdv=abs(ai-bi);
+ let cd=max(max(cdv.x,cdv.y),max(cdv.z,cdv.w));
+ let covA=a.a>0.0;let covB=b.a>0.0;let cov=covA||covB;let both=covA&&covB;
+ let dA=d24(da);let dB=d24(db);let dd=abs(dA-dB);
+ let colDiff=any(a!=b);let depDiff=cov&&any(da.rgb!=db.rgb);
+ if(cov){atomicAdd(&cnt[2],1u);if(depDiff){atomicAdd(&cnt[1],1u);}}
+ if(colDiff){atomicAdd(&cnt[0],1u);}
+ atomicMax(&cnt[3],u32(cd));
+ if(both){atomicMax(&cnt[4],u32(dd));}
+ if(covA){atomicAdd(&cnt[5],1u);}
+ if(covB){atomicAdd(&cnt[6],1u);}
+ if(both){atomicAdd(&cnt[7],1u);}
+ if(cd==1){atomicAdd(&cnt[8],1u);}
+ if(both&&dd>=1&&dd<=2){atomicAdd(&cnt[9],1u);}
+ if(both&&dd>=256){atomicAdd(&cnt[10],1u);}
+ if(colDiff||depDiff){
+  let lo=p-pr.rect.xy;let hi=pr.rect.zw-p-vec2<i32>(1,1);
+  if(min(min(lo.x,lo.y),min(hi.x,hi.y))<2){atomicAdd(&cnt[11],1u);}
+  if(both&&dd>0){if(dA<dB){atomicAdd(&cnt[12],1u);}else{atomicAdd(&cnt[13],1u);}}
+  var fit=false;
+  for(var k=0;k<4;k=k+1){
+   var o=vec2<i32>(1,0);
+   if(k==1){o=vec2<i32>(-1,0);}else if(k==2){o=vec2<i32>(0,1);}else if(k==3){o=vec2<i32>(0,-1);}
+   let pn=clamp(p+o,pr.rect.xy,pr.rect.zw-vec2<i32>(1,1))-pr.org;
+   let a2=textureLoad(colA,pn,0);let d2=textureLoad(depA,pn,0);
+   let cov2=a2.a>0.0||b.a>0.0;
+   if(all(a2==b)&&(!cov2||all(d2.rgb==db.rgb))){fit=true;}
+  }
+  if(fit){atomicAdd(&cnt[14],1u);}
+ }
 }
 `;
 }
@@ -263,7 +297,7 @@ export function createDirectApi(h) {
   // noteForCheck(p) after the centre pass of a frame at scale 1 (p = { u, variant, W, H, eye, region, D, pxTex }); check(cb) once from the same frame draws (A) the centre pass over the rect D again (the reference) and
   // (B) the direct material over the same rect into an eye-sized scratch image, then a compute pass counts the pixels that differ (cb({ total, covered, colour, depth, text })). One at a time; false = not now.
   const ck = { note: null, busy: false, pipes: new Map(), diff: null, A: null, B: null, cnt: null, rb: null, par: null, ubuf: null, dbuf: null, dgroup: null, gD: null, gKey: '' };
-  const noteForCheck = p => { ck.note = p; };
+  const noteForCheck = p => { ck.note = { ...p, noteNo: st.frameNo }; };
   const mkTarget = (w, hh) => { const mk = () => device.createTexture({ size: [w, hh, 1], format: 'rgba8unorm', usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING }); const t = { w, h: hh, color: mk(), depth: mk() }; t.cv = t.color.createView(); t.dv = t.depth.createView(); return t; };
   const killTarget = t => { try { t?.color.destroy(); t?.depth.destroy(); } catch { /* gone */ } };
   const checkPipe = variant => {
@@ -301,14 +335,15 @@ export function createDirectApi(h) {
       const r = n.region, D = n.D, rw = r.x1 - r.x0, rh = r.y1 - r.y0, dw = D.x1 - D.x0, dh = D.y1 - D.y0;
       if (!ck.A || ck.A.w !== rw || ck.A.h !== rh) { killTarget(ck.A); ck.A = mkTarget(rw, rh); }
       if (!ck.B || ck.B.w !== n.W || ck.B.h !== n.H) { killTarget(ck.B); ck.B = mkTarget(n.W, n.H); }
-      ck.cnt ||= device.createBuffer({ size: 16, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST });
-      ck.rb ||= device.createBuffer({ size: 16, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
+      ck.cnt ||= device.createBuffer({ size: DIRECT_DIFF_COUNTERS * 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST });
+      ck.rb ||= device.createBuffer({ size: DIRECT_DIFF_COUNTERS * 4, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
       ck.par ||= device.createBuffer({ size: 32, usage: BUF_U() });
       ck.ubuf ||= device.createBuffer({ size: layout.byteSize, usage: BUF_U() });
       ck.dbuf ||= device.createBuffer({ size: 16, usage: BUF_U() });
       ck.dgroup ||= device.createBindGroup({ layout: layouts().dBgl, entries: [{ binding: 0, resource: { buffer: ck.dbuf } }] });
       // B's uniforms: the whole eye's matrix and the tiles' origin relative to the region (what the real path writes for eye 0)
-      const ab = h.fillUniforms(n.u, { mvp: n.eye.mvp, origin: n.eye.origin, lightOff: n.eye.lightOff, ...h.passExtra(n.u), proxyOn: n.pxTex ? 1 : 0, proxyOrg: n.pxTex ? [r.x0, r.y0] : [0, 0] });
+      const pxOrg = n.pxTex ? [r.x0, r.y0] : [0, 0], checkNo = st.frameNo;
+      const ab = h.fillUniforms(n.u, { mvp: n.eye.mvp, origin: n.eye.origin, lightOff: n.eye.lightOff, ...h.passExtra(n.u), proxyOn: n.pxTex ? 1 : 0, proxyOrg: pxOrg });
       device.queue.writeBuffer(ck.ubuf, 0, ab);
       device.queue.writeBuffer(ck.dbuf, 0, new Int32Array([D.x0, D.y0, D.x1, D.y1]));
       device.queue.writeBuffer(ck.par, 0, new Int32Array([D.x0, D.y0, D.x1, D.y1, r.x0, r.y0, 0, 0]));
@@ -327,12 +362,13 @@ export function createDirectApi(h) {
       }
       enc.clearBuffer(ck.cnt);
       const cp = enc.beginComputePass(); cp.setPipeline(dp.pipe); cp.setBindGroup(0, ck.gD); cp.dispatchWorkgroups(Math.ceil(dw / 8), Math.ceil(dh / 8)); cp.end();
-      enc.copyBufferToBuffer(ck.cnt, 0, ck.rb, 0, 16);
+      enc.copyBufferToBuffer(ck.cnt, 0, ck.rb, 0, DIRECT_DIFF_COUNTERS * 4);
       device.queue.submit([enc.finish()]);
       if (rec) rec.shadowed = true;
       ck.rb.mapAsync(GPUMapMode.READ).then(() => {
         const a = new Uint32Array(ck.rb.getMappedRange().slice(0)); ck.rb.unmap(); ck.busy = false; if (ck.release) { ck.release = false; releaseCheck(); }
-        try { cb?.({ total: dw * dh, covered: a[2], colour: a[0], depth: a[1], text: 'rect ' + D.x0 + ',' + D.y0 + '-' + D.x1 + ',' + D.y1 + ' of the eye: colour ' + a[0] + ' depth ' + a[1] + ' of ' + a[2] + ' covered px' }); } catch { /* the page's callback */ }
+        const meta = { checkNo, noteNo: n.noteNo ?? null, D: [D.x0, D.y0, D.x1, D.y1], region: [r.x0, r.y0, r.x1, r.y1], W: n.W, H: n.H, pre: !!n.pxTex, orgA: [0, 0], orgB: pxOrg };
+        try { cb?.({ total: dw * dh, covered: a[2], colour: a[0], depth: a[1], cmax: a[3], dmax: a[4], covA: a[5], covB: a[6], both: a[7], c1: a[8], d2: a[9], d256: a[10], edge: a[11], aFront: a[12], bFront: a[13], shift: a[14], ...meta, text: 'rect ' + D.x0 + ',' + D.y0 + '-' + D.x1 + ',' + D.y1 + ' of the eye: colour ' + a[0] + ' depth ' + a[1] + ' of ' + a[2] + ' covered px' }); } catch { /* the page's callback */ }
       }).catch(() => { ck.busy = false; if (ck.release) { ck.release = false; releaseCheck(); } });
       return true;
     } catch (e) { ck.busy = false; note('direct draw check', 'the check threw: ' + errText(e)); return false; }
