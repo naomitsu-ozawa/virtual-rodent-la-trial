@@ -6,7 +6,7 @@
 // the sample pair's second volume, the general (non-combined) loop and the HU path.
 // The ray: the box is drawn with its back faces (like the WebGL program), vPos is the back-face point, the ray starts at the eye (origin, object space).
 // Output: colour 0 = the premultiplied colour, colour 1 = the depth of the first thing shown (NDC z, 24 bit in rgb) for the composite.
-import { lightingWGSL } from './lighting.js?v=20261124-build760';
+import { lightingWGSL } from './lighting.js?v=20261124-build761';
 
 // ---- the uniform buffer: one struct, every member laid out by the WGSL rules (vec3 = 16-aligned, 12 bytes; arrays of vec4 only) ----
 // [name, type, count]; the packer (vr-wgpu.js) writes by this table, the struct text is made from it, a unit test checks both against wgsl_reflect
@@ -555,4 +555,52 @@ fn chan(a:vec4<f32>,b:vec4<f32>)->u32{let d=abs(a-b)*255.0;return u32(round(max(
  if(dd){atomicMax(&cnt[2],max(chan(da,db),1u));}
 }
 `;
+}
+
+// the comparison of the same-picture check (docs/vr-wgpu-ident.js): like proxyDiffWgsl, and in the same compute pass it also counts WHERE the two targets differ. A = the low pass the display really drew (the reference), B = the check's own draw of the same frame.
+// P = (cw, ch, split, nonce): the compared range (px of the target: both eyes' viewports side by side) and the x where the right eye's viewport starts. cnt (IDENT_DIFF.total u32, cleared by the host before each run):
+//   pixels (colour or packed depth differ), maxColor (the largest colour channel difference, 0..255), maxDepth (the largest difference of a byte of the packed depth), colourPixels (pixels whose colour differs),
+//   x / y extent as `size - coordinate` maxima (a minimum without an initial value; 0 = none), eye0 / eye1 (differing pixels of each eye), cells (the differing pixels of each of the 4 x 4 blocks of the compared range, row by row), listN (differences met, the list holds the first 16 of them in the order the GPU got to them)
+//   and per listed pixel 6 u32: x, y, colour A, colour B, packed depth A, packed depth B (each as 4 bytes, r in the low byte); body = the pixels of A (the display's picture) whose alpha is not 0 (is the body in the picture at all);
+//   nonce = P.w, written back by one thread (the host checks that the read-back is this run's: a comparison whose number does not come back is not counted).
+export const IDENT_DIFF = { pixels: 0, maxColor: 1, maxDepth: 2, colorPixels: 3, minX: 4, minY: 5, maxX: 6, maxY: 7, eye0: 8, eye1: 9, cells: 10, listN: 26, list: 27, listMax: 16, listStride: 6, body: 123, nonce: 124, total: 125 };
+export const IDENT_DIFF_BINDINGS = { colorA: 0, depthA: 1, colorB: 2, depthB: 3, count: 4, params: 5 };
+export function identDiffWgsl() {
+  const D = IDENT_DIFF;
+  return `// VR / AR same-picture check comparison (WGSL): where and by how much the check's picture differs from the one the display drew
+@group(0) @binding(0) var cA:texture_2d<f32>;
+@group(0) @binding(1) var dA:texture_2d<f32>;
+@group(0) @binding(2) var cB:texture_2d<f32>;
+@group(0) @binding(3) var dB:texture_2d<f32>;
+@group(0) @binding(4) var<storage,read_write> cnt:array<atomic<u32>,${D.total}>;
+@group(0) @binding(5) var<uniform> P:vec4<u32>;
+fn chan(a:vec4<f32>,b:vec4<f32>)->u32{let d=abs(a-b)*255.0;return u32(round(max(max(d.x,d.y),max(d.z,d.w))));}
+fn pack4(v:vec4<f32>)->u32{let b=vec4<u32>(round(clamp(v,vec4<f32>(0.0),vec4<f32>(1.0))*255.0));return b.x|(b.y<<8u)|(b.z<<16u)|(b.w<<24u);}
+@compute @workgroup_size(8,8) fn main(@builtin(global_invocation_id) g:vec3<u32>){
+ if(g.x>=P.x||g.y>=P.y){return;}
+ let p=vec2<i32>(g.xy);
+ if(g.x==0u&&g.y==0u){atomicStore(&cnt[${D.nonce}],P.w);}
+ let ca=textureLoad(cA,p,0);let cb=textureLoad(cB,p,0);let da=textureLoad(dA,p,0);let db=textureLoad(dB,p,0);
+ if(ca.a!=0.0){atomicAdd(&cnt[${D.body}],1u);}
+ let cd=any(ca!=cb);let dd=any(da!=db);
+ if(!(cd||dd)){return;}
+ atomicAdd(&cnt[${D.pixels}],1u);
+ if(cd){atomicAdd(&cnt[${D.colorPixels}],1u);atomicMax(&cnt[${D.maxColor}],max(chan(ca,cb),1u));}
+ if(dd){atomicMax(&cnt[${D.maxDepth}],max(chan(da,db),1u));}
+ atomicMax(&cnt[${D.minX}],P.x-g.x);atomicMax(&cnt[${D.minY}],P.y-g.y);atomicMax(&cnt[${D.maxX}],g.x+1u);atomicMax(&cnt[${D.maxY}],g.y+1u);
+ if(g.x<P.z){atomicAdd(&cnt[${D.eye0}],1u);}else{atomicAdd(&cnt[${D.eye1}],1u);}
+ let cx=min(3u,g.x*4u/P.x);let cy=min(3u,g.y*4u/P.y);
+ atomicAdd(&cnt[${D.cells}u+cy*4u+cx],1u);
+ let n=atomicAdd(&cnt[${D.listN}],1u);
+ if(n<${D.listMax}u){let b=${D.list}u+n*${D.listStride}u;atomicStore(&cnt[b],g.x);atomicStore(&cnt[b+1u],g.y);atomicStore(&cnt[b+2u],pack4(ca));atomicStore(&cnt[b+3u],pack4(cb));atomicStore(&cnt[b+4u],pack4(da));atomicStore(&cnt[b+5u],pack4(db));}
+}
+`;
+}
+// the host's decoding of the counters (a Uint32Array of IDENT_DIFF.total); cw / ch = the compared range
+export function identDiffDecode(a, cw, ch) {
+  const D = IDENT_DIFF, n = a[D.pixels];
+  const rect = n ? { x0: cw - a[D.minX], y0: ch - a[D.minY], x1: a[D.maxX], y1: a[D.maxY] } : null;
+  const list = [];
+  for (let i = 0; i < Math.min(D.listMax, a[D.listN]); i++) { const b = D.list + i * D.listStride; list.push({ x: a[b], y: a[b + 1], colA: a[b + 2], colB: a[b + 3], depA: a[b + 4], depB: a[b + 5] }); }
+  return { pixels: n, body: a[D.body], nonce: a[D.nonce], maxColor: a[D.maxColor], maxDepth: a[D.maxDepth], colorPixels: a[D.colorPixels], rect, eyes: [a[D.eye0], a[D.eye1]], cells: Array.from(a.subarray(D.cells, D.cells + 16)), list };
 }
