@@ -25,6 +25,8 @@ export function createPerfLog({ kind = 'webgl', mode = 'vr', now = () => perform
   const ipBins = new Uint16Array(IP_BINS); let ipN = 0; // the second's frame intervals as a frequency table (no array made per frame)
   let gfixOn = 0, fmin = Infinity, fsum = 0, fn = 0; // the second's: a guard held the scale / periphery (0 / 1), the lowest and the sum of the scale f over the frames
   const stalls = []; // one entry per frame interval of two or more periods (up to PERF_MAX_STALLS)
+  let saveOff = false, saves = 0; // saveOff: the periodic localStorage mirror is paused (an isolation run of the comparison bench, docs/vr-bench.js; a forced save still writes); saves = how many times the mirror was written
+  const sections = [], ext = {}; // sections: text blocks the report shows after its header (each a string array, or a function returning one); ext: extra JSON the mirror keeps (the bench results)
   const acc = Object.fromEntries(MEANS.map(k => [k, { s: 0, n: 0 }])), smp = Object.fromEntries(MEDIANS.map(k => [k, []]));
   const rows = [], meta = {}; // meta: free text lines about the session (which GPU timers existed, ...) for the header of the report
   // one frame of the app's loop (ts = the frame's time in ms, budgetMs = 1000 / target Hz): the gap since the previous frame goes into the interval counts
@@ -63,9 +65,9 @@ export function createPerfLog({ kind = 'webgl', mode = 'vr', now = () => perform
   const sample = (k, ms) => { const a = smp[k]; if (a && Number.isFinite(ms) && a.length < 1000) { a.push(ms); if (k === 'span') lastSpan = r2(ms); } };
   // the localStorage mirror: every few seconds, not every row (the string of 600 rows is not made once a second)
   const save = (at = now(), force = false) => {
-    if (!force && at - savedAt < saveEveryMs) return;
-    savedAt = at;
-    try { store?.setItem(key, JSON.stringify({ kind, mode, dropped, meta, rows: rows.slice(-PERF_MIRROR_ROWS), stalls: stalls.slice(-PERF_MIRROR_STALLS) })); } catch { /* private window / full */ }
+    if (!force && (saveOff || at - savedAt < saveEveryMs)) return;
+    savedAt = at; saves++;
+    try { store?.setItem(key, JSON.stringify({ kind, mode, dropped, meta, rows: rows.slice(-PERF_MIRROR_ROWS), stalls: stalls.slice(-PERF_MIRROR_STALLS), ...(Object.keys(ext).length ? { ext } : {}) })); } catch { /* private window / full */ }
   };
   // the end of a second: the row = the accumulators + the state given; they start again. snap = { f, per, cap, auto, lv, si, step, cov, size, menu, hz, fov, ... }
   const row = (snap = {}, at = now()) => {
@@ -92,7 +94,7 @@ export function createPerfLog({ kind = 'webgl', mode = 'vr', now = () => perform
     const recLeft = rows.filter(r => !r.menu && r.rec && r.fps > 0).length;
     return { rows: rows.length, closedRows: closed.length, recLeft, dropped, fps: pick('fps'), vol: pick('vol'), main: pick('main'), render: pick('render'), js: pick('js'), span: pick('span'), gap: pick('gap'), oth: pick('oth'), cpu: pick('cpu'), swd: pick('swd'), wake: pick('wake'), pre: pick('pre'), vlat: pick('vlat'), vdrop: pick('vdrop'), f: pick('f'), step: pick('step'), g1: closed.reduce((s, r) => s + r.g1, 0), g2: closed.reduce((s, r) => s + r.g2, 0), g3: closed.reduce((s, r) => s + r.g3, 0) };
   };
-  return { kind, mode, rows, stalls, meta, get dropped() { return dropped; }, get stallsDropped() { return stallsDropped; }, frame, fval, count, move, add, sample, row, get lastDrops() { const r = rows[rows.length - 1]; return r ? r.g2 + r.g3 : null; }, save, flush, summary };
+  return { kind, mode, rows, stalls, meta, sections, ext, setSaveOff(v) { saveOff = !!v; }, get saves() { return saves; }, get dropped() { return dropped; }, get stallsDropped() { return stallsDropped; }, frame, fval, count, move, add, sample, row, get lastDrops() { const r = rows[rows.length - 1]; return r ? r.g2 + r.g3 : null; }, save, flush, summary };
 }
 const COLS = [['t', 4], ['fps', 5], ['g1', 4], ['g2', 3], ['g3', 3], ['vol', 6], ['main', 6], ['render', 6], ['js', 6], ['span', 6], ['gap', 6], ['oth', 6], ['cpu', 6], ['swd', 6], ['wake', 6], ['pre', 6], ['vlat', 6], ['vdrop', 6], ['f', 5], ['per', 5], ['cap', 5], ['auto', 4], ['lv', 5], ['si', 3], ['step', 5], ['cov', 8], ['w', 5], ['h', 5], ['size', 6], ['menu', 4], ['hz', 4], ['fov', 4], ['rec', 3], ['hold', 4], ['mv', 6], ['mvr', 6], ['imax', 6], ['mk', 3], ['slotc', 5], ['perc', 4], ['hset', 5], ['hk', 5], ['gfix', 4], ['mlow', 4], ['tab', 3], ['fmin', 6], ['favg', 6], ['late', 5], ['ip95', 6], ['lpx', 8]];
 const STALL_COLS = [['t', 6], ['gap', 6], ['span', 6], ['vol', 6], ['hold', 4], ['slot', 4], ['tg', 3], ['per', 3], ['cov', 8]];
@@ -104,6 +106,7 @@ export function perfReport(p, { build = '', ua = '', hz = null } = {}) {
   L.push('VR performance log · ' + name + ' · ' + p.mode + (build ? ' · build ' + build : '') + (hz ? ' · target ' + hz + ' Hz' : ''));
   if (ua) L.push('UA: ' + ua);
   for (const [k, v] of Object.entries(p.meta || {})) L.push(k + ': ' + v);
+  for (const sec of p.sections || []) { let t = null; try { t = typeof sec === 'function' ? sec() : sec; } catch (e) { t = ['-- section failed: ' + String(e?.message ?? e).slice(0, 160)]; } if (Array.isArray(t)) for (const l of t) L.push(l); } // the comparison bench's and the frame ring's blocks (docs/vr-bench.js)
   L.push('-- summary (rows with the menu closed: ' + s.closedRows + ' of ' + s.rows + (s.recLeft ? ', ' + s.recLeft + ' rows of the breakdown recording left out' : '') + (s.dropped ? ', ' + s.dropped + ' older rows dropped' : '') + ')');
   L.push('median fps ' + f(s.fps) + ' · volume GPU ' + f(s.vol) + ' ms · main GPU ' + f(s.main) + ' ms · render() CPU ' + f(s.render) + ' ms · JS ' + f(s.js) + ' ms · scale f ' + f(s.f) + ' · step ' + f(s.step) + ' voxel');
   L.push('frame intervals (menu closed): 1 period ' + s.g1 + ' · 2 periods ' + s.g2 + ' · 3+ periods ' + s.g3);
@@ -138,38 +141,76 @@ export function perfFileName(kind, build, now = new Date()) {
 
 // ---- the volume breakdown (WebGPU, one 30 s recording started from the detail tab; vr-wgpu.js shadow passes and counting probe) ----
 // The shadow passes are throw-away copies of a frame's low pass with one step taken out; `add` gets each one's GPU ms and the same frame's real low pass ms. This is a pure collector (no DOM, no GPU): it never touches the log's own columns.
-// How each variant of the eight is made (the host reads this table): abl = another program text (docs/vr-wgsl-core.js ablate), overrides = another uniform value.
-export const BD_VARIANTS = ['same', 'box', 'simple', 'noGrad', 'noRefine', 'noShade', 'withCreep', 'noJump', 'noProxy'];
-export const BD_SPECS = {
-  same: { name: 'same' }, box: { name: 'box', overrides: { diag: 1 } }, simple: { name: 'simple', overrides: { diag: 3 } },
-  noGrad: { name: 'noGrad', abl: 'grad' }, noRefine: { name: 'noRefine', abl: 'refine' }, noShade: { name: 'noShade', abl: 'shade' },
-  withCreep: { name: 'withCreep', overrides: { useSkip: 1 } }, // the display runs without the creep skip (useSkip 0); this pass turns it on (the host skips it when its bits are not valid)
-  noJump: { name: 'noJump', overrides: { jumpOn: 0, proxyOn: 0 } }, // the pre-pass needs the jumps (its start is safe only with them): without jumps it is off too, so this pass leaves out both
-  noProxy: { name: 'noProxy', overrides: { proxyOn: 0 }, proxy: true }, // the pre-pass off over the display's (the host makes no pass when the frame's low pass did not use it; its turn also runs the proxy comparison: see add('proxyDiff'))
-};
-export const BD_PROBE_FIELDS = ['outcome', 'iters', 'creep', 'jumps', 'skipReads', 'clsReads', 'refineReads', 'gradReads', 'near4Steps', 'near4Jumps', 'near8Steps', 'near8Jumps', 'near16Steps', 'near16Jumps']; // the u32 of a probe pixel (docs/vr-wgsl-core.js COUNTER_FIELDS)
+// ---- the table of the shadow-pass variants: ONE place to add a variant ----
+// A variant is made with defineBdVariant({ name, abl?, overrides?, proxy?, diff? }) (the nine of the build are the calls below; a new one is one more call there; BD_VARIANTS = the names in the order they run, BD_SPECS[name] = the entry):
+//   name      the variant's name (the key of the report's "abl <name>" line); unique.
+//   abl       another program text of the display pass (docs/vr-wgsl-core.js ablate: a name in ABLATIONS; the host compiles every ABLATIONS entry when the recording is prepared).
+//   overrides another uniform value over the display's (a field of the uniform layout; the host writes it into the pass's own copy of the frame's uniforms).
+//   proxy     true = the pass needs the low pass to have used the pre-pass (else the host has no program for the frame and steps past it).
+//   diff      true = count the differing pixels: the host draws the variant AND the display's own pass (display program, the frame's own uniforms and tiles) into the same pair of scratch targets (same region, viewports and scissors) and a small compute counts the pixels
+//             whose colour or packed depth differ, and the largest colour channel difference; the report gets "diff px <name>: max N of M px (the comparisons had one at most) · K of C comparisons had a differing pixel · max colour channel diff X of 255".
+//             A variant that must be identical to the display (the pre-pass start, a coarse distance field, an early stop) says diff: true and its expected value is 0; one that is not identical (a different gradient) shows how much it differs.
+//   A variant that cannot be made by a program text or a uniform value (its own pipeline, bind group, extra compute) registers a host function too: vr-wgpu.js registerShadowEncoder(name, fn); the table entry stays the same (name, diff, proxy).
+export const BD_VARIANTS = [];
+export const BD_SPECS = {};
+export function defineBdVariant(spec) {
+  if (!spec || typeof spec.name !== 'string' || !spec.name) throw new Error('defineBdVariant: a name is needed');
+  if (BD_SPECS[spec.name]) throw new Error('defineBdVariant: ' + spec.name + ' is already defined');
+  BD_SPECS[spec.name] = spec; BD_VARIANTS.push(spec.name);
+  return spec;
+}
+// how each variant is made (the host reads this table): abl = another program text, overrides = another uniform value
+defineBdVariant({ name: 'same' }); defineBdVariant({ name: 'box', overrides: { diag: 1 } }); defineBdVariant({ name: 'simple', overrides: { diag: 3 } });
+defineBdVariant({ name: 'noGrad', abl: 'grad' }); defineBdVariant({ name: 'noRefine', abl: 'refine' }); defineBdVariant({ name: 'noShade', abl: 'shade' });
+defineBdVariant({ name: 'withCreep', overrides: { useSkip: 1 } }); // the display runs without the creep skip (useSkip 0); this pass turns it on (the host skips it when its bits are not valid)
+defineBdVariant({ name: 'noJump', overrides: { jumpOn: 0, proxyOn: 0 } }); // the pre-pass needs the jumps (its start is safe only with them): without jumps it is off too, so this pass leaves out both
+defineBdVariant({ name: 'noProxy', overrides: { proxyOn: 0 }, proxy: true, diff: true }); // the pre-pass off over the display's (the host makes no pass when the frame's low pass did not use it; its turn also runs the pixel comparison, delivered as 'proxyDiff'; see add)
+// ---- add new variants above this line, one defineBdVariant call each ----
+export const BD_PROBE_FIELDS = ['outcome', 'iters', 'creep', 'jumps', 'skipReads', 'clsReads', 'refineReads', 'gradReads', 'near4Steps', 'near4Jumps', 'near8Steps', 'near8Jumps', 'near16Steps', 'near16Jumps', 'toTA', 'last4Steps', 'last8Steps', 'last16Steps']; // the u32 of a probe pixel (docs/vr-wgsl-core.js COUNTER_FIELDS)
 const BD_STRIDE = BD_PROBE_FIELDS.length;
 export const BD_NEAR_R = [4, 8, 16]; // the approach radii in voxels (grid-index units of the distance bytes); the field pair of R is 8 + 2 * index
 const BD_OUTCOMES = ['hit', 'pass', 'accstop', 'discard']; // outcome value 1..4 (0 = the pixel was not covered)
 const BD_BLOCK = 8; // 8 x 8 pixels stand in for a GPU wave
 const quantile = (a, q) => { const v = a.filter(x => Number.isFinite(x)).sort((x, y) => x - y); if (!v.length) return null; const i = (v.length - 1) * q, lo = Math.floor(i), hi = Math.ceil(i); return v[lo] + (v[hi] - v[lo]) * (i - lo); };
 const newOutcomeAgg = () => ({ px: 0, steps: [], iters: 0, jumps: 0, creep: 0, skipReads: 0, near: BD_NEAR_R.map(() => ({ n: 0, steps: 0, jumps: 0 })) }); // one outcome's share of the probe (hit, pass): its steps, jumps, creep steps and skipTex reads; near[i] = the rays that came within BD_NEAR_R[i] of a surface (count, sums of their steps and jumps up to that sample)
-const newProbeAgg = () => ({ windows: 0, px: 0, steps: [], by: [newOutcomeAgg(), newOutcomeAgg()], sums: { iters: 0, creep: 0, jumps: 0, skipReads: 0, clsReads: 0, refineReads: 0, gradReads: 0 }, outcome: [0, 0, 0, 0], blocks: 0, blockRatio: [], mixed: 0 });
+const newSplitAgg = () => ({ n: 0, toTA: 0, approach: 0, near: 0, tail: 0, never: 0 }); // one outcome's rays at one R: their steps cut into four places (see addProbe)
+const newProbeAgg = () => ({ split: BD_NEAR_R.map(() => [newSplitAgg(), newSplitAgg()]), windows: 0, px: 0, steps: [], by: [newOutcomeAgg(), newOutcomeAgg()], sums: { iters: 0, creep: 0, jumps: 0, skipReads: 0, clsReads: 0, refineReads: 0, gradReads: 0 }, outcome: [0, 0, 0, 0], blocks: 0, blockRatio: [], mixed: 0 });
 export function createVolBreakdown() {
-  const ratios = Object.fromEntries(BD_VARIANTS.map(v => [v, []])), lows = [], probes = { whole: newProbeAgg(), native: newProbeAgg() };
-  const proxy = { cmp: 0, differ: 0, max: 0, total: 0, ms: [] }; // the pre-pass: comparisons made (on vs off, same region, uniforms and tiles), how many had a differing pixel, the largest count, the pixels compared; the compute pass's ms
+  const ratios = Object.fromEntries(BD_VARIANTS.map(v => [v, []])), lows = [], probes = { whole: newProbeAgg(), native: newProbeAgg() }, probesOn = { whole: newProbeAgg(), native: newProbeAgg() }; // probes = the counting probe without the pre-pass (the upper bound, as before), probesOn = with the display's own tiles
+  const proxy = { ms: [] }; // the pre-pass compute pass's ms
+  const diffs = {}; // per diff variant (BD_SPECS diff): comparisons made, how many had a differing pixel, the largest count, the pixels compared, the largest colour channel / packed depth byte difference, the most pixels whose colour differs in one comparison
+  const dstat = v => (diffs[v] ||= { cmp: 0, differ: 0, max: 0, total: 0, maxColor: 0, maxDepth: 0, colorPx: 0 });
   // one shadow pass of `variant`: its GPU ms and the same frame's low pass GPU ms (both > 0 and finite, else it is not a sample)
   // Two more kinds come through the same callback (the host's onShadow of the breakdown): ('proxyDiff', pixels that differ, pixels compared) and ('proxyMs', the pre-pass compute pass's ms, 1)
   const add = (variant, shadowMs, lowMs) => {
-    if (variant === 'proxyDiff') { if (!Number.isFinite(shadowMs) || !(lowMs > 0) || shadowMs < 0) return false; proxy.cmp++; if (shadowMs > 0) proxy.differ++; proxy.max = Math.max(proxy.max, shadowMs); proxy.total = Math.max(proxy.total, lowMs); return true; }
+    // the comparison of a diff variant (BD_SPECS diff) comes as ('diff:<name>', pixels that differ, pixels compared), 'diffMax:<name>' (largest colour channel difference, largest packed depth byte difference), 'diffColor:<name>' (pixels whose colour differs, 1); noProxy's own count keeps its name 'proxyDiff'
+    const dv = variant === 'proxyDiff' ? 'noProxy' : typeof variant === 'string' && variant.startsWith('diff:') ? variant.slice(5) : null;
+    if (dv !== null) { if (!BD_SPECS[dv]?.diff || !Number.isFinite(shadowMs) || !(lowMs > 0) || shadowMs < 0) return false; const d = dstat(dv); d.cmp++; if (shadowMs > 0) d.differ++; d.max = Math.max(d.max, shadowMs); d.total = Math.max(d.total, lowMs); return true; }
+    if (typeof variant === 'string' && (variant.startsWith('diffMax:') || variant.startsWith('diffColor:'))) {
+      const v = variant.slice(variant.indexOf(':') + 1); if (!BD_SPECS[v]?.diff || !Number.isFinite(shadowMs) || shadowMs < 0) return false;
+      const d = dstat(v); if (variant.startsWith('diffMax:')) { d.maxColor = Math.max(d.maxColor, shadowMs); d.maxDepth = Math.max(d.maxDepth, Number.isFinite(lowMs) ? lowMs : 0); } else d.colorPx = Math.max(d.colorPx, shadowMs);
+      return true;
+    }
+    if (typeof variant === 'string' && variant.startsWith('probeOn:')) return addProbeOn(variant.slice(8), shadowMs, lowMs, lowMs); // the counting probe with the pre-pass on: (counters, w = h = 64)
     if (variant === 'proxyMs') { if (!Number.isFinite(shadowMs) || shadowMs < 0) return false; if (proxy.ms.length < 4000) proxy.ms.push(shadowMs); return true; }
-    if (!ratios[variant] || !Number.isFinite(shadowMs) || !Number.isFinite(lowMs) || shadowMs < 0 || !(lowMs > 0)) return false;
-    ratios[variant].push(shadowMs / lowMs); lows.push(lowMs);
+    if (!Object.hasOwn(BD_SPECS, variant) || !Number.isFinite(shadowMs) || !Number.isFinite(lowMs) || shadowMs < 0 || !(lowMs > 0)) return false;
+    (ratios[variant] ||= []).push(shadowMs / lowMs); lows.push(lowMs); // (a variant defined after this collector was made has its list made here)
     return true;
   };
+  // one ray's steps in four places (R = BD_NEAR_R[i]): toTA = the iterations before the pre-pass's start (counted by the twin: the run without the pre-pass; 0 with it), approach = from there up to the first sample within R of a surface, near = from the first (or, if
+  // that lay before the start, the first after the start) to the LAST sample within R, tail = after the last one to the ray's end. A ray none of whose samples came within R puts everything after the start in approach (and is counted in never). The four add up to the ray's steps.
+  const splitRay = (a, k, c, o) => {
+    const I = c[o + 1], A = Math.min(c[o + 14], I);
+    BD_NEAR_R.forEach((_, i) => {
+      const F = c[o + 8 + 2 * i], L = c[o + 15 + i], sp = a.split[i][k];
+      sp.n++; sp.toTA += A;
+      if (F === 0) { sp.never++; sp.approach += I - A; return; }
+      sp.approach += Math.max(0, F - 1 - A); sp.near += L > A ? L - Math.max(F, A + 1) + 1 : 0; sp.tail += I - Math.max(L, A);
+    });
+  };
   // one counting probe window: counters = Uint32Array(w * h * BD_PROBE_FIELDS.length) (BD_PROBE_FIELDS per pixel; outcome 0 = not covered); kind = 'whole' | 'native'
-  const addProbe = (kind, counters, w, h) => {
-    const a = probes[kind]; if (!a || !counters || !(w > 0) || !(h > 0) || counters.length < w * h * BD_STRIDE) return false;
+  const feed = (a, counters, w, h) => {
+    if (!a || !counters || !(w > 0) || !(h > 0) || counters.length < w * h * BD_STRIDE) return false;
     a.windows++;
     const nb = Math.ceil(w / BD_BLOCK) * Math.ceil(h / BD_BLOCK), bn = new Uint16Array(nb), bh = new Uint16Array(nb), bs = new Float64Array(nb), bm = new Float64Array(nb);
     for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
@@ -177,7 +218,7 @@ export function createVolBreakdown() {
       if (oc < 1 || oc > 4) continue;
       a.px++; a.outcome[oc - 1]++;
       if (a.steps.length < 200000) a.steps.push(counters[o + 1]);
-      if (oc <= 2) { const b = a.by[oc - 1]; b.px++; if (b.steps.length < 200000) b.steps.push(counters[o + 1]); b.iters += counters[o + 1]; b.jumps += counters[o + 3]; b.creep += counters[o + 2]; b.skipReads += counters[o + 4]; BD_NEAR_R.forEach((_, i) => { const st = counters[o + 8 + 2 * i]; if (st > 0) { const nr = b.near[i]; nr.n++; nr.steps += st; nr.jumps += counters[o + 9 + 2 * i]; } }); }
+      if (oc <= 2) { splitRay(a, oc - 1, counters, o); const b = a.by[oc - 1]; b.px++; if (b.steps.length < 200000) b.steps.push(counters[o + 1]); b.iters += counters[o + 1]; b.jumps += counters[o + 3]; b.creep += counters[o + 2]; b.skipReads += counters[o + 4]; BD_NEAR_R.forEach((_, i) => { const st = counters[o + 8 + 2 * i]; if (st > 0) { const nr = b.near[i]; nr.n++; nr.steps += st; nr.jumps += counters[o + 9 + 2 * i]; } }); }
       a.sums.iters += counters[o + 1]; a.sums.creep += counters[o + 2]; a.sums.jumps += counters[o + 3]; a.sums.skipReads += counters[o + 4]; a.sums.clsReads += counters[o + 5]; a.sums.refineReads += counters[o + 6]; a.sums.gradReads += counters[o + 7];
       const work = counters[o + 1] + counters[o + 6] + counters[o + 7], b = (y / BD_BLOCK | 0) * Math.ceil(w / BD_BLOCK) + (x / BD_BLOCK | 0);
       bn[b]++; if (oc === 1) bh[b]++; bs[b] += work; if (work > bm[b]) bm[b] = work;
@@ -190,6 +231,9 @@ export function createVolBreakdown() {
     }
     return true;
   };
+  // one counting probe window: counters = Uint32Array(w * h * BD_PROBE_FIELDS.length) (BD_PROBE_FIELDS per pixel; outcome 0 = not covered); kind = 'whole' | 'native'. addProbe = the run without the pre-pass (as before), addProbeOn = the run with the display's tiles
+  const addProbe = (kind, counters, w, h) => feed(probes[kind], counters, w, h);
+  const addProbeOn = (kind, counters, w, h) => feed(probesOn[kind], counters, w, h);
   // the per-pixel means of one outcome (null where no pixel ended so) and the 95th percentile of its steps
   const outcomeSummary = b => {
     if (!b.px) return null;
@@ -197,6 +241,11 @@ export function createVolBreakdown() {
     // near = per radius: the rays that came within R of a surface: their mean steps / jumps up to the first such sample (null = none did) and never = the share of this outcome's rays that never did
     const near = BD_NEAR_R.map((R, i) => { const x = b.near[i]; return { R, reached: x.n, steps: x.n ? x.steps / x.n : null, jumps: x.n ? x.jumps / x.n : null, never: (b.px - x.n) / b.px }; });
     return { px: b.px, steps: { mean: b.iters / b.px, p95: st[Math.min(st.length - 1, Math.ceil(0.95 * st.length) - 1)] }, jumps: b.jumps / b.px, creep: b.creep / b.px, skip: b.skipReads / b.px, near };
+  };
+  // the four places of the steps per ray (see splitRay), per R and outcome: mean steps of the rays of that outcome (null = none)
+  const splitSummary = a => {
+    if (!a.windows || !a.px) return null;
+    return a.split.map((pair, i) => ({ R: BD_NEAR_R[i], ...Object.fromEntries(['hit', 'pass'].map((k, j) => { const x = pair[j]; return [k, x.n ? { n: x.n, toTA: x.toTA / x.n, approach: x.approach / x.n, near: x.near / x.n, tail: x.tail / x.n, never: x.never / x.n } : null]; })) }));
   };
   const probeSummary = a => {
     if (!a.windows || !a.px) return null;
@@ -209,7 +258,11 @@ export function createVolBreakdown() {
   };
   // R_v = the median ratio of a variant, M = the median of the real low pass ms of these frames; the cost of a step = (R_same - R_v) x M
   const summary = () => {
-    const M = median(lows), R = {}, out = { M, nLow: lows.length, variants: {}, split: null, probes: { whole: probeSummary(probes.whole), native: probeSummary(probes.native) }, proxy: { comparisons: proxy.cmp, withDifference: proxy.differ, maxDiffPx: proxy.max, pixels: proxy.total, computeMs: median(proxy.ms), computeN: proxy.ms.length } };
+    const M = median(lows), R = {}, out = { M, nLow: lows.length, variants: {}, split: null, probes: { whole: probeSummary(probes.whole), native: probeSummary(probes.native) }, proxy: { comparisons: (diffs.noProxy?.cmp | 0), withDifference: (diffs.noProxy?.differ | 0), maxDiffPx: (diffs.noProxy?.max | 0), pixels: (diffs.noProxy?.total | 0), computeMs: median(proxy.ms), computeN: proxy.ms.length },
+      diffs: Object.fromEntries(BD_VARIANTS.filter(v => BD_SPECS[v].diff).map(v => { const d = dstat(v); return [v, { comparisons: d.cmp, withDifference: d.differ, maxDiffPx: d.max, pixels: d.total, maxColorDiff: d.maxColor, maxDepthByteDiff: d.maxDepth, maxColorPx: d.colorPx }]; })),
+      probesOn: { whole: probeSummary(probesOn.whole), native: probeSummary(probesOn.native) },
+      splits: { off: { whole: splitSummary(probes.whole), native: splitSummary(probes.native) }, on: { whole: splitSummary(probesOn.whole), native: splitSummary(probesOn.native) } } };
+    for (const v of BD_VARIANTS) ratios[v] ||= [];
     for (const v of BD_VARIANTS) R[v] = median(ratios[v]);
     for (const v of BD_VARIANTS) {
       const q1 = quantile(ratios[v], 0.25), q3 = quantile(ratios[v], 0.75);
@@ -235,6 +288,11 @@ export function createVolBreakdown() {
     }
     L.push('proxy diff px: ' + (s.proxy.comparisons ? 'max ' + s.proxy.maxDiffPx + ' of ' + s.proxy.pixels + ' px · ' + s.proxy.withDifference + ' of ' + s.proxy.comparisons + ' comparisons had a differing pixel' : '- (no comparison made: the low pass did not use the pre-pass, or no read-back)')
       + ' · pre-pass compute median ' + (pc !== null ? f2(pc) + ' ms (' + s.proxy.computeN + ')' : '-'));
+    for (const v of BD_VARIANTS) { // one line per variant that counts differing pixels (BD_SPECS diff)
+      const d = s.diffs[v]; if (!d) continue;
+      L.push('diff px ' + v + ': ' + (d.comparisons ? 'max ' + d.maxDiffPx + ' of ' + d.pixels + ' px · ' + d.withDifference + ' of ' + d.comparisons + ' comparisons had a differing pixel · max colour channel diff ' + d.maxColorDiff + ' of 255 · max packed depth byte diff ' + d.maxDepthByteDiff + ' of 255 · colour differs in up to ' + d.maxColorPx + ' px'
+        : '- (no comparison made: the variant had no pass in a frame, or no read-back)'));
+    }
     const sp = s.split;
     L.push(sp ? 'split: fixed(box) ' + f1(sp.fixed) + ' ms · march ' + f1(sp.march) + ' ms · refine ' + f1(sp.refine) + ' ms · gradient ' + f1(sp.gradient) + ' ms · shading ' + f1(sp.shading) + ' ms · sum ' + f1(sp.sum) + ' ms vs low ' + f1(s.M) + ' ms (' + Math.round(sp.pct) + ' %)' : 'split: fixed(box) - · march - · refine - · gradient - · shading - · sum vs low -');
     const w = s.probes.whole, n = s.probes.native;
@@ -248,6 +306,15 @@ export function createVolBreakdown() {
       : 'probe approach (steps/jumps to the first sample within R voxels of a surface): - (no probe read back)');
     L.push(n ? 'probe native: windows ' + n.windows + ' · blocks ' + n.blocks + ' · block max/mean median/p90 ' + (n.blockMax ? f2(n.blockMax.median) + '/' + f2(n.blockMax.p90) : '-') + ' · mixed hit blocks share ' + f2(n.mixedShare)
       : 'probe native: - (no probe read back)');
+    // the steps of a ray in four places, per window kind, the run without the pre-pass (to-tA is what the pre-pass skips: the iterations before its start) and the run with the display's tiles (as displayed)
+    const sx = o => (o ? [o.toTA, o.approach, o.near, o.tail].map(f1).join('/') + ' (n ' + o.n + ', never ' + Math.round(o.never * 100) + '%)' : '-');
+    const place = r => (r ? r.map(x => 'R=' + x.R + ' hit ' + sx(x.hit) + ' | pass ' + sx(x.pass)).join(' ; ') : '- (no window)');
+    for (const k of ['whole', 'native']) {
+      L.push('probe split ' + k + ' off (steps per ray: to tA / approach / near / tail): ' + place(s.splits.off[k]));
+      L.push('probe split ' + k + ' on (the same, with the display\'s tiles): ' + place(s.splits.on[k]));
+    }
+    const mo = a => [a?.byOutcome.hit, a?.byOutcome.pass].map(o => (o ? f1(o.steps.mean) : '-')).join(' | ') + ' (windows ' + (a ? a.windows : 0) + ')';
+    L.push('probe steps per ray, hit | pass: whole off ' + mo(s.probes.whole) + ' · whole on ' + mo(s.probesOn.whole) + ' · native off ' + mo(s.probes.native) + ' · native on ' + mo(s.probesOn.native));
     return L;
   };
   const api = { add, addProbe, summary, lines, seconds: null };
@@ -265,6 +332,8 @@ export function volBreakdownReport(p) {
   L.push('note: split: fixed = R_box x M (box = nothing but the per-pixel start: diag 1); refine / gradient / shading = est of noRefine / noGrad / noShade; march = (R_simple - R_box) x M - shading (simple = diag 3: no surface search, no gradient, the shading maths kept); sum = the five against M ("sum vs low", additive steps give 100 %).');
   L.push('note: probe = a 64 x 64 window of the left eye, alternately every second: whole = the eye\'s whole image shrunk into the window (the spread of the work), native = the centre of the region the low pass drew, at the pass\'s own pixel pitch (how the heavy pixels lie together). The counts per pixel come from a counting twin of the display program (steps = loop iterations; reads per px = fetches of skipTex / clsTex in the march, with the re-read of the previous sample / in the surface search / in the gradient; creep, jumps = how often; the display runs without the creep skip, so the counting twin runs without it too and its creep and skipTex counts are 0).');
   L.push('note: probe approach = per outcome (hit / pass) of the whole-image probe window: the loop iterations (steps) and jumps a ray used until its first sample with a surface distance <= R voxels, R = 4 / 8 / 16 (the distance byte dd the march jumps by, in grid-index units = voxels of the texture, read before the jumps switch; the sample itself counts as a step, the jumps are those made before it), the mean over the rays that did come within R; never = the share of the pass rays none of whose samples came within R. Counts only; it changes nothing that is drawn. It is a rough upper bound of what starting the ray near the surface (and ending it where nothing is left) could save: the steps before the first sample within R, and the pass rays that never come near a surface at all.');
+  L.push('note: diff px <variant> (every variant with diff in the table of vr-perf-log.js, the noProxy line above included): the variant\'s pass and the display\'s own pass (display program, the frame\'s uniforms and tiles) are drawn into the same pair of scratch targets of the same region and a small compute counts the pixels whose colour or packed depth differ (4 u32 are read back, one comparison at a time); max = the largest count of a comparison, of = the pixels compared, "had a differing pixel" = comparisons with a count above 0, max colour channel diff = the largest difference of an rgba8 colour channel (0 to 255) over all comparisons, packed depth byte diff = the same for the packed depth bytes (it only says not equal: a byte is no depth). A variant that is meant to be identical to the display shows 0 everywhere; anything else is not identical.');
+  L.push('note: probe split = the steps (loop iterations) of a ray in four places, mean over the hit and the pass rays of the window, per R (4 / 8 / 16 voxels of the surface distance byte): to tA = the iterations before the start the pre-pass gives the ray (the tile\'s tA; the run without the pre-pass counts them, the run with it starts there: 0), approach = from there to the first sample within R of a surface, near = from the first sample within R (the first after the start when it lay before it) to the last one, tail = after the last sample within R to the end of the ray; the four add up to the steps. A ray none of whose samples came within R has no near and no tail: all its steps after the start are approach (never = their share; a ray the pre-pass calls empty has 0 steps and counts as such a ray, so never is larger in the run with the pre-pass). The tail of the pass rays is what stopping a ray early (an end distance) could save at most. "off" = the counting twin without the pre-pass over the window (tA read from the display\'s tiles of that frame), "on" = with the display\'s tiles, the run of the display (the steps of the probe lines above are the off run, as before). whole = the eye\'s whole image shrunk into the window: a probe pixel reads the tile of the display pixel it stands for (its ray is between pixel centres, so a ray at the border of a tile is only approximately inside the tile\'s cone); a pixel outside the low pass\'s region has no tile (no pre-pass for it). "-" = no window with the display\'s tiles (the frame\'s low pass did not use the pre-pass).');
   L.push('note: blocks are 8 x 8 pixels, an approximation of a GPU wave (the real wave size is not known): block max/mean = the largest work of the block over its mean (work = steps + search reads + gradient reads, covered pixels only), median and 90th percentile over the blocks; mixed hit blocks = blocks with both pixels that end on a hit and pixels that do not, as a share of the blocks with a covered pixel.');
   L.push('note: rows with rec = 1 were recorded while the breakdown ran: its shadow passes and probes load the GPU and its recording does not sample swd / vlat / wake, so span, gap, swd and fps of those rows are disturbed (the frame after a shadow pass has no gap sample); the summary above leaves them out, and the auto quality does not change while it records. This section does not follow the menu state (it uses every recorded pass).');
   return L;

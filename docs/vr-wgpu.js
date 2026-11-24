@@ -2,8 +2,10 @@
 // (the three.js Data3DTexture objects stay the holders of the data, a GPUTexture is made from one on first use and again when its version changes), the volume render pass per eye,
 // the offscreen targets (colour + depth packed in rgba8, both eyes side by side, reduced scale and the periphery target), and the composite material (three.js NodeMaterial, TSL) that
 // puts the offscreen image into the headset's frame with the volume's depth. Plain WebGPU; three.js (the WebGPU build) is passed in.
-import { volumeWgsl, uniformLayout, BOX_VERTICES, VOLUME_BINDINGS, COUNTER_FIELDS, PROXY, PROXY_FIELDS, PROXY_BINDINGS, PROXY_DIFF_BINDINGS, proxyWgsl, proxyDiffWgsl } from './vr-wgsl-core.js?v=20261119-build756';
-import { FOVEA_K } from './vr-render-scale.js?v=20261119-build756';
+import { volumeWgsl, uniformLayout, BOX_VERTICES, VOLUME_BINDINGS, COUNTER_FIELDS, ABLATIONS, COUNTER_CFG_BINDING, PROXY, PROXY_FIELDS, PROXY_BINDINGS, PROXY_DIFF_BINDINGS, proxyWgsl, proxyDiffWgsl } from './vr-wgsl-core.js?v=20261124-build757';
+import { FOVEA_K } from './vr-render-scale.js?v=20261124-build757';
+// run-time switch of the comparison bench (docs/vr-bench.js createIsolation): the volume pass's own GPU timestamps (the per-frame timestamp read-back: one mapAsync per pass) can be turned off for an isolation run. Default = as always (on).
+export const GX_SWITCH = { timers: true };
 
 export const VRGPU_STORE_KEY = 'vrl-vr-gpu';
 // the choice of the page's 「WebGPUで開く」 button (kept per browser; no URL parameter: the public build's gate takes no unknown URL keys). Default: the WebGL view.
@@ -103,10 +105,14 @@ export async function requestVrGpuDevice() {
   if (!vrGpuAvailable()) throw new Error('WebGPU XR is not available (no navigator.gpu or XRGPUBinding)');
   const adapter = await navigator.gpu.requestAdapter({ xrCompatible: true });
   if (!adapter) throw new Error('no WebGPU adapter that can be used in XR (xrCompatible)');
-  const want = ['shader-f16', 'timestamp-query', 'float32-filterable'].filter(f => adapter.features.has(f));
-  let device;
-  try { device = await adapter.requestDevice({ requiredFeatures: want }); } catch { device = await adapter.requestDevice(); want.length = 0; }
-  return { adapter, device, f16: device.features.has('shader-f16'), timestamps: device.features.has('timestamp-query') };
+  const wanted = ['shader-f16', 'timestamp-query', 'float32-filterable'].filter(f => adapter.features.has(f));
+  // subgroups (the compute passes may use the subgroup operations): asked for when the adapter lists it; a device that refuses it is asked again with the three above, and then with none
+  let want = adapter.features.has('subgroups') ? [...wanted, 'subgroups'] : wanted, device;
+  try { device = await adapter.requestDevice({ requiredFeatures: want }); } catch {
+    if (want.length > wanted.length) { want = wanted; try { device = await adapter.requestDevice({ requiredFeatures: want }); } catch { /* none below */ } }
+    if (!device) { device = await adapter.requestDevice(); want = []; }
+  }
+  return { adapter, device, f16: device.features.has('shader-f16'), timestamps: device.features.has('timestamp-query'), subgroups: device.features.has('subgroups'), requested: want };
 }
 
 const TEX_FORMATS = { // three.js format -> [GPU format, bytes per texel]
@@ -180,7 +186,7 @@ export function createVolumeGpu({ device, THREE, f16 = false, onTargetFreed = nu
   const makeModule = v => { const m = device.createShaderModule({ code: volumeWgsl({ f16, ...v }) }); try { onShader?.(m, { f16, ...v }); } catch { /* diagnostics only */ } return m; }; // onShader: the session's diagnostics read the compiler's messages
   let pipeLayoutCnt = null, bglCnt = null; // the counting variants (abl / counters of the performance record's breakdown) have a second bind group: the storage buffer the counts go to
   const cntLayouts = () => {
-    bglCnt ||= device.createBindGroupLayout({ entries: [{ binding: 0, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'storage' } }] });
+    bglCnt ||= device.createBindGroupLayout({ entries: [{ binding: 0, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'storage' } }, { binding: COUNTER_CFG_BINDING.binding, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } }] }); // the counts, and the twin's window / tile mapping (vr-wgsl-core.js COUNTER_CFG_BINDING)
     pipeLayoutCnt ||= device.createPipelineLayout({ bindGroupLayouts: [bgl, bglCnt] });
     return { bglCnt, pipeLayoutCnt };
   };
@@ -255,7 +261,7 @@ export function createVolumeGpu({ device, THREE, f16 = false, onTargetFreed = nu
   const proxyDummyTex = () => proxyDummy ||= device.createTexture({ size: [1, 1, 1], format: 'r32float', usage: GPUTextureUsage.TEXTURE_BINDING });
 
   // ---- small offscreen targets on demand: a pool keyed by size (the 48 x 48 probe's), colour + packed depth; the two passes' own targets are fixedTarget (below) ----
-  const counts = { target: 0, tex: 0, group: 0, slot: 0, peri: 0 }; // running totals of what was made (the performance record reads the differences once a frame: target = offscreen target, tex = tile texture, group = bind group; slot / peri are counted by createVrVolumeRenderer)
+  const counts = { target: 0, tex: 0, group: 0, slot: 0, peri: 0, maps: 0 }; // running totals of what was made (the performance record reads the differences once a frame: target = offscreen target, tex = tile texture, group = bind group; slot / peri are counted by createVrVolumeRenderer)
   const pool = [];
   let frameNo = 0; // a target used in this frame is never let go in it
   const beginFrame = () => { frameNo++; };
@@ -445,7 +451,7 @@ export function createVolumeGpu({ device, THREE, f16 = false, onTargetFreed = nu
   };
   // read one slot back: rec = the frame it belongs to; marker = its end only counts (the begin of the marker is not work); onMs(ms) = the pass duration
   const readSlot = (slot, rec, marker, onMs) => {
-    const sl = ts.slots[slot];
+    const sl = ts.slots[slot]; counts.maps++; // maps = timestamp read-backs started (a running total, read by the frame ring of docs/vr-bench.js)
     sl.buf.mapAsync(GPUMapMode.READ).then(() => {
       const a = new BigUint64Array(sl.buf.getMappedRange().slice(0)); sl.buf.unmap();
       onMs?.(Number(a[1] - a[0]) / 1e6);
@@ -484,7 +490,7 @@ export function createVolumeGpu({ device, THREE, f16 = false, onTargetFreed = nu
   // proxy = { tilesPerEye, tilesY }: the pre-pass runs first (its compute pass has a timestamp slot of its own; its ms is in the vol numbers, not in rec.lowMs) when the pass may use it (proxyUsable).
   // Returns { proxy: { tex } | null }: the tiles the pass read (the breakdown's snapshot carries them to its shadow passes).
   const drawPass = (target, eyes, u, variant, slot0, overrides = null, readback = null, o = null) => {
-    const timed = o?.timed ?? !overrides;
+    const timed = (o?.timed ?? !overrides) && GX_SWITCH.timers; // GX_SWITCH.timers = false (an isolation run of the comparison bench): no timestamp slot, no read-back
     const enc = device.createCommandEncoder();
     const slot = ts && timed ? ts.slots.findIndex(x => !x.busy) : -1; // the probe (overrides) and a pass with no free slot are not timed
     const rec = ts && timed ? ts.cur : null; // the frame this pass belongs to (a pass that is not timed makes the frame's span / gap unusable)
@@ -498,6 +504,7 @@ export function createVolumeGpu({ device, THREE, f16 = false, onTargetFreed = nu
       if (!pxTex) slotC = -1;
       else if (slotC >= 0) { enc.resolveQuerySet(ts.qs, 2 * slotC, 2, ts.resolve, 256 * slotC); enc.copyBufferToBuffer(ts.resolve, 256 * slotC, ts.slots[slotC].buf, 0, 16); ts.slots[slotC].busy = true; rec.pend++; rec.vpend++; }
     }
+    if (!pxTex && o?.pxTex) pxTex = o.pxTex; // the counting probe: the display's own tiles of the frame (no compute pass of its own); proxyOn is 1 then, an override of 0 leaves them to the counting twin to read tA
     o?.before?.(enc);
     const tsw = o?.tsw ?? (slot >= 0 ? { querySet: ts.qs, beginningOfPassWriteIndex: 2 * slot, endOfPassWriteIndex: 2 * slot + 1 } : null);
     const pass = enc.beginRenderPass({ ...(tsw ? { timestampWrites: tsw } : {}), colorAttachments: [
@@ -548,12 +555,12 @@ export function createVolumeGpu({ device, THREE, f16 = false, onTargetFreed = nu
       b.resolve = device.createBuffer({ size: 256 * BD_SLOTS, usage: GPUBufferUsage.QUERY_RESOLVE | GPUBufferUsage.COPY_SRC });
       b.slots = Array.from({ length: BD_SLOTS }, () => ({ buf: device.createBuffer({ size: 16, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ }), busy: false }));
     }
-    const jobs = ['grad', 'refine', 'shade'].map(abl => ({ v: { ...b.variant, abl }, what: 'abl ' + abl })).concat([{ v: { ...b.variant, counters: true }, what: 'counters' }]);
+    const jobs = ABLATIONS.map(abl => ({ v: { ...b.variant, abl }, what: 'abl ' + abl })).concat([{ v: { ...b.variant, counters: true }, what: 'counters' }]);
     await Promise.all(jobs.map(async j => {
       try { const p = await device.createRenderPipelineAsync(pipeDesc(j.v)); if (bd === b) b.pipes.set(vkey(j.v), p); }
       catch (e) { b.failed.push(j.what + ': ' + String(e?.message ?? e).slice(0, 160)); }
     }));
-    if (!b.variant.events && ts) { // the proxy comparison's compute (the 'noProxy' turn of a session whose low pass uses the pre-pass); a failure is listed and the turn then runs without the comparison
+    if (ts) { // the pixel comparison's compute (every variant with diff in the table of vr-perf-log.js: the noProxy turn of a session whose low pass uses the pre-pass, and the new ones); a failure is listed and the turn then runs without the comparison
       try {
         const module = device.createShaderModule({ code: proxyDiffWgsl() }); try { onShader?.(module, { proxyDiff: true }); } catch { /* diagnostics only */ }
         const bgl = device.createBindGroupLayout({ entries: [
@@ -561,25 +568,27 @@ export function createVolumeGpu({ device, THREE, f16 = false, onTargetFreed = nu
           { binding: PROXY_DIFF_BINDINGS.count, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
         ] });
         const pipe = await device.createComputePipelineAsync({ layout: device.createPipelineLayout({ bindGroupLayouts: [bgl] }), compute: { module, entryPoint: 'main' } });
-        if (bd === b) b.diff = { pipe, bgl, group: null, gA: null, gB: null, busy: false, cnt: device.createBuffer({ size: 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST }), rb: device.createBuffer({ size: 4, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ }) };
+        if (bd === b) b.diff = { pipe, bgl, group: null, gA: null, gB: null, busy: false, cnt: device.createBuffer({ size: 16, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST }), rb: device.createBuffer({ size: 16, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ }) }; // 4 u32: pixels that differ, largest colour channel difference, largest packed depth byte difference, pixels whose colour differs
       } catch (e) { b.failed.push('proxy diff: ' + String(e?.message ?? e).slice(0, 160)); }
     }
     if (bd !== b) return null; // ended while compiling
     if (b.pipes.has(vkey({ ...b.variant, counters: true }))) {
       const mk = () => device.createTexture({ size: [BD_PROBE, BD_PROBE, 1], format: 'rgba8unorm', usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC });
       const t = { w: BD_PROBE, h: BD_PROBE, color: mk(), depth: mk() }; t.colorView = t.color.createView(); t.depthView = t.depth.createView();
-      const cnt = device.createBuffer({ size: BD_PROBE_BYTES, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST });
-      b.probe = { target: t, cnt, rb: device.createBuffer({ size: BD_PROBE_BYTES, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ }), busy: false,
-        group: device.createBindGroup({ layout: cntLayouts().bglCnt, entries: [{ binding: 0, resource: { buffer: cnt } }] }) };
+      const cfg = device.createBuffer({ size: COUNTER_CFG_BINDING.floats * 4, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+      const run = () => { const cnt = device.createBuffer({ size: BD_PROBE_BYTES, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST }); return { cnt, rb: device.createBuffer({ size: BD_PROBE_BYTES, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ }),
+        group: device.createBindGroup({ layout: cntLayouts().bglCnt, entries: [{ binding: 0, resource: { buffer: cnt } }, { binding: COUNTER_CFG_BINDING.binding, resource: { buffer: cfg } }] }) }; };
+      const r1 = run(), r2 = run(); // r1 = the run without the pre-pass (the probe's result), r2 = the run with the display's tiles (delivered through onShadow); each its own buffers: the second is submitted before the first is read
+      b.probe = { target: t, cnt: r1.cnt, rb: r1.rb, group: r1.group, run2: r2, cfg, busy: false };
       b.probeOk = true;
     }
-    return { shadow: b.shadowOk && ['grad', 'refine', 'shade'].every(a => b.pipes.has(vkey({ ...b.variant, abl: a }))), probe: b.probeOk, failed: b.failed.slice() };
+    return { shadow: b.shadowOk && ABLATIONS.every(a => b.pipes.has(vkey({ ...b.variant, abl: a }))), probe: b.probeOk, failed: b.failed.slice() };
   };
   function endBreakdown() {
     const b = bd; if (!b) return; bd = null;
     const kill = x => { try { x?.destroy(); } catch { /* gone */ } };
     kill(b.qs); kill(b.resolve); b.slots.forEach(x => kill(x.buf)); kill(b.tgt?.color); kill(b.tgt?.depth); kill(b.tgt2?.color); kill(b.tgt2?.depth); kill(b.diff?.cnt); kill(b.diff?.rb);
-    if (b.probe) { kill(b.probe.target.color); kill(b.probe.target.depth); kill(b.probe.cnt); kill(b.probe.rb); }
+    if (b.probe) { kill(b.probe.target.color); kill(b.probe.target.depth); kill(b.probe.cnt); kill(b.probe.rb); kill(b.probe.run2.cnt); kill(b.probe.run2.rb); kill(b.probe.cfg); }
     for (const i of [4, 5, 6, 7, 8]) { kill(ubufs[i]); ubufs[i] = undefined; for (const k of [...groups.keys()]) if (k.endsWith(':' + i)) groups.delete(k); } // the bind groups made on those buffers go with them (a second recording must not bind a destroyed buffer)
     ubufs.length = Math.min(ubufs.length, 4);
     bglCnt = null; pipeLayoutCnt = null; // (layouts and pipelines have no destroy: they are let go for the garbage collector)
@@ -596,22 +605,26 @@ export function createVolumeGpu({ device, THREE, f16 = false, onTargetFreed = nu
       s.eyes.push({ x: e.x, y: e.y, w: e.w, h: e.h, vx: e.vx ?? e.x, vy: e.vy ?? e.y, vw: e.vw ?? e.w, vh: e.vh ?? e.h, scissors: (e.scissors || [[e.x, e.y, e.w, e.h]]).map(c => c.slice()) });
       fillUniforms(u, { mvp: e.mvp, origin: e.origin, lightOff: e.lightOff, ...base, proxyOn: px ? 1 : 0, proxyOrg: px ? e.pxOrg : [0, 0] });
       s.ab[i].set(uI); s.bg[i] = bindGroup(4 + i, u, px?.tex);
-      s.bgOn[i] = px ? bindGroup(7 + i, u, px.tex) : null; // the 'on' copy of the proxy comparison (its own uniform buffer: a write goes before the whole submit, so two draws of one submit never share a buffer)
+      s.bgOn[i] = bindGroup(7 + i, u, px?.tex); // the display's own copy of the frame's uniforms (the reference of a comparison: its own uniform buffer, a write goes before the whole submit, so two draws of one submit never share a buffer)
     });
   };
-  // one shadow pass for the record closed by markFrame; spec = { name, abl, overrides }. true = submitted; false = not now (no timer slot free, no snapshot of this frame: try again later);
+  // one shadow pass for the record closed by markFrame; spec = a BD_SPECS entry ({ name, abl, overrides, proxy, diff }, docs/vr-perf-log.js defineBdVariant); a variant with a function registered by registerShadowEncoder(name, fn) draws itself (see there).
+  // spec.diff (or proxy): the display's own pass is drawn too (display program, the snapshot's own uniforms and tiles) into the second scratch target and a compute counts the pixels that differ from the variant's target: delivered as ('diff:<name>', pixels, compared), ('diffMax:<name>', max colour channel diff, max packed depth byte diff), ('diffColor:<name>', pixels whose colour differs, 1); noProxy's count keeps the name 'proxyDiff'.
+  // (The rest of this comment is the one it had.) true = submitted; false = not now (no timer slot free, no snapshot of this frame: try again later);
   // null = this variant has no program for the display variant in use (its compile failed, or the display variant changed since the recording began: it will not come back, the caller steps past it)
   const shadowPass = (rec, spec) => {
     const b = bd, s = b?.snap;
     if (!b || !b.shadowOk || !rec || s.rec !== rec || rec.vols === 0 || !s.target || !s.eyes.length) return false;
-    const pipeline = spec.abl ? b.pipes.get(vkey({ ...s.variant, abl: spec.abl })) : pipes.get(vkey(s.variant)); // never compiled here: a variant the display changed to meanwhile is skipped
-    if (!pipeline) return null;
+    const custom = shadowEncoders.get(spec.name) || null;
+    const displayPipe = pipes.get(vkey(s.variant)); // never compiled here: a variant the display changed to meanwhile is skipped
+    const pipeline = custom ? null : spec.abl ? b.pipes.get(vkey({ ...s.variant, abl: spec.abl })) : displayPipe;
+    if (!pipeline && !custom) return null;
     const wantsCreep = (spec.overrides?.useSkip | 0) > 0; // withCreep: the creep skip over the display's 0, only where the host's bits are valid for the texture (else the pass would read a dummy skipTex): no program, the caller steps past it
     if (wantsCreep && !s.skipHostOn) return null;
     if (spec.proxy && !s.px) return null; // noProxy: the low pass of this frame did not use the pre-pass (no distance field, sections, ...): its shadow would be the same pass (a silent zero), no program: the caller steps past it
     const sl = b.slots.findIndex(x => !x.busy);
     if (sl < 0) return false;
-    const wantsDiff = !!spec.proxy && !!b.diff && !b.diff.busy; // the proxy comparison runs on the noProxy turn, one at a time
+    const wantsDiff = !!(spec.proxy || spec.diff) && !!b.diff && !!displayPipe && !b.diff.busy; // the comparison runs on the turn of a diff variant (noProxy among them), one at a time
     const W = s.target.w, H = s.target.h; // scratch targets of exactly the low target's size (another size would change the clear / store work)
     if (!b.tgt || b.tgt.w !== W || b.tgt.h !== H) {
       if (b.tgt) { b.tgt.color.destroy(); b.tgt.depth.destroy(); }
@@ -619,6 +632,13 @@ export function createVolumeGpu({ device, THREE, f16 = false, onTargetFreed = nu
       b.tgt = { w: W, h: H, color: mk(), depth: mk() }; b.tgt.colorView = b.tgt.color.createView(); b.tgt.depthView = b.tgt.depth.createView();
     }
     const enc = device.createCommandEncoder();
+    if (custom) { // a variant that draws itself (registerShadowEncoder): it gets the scratch target of the frame's size and the begin / end timestamps; null = no program for this frame (the caller steps past it)
+      let made;
+      try {
+        made = custom({ device, enc, target: b.tgt, eyes: s.eyes, snap: s, ubufOf, overrides: spec.overrides || null, tsw: { querySet: b.qs, beginningOfPassWriteIndex: 2 * sl, endOfPassWriteIndex: 2 * sl + 1 }, tswBegin: { querySet: b.qs, beginningOfPassWriteIndex: 2 * sl }, tswEnd: { querySet: b.qs, endOfPassWriteIndex: 2 * sl + 1 } });
+      } catch (e) { b.failed.push(spec.name + ': ' + String(e?.message ?? e).slice(0, 160)); made = null; }
+      if (made === null || made === false) return null;
+    } else {
     const pass = enc.beginRenderPass({ timestampWrites: { querySet: b.qs, beginningOfPassWriteIndex: 2 * sl, endOfPassWriteIndex: 2 * sl + 1 }, colorAttachments: [
       { view: b.tgt.colorView, loadOp: 'clear', storeOp: 'store', clearValue: { r: 0, g: 0, b: 0, a: 0 } },
       { view: b.tgt.depthView, loadOp: 'clear', storeOp: 'store', clearValue: { r: 0, g: 0, b: 0, a: 0 } },
@@ -634,6 +654,7 @@ export function createVolumeGpu({ device, THREE, f16 = false, onTargetFreed = nu
       for (const sc of e.scissors) { pass.setScissorRect(sc[0], sc[1], sc[2], sc[3]); pass.draw(36); }
     });
     pass.end();
+    }
     enc.resolveQuerySet(b.qs, 2 * sl, 2, b.resolve, 256 * sl); enc.copyBufferToBuffer(b.resolve, 256 * sl, b.slots[sl].buf, 0, 16);
     b.slots[sl].busy = true;
     let diffTotal = 0;
@@ -648,7 +669,7 @@ export function createVolumeGpu({ device, THREE, f16 = false, onTargetFreed = nu
         { view: b.tgt2.colorView, loadOp: 'clear', storeOp: 'store', clearValue: { r: 0, g: 0, b: 0, a: 0 } },
         { view: b.tgt2.depthView, loadOp: 'clear', storeOp: 'store', clearValue: { r: 0, g: 0, b: 0, a: 0 } },
       ] });
-      on.setPipeline(pipeline); on.setVertexBuffer(0, boxBuf);
+      on.setPipeline(displayPipe); on.setVertexBuffer(0, boxBuf);
       s.eyes.forEach((e, i) => {
         device.queue.writeBuffer(ubufOf(7 + i), 0, s.ab[i]);
         on.setBindGroup(0, s.bgOn[i]); on.setViewport(e.vx, e.vy, e.vw, e.vh, 0, 1); diffTotal += e.vw * e.vh;
@@ -666,13 +687,16 @@ export function createVolumeGpu({ device, THREE, f16 = false, onTargetFreed = nu
       enc.clearBuffer(d.cnt);
       let cw = 1, ch = 1; for (const e of s.eyes) { cw = Math.max(cw, e.vx + e.vw); ch = Math.max(ch, e.vy + e.vh); } // only the part the passes drew (the scratch targets are the largest size now; both are cleared, so outside it they agree)
       const cp = enc.beginComputePass(); cp.setPipeline(d.pipe); cp.setBindGroup(0, d.group); cp.dispatchWorkgroups(Math.ceil(Math.min(W, cw) / 8), Math.ceil(Math.min(H, ch) / 8)); cp.end();
-      enc.copyBufferToBuffer(d.cnt, 0, d.rb, 0, 4);
+      enc.copyBufferToBuffer(d.cnt, 0, d.rb, 0, 16);
       d.busy = true;
     }
     device.queue.submit([enc.finish()]);
-    if (wantsDiff) { // delivered through the same callback as the timings: ('proxyDiff', pixels that differ, pixels compared)
-      const d = b.diff;
-      d.rb.mapAsync(GPUMapMode.READ).then(() => { const n = new Uint32Array(d.rb.getMappedRange().slice(0))[0]; d.rb.unmap(); d.busy = false; try { b.onShadow?.('proxyDiff', n, diffTotal); } catch { /* the page's callback */ } }).catch(() => { d.busy = false; });
+    if (wantsDiff) { // delivered through the same callback as the timings: ('proxyDiff' | 'diff:<name>', pixels that differ, pixels compared), then the largest differences and the pixels whose colour differs
+      const d = b.diff, diffName = spec.name === 'noProxy' ? 'proxyDiff' : 'diff:' + spec.name;
+      d.rb.mapAsync(GPUMapMode.READ).then(() => {
+        const a = new Uint32Array(d.rb.getMappedRange().slice(0)); d.rb.unmap(); d.busy = false;
+        try { b.onShadow?.(diffName, a[0], diffTotal); b.onShadow?.('diffMax:' + spec.name, a[1], a[2]); b.onShadow?.('diffColor:' + spec.name, a[3], 1); } catch { /* the page's callback */ }
+      }).catch(() => { d.busy = false; });
     }
     rec.shadowed = true;
     const p = { name: spec.name, shadow: null, low: rec.lowMs, done: false, cb: b.onShadow };
@@ -687,19 +711,32 @@ export function createVolumeGpu({ device, THREE, f16 = false, onTargetFreed = nu
     if (p.low !== null) finPair(p);
     return true;
   };
-  // the counting probe: eye = { mvp, origin, lightOff } of the 64 x 64 window (the caller made the matrix); resolves the Uint32Array (64 x 64 x COUNTER_FIELDS.length: COUNTER_FIELDS per pixel, 0 where nothing was covered) or null
-  const probeCounters = async (u, eye, variant, rec = null) => { // rec = the frame record just closed (markFrame): the frame after it has no gap sample, as after a shadow pass
+  // the counting probe: eye = { mvp, origin, lightOff } of the 64 x 64 window (the caller made the matrix); resolves the Uint32Array (64 x 64 x COUNTER_FIELDS.length: COUNTER_FIELDS per pixel, 0 where nothing was covered) or null.
+  // tile = where the window lies in the low pass's region { sx, sy, ox, oy, w, h } (a probe pixel p reads the display's tile of the region pixel floor(p * (sx, sy)) + (ox, oy); w, h = the region's size: outside it there is no tile). With it, and while the frame's low pass used the pre-pass
+  // (the snapshot of this frame, rec the same), the probe is made twice from the same frame: the run WITHOUT the pre-pass (proxyOn 0, tA read from the display's tiles for the to-tA count) is the result, as the probe always was (the upper bound), and the run WITH the display's tiles
+  // (what the display marches) is delivered through onShadow as ('probeOn:<kind>', counters, 64) (the kind is the caller's: opts.kind). mode 'off' / 'on' = only that run (the 'on' result is then the one returned), 'both' (default). Without tiles there is one run, the old one.
+  const probeCounters = async (u, eye, variant, rec = null, tile = null, opts = null) => { // rec = the frame record just closed (markFrame): the frame after it has no gap sample, as after a shadow pass
     const b = bd, pr = b?.probe;
     if (!pr || pr.busy) return null;
     const pipeline = b.pipes.get(vkey({ ...b.variant, counters: true }));
     if (!pipeline || vkey(variant) !== vkey(b.variant)) return null;
+    const pxTex = tile && b.snap.px?.tex && (!rec || b.snap.rec === rec) && b.snap.target ? b.snap.px.tex : null; // the tiles of the frame the window was cut from; none = the frame's low pass did not use the pre-pass (or it is not this frame's)
+    const mode = !pxTex ? 'off' : opts?.mode === 'on' || opts?.mode === 'off' ? opts.mode : 'both';
     pr.busy = true;
     try {
       if (rec) rec.shadowed = true;
-      drawPass(pr.target, [{ x: 0, y: 0, w: BD_PROBE, h: BD_PROBE, mvp: eye.mvp, origin: eye.origin, lightOff: eye.lightOff }], u, variant, 6, null, null,
-        { timed: false, pipeline, group1: pr.group, before: enc => enc.clearBuffer(pr.cnt), after: enc => enc.copyBufferToBuffer(pr.cnt, 0, pr.rb, 0, BD_PROBE_BYTES) });
-      await pr.rb.mapAsync(GPUMapMode.READ);
-      const out = new Uint32Array(pr.rb.getMappedRange().slice(0)); pr.rb.unmap();
+      const cfg = new Float32Array(COUNTER_CFG_BINDING.floats);
+      if (pxTex) cfg.set([tile.sx, tile.sy, tile.ox, tile.oy, tile.w, tile.h, 1, 0]);
+      device.queue.writeBuffer(pr.cfg, 0, cfg);
+      const run = (r, on) => { // one pass of the window into the probe's own target and the run's own buffer; submitted at once
+        drawPass(pr.target, [{ x: 0, y: 0, w: BD_PROBE, h: BD_PROBE, mvp: eye.mvp, origin: eye.origin, lightOff: eye.lightOff, pxOrg: [0, 0] }], u, variant, 6, pxTex && !on ? { proxyOn: 0 } : null, null,
+          { timed: false, pipeline, group1: r.group, pxTex, before: enc => enc.clearBuffer(r.cnt), after: enc => enc.copyBufferToBuffer(r.cnt, 0, r.rb, 0, BD_PROBE_BYTES) });
+        return r.rb.mapAsync(GPUMapMode.READ).then(() => { const out = new Uint32Array(r.rb.getMappedRange().slice(0)); r.rb.unmap(); return out; });
+      };
+      const first = run(mode === 'on' ? pr.run2 : pr, mode === 'on'), second = mode === 'both' ? run(pr.run2, true) : null; // (the unread one never leaves a rejected promise: see below; both submitted before either is read; each draw writes its own uniform copy before its own submit)
+      second?.catch(() => {});
+      const out = await first;
+      if (second) { const on = await second; try { b.onShadow?.('probeOn:' + (opts?.kind ?? 'whole'), on, BD_PROBE); } catch { /* the page's callback */ } }
       return out;
     } finally { pr.busy = false; }
   };
@@ -825,6 +862,14 @@ export function createComposite({ THREE, halfExt = [1, 1, 1], device }) {
 // boxes = the covered rect of the box per eye (eyeMetrics: x0 y0 x1 y1, px of the eye image, y up; the whole image when the box reaches the eye).: a pass draws only that rect (and, for the centre, only its part inside
 // the centre rect) into a part of the pass's target of that size, in steps (bucketSize); without boxes the whole eye image, as before.: the two targets are made once, at the first draw (both eyes at the largest scale), and a region only changes
 // the part of them that is drawn and read.
+// ---- variants that draw themselves (the performance record's shadow passes) ----
+// A variant of docs/vr-perf-log.js BD_SPECS that a program text (abl) or a uniform value (overrides) cannot make (its own pipeline, bind group, extra compute passes) registers a function here under its table name:
+//   registerShadowEncoder(name, ({ device, enc, target, eyes, snap, ubufOf, overrides, tsw, tswBegin, tswEnd }) => ...)
+// It is called when the variant's turn comes, with the command encoder of the shadow pass (nothing is submitted by it), the scratch target of the low pass's size ({ w, h, color, depth, colorView, depthView }: rgba8, clear to 0 and draw the same region the low pass drew),
+// eyes = the snapshot's eyes ({ x, y, w, h, vx, vy, vw, vh, scissors } of the low pass; the frame's own uniforms are snap.ab[i], the bind groups of the display's uniforms snap.bgOn[i] with its tiles snap.px?.tex), and the timestamps of the pass: tsw = begin and end on ONE pass,
+// tswBegin on the first pass and tswEnd on the last when it draws more than one. It returns nothing (done), or null / false = no program for this frame (the caller steps past it); a throw is listed as a failure of the variant. The turn then compares the target with the display's own pass if the table entry says diff: true.
+const shadowEncoders = new Map();
+export function registerShadowEncoder(name, fn) { if (typeof fn === 'function') shadowEncoders.set(name, fn); else shadowEncoders.delete(name); }
 export function createVrVolumeRenderer({ THREE, device, f16 = false, halfExt = [1, 1, 1], onShader = null }) {
   const composite = createComposite({ THREE, halfExt, device });
   const volume = createVolumeGpu({ device, THREE, f16, onShader, onTargetFreed: t => composite.forget(t.color, t.depth) });
@@ -912,7 +957,9 @@ export function createVrVolumeRenderer({ THREE, device, f16 = false, halfExt = [
   };
   // the performance record's breakdown (see createVolumeGpu): begin(variant, onShadow) before, shadow(rec, spec) / probe(u, kind) while it records, end() after.
   // probe windows (left eye, 64 x 64 px): 'whole' = the eye's whole image shrunk into the window (the distribution of the work), 'native' = the centre of the region the low pass drew, at the pass's own pixel pitch (how the heavy pixels lie together)
+  let bdProbeMode = 'both'; // the counting probe's runs: 'both' (without the pre-pass, the result as always, and with the display's tiles, to the report), 'off' or 'on' (only that one)
   const breakdown = {
+    setProbeMode: m => { bdProbeMode = m === 'on' || m === 'off' ? m : 'both'; },
     begin: (variant, onShadow) => volume.beginBreakdown(variant, onShadow),
     end: () => volume.endBreakdown(),
     shadow: (rec, spec) => volume.shadowPass(rec, spec),
@@ -921,12 +968,15 @@ export function createVrVolumeRenderer({ THREE, device, f16 = false, halfExt = [
       const e0 = tmpEye[0];
       if (!e0.mvp || !e0.origin) return null;
       let mvp = e0.mvp;
+      const rg = bdLow.r; // where the window lies in the low pass's region (its pixel (x, y) is the region's (x - x0, y - y0)): the probe reads the display's tile of the pixel it stands for (vr-wgpu.js probeCounters)
+      let tile = rg ? { sx: bdLow.Wu / 64, sy: bdLow.Hu / 64, ox: 0 - rg[0], oy: 0 - rg[1], w: rg[2], h: rg[3] } : null; // whole: the eye's whole image shrunk into the window
       if (kind === 'native') {
         const r = bdLow.r; if (!r) return null;
         const wx0 = Math.max(0, Math.min(Math.max(0, bdLow.Wu - 64), Math.floor(r[0] + (r[2] - 64) / 2))), wy0 = Math.max(0, Math.min(Math.max(0, bdLow.Hu - 64), Math.floor(r[1] + (r[3] - 64) / 2)));
         mvp = regionMvp(bdMat, e0.mvp, regionClip({ x0: wx0, y0: wy0, x1: wx0 + 64, y1: wy0 + 64 }, bdLow.Wu, bdLow.Hu));
+        tile = { sx: 1, sy: 1, ox: wx0 - r[0], oy: wy0 - r[1], w: r[2], h: r[3] }; // the window's pixels are the low pass's own
       }
-      const counters = await volume.probeCounters(u, { mvp, origin: e0.origin, lightOff: e0.lightOff }, bdLow.variant, rec);
+      const counters = await volume.probeCounters(u, { mvp, origin: e0.origin, lightOff: e0.lightOff }, bdLow.variant, rec, tile, { kind, mode: bdProbeMode });
       return counters ? { kind, counters, w: 64, h: 64 } : null;
     },
   };
@@ -964,7 +1014,8 @@ export function createGxDiag({ now = () => performance.now(), store = (() => { t
   const t0 = now();
   const d = { stages: [], values: {}, counts: { xrFrames: 0, poses: 0, loop: 0, render: 0, rendered: 0, vol: 0 }, errors: [], dropped: 0 };
   const ms = () => Math.round(now() - t0);
-  const save = () => { try { store?.setItem(GX_DIAG_KEY, JSON.stringify(d)); } catch { /* private window / full */ } };
+  let saves = 0; // how many times the record was written to the store (the frame ring of docs/vr-bench.js reads it)
+  const save = () => { saves++; try { store?.setItem(GX_DIAG_KEY, JSON.stringify(d)); } catch { /* private window / full */ } };
   const stage = (name, info) => {
     if (d.stages.length >= maxStages) d.stages.splice(8, 1); // the first ones (the start) and the latest stay
     const s = { at: ms(), name }; if (info !== undefined) s.info = clip(typeof info === 'string' ? info : JSON.stringify(info), 300);
@@ -979,7 +1030,7 @@ export function createGxDiag({ now = () => performance.now(), store = (() => { t
     save();
   };
   const count = k => { d.counts[k] = (d.counts[k] | 0) + 1; };
-  return { d, stage, value, error, count, flush: save, ms };
+  return { d, stage, value, error, count, flush: save, ms, get saves() { return saves; } };
 }
 // the file name of the saved record: build number and local date / time (the same clock as the screenshot names), e.g. vrl-vr-gpu-diag-741-20261118-0915.txt
 export function gxDiagFileName(build, now = new Date()) {
@@ -1071,7 +1122,7 @@ export function gxEscapeHeld(sources) {
 // (a) when the escape (gxEscapeHeld) is held for escapeMs, (b) when stallFrames frames came after the renderer took the session without one completed main render
 // (counted in frames, not time: a long synchronous step brings no frames and is no stall). Before the renderer takes the session there is no layer and no frame comes (vr-view.js has a timer for that).
 // state(): { bound, rendered, binding, layer, ref }, read each frame.
-export function startGxHeartbeat({ session, diag, state, now = () => performance.now(), escapeMs = 2000, stallFrames = 720, onEnd = null }) {
+export function startGxHeartbeat({ session, diag, state, now = () => performance.now(), escapeMs = 2000, stallFrames = 720, onEnd = null, onFrame = null, saveOn = () => true }) { // saveOn(): false = skip the once-a-second write to localStorage (an isolation run of the comparison bench); the default writes as always
   let alive = true, lastSave = now(), escAt = null, inspected = false, lastRendered = -1, stall = 0, ending = false;
   const end = why => { if (ending) return; ending = true; diag.stage('auto-end', why); try { onEnd?.(why); } catch { /* the line is not worth a failure */ } try { session.end()?.catch?.(() => {}); } catch { /* ended */ } };
   const tick = (t, frame) => {
@@ -1083,11 +1134,12 @@ export function startGxHeartbeat({ session, diag, state, now = () => performance
     try { if (s.ref) pose = frame.getViewerPose(s.ref); } catch (e) { diag.error('pose', e); }
     if (pose) diag.count('poses');
     if (pose && s.bound && !inspected && s.binding && s.layer) { inspected = true; diag.value('subImages', gxFrameValues(s.binding, s.layer, pose.views)); diag.stage('first posed frame (sub images read)'); }
+    if (onFrame && pose && s.bound && s.binding && s.layer) { try { onFrame(frame, pose, s); } catch (e) { diag.error('frame-hook', e); } } // vr-wgpu-caps.js: the checks that run on the posed frames of the session's start
     if (gxEscapeHeld(session.inputSources)) { if (escAt === null) escAt = n; else if (n - escAt >= escapeMs) end('escape held'); } else escAt = null;
     const r = s.rendered | 0;
     if (r !== lastRendered) { lastRendered = r; stall = 0; } else if (s.bound) stall++;
     if (stall >= stallFrames) end(stall + ' frames without a completed main render');
-    if (n - lastSave >= 1000) { lastSave = n; diag.flush(); }
+    if (n - lastSave >= 1000) { lastSave = n; if (saveOn()) diag.flush(); }
   };
   try { session.requestAnimationFrame(tick); } catch (e) { diag.error('heartbeat', e); }
   return { stop() { alive = false; } };

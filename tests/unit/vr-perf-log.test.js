@@ -161,7 +161,7 @@ describe('the frame timeline columns: span / gap medians, oth, cpu / swd means',
   });
   it('wiring: the frame end (marker, cpu, swd) runs after the main render, swd on every 4th frame one at a time; span / gap are taken with the volume ms', () => {
     expect(vr).toContain("perfLog.add('render',performance.now()-rc0); // the CPU ms of renderer.render() (WebGPU: with gxRender's bookkeeping)\n  if(gx)gxFrameEnd(fa0);");
-    expect(vr).toContain("gx.vol?.volume.markFrame?.(gxMeasure())"); expect(vr).toContain("perfLog.add('cpu',t1-fa0)");
+    expect(vr).toContain("gx.vol?.volume.markFrame?.(gxMeasure()||ISO.state.span)"); expect(vr).toContain("perfLog.add('cpu',t1-fa0)");
     expect(vr).toContain("if(gxMeasure()&&!gxRec.on&&!gxSwdBusy&&(gxS.rendered&3)===2){gxSwdBusy=true;const fn=frameNo;gx.device.queue.onSubmittedWorkDone()");
     expect(vr).toContain("perfLog.sample('span',v)"); expect(vr).toContain("perfLog.sample('gap',v)");
   });

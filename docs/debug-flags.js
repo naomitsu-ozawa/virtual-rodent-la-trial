@@ -6,8 +6,10 @@ const SETTINGS_KEY='vrl.settings.v1';
 export const DEBUG_SWITCHES=[
  {id:'vrHighp',group:'light',store:'settings',when:'reload',label:'dbgVrPrec',note:'dbgVrPrecNote'},
  {id:'vrNoSkip',group:'light',store:'settings',when:'vr',label:'dbgVrNoSkip',note:'dbgVrNoSkipNote'}, // ON = the VR creep skip is off (it is on by default; the picture is identical, only the work differs)
+ {id:'gxWait3',group:'light',store:'settings',when:'vr',label:'dbgGxWait3',note:'dbgGxWait3Note'}, // ON = the WebGPU view waits 3 ms after the volume submit on every 8th frame (a diagnosis of when the browser sends the submit to the GPU; vr-wgpu-caps.js)
+ {id:'gxLayerUsage',group:'light',store:'settings',when:'vr',label:'dbgGxLayerUsage',note:'dbgGxLayerUsageNote'}, // ON = the WebGPU view's projection layer is made with a textureUsage (the 'trial launch'; the picture is the same; vr-wgpu-caps.js)
 ];
-export const DEBUG_SETTING_DEFAULTS={vrHighp:false,vrNoSkip:false};
+export const DEBUG_SETTING_DEFAULTS={vrHighp:false,vrNoSkip:false,gxWait3:false,gxLayerUsage:false};
 const ls=()=>{try{return globalThis.localStorage||null}catch{return null}};
 const objOf=t=>{try{const o=JSON.parse(t);return o&&typeof o==='object'&&!Array.isArray(o)?o:null}catch{return null}};
 // the stored value of a switch (without the URL), as a boolean

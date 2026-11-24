@@ -3,9 +3,9 @@
 // The maths of the pre-pass and its start are tested in vr-wgsl-proxy.test.js; the text of the passes in vr-breakdown.test.js / vr-wgpu.test.js.
 import { describe, it, expect, vi } from 'vitest';
 import * as THREEG from 'three/webgpu';
-import { uniformLayout, PROXY_FIELDS, PROXY, VOLUME_BINDINGS, proxyWgsl } from '../../docs/vr-wgsl-core.js';
-import { createVrVolumeRenderer } from '../../docs/vr-wgpu.js';
-import { BD_SPECS } from '../../docs/vr-perf-log.js';
+import { uniformLayout, PROXY_FIELDS, PROXY, VOLUME_BINDINGS, COUNTER_FIELDS, proxyWgsl } from '../../docs/vr-wgsl-core.js';
+import { createVrVolumeRenderer, registerShadowEncoder } from '../../docs/vr-wgpu.js';
+import { BD_SPECS, BD_VARIANTS, defineBdVariant } from '../../docs/vr-perf-log.js';
 
 // ---- the host, driven with a mock device ----
 const GPU_GLOBALS = () => {
@@ -31,7 +31,7 @@ const mockGpu = (script, { timestamps = true } = {}) => {
   device.createCommandEncoder = () => ({
     beginRenderPass: d => { const p = { d, pipeline: null, groups: {}, viewports: [], scissors: [], draws: 0 }; log.passes.push(p); log.cmds.push('pass'); return { setPipeline: x => { p.pipeline = x; }, setVertexBuffer() {}, setBindGroup: (i, g) => { p.groups[i] = g; }, setViewport: (...a) => p.viewports.push(a), setScissorRect: (...a) => p.scissors.push(a), draw: () => { p.draws++; }, end() {} }; },
     beginComputePass: d => { const p = { d, pipeline: null, groups: {}, dispatches: [], at: log.cmds.length }; log.computePasses.push(p); log.cmds.push('cpass'); return { setPipeline: x => { p.pipeline = x; }, setBindGroup: (i, g) => { p.groups[i] = g; }, dispatchWorkgroups: (...a) => p.dispatches.push(a), end() {} }; },
-    resolveQuerySet() {}, copyBufferToBuffer: (_s, _o, dst, _d, n) => { if (n === 16) dst.vals = script.shift(); log.cmds.push('copyB' + n); }, clearBuffer: () => log.cmds.push('clear'), copyTextureToBuffer() {}, finish: () => ({}),
+    resolveQuerySet() {}, copyBufferToBuffer: (_s, _o, dst, _d, n) => { if (n === 16 && !(_s.d.usage & 64)) dst.vals = script.shift(); log.cmds.push('copyB' + n); }, clearBuffer: () => log.cmds.push('clear'), copyTextureToBuffer() {}, finish: () => ({}),
   });
   return { device, log };
 };
@@ -148,12 +148,12 @@ describe('host: the breakdown\'s shadow passes carry the low pass\'s pre-pass (p
     expect(r.breakdown.shadow(rec3, BD_SPECS.noProxy)).toBeNull(); expect(log.passes.length).toBe(np);
     r.dispose();
   }));
-  it('the noProxy turn: the shadow pass with proxyOn 0 (timed), then the same region with the snapshot\'s own uniforms (proxyOn 1, buffers of its own) into a second target, a compute that counts the differing pixels, 4 bytes read back and delivered as (proxyDiff, count, pixels compared)', withGpu(async () => {
+  it('the noProxy turn: the shadow pass with proxyOn 0 (timed), then the same region with the snapshot\'s own uniforms (proxyOn 1, buffers of its own) into a second target, a compute that counts the differing pixels (and the largest colour difference), 16 bytes read back and delivered as (proxyDiff, count, pixels compared), then (diffMax:noProxy, ..) and (diffColor:noProxy, ..)', withGpu(async () => {
     const { device, log } = mockGpu([[1_000_000n, 3_000_000n], [3_000_000n, 13_000_000n], [13_100_000n, 13_200_000n], [20_000_000n, 28_000_000n]]);
     const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1] });
     const got = []; const res = await begin(r, (...a) => got.push(a)); expect(res.failed).toEqual([]);
-    const rb = log.buffers.find(b => b.d.size === 4 && (b.d.usage & 32)), cnt = log.buffers.find(b => b.d.size === 4 && (b.d.usage & 64)); expect(rb && cnt).toBeTruthy();
-    rb.vals = [7n, 0n];
+    const rb = log.buffers.filter(b => b.d.size === 16 && (b.d.usage & 32)).at(-1), cnt = log.buffers.find(b => b.d.size === 16 && (b.d.usage & 64)); expect(rb && cnt).toBeTruthy();
+    rb.vals = [7n | (4n << 32n), 9n | (2n << 32n)]; // the 4 u32: 7 pixels differ, the largest colour channel difference 4, the largest packed depth byte difference 9, 2 pixels whose colour differs
     const rec = frameOf(r, proxyU()); const n0 = log.writes.length, np = log.passes.length, nc = log.computePasses.length;
     expect(r.breakdown.shadow(rec, BD_SPECS.noProxy)).toBe(true);
     const w = log.writes.slice(n0).filter(isMain); expect(w).toHaveLength(4); expect(w.map(x => x.data[at('proxyOn')])).toEqual([0, 0, 1, 1]); // off x 2 (buffers 4, 5), on x 2 (buffers 7, 8)
@@ -165,9 +165,10 @@ describe('host: the breakdown\'s shadow passes carry the low pass\'s pre-pass (p
     const cp = log.computePasses[nc]; expect(cp).toBeTruthy(); expect(cp.dispatches).toEqual([[Math.ceil(642 / 8), Math.ceil(240 / 8)]]); // the part the passes drew, not the scratch targets' size
     const ent = cp.groups[0].d.entries; expect(ent.map(e => e.binding)).toEqual([0, 1, 2, 3, 4]);
     expect(ent[0].resource.t).toBe(off.d.colorAttachments[0].view.t); expect(ent[1].resource.t).toBe(off.d.colorAttachments[1].view.t); expect(ent[2].resource.t).toBe(on.d.colorAttachments[0].view.t); expect(ent[3].resource.t).toBe(on.d.colorAttachments[1].view.t); expect(ent[4].resource.buffer).toBe(cnt);
-    expect(log.cmds.slice(-4)).toEqual(['clear', 'cpass', 'copyB4', 'submit']);
+    expect(log.cmds.slice(-4)).toEqual(['clear', 'cpass', 'copyB16', 'submit']);
     await settle();
     expect(got.filter(x => x[0] === 'proxyDiff')).toEqual([['proxyDiff', 7, 2 * 320 * 240]]);
+    expect(got.filter(x => x[0] === 'diffMax:noProxy')).toEqual([['diffMax:noProxy', 4, 9]]); expect(got.filter(x => x[0] === 'diffColor:noProxy')).toEqual([['diffColor:noProxy', 2, 1]]);
     expect(got.find(x => x[0] === 'proxyMs')).toEqual(['proxyMs', 2, 1]); // the compute pass of the frame drawn while recording: 2 ms
     expect(got.find(x => x[0] === 'noProxy')[1]).toBeCloseTo(8); expect(got.find(x => x[0] === 'noProxy')[2]).toBeCloseTo(10);
     // one comparison at a time: while its read-back is out the next noProxy turn is timed without it
@@ -179,6 +180,109 @@ describe('host: the breakdown\'s shadow passes carry the low pass\'s pre-pass (p
     const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1] });
     await begin(r, () => {}); const rec = frameOf(r, proxyU()); const nc = log.computePasses.length;
     expect(r.breakdown.shadow(rec, BD_SPECS.same)).toBe(true); expect(log.computePasses.length).toBe(nc);
+    r.dispose();
+  }));
+});
+
+describe('host: the pixel comparison of any variant (diff in the table), a variant that draws itself (registerShadowEncoder)', () => {
+  const withVariant = async (spec, fn) => { defineBdVariant(spec); try { await fn(); } finally { delete BD_SPECS[spec.name]; BD_VARIANTS.splice(BD_VARIANTS.indexOf(spec.name), 1); } };
+  const script = () => [[1_000_000n, 3_000_000n], [3_000_000n, 13_000_000n], [13_100_000n, 13_200_000n], [20_000_000n, 28_000_000n], [30_000_000n, 31_000_000n]];
+  it('a program-text variant with diff: the variant pass is timed with its own program, the display\'s own pass (the DISPLAY program, the snapshot\'s uniforms and tiles) goes to the second target, the compute counts and the numbers come as diff:<name>, diffMax:<name>, diffColor:<name>', withGpu(async () => {
+    await withVariant({ name: 'gen', abl: 'grad', diff: true }, async () => {
+      const { device, log } = mockGpu(script());
+      const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1] });
+      const got = []; await begin(r, (...a) => got.push(a));
+      const rb = log.buffers.filter(b => b.d.size === 16 && (b.d.usage & 32)).at(-1); rb.vals = [3n | (9n << 32n), 6n | (1n << 32n)]; // 3 px differ, max colour diff 9, max depth byte diff 6, 1 px colour differs
+      const rec = frameOf(r, proxyU()); const np = log.passes.length, nc = log.computePasses.length;
+      expect(r.breakdown.shadow(rec, BD_SPECS.gen)).toBe(true);
+      const [vari, ref] = log.passes.slice(np); expect(vari.d.timestampWrites).toBeTruthy(); expect(ref.d.timestampWrites).toBeUndefined();
+      expect(ref.pipeline).toBe(r.volume.pipeFor({ cls4: false, events: false })); expect(vari.pipeline).not.toBe(ref.pipeline); // the reference is the display program, not the variant's
+      expect(ref.viewports).toEqual(vari.viewports); expect(ref.scissors).toEqual(vari.scissors); expect(log.computePasses.length).toBe(nc + 1);
+      await settle();
+      expect(got.filter(x => x[0] === 'diff:gen')).toEqual([['diff:gen', 3, 2 * 320 * 240]]); expect(got.filter(x => x[0] === 'diffMax:gen')).toEqual([['diffMax:gen', 9, 6]]); expect(got.filter(x => x[0] === 'diffColor:gen')).toEqual([['diffColor:gen', 1, 1]]);
+      expect(got.some(x => x[0] === 'proxyDiff')).toBe(false); // noProxy's name is its own
+      r.dispose();
+    });
+  }));
+  it('a variant with diff in a frame whose low pass did not use the pre-pass still compares (the reference has bind groups of its own); a variant without diff makes no comparison; the table\'s noProxy has no program there (as before)', withGpu(async () => {
+    await withVariant({ name: 'ovr', overrides: { diag: 1 }, diff: true }, async () => {
+      const { device, log } = mockGpu(script());
+      const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1] });
+      const got = []; await begin(r, (...a) => got.push(a));
+      const rec = frameOf(r, {}); const np = log.passes.length, nc = log.computePasses.length; // u = {}: no pre-pass in the low pass
+      expect(r.breakdown.shadow(rec, BD_SPECS.ovr)).toBe(true); expect(log.passes.length).toBe(np + 2); expect(log.computePasses.length).toBe(nc + 1);
+      await settle(); expect(got.filter(x => x[0] === 'diff:ovr')).toHaveLength(1);
+      const rec2 = frameOf(r, {}); const nc2 = log.computePasses.length; expect(r.breakdown.shadow(rec2, BD_SPECS.same)).toBe(true); expect(log.computePasses.length).toBe(nc2);
+      const rec3 = frameOf(r, {}); expect(r.breakdown.shadow(rec3, BD_SPECS.noProxy)).toBeNull();
+      r.dispose();
+    });
+  }));
+  it('a registered encoder draws the variant: it is given the encoder, the scratch target and the timestamps and nothing else is drawn for it; its result is compared with the display\'s pass; null = no program, nothing submitted', withGpu(async () => {
+    await withVariant({ name: 'enc', diff: true }, async () => {
+      const { device, log } = mockGpu(script());
+      const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1] });
+      const got = []; await begin(r, (...a) => got.push(a));
+      const seen = [];
+      registerShadowEncoder('enc', ctx => { seen.push(ctx); ctx.enc.beginRenderPass({ timestampWrites: ctx.tsw, colorAttachments: [{ view: ctx.target.colorView }, { view: ctx.target.depthView }] }).end(); });
+      try {
+        const rec = frameOf(r, proxyU()); const np = log.passes.length, nsub = log.cmds.filter(c => c === 'submit').length;
+        expect(r.breakdown.shadow(rec, BD_SPECS.enc)).toBe(true);
+        expect(seen).toHaveLength(1); const c = seen[0]; expect(c.target.w).toBeGreaterThan(0); expect(c.target.colorView).toBeTruthy(); expect(c.eyes).toHaveLength(2); expect(c.tsw.beginningOfPassWriteIndex + 1).toBe(c.tsw.endOfPassWriteIndex); expect(c.tswBegin.endOfPassWriteIndex).toBeUndefined(); expect(c.tswEnd.beginningOfPassWriteIndex).toBeUndefined();
+        const [mine, ref] = log.passes.slice(np); expect(log.passes.length).toBe(np + 2); expect(mine.d.timestampWrites).toBe(c.tsw); expect(ref.pipeline).toBe(r.volume.pipeFor({ cls4: false, events: false })); // its own pass, then the display's reference
+        expect(log.cmds.filter(x => x === 'submit').length).toBe(nsub + 1);
+        await settle(); expect(got.filter(x => x[0] === 'diff:enc')).toHaveLength(1);
+        registerShadowEncoder('enc', () => null); const rec2 = frameOf(r, proxyU()); const np2 = log.passes.length, ns2 = log.cmds.filter(x => x === 'submit').length;
+        expect(r.breakdown.shadow(rec2, BD_SPECS.enc)).toBeNull(); expect(log.cmds.filter(x => x === 'submit').length).toBe(ns2); expect(log.passes.length).toBe(np2);
+        registerShadowEncoder('enc', () => { throw new Error('boom'); }); expect(r.breakdown.shadow(rec2, BD_SPECS.enc)).toBeNull(); expect(log.cmds.filter(x => x === 'submit').length).toBe(ns2);
+      } finally { registerShadowEncoder('enc', null); }
+      r.dispose();
+    });
+  }));
+});
+
+describe('host: the counting probe with the display\'s pre-pass tiles', () => {
+  const script = () => [[1_000_000n, 3_000_000n], [3_000_000n, 13_000_000n], [13_100_000n, 13_200_000n]];
+  const cfgOf = w => Array.from(new Float32Array(w.data.buffer));
+  const cfgWrites = (log, n0) => log.writes.slice(n0).filter(w => w.data.length === 8);
+  it('both runs from the frame of the window: the run without the pre-pass (proxyOn 0, the tiles bound, the result) and the one with the display\'s tiles (proxyOn 1, the same tiles, delivered as probeOn:<kind>); each with its own buffer, the cfg says which tile each pixel reads', withGpu(async () => {
+    const { device, log } = mockGpu(script());
+    const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1] });
+    const got = []; await begin(r, (...a) => got.push(a));
+    const u = proxyU(), rec = frameOf(r, u); const tiles = log.textures.find(t => t.d.format === 'r32float' && t.d.size[0] === TILES.texCols);
+    const np = log.passes.length, n0 = log.writes.length, nCmd = log.cmds.length;
+    const res = await r.breakdown.probe(u, 'whole', rec);
+    expect(res.kind).toBe('whole'); expect(res.counters).toBeInstanceOf(Uint32Array); expect(res.counters.length).toBe(64 * 64 * COUNTER_FIELDS.length);
+    const [off, on] = log.passes.slice(np); expect(log.passes.length).toBe(np + 2);
+    const w = log.writes.slice(n0).filter(isMain); expect(w.map(x => x.data[at('proxyOn')])).toEqual([0, 1]);
+    expect(bind9(off.groups[0])).toBe(tiles); expect(bind9(on.groups[0])).toBe(tiles); // the display's tiles of this frame in both runs
+    expect(off.groups[1]).not.toBe(on.groups[1]); expect(off.d.timestampWrites).toBeUndefined(); expect(on.d.timestampWrites).toBeUndefined();
+    const cw = cfgWrites(log, n0); expect(cw).toHaveLength(1); expect(cfgOf(cw[0])).toEqual([5, 3.75, 0, 0, 320, 240, 1, 0]); // whole: the eye's 320 x 240 image in 64 x 64: a window pixel stands for 5 x 3.75 region pixels
+    const cmds = log.cmds.slice(nCmd); expect(cmds.filter(c => c === 'clear')).toHaveLength(2); expect(cmds.filter(c => c === 'copyB' + 64 * 64 * COUNTER_FIELDS.length * 4)).toHaveLength(2);
+    expect(got.filter(x => x[0] === 'probeOn:whole')).toHaveLength(1); expect(got.find(x => x[0] === 'probeOn:whole')[1]).toBeInstanceOf(Uint32Array); expect(got.find(x => x[0] === 'probeOn:whole')[2]).toBe(64);
+    const n1 = log.writes.length; await r.breakdown.probe(u, 'native', rec);
+    expect(cfgOf(cfgWrites(log, n1)[0])).toEqual([1, 1, 128, 88, 320, 240, 1, 0]); // native: the window (128, 88) of the 320 x 240 region at the region's own pixels
+    r.dispose();
+  }));
+  it('a frame whose low pass used no pre-pass, or a probe of another frame: one run as before, no tiles bound (cfg mode 0), nothing delivered as probeOn; the mode switch picks one run', withGpu(async () => {
+    const { device, log } = mockGpu(script());
+    const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1] });
+    const got = []; await begin(r, (...a) => got.push(a));
+    let rec = frameOf(r, {}), np = log.passes.length, n0 = log.writes.length;
+    const res = await r.breakdown.probe({}, 'whole', rec); expect(res.counters.length).toBe(64 * 64 * COUNTER_FIELDS.length); expect(log.passes.length).toBe(np + 1);
+    expect(cfgOf(cfgWrites(log, n0)[0])[6]).toBe(0); expect(got.some(x => x[0] === 'probeOn:whole')).toBe(false);
+    const u = proxyU(); const rec2 = frameOf(r, u); const other = frameOf(r, u); // the snapshot is of `other`: a probe with rec2 does not borrow its tiles
+    np = log.passes.length; await r.breakdown.probe(u, 'whole', rec2); expect(log.passes.length).toBe(np + 1);
+    r.breakdown.setProbeMode('off'); const rec4 = frameOf(r, u); np = log.passes.length; n0 = log.writes.length; await r.breakdown.probe(u, 'whole', rec4);
+    expect(log.passes.length).toBe(np + 1); expect(log.writes.slice(n0).filter(isMain).map(x => x.data[at('proxyOn')])).toEqual([0]);
+    r.breakdown.setProbeMode('on'); const rec5 = frameOf(r, u); np = log.passes.length; n0 = log.writes.length; const on = await r.breakdown.probe(u, 'whole', rec5);
+    expect(log.passes.length).toBe(np + 1); expect(log.writes.slice(n0).filter(isMain).map(x => x.data[at('proxyOn')])).toEqual([1]); expect(on.counters.length).toBe(64 * 64 * COUNTER_FIELDS.length); expect(other).toBeTruthy();
+    r.dispose();
+  }));
+  it('end() lets the second run\'s buffers and the cfg go with the others', withGpu(async () => {
+    const { device, log } = mockGpu(script());
+    const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1] });
+    await begin(r, () => {}); const big = log.buffers.filter(b => b.d.size === 64 * 64 * COUNTER_FIELDS.length * 4), cfg = log.buffers.filter(b => b.d.size === 32 && (b.d.usage & 4));
+    expect(big).toHaveLength(4); expect(cfg).toHaveLength(1); r.breakdown.end(); expect(big.every(b => b.destroyed)).toBe(true); expect(cfg[0].destroyed).toBe(true);
     r.dispose();
   }));
 });

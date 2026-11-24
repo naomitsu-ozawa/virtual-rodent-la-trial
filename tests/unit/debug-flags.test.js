@@ -10,13 +10,13 @@ const src = f => readFileSync(new URL('../../docs/' + f, import.meta.url), 'utf8
 
 describe('debug switch: VR 16-bit is the default; one switch goes back to 32 bit, one turns the creep skip off', () => {
   it('has the two switches, off by default, and they exist in the settings defaults', () => {
-    expect(DEBUG_SWITCHES.map(d => d.id)).toEqual(['vrHighp', 'vrNoSkip']);
+    expect(DEBUG_SWITCHES.map(d => d.id)).toEqual(['vrHighp', 'vrNoSkip', 'gxWait3', 'gxLayerUsage']);
     expect(debugFlag('vrNoSkip', mem())).toBe(false);
     expect(SETTINGS_DEFAULTS.vrNoSkip).toBe(false);
     expect(DEBUG_SWITCHES.find(d => d.id === 'vrNoSkip').when).toBe('vr'); // read when a VR session starts, no reload
     expect(debugFlag('vrHighp', mem())).toBe(false);
     expect(SETTINGS_DEFAULTS.vrHighp).toBe(false);
-    expect(DEBUG_SETTING_DEFAULTS).toEqual({ vrHighp: false, vrNoSkip: false });
+    expect(DEBUG_SETTING_DEFAULTS).toEqual({ vrHighp: false, vrNoSkip: false, gxWait3: false, gxLayerUsage: false });
   });
   it('reads the settings JSON; broken JSON and unknown ids are off', () => {
     expect(debugFlag('vrHighp', mem({ 'vrl.settings.v1': JSON.stringify({ vrHighp: true }) }))).toBe(true);
@@ -47,7 +47,7 @@ describe('debug switch: VR 16-bit is the default; one switch goes back to 32 bit
   it('reset goes back through setSetting', () => {
     const calls = {};
     resetDebugFlags((k, v) => { calls[k] = v; });
-    expect(calls).toEqual({ vrHighp: false, vrNoSkip: false });
+    expect(calls).toEqual({ vrHighp: false, vrNoSkip: false, gxWait3: false, gxLayerUsage: false });
   });
 });
 

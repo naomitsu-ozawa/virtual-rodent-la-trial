@@ -7,7 +7,7 @@ import * as THREEG from 'three/webgpu';
 import { WgslReflect } from 'wgsl_reflect/wgsl_reflect.module.js';
 import { volumeWgsl, ABLATIONS, COUNTER_FIELDS, uniformLayout, proxyWgsl, proxyDiffWgsl } from '../../docs/vr-wgsl-core.js';
 import { createVrVolumeRenderer, regionClip, regionMvp, gxShaderInfo } from '../../docs/vr-wgpu.js';
-import { createVolBreakdown, createPerfLog, perfReport, BD_VARIANTS, BD_SPECS, BD_PROBE_FIELDS, BD_NEAR_R } from '../../docs/vr-perf-log.js';
+import { createVolBreakdown, createPerfLog, perfReport, BD_VARIANTS, BD_SPECS, BD_PROBE_FIELDS, BD_NEAR_R, defineBdVariant } from '../../docs/vr-perf-log.js';
 
 const read = f => readFileSync(new URL('../../docs/' + f, import.meta.url), 'utf8');
 const vr = read('vr-view.js'), host = read('vr-wgpu.js');
@@ -150,20 +150,35 @@ describe('WGSL: the breakdown variants (abl, counters)', () => {
     const t = volumeWgsl({ counters: true });
     expect(t).toContain('@group(1) @binding(0) var<storage,read_write> cnt:array<u32>;');
     const r = new WgslReflect(t);
-    const g1 = r.getBindGroups()[1]; expect(g1).toHaveLength(1); expect(g1[0].name).toBe('cnt');
+    const g1 = r.getBindGroups()[1]; expect(g1).toHaveLength(2); expect(g1.map(x => x.name + ':' + x.binding)).toEqual(['cnt:0', 'cntCfg:1']); // the counts, and the window / tile mapping (a uniform)
     expect(t).not.toContain('discard;'); expect(base).toContain('discard;');
     expect(t).toContain('fn fsMain(in:VOut)->FOut{'); expect(t).toContain('@fragment fn fs(in:VOut)->FOut{');
     expect(t).toContain('(u32(in.pos.y)*CNT_W+u32(in.pos.x))*' + NF + 'u');
-    expect(COUNTER_FIELDS).toHaveLength(14); expect(BD_PROBE_FIELDS).toEqual(COUNTER_FIELDS);
+    expect(COUNTER_FIELDS).toHaveLength(18); expect(BD_PROBE_FIELDS).toEqual(COUNTER_FIELDS);
     for (const x of ['gIters+=1u', 'gCreep+=1u', 'gJumps+=1u', 'gSkipRd+=1u', 'gClsRd+=1u', 'gRefRd+=1u', 'gGradRd+=6u', 'gOut=1u', 'gOut=3u', 'gOut=4u']) expect(t, x).toContain(x);
     // the approach counts: read from dd before the jumpOn override (so a run without jumps still measures the field), at the first sample within 4 / 8 / 16; the display text has none of it
     expect(t).toContain('cntNear(dd);if(u.jumpOn==0){dd=0.0;}\n  chk=dd<2.7;'); expect(t).toContain('if(gN4==0u&&dd<=4.0){gN4=gIters;gJ4=gJumps;}'); expect(t).toContain('if(gN8==0u&&dd<=8.0){gN8=gIters;gJ8=gJumps;}'); expect(t).toContain('if(gN16==0u&&dd<=16.0){gN16=gIters;gJ16=gJumps;}');
-    expect(t).toContain('cnt[b+8u]=gN4;cnt[b+9u]=gJ4;cnt[b+10u]=gN8;cnt[b+11u]=gJ8;cnt[b+12u]=gN16;cnt[b+13u]=gJ16;'); expect(COUNTER_FIELDS.slice(8)).toEqual(['near4Steps', 'near4Jumps', 'near8Steps', 'near8Jumps', 'near16Steps', 'near16Jumps']);
+    expect(t).toContain('cnt[b+8u]=gN4;cnt[b+9u]=gJ4;cnt[b+10u]=gN8;cnt[b+11u]=gJ8;cnt[b+12u]=gN16;cnt[b+13u]=gJ16;'); expect(COUNTER_FIELDS.slice(8, 14)).toEqual(['near4Steps', 'near4Jumps', 'near8Steps', 'near8Jumps', 'near16Steps', 'near16Jumps']);
     expect(base).not.toContain('cntNear'); expect(base).not.toContain('gN4');
     expect(t.split('gClsRd+=1u').length - 1).toBe(2); expect(t.split('gRefRd+=1u').length - 1).toBe(2);
     expect(r.entry.fragment.map(e => e.name)).toEqual(['fs']);
   });
   it('the display variants have no storage binding and no group 1', () => { expect(base).not.toContain('@group(1)'); expect(new WgslReflect(base).getBindGroups()).toHaveLength(1); });
+  it('counters: the place counts (toTA, last-near per R) and the pre-pass start of the twin: the tile comes from cntTileA (the window mapping), tA is read in every run, only proxyOn == 1 moves k; the display text has none of it; a text without the start (sections) keeps toTA 0', () => {
+    for (const cls4 of [false, true]) {
+      const t = volumeWgsl({ cls4, events: false, counters: true });
+      expect(t).toContain('struct CntCfg{sc:vec4<f32>,lim:vec4<f32>};'); expect(t).toContain('@group(1) @binding(1) var<uniform> cntCfg:CntCfg;');
+      expect(t).toContain('iters++;gIters+=1u;if(k<gKs){gA+=1u;}');
+      expect(t).toContain('let tA=cntTileA(in.pos.xy);'); expect(t).not.toContain('textureLoad(proxyTex,(vec2<i32>(in.pos.xy)-u.proxyOrg)/8,0)'); // the display's lookup is replaced
+      expect(t).toContain('if(cntCfg.lim.z>0.5){gKs=select(kS,1073741824,em);}'); expect(t).toContain('if(u.proxyOn==1){if(em){emptyRay=true;}else{k=kS;}}');
+      expect(t).toContain('if(dd<=4.0){gL4=gIters;}if(dd<=8.0){gL8=gIters;}if(dd<=16.0){gL16=gIters;}');
+      expect(t).toContain('cnt[b+14u]=gA;cnt[b+15u]=gL4;cnt[b+16u]=gL8;cnt[b+17u]=gL16;'); expect(COUNTER_FIELDS.slice(14)).toEqual(['toTA', 'last4Steps', 'last8Steps', 'last16Steps']);
+      // the tile lookup outside the region or without tiles is tA 0 (the ray starts as it would without the pre-pass), the lookup itself is the display's tile = pixel / 8
+      expect(t).toContain('if(cntCfg.lim.z<0.5){return 0.0;}'); expect(t).toContain('if(q.x<0||q.y<0||q.x>=i32(cntCfg.lim.x)||q.y>=i32(cntCfg.lim.y)){return 0.0;}'); expect(t).toContain('return textureLoad(proxyTex,q/8,0).r;');
+      expect(volumeWgsl({ cls4, events: false })).toContain('textureLoad(proxyTex,(vec2<i32>(in.pos.xy)-u.proxyOrg)/8,0)'); expect(volumeWgsl({ cls4, events: false })).not.toContain('cntTileA');
+    }
+    const ev = volumeWgsl({ events: true, counters: true }); expect(ev).not.toContain('cntTileA(in.pos.xy)'); expect(ev).toContain('gKs'); expect(new WgslReflect(ev).getBindGroups()[1]).toHaveLength(2);
+  });
   it('an unknown abl is an error, and the header comment of a variant says which it is', () => {
     expect(() => volumeWgsl({ abl: 'nope' })).toThrow();
     expect(volumeWgsl({ abl: 'grad' })).toContain('events=true abl=grad counters=false');
@@ -291,6 +306,93 @@ describe('the collector (createVolBreakdown)', () => {
   });
 });
 
+describe('the collector: the steps of a ray in four places (to tA / approach / near / tail), the probe with and without the pre-pass', () => {
+  const F = Object.fromEntries(BD_PROBE_FIELDS.map((k, i) => [k, i]));
+  // one pixel: outcome, steps, the pre-pass's start count A, and per R (4, 8, 16) the first / last sample within R (0 = none)
+  const px = (c, i, { oc, I, A = 0, first = [0, 0, 0], last = [0, 0, 0] }) => { const o = i * NF; c[o + F.outcome] = oc; c[o + F.iters] = I; c[o + F.toTA] = A; [4, 8, 16].forEach((R, j) => { c[o + F['near' + R + 'Steps']] = first[j]; c[o + F['last' + R + 'Steps']] = last[j]; }); };
+  const win = (rays, n = 64) => { const c = new Uint32Array(n * NF); rays.forEach((r, i) => px(c, i, r)); return c; }; // n pixels (the window's 8 x 8 here, 64 x 64 = 4096 where the host's own size is meant)
+  const sum4 = o => o.toTA + o.approach + o.near + o.tail;
+  it('the five places a ray can lie in: all before the start, a near stretch before the start, the usual one, a ray that never came near, one that ended near', () => {
+    const vb = createVolBreakdown();
+    // hit rays (each alone in its window): [I, A, first, last] -> toTA / approach / near / tail
+    const cases = [
+      [{ oc: 1, I: 20, A: 5, first: [9, 9, 9], last: [20, 20, 20] }, [5, 3, 12, 0]], // after the start: approach 9 - 1 - 5, near 20 - 9 + 1
+      [{ oc: 1, I: 25, A: 10, first: [4, 4, 4], last: [15, 15, 15] }, [10, 0, 5, 10]], // the first near sample lay before the start: near counts from the start
+      [{ oc: 1, I: 12, A: 12, first: [2, 2, 2], last: [3, 3, 3] }, [12, 0, 0, 0]], // everything before the start (an empty ray in the run without the pre-pass)
+      [{ oc: 1, I: 7, A: 2 }, [2, 5, 0, 0]], // never within R: all steps after the start are approach
+      [{ oc: 1, I: 30, A: 0, first: [10, 10, 10], last: [18, 18, 18] }, [0, 9, 9, 12]],
+    ];
+    for (const [ray, want] of cases) {
+      const v = createVolBreakdown(); expect(v.addProbe('whole', win([ray]), 8, 8)).toBe(true);
+      const hit = v.summary().splits.off.whole[0].hit; expect([hit.toTA, hit.approach, hit.near, hit.tail]).toEqual(want); expect(sum4(hit)).toBe(ray.I); expect(hit.n).toBe(1); expect(hit.never).toBe(ray.first?.[0] ? 0 : 1);
+    }
+    expect(vb.summary().splits.off.whole).toBeNull(); // no window: no split
+  });
+  it('the four places add up to the steps of every covered hit / pass ray, per R, and a mixed window is averaged per outcome (accstop and discard are left out)', () => {
+    const rays = []; let seed = 7; const rnd = n => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) % n;
+    for (let i = 0; i < 64; i++) { const I = 1 + rnd(200), A = rnd(I + 1), f = [0, 0, 0], l = [0, 0, 0]; for (let j = 0; j < 3; j++) if (rnd(3)) { f[j] = 1 + rnd(I); l[j] = f[j] + rnd(I - f[j] + 1); } rays.push({ oc: 1 + (i & 1) + (i % 7 === 0 ? 2 : 0), I, A, first: f, last: l }); }
+    const vb = createVolBreakdown(); vb.addProbe('native', win(rays), 8, 8);
+    const sp = vb.summary().splits.off.native;
+    for (const x of sp) for (const k of ['hit', 'pass']) { const o = x[k]; const mine = rays.filter(r => r.oc === (k === 'hit' ? 1 : 2)); expect(o.n).toBe(mine.length); expect(sum4(o)).toBeCloseTo(mine.reduce((a, r) => a + r.I, 0) / mine.length, 9); }
+  });
+  it('the run with the display\'s tiles comes through add(probeOn:<kind>) into its own aggregate; the run without stays the probe of before (probes.whole, the lines of the probe), the on run starts at the pre-pass\'s start (to tA 0)', () => {
+    const vb = createVolBreakdown();
+    expect(vb.add('probeOn:whole', win([{ oc: 1, I: 14, A: 0, first: [3, 3, 3], last: [14, 14, 14] }], 4096), 64)).toBe(true); // (name, counters, 64: the host's own call)
+    expect(vb.add('probeOn:bogus', win([], 4096), 64)).toBe(false);
+    vb.addProbe('whole', win([{ oc: 1, I: 20, A: 6, first: [9, 9, 9], last: [20, 20, 20] }]), 8, 8);
+    const s = vb.summary(), on = s.splits.on.whole[0].hit, off = s.splits.off.whole[0].hit;
+    expect([on.toTA, on.approach, on.near, on.tail]).toEqual([0, 2, 12, 0]); expect([off.toTA, off.approach, off.near, off.tail]).toEqual([6, 2, 12, 0]);
+    expect(s.probes.whole.windows).toBe(1); expect(s.probes.whole.steps.mean).toBe(20); expect(s.probesOn.whole.windows).toBe(1); expect(s.probesOn.whole.steps.mean).toBe(14);
+    const t = vb.lines(), at = k => t.find(l => l.startsWith(k));
+    expect(at('probe whole: windows 1')).toMatch(/steps mean\/p50\/p95\/max 20\.0\/20\/20\/20/); // the existing line: the run without
+    expect(at('probe split whole off (steps per ray: to tA / approach / near / tail): R=4 hit 6.0/2.0/12.0/0.0 (n 1, never 0%) | pass -')).toBeTruthy();
+    expect(at('probe split whole on (the same, with the display\'s tiles): R=4 hit 0.0/2.0/12.0/0.0 (n 1, never 0%) | pass -')).toBeTruthy();
+    expect(at('probe split native off')).toMatch(/- \(no window\)$/);
+    expect(at('probe steps per ray, hit | pass: whole off 20.0 | - (windows 1) · whole on 14.0 | - (windows 1)')).toBeTruthy();
+  });
+  it('the notes say what the places mean and what the diff lines are (English)', () => {
+    const log = createPerfLog({ kind: 'webgpu', hz: 72 }); log.vb = createVolBreakdown(); log.vb.seconds = 1;
+    const t = perfReport(log, {}).split('\n'), notes = t.filter(l => l.startsWith('note: ')).join('\n');
+    expect(notes).toMatch(/probe split = the steps \(loop iterations\) of a ray in four places/); expect(notes).toMatch(/to tA = the iterations before the start the pre-pass gives the ray/); expect(notes).toMatch(/The tail of the pass rays is what stopping a ray early/);
+    expect(notes).toMatch(/diff px <variant>/); expect(notes).toMatch(/max colour channel diff/); expect(notes).not.toMatch(/[぀-ヿ一-鿿]/);
+  });
+});
+
+describe('the table of variants: one place to add one (defineBdVariant), the pixel comparison of any variant', () => {
+  const withVariant = (spec, fn) => { defineBdVariant(spec); try { fn(); } finally { delete BD_SPECS[spec.name]; BD_VARIANTS.splice(BD_VARIANTS.indexOf(spec.name), 1); } };
+  it('a defined variant is in BD_VARIANTS (the order it was defined in) and BD_SPECS, appears in the report as an "abl" line and in the collector; a name is defined once; the nine stay as they were', () => {
+    expect(BD_VARIANTS).toEqual(['same', 'box', 'simple', 'noGrad', 'noRefine', 'noShade', 'withCreep', 'noJump', 'noProxy']);
+    withVariant({ name: 'spec', abl: 'grad', diff: true }, () => {
+      expect(BD_VARIANTS.at(-1)).toBe('spec'); expect(BD_SPECS.spec).toEqual({ name: 'spec', abl: 'grad', diff: true });
+      expect(() => defineBdVariant({ name: 'spec' })).toThrow(/already defined/); expect(() => defineBdVariant({})).toThrow();
+      const vb = createVolBreakdown(); expect(vb.add('spec', 4, 5)).toBe(true); expect(vb.summary().variants.spec.n).toBe(1); expect(vb.lines().some(l => l.startsWith('abl spec n=1 '))).toBe(true);
+    });
+    expect(BD_VARIANTS).toHaveLength(9); expect(BD_SPECS.spec).toBeUndefined();
+    expect(BD_SPECS.noProxy.diff).toBe(true); expect(BD_SPECS.noJump.diff).toBeUndefined(); expect(BD_SPECS.same.diff).toBeUndefined();
+  });
+  it('a diff variant counts comparisons: max pixels of one, pixels compared, comparisons with a differing pixel, the largest colour channel and depth byte difference; the line says so', () => {
+    withVariant({ name: 'coarse', abl: 'grad', diff: true }, () => {
+      const vb = createVolBreakdown();
+      expect(vb.summary().diffs.coarse).toEqual({ comparisons: 0, withDifference: 0, maxDiffPx: 0, pixels: 0, maxColorDiff: 0, maxDepthByteDiff: 0, maxColorPx: 0 });
+      expect(vb.lines().find(l => l.startsWith('diff px coarse: '))).toBe('diff px coarse: - (no comparison made: the variant had no pass in a frame, or no read-back)');
+      for (const [n, tot] of [[0, 1000], [12, 1000], [0, 900]]) expect(vb.add('diff:coarse', n, tot)).toBe(true);
+      expect(vb.add('diffMax:coarse', 3, 40)).toBe(true); expect(vb.add('diffMax:coarse', 1, 80)).toBe(true); expect(vb.add('diffColor:coarse', 5, 1)).toBe(true); expect(vb.add('diffColor:coarse', 2, 1)).toBe(true);
+      expect(vb.summary().diffs.coarse).toEqual({ comparisons: 3, withDifference: 1, maxDiffPx: 12, pixels: 1000, maxColorDiff: 3, maxDepthByteDiff: 80, maxColorPx: 5 });
+      expect(vb.lines().find(l => l.startsWith('diff px coarse: '))).toBe('diff px coarse: max 12 of 1000 px · 1 of 3 comparisons had a differing pixel · max colour channel diff 3 of 255 · max packed depth byte diff 80 of 255 · colour differs in up to 5 px');
+      expect(vb.add('diff:nobody', 1, 1)).toBe(false); expect(vb.add('diff:same', 1, 1)).toBe(false); expect(vb.add('diff:coarse', -1, 10)).toBe(false); expect(vb.add('diff:coarse', 1, 0)).toBe(false); expect(vb.add('diffMax:same', 1, 1)).toBe(false);
+    });
+  });
+  it('noProxy: the proxy diff line and the summary of before come out in the same form (proxyDiff is its own count; the new numbers are in the diff px line)', () => {
+    const vb = createVolBreakdown();
+    expect(vb.lines().find(l => l.startsWith('proxy diff px: '))).toBe('proxy diff px: - (no comparison made: the low pass did not use the pre-pass, or no read-back) · pre-pass compute median -');
+    for (const [n, tot] of [[0, 640], [0, 640], [3, 700]]) vb.add('proxyDiff', n, tot);
+    vb.add('diffMax:noProxy', 2, 7); vb.add('proxyMs', 0.8, 1);
+    expect(vb.summary().proxy).toEqual({ comparisons: 3, withDifference: 1, maxDiffPx: 3, pixels: 700, computeMs: 0.8, computeN: 1 });
+    expect(vb.lines().find(l => l.startsWith('proxy diff px: '))).toBe('proxy diff px: max 3 of 700 px · 1 of 3 comparisons had a differing pixel · pre-pass compute median 0.80 ms (1)');
+    expect(vb.lines().find(l => l.startsWith('diff px noProxy: '))).toBe('diff px noProxy: max 3 of 700 px · 1 of 3 comparisons had a differing pixel · max colour channel diff 2 of 255 · max packed depth byte diff 7 of 255 · colour differs in up to 0 px');
+  });
+});
+
 // ---- the host, driven with a mock device ----
 const GPU_GLOBALS = () => {
   vi.stubGlobal('GPUShaderStage', { VERTEX: 1, FRAGMENT: 2, COMPUTE: 4 }); vi.stubGlobal('GPUBufferUsage', { VERTEX: 1, COPY_DST: 2, UNIFORM: 4, QUERY_RESOLVE: 8, COPY_SRC: 16, MAP_READ: 32, STORAGE: 64 });
@@ -315,7 +417,7 @@ const mockGpu = (script, { timestamps = true } = {}) => {
   device.createCommandEncoder = () => ({
     beginRenderPass: d => { const p = { d, pipeline: null, groups: {}, viewports: [], scissors: [], draws: 0 }; log.passes.push(p); log.cmds.push('pass'); return { setPipeline: x => { p.pipeline = x; }, setVertexBuffer() {}, setBindGroup: (i, g) => { p.groups[i] = g; }, setViewport: (...a) => p.viewports.push(a), setScissorRect: (...a) => p.scissors.push(a), draw: () => { p.draws++; }, end() {} }; },
     beginComputePass: d => { const p = { d, pipeline: null, groups: {}, dispatches: [], at: log.cmds.length }; log.computePasses.push(p); log.cmds.push('cpass'); return { setPipeline: x => { p.pipeline = x; }, setBindGroup: (i, g) => { p.groups[i] = g; }, dispatchWorkgroups: (...a) => p.dispatches.push(a), end() {} }; },
-    resolveQuerySet() {}, copyBufferToBuffer: (_s, _o, dst, _d, n) => { if (n === 16) dst.vals = script.shift(); log.cmds.push('copyB' + n); }, clearBuffer: () => log.cmds.push('clear'), copyTextureToBuffer() {}, finish: () => ({}),
+    resolveQuerySet() {}, copyBufferToBuffer: (_s, _o, dst, _d, n) => { if (n === 16 && !(_s.d.usage & 64)) dst.vals = script.shift(); log.cmds.push('copyB' + n); }, clearBuffer: () => log.cmds.push('clear'), copyTextureToBuffer() {}, finish: () => ({}),
   });
   return { device, log };
 };
@@ -533,8 +635,8 @@ describe('vr-view.js wiring (static)', () => {
   const rec = vr.slice(a, b);
   it('the shadow pass is thrown after markFrame, in phase 1 of 4 frames; the probe in phase 3 (never in the shadow\'s frame) once a second, whichever way the menu is', () => {
     expect(a).toBeGreaterThan(0); expect(b).toBeGreaterThan(a);
-    expect(vr.indexOf('frec=gx.vol?.volume.markFrame?.(gxMeasure())')).toBeGreaterThan(0);
-    expect(vr.indexOf('gxRecFrame(frec,t1)')).toBeGreaterThan(vr.indexOf('frec=gx.vol?.volume.markFrame?.(gxMeasure())'));
+    expect(vr.indexOf('frec=gx.vol?.volume.markFrame?.(gxMeasure()||ISO.state.span)')).toBeGreaterThan(0); // ISO.state.span: the comparison bench's frame marker (false by default)
+    expect(vr.indexOf('gxRecFrame(frec,t1)')).toBeGreaterThan(vr.indexOf('frec=gx.vol?.volume.markFrame?.(gxMeasure()||ISO.state.span)'));
     expect(rec).toContain('const ph=gxS.rendered&3;'); expect(rec).toContain('if(ph===1){try{if(gx.vol.breakdown.shadow(frec,BD_SPECS[BD_VARIANTS[gxRec.vi%BD_VARIANTS.length]])!==false)gxRec.vi++}');
     expect(rec).toContain('else if(ph===3&&tn-gxRec.probeAt>=1000){'); expect(rec).not.toMatch(/ui\.open|ui\.tab/);
     expect(vr.indexOf('gxFrameEnd(fa0);\n  if(shotRequested')).toBeGreaterThan(0); // after the main render and the record's render line, as before
@@ -542,8 +644,8 @@ describe('vr-view.js wiring (static)', () => {
   it('while it records: no swd, no vlat, no wake sample; rows carry rec 1 (WebGPU only); the first press only starts it; the benchmarks are not started with it and it does not start with them', () => {
     expect(vr).toContain('if(gxMeasure()&&!gxRec.on&&!gxSwdBusy&&(gxS.rendered&3)===2){'); expect(vr).toContain('if(gxMeasure()&&!gxRec.on&&!gxSwdBusy&&(gxS.rendered&3)===3){'); expect(vr).toContain('if(gxMeasure()&&!gxRec.on&&fa0-gxWakeAt<1000)');
     expect(vr).toContain('...(gx?{rec:(gxRec.on||gxRec.sec)?1:0,');
-    expect(vr).toContain("if(!gx?.vol||!gx.ready||gxRec.phase!=='idle'||bench.active||anBench.active||!mesh||!material)return;");
-    expect(vr).toContain("const startAnBench=()=>{if(anBench.active||bench.active||!mesh||gxRec.phase==='prep'||gxRec.on)return;"); expect(vr).toContain("if(bench.active||!mesh||gxRec.phase==='prep'||gxRec.on)return;");
+    expect(vr).toContain("if(!gx?.vol||!gx.ready||gxRec.phase!=='idle'||bench.active||anBench.active||cmpBench.active||!mesh||!material)return;");
+    expect(vr).toContain("const startAnBench=()=>{if(anBench.active||bench.active||cmpBench.active||!mesh||gxRec.phase==='prep'||gxRec.on)return;"); expect(vr).toContain("if(bench.active||cmpBench.active||!mesh||gxRec.phase==='prep'||gxRec.on)return;"); // the comparison bench (vr-bench.js) is one more thing they do not start inside
   });
   it('it does not write the diagnostics setting and leaves stage marks for its start and end; the 30 s run on the frame clock', () => {
     expect(rec).not.toContain('settings.diag'); expect(rec).not.toMatch(/saveSettings|applyQuality|setTimeout/);
@@ -565,7 +667,7 @@ describe('vr-view.js wiring (static)', () => {
     expect(host).toContain('const lowDraw = volume.drawPass(low.target, low.eyes, u, vr, 0, null, null, { proxy: low.px });');
     expect(host).toContain('\n    if (volume.bdActive()) {');
     expect(host).toContain('for (const sc of e.scissors || [[e.x, e.y, e.w, e.h]]) { pass.setScissorRect(sc[0], sc[1], sc[2], sc[3]); pass.draw(36); }');
-    expect(host).toContain('const timed = o?.timed ?? !overrides;');
+    expect(host).toContain('const timed = (o?.timed ?? !overrides) && GX_SWITCH.timers;'); // GX_SWITCH.timers: the isolation run's switch (true by default)
     expect(vr).toContain('gx.vol.breakdown.begin(variant,'); expect(vr).toContain('if(gx){gxRec.gen++;gxRec.on=false;try{gx.vol?.dispose()}');
   });
 });
