@@ -123,8 +123,12 @@ export function foveaVerdict({ xr0, xr1, c0, c1 }) {
 }
 // the check as a per-frame machine: frame(xrFrame, pose) is called from the session's heartbeat (vr-wgpu.js startGxHeartbeat onFrame). It starts after `startAfter` posed frames, runs steps (foveation values, each
 // `skip` frames to settle then `samples` frames measured), puts the foveation back, writes rec.fovea and calls rec.publish(). Any failure stops it with the error in rec.fovea.
+// `done` (getter) = the check has ended (finished, unsupported, failed or aborted): the heartbeat reads the pose every frame until then (so the check ends within the first ~120 frames after the start, as it did when the heartbeat
+// called it every frame) and every GX_POSE_EVERY-th frame after. Measurement of the check itself (performance.now() and counters only): F.events = the start / each step / the end (or abort / failure) with the time and the
+// posed-frame number, rec.foveaDraws = the heavy draws submitted so far (the frame ring of vr-bench.js reads it as the column fv).
 export function createFoveaProbe({ device, binding, layer, rec, startAfter = 100, skip = 6, samples = 24, steps = [0, 1, 0, 1], iters = 96, ring = 4, now = () => performance.now() }) {
-  const F = rec.fovea = { state: 'waiting', initial: null, steps: [], error: null };
+  const F = rec.fovea = { state: 'waiting', initial: null, steps: [], error: null, events: [] };
+  const ev = (k, more = null) => { if (F.events.length < 64) F.events.push({ k, t: now(), seen: st.seen, draws: rec.foveaDraws | 0, ...more }); }; // the check's own timeline (a few entries per session)
   const st = { seen: 0, init: false, step: 0, inStep: 0, done: false, slot: 0, busy: new Array(ring).fill(false), pend: 0, finishing: false, scopeChecked: false };
   const per = steps.map(() => ({ xr: [], ctrl: [] }));
   let res = null, orig = null, lastW = null;
@@ -133,7 +137,7 @@ export function createFoveaProbe({ device, binding, layer, rec, startAfter = 100
   const setFov = v => { adopt(); layer.fixedFoveation = v; const rb = layer.fixedFoveation; lastW = typeof rb === 'number' ? rb : v; };
   const restore = () => { try { adopt(); if (orig !== null && typeof orig === 'number') { layer.fixedFoveation = orig; lastW = null; } } catch { /* gone */ } };
   const release = () => { const r = res; res = null; if (!r) return; for (const o of [r.qs, r.resolve, ...r.read, r.ubuf, r.ctrlTex]) { try { o?.destroy?.(); } catch { /* gone */ } } };
-  const fail = e => { if (st.done && F.error) return; st.done = true; F.state = 'failed'; F.error = capsErrText(e); restore(); if (!st.pend) release(); try { rec.publish(); } catch { /* the record is not worth a failure */ } };
+  const fail = e => { if (st.done && F.error) return; st.done = true; F.state = 'failed'; F.error = capsErrText(e); ev('fail'); restore(); if (!st.pend) release(); try { rec.publish(); } catch { /* the record is not worth a failure */ } };
   const finalize = () => {
     if (F.state === 'done') return;
     const by = v => { const idx = steps.map((s, i) => (s === v ? i : -1)).filter(i => i >= 0); return { xr: phaseStats(idx.flatMap(i => per[i].xr)), ctrl: phaseStats(idx.flatMap(i => per[i].ctrl)) }; };
@@ -141,15 +145,16 @@ export function createFoveaProbe({ device, binding, layer, rec, startAfter = 100
     F.result = { fov0: lo.xr, fov1: hi.xr, ctrl0: lo.ctrl, ctrl1: hi.ctrl, ratio: lo.xr.ms > 0 ? r2(hi.xr.ms / lo.xr.ms) : null };
     F.verdict = foveaVerdict({ xr0: lo.xr.ms, xr1: hi.xr.ms, c0: lo.ctrl.ms, c1: hi.ctrl.ms });
     F.state = 'done'; release();
+    ev('result');
     try { rec.publish(); } catch { /* none */ }
   };
   const init = (subs, pose) => {
     st.init = true;
     const f0 = layer.fixedFoveation;
     F.initial = f0 ?? null;
-    if (typeof f0 !== 'number') { st.done = true; F.state = 'unsupported'; F.verdict = 'layer.fixedFoveation is ' + (f0 === undefined ? 'undefined' : String(f0)) + ' (the headset reports no fixed foveation for this layer)'; rec.publish(); return false; }
+    if (typeof f0 !== 'number') { st.done = true; ev('unsupported'); F.state = 'unsupported'; F.verdict = 'layer.fixedFoveation is ' + (f0 === undefined ? 'undefined' : String(f0)) + ' (the headset reports no fixed foveation for this layer)'; rec.publish(); return false; }
     orig = f0;
-    if (!device.features?.has?.('timestamp-query')) { st.done = true; F.state = 'unsupported'; F.verdict = 'not measured: the device has no timestamp-query'; rec.publish(); return false; }
+    if (!device.features?.has?.('timestamp-query')) { st.done = true; ev('unsupported'); F.state = 'unsupported'; F.verdict = 'not measured: the device has no timestamp-query'; rec.publish(); return false; }
     const colorTex = subs[0].colorTexture, vp = subs[0].viewport;
     const d0 = (typeof subs[0].getViewDescriptor === 'function' ? subs[0].getViewDescriptor() : null) || {}, format = d0.format || colorTex.format; // the pass renders into a view of this format
     F.format = format; F.textureFormat = colorTex.format; F.viewport = vp ? [vp.x, vp.y, vp.width, vp.height] : null; F.eyes = subs.length;
@@ -172,6 +177,8 @@ export function createFoveaProbe({ device, binding, layer, rec, startAfter = 100
     device.popErrorScope().then(err => { if (err) fail(err); }, () => {});
     F.state = 'running'; F.iters = iters;
     setFov(steps[0]);
+    ev('init', { step: 0, fov: steps[0] });
+    try { rec.publish?.(); } catch { /* the record is not worth a failure */ } // the record shows 'running' from here (and the events: the start)
     return true;
   };
   const eyeView = (sub, i) => { const d = (typeof sub.getViewDescriptor === 'function' ? sub.getViewDescriptor() : null) || {}, t = sub.colorTexture, multi = (t.depthOrArrayLayers || 1) > 1; return t.createView({ ...d, dimension: '2d', arrayLayerCount: 1, baseArrayLayer: multi ? (d.baseArrayLayer ?? i) : 0 }); };
@@ -202,6 +209,7 @@ export function createFoveaProbe({ device, binding, layer, rec, startAfter = 100
         enc.resolveQuerySet(res.qs, base, 8, res.resolve, slot * 256);
         enc.copyBufferToBuffer(res.resolve, slot * 256, res.read[slot], 0, 64);
         device.queue.submit([enc.finish()]);
+        rec.foveaDraws = (rec.foveaDraws | 0) + 1; // the heavy draws submitted (the frame ring's column fv)
         if (scoped) { open = false; device.popErrorScope().then(err => { if (err) fail(err); }, () => {}); }
         st.busy[slot] = true; st.pend++;
         const buf = res.read[slot];
@@ -215,12 +223,12 @@ export function createFoveaProbe({ device, binding, layer, rec, startAfter = 100
       if (++st.inStep >= skip + samples) { // this step is complete
         F.steps.push({ fov: steps[st.step], read: layer.fixedFoveation });
         st.step++; st.inStep = 0;
-        if (st.step >= steps.length) { st.done = true; st.finishing = true; restore(); F.readBack = F.steps.map(s => s.read); if (st.pend === 0) finalize(); }
-        else setFov(steps[st.step]);
+        if (st.step >= steps.length) { st.done = true; st.finishing = true; ev('end'); restore(); F.readBack = F.steps.map(s => s.read); if (st.pend === 0) finalize(); }
+        else { setFov(steps[st.step]); ev('step', { step: st.step, fov: steps[st.step] }); }
       }
     } catch (e) { if (open) { try { device.popErrorScope().catch(() => {}); } catch { /* none */ } } fail(e); }
   };
-  return { frame, get done() { return st.done; }, abort: () => { if (!st.done) { st.done = true; restore(); F.state = F.state === 'waiting' ? 'not run' : F.state; if (!st.pend) release(); } } };
+  return { frame, get done() { return st.done; }, abort: () => { if (!st.done) { st.done = true; ev('abort'); restore(); F.state = F.state === 'waiting' ? 'not run' : F.state; if (!st.pend) release(); } } };
 }
 
 // ---- 4. the wait after the submit ----
@@ -308,6 +316,7 @@ export function formatCapsSummary(s, { subImages = null } = {}) {
       L.push('    off-screen control (same draw, no foveation possible): in the foveation 0 frames ' + p(r.ctrl0) + ' · in the foveation 1 frames ' + p(r.ctrl1));
       if (F.readBack) L.push('    layer.fixedFoveation read back after each step: ' + F.readBack.join(', '));
     }
+    if (F.events?.length) { const t0 = F.events[0].t; L.push('    timeline (t = ms from the first entry' + (Number.isFinite(t0) ? ', first at ' + Math.round(t0) + ' ms on the page clock' : '') + '; seen = frames the check was called for; draws = heavy draws submitted so far): ' + F.events.map(e => e.k + (e.step !== undefined ? ' ' + e.step : '') + (e.fov !== undefined ? ' fov=' + e.fov : '') + ' t=+' + Math.round(e.t - t0) + ' seen=' + e.seen + ' draws=' + e.draws).join(' · ')); }
     if (F.changedByApp) L.push('    the app set the foveation ' + F.changedByApp + ' time(s) during the check (its own value was put back at the end; the phases around it are not clean)');
     if (F.verdict) L.push('    verdict: ' + F.verdict);
   }
@@ -324,7 +333,7 @@ export function formatCapsSummary(s, { subImages = null } = {}) {
 }
 // the one place the results are gathered: s = { adapter, layer, fovea, wait }; publish() rewrites the single entry in the diagnostic record
 export function createCapsRecord(diag, key = 'device caps') {
-  const rec = { adapter: null, layer: null, fovea: null, wait: null, key };
+  const rec = { adapter: null, layer: null, fovea: null, wait: null, foveaDraws: 0, key };
   // set in the record only (the heartbeat's once-a-second flush saves it): diag.value() would write localStorage in the middle of a timing check
   rec.publish = () => { try { if (diag.d?.values) diag.d.values[key] = formatCapsSummary(rec, { subImages: diag.d.values.subImages }); } catch { /* the record is not worth a failure */ } };
   return rec;
@@ -338,11 +347,14 @@ export function startGxCaps(diag, d) {
   return rec;
 }
 // the per-frame hook of the session's heartbeat (vr-wgpu.js startGxHeartbeat onFrame): the trial layer's sub image once, then the foveation check. Nothing here throws into the heartbeat's own work.
+// hook.done (getter) = the foveation check has ended (finished / unsupported / failed / aborted); false until it exists. The heartbeat calls the hook every frame until then.
 export function capsFrameHook(rec, device, opts = {}) {
   let fov = null, trialDone = false;
-  return (frame, pose, s) => {
+  const hook = (frame, pose, s) => {
+    if (!fov) fov = createFoveaProbe({ device, binding: s.binding, layer: s.layer, rec, ...opts }); // rec.fovea is there (state 'waiting') before the first publish: the record never says 'not run' for a check that is about to run
     if (!trialDone) { trialDone = true; try { probeTrialSubImage(rec, s.binding, pose.views); rec.publish(); } catch { /* none */ } }
-    if (!fov) fov = createFoveaProbe({ device, binding: s.binding, layer: s.layer, rec, ...opts });
     fov.frame(frame, pose);
   };
+  Object.defineProperty(hook, 'done', { get: () => !!fov && fov.done });
+  return hook;
 }

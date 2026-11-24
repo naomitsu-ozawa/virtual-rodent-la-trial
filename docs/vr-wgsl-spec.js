@@ -7,7 +7,7 @@
 // What is NOT specialised (continuous values, flags that are tests on a continuous value, and per-pass values): stepSize, texDims, halfExt, calib, voxelSize, boxC / boxH (the content box's size; its test boxH.x > 0 reads a float that is also used in arithmetic),
 // segA x y z (thresholds, alpha), segC rgb, segM, ctShade / ctShadeBright / ctShadeContrast / ctShadeRange, cutPlanes, sliceWindow / sliceAir / sliceTint / sliceOpacity / sliceSegOnly (tests on floats that the slice code also uses as values; section variant only),
 // proxyOn / proxyOrg (differ per pass and per eye), mvp / origin / lightOff (per eye and frame). A folded division / pow / normalize could round differently from the run-time one.
-import { volumeWgsl, uniformLayout } from './vr-wgsl-core.js?v=20261124-build759';
+import { volumeWgsl, uniformLayout } from './vr-wgsl-core.js?v=20261124-build760';
 
 // the code constant of the display switch (the diagnostics' / the page's choice comes later): false = the display always uses the generic program, true = the display uses the specialised program of its
 // current settings as soon as it is made (the generic program draws until then), see createVolumeGpu({ specDisplay }) in docs/vr-wgpu.js

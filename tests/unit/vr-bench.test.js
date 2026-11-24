@@ -7,7 +7,7 @@ import * as THREEG from 'three/webgpu';
 import {
   BENCH_SCENES, BENCH_SEGMENTS, BENCH_SEGMENT_MS, BENCH_MOTION, BENCH_SPEED, BENCH_HOLDER_SCALE, BENCH_DISCARD_MS, BENCH_PLANS, ISO_MODES, RING_SIZE, RING_SLOW_MS, BENCH_COUNT, quantile, statsOf,
   benchPose, benchWarp, benchSegmentsOf, quatYXZ, quatAngleDeg,
-  createBenchScript, createFrameRing, createLongTaskWatcher, createIsolation, createCompareBench, tapPerfLog, benchReportLines, ringReportLines, readHeapBytes,
+  createBenchScript, createFrameRing, createLongTaskWatcher, createIsolation, createCompareBench, tapPerfLog, benchReportLines, ringReportLines, leftoverReportLines, readHeapBytes, RING_SAMPLES,
 } from '../../docs/vr-bench.js';
 import { MAX_LONG_M, NORM_LONG } from '../../docs/vr-real-scale.js';
 import { createPerfLog, perfReport } from '../../docs/vr-perf-log.js';
@@ -372,6 +372,75 @@ describe('the frame ring', () => {
     expect(L.find(l => /^\s+12 /.test(l))).toMatch(/F\s*$/); expect(L.find(l => /^\s+13 /.test(l))).toMatch(/P\s*$/); // the render scale changed at 12, the periphery scale at 13
     expect(L.filter(l => /^\s+\d+ /.test(l))).toHaveLength(7);
     const none = ringReportLines(createFrameRing(), {}); expect(none[0]).toContain('0 of 0 frames'); expect(none.some(l => l.includes('0 window(s)'))).toBe(true);
+  });
+  it('fv / pz / pms are running totals (the ring keeps the differences); ml / gd / vol / lag / ph are the frame\'s own values (NaN = none)', () => {
+    const ring = createFrameRing(); const c = { fv: 0, pz: 0, pms: 0 };
+    ring.frame(0, { ...c });
+    Object.assign(c, { fv: 1, pz: 1, pms: 0.4 }); ring.frame(14, { ...c, ml: 2.5, gd: -1.5, vol: 6, lag: 3, ph: 1 });
+    ring.frame(28, { ...c }); // nothing in this interval
+    Object.assign(c, { fv: 3, pz: 2, pms: 0.9 }); ring.frame(42, { ...c });
+    const [a, b, d] = ring.records();
+    expect(a).toMatchObject({ fv: 1, pz: 1, ml: 2.5, gd: -1.5, vol: 6, lag: 3, ph: 1 }); expect(a.pms).toBeCloseTo(0.4, 5);
+    expect(b).toMatchObject({ fv: 0, pz: 0, pms: 0 }); expect(Number.isNaN(b.ml)).toBe(true); expect(Number.isNaN(b.gd)).toBe(true); expect(Number.isNaN(b.lag)).toBe(true);
+    expect(d.fv).toBe(2); expect(d.pz).toBe(1); expect(d.pms).toBeCloseTo(0.5, 5);
+  });
+  it('the session table counts ALL frames (not only the ring\'s): phase x frames since the check\'s last draw (0..15, then none) x measured frame (mp > 0) -> frames / over 21 / over 30 ms', () => {
+    const ring = createFrameRing({ size: 50 }); ring.frame(0, {}); let t = 0, fv = 0, maps = 0;
+    const step = (dt, { draw = false, mp = false, ph = 0 } = {}) => { t += dt; if (draw) fv++; if (mp) maps++; ring.frame(t, { fv, maps, ph }); };
+    step(14, { draw: true }); // since 0
+    step(25); // since 1, over 21
+    for (let k = 2; k <= 14; k++) step(14); // since 2..14
+    step(35, { mp: true }); // since 15, measured, over 30 (and over 21)
+    step(14); step(14); // since none (16 and later)
+    step(14, { draw: true, ph: 1 }); step(22, { ph: 1 }); step(14, { ph: 2, mp: true });
+    for (let k = 0; k < 400; k++) step(14, { ph: 2 }); // far beyond the ring's size (50)
+    expect(ring.count).toBe(1 + 1 + 13 + 1 + 2 + 3 + 400 + 0 - 0 + 0); // 421
+    const S = ring.session(), cell = (ph, since, mp) => S.cells.find(c => c.ph === ph && c.since === since && c.mp === mp);
+    expect(cell(0, 0, 0)).toEqual({ ph: 0, since: 0, mp: 0, n: 1, o21: 0, o30: 0 });
+    expect(cell(0, 1, 0)).toMatchObject({ n: 1, o21: 1, o30: 0 });
+    expect(cell(0, 15, 1)).toMatchObject({ n: 1, o21: 1, o30: 1 });
+    expect(cell(0, 16, 0)).toMatchObject({ n: 2, o21: 0, o30: 0 }); // 'none'
+    expect(cell(1, 0, 0)).toMatchObject({ n: 1 }); expect(cell(1, 1, 0)).toMatchObject({ n: 1, o21: 1 });
+    expect(cell(2, 2, 1)).toMatchObject({ n: 1 }); expect(cell(2, 3, 0).n).toBe(1); expect(cell(2, 15, 0).n).toBe(1); expect(cell(2, 16, 0).n).toBe(400 - 13);
+    expect(S.cells.reduce((n, c) => n + c.n, 0)).toBe(421); expect(ring.records()).toHaveLength(50);
+    expect(S.phases.map(p => p.name)).toEqual(['pre', 'rec', 'post']);
+  });
+  it('per phase: median and p95 of dt, cov, vol, ml, gd, lag (exact when few); a very long session keeps a uniform sample, and the count seen', () => {
+    const ring = createFrameRing(); ring.frame(0, {}); let t = 0;
+    for (let i = 1; i <= 100; i++) { t += 14; ring.frame(t, { ph: 0, cov: 1000 + i, vol: i % 2 ? 4 : 8, ml: i <= 10 ? i : NaN, gd: i === 5 ? -3 : NaN, lag: i }); }
+    const p = ring.session().phases[0];
+    expect(p.dt).toMatchObject({ n: 100, used: 100, med: 14, p95: 14 }); expect(p.cov).toMatchObject({ n: 100, med: 1050.5, p95: 1095 }); expect(p.vol).toMatchObject({ n: 100, med: 6, p95: 8 });
+    expect(p.ml).toMatchObject({ n: 10, med: 5.5, p95: 10 }); expect(p.gd).toMatchObject({ n: 1, med: -3, p95: -3 }); expect(p.lag).toMatchObject({ n: 100, med: 50.5, p95: 95 });
+    expect(ring.session().phases[1].dt.n).toBe(0); expect(ring.session().phases[1].dt.med).toBeNull();
+    const big = createFrameRing(); big.frame(0, {}); let u = 0; const N = RING_SAMPLES * 3;
+    for (let i = 0; i < N; i++) { u += 14; big.frame(u, { cov: i }); }
+    const q = big.session().phases[0].cov; expect(q.n).toBe(N); expect(q.used).toBe(RING_SAMPLES); expect(Math.abs(q.med - N / 2)).toBeLessThan(N * 0.05); expect(Math.abs(q.p95 - N * 0.95)).toBeLessThan(N * 0.05);
+    const big2 = createFrameRing(); big2.frame(0, {}); let w = 0; for (let i = 0; i < N; i++) { w += 14; big2.frame(w, { cov: i }); } expect(big2.session().phases[0].cov.med).toBe(q.med); // the same run, the same sample
+  });
+  it('the text: the session table with the phases and the since rows, the new columns in the windows, and the leftovers of the recording', () => {
+    const ring = createFrameRing(); ring.frame(1000, {}); let t = 1000, fv = 0, maps = 0;
+    for (let i = 0; i < 40; i++) { t += i === 12 ? 45 : 14; if (i === 10) fv++; if (i === 11) maps++; ring.frame(t, { fv, maps, pz: i, pms: i * 0.2, ph: i > 30 ? 2 : i > 20 ? 1 : 0, cov: 5e5, vol: 7, ml: i === 12 ? 4.5 : NaN, gd: i === 12 ? 9.25 : NaN, lag: i === 12 ? 11.5 : 2 }); }
+    const L = ringReportLines(ring, { sinceMs: 1000 });
+    expect(L.some(l => l.includes('foveation check x frame intervals, all 40 frames of the session'))).toBe(true);
+    expect(L.some(l => l.startsWith('ph    since'))).toBe(true);
+    // the draw is in interval 10 (since 0), the read-back started in interval 11 (since 1, measured), the 45 ms interval is 12 (since 2, not measured)
+    const cells = ring.session().cells, c2 = cells.find(c => c.ph === 0 && c.since === 2); expect(c2).toMatchObject({ mp: 0, n: 1, o21: 1, o30: 1 }); expect(cells.find(c => c.ph === 0 && c.since === 1)).toMatchObject({ mp: 1, n: 1, o21: 0 });
+    expect(L.find(l => /^pre\s+2\s+\|/.test(l))).toMatch(/\|\s+1\s+1\s+1 \|/); expect(L.find(l => /^pre\s+1\s+\|/.test(l))).toBeTruthy(); expect(L.find(l => /^pre\s+none\s+\|/.test(l))).toBeTruthy();
+    expect(L.find(l => l.startsWith('ph pre: median / p95'))).toMatch(/cov 500000 \/ 500000 \(n 21\) · vol 7 \/ 7/); expect(L.find(l => l.startsWith('ph rec:'))).toBeTruthy(); expect(L.find(l => l.startsWith('ph post:'))).toBeTruthy();
+    const head = L.find(l => /^\s+n\s+t\s+dt\s/.test(l)); expect(head).toMatch(/\bfv\s+pz\s+pm\s+ml\s+gd\s+lag\s+flag/);
+    const w = L.find(l => /^\s+12 /.test(l)); expect(w).toContain('45.0'); expect(w).toContain('4.5'); expect(w).toContain('9.3'); expect(w).toContain('11.5');
+    const E = leftoverReportLines([{ at: 'prepare', t: 2000, every: 8, slots: 24, slotsBusy: 0, bd: false, track: false, groups: 3, pipes: 5, ubufs: 4, heap: 52428800 }, { at: 'freed', t: 33000, every: 8, slots: 24, slotsBusy: 2, bd: true, track: true, groups: 40, pipes: 5, ubufs: 9, heap: 0 }], { sinceMs: 1000 });
+    expect(E[0]).toContain('2 dump(s)'); expect(E[1]).toContain('prepare'); expect(E[1]).toContain('t 1.00 s'); expect(E[1]).toContain('timestamps every 8'); expect(E[1]).toContain('breakdown object no'); expect(E[1]).toContain('JS heap 50.0 MB');
+    expect(E[2]).toContain('slots busy 2 of 24'); expect(E[2]).toContain('breakdown object yes'); expect(E[2]).toContain('trackTimestamp true'); expect(E[2]).toContain('bind groups 40'); expect(E[2]).toContain('uniform buffers 9'); expect(E[2]).toContain('JS heap -');
+    expect(leftoverReportLines([])[0]).toContain('no recording in this session');
+  });
+  it('vr-view.js feeds the new columns, switches the phase when the recording is prepared / its resources are let go, and dumps the leftovers three times', () => {
+    expect(vrSrc).toContain('{const fvN=gxCaps?gxCaps.foveaDraws|0:0,pzN=gxPose?gxPose.poseReads:0,pmN=gxPose?gxPose.poseMs:0;c.fv=benchLag.fv;c.pz=benchLag.pz;c.pms=benchLag.pms;benchLag.fv=fvN;benchLag.pz=pzN;benchLag.pms=pmN}c.ph=benchPh;'); // one frame late: the heartbeat's tick runs before this callback
+    expect(vrSrc).toContain('gx?.vol?.volume.takeGauges?.(benchG);c.ml=benchG.ml;c.gd=benchG.gd;c.vol=benchG.vol;c.lag=xrTs?fa0-xrTs:NaN;');
+    expect(vrSrc).toContain("gxRec.phase='prep';benchPh=1;gxRec.leftAt=0;gxLeftDump('prepare');");
+    expect(vrSrc).toContain("benchPh=2;gxLeftDump('freed');gxRec.leftAt=tn+10000}else if(gxRec.leftAt&&tn>=gxRec.leftAt){gxRec.leftAt=0;gxLeftDump('freed +10 s')}");
+    expect(vrSrc).toContain("if(benchPh===1){benchPh=2;gxLeftDump('freed (abort)')}"); expect(vrSrc).toContain('gxPose=gxHb?gxHb.stats:null;'); expect(vrSrc).toContain('leftoverReportLines(gxLeft,{sinceMs:benchT0})');
+    expect(vrSrc).toContain("gxLeft.push({at,t:performance.now(),...o,track:renderer.backend?.trackTimestamp,heap:readHeapBytes()})");
   });
   it('the long-task observer collects the tasks it is told of (the newest 300) and sums their overlap with an interval; unsupported = no tasks, no throw', () => {
     let cb = null; class PO { constructor(f) { cb = f; } observe() {} disconnect() {} }

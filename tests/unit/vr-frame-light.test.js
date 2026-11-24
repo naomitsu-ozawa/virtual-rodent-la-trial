@@ -326,3 +326,47 @@ describe('E1: what moved out of the frame callback (WebGPU session; the WebGL se
     expect(perfsrc).toMatch(/\['cpu', 6\]/); expect(perfsrc).toMatch(/\['pre', 6\]/);
   });
 });
+
+// ---- the measurements of the timestamp path (gauges the page takes once a frame; performance.now() and numbers only) ----
+describe('host gauges: ml (mapAsync latency), gd (GPU start gap minus CPU submit gap), vol, and the leftovers of the recording', () => {
+  const clock = () => { const c = { T: 0 }; vi.spyOn(performance, 'now').mockImplementation(() => c.T); return c; };
+  it('ml is the longest mapAsync (call to resolved) since the last take; gd compares the GPU start of two successive measured frames with their CPU submit times; vol is the frame\'s volume ms; a take clears them', withGpu(async () => {
+    const c = clock();
+    try {
+      const { device } = counted([[1_000_000n, 11_000_000n], [21_000_000n, 31_000_000n], [61_000_000n, 69_000_000n]]);
+      const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1] }); const out = { ml: 0, gd: 0, vol: 0 };
+      c.T = 100; frameOff(r, {}); c.T = 103; await settle();
+      expect(r.volume.takeGauges(out)).toBe(out); expect(out.ml).toBeCloseTo(3, 5); expect(out.vol).toBeCloseTo(10, 5); expect(Number.isNaN(out.gd)).toBe(true); // the first measured frame has nothing to compare with
+      r.volume.takeGauges(out); expect(Number.isNaN(out.ml) && Number.isNaN(out.gd) && Number.isNaN(out.vol)).toBe(true); // cleared by the take
+      c.T = 116; frameOff(r, {}); c.T = 121; await settle(); // GPU start 20 ms after the first, submitted 16 ms after it
+      r.volume.takeGauges(out); expect(out.ml).toBeCloseTo(5, 5); expect(out.gd).toBeCloseTo(4, 5); expect(out.vol).toBeCloseTo(10, 5);
+      c.T = 130; frameOff(r, {}); c.T = 130.5; await settle(); // GPU start 40 ms after the second, submitted 14 ms after it
+      r.volume.takeGauges(out); expect(out.gd).toBeCloseTo(26, 5); expect(out.ml).toBeCloseTo(0.5, 5); expect(out.vol).toBeCloseTo(8, 5);
+      r.dispose();
+    } finally { vi.restoreAllMocks(); }
+  }));
+  it('frames that are not timed give no gauge (one frame in 8): gd compares the successive MEASURED frames', withGpu(async () => {
+    const c = clock();
+    try {
+      const { device } = counted([[1_000_000n, 11_000_000n], [101_000_000n, 111_000_000n]]);
+      const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1] }); r.volume.setTimerEvery(8); const out = {};
+      for (let i = 0; i < 9; i++) { c.T = 1000 + i * 12; frameOff(r, {}); await settle(); }
+      r.volume.takeGauges(out); expect(out.gd).toBeCloseTo(100 - 96, 5); // frames 1 and 9: GPU 100 ms apart, CPU 96 ms apart
+      r.dispose();
+    } finally { vi.restoreAllMocks(); }
+  }));
+  it('leftovers(): the timer period, the busy slots, whether the breakdown exists, bind groups, pipelines and uniform buffers', withGpu(async () => {
+    const { device } = counted([[1_000_000n, 11_000_000n]], [0]); // the read-back stays pending: its slot stays in use
+    const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1] });
+    expect(r.volume.leftovers()).toMatchObject({ every: 1, slotsBusy: 0, bd: false, ubufs: 4 });
+    frameOff(r, {}); await settle(); const o = r.volume.leftovers();
+    expect(o.slotsBusy).toBe(1); expect(o.slots).toBeGreaterThan(1); expect(o.groups).toBeGreaterThan(0); expect(o.pipes).toBeGreaterThan(0);
+    r.volume.setTimerEvery(8); expect(r.volume.leftovers().every).toBe(8);
+    r.dispose();
+  }));
+  it('the sources: the gauges are numbers in a fixed object (no new promise or GPU command), the submit time is taken with performance.now()', () => {
+    expect(host).toContain('const gauge = { ml: NaN, gd: NaN, vol: NaN }'); expect(host).toContain('if (rec && rec.sub === null) rec.sub = performance.now();');
+    expect(host).toContain('const m0 = performance.now();'); expect(host).toContain('const ml = performance.now() - m0; if (!(ml <= gauge.ml)) gauge.ml = ml;');
+    expect(host).toContain('const stats = { poseReads: 0, poseMs: 0 };'); expect(host).toContain('onFrame.done === false');
+  });
+});

@@ -2,13 +2,13 @@
 // (the three.js Data3DTexture objects stay the holders of the data, a GPUTexture is made from one on first use and again when its version changes), the volume render pass per eye,
 // the offscreen targets (colour + depth packed in rgba8, both eyes side by side, reduced scale and the periphery target), and the composite material (three.js NodeMaterial, TSL) that
 // puts the offscreen image into the headset's frame with the volume's depth. Plain WebGPU; three.js (the WebGPU build) is passed in.
-import { volumeWgsl, uniformLayout, BOX_VERTICES, VOLUME_BINDINGS, COUNTER_FIELDS, ABLATIONS, COUNTER_CFG_BINDING, PROXY, PROXY_FIELDS, PROXY_BINDINGS, PROXY_DIFF_BINDINGS, proxyWgsl, proxyDiffWgsl } from './vr-wgsl-core.js?v=20261124-build759';
-import { FOVEA_K } from './vr-render-scale.js?v=20261124-build759';
-import { MARCH_VARIANTS, marchWgsl, createMarchHost } from './vr-wgpu-coarse-march.js?v=20261124-build759';
-import { createCoarseProxy } from './vr-wgpu-coarse-proxy.js?v=20261124-build759'; // the coarse distance grid and its pre-pass variants of the shadow pass (group 2)
-import { createCsShadow } from './vr-wgpu-cs.js?v=20261124-build759';
-import { createDirectApi, directRegion } from './vr-wgpu-direct.js?v=20261124-build759'; // the direct draw trial (the centre of the volume drawn straight into the eye image; off unless the diagnostic setting asks)
-import { createSpecPipelines, specSigOfPacked, SPEC_DISPLAY_DEFAULT } from './vr-wgsl-spec.js?v=20261124-build759'; // A4: the specialised program (override constants for the settings that do not change per frame)
+import { volumeWgsl, uniformLayout, BOX_VERTICES, VOLUME_BINDINGS, COUNTER_FIELDS, ABLATIONS, COUNTER_CFG_BINDING, PROXY, PROXY_FIELDS, PROXY_BINDINGS, PROXY_DIFF_BINDINGS, proxyWgsl, proxyDiffWgsl } from './vr-wgsl-core.js?v=20261124-build760';
+import { FOVEA_K } from './vr-render-scale.js?v=20261124-build760';
+import { MARCH_VARIANTS, marchWgsl, createMarchHost } from './vr-wgpu-coarse-march.js?v=20261124-build760';
+import { createCoarseProxy } from './vr-wgpu-coarse-proxy.js?v=20261124-build760'; // the coarse distance grid and its pre-pass variants of the shadow pass (group 2)
+import { createCsShadow } from './vr-wgpu-cs.js?v=20261124-build760';
+import { createDirectApi, directRegion } from './vr-wgpu-direct.js?v=20261124-build760'; // the direct draw trial (the centre of the volume drawn straight into the eye image; off unless the diagnostic setting asks)
+import { createSpecPipelines, specSigOfPacked, SPEC_DISPLAY_DEFAULT } from './vr-wgsl-spec.js?v=20261124-build760'; // A4: the specialised program (override constants for the settings that do not change per frame)
 // run-time switch of the comparison bench (docs/vr-bench.js createIsolation): the volume pass's own GPU timestamps (the per-frame timestamp read-back: one mapAsync per pass) can be turned off for an isolation run. Default = as always (on).
 export const GX_SWITCH = { timers: true };
 
@@ -459,7 +459,18 @@ export function createVolumeGpu({ device, THREE, f16 = false, onTargetFreed = nu
     markTex: device.createTexture({ size: [1, 1, 1], format: 'rgba8unorm', usage: GPUTextureUsage.RENDER_ATTACHMENT }),
     seq: 0, cur: null, q: [], prev: null, gaps: [], spans: [], every: 1,
   } : null;
-  const newRec = () => ({ id: ++ts.seq, pend: 0, vols: 0, b: null, e: null, bad: false, closed: false, vpend: 0, vms: 0, vbad: false, vcb: null, lowMs: null, pairs: null, shadowed: false, atomic: false, hadLow: false }); // one XR frame: b = first start, e = last end (BigInt ticks, ns), pend = readbacks still to come
+  // Measurement of the timestamp path itself (performance.now() and numbers in a fixed object only; read by the page once a frame with takeGauges, which also clears them):
+  // ml = the longest mapAsync (call -> resolved) among the read-backs that completed since the last take; gd = for the frame whose volume passes were all read back: (GPU start of its first volume pass - the previous measured
+  // frame's) - (CPU time of its first submit - the previous measured frame's), in ms; vol = that frame's volume GPU ms. NaN = none since the last take.
+  const gauge = { ml: NaN, gd: NaN, vol: NaN }, gdPrev = { b: null, sub: 0 };
+  // called from readSlot once the last volume pass of the frame has been read back AND its start is in rec.b
+  const frameGd = rec => {
+    if (rec.bad || rec.b === null || rec.sub === null) { gdPrev.b = null; return; } // a frame with a pass that was not timed: no start to compare
+    if (gdPrev.b !== null) { const g = Number(rec.b - gdPrev.b) / 1e6 - (rec.sub - gdPrev.sub); if (Number.isFinite(g) && g > -1e4 && g < 1e4) gauge.gd = g; }
+    gdPrev.b = rec.b; gdPrev.sub = rec.sub;
+  };
+  const takeGauges = out => { out.ml = gauge.ml; out.gd = gauge.gd; out.vol = gauge.vol; gauge.ml = gauge.gd = gauge.vol = NaN; return out; };
+  const newRec = () => ({ id: ++ts.seq, pend: 0, sub: null, vols: 0, b: null, e: null, bad: false, closed: false, vpend: 0, vms: 0, vbad: false, vcb: null, lowMs: null, pairs: null, shadowed: false, atomic: false, hadLow: false }); // one XR frame: b = first start, e = last end (BigInt ticks, ns), pend = readbacks still to come
   if (ts) ts.cur = newRec();
   // the frames whose readbacks are all in, oldest first: a frame with every timestamp valid gives its span; its gap needs the frame before it to be valid too
   const finishFrames = () => {
@@ -476,17 +487,21 @@ export function createVolumeGpu({ device, THREE, f16 = false, onTargetFreed = nu
   // read one slot back: rec = the frame it belongs to; marker = its end only counts (the begin of the marker is not work); onMs(ms) = the pass duration
   const readSlot = (slot, rec, marker, onMs) => {
     const sl = ts.slots[slot]; counts.maps++; // maps = timestamp read-backs started (a running total, read by the frame ring of docs/vr-bench.js)
+    const m0 = performance.now(); // ml: the time from the mapAsync call to its resolution
     sl.buf.mapAsync(GPUMapMode.READ).then(() => {
+      { const ml = performance.now() - m0; if (!(ml <= gauge.ml)) gauge.ml = ml; }
       const a = new BigUint64Array(sl.buf.getMappedRange().slice(0)); sl.buf.unmap();
       onMs?.(Number(a[1] - a[0]) / 1e6);
       if (a[0] === 0n || a[1] < a[0]) rec.bad = true;
       else { if (!marker && (rec.b === null || a[0] < rec.b)) rec.b = a[0]; if (rec.e === null || a[1] > rec.e) rec.e = a[1]; }
+      if (!marker && rec.vpend === 0 && !rec.gdDone) { rec.gdDone = true; frameGd(rec); }
       rec.pend--; sl.busy = false; finishFrames();
-    }).catch(() => { rec.bad = true; rec.pend--; sl.busy = false; finishFrames(); });
+    }).catch(() => { rec.bad = true; gdPrev.b = null; rec.pend--; sl.busy = false; finishFrames(); });
   };
   // the volume passes of one XR frame have all been read back (performance record only): volDone is called per pass; the callback of onFrameVolMs gets the frame's volume GPU ms (the sum of its passes, as the vol column)
   const volDone = rec => {
     if (--rec.vpend > 0) return;
+    if (!rec.vbad) gauge.vol = rec.vms;
     if (rec.atomic && !rec.vbad && rec.hadLow) { ts.sumMs += rec.vms; ts.count++; } // a sampled frame (every > 1): the whole frame, once all its passes are back
     if (!rec.vcb) return; const cb = rec.vcb; rec.vcb = null; if (!rec.vbad) cb(rec.vms);
   };
@@ -558,6 +573,7 @@ export function createVolumeGpu({ device, THREE, f16 = false, onTargetFreed = nu
     o?.after?.(enc);
     if (slot >= 0) { enc.resolveQuerySet(ts.qs, 2 * slot, 2, ts.resolve, 256 * slot); enc.copyBufferToBuffer(ts.resolve, 256 * slot, ts.slots[slot].buf, 0, 16); ts.slots[slot].busy = true; rec.pend++; rec.vols++; rec.vpend++; } // (a query resolve lands on a 256-byte offset)
     device.queue.submit([enc.finish()]);
+    if (rec && rec.sub === null) rec.sub = performance.now(); // the CPU time of the frame's first timed submit (gd above)
     if (slotC >= 0) readSlot(slotC, rec, false, ms => { if (ms >= 0 && ms < 1000) { if (!rec.atomic) ts.sumMs += ms; rec.vms += ms; try { bd?.onShadow?.('proxyMs', ms, 1); } catch { /* the page's callback */ } } else rec.vbad = true; volDone(rec); });
     if (slot >= 0) {
       const isLow = slot0 === 0;
@@ -903,7 +919,7 @@ export function createVolumeGpu({ device, THREE, f16 = false, onTargetFreed = nu
     px.pool.length = 0; px.ubuf?.destroy(); proxyDummy?.destroy();
     if (ts) { try { ts.qs.destroy(); ts.resolve.destroy(); ts.slots.forEach(x => x.buf.destroy()); ts.markTex.destroy(); } catch { /* gone */ } }
   };
-  return { counts, device, f16, layout, warm, pipeFor, gpuOf, copySlab, initTexture, getTarget, fixedTarget, dropTarget, drawPass, dispose, takeGpuMs, takeFrameStats, onFrameVolMs, markFrame, setTimerEvery, beginFrame, hasTimer: !!ts, poolSize: () => pool.length,
+  return { counts, device, f16, layout, warm, pipeFor, gpuOf, copySlab, initTexture, getTarget, fixedTarget, dropTarget, drawPass, dispose, takeGpuMs, takeFrameStats, takeGauges, leftovers: () => ({ every: ts ? ts.every : null, slots: ts ? ts.slots.length : 0, slotsBusy: ts ? ts.slots.reduce((n, x) => n + (x.busy ? 1 : 0), 0) : 0, bd: !!bd, groups: groups.size, pipes: pipes.size, ubufs: ubufs.reduce((n, x) => n + (x ? 1 : 0), 0) }), onFrameVolMs, markFrame, setTimerEvery, beginFrame, hasTimer: !!ts, poolSize: () => pool.length,
     beginBreakdown, endBreakdown, bdActive, bdSnapshot, shadowPass, probeCounters, direct,
     spec: { pipelines: specs, setDisplay: v => { specOn = !!v; }, display: () => specOn } };
 }
@@ -1298,9 +1314,13 @@ export function gxEscapeHeld(sources) {
 // session's own end listener flushes at the end), the stage / error saves are unchanged. The pose is read each frame until the sub images are read; after that every poseEvery-th frame (counts.poses counts poseEvery
 // for each pose seen then: the headset still gives poses), and the controllers are read for the escape at most once per escapePollMs (time, not frames: at a slow frame rate every frame still reads them).
 // poseEvery 1 / escapePollMs 0 = every frame (as before). doc = where the page's visibilitychange comes from (null: none).
+// The posed-frame hook (onFrame) may have a `done` property (vr-wgpu-caps.js capsFrameHook: the foveation check): while it is exactly false the pose is read and the hook called EVERY frame (the check, which runs
+// in the first ~120 frames, ends in seconds), after it is true (or when the hook has no `done`, or there is no hook) the pose is read every poseEvery-th frame as above. stats = { poseReads, poseMs } (running totals:
+// getViewerPose calls made here and the ms they took; the frame ring of docs/vr-bench.js reads the differences as the columns pz / pms); returned as hb.stats.
 export const GX_POSE_EVERY = 16, GX_ESCAPE_POLL_MS = 50;
 export function startGxHeartbeat({ session, diag, state, now = () => performance.now(), escapeMs = 2000, stallFrames = 720, onEnd = null, onFrame = null, saveOn = () => true, poseEvery = 1, escapePollMs = 0, doc = globalThis.document }) { // onFrame(frame, pose, s): the posed frames' hook (vr-wgpu-caps.js). saveOn(): false = no save when hidden either (an isolation run of the comparison bench); the default saves
   let alive = true, escAt = null, inspected = false, lastRendered = -1, stall = 0, ending = false, nf = 0, escPolled = -Infinity;
+  const stats = { poseReads: 0, poseMs: 0 };
   const end = why => { if (ending) return; ending = true; diag.stage('auto-end', why); try { onEnd?.(why); } catch { /* the line is not worth a failure */ } try { session.end()?.catch?.(() => {}); } catch { /* ended */ } };
   const tick = (t, frame) => {
     if (!alive) return;
@@ -1308,10 +1328,12 @@ export function startGxHeartbeat({ session, diag, state, now = () => performance
     const s = state() || {};
     nf++;
     diag.count('xrFrames');
-    if (!inspected || nf % Math.max(1, poseEvery) === 0) {
+    const checking = !inspected || (onFrame !== null && onFrame.done === false); // the pose is read every frame: until the sub images are read, and while the foveation check (the hook) has not ended
+    if (checking || nf % Math.max(1, poseEvery) === 0) {
       let pose = null;
-      try { if (s.ref) pose = frame.getViewerPose(s.ref); } catch (e) { diag.error('pose', e); }
-      if (pose) { const w = inspected ? Math.max(1, poseEvery) : 1; diag.d.counts.poses = (diag.d.counts.poses | 0) + w; }
+      const p0 = now();
+      try { if (s.ref) { pose = frame.getViewerPose(s.ref); stats.poseReads++; stats.poseMs += now() - p0; } } catch (e) { diag.error('pose', e); }
+      if (pose) { const w = checking ? 1 : Math.max(1, poseEvery); diag.d.counts.poses = (diag.d.counts.poses | 0) + w; }
       if (pose && s.bound && !inspected && s.binding && s.layer) { inspected = true; diag.value('subImages', gxFrameValues(s.binding, s.layer, pose.views)); diag.stage('first posed frame (sub images read)'); }
       if (onFrame && pose && s.bound && s.binding && s.layer) { try { onFrame(frame, pose, s); } catch (e) { diag.error('frame-hook', e); } } // vr-wgpu-caps.js: the checks that run on the posed frames of the session's start (read in the frames that read the pose)
     }
@@ -1329,7 +1351,7 @@ export function startGxHeartbeat({ session, diag, state, now = () => performance
   try { doc?.addEventListener?.('visibilitychange', onHide); } catch { /* none */ }
   try { session.addEventListener?.('visibilitychange', onHide); } catch { /* none */ }
   try { session.requestAnimationFrame(tick); } catch (e) { diag.error('heartbeat', e); }
-  return { stop() { alive = false; try { doc?.removeEventListener?.('visibilitychange', onHide); } catch { /* gone */ } try { session.removeEventListener?.('visibilitychange', onHide); } catch { /* gone */ } } };
+  return { stats, stop() { alive = false; try { doc?.removeEventListener?.('visibilitychange', onHide); } catch { /* gone */ } try { session.removeEventListener?.('visibilitychange', onHide); } catch { /* gone */ } } };
 }
 // the compiler's messages of one WGSL module into the record (errors and warnings, the first few), keyed by its variant
 export function gxShaderInfo(diag, module, v) {

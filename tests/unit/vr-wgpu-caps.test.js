@@ -293,6 +293,31 @@ describe('the fixed foveation check in the XR eye pass', () => {
     expect(writes[writes.length - 1]).toBe(0); expect(v).toBe(0); expect(rec.fovea.changedByApp).toBeGreaterThanOrEqual(1);
     expect(formatCapsSummary({ fovea: rec.fovea })).toContain('the app set the foveation');
   });
+  it('the timeline: init, each step, the end and the result are recorded with the clock and the frame count; every heavy draw is counted in rec.foveaDraws; the record is published at init (not run -> running)', async () => {
+    const m = mock({ gain: 0.4 }); let tt = 5000; const states = []; const rec = { publish: vi.fn(() => { states.push(rec.fovea.state + ':' + rec.fovea.events.length); }) };
+    const p = createFoveaProbe({ device: m.device, binding: m.binding, layer: m.layer, rec, startAfter: 2, skip: 2, samples: 5, now: () => (tt += 10) });
+    expect(p.done).toBe(false); expect(rec.fovea.events).toEqual([]);
+    for (let i = 0; i < 80 && !p.done; i++) { p.frame({}, pose); await flush(); } await flush();
+    expect(p.done).toBe(true);
+    expect(states[0]).toBe('running:1'); // published at init, with the start event in it
+    const E = rec.fovea.events; expect(E.map(e => e.k)).toEqual(['init', 'step', 'step', 'step', 'end', 'result']);
+    expect(E.slice(0, 4).map(e => e.fov)).toEqual([0, 1, 0, 1]); expect(E.slice(0, 4).map(e => e.step)).toEqual([0, 1, 2, 3]);
+    expect(E.map(e => e.t)).toEqual([...E.map(e => e.t)].sort((a, b) => a - b)); expect(E[0].t).toBeGreaterThan(5000);
+    expect(E[0].seen).toBe(2); expect(E[1].seen).toBe(2 + 6); expect(E[4].seen).toBe(2 + 27); // 7 frames per step (2 to settle, 5 measured), the first frame of the check is the 2nd call (seen 2)
+    expect(E[0].draws).toBe(0); expect(rec.foveaDraws).toBe(28); expect(E[4].draws).toBe(28);
+    const text = formatCapsSummary({ fovea: rec.fovea });
+    expect(text).toContain('timeline'); expect(text).toContain('init 0 fov=0 t=+0 seen=2 draws=0'); expect(text).toContain('step 1 fov=1'); expect(text).toContain('end ');
+  });
+  it('done is true for an unsupported layer, a failure and an abort too, with the event recorded; abort of a check that has not started marks it not run', async () => {
+    const a = mock({ layerFov: null }), ra = { publish() {} }; const pa = await run(a, ra);
+    expect(pa.done).toBe(true); expect(ra.fovea.events.map(e => e.k)).toEqual(['unsupported']); expect(ra.foveaDraws | 0).toBe(0);
+    const b = mock({ pipelineThrows: true }), rb = { publish() {} }; const pb = await run(b, rb);
+    expect(pb.done).toBe(true); expect(rb.fovea.events.map(e => e.k)).toEqual(['fail']);
+    const c = mock(), rc = { publish() {} }, pc = createFoveaProbe({ device: c.device, binding: c.binding, layer: c.layer, rec: rc, startAfter: 50 });
+    expect(pc.done).toBe(false); pc.abort(); expect(pc.done).toBe(true); expect(rc.fovea.state).toBe('not run'); expect(rc.fovea.events.map(e => e.k)).toEqual(['abort']);
+    const d = mock(), rd = { publish() {} }, pd = createFoveaProbe({ device: d.device, binding: d.binding, layer: d.layer, rec: rd, startAfter: 2, skip: 2, samples: 5 });
+    for (let i = 0; i < 9; i++) { pd.frame({}, pose); await flush(); } expect(pd.done).toBe(false); pd.abort(); expect(pd.done).toBe(true); expect(rd.fovea.events.map(e => e.k)).toEqual(['init', 'step', 'abort']); expect(d.layer.fixedFoveation).toBe(0.5);
+  });
   it('waits for the posed frames at the start of the session before it begins', async () => {
     const m = mock(), rec = { publish() {} }; const p = createFoveaProbe({ device: m.device, binding: m.binding, layer: m.layer, rec, startAfter: 10 });
     for (let i = 0; i < 8; i++) p.frame({}, pose);
@@ -325,6 +350,26 @@ describe('the heartbeat hands the posed frames to the hook, and the hook cannot 
     const hook = capsFrameHook(rec, { features: new Set() }, { startAfter: 1000 });
     hook({}, { views: [{ eye: 'left' }] }, { binding, layer: {} }); hook({}, { views: [{ eye: 'left' }] }, { binding, layer: {} });
     expect(rec.layer.trialSub[0].usage).toBe(30); expect(binding.getViewSubImage).toHaveBeenCalledTimes(1); expect(rec.fovea.state).toBe('waiting');
+  });
+  const bound = () => ({ bound: true, rendered: 0, ref: {}, binding: { getViewSubImage: () => ({ colorTexture: {}, viewport: { x: 0, y: 0, width: 1, height: 1 } }) }, layer: {} });
+  it('the page\'s hook: not done = called on every frame (the check ends within its first frames); done = only on every poseEvery-th frame again; the record never says "not run" once the hook has run', () => {
+    const s = fakeSession(), g = createGxDiag({ store: null }), st = bound(); let t = 0; const states = [];
+    const rec = { publish: vi.fn(() => states.push(rec.fovea ? rec.fovea.state : 'none')), layer: { trial: { destroy: vi.fn() } } };
+    const hook = capsFrameHook(rec, { features: new Set() }, { startAfter: 3 }); expect(hook.done).toBe(false);
+    const hb = startGxHeartbeat({ session: s, diag: g, state: () => st, onFrame: hook, poseEvery: 16, now: () => (t += 0.5), stallFrames: 1e9 });
+    for (let i = 0; i < 40; i++) s.frame({ views: [{ eye: 'left' }] });
+    expect(hook.done).toBe(true); expect(rec.fovea.state).toBe('unsupported'); expect(rec.fovea.events.map(e => e.k)).toEqual(['unsupported']);
+    expect(states[0]).toBe('waiting'); // the first publish (the trial layer's sub image) already has the check's record
+    expect(g.d.counts.xrFrames).toBe(40); expect(hb.stats.poseReads).toBe(3 + 2); // frames 1-3 (the check runs), then the 16th and 32nd
+    expect(hb.stats.poseMs).toBeCloseTo(0.5 * 5, 5); expect(g.d.counts.poses).toBe(3 + 2 * 16);
+  });
+  it('a hook with done = false is called every frame, with done = true every poseEvery-th, a hook without done (or no hook) as before; the pose reads and their ms are counted', () => {
+    const mk = done => { const s = fakeSession(), g = createGxDiag({ store: null }), st = bound(); let t = 0; const hook = vi.fn(); if (done !== undefined) hook.done = done; const hb = startGxHeartbeat({ session: s, diag: g, state: () => st, onFrame: hook, poseEvery: 16, now: () => (t += 0.25), stallFrames: 1e9 }); return { s, g, hook, hb }; };
+    const a = mk(false); for (let i = 0; i < 64; i++) { a.s.frame({ views: [{}] }); if (i === 19) a.hook.done = true; }
+    expect(a.hook).toHaveBeenCalledTimes(20 + 3); expect(a.hb.stats.poseReads).toBe(23); expect(a.hb.stats.poseMs).toBeCloseTo(0.25 * 23, 5); expect(a.g.d.counts.poses).toBe(20 + 3 * 16);
+    const b = mk(true); for (let i = 0; i < 64; i++) b.s.frame({ views: [{}] }); expect(b.hook).toHaveBeenCalledTimes(5); expect(b.hb.stats.poseReads).toBe(5); // the first frame (the sub images are read), then the 16th, 32nd, 48th, 64th
+    const c = mk(undefined); for (let i = 0; i < 64; i++) c.s.frame({ views: [{}] }); expect(c.hook).toHaveBeenCalledTimes(5); expect(c.hb.stats.poseReads).toBe(5);
+    const s = fakeSession(), g = createGxDiag({ store: null }), hb = startGxHeartbeat({ session: s, diag: g, state: () => bound(), poseEvery: 16, stallFrames: 1e9 }); for (let i = 0; i < 33; i++) s.frame({ views: [{}] }); expect(hb.stats.poseReads).toBe(1 + 2); expect(g.d.counts.poses).toBe(1 + 2 * 16);
   });
   it('vr-view hands the hook to the heartbeat', () => { expect(src('vr-view.js')).toContain("onFrame:gxCaps?capsFrameHook(gxCaps,gx.device):null"); });
 });

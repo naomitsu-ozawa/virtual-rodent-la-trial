@@ -8,7 +8,7 @@
 // What keeps the picture the same (plan 0-7): the march stays on its own grid t0 + k * stp (a skip is a jump of k only), every skipped sample lies inside a ball around a sample read with a distance dd >= 2.7 (the radius dd - 1.8 voxels, the
 // jump's own bound, so no skipped sample is inside a shown segment), a start is the pre-pass rule (k = floor((tA - t0) / stp) - 1, never below 0), and the grid point before a hit is therefore always read normally. A ray that hits is
 // searched with the state the loop leaves (hitLo / hitHi / f0 / f1 / hitNb / hitIso), which a list entry carries whole.
-import { volumeWgsl, uniformLayout, uniformStruct, PROXY } from './vr-wgsl-core.js?v=20261124-build759';
+import { volumeWgsl, uniformLayout, uniformStruct, PROXY } from './vr-wgsl-core.js?v=20261124-build760';
 
 export const CS_TILE = 8; // the workgroup is one 8 x 8 pixel tile (as the pre-pass's tile)
 export const CS_MODES = ['full', 'march', 'shade', 'tile', 'share'];

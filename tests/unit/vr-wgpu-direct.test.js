@@ -6,8 +6,8 @@ import { WgslReflect } from 'wgsl_reflect/wgsl_reflect.module.js';
 import * as THREEG from 'three/webgpu';
 import { volumeWgsl, uniformLayout, PROXY } from '../../docs/vr-wgsl-core.js';
 import { createVrVolumeRenderer, bandRects, scaledRegion, fitSlot } from '../../docs/vr-wgpu.js';
-import { directRegion, directFragmentWgsl, directDiffWgsl, createDirectApi, DIRECT_MIN_PX } from '../../docs/vr-wgpu-direct.js';
-import { createDirectLog, directReport } from '../../docs/vr-direct-log.js';
+import { directRegion, directFragmentWgsl, directDiffWgsl, createDirectApi, DIRECT_MIN_PX, DIRECT_DIFF_COUNTERS } from '../../docs/vr-wgpu-direct.js';
+import { createDirectLog, directReport, CHECK_ROWS, CHECK_CLASSES } from '../../docs/vr-direct-log.js';
 import { createFlapGuard } from '../../docs/vr-flicker-guard.js';
 import { createPerfLog, perfReport } from '../../docs/vr-perf-log.js';
 
@@ -82,10 +82,13 @@ describe('the fragment wrapper (text)', () => {
       expect(r.entry.vertex.map(e => e.name)).toEqual(['vs']);
     }
   });
-  it('the comparison compute parses and counts colour / depth / covered pixels', () => {
+  it('the comparison compute parses and counts 16 values (colour / depth / covered, the largest differences, the classes)', () => {
     const src = directDiffWgsl(), r = parse(src);
     expect(r.entry.compute.map(e => e.name)).toEqual(['main']);
-    expect(src).toContain('atomicAdd(&cnt[0],1u)'); expect(src).toContain('atomicAdd(&cnt[1],1u)'); expect(src).toContain('atomicAdd(&cnt[2],1u)');
+    expect(DIRECT_DIFF_COUNTERS).toBe(16);
+    for (const i of [0, 1, 2, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]) expect(src).toContain('atomicAdd(&cnt[' + i + '],1u)');
+    for (const i of [3, 4]) expect(src).toContain('atomicMax(&cnt[' + i + '],');
+    const used = [...src.matchAll(/cnt\[(\d+)\]/g)].map(m => +m[1]); expect(Math.max(...used)).toBeLessThan(DIRECT_DIFF_COUNTERS);
   });
 });
 
@@ -300,9 +303,11 @@ describe('the check (the recording only): the centre pass again over the rect, t
     expect(log.passes[1].viewports).toEqual([[0, 0, 640, 480, 0, 1]]); expect(log.passes[1].scissors).toEqual([[191, 141, 258, 198]]); expect(log.passes[1].draws).toBe(1);
     expect(log.passes[1].d.colorAttachments).toHaveLength(2);
     const par = log.writes.filter(w => w.data.length === 8).map(w => [...w.data]); expect(par).toEqual([[191, 141, 449, 339, 178, 128, 0, 0]]); // the comparison's rect and the region origin (A's pixel = pixel - origin)
+    expect(log.buffers.filter(b => b.d.size === 64)).toHaveLength(2); // the counters and their read-back: 16 u32
     expect(api.check(() => {})).toBe(false); // one at a time
     await settle();
-    expect(got).toEqual([{ total: 258 * 198, covered: 0, colour: 0, depth: 0, text: expect.stringContaining('rect 191,141-449,339') }]);
+    expect(got).toEqual([{ total: 258 * 198, covered: 0, colour: 0, depth: 0, cmax: 0, dmax: 0, covA: 0, covB: 0, both: 0, c1: 0, d2: 0, d256: 0, edge: 0, aFront: 0, bFront: 0, shift: 0,
+      checkNo: 0, noteNo: 0, D: [191, 141, 449, 339], region: [178, 128, 462, 352], W: 640, H: 480, pre: false, orgA: [0, 0], orgB: [0, 0], text: expect.stringContaining('rect 191,141-449,339') }]);
     expect(api.check(() => {})).toBe(true); // free again; the same sizes: the images are kept
     expect(log.passes).toHaveLength(4);
   }));
@@ -466,13 +471,42 @@ describe('the record', () => {
     const p = { direct: d, rows: [{ t: 1, dir: 2, dmiss: 1, f: 1, vol: 1.234, main: 5.5, span: 7, oth: 0.2 }, { t: 2, dir: null }, { t: 3 }] };
     const text = directReport(p).join('\n');
     expect(text).toContain('direct draw: hooked'); expect(text).toContain('4 drawn, 3 asked'); expect(text).toContain('2 went through it'); expect(text).toContain('colour differs in 3 px, depth differs in 1 px, 1 checks with a difference');
-    expect(text).toContain('check with a difference: rect 1,2-3,4'); expect(text).toMatch(/not checked/);
+    expect(text).toContain('-- direct draw checks (one line per check, the first 400'); expect(text.split('\n').filter(l => l.startsWith('  chk ')).length).toBe(2); expect(text).toMatch(/not checked/);
     expect(text).toMatch(/1 +2 +1 +1 +1\.2 +5\.5 +7 +0\.2/);
     const cmp = directReport({ direct: d, rows: [{ t: 1, dir: 3, fps: 72, g1: 70, g2: 2, g3: 0, vol: 2, main: 6, span: 8 }, { t: 2, dir: 0, fps: 72, g1: 71, g2: 1, g3: 0, vol: 9, main: 1, span: 11 }, { t: 3, dir: 0, fps: 72, menu: 1, g1: 72, g2: 0, g3: 0, vol: 99 }] }).join('\n');
     expect(cmp).toContain('with direct frames (dir > 0): 1 rows, vol 2 ms, main 6 ms, span 8 ms, frame intervals over 1.5 periods (g2 + g3) 2 of 72');
     expect(cmp).toContain('without (dir = 0): 1 rows, vol 9 ms, main 1 ms, span 11 ms, over 1.5 periods 1 of 72'); // the row with the menu open is left out
     expect(directReport({ direct: createDirectLog() })).toEqual([]); // never asked: no section
     expect(directReport({})).toEqual([]);
+  });
+  it('aggregates the 16 values of the checks: the largest differences, the sums and the checks per class, one line per check (at most 400)', () => {
+    const d = createDirectLog();
+    const base = { total: 1000, covered: 800, colour: 0, depth: 0, cmax: 0, dmax: 0, covA: 790, covB: 800, both: 780, c1: 0, d2: 0, d256: 0, edge: 0, aFront: 0, bFront: 0, shift: 0 };
+    const meta = { noteNo: 10, checkNo: 11, D: [191, 141, 449, 339], region: [178, 128, 462, 352], W: 640, H: 480, pre: true, orgA: [0, 0], orgB: [178, 128] };
+    d.check({ ...base, ...meta, colour: 5, depth: 4, cmax: 3, dmax: 70, c1: 2, d2: 1, d256: 0, edge: 3, aFront: 1, bFront: 3, shift: 2, text: 'x' }, { t: 12.34, per: 1, hold: 0.8 });
+    d.check({ ...base, ...meta, noteNo: 18, checkNo: 19, colour: 1, depth: 0, cmax: 9, dmax: 300, c1: 0, d2: 0, d256: 2, edge: 0, aFront: 2, bFront: 0, shift: 0 }, { t: 13.5, per: 0.9, hold: 1 });
+    d.check({ ...base, ...meta }, { t: 14, per: 1, hold: 1 });
+    const c = d.checks;
+    expect(c).toMatchObject({ n: 3, colour: 6, depth: 4, bad: 2, cmaxMax: 9, dmaxMax: 300, omitted: 0 });
+    expect(c.sum).toMatchObject({ covered: 2400, colour: 6, depth: 4, covA: 2370, covB: 2400, both: 2340, c1: 2, d2: 1, d256: 2, edge: 3, aFront: 3, bFront: 3, shift: 2 });
+    expect(c.nz).toMatchObject({ covered: 3, colour: 2, depth: 1, c1: 1, d2: 1, d256: 1, edge: 1, aFront: 2, bFront: 1, shift: 1 });
+    expect(Object.keys(c.sum)).toEqual(CHECK_CLASSES.map(x => x[0]));
+    expect(c.rows).toHaveLength(3); expect(c.rows[0]).toMatchObject({ t: 12.34, per: 1, hold: 0.8, noteNo: 10, checkNo: 11 });
+    const text = directReport({ direct: d, rows: [] }).join('\n'), lines = text.split('\n');
+    expect(text).toContain('largest colour difference of any check 9 (0..255), largest depth difference of any check 300 (24-bit units)');
+    expect(text).toContain('depth differs by 256 or more (both covered): 2 px in total, in 1 of 3 checks');
+    expect(text).toContain('differs but equals B with A shifted by 1 px: 2 px in total, in 1 of 3 checks');
+    const rows = lines.filter(l => l.startsWith('  chk '));
+    expect(rows).toHaveLength(3);
+    expect(rows[0]).toBe('  chk t=12.3 per=1 hold=0.8 note#10 chk#11 D=191,141,449,339 R=178,128,462,352 640x480 pre=1 orgA=0,0 orgB=178,128 | col 5 dep 4 of 800 cmax 3 dmax 70 A 790 B 800 both 780 c1 2 d2 1 d256 0 edge 3 Af 1 Bf 3 sh 2 (1000 px)');
+    // more than 400 checks: the rows stop at 400, the totals go on
+    const e = createDirectLog();
+    for (let i = 0; i < CHECK_ROWS + 25; i++) e.check({ ...base, ...meta, colour: 1, cmax: 1 }, { t: i, per: 1, hold: 1 });
+    expect(e.checks.rows).toHaveLength(CHECK_ROWS); expect(e.checks.omitted).toBe(25); expect(e.checks.n).toBe(CHECK_ROWS + 25); expect(e.checks.sum.colour).toBe(CHECK_ROWS + 25);
+    expect(directReport({ direct: e, rows: [] }).filter(l => l.startsWith('  chk ')).length).toBe(CHECK_ROWS);
+    expect(directReport({ direct: e, rows: [] }).join('\n')).toContain('25 more checks are in the totals only');
+    // a check without the new values (an older result) is still counted, with zeros
+    const o = createDirectLog(); o.check({ total: 10, covered: 4, colour: 1, depth: 0 }); expect(o.checks).toMatchObject({ n: 1, cmaxMax: 0, bad: 1 }); expect(directReport({ direct: o, rows: [] }).join('\n')).toContain('  chk t=- per=- hold=-');
   });
   it('perfReport prints the section only when the log has one; the report without it is unchanged', () => {
     const base = createPerfLog({ kind: 'webgpu', mode: 'vr' }); base.row({ f: 1 });
@@ -488,7 +522,7 @@ describe('the record', () => {
   });
   it('the page feeds it: one frame call after the main render, the check while recording, the row, the log on the perf log', () => {
     expect(vrView).toContain('gxDirLog.frame(gxDirAsked,gxDirUsed)');
-    expect(vrView).toContain('else if(ph===2&&(gxS.rendered&7)===2){try{gx.vol.direct.check(r=>gxDirLog.check(r),frec)}'); // after the frame's marker, in a frame of neither the shadow pass (phase 1) nor the probe (phase 3)
+    expect(vrView).toContain('else if(ph===2&&(gxS.rendered&7)===2){try{const cx={t:(tn-gxRec.t0)/1000,per:rs.per,hold:hkMin};gx.vol.direct.check(r=>gxDirLog.check(r,cx),frec)}'); // the context (time, per, hold) is taken when the check starts; after the frame's marker, in a frame of neither the shadow pass (phase 1) nor the probe (phase 3)
     expect(vrView).toContain('perfLog.row=(snap,at)=>row0({...snap,...gxDirLog.takeRow()},at)');
     expect(vrView).toContain('perfLog.direct=gxDirLog;');
   });
