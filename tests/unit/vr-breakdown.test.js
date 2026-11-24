@@ -646,8 +646,8 @@ describe('vr-view.js wiring (static)', () => {
   it('while it records: no swd, no vlat, no wake sample; rows carry rec 1 (WebGPU only); the first press only starts it; the benchmarks are not started with it and it does not start with them', () => {
     expect(vr).toContain('if(gxMeasure()&&!gxRec.on&&!gxSwdBusy&&(gxS.rendered&3)===2){'); expect(vr).toContain('if(gxMeasure()&&!gxRec.on&&!gxSwdBusy&&(gxS.rendered&3)===3){'); expect(vr).toContain('if(gxMeasure()&&!gxRec.on&&fa0-gxWakeAt<1000)');
     expect(vr).toContain('...(gx?{rec:(gxRec.on||gxRec.sec)?1:0,');
-    expect(vr).toContain("if(!gx?.vol||!gx.ready||gxRec.phase!=='idle'||bench.active||anBench.active||cmpBench.active||!mesh||!material)return;");
-    expect(vr).toContain("const startAnBench=()=>{if(anBench.active||bench.active||cmpBench.active||!mesh||gxRec.phase==='prep'||gxRec.on)return;"); expect(vr).toContain("if(bench.active||cmpBench.active||!mesh||gxRec.phase==='prep'||gxRec.on)return;"); // the comparison bench (vr-bench.js) is one more thing they do not start inside
+    expect(vr).toContain("if(!gx?.vol||!gx.ready||gxRec.phase!=='idle'||bench.active||anBench.active||cmpBench.active||identRun?.active||!mesh||!material)return;");
+    expect(vr).toContain("const startAnBench=()=>{if(anBench.active||bench.active||cmpBench.active||identRun?.active||!mesh||gxRec.phase==='prep'||gxRec.on)return;"); expect(vr).toContain("if(bench.active||cmpBench.active||identRun?.active||!mesh||gxRec.phase==='prep'||gxRec.on)return;"); // the comparison bench (vr-bench.js) is one more thing they do not start inside
   });
   it('it does not write the diagnostics setting and leaves stage marks for its start and end; the 30 s run on the frame clock', () => {
     expect(rec).not.toContain('settings.diag'); expect(rec).not.toMatch(/saveSettings|applyQuality|setTimeout/);
@@ -666,7 +666,7 @@ describe('vr-view.js wiring (static)', () => {
     expect(host).toContain('try { volume.bdSnapshot(low.target, low.eyes, u, vr, lowDraw?.proxy ?? null); } catch (e) {');
   });
   it('the volume pass of the frame is called as before; the snapshot of the low pass is the renderer\'s (host), only while a recording runs', () => {
-    expect(host).toContain('const lowDraw = volume.drawPass(low.target, low.eyes, u, vr, 0, null, null, { proxy: low.px });');
+    expect(host).toContain("const lowDraw = volume.drawPass(low.target, low.eyes, u, vr, 0, null, null, dnp ? { proxy: low.px, np: { ...dnp, skip: dReq ? 'direct' : '' } } : { proxy: low.px });"); // the new ways' option is added only while a display switch asks (dnp null: the call of before, character for character)
     expect(host).toContain('\n    if (volume.bdActive()) {');
     expect(host).toContain('for (const sc of e.scissors || [[e.x, e.y, e.w, e.h]]) { pass.setScissorRect(sc[0], sc[1], sc[2], sc[3]); pass.draw(36); }');
     expect(host).toContain('const timed = (o?.timed ?? !overrides) && GX_SWITCH.timers;'); // GX_SWITCH.timers: the isolation run's switch (true by default)

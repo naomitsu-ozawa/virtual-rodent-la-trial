@@ -127,7 +127,7 @@ describe('E0 host: the volume timestamps of one frame in N when the page asks (s
   }));
   it('the page asks before every draw: 1 while the breakdown is prepared / recorded, TS_SAMPLE_EVERY otherwise; the default of the host is 1', () => {
     expect(TS_SAMPLE_EVERY).toBe(8);
-    const iSet = vr.indexOf('gx.vol.volume.setTimerEvery?.(gxMeasure()?1:TS_SAMPLE_EVERY);'), iDraw = vr.indexOf('gx.vol.draw({u:material.uniforms,cams,');
+    const iSet = vr.indexOf('gx.vol.volume.setTimerEvery?.(gxMeasure()||identRun?.active?1:TS_SAMPLE_EVERY);'), iDraw = vr.indexOf('gx.vol.draw({u:material.uniforms,cams,');
     expect(iSet).toBeGreaterThan(0); expect(iDraw).toBeGreaterThan(iSet);
     expect(vr.slice(iSet, iDraw)).not.toContain('renderer.render(');
   });

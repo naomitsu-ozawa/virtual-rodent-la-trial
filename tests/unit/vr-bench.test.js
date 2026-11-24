@@ -550,7 +550,7 @@ describe('the hooks in vr-view.js', () => {
     expect(vrSrc).toContain("if(!timerExt||!ISO.state.timers||pending.length>12){fn();return}"); // the WebGL timer queries
     expect(vrSrc).toContain("GX_SWITCH.timers=!!st.timers;perfLog?.setSaveOff(!st.perfSave)"); // the volume timestamps and the 5 s mirror
     expect(vrSrc).toContain("bench:benchOn||cmpBench.active"); // no hold scale while the bench runs
-    expect(vrSrc).toContain("gxRec.phase!=='idle'||bench.active||anBench.active||cmpBench.active||!mesh||!material)return; // not together"); // the breakdown recording does not start inside the bench (its button is on the tab the as-is run has open)
+    expect(vrSrc).toContain("gxRec.phase!=='idle'||bench.active||anBench.active||cmpBench.active||identRun?.active||!mesh||!material)return; // not together"); // (the same-picture check refuses the recording too) // the breakdown recording does not start inside the bench (its button is on the tab the as-is run has open)
   });
   it('the comparison bench is its own thing: not bench.active (the old benchmark\'s cap / guards / periphery rules do not apply), no section plane through bench.noSection, 100 %, auto off, menu closed', () => {
     const blk = vrSrc.slice(vrSrc.indexOf('const cmpBench=createCompareBench('), vrSrc.indexOf(' const applyQuality=()=>{'));
@@ -558,9 +558,9 @@ describe('the hooks in vr-view.js', () => {
     expect(blk).toContain("m==='open'"); expect(blk).toContain('setMenuOpen(false)'); expect(blk).toContain('bringVolumeFront()');
     expect(blk).toContain('holder.quaternion.set(p.quat[0],p.quat[1],p.quat[2],p.quat[3])'); expect(blk).toContain('holder.scale.setScalar(p.scale)'); expect(blk).toContain('ref:()=>'); // the pose is the bench's own (time alone), the size is its largest
     expect(blk).not.toContain('headFwd'); expect(blk).not.toContain('clampScale');
-    expect(vrSrc).toContain('move:(cm,deg)=>cmpBench.move(cm,deg)'); // the volume's movement as the performance record counts it
+    expect(vrSrc).toContain('move:(cm,deg)=>{cmpBench.move(cm,deg);'); // the volume's movement as the performance record counts it
     expect(vrSrc).toContain("session.addEventListener('end',()=>cmpBench.abort(),{once:true})");
-    expect(vrSrc).toContain('if(bench.active||cmpBench.active||!mesh||gxRec.phase===\'prep\'||gxRec.on)return;'); // the old benchmark does not start inside it
+    expect(vrSrc).toContain('if(bench.active||cmpBench.active||identRun?.active||!mesh||gxRec.phase===\'prep\'||gxRec.on)return;'); // the old benchmark does not start inside it
   });
   it('the ring is fed at the start of each frame callback, closed at its end, and the report sections are registered with the perf log', () => {
     expect(vrSrc).toContain('benchRing.frame(xrTs||performance.now(),c);cmpBench.frame(xrTs||performance.now())');

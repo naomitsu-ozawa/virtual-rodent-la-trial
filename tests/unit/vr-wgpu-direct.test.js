@@ -431,7 +431,7 @@ describe('the flicker guard of the switch (the way the WebGL view guards its pat
     expect(vrView).toMatch(/gxDirGuard=createFlapGuard\(\{fallback:\(\)=>false\}\)/);
     expect(vrView).toMatch(/const want=!!settings\.gxDirect&&f>=1-1e-6&&!!gx\.vol\.direct\?\.installed,ok=gxDirGuard\.step\(want,nowG\);gxDirAsked=want&&ok&&!gxDirGuard\.frozenAt\(nowG\)/);
     expect(vrView).toContain('gx.vol.direct.ask(gxDirAsked);');
-    expect(vrView).toContain('boxes:xrCam?rsEyes:null});'); // the draw call itself is the one of before
+    expect(vrView).toContain('boxes:xrCam?rsEyes:null,identCtx:identRun?.active?identCtxNow():null});'); // (the check's frame state is the only new argument) // the draw call itself is the one of before
   });
 });
 
@@ -455,7 +455,7 @@ describe('the setting: off by default, in the diagnostics page, both languages',
     expect(host).toContain('if (dReq) {'); // the uniforms of the path only for a frame that asked
     expect(host).toContain('scissors: bandRects(r, inner?.(i, r) ?? null, H, scale, shrink)');
     expect(host).toContain("peri = pass('peri', fp, tmpPeri, boxOf, i => rectOf(i), band + Math.ceil(2 / Math.max(fp, 0.05)) + 1);");
-    expect(host).toContain('volume.drawPass(low.target, low.eyes, u, vr, 0, null, null, { proxy: low.px })');
+    expect(host).toContain(': { proxy: low.px }); // the low pass (and no other) runs the pre-pass');
   });
 });
 

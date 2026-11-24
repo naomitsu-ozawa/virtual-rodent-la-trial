@@ -6,10 +6,10 @@
 //   - which uniforms the part owns (the rest is the body's by reference: PART_OWN), the target a grip takes (partTargetOf), the part's own box (partBoundsOf), the laser's rule on the CPU (partKeepVoxelOf),
 //   - several parts at once: every part has its own box, uniforms and pose; the tables are patched for all of them (patchRegionLutMany / patchChildLutMany); a part's proxy box is its own bounding box (partProxyBox) and its laser march
 //     runs only inside it (partRayRange), the texts. The way in is the long-press ring (region-ring.js 切り出す / 戻す); the grip stays the body's grab and takes a part only where the laser meets one.
-import { regionLutAlpha } from './region-visibility.js?v=20261124-build760';
-import { boxFromRange } from './vr-content-box.js?v=20261124-build760';
-import { euclideanDistanceBytes, morph3 } from './distance-field.js?v=20261124-build760';
-import { hiddenClassBytes } from './vr-hide-field.js?v=20261124-build760';
+import { regionLutAlpha } from './region-visibility.js?v=20261124-build761';
+import { boxFromRange } from './vr-content-box.js?v=20261124-build761';
+import { euclideanDistanceBytes, morph3 } from './distance-field.js?v=20261124-build761';
+import { hiddenClassBytes } from './vr-hide-field.js?v=20261124-build761';
 
 // ---- the shader block. Spliced into the volume fragment shader once (vr-view.js ${PART_GLSL}, after the hidden-shape block A and BEFORE the an earlier change hide helpers hideAnyOn / hideAt / hideGrad, so that they read the re-pointed functions too), so that no existing line of the shader has to change. Without VRL_PART (every program but the
 // part's) the preprocessor drops all of it: the body's programs are the ones they were. With VRL_PART the two functions the marching loops ask "is this voxel a hidden shape?" (regionHiddenAt / childHiddenAt) are

@@ -134,8 +134,9 @@ export function marchWgsl(base, kind) {
 
 // ---- the GPU side (used by docs/vr-wgpu.js createVolumeGpu): the group-1 layout, the grids as textures, the bind group per variant ----
 // device = the GPUDevice, bgl0 = the volume pass's group-0 layout. prepare(tex, gen, data, dims, cellsWanted) -> 'ready' | 'wait' | null (null: this texture cannot be used: no bytes on the CPU, another format)
-export function createMarchHost({ device, bgl0 }) {
-  let layout = null, st = null;
+// cells = the coarse cell sizes the host makes grids for (default: all, as the performance record's variants need); the DISPLAY's host (docs/vr-wgpu-newpath.js) passes [] : it keeps the distance texture only (distSplit does not read the grid), and a 1 x 1 x 1 stand-in fills the grid's binding
+export function createMarchHost({ device, bgl0, cells = MARCH_CELLS }) {
+  let layout = null, st = null, dummyCoarse = null;
   const layouts = () => {
     if (!layout) {
       const bgl = device.createBindGroupLayout({ entries: [MARCH_BINDINGS.dist, MARCH_BINDINGS.coarse].map(binding => ({ binding, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float', viewDimension: '3d' } })) });
@@ -144,6 +145,7 @@ export function createMarchHost({ device, bgl0 }) {
     return layout;
   };
   const kill = () => { if (!st) return; try { st.dist.destroy(); st.coarse.forEach(x => x.destroy()); } catch { /* gone */ } st = null; };
+  const killAll = () => { kill(); try { dummyCoarse?.destroy(); } catch { /* gone */ } dummyCoarse = null; };
   const mk3 = (size, usage) => device.createTexture({ size, dimension: '3d', format: 'r8unorm', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
   const put = (tex, bytes, z0, z1, w, h) => device.queue.writeTexture({ texture: tex, origin: [0, 0, z0] }, bytes.subarray(z0 * w * h, z1 * w * h), { bytesPerRow: w, rowsPerImage: h }, [w, h, z1 - z0]);
   // tex = the combined texture's object (a new object, or a new gen = bytes written since: made again); data = its rgba bytes on the CPU
@@ -151,26 +153,42 @@ export function createMarchHost({ device, bgl0 }) {
     if (!data || !dims || data.length !== dims[0] * dims[1] * dims[2] * 4) return null;
     if (st && (st.tex !== tex || st.gen !== gen || st.dims.some((x, i) => x !== dims[i]))) kill();
     if (!st) {
-      const dist = mk3(dims, 0), b = createMarchGridBuilder({ data, dims, onDistSlab: (z0, z1) => put(dist, b.dist, z0, z1, dims[0], dims[1]) });
+      const dist = mk3(dims, 0), b = createMarchGridBuilder({ data, dims, cells, onDistSlab: (z0, z1) => put(dist, b.dist, z0, z1, dims[0], dims[1]) });
       st = { tex, gen, dims: dims.slice(), dist, builder: b, coarse: new Map(), groups: new Map(), ready: false };
     }
     if (!st.ready) {
       if (!st.builder.step()) return 'wait';
       for (const [c, bytes] of st.builder.coarse) { const cd = coarseDims(dims, c), t = mk3(cd, 0); put(t, bytes, 0, cd[2], cd[0], cd[1]); st.coarse.set(c, t); }
       st.ready = true;
+      if (!cells.length) st.builder = null; // the display's host: the CPU copy of the distance bytes is not kept once they are on the GPU
     }
     return 'ready';
   };
   // the group-1 bind group of a variant (a distSplit pass takes the first cell's grid: it does not read it)
   const group = kind => {
     if (!st?.ready) return null;
-    const cell = MARCH_VARIANTS[kind].cell || MARCH_CELLS[0];
+    const cell = MARCH_VARIANTS[kind].cell || cells[0] || 0;
     let g = st.groups.get(cell);
     if (!g) {
-      g = device.createBindGroup({ layout: layouts().bgl, entries: [{ binding: MARCH_BINDINGS.dist, resource: st.dist.createView({ dimension: '3d' }) }, { binding: MARCH_BINDINGS.coarse, resource: st.coarse.get(cell).createView({ dimension: '3d' }) }] });
+      const grid = st.coarse.get(cell) || (dummyCoarse ||= (() => { const t = mk3([1, 1, 1], 0); put(t, new Uint8Array(1), 0, 1, 1, 1); return t; })()); // a display host has no grid: the stand-in (never read: distSplit does not touch it)
+      g = device.createBindGroup({ layout: layouts().bgl, entries: [{ binding: MARCH_BINDINGS.dist, resource: st.dist.createView({ dimension: '3d' }) }, { binding: MARCH_BINDINGS.coarse, resource: grid.createView({ dimension: '3d' }) }] });
       st.groups.set(cell, g);
     }
     return g;
   };
-  return { layouts, prepare, group, destroy: kill, get state() { return st; } };
+  // the DISPLAY's host: bytes [z0, z1) of the combined texture were written to the GPU (docs/vr-wgpu.js writeRange, the same call): the distance texture's same slices are written from the same bytes, and the host's version follows
+  // (gen = the entry's new write number), so prepare() finds nothing to make again. A host whose distance texture is not complete (a write while it is being made: it is made again from the new version), another texture or another size is left alone: false.
+  // A write of more than maxTexels texels is not copied here (a hitch on the frame): the host is let go and made again, a slab a frame, by prepare().
+  const writeRange = (tex, gen, bytes, z0, z1, maxTexels = 4 << 20) => {
+    if (!st || st.tex !== tex || !st.ready) return false;
+    const [w, h, d] = st.dims, wh = w * h;
+    if (z1 <= z0 || z0 < 0 || z1 > d || bytes.length < z1 * wh * 4) return false;
+    if ((z1 - z0) * wh > maxTexels) { kill(); return false; }
+    const n = z1 - z0, slab = new Uint8Array(n * wh); // the alpha bytes of the written slices, put on the GPU from a slab of their own (a display host keeps no CPU copy of the 16 MB texture)
+    for (let i = 0, j = z0 * wh * 4 + 3; i < slab.length; i++, j += 4) slab[i] = bytes[j];
+    device.queue.writeTexture({ texture: st.dist, origin: [0, 0, z0] }, slab, { bytesPerRow: w, rowsPerImage: h }, [w, h, n]);
+    st.gen = gen;
+    return true;
+  };
+  return { layouts, prepare, group, writeRange, destroy: killAll, get state() { return st; } };
 }

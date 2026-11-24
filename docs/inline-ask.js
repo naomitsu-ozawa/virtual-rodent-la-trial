@@ -4,7 +4,7 @@
 //   armConfirm(btn, run)   -> a destructive button asks in place: the 1st press arms it (label "もう一度押すと…"),
 //                             a 2nd press within ARM_MS runs it; otherwise it falls back to its own label.
 //   noteInline(el, text)   -> a short note right after el that fades out by itself (instead of alert()).
-import { tr } from './i18n.js?v=20261124-build760';
+import { tr } from './i18n.js?v=20261124-build761';
 
 export const ARM_MS = 4000, NOTE_MS = 3500;
 
