@@ -12,8 +12,9 @@
 //   - Channel 3 is the fourth class texture's byte (cls4) when there is one, else the texture's alpha; in a combined texture that alpha is the distance and no shown segment has channel 3 (the bit is set and never read), in a classification-only texture of a four-segment data set it is the fourth class.
 // OS = S on the 4 x 4 pre-pass tiles' walk (the start and the end of the ray are moved by tA / tB: nothing before tA and after tB can be inside) with the loop's own limit kept: the display's loop ends after 4096 iterations from the grid
 // point 0; a walk that starts at k0 > 0 ends at k = 4096, so a ray the limit would have ended ends at the same sample.
-import { uniformLayout, uniformStruct, PROXY, volumeWgsl } from './vr-wgsl-core.js?v=20261125-build762';
-import { coarseVolumeWgsl, COARSE, coarseDims, packedDims } from './vr-wgpu-coarse-proxy.js?v=20261125-build762';
+import { uniformLayout, uniformStruct, PROXY, volumeWgsl } from './vr-wgsl-core.js?v=20261125-build763';
+import { featOf } from './vr-wgsl-feat.js?v=20261125-build763';
+import { coarseVolumeWgsl, COARSE, coarseDims, packedDims } from './vr-wgpu-coarse-proxy.js?v=20261125-build763';
 
 export const MARK_FIELDS = [['dims', 'vec4i'], ['cdims', 'vec4i']]; // dims = (w, h, d, the first row of cells of this build), cdims = the cells (x, y, z)
 export const MARK_BINDINGS = { params: 0, cls: 1, cls4: 2, out: 3, alpha: 4 }; // out = the channel marks, alpha = the least distance byte of the footprint (both packed four cells along x an rgba8uint texel)
@@ -79,7 +80,7 @@ export const SKIP_ANCHORS = {
   loopHead: '  let t=t0+f32(k)*stp;\n  if(t>endT||acc.a>ACC_STOP){break;}\n',
 };
 // the skip, after the sample's coordinate and before its read. The cell is the one that contains the point (the coarse grid's own rule: v = tc * dims, cell = v / 4 clamped); a frame with jumps (jumpOn 1) never skips: its sample's read also gives the distance
-export function skipSub(t, { limit = false } = {}) {
+export function skipSub(t, { limit = false, hid = false } = {}) { // hid: the program has the hiding code (a feature): a skipped sample is outside every shown segment, so the ray is not in a hidden part there (prevHid false, as the creep skip's)
   let o = subOnce(t, SKIP_ANCHORS.decl, SKIP_ANCHORS.decl + '@group(' + MARK_GROUP.group + ') @binding(' + MARK_GROUP.tex + ') var markTex:texture_3d<u32>;\n');
   o = subOnce(o, SKIP_ANCHORS.perRay, SKIP_ANCHORS.perRay
     + ' var shownMask=0u;\n'
@@ -90,16 +91,16 @@ export function skipSub(t, { limit = false } = {}) {
     + '  if(u.jumpOn==0){\n'
     + '   let mc=min(vec3<i32>(tcS*markDims)/' + COARSE.cell + ',markCells-vec3<i32>(1));\n' // (the texture's own size: the marks are made from it, not from a uniform)
     + '   let mt=textureLoad(markTex,vec3<i32>(mc.x/' + COARSE.perTexel + ',mc.y,mc.z),0);\n'
-    + '   if((mt[mc.x%' + COARSE.perTexel + ']&shownMask)==0u){prevValid=true;prevSkip=true;lastIndex=-1;previousT=t;k++;continue;}\n'
+    + '   if((mt[mc.x%' + COARSE.perTexel + ']&shownMask)==0u){prevValid=true;prevSkip=true;lastIndex=-1;' + (hid ? 'prevHid=false;' : '') + 'previousT=t;k++;continue;}\n'
     + '  }\n');
   if (limit) o = subOnce(o, SKIP_ANCHORS.loopHead, SKIP_ANCHORS.loopHead + '  if(k>=4096){break;}\n'); // OS: the display's loop ends after 4096 iterations from k = 0; a walk that starts later ends at the same sample
   return o.replace(/(\/\/ VR \/ AR volume pass \(WGSL\), variant [^\n]*)\n/, '$1 skip-marks' + (limit ? ' tile-walk' : '') + '\n');
 }
 // S (no section planes), EvS (with), OS (the 4 x 4 tiles' walk, no section planes)
-export function skipText({ f16 = false, cls4 = false, events = false, tiles = false } = {}) {
+export function skipText({ f16 = false, cls4 = false, events = false, tiles = false, feat = null } = {}) {
   if (tiles && events) throw new Error('skip marks: the tiles\' walk is not made for the section-plane program');
-  const base = tiles ? coarseVolumeWgsl({ f16, cls4 }, 4) : volumeWgsl({ f16, cls4, events });
-  return skipSub(base, { limit: tiles });
+  const base = tiles ? coarseVolumeWgsl({ f16, cls4, feat }, 4) : volumeWgsl({ f16, cls4, events, feat });
+  return skipSub(base, { limit: tiles, hid: !!featOf(feat) });
 }
 
 // the rows of cells [a, b) whose footprint touches the texels' slices [z0, z1): the cells cz with 4 cz - 1 <= z1 - 1 and 4 cz + 4 >= z0
@@ -132,15 +133,17 @@ export function alphaGridCpu({ data, dims }) {
 export function createMarkHost(ctx) {
   const { device } = ctx;
   const layout = uniformLayout(MARK_FIELDS), fld = n => layout.fields.find(f => f.name === n);
-  const st = { bgl: null, pipeLayout: null, progs: new Map(), grid: null, ubuf: null, key: null, dead: false, groups: new Map(), builds: 0, bg: new Map() };
+  const sh = ctx.share || {}; sh.progs ||= new Map(); // the compiled programs and layouts are shared by the hosts of several data sources (ctx.share, held by the caller)
+  const st = { bgl: sh.bgl || null, pipeLayout: sh.pipeLayout || null, progs: sh.progs, grid: null, ubuf: null, key: null, dead: false, groups: new Map(), builds: 0, bg: new Map() };
   const layouts = () => {
-    if (!st.bgl) {
+    if (!sh.bgl) {
       st.bgl = device.createBindGroupLayout({ entries: [{ binding: MARK_GROUP.tex, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'uint', viewDimension: '3d' } }] });
       st.pipeLayout = device.createPipelineLayout({ bindGroupLayouts: [ctx.bgl0, st.bgl] });
-    }
+      sh.bgl = st.bgl; sh.pipeLayout = st.pipeLayout;
+    } else { st.bgl = sh.bgl; st.pipeLayout = sh.pipeLayout; }
     return st;
   };
-  const buildBgl = () => st.buildBgl ||= device.createBindGroupLayout({ entries: [
+  const buildBgl = () => st.buildBgl ||= sh.buildBgl ||= device.createBindGroupLayout({ entries: [
     { binding: MARK_BINDINGS.params, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
     { binding: MARK_BINDINGS.cls, visibility: GPUShaderStage.COMPUTE, texture: { sampleType: 'float', viewDimension: '3d' } },
     { binding: MARK_BINDINGS.cls4, visibility: GPUShaderStage.COMPUTE, texture: { sampleType: 'float', viewDimension: '3d' } },
@@ -156,7 +159,7 @@ export function createMarkHost(ctx) {
     try {
       const module = device.createShaderModule({ code: marksBuildWgsl({ cls4 }) });
       try { ctx.onShader?.(module, { marks: true, cls4 }); } catch { /* diagnostics only */ }
-      Promise.resolve(device.createComputePipelineAsync({ layout: device.createPipelineLayout({ bindGroupLayouts: [buildBgl()] }), compute: { module, entryPoint: 'main' } })).then(pipe => { if (!st.dead) { p.pipe = pipe; p.state = 'ready'; } }, e => { p.state = 'failed'; p.msg = String(e?.message ?? e).slice(0, 160); });
+      Promise.resolve(device.createComputePipelineAsync({ layout: device.createPipelineLayout({ bindGroupLayouts: [buildBgl()] }), compute: { module, entryPoint: 'main' } })).then(pipe => { if (!st.dead || ctx.share) { p.pipe = pipe; p.state = 'ready'; } }, e => { p.state = 'failed'; p.msg = String(e?.message ?? e).slice(0, 160); });
     } catch (e) { p.state = 'failed'; p.msg = String(e?.message ?? e).slice(0, 160); }
     return p;
   };
@@ -226,7 +229,7 @@ export function createMarkHost(ctx) {
   const destroy = () => {
     st.dead = true;
     try { if (st.grid) { ctx.dropGroups?.(st.grid.tex); st.grid.tex.destroy(); st.grid.alpha.destroy(); } st.ubuf?.destroy(); } catch { /* gone */ }
-    st.grid = null; st.ubuf = null; st.groups.clear(); st.progs.clear(); st.key = null;
+    st.grid = null; st.ubuf = null; st.groups.clear(); if (!ctx.share) st.progs.clear(); st.key = null;
   };
   // the textures and buffers let go, the programs and layouts kept (a rebuild after a GPU error: the next prepare makes the marks whole again from the GPU's bytes, nothing is compiled again)
   const reset = () => {

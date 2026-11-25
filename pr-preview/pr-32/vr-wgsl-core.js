@@ -6,7 +6,8 @@
 // the sample pair's second volume, the general (non-combined) loop and the HU path.
 // The ray: the box is drawn with its back faces (like the WebGL program), vPos is the back-face point, the ray starts at the eye (origin, object space).
 // Output: colour 0 = the premultiplied colour, colour 1 = the depth of the first thing shown (NDC z, 24 bit in rgb) for the composite.
-import { lightingWGSL } from './lighting.js?v=20261125-build762';
+import { lightingWGSL } from './lighting.js?v=20261125-build763';
+import { featParts, featKey, FEAT_FIELDS } from './vr-wgsl-feat.js?v=20261125-build763';
 
 // ---- the uniform buffer: one struct, every member laid out by the WGSL rules (vec3 = 16-aligned, 12 bytes; arrays of vec4 only) ----
 // [name, type, count]; the packer (vr-wgpu.js) writes by this table, the struct text is made from it, a unit test checks both against wgsl_reflect
@@ -28,6 +29,8 @@ export const UNIFORM_FIELDS = [
   ['ctShadeContrast', 'f32'], ['planeCount', 'i32'], ['planeCut', 'i32'], ['capOn', 'i32'],
   ['jumpOn', 'i32'], ['proxyOn', 'i32'], ['proxyOrg', 'vec2i'], ['pad1', 'i32'],
 ];
+// the packer's members: the core's own and then the feature axis' (docs/vr-wgsl-feat.js): the offsets of the core's members are the same in both, a text without a feature declares only the core's
+export const UNIFORM_FIELDS_ALL = [...UNIFORM_FIELDS, ...FEAT_FIELDS];
 const TYPES = {
   f32: { a: 4, s: 4, n: 1, k: 'f', wgsl: 'f32' }, i32: { a: 4, s: 4, n: 1, k: 'i', wgsl: 'i32' },
   vec2f: { a: 8, s: 8, n: 2, k: 'f', wgsl: 'vec2<f32>' }, vec2i: { a: 8, s: 8, n: 2, k: 'i', wgsl: 'vec2<i32>' }, vec3f: { a: 16, s: 12, n: 3, k: 'f', wgsl: 'vec3<f32>' },
@@ -62,12 +65,13 @@ export const BOX_VERTICES = (() => { // 12 triangles, counter-clockwise seen fro
 
 // the WGSL of one variant. f16: shader-f16 is on (the per-step values qc / f0..f3 / curF in half precision, the 0.5 test stays exact because q - 0.5 is taken in f32 first);
 // cls4: the fourth segment's classes come from cls4Tex; events: the section planes / slices / cut face code is compiled (a session without a section leaves it out)
-function volumeWgslBase({ f16, cls4, events }) {
+function volumeWgslBase({ f16, cls4, events, feat = null }) {
   const C4 = (e, tc) => (cls4 ? `${e}.a=textureSampleLevel(cls4Tex,smp,clamp(${tc},vec3<f32>(0.0),vec3<f32>(0.999999)),0.0).r;` : '');
   const EV = s => (events ? s : '');
   const PX = s => (events ? '' : s); // the pre-pass start: not in a variant with section planes (those run the march from k = 0, the text of)
   const FM = f16 ? 'f16' : 'f32', FM4 = 'vec4<' + FM + '>'; // the half-precision type of the per-step values (written out: no alias)
-  return `${f16 ? 'enable f16;\n' : ''}// VR / AR volume pass (WGSL), variant f16=${f16} cls4=${cls4} events=${events}
+  const FT = featParts(feat), H = (s, e = '') => (FT.on ? s : e); // FT: the feature axis' pieces ('' / the core's own text for none); H(text, other): text only with a feature
+  return `${f16 ? 'enable f16;\n' : ''}// VR / AR volume pass (WGSL), variant f16=${f16} cls4=${cls4} events=${events}${H(' feat=' + featKey(feat))}
 const SEG_OFF=${f16 ? 'f16(4.0)' : '1.0e9'};
 const ACC_STOP:f32=0.95;
 const DEPTH_BIAS_RAY:f32=0.5;
@@ -76,7 +80,7 @@ const CT_SHADE_MIN:f32=0.35;
 const SEG_ALPHA:f32=0.95;
 const NSEG:i32=4;
 const SECTION_PLANES:i32=10;
-${uniformStruct()}
+${uniformStruct(FT.on ? [...UNIFORM_FIELDS, ...FT.fields] : UNIFORM_FIELDS)}
 @group(0) @binding(0) var<uniform> u:U;
 @group(0) @binding(1) var vol:texture_3d<f32>;
 @group(0) @binding(2) var clsTex:texture_3d<f32>;
@@ -87,7 +91,7 @@ ${uniformStruct()}
 @group(0) @binding(7) var smp:sampler;
 @group(0) @binding(8) var smpE:sampler;
 @group(0) @binding(9) var proxyTex:texture_2d<f32>;
-${lightingWGSL()}
+${FT.bind}${lightingWGSL()}
 struct VOut{@builtin(position) pos:vec4<f32>,@location(0) vPos:vec3<f32>};
 @vertex fn vs(@location(0) p:vec3<f32>)->VOut{
  var o:VOut;let q=p*u.halfExt;o.vPos=q;o.pos=u.mvp*vec4<f32>(q,1.0);return o;
@@ -150,9 +154,9 @@ fn segIdxOfQ(q:vec4<f32>)->i32{
  return -1;
 }
 fn segIdxAt(tc:vec3<f32>)->i32{return segIdxOfQ(clsAt(tc));}
-// the slice fill's lit look (the plane's normal turned to the viewer: the cut face of a tissue-look segment), the rest keep col
+${FT.fns}// the slice fill's lit look (the plane's normal turned to the viewer: the cut face of a tissue-look segment), the rest keep col
 fn sliceLook(p:vec3<f32>,col:vec3<f32>,si:i32,rd:vec3<f32>,ro:vec3<f32>)->vec3<f32>{
- let m=u.segM[si];
+ ${FT.look}let m=${FT.segM}[si];
  if(m.w<0.5||m.w>3.5){return col;}
  var bi=0;var bd=1.0e30;
  for(var i=0;i<SECTION_PLANES;i++){if(i>=u.planeCount){break;}let dd=abs(dot(u.cutPlanes[i].xyz,p)-u.cutPlanes[i].w);if(dd<bd){bd=dd;bi=i;}}
@@ -162,14 +166,14 @@ fn sliceLook(p:vec3<f32>,col:vec3<f32>,si:i32,rd:vec3<f32>,ro:vec3<f32>)->vec3<f
 fn sliceColor(p:vec3<f32>,rd:vec3<f32>,ro:vec3<f32>)->vec4<f32>{
  let hu=sliceHU(p);let a=smoothstep(u.sliceAir,u.sliceAir+10.0,hu);
  if(u.sliceSegOnly>0.5){
-  var si=-1;if(u.ctShade>0.5||u.sliceTint>0.0){si=segIdxAt(texCoord(p));}
+  var si=-1;if(u.ctShade>0.5||u.sliceTint>0.0){si=${FT.vis('segIdxAt(texCoord(p))', 'p')};}
   if(si<0){return vec4<f32>(0.0);}
-  var sr=vec4<f32>(u.segC[si].rgb*ctLumHU(hu,si),select(u.sliceTint,SEG_ALPHA,u.ctShade>0.5));
+  var sr=vec4<f32>(${FT.col('p', 'u.segC[si].rgb', 'si')}*${FT.lum('p', 'hu', 'si')},select(u.sliceTint,SEG_ALPHA,u.ctShade>0.5));
   sr=vec4<f32>(sliceLook(p,sr.rgb,si,rd,ro),sr.a);return sr;
  }
  if(a<=0.0){return vec4<f32>(0.0);}
  let g=clamp((hu-(u.sliceWindow.x-0.5*u.sliceWindow.y))/max(u.sliceWindow.y,1.0e-3),0.0,1.0);
- if(u.sliceTint>0.0){let si=segIdxAt(texCoord(p));if(si>=0){return vec4<f32>(mix(vec3<f32>(g),u.segC[si].rgb*ctLumHU(hu,si),vec3<f32>(u.sliceTint)),a);}}
+ if(u.sliceTint>0.0){let si=${FT.vis('segIdxAt(texCoord(p))', 'p')};if(si>=0){return vec4<f32>(mix(vec3<f32>(g),${FT.col('p', 'u.segC[si].rgb', 'si')}*${FT.lum('p', 'hu', 'si')},vec3<f32>(u.sliceTint)),a);}}
  return vec4<f32>(vec3<f32>(g),a);
 }
 // the HU gradient normal (central differences, six fetches); gHuMean = the mean of them = the HU at the hit
@@ -187,7 +191,7 @@ fn gradientHU(tc:vec3<f32>)->vec3<f32>{
 }
 // the normal of a hit on slot s: where the surface IS the processing mask the gradient of the mask's field (editTex channel s, read linear), else the HU gradient
 fn gradientAtS(tc:vec3<f32>,s:i32)->vec3<f32>{
- if(s>=0&&((u.editMask>>u32(s))&1)==1){
+${FT.bake} if(s>=0&&((u.editMask>>u32(s))&1)==1){
   let dd=1.0/max(vec3<f32>(textureDimensions(editTex)),vec3<f32>(1.0));let tq=cl(tc);
   let md=((u.editMaskOnly>>u32(s))&1)==1;
   let e0=textureSampleLevel(editTex,smpE,tq,0.0);
@@ -208,7 +212,7 @@ fn gradientAtS(tc:vec3<f32>,s:i32)->vec3<f32>{
 }
 @fragment fn fs(in:VOut)->FOut{
  var fo:FOut;fo.color=vec4<f32>(0.0);fo.depth=encDepth(in.pos.z);
- let o=u.origin;let dir=normalize(in.vPos-u.origin);
+${FT.init} let o=u.origin;let dir=normalize(in.vPos-u.origin);
  gInv=0.5/u.halfExt;
  let tcO=texCoord(o);let tcD=vec3<f32>(dir.x*gInv.x,-dir.y*gInv.y,dir.z*gInv.z);
  let bounds=hitBox(o,dir);
@@ -257,28 +261,50 @@ ${PX(` // the pre-pass: proxyTex holds, per 8 x 8 pixel tile, tA = the eye dista
  var prevSkip=false;var skBlk=vec3<i32>(-1);var skBits=vec2<u32>(0u);
  var chk=false; // the creep check is made only while the ray is near a surface (see below): false at the ray start and after a jump
  var hitIdx=-1;var hitLo=0.0;var hitHi=0.0;var hitF0=0.0;var hitF1=0.0;var hitIso=false;var hitSimple=false;var hitNb=6;
- // per-ray constants: one-hot channel selectors per segment (no dynamic indexing of the fetched vector inside the march); a disabled segment's offset is SEG_OFF
+${FT.hidInit} // per-ray constants: one-hot channel selectors per segment (no dynamic indexing of the fetched vector inside the march); a disabled segment's offset is SEG_OFF
  var sel0=${FM4}(0.0);var sel1=${FM4}(0.0);var sel2=${FM4}(0.0);var sel3=${FM4}(0.0);var off0=SEG_OFF;var off1=SEG_OFF;var off2=SEG_OFF;var off3=SEG_OFF;
  {let c=u.clsChan[0];if(c>=0&&u.segA[0].w>0.5){sel0[c]=${FM}(1.0);off0=${FM}(0.0);}}
  {let c=u.clsChan[1];if(c>=0&&u.segA[1].w>0.5){sel1[c]=${FM}(1.0);off1=${FM}(0.0);}}
  {let c=u.clsChan[2];if(c>=0&&u.segA[2].w>0.5){sel2[c]=${FM}(1.0);off2=${FM}(0.0);}}
  {let c=u.clsChan[3];if(c>=0&&u.segA[3].w>0.5){sel3[c]=${FM}(1.0);off3=${FM}(0.0);}}
  let skipOn=u.useSkip>0&&u.diag!=4;
- for(var iter=${events ? '0' : 'select(0,4096,emptyRay)'};iter<4096;iter++){
+${FT.P ? ` // the parts (P): pfA + pfV * t = the sample in the texel coordinates of the part's field (its trilinear cell = the floor), the map partFieldAt reads; the 8^3 blocks of partOcc are read only on a ray without slices or a cut face (the WebGL program's
+ // narrow loop: its loop with those events has none)
+ let pfD=vec3<f32>(textureDimensions(partField));let pfA=(tcO*u.partFieldScale+u.partFieldOff)*pfD-vec3<f32>(0.5);let pfV=tcD*u.partFieldScale*pfD;let pfOn=${events ? 'nSlice==0&&capT<0.0' : 'true'};
+` : ''} for(var iter=${events ? '0' : 'select(0,4096,emptyRay)'};iter<4096;iter++){
   let t=t0+f32(k)*stp;
   if(t>endT||acc.a>ACC_STOP){break;}
   iters++;
-${EV(`  // slices up to t + step, then the cut face, then the sample (the order of the WebGL loop)
+${FT.P ? `  // a part's ray (partKind != 0) in an 8^3 block of its field where no point is in the part, the body's (partKind 0) in a block that every slot it draws cuts whole: no sample up to the block's far side can be a hit, the ray goes to the first grid point past it,
+  // the loop's state is that after the last sample left out (previousT): lastIndex -1, prevHid = it was in a shown segment (hidden here), prevF = its value
+  if(pfOn){
+   let pp=pfA+pfV*t;let bk=min(clamp(vec3<i32>(floor(pp)),vec3<i32>(0),vec3<i32>(pfD)-vec3<i32>(1))>>vec3<u32>(3u),vec3<i32>(textureDimensions(partOcc))-vec3<i32>(1));
+   let ob=textureLoad(partOcc,bk,0);
+   var occOut=false;
+   if(u.partKind!=0){occOut=ob.r<0.5;}else{occOut=(off0>${FM}(0.5)||ob.r>0.5)&&(off1>${FM}(0.5)||ob.g>0.5)&&(off2>${FM}(0.5)||ob.b>0.5)&&(off3>${FM}(0.5)||ob.a>0.5);}
+   if(occOut){
+    let lo3=vec3<f32>(bk*8);let bd=select(lo3,lo3+vec3<f32>(8.0),pfV>=vec3<f32>(0.0));let tx=abs(bd-pp)/max(abs(pfV),vec3<f32>(1.0e-9));
+    let pm=i32(min(max(1.0,ceil(min(tx.x,min(tx.y,tx.z))/stp)),16777216.0));
+    let pT=t0+f32(k+pm-1)*stp;previousT=pT;
+    var qo=textureSampleLevel(clsTex,smp,cl(tcO+tcD*pT),0.0);${C4('qo', '(tcO+tcD*pT)')}
+    let qoc=${FM4}(qo-vec4<f32>(0.5));
+    let h0=dot(qoc,sel0)-off0;let h1=dot(qoc,sel1)-off1;let h2=dot(qoc,sel2)-off2;let h3=dot(qoc,sel3)-off3;
+    var hf=max(max(h0,h1),max(h2,h3));if(h3>=${FM}(0.0)){hf=h3;}if(h2>=${FM}(0.0)){hf=h2;}if(h1>=${FM}(0.0)){hf=h1;}if(h0>=${FM}(0.0)){hf=h0;}
+    prevF=f32(hf);prevHid=max(max(h0,h1),max(h2,h3))>=${FM}(0.0);
+    prevValid=true;prevSkip=false;lastIndex=-1;k+=pm;continue;
+   }
+  }
+` : ''}${EV(`  // slices up to t + step, then the cut face, then the sample (the order of the WebGL loop)
   while(nextSlice<nSlice&&sliceT[nextSlice]<=t+stp){
    let sc=sliceColor(o+dir*sliceT[nextSlice],dir,o);nextSlice++;
    let contribution=(1.0-acc.a)*u.sliceOpacity*sc.a;acc=vec4<f32>(acc.rgb+sc.rgb*contribution,acc.a+contribution);
   }
   if(capT>=0.0){
-   let cp=o+dir*capT;let capAt=capT;let ci=segIdxAt(texCoord(cp));capT=-1.0;
-   if(ci>=0){
+   let cp=o+dir*capT;let capAt=capT;${H('var', 'let')} ci=segIdxAt(texCoord(cp));capT=-1.0;
+${(FT.R ? '   ci=regionVis(cp,ci);\n' : '') + (FT.C ? '   ci=childVis(cp,ci);\n   if(ci>=0){childLook(childLookIdAt(texCoord(cp),ci),ci);}\n' : '')}   if(ci>=0){
     let n=u.cutPlanes[capPlane].xyz;let viewDir=-dir;
-    let lit=vrlRealCut(mix(u.segC[ci].rgb,vec3<f32>(1.0),vec3<f32>(0.22)),n,viewDir,u.lightOff,vrlDepth01(capAt,o,u.halfExt));
-    let contribution=(1.0-acc.a)*clamp(u.segA[ci].z,0.03,1.0);acc=vec4<f32>(acc.rgb+lit*contribution,acc.a+contribution);depthMark(capAt,contribution);
+    let lit=vrlRealCut(mix(${FT.col('cp', 'u.segC[ci].rgb', 'ci')},vec3<f32>(1.0),vec3<f32>(0.22)),n,viewDir,u.lightOff,vrlDepth01(capAt,o,u.halfExt));
+    let contribution=(1.0-acc.a)*clamp(${FT.segA}[ci].z,0.03,1.0);acc=vec4<f32>(acc.rgb+lit*contribution,acc.a+contribution);depthMark(capAt,contribution);
     lastIndex=ci;previousT=t;k++;continue;
    }
   }
@@ -295,7 +321,7 @@ ${EV(`  // slices up to t + step, then the cut face, then the sample (the order 
     if(any(sb!=skBlk)){skBlk=sb;skBits=textureLoad(skipTex,sb,0).rg;}
     let sl=sc&vec3<i32>(3);let sbit=sl.x+(sl.y<<2u)+(sl.z<<4u);
     let sw=select(skBits.y,skBits.x,sbit<32);
-    if(((sw>>u32(sbit&31))&1u)!=0u){prevValid=true;prevSkip=true;lastIndex=-1;previousT=t;k++;continue;}
+    if(((sw>>u32(sbit&31))&1u)!=0u){prevValid=true;prevSkip=true;lastIndex=-1;${H('prevHid=false;')}previousT=t;k++;continue;}
    }
   }
   let tcS=cl(tcO+tcD*t);
@@ -306,7 +332,7 @@ ${EV(`  // slices up to t + step, then the cut face, then the sample (the order 
    if(max(max(dot(qfc,sel0)-off0,dot(qfc,sel1)-off1),max(dot(qfc,sel2)-off2,dot(qfc,sel3)-off3))>=${FM}(0.0)){dd=0.0;}
   }
   if(u.jumpOn==0){dd=0.0;}
-  chk=dd<2.7;
+${FT.T ? '  if((prevHid&&!hideFieldOk())||(lastIndex>=0&&hideAnyOn())){dd=0.0;}\n' : H('  if(prevHid&&!hideFieldOk()){dd=0.0;}\n')}  chk=dd<2.7;
   // a jump is never shorter than a normal step (m >= 1); it lands on the same t0 + k * step grid
   if(dd>=2.7){let m=max(1,i32(floor((dd-1.8)*jkA/stp)));let nextJ=t0+f32(k+m)*stp;jumpLen+=nextJ-t;previousT=nextJ-stp*0.05;prevValid=false;k+=m;continue;}
   ${C4('q', 'tcS')}
@@ -314,8 +340,8 @@ ${EV(`  // slices up to t + step, then the cut face, then the sample (the order 
   let f0=dot(qc,sel0)-off0;let f1=dot(qc,sel1)-off1;let f2=dot(qc,sel2)-off2;let f3=dot(qc,sel3)-off3;
   var idx=-1;var curF:${FM}=${FM}(-1.0);
   if(f0>=${FM}(0.0)){idx=0;curF=f0;}else if(f1>=${FM}(0.0)){idx=1;curF=f1;}else if(f2>=${FM}(0.0)){idx=2;curF=f2;}else if(f3>=${FM}(0.0)){idx=3;curF=f3;}
-  if(idx!=lastIndex){
-   if(idx>=0){
+${H('  var hidNow=false; // this sample is in a hidden part (-> prevHid of the next one)\n')}  if(idx!=lastIndex){
+${H('   var passH=false; // a hit on a hidden part is no hit: the ray goes on (lastIndex stays -1, so the next sample inside the segment is a candidate again)\n')}   if(idx>=0){
     if(prevSkip&&prevValid){
      var qp=textureSampleLevel(clsTex,smp,cl(tcO+tcD*previousT),0.0);${C4('qp', '(tcO+tcD*previousT)')}
      let qpc=${FM4}(qp-vec4<f32>(0.5));
@@ -323,19 +349,58 @@ ${EV(`  // slices up to t + step, then the cut face, then the sample (the order 
      prevF=f32(max(max(g0,g1),max(g2,g3)));
     }
     // segments are always opaque in VR: every hit ends the ray and is searched and shaded after the loop
-    let simple=u.diag==3||u.segC[idx].w>0.5;
-    hitIso=u.refine==1&&((u.editMask>>u32(idx))&1)==0&&prevValid&&prevF<0.0;
-    hitIdx=idx;hitLo=previousT;hitHi=t;hitF0=prevF;hitF1=f32(curF);hitSimple=simple;hitNb=select(2,6,prevValid);lastIndex=idx;break;
-   }
-   lastIndex=idx;
-  }
-  prevSkip=false;prevValid=true;prevF=select(f32(max(max(f0,f1),max(f2,f3))),f32(curF),idx>=0);
+    ${H('var', 'let')} simple=u.diag==3||u.segC[idx].w>0.5;
+${FT.C ? `    {var chI=cIdx(tcO+tcD*t).x;var chE=vec4<f32>(0.0);if(chI>=1){chE=childLut[256+chI];}
+     passH=${FT.chH}(tcO+tcD*t,idx);
+     if(!passH&&((i32(chE.a+0.5)>>u32(idx))&1)==1){chI=cIdx(tcO+tcD*t).y;chE=vec4<f32>(0.0);if(chI>=1){chE=childLut[256+chI];}}
+     if(((i32(chE.b+0.5)>>u32(idx))&1)==1){simple=true;}
+     childLook(chI,idx);}
+` : ''}${FT.R ? `    if(!passH&&u.regionAnyHidden!=0){passH=${FT.rgH}(tcO+tcD*t,idx);}\n` : ''}${H('    hidNow=passH;\n')}    hitIso=u.refine==1&&((u.editMask>>u32(idx))&1)==0&&prevValid&&prevF<0.0;
+${FT.T ? `    hitHid=prevHid;
+    if(!passH){
+     let alphaT=clamp(gSegA[idx].z,0.03,1.0);
+     if((1.0-acc.a)*alphaT+acc.a>ACC_STOP&&!simple){hitIdx=idx;hitLo=previousT;hitHi=t;hitF0=prevF;hitF1=f32(curF);hitSimple=simple;hitNb=select(2,6,prevValid);lastIndex=idx;break;}
+     { // the non-opaque march: a hit that does not end the ray is searched and shaded here, the ray goes on behind it (the WebGL 'full' program's loop)
+      var lo=previousT;var hi=t;var f0i=prevF;var f1i=f32(curF);let cI=u.clsChan[idx];let nb=select(2,6,prevValid);
+      if(!simple&&hitIso&&!hideAnyOn()){
+       for(var r=0;r<3;r++){
+        var mid=(lo+hi)*0.5;if(r<2&&abs(f1i-f0i)>1.0e-6){mid=clamp(lo+(hi-lo)*(-f0i/(f1i-f0i)),lo+(hi-lo)*0.02,hi-(hi-lo)*0.02);}
+        let qm=clsAt(tcO+tcD*mid);
+        let fmv=qm[cI] - 0.5;var inside=fmv>=0.0;
+        for(var s=0;s<NSEG;s++){if(s>=idx){break;}let c=u.clsChan[s];if(c>=0&&u.segA[s].w>0.5&&qm[c]>=0.5){inside=false;}}
+        if(inside){hi=mid;f1i=fmv;}else{lo=mid;f0i=fmv;}
+       }
+      }else if(!simple){
+       for(var r=0;r<6;r++){
+        if(r>=nb){break;}
+        let mid=(lo+hi)*0.5;let qm=clsAt(tcO+tcD*mid);
+        var inside=qm[cI]>=0.5;
+        for(var s=0;s<NSEG;s++){if(s>=idx){break;}let c=u.clsChan[s];if(c>=0&&u.segA[s].w>0.5&&qm[c]>=0.5){inside=false;}}
+        if(inside&&hideAnyOn()&&hideAt(tcO+tcD*mid,idx)){inside=false;}
+        if(inside){hi=mid;}else{lo=mid;}
+       }
+      }
+      let hpT=o+dir*hi;let tcT=texCoord(hpT);
+      var onFaceT=!simple&&hi<=faceEnd;
+      var nT=-dir;var hcutT=false;
+      if(!simple){if(onFaceT){nT=entryFaceNormal(o,dir);}else{if(prevHid){let hn=hideGrad(tcT,idx);if(dot(hn,hn)>0.0){nT=normalize(hn);hcutT=true;}}if(!hcutT){nT=gradientAtS(tcT,idx);}}}
+      onFaceT=onFaceT||hcutT;
+      let viewDirT=normalize(o-hpT);let laterT=acc.a>0.0&&!simple&&!onFaceT;
+      let nnT=select(nT,select(nT,-nT,gHuMean<0.5*(u.segA[idx].x+u.segA[idx].y)),laterT);
+      let shadeT=vrlShade(nnT,viewDirT,u.lightOff,vrlDepth01(hi,o,u.halfExt),select(0.0,1.0,laterT),gSegM[idx].xyz);
+      let litT=colAt(hpT+dir*(0.75*u.voxelMin),u.segC[idx].rgb,idx)*shadeT.x+vec3<f32>(shadeT.y);
+      let contributionT=(1.0-acc.a)*alphaT;acc=vec4<f32>(acc.rgb+litT*contributionT,acc.a+contributionT);depthMark(hi,contributionT);
+     }
+    }
+` : H('    hitHid=prevHid;\n    if(!passH){')}${FT.T ? '' : "    hitIdx=idx;hitLo=previousT;hitHi=t;hitF0=prevF;hitF1=f32(curF);hitSimple=simple;hitNb=select(2,6,prevValid);lastIndex=idx;break;" + H('}') + "\n"}   }\n   lastIndex=${H('select(idx,-1,passH)', 'idx')};
+  }${FT.T ? ' else if(idx>=0&&hideAnyOn()&&hideAt(tcO+tcD*t,idx)){lastIndex=-1;hidNow=true;} // a see-through segment: a hidden part met inside it is left like one met from outside, the shown part after it is a hit again' : ''}
+${H('  prevHid=hidNow;\n')}  prevSkip=false;prevValid=true;prevF=select(f32(max(max(f0,f1),max(f2,f3))),f32(curF),idx>=0);
   previousT=t;k++;
  }
  if(hitIdx>=0){
-  let idx=hitIdx;var lo=hitLo;var hi=hitHi;var f0=hitF0;var f1=hitF1;let cIdx=u.clsChan[idx];
+  ${FT.P ? 'var' : 'let'} idx=hitIdx;var lo=hitLo;var hi=hitHi;var f0=hitF0;var f1=hitF1;${FT.P ? 'var' : 'let'} cIdx=u.clsChan[idx];
   if(hitSimple){}
-  else if(hitIso){ // two secant guesses and one bisection on the interpolated class value
+  else if(hitIso${FT.P ? '&&!hitHid' : ''}${H('&&!hideAnyOn()')}){ // two secant guesses and one bisection on the interpolated class value
    for(var r=0;r<3;r++){
     var mid=(lo+hi)*0.5;if(r<2&&abs(f1-f0)>1.0e-6){mid=clamp(lo+(hi-lo)*(-f0/(f1-f0)),lo+(hi-lo)*0.02,hi-(hi-lo)*0.02);}
     let qm=clsAt(tcO+tcD*mid);
@@ -349,18 +414,35 @@ ${EV(`  // slices up to t + step, then the cut face, then the sample (the order 
     let mid=(lo+hi)*0.5;let qm=clsAt(tcO+tcD*mid);
     var inside=qm[cIdx]>=0.5;
     for(var s=0;s<NSEG;s++){if(s>=idx){break;}let c=u.clsChan[s];if(c>=0&&u.segA[s].w>0.5&&qm[c]>=0.5){inside=false;}}
-    if(inside){hi=mid;}else{lo=mid;}
+${FT.P ? `    { // after a hidden part: the first point where ANY shown segment is and it is not hidden (its own slot): the cut face, whatever segment it meets
+     var hs=idx;var hc=inside&&hideAnyOn();
+     if(hitHid&&u.diag!=4){let qmc=${FM4}(qm-vec4<f32>(0.5));hs=-1;if(dot(qmc,sel0)-off0>=${FM}(0.0)){hs=0;}else if(dot(qmc,sel1)-off1>=${FM}(0.0)){hs=1;}else if(dot(qmc,sel2)-off2>=${FM}(0.0)){hs=2;}else if(dot(qmc,sel3)-off3>=${FM}(0.0)){hs=3;}inside=hs>=0;hc=inside;}
+     if(hc&&hideAt(tcO+tcD*mid,hs)){inside=false;}
+    }
+` : H('    if(inside&&hideAnyOn()&&hideAt(tcO+tcD*mid,idx)){inside=false;} // the surface is not in a hidden part: after a hidden part it is where the shown part starts\n')}    if(inside){hi=mid;}else{lo=mid;}
    }
   }
-  let hp=o+dir*hi;let tc=texCoord(hp);
-  let onFace=!hitSimple&&hi<=faceEnd;
+${FT.P ? `  if(hitHid&&!hitSimple&&u.diag!=4){ // the segment of the point found (the cut face's), not the sample's one step on (not at diag 4: the WebGL program's general loop, which draws that diagnostic, keeps the sample's own segment)
+   let tb=tcO+tcD*hi;var qb=textureSampleLevel(clsTex,smp,cl(tb),0.0);${C4('qb', 'tb')}
+   let qbc=${FM4}(qb-vec4<f32>(0.5));var sb=-1;if(dot(qbc,sel0)-off0>=${FM}(0.0)){sb=0;}else if(dot(qbc,sel1)-off1>=${FM}(0.0)){sb=1;}else if(dot(qbc,sel2)-off2>=${FM}(0.0)){sb=2;}else if(dot(qbc,sel3)-off3>=${FM}(0.0)){sb=3;}
+   if(sb>=0&&sb!=idx){idx=sb;cIdx=u.clsChan[idx];hitSimple=u.diag==3||u.segC[idx].w>0.5;
+${FT.C ? `    {var chI=chIdxP(tb).x;var chE=vec4<f32>(0.0);if(chI>=1){chE=childLut[256+chI];}if(((i32(chE.a+0.5)>>u32(idx))&1)==1){chI=chIdxP(tb).y;chE=vec4<f32>(0.0);if(chI>=1){chE=childLut[256+chI];}}if(((i32(chE.b+0.5)>>u32(idx))&1)==1){hitSimple=true;}childLook(chI,idx);}
+` : ''}   }
+  }
+` : ''}  let hp=o+dir*hi;let tc=texCoord(hp);
+${FT.on ? `  var onFace=!hitSimple&&hi<=faceEnd;
+  var n=-dir;
+  var hcut=false;
+  if(!hitSimple){if(onFace){n=entryFaceNormal(o,dir);}else{if(hitHid){let hn=hideGrad(tc,idx);if(dot(hn,hn)>0.0){n=normalize(hn);hcut=true;}}if(!hcut){n=gradientAtS(tc,idx);}}}
+  onFace=onFace||hcut; // the cut a hidden part leaves is lit by its border, as the box face (not flipped)
+` : `  let onFace=!hitSimple&&hi<=faceEnd;
   var n=-dir;
   if(!hitSimple){if(onFace){n=entryFaceNormal(o,dir);}else{n=gradientAtS(tc,idx);}}
-  let viewDir=normalize(o-hp);let later=acc.a>0.0&&!hitSimple&&!onFace;
+`}  let viewDir=normalize(o-hp);let later=acc.a>0.0&&!hitSimple&&!onFace;
   let nn=select(n,select(n,-n,gHuMean<0.5*(u.segA[idx].x+u.segA[idx].y)),later);
-  let shade=vrlShade(nn,viewDir,u.lightOff,vrlDepth01(hi,o,u.halfExt),select(0.0,1.0,later),u.segM[idx].xyz);
-  let alpha=clamp(u.segA[idx].z,0.03,1.0);
-  let lit=u.segC[idx].rgb*shade.x+vec3<f32>(shade.y);
+  let shade=vrlShade(nn,viewDir,u.lightOff,vrlDepth01(hi,o,u.halfExt),select(0.0,1.0,later),${FT.segM}[idx].xyz);
+  let alpha=clamp(${FT.segA}[idx].z,0.03,1.0);
+  let lit=${FT.col('hp+dir*(0.75*u.voxelMin)', 'u.segC[idx].rgb', 'idx')}*shade.x+vec3<f32>(shade.y);
   let contribution=(1.0-acc.a)*alpha;acc=vec4<f32>(acc.rgb+lit*contribution,acc.a+contribution);hitEnd=true;
   depthMark(hi,1.0);
  }
@@ -447,8 +529,8 @@ function ablate(t, abl, counters) {
   return t.replace(/(\/\/ VR \/ AR volume pass \(WGSL\), variant [^\n]*)\n/, '$1 abl=' + (abl || 'none') + ' counters=' + counters + '\n');
 }
 // the WGSL of one variant; abl / counters only for the performance record's breakdown (see above): with the defaults the text is the display variant's, character for character
-export function volumeWgsl({ f16 = false, cls4 = false, events = true, abl = '', counters = false } = {}) {
-  const t = volumeWgslBase({ f16, cls4, events });
+export function volumeWgsl({ f16 = false, cls4 = false, events = true, abl = '', counters = false, feat = null } = {}) {
+  const t = volumeWgslBase({ f16, cls4, events, feat });
   return abl || counters ? ablate(t, abl, counters) : t;
 }
 

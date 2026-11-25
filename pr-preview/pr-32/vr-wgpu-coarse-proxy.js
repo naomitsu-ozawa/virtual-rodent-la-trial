@@ -27,7 +27,7 @@
 // ---- what the volume pass does with (tA, tB) ----
 // The march starts one grid point before the one tA falls on (k = floor((tA - t0) / stp) - 1, never below 0: the display's rule, so a hit k* >= k + 1) and its end is min(endT, tB): the loop ends when t > endT, and no sample past tB is inside a shown segment,
 // so no hit, no accumulated colour and no depth mark happens there. Only the start and the end move; the samples, jumps, hit bracket, search and shading are the march's own.
-import { uniformLayout, uniformStruct, PROXY, PROXY_FIELDS, PROXY_DIFF_BINDINGS, volumeWgsl } from './vr-wgsl-core.js?v=20261125-build762';
+import { uniformLayout, uniformStruct, PROXY, PROXY_FIELDS, PROXY_DIFF_BINDINGS, volumeWgsl } from './vr-wgsl-core.js?v=20261125-build763';
 
 export const COARSE = { cell: 4, perTexel: 4, empty: PROXY.empty, rebuildEvery: 6 };
 // the variants of the shadow pass (docs/vr-perf-log.js BD_SPECS carries the same table under `coarse`)
@@ -204,8 +204,8 @@ export const VOLUME_ANCHORS = [
   'let tA=textureLoad(proxyTex,(vec2<i32>(in.pos.xy)-u.proxyOrg)/8,0).r;',
   'if(tA>endT){emptyRay=true;}else if(tA>t0){k=max(0,i32(floor((tA-t0)/stp))-1);}',
 ];
-export function coarseVolumeWgsl({ f16 = false, cls4 = false } = {}, tile = 4) {
-  let t = volumeWgsl({ f16, cls4, events: false });
+export function coarseVolumeWgsl({ f16 = false, cls4 = false, feat = null } = {}, tile = 4) {
+  let t = volumeWgsl({ f16, cls4, events: false, feat });
   t = sub(t, VOLUME_ANCHORS[0], `let tt=textureLoad(proxyTex,(vec2<i32>(in.pos.xy)-u.proxyOrg)/${tile},0).rg;let tA=tt.r;`);
   t = sub(t, VOLUME_ANCHORS[1], 'if(tA>endT){emptyRay=true;}else{if(tA>t0){k=max(0,i32(floor((tA-t0)/stp))-1);}endT=min(endT,tt.g);}');
   return t.replace(/(\/\/ VR \/ AR volume pass \(WGSL\), variant [^\n]*)\n/, '$1 coarse-tile=' + tile + '\n');
