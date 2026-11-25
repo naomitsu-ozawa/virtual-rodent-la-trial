@@ -5,7 +5,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import * as THREEG from 'three/webgpu';
 import { WgslReflect } from 'wgsl_reflect/wgsl_reflect.module.js';
-import { volumeWgsl, uniformLayout, proxyWgsl, proxyDiffWgsl, identDiffWgsl, IDENT_DIFF, identDiffDecode } from '../../docs/vr-wgsl-core.js';
+import { volumeWgsl, uniformLayout, UNIFORM_FIELDS_ALL, proxyWgsl, proxyDiffWgsl, identDiffWgsl, IDENT_DIFF, identDiffDecode } from '../../docs/vr-wgsl-core.js';
 import * as host from '../../docs/vr-wgpu.js';
 import { createVrVolumeRenderer } from '../../docs/vr-wgpu.js';
 import * as P from '../../docs/vr-wgpu-coarse-proxy.js';
@@ -231,16 +231,19 @@ describe('the display with a switch on: a way is chosen for every pass of every 
     expect(rec.log.slice(n0).filter(l => l.startsWith('compute.dispatch'))).toContain('compute.dispatch ' + Math.ceil(Math.ceil(500 / 4) * 2 / 8) + ',' + Math.ceil(Math.ceil(500 / 4) / 8)); // the 4 x 4 tiles: 125 per eye, two eyes, 125 rows
     rec.r.dispose();
   }));
-  it('the frames that are not B: a step too fine for the walk limit, diag 2 and the grid not ready are D (distSplit with the display\'s 8 x 8 pre-pass); the probe (diag 5), diag 1 and a matrix that cannot be inverted are D0 (no pre-pass); a section plane is EvD (distSplit on the section-plane program); no jumps is S (the skip marks)', withGpu(async () => {
+  it('the frames that are not B: a step too fine for the walk limit and the grid not ready are D (distSplit with the display\'s 8 x 8 pre-pass); diag 2 (the loop count is the picture), the probe (diag 5), diag 1 and a matrix that cannot be inverted are D0 (no pre-pass); a section plane is EvD (distSplit on the section-plane program); no jumps is S (the skip marks)', withGpu(async () => {
     const rec = mkR({ distSplitDisplay: true, coarseDisplay: true }), u = sceneUniforms(); await ready(rec.r, u);
     for (let i = 0; i < 4; i++) frameOf(rec.r, u); expect(rec.r.stats.np).toMatchObject({ use: true, way: 'B' });
     const way = (setup, expected, over = {}) => { const bak = {}; setup?.(u, bak); frameOf(rec.r, u, over); expect(rec.r.stats.np, expected.reason ?? expected.way).toMatchObject(expected); setup?.(u, bak, true); };
     way((u2, b, undo) => { u2.stepSize.value = undo ? 0.02 : 0.0008; }, { use: true, way: 'D' });
-    way((u2, b, undo) => { u2.diag.value = undo ? 0 : 2; }, { use: true, way: 'D' });
+    way((u2, b, undo) => { u2.diag.value = undo ? 0 : 2; }, { use: true, way: 'D0' });
     way((u2, b, undo) => { u2.diag.value = undo ? 0 : 5; }, { use: true, way: 'D0' });
     way((u2, b, undo) => { u2.diag.value = undo ? 0 : 1; }, { use: true, way: 'D0' });
     way((u2, b, undo) => { u2.planeCount.value = undo ? 0 : 2; }, { use: true, way: 'EvD' });
-    way((u2, b, undo) => { u2.distInCls.value = undo ? 1 : 0; }, { use: true, way: 'S', mode: 'skip' });
+    way((u2, b, undo) => { u2.distInCls.value = undo ? 1 : 0; }, { use: true, way: 'S', mode: 'genSkip' }); // the combined texture is not in use: the general loop's S
+    way((u2, b, undo) => { u2.distInCls.value = undo ? 1 : 0; u2.diag.value = undo ? 0 : 4; }, { use: true, way: 'S', mode: 'genSkip' }); // (whatever the diagnostic)
+    way((u2, b, undo) => { u2.diag.value = undo ? 0 : 4; }, { use: true, way: 'OS', mode: 'tileSkip' }); // diag 4 with the combined texture in use: the core's tile walk
+    way((u2, b, undo) => { u2.useCls.value = undo ? 1 : 0; }, { use: true, way: 'S', mode: 'genSkipHu' }); // the HU source of the general loop (the classification-off diagnostic): the HU marks' S
     way(null, { use: true, way: 'EvD' }, { variant: { cls4: false, events: true } });
     frameOf(rec.r, u); expect(rec.r.stats.np).toMatchObject({ use: true, way: 'B' }); // everything back: B again
     rec.r.dispose();
@@ -311,8 +314,8 @@ describe('the display with a switch on: a way is chosen for every pass of every 
     let done = false; const p = rec.r.preload(u, [{ cls4: false, events: false }]).then(() => { done = true; });
     await settle(); await settle(); await new Promise(r => setTimeout(r, 30)); expect(done).toBe(false); expect(releases.length).toBeGreaterThan(0); // (held by the programs of the ways)
     const c4Held = releases.length; for (const r of releases.splice(0)) r(); await p; expect(done).toBe(true);
-    expect(c4Held).toBe(4); // c3: B (both), OS (tileSkip), S (skip) and EvS (skipEv) are the ones held here (the c4 ones are started after the wait, not waited for)
-    await settle(); const progs = rec.stats.shaders.filter(c => /march=distSplit|skip-marks/.test(c)); expect(progs.length).toBeGreaterThanOrEqual(6 + 6); // every way of c3, then (started, not waited for) every way of c4
+    expect(c4Held).toBe(8); // c3: B (both), OS (tileSkip), S (skip), EvS (skipEv) and the general loop's S and EvS (genSkip, genSkipEv) and of the HU data (genSkipHu, genSkipHuEv) are the ones held here (the c4 ones are started after the wait, not waited for)
+    await settle(); const progs = rec.stats.shaders.filter(c => /march=distSplit|skip-marks/.test(c)); expect(progs.length).toBeGreaterThanOrEqual(8 + 8); // every way of c3, then (started, not waited for) every way of c4
     frameOf(rec.r, u); expect(rec.r.stats.np.use).toBe(true);
     rec.r.dispose();
   }));
@@ -440,7 +443,7 @@ describe('the check\'s GPU side', () => {
     const { rec, results, u } = await runCheck(8);
     const written = new Set(), w0 = rec.device.queue.writeBuffer; rec.device.queue.writeBuffer = (b, o, d) => { written.add(b); return w0(b, o, d); };
     frameOf(rec.r, u, { identCtx: { phase: 'auto', measured: true } }); await settle();
-    const size = uniformLayout().byteSize, ubufs = [...written].filter(b => b.desc.size === size), before = ubufs.length;
+    const size = uniformLayout(UNIFORM_FIELDS_ALL).byteSize, ubufs = [...written].filter(b => b.desc.size === size), before = ubufs.length;
     expect(before).toBeGreaterThanOrEqual(2); const mine = ubufs.filter(b => true);
     await rec.r.breakdown.begin({ cls4: false, events: false }, () => {}); rec.r.breakdown.end();
     written.clear(); frameOf(rec.r, u, { identCtx: { phase: 'auto', measured: true } }); await settle();
@@ -793,7 +796,7 @@ describe('the sixth segment (the hold scale), the tissue switch numbers and the 
     expect(vrView).toContain("return false}return swapData0(setId)} }"); expect(vrView).toContain('if(!running||ui.swapBusy)return false;\n   stopPair();');
   });
   it('the combined texture is marked while its rebuild goes up (docs/vr-combo-rebuild.js writes the alpha into the bytes ahead of the slab), every frame, before the draw', () => {
-    const i = vrView.indexOf('gx.vol.volume.markCpuBusy?.(material.uniforms.clsTex?.value,!!comboT?.rb?.busy);'); expect(i).toBeGreaterThan(0); expect(vrView.indexOf('gx.vol.draw({u:material.uniforms,cams,')).toBeGreaterThan(i);
+    const i = vrView.indexOf('gx.vol.volume.markCpuBusy?.(material.uniforms.clsTex?.value,!!comboT?.rb?.busy);'); expect(i).toBeGreaterThan(0); expect(vrView.indexOf('gx.vol.draw({u:(diagAn.noRegion?null:partGxU(vk))||material.uniforms,cams,')).toBeGreaterThan(i);
   });
   it('a destroyed instance no longer follows the combined texture\'s writes', withGpu(async () => {
     const rec = mkR({}, false, { echo: {}, errorScopes: {} }), u = sceneUniforms(); await ready(rec.r, u);

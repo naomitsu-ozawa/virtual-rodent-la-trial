@@ -13,8 +13,9 @@ describe('chooseWay: the table of chapter 6', () => {
   it('the normal frame (jumps, no section, diag 0 or 3) is B in the centre and in the periphery', () => {
     for (const diag of [0, 3]) for (const pass of ['low', 'peri']) expect(ch({ pass, diag })).toBe('B');
   });
-  it('a walk that can reach the loop limit, diag 2 and a grid being made: D in the centre, D0 in the periphery (its D has no tiles)', () => {
-    for (const o of [{ walkOk: false }, { diag: 2 }, { gridReady: false }]) { expect(ch({ ...o, pass: 'low' })).toBe('D'); expect(ch({ ...o, pass: 'peri' })).toBe('D0'); }
+  it('a walk that can reach the loop limit and a grid being made: D in the centre, D0 in the periphery (its D has no tiles); diag 2 (the loop count is the picture) is D0 in both', () => {
+    for (const o of [{ walkOk: false }, { gridReady: false }]) { expect(ch({ ...o, pass: 'low' })).toBe('D'); expect(ch({ ...o, pass: 'peri' })).toBe('D0'); }
+    for (const pass of ['low', 'peri']) expect(ch({ diag: 2, pass })).toBe('D0');
   });
   it('the probe (diag 5 or the probe pass), diag 1 and a matrix that cannot be inverted are D0 in every pass', () => {
     for (const pass of ['low', 'peri', 'probe']) { expect(ch({ pass, diag: 5 })).toBe('D0'); expect(ch({ pass, diag: 1 })).toBe('D0'); expect(ch({ pass, matrixOk: false })).toBe('D0'); }

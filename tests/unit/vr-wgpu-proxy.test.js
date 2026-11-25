@@ -3,7 +3,7 @@
 // The maths of the pre-pass and its start are tested in vr-wgsl-proxy.test.js; the text of the passes in vr-breakdown.test.js / vr-wgpu.test.js.
 import { describe, it, expect, vi } from 'vitest';
 import * as THREEG from 'three/webgpu';
-import { uniformLayout, PROXY_FIELDS, PROXY, VOLUME_BINDINGS, COUNTER_FIELDS, proxyWgsl } from '../../docs/vr-wgsl-core.js';
+import { uniformLayout, UNIFORM_FIELDS_ALL, PROXY_FIELDS, PROXY, VOLUME_BINDINGS, COUNTER_FIELDS, proxyWgsl } from '../../docs/vr-wgsl-core.js';
 import { createVrVolumeRenderer, registerShadowEncoder } from '../../docs/vr-wgpu.js';
 import { BD_SPECS, BD_VARIANTS, defineBdVariant } from '../../docs/vr-perf-log.js';
 
@@ -37,7 +37,7 @@ const mockGpu = (script, { timestamps = true } = {}) => {
 };
 const drawLow = (r, u = {}) => r.draw({ u, cams: [eyeCam(640, 480), eyeCam(640, 480)], model: new THREEG.Matrix4(), f: 0.5, fov: false, rects: null, variant: { cls4: false, events: false } });
 const frame = (r, { u = {} } = {}) => { drawLow(r, u); return r.volume.markFrame(); };
-const L = uniformLayout(), PL = uniformLayout(PROXY_FIELDS);
+const L = uniformLayout(UNIFORM_FIELDS_ALL), PL = uniformLayout(PROXY_FIELDS);
 const at = n => L.fields.find(f => f.name === n).offset / 4, pat = n => PL.fields.find(f => f.name === n).offset / 4;
 const isMain = w => w.data.length === L.byteSize / 4, isPx = w => w.data.length === PL.byteSize / 4;
 // a session's uniforms that let the low pass use the pre-pass: jumps valid (distInCls, useCls), a combined texture on the GPU, no section, two shown slots
@@ -92,7 +92,7 @@ describe('host: the low pass runs the pre-pass first, with the tiles it reads', 
     r.dispose();
   }));
   it('a pass that may not use it makes no compute pass and has proxyOn 0 with the 1 x 1 stand-in bound: jumps off, sections (the variant and the plane count), the probe\'s diag 5 (diag 4 is OS now: its tiles are the 4 x 4 ones, tests/unit/vr-wgpu-display-ident.test.js; a missing combined texture draws nothing)', withGpu(async () => {
-    for (const [what, u, extra] of [['no jumps (distInCls 0)', proxyU({ distInCls: { value: 0 } }), {}], ['useCls 0', proxyU({ useCls: { value: 0 } }), {}], ['section variant', proxyU({ planeCount: { value: 2 } }), { variant: { cls4: false, events: true } }],
+    for (const [what, u, extra] of [['no jumps (distInCls 0)', proxyU({ distInCls: { value: 0 } }), {}], ['section variant', proxyU({ planeCount: { value: 2 } }), { variant: { cls4: false, events: true } }],
       ['diag 5', proxyU({ diag: { value: 5 } }), {}], ['cls4 variant without cls4Tex', proxyU(), { variant: { cls4: true, events: false } }]]) {
       const { device, log } = mockGpu([[1n, 2n], [3n, 4n]]);
       const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1] }); await r.preload(proxyU(), [{ cls4: false, events: false }]); log.computePasses.length = 0; log.passes.length = 0; log.cmds.length = 0; /* the session start: the display's ways are compiled and the data's grids made before the first frame (what the test counts is what a frame does) */

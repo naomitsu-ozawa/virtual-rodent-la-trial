@@ -12,7 +12,7 @@ describe('the page compiles the parts\' programs before the session', () => {
     expect(src).toContain("const partBaseOf=(k,u)=>makeVolumeBase({...definesOfKey(k),VRL_PART:''},u);");
     expect(src).toContain('export const partMaterialsOf=(k,u)=>{const vars=materialVariants(partBaseOf(k,u));return{vars,rays:rayVariantsOf(vars)}};');
     // the session's template (partEnsure compiles res.tpl) is made by it, with the session's own set key
-    expect(src).toContain('const partMaterials=own=>{const u=partUniforms(unifs,own),m=partMaterialsOf(setKey,u);return{u,vars:m.vars,rays:m.rays}};');
+    expect(src).toContain('const partMaterials=own=>{const u=partUniforms(unifs,own);if(gx)return{u,vars:{},rays:{}};const m=partMaterialsOf(setKey,u);return{u,vars:m.vars,rays:m.rays}};'); // (the WebGPU session: no GLSL program, the uniforms only)
     // and nowhere else is a VRL_PART base made
     expect(src.match(/VRL_PART:''/g).length).toBe(1);
   });

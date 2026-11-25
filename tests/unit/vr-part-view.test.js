@@ -415,8 +415,8 @@ describe('several parts at once', () => {
   });
   it('the part\'s box is its own: the proxy geometry is made per part from its box, never the body\'s box; its programs are shared', () => {
     expect(src).toContain('const geo=new THREE.BoxGeometry(2*prox.h[0]/he[0],2*prox.h[1]/he[1],2*prox.h[2]/he[2]);geo.translate(prox.c[0]/he[0],prox.c[1]/he[1],prox.c[2]/he[2]);');
-    expect(src).toContain('const m=new THREE.Mesh(geo,mats.vars[partFull()])');
-    expect(src).toContain('const r=new THREE.Mesh(geo,mats.rays[partFull()])');
+    expect(src).toContain('const m=new THREE.Mesh(geo,gx?res.comp:mats.vars[partFull()])');
+    expect(src).toContain('const r=gx?new THREE.Object3D():new THREE.Mesh(geo,mats.rays[partFull()])');
     expect(src).not.toMatch(/new THREE\.Mesh\(meshObj\.geometry,(mats|res\.|q\.)/); // no part is drawn on the body's box
     expect(src).toContain('u.boxEntry'.slice(0, 0) + 'boxEntry:{value:1}'); // the march starts at the content box
     expect(src).toContain('partFree=q=>{partHide(q);q.held=null;'); expect(src).toContain('q.geo.dispose()');

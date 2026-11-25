@@ -159,14 +159,14 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>) {
 // ---- the GPU side (used by docs/vr-wgpu.js createVolumeGpu): the group-1 layout, the grids as textures, the bind group per variant ----
 // device = the GPUDevice, bgl0 = the volume pass's group-0 layout. prepare(tex, gen, data, dims, cellsWanted) -> 'ready' | 'wait' | null (null: this texture cannot be used: no bytes on the CPU, another format)
 // cells = the coarse cell sizes the host makes grids for (default: all, as the performance record's variants need); the DISPLAY's host (docs/vr-wgpu-newpath.js) passes [] : it keeps the distance texture only (distSplit does not read the grid), and a 1 x 1 x 1 stand-in fills the grid's binding
-export function createMarchHost({ device, bgl0, cells = MARCH_CELLS }) {
-  let layout = null, st = null, dummyCoarse = null;
+export function createMarchHost({ device, bgl0, cells = MARCH_CELLS, share = {} }) { // share: the compiled program and the layouts, held by the caller for several hosts (one per data source: the programs are made once)
+  let st = null, dummyCoarse = null;
   const layouts = () => {
-    if (!layout) {
+    if (!share.layout) {
       const bgl = device.createBindGroupLayout({ entries: [MARCH_BINDINGS.dist, MARCH_BINDINGS.coarse].map(binding => ({ binding, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float', viewDimension: '3d' } })) });
-      layout = { bgl, pipeLayout: device.createPipelineLayout({ bindGroupLayouts: [bgl0, bgl] }) };
+      share.layout = { bgl, pipeLayout: device.createPipelineLayout({ bindGroupLayouts: [bgl0, bgl] }) };
     }
-    return layout;
+    return share.layout;
   };
   const kill = () => { if (!st) return; try { st.dist.destroy(); st.coarse.forEach(x => x.destroy()); } catch { /* gone */ } st = null; };
   const killAll = () => { kill(); try { dummyCoarse?.destroy(); } catch { /* gone */ } dummyCoarse = null; };
@@ -215,10 +215,10 @@ export function createMarchHost({ device, bgl0, cells = MARCH_CELLS }) {
     return true;
   };
   // ---- the display's way (P1): everything on the GPU, from the combined texture's GPU texture ----
-  let gp = null; // { state: 'pending' | 'ready' | 'failed', pipe, bgl, ubuf, buf, bufSlices, msg }
+  // share.gp = { state: 'pending' | 'ready' | 'failed', pipe, bgl, ubuf, buf, bufSlices, msg }
   const gpuProg = () => {
-    if (gp) return gp;
-    const me = gp = { state: 'pending', pipe: null, bgl: null, ubuf: null, buf: null, bufBytes: 0, msg: '' }; // (a host let go meanwhile: the compile that comes back later finds gp is another object and leaves it)
+    if (share.gp) return share.gp;
+    const me = share.gp = { state: 'pending', pipe: null, bgl: null, ubuf: null, buf: null, bufBytes: 0, msg: '' }; // (a host let go meanwhile: the compile that comes back later finds gp is another object and leaves it)
     try {
       const module = device.createShaderModule({ code: distGpuWgsl() });
       me.bgl = device.createBindGroupLayout({ entries: [
@@ -233,15 +233,15 @@ export function createMarchHost({ device, bgl0, cells = MARCH_CELLS }) {
   // the alpha bytes of slices [z0, z1) of clsGpu (the combined texture's GPUTexture) into the host's distance texture, in chunks of DIST_GPU.chunkSlices (each its own submit: the uniform and the buffer are the chunk's)
   const encodeDist = (clsGpu, dist, dims, z0, z1) => {
     const [w, h, d] = dims, pitch = distGpuPitch(w), per = Math.min(DIST_GPU.chunkSlices, d), need = pitch * h * per;
-    if (!gp.buf || gp.bufBytes < need) { try { gp.buf?.destroy(); } catch { /* gone */ } gp.buf = device.createBuffer({ size: need, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC }); gp.bufBytes = need; }
-    gp.ubuf ||= device.createBuffer({ size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    if (!share.gp.buf || share.gp.bufBytes < need) { try { share.gp.buf?.destroy(); } catch { /* gone */ } share.gp.buf = device.createBuffer({ size: need, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC }); share.gp.bufBytes = need; }
+    share.gp.ubuf ||= device.createBuffer({ size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
     for (let z = z0; z < z1; z += per) {
       const n = Math.min(per, z1 - z);
-      device.queue.writeBuffer(gp.ubuf, 0, new Uint32Array([w, h, d, z, pitch / 4, n, 0, 0]));
-      const bg = device.createBindGroup({ layout: gp.bgl, entries: [{ binding: 0, resource: { buffer: gp.ubuf } }, { binding: 1, resource: clsGpu.createView({ dimension: '3d' }) }, { binding: 2, resource: { buffer: gp.buf } }] });
+      device.queue.writeBuffer(share.gp.ubuf, 0, new Uint32Array([w, h, d, z, pitch / 4, n, 0, 0]));
+      const bg = device.createBindGroup({ layout: share.gp.bgl, entries: [{ binding: 0, resource: { buffer: share.gp.ubuf } }, { binding: 1, resource: clsGpu.createView({ dimension: '3d' }) }, { binding: 2, resource: { buffer: share.gp.buf } }] });
       const enc = device.createCommandEncoder(), cp = enc.beginComputePass();
-      cp.setPipeline(gp.pipe); cp.setBindGroup(0, bg); cp.dispatchWorkgroups(Math.ceil(pitch / 4 / 8), Math.ceil(h / 8), Math.ceil(n / 4)); cp.end();
-      enc.copyBufferToTexture({ buffer: gp.buf, bytesPerRow: pitch, rowsPerImage: h }, { texture: dist, origin: [0, 0, z] }, [w, h, n]);
+      cp.setPipeline(share.gp.pipe); cp.setBindGroup(0, bg); cp.dispatchWorkgroups(Math.ceil(pitch / 4 / 8), Math.ceil(h / 8), Math.ceil(n / 4)); cp.end();
+      enc.copyBufferToTexture({ buffer: share.gp.buf, bytesPerRow: pitch, rowsPerImage: h }, { texture: dist, origin: [0, 0, z] }, [w, h, n]);
       device.queue.submit([enc.finish()]);
     }
   };
@@ -257,15 +257,15 @@ export function createMarchHost({ device, bgl0, cells = MARCH_CELLS }) {
   };
   // the display's host: slices [z0, z1) of the combined texture were just written to the GPU (the same call as the texture's own write): the distance texture's same slices follow, from the GPU's bytes; false = nothing to follow (no distance texture of this texture yet: it is made whole at the first draw)
   const writeRangeGpu = (tex, gen, clsGpu, z0, z1) => {
-    if (!st || !st.gpuMade || st.tex !== tex || !st.ready || gp?.state !== 'ready') return false;
+    if (!st || !st.gpuMade || st.tex !== tex || !st.ready || share.gp?.state !== 'ready') return false;
     if (z1 <= z0 || z0 < 0 || z1 > st.dims[2]) return false;
     encodeDist(clsGpu, st.dist, st.dims, z0, z1);
     st.gen = gen;
     return true;
   };
   // the textures and buffers let go, the program kept (a rebuild after a GPU error: the next prepareGpu makes the distance texture whole again)
-  const reset = () => { kill(); try { gp?.buf?.destroy(); gp?.ubuf?.destroy(); } catch { /* gone */ } if (gp) { gp.buf = null; gp.ubuf = null; gp.bufBytes = 0; } };
-  const retryProg = () => { if (gp?.state === 'failed') gp = null; };
-  const killAllGpu = () => { killAll(); try { gp?.buf?.destroy(); gp?.ubuf?.destroy(); } catch { /* gone */ } gp = null; };
+  const reset = () => { kill(); try { share.gp?.buf?.destroy(); share.gp?.ubuf?.destroy(); } catch { /* gone */ } if (share.gp) { share.gp.buf = null; share.gp.ubuf = null; share.gp.bufBytes = 0; } };
+  const retryProg = () => { if (share.gp?.state === 'failed') share.gp = null; };
+  const killAllGpu = () => { killAll(); }; // (the shared program and its scratch buffers belong to whoever holds `share`)
   return { layouts, prepare, prepareGpu, writeRangeGpu, gpuProg, reset, retryProg, group, writeRange, destroy: killAllGpu, get state() { return st; } };
 }

@@ -198,13 +198,13 @@ describe('the wake / pre / vlat columns (the wait inside the gap)', () => {
     expect(vr).toContain("gx.vol.volume.onFrameVolMs?.(ms=>{p.v=ms;fin()})"); expect(vr).toContain("perfLog.add('vlat',Math.max(0,p.d-p.v))"); expect(vr).toContain("if(p.d<=floor+0.5){perfLog.add('vdrop',1);return}"); expect(vr).toContain("if(gxVolPend&&gxVolPend.t1===null)gxVolPend.t1=t1"); expect(vr).not.toContain("if(gxVolPend)gxVolPend.t1=t1"); expect(vr).toContain("catch(e){gxSwdBusy=false;gxVolPend=null;");
     expect(vr).toContain("perfLog.add('swd',n-t1);if(frameNo===fn){gxWakeAt=n;perfLog.add('late',0)}else perfLog.add('late',1)");
     expect(vr).toContain("if(gxWakeAt>0){if(gxMeasure()&&!gxRec.on&&fa0-gxWakeAt<1000)perfLog.add('wake',fa0-gxWakeAt);gxWakeAt=0}");
-    expect(vr.indexOf("gxVolSubmitted(fa0);")).toBeGreaterThan(vr.indexOf('gx.vol.draw({u:material.uniforms'));
+    expect(vr.indexOf("gxVolSubmitted(fa0);")).toBeGreaterThan(vr.indexOf('gx.vol.draw({u:(diagAn.noRegion?null:partGxU(vk))||material.uniforms'));
     expect(vr.indexOf("gxVolSubmitted(fa0);")).toBeLessThan(vr.indexOf('rs.low=true;rs.w=gx.vol.stats.w'));
   });
 });
 
 describe('WebGPU: the volume pass is submitted before the bookkeeping that does not feed it', () => {
-  const loopAt = vr.indexOf(' renderer.setAnimationLoop(xrTs=>{'), draw = vr.indexOf('gx.vol.draw({u:material.uniforms');
+  const loopAt = vr.indexOf(' renderer.setAnimationLoop(xrTs=>{'), draw = vr.indexOf('gx.vol.draw({u:(diagAn.noRegion?null:partGxU(vk))||material.uniforms');
   const at = (needle, from = loopAt) => { const i = vr.indexOf(needle, from); expect(i, needle).toBeGreaterThan(from); return i; };
   it('what decides the volume (hands, planes, uniforms, shown set, pair / part, render scale, region highlight) is before the submit; the HU line / hover / cards / markers bookkeeping is after it on WebGPU', () => {
     for (const before of ['updatePress(c,nowF)', 'setRegionHighlight(hlTracker.update(', 'refreshContentBox();', 'skipTick();', 'pairFrame();', 'partFrame();', 'benchTick();', 'const kF=FOVEA_K[settings.foveation|0]??1', 'const fG=benchOn?fRaw:scaleGuard.step(fRaw,nowG)'])
@@ -389,7 +389,7 @@ describe('the hold / movement / stall columns', () => {
   });
   it('wiring: vr-wgpu.js counts what it makes, vr-view.js feeds the differences once a frame (no object made) and the volume movement after the render', () => {
     const wg = readFileSync(new URL('../../docs/vr-wgpu.js', import.meta.url), 'utf8');
-    for (const w of ['counts.target++', 'counts.tex++', 'counts.group++', 'volume.counts.slot++', 'volume.counts.peri++', 'return { counts, device']) expect(wg, w).toContain(w);
+    for (const w of ['counts.target++', 'counts.tex++', 'counts.group++', 'volume.counts.slot++', 'volume.counts.peri++', 'return { ensureZ, counts, device']) expect(wg, w).toContain(w);
     expect((wg.match(/counts\.group\+\+/g) || []).length).toBe(2);
     expect(vr).toContain("perfLog.count('mk',d)"); expect(vr).toContain("perfLog.count('slotc',ds)"); expect(vr).toContain("perfLog.count('perc',dp)");
     expect(vr).toContain('perfLog.move(pmP.distanceTo(pmP0)*100,pmQ.angleTo(pmQ0)*57.29578)');

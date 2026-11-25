@@ -3,7 +3,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { WgslReflect } from 'wgsl_reflect/wgsl_reflect.module.js';
-import { volumeWgsl, uniformLayout, PROXY, PROXY_FIELDS, proxyPixelDir } from '../../docs/vr-wgsl-core.js';
+import { volumeWgsl, uniformLayout, UNIFORM_FIELDS_ALL, PROXY, PROXY_FIELDS, proxyPixelDir } from '../../docs/vr-wgsl-core.js';
 import * as C from '../../docs/vr-wgpu-coarse-proxy.js';
 import { makeScene, rng, fetchTexel, insideAt } from '../helpers/coarse-proxy-scene.js';
 import { BD_VARIANTS, BD_SPECS, COARSE_NAMES, createVolBreakdown, createPerfLog, perfReport } from '../../docs/vr-perf-log.js';
@@ -348,7 +348,7 @@ function mockHost({ cls4 = false, failCompute = false } = {}) {
       resolveQuerySet() {}, copyBufferToBuffer() {}, clearBuffer() {}, finish: () => ({}),
     }),
   };
-  const layout = uniformLayout(); const P = uniformLayout(PROXY_FIELDS);
+  const layout = uniformLayout(UNIFORM_FIELDS_ALL); const P = uniformLayout(PROXY_FIELDS);
   const pxAb = new ArrayBuffer(P.byteSize), I = new Int32Array(pxAb), at = n => P.fields.find(f => f.name === n).offset / 4;
   I[at('nEyes')] = 2; I[at('w0')] = 128; I[at('h0')] = 96; I[at('w1')] = 128; I[at('h1')] = 96; [0, 1, -1, -1].forEach((c, k) => { I[at('clsChan') + k] = c; }); [1, 1, 0, 0].forEach((c, k) => { I[at('segOn') + k] = c; });
   const tex = () => ({ image: { width: 64, height: 64, depth: 64 } });
@@ -381,7 +381,7 @@ describe('host: the shadow pass of a coarse variant (mock device)', () => {
     expect(h.log.events.find(e => e[0] === 'diff:proxyCoarse').slice(1)).toEqual([0, 128 * 96 * 2]); expect(h.log.events.find(e => e[0] === 'proxyMs:proxyCoarse')[1]).toBeCloseTo(1.999);
   }));
   it('the pixel -> tile mapping of each eye: proxyOrg x = vx - tile * eye * tilesPerEye (tile 4: 32 tiles an eye), written over the snapshot\'s own uniforms of that eye', withGpu(async () => {
-    const h = mockHost(), org = uniformLayout().fields.find(f => f.name === 'proxyOrg').offset / 4;
+    const h = mockHost(), org = uniformLayout(UNIFORM_FIELDS_ALL).fields.find(f => f.name === 'proxyOrg').offset / 4;
     h.bd.snap.ab[0][org] = 99; h.bd.snap.ab[1][org] = 99;
     await ready(h, BD_SPECS.proxyCoarse); h.cp.shadow(h.rec, BD_SPECS.proxyCoarse);
     const w = h.log.writes.filter(x => x.data.length === h.bd.tmp.length && x.b.ubuf !== undefined);

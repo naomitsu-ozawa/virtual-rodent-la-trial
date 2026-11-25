@@ -15,7 +15,7 @@
 //
 // Exactness: the composite hands the blender the centre pass' colour at 8 bit per channel and its depth at 24 bit (the packed depth, decoded as the composite does); the wrapper quantises both in the same way, so the eye image
 // gets the same values. A pixel of the rect is the pixel of the centre pass at the same eye pixel (render scale 1: the centre pass' region is the eye image's pixels); the pre-pass' tiles are the centre pass' own (same texture).
-import { volumeWgsl, VOLUME_BINDINGS, PROXY } from './vr-wgsl-core.js?v=20261125-build762';
+import { volumeWgsl, VOLUME_BINDINGS, PROXY } from './vr-wgsl-core.js?v=20261125-build763';
 
 export const DIRECT_MIN_PX = 16; // a rect smaller than this (either side) is not worth a path of its own: the offscreen path draws it
 const intersect = (a, b) => ({ x0: Math.max(a.x0, b.x0), y0: Math.max(a.y0, b.y0), x1: Math.min(a.x1, b.x1), y1: Math.min(a.y1, b.y1) });
@@ -113,7 +113,7 @@ fn main(@builtin(global_invocation_id) g:vec3<u32>){
 `;
 }
 
-const vkeyOf = v => (v.cls4 ? 'c4' : 'c3') + (v.events ? 'e' : 'n');
+const vkeyOf = v => (v.cls4 ? 'c4' : 'c3') + (v.events ? 'e' : 'n') + (v.feat ? '-' + (v.feat.R ? 'R' : '') + (v.feat.C ? 'C' : '') : '');
 const errText = e => String(e?.message ?? e?.error?.message ?? e).slice(0, 200);
 
 // p.way (setFrame) = { mode, group1 (the way's bind group 1), tile (the tiles' size) } of the centre pass' way this frame, or null (the display's own program)
@@ -136,7 +136,7 @@ export function createDirectApi(h) {
     const tv = (t, kind) => (h.gpuOf(t) || h.dummy(kind));
     const tex = [tv(u.vol?.value, 'f'), tv(u.clsTex?.value, 'f'), tv(u.cls4Tex?.value, 'f'), tv(u.skipTex?.value, 'uint'), tv(u.editTex?.value, 'f'), tv(u.sliceVol?.value, 'f'), pxTex || h.proxyDummyTex()];
     const editNearest = u.editTex?.value?.minFilter === THREE.NearestFilter;
-    const key = tag + ':' + tex.map(t => h.texId(t)).join('.') + (editNearest ? 'n' : 'l');
+    const fb = h.featBind(u), key = tag + ':' + tex.map(t => h.texId(t)).join('.') + (editNearest ? 'n' : 'l') + '/' + fb.ids.join('.');
     let g = groups.get(key);
     if (!g) {
       if (groups.size > 24) groups.clear();
@@ -145,6 +145,7 @@ export function createDirectApi(h) {
         ...[VOLUME_BINDINGS.vol, VOLUME_BINDINGS.cls, VOLUME_BINDINGS.cls4, VOLUME_BINDINGS.skip, VOLUME_BINDINGS.edit, VOLUME_BINDINGS.slice].map((binding, i) => ({ binding, resource: tex[i].createView({ dimension: '3d' }) })),
         { binding: VOLUME_BINDINGS.sampler, resource: h.linear }, { binding: VOLUME_BINDINGS.samplerEdit, resource: editNearest ? h.nearest : h.linear },
         { binding: VOLUME_BINDINGS.proxy, resource: tex[6].createView({ dimension: '2d' }) },
+        ...fb.entries,
       ] });
       groups.set(key, g);
     }
@@ -164,12 +165,12 @@ export function createDirectApi(h) {
   const wayLayout = mode => { const g1 = h.way.group1Layout(mode); let l = wayLays.get(g1); if (!l) { l = device.createPipelineLayout({ bindGroupLayouts: [bgl, g1, layouts().dBgl] }); wayLays.set(g1, l); } return l; };
   const wayPipe = (variant, mode) => {
     const s = st.seen; if (!s || !s.colorFormat || !s.depthFormat || !h.way) return null;
-    const key = 'way:' + mode + ':' + (variant.cls4 ? 'c4' : 'c3') + '|' + sigOf(s);
+    const key = 'way:' + mode + ':' + (variant.cls4 ? 'c4' : 'c3') + (variant.feat ? '-' + (variant.feat.R ? 'R' : '') + (variant.feat.C ? 'C' : '') : '') + '|' + sigOf(s);
     let e = pipes.get(key);
     if (!e) {
       e = { state: 'pending', pipe: null }; pipes.set(key, e);
       try {
-        const module = device.createShaderModule({ code: directFragmentWgsl(h.way.text(mode, !!variant.cls4), { group: 2 }) });
+        const module = device.createShaderModule({ code: directFragmentWgsl(h.way.text(mode, !!variant.cls4, variant.feat), { group: 2 }) });
         try { h.onShader?.(module, { f16, cls4: !!variant.cls4, events: !!variant.events, abl: 'direct', coarse: 'direct ' + mode }); } catch { /* diagnostics only */ }
         device.createRenderPipelineAsync({ layout: wayLayout(mode), vertex: vertex(module), fragment: { module, entryPoint: 'fs', targets: [{ format: s.colorFormat, blend: { color: ONE, alpha: ONE }, writeMask: 0xf }] },
           primitive: { topology: 'triangle-list', cullMode: 'front', frontFace: 'ccw' }, depthStencil: { format: s.depthFormat, depthWriteEnabled: true, depthCompare: 'less-equal' }, multisample: { count: s.samples } })

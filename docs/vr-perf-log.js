@@ -2,7 +2,7 @@
 // Pure (no DOM, no three.js): vr-view.js feeds it (frame / add / row) and shows the text on the page after the session. Nothing here changes what is drawn.
 // A row: fps, how many frame intervals were 1 / 2 / 3+ refresh periods, the GPU ms of the volume pass and of the main render (WebGL: EXT_disjoint_timer_query; WebGPU: timestamp-query / three's timestamps),
 // the JS ms of the app's frame, the CPU ms of renderer.render(), (WebGPU only) the frame's GPU timeline and CPU timeline: span / gap / oth / cpu / swd, and wake / pre / vlat / vdrop (see the note lines of the report), and the state the drawing choices were made in (scale f, periphery, data cap, auto level / step, step in voxels, covered px, size, menu, target Hz, foveation).
-import { directReport } from './vr-direct-log.js?v=20261125-build762';
+import { directReport } from './vr-direct-log.js?v=20261125-build763';
 export const PERF_KEY = 'vrl-vr-perf'; // + '-webgl' / '-webgpu': one mirror per kind (a WebGPU session does not overwrite the WebGL one)
 export const PERF_MIRROR_ROWS = 120; // the last rows the localStorage mirror keeps (the whole log stays in memory and in the page's text)
 export const PERF_MAX_ROWS = 600; // 10 minutes of rows

@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import * as THREEG from 'three/webgpu';
 import { WgslReflect } from 'wgsl_reflect/wgsl_reflect.module.js';
-import { volumeWgsl, ABLATIONS, COUNTER_FIELDS, uniformLayout, proxyWgsl, proxyDiffWgsl } from '../../docs/vr-wgsl-core.js';
+import { volumeWgsl, ABLATIONS, COUNTER_FIELDS, uniformLayout, UNIFORM_FIELDS_ALL, proxyWgsl, proxyDiffWgsl } from '../../docs/vr-wgsl-core.js';
 import { createVrVolumeRenderer, regionClip, regionMvp, gxShaderInfo } from '../../docs/vr-wgpu.js';
 import { MARCH_VARIANTS, marchWgsl } from '../../docs/vr-wgpu-coarse-march.js';
 import { createVolBreakdown, createPerfLog, perfReport, BD_VARIANTS, BD_SPECS, BD_PROBE_FIELDS, BD_NEAR_R, defineBdVariant } from '../../docs/vr-perf-log.js';
@@ -144,7 +144,7 @@ describe('WGSL: the breakdown variants (abl, counters)', () => {
     expect(base).not.toContain('f32(u.pad1)');
   });
   it('pad1 is 0 at run time: the packer never gets a value for it (it is in no uniforms object of the session)', () => {
-    expect(uniformLayout().fields.map(f => f.name)).toContain('pad1');
+    expect(uniformLayout(UNIFORM_FIELDS_ALL).fields.map(f => f.name)).toContain('pad1');
     expect(vr).not.toMatch(/pad1\s*:\s*\{?\s*value/);
   });
   it('counters: a storage buffer in group 1 (writable, fragment), COUNTER_FIELDS.length u32 a pixel from the position, no discard left, every counter has its place', () => {
@@ -516,9 +516,9 @@ describe('host: the shadow pass', () => {
     const got = []; await begin(r, (n, s, l) => got.push([n, s, l]));
     const rec = frame(r); const nWrites = log.writes.length;
     expect(r.breakdown.shadow(rec, BD_SPECS.box)).toBe(true);
-    const diag = uniformLayout().fields.find(f => f.name === 'diag').offset / 4;
-    const w = log.writes.slice(nWrites).filter(x => x.data.length === uniformLayout().byteSize / 4); expect(w).toHaveLength(2); expect(w.map(x => x.data[diag])).toEqual([1, 1]);
-    expect(log.writes.slice(0, nWrites).filter(x => x.data.length === uniformLayout().byteSize / 4).map(x => x.data[diag])).toEqual([0, 0]);
+    const diag = uniformLayout(UNIFORM_FIELDS_ALL).fields.find(f => f.name === 'diag').offset / 4;
+    const w = log.writes.slice(nWrites).filter(x => x.data.length === uniformLayout(UNIFORM_FIELDS_ALL).byteSize / 4); expect(w).toHaveLength(2); expect(w.map(x => x.data[diag])).toEqual([1, 1]);
+    expect(log.writes.slice(0, nWrites).filter(x => x.data.length === uniformLayout(UNIFORM_FIELDS_ALL).byteSize / 4).map(x => x.data[diag])).toEqual([0, 0]);
     await settle(); expect(got.filter(x => x[0] !== 'proxyMs')).toEqual([['box', 6, 10]]);
     r.dispose();
     const g2 = mockGpu([[0n, 0n], [20_100_000n, 20_200_000n], [30_000_000n, 36_000_000n]]); const r2 = createVrVolumeRenderer({ THREE: THREEG, device: g2.device, halfExt: [1, 1, 1] }); const got2 = []; await begin(r2, (...a) => got2.push(a));
@@ -528,7 +528,7 @@ describe('host: the shadow pass', () => {
     const { device, log } = mockGpu([[10_000_000n, 20_000_000n], [20_100_000n, 20_200_000n], [30_000_000n, 36_000_000n], [40_000_000n, 50_000_000n], [50_100_000n, 50_200_000n], [60_000_000n, 66_000_000n], [70_000_000n, 76_000_000n], [80_000_000n, 86_000_000n]]);
     const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1] }); await r.preload(bdU(), [{ cls4: false, events: false }]); log.computePasses?.splice(0); log.passes.length = 0; log.cmds.length = 0; /* the session start: the display's ways are compiled and the data's grids made before the first frame */
     const got = []; await begin(r, (n, s, l) => got.push([n, s, l]));
-    const sk = uniformLayout().fields.find(f => f.name === 'useSkip').offset / 4, isU = w => w.data.length === uniformLayout().byteSize / 4;
+    const sk = uniformLayout(UNIFORM_FIELDS_ALL).fields.find(f => f.name === 'useSkip').offset / 4, isU = w => w.data.length === uniformLayout(UNIFORM_FIELDS_ALL).byteSize / 4;
     // the host's switch is on: the low pass still gets 0, the shadow of 'same' 0, withCreep 1
     let n0 = log.writes.length; const rec = frame(r, { u: HOST_SKIP_ON() });
     expect(log.writes.slice(n0).filter(isU).map(w => w.data[sk])).toEqual([0, 0]);
@@ -616,10 +616,10 @@ describe('host: the counting probe', () => {
     const cam = eyeCam(640, 480); r.draw({ u: {}, cams: [cam, eyeCam(640, 480)], model: new THREEG.Matrix4(), f: 0.5, fov: false, rects: null, variant: { cls4: false, events: false } });
     const mvpOf = w => new Float32Array(w.data.buffer, 0, 16);
     const nW = log.writes.length; await r.breakdown.probe({}, 'whole');
-    const whole = log.writes.slice(nW).find(w => w.data.length === uniformLayout().byteSize / 4); const id = new THREEG.Matrix4().elements;
+    const whole = log.writes.slice(nW).find(w => w.data.length === uniformLayout(UNIFORM_FIELDS_ALL).byteSize / 4); const id = new THREEG.Matrix4().elements;
     expect(Array.from(mvpOf(whole))).toEqual(id);
     const nW2 = log.writes.length; await r.breakdown.probe({}, 'native');
-    const nat = log.writes.slice(nW2).find(w => w.data.length === uniformLayout().byteSize / 4);
+    const nat = log.writes.slice(nW2).find(w => w.data.length === uniformLayout(UNIFORM_FIELDS_ALL).byteSize / 4);
     // the low pass drew the whole 320 x 240 scaled image (no box given): a 64 x 64 window at (128, 88)
     const want = regionMvp(new THREEG.Matrix4(), new THREEG.Matrix4(), regionClip({ x0: 128, y0: 88, x1: 192, y1: 152 }, 320, 240)).elements;
     Array.from(mvpOf(nat)).forEach((v, i) => expect(v).toBeCloseTo(want[i], 5));
@@ -674,7 +674,7 @@ describe('vr-view.js wiring (static)', () => {
     expect(host).toContain('try { volume.bdSnapshot(low.target, low.eyes, u, vr, bdPx); } catch (e) {');
   });
   it('the volume pass of the frame is called as before; the snapshot of the low pass is the renderer\'s (host), only while a recording runs', () => {
-    expect(host).toContain("const lowDraw = volume.drawPass(low.target, low.eyes, u, vr, 0, null, null, dnp ? { proxy: low.px, np: { ...dnp, auto: true, pass: 'low', skip: '' } } : { proxy: low.px });"); // the new ways' option is added only while a display switch asks (dnp null: the call of before, character for character)
+    expect(host).toContain("const lowDraw = multi ? drawVols(low, 'low', 0, 'low') : volume.drawPass(low.target, low.eyes, u, vr, 0, null, null, dnp ? { proxy: low.px, np: { ...dnp, auto: true, pass: 'low', skip: '' } } : { proxy: low.px });"); // the new ways' option is added only while a display switch asks (dnp null: the call of before, character for character)
     expect(host).toContain('\n    if (volume.bdActive()) {');
     expect(host).toContain('for (const sc of e.scissors || [[e.x, e.y, e.w, e.h]]) { pass.setScissorRect(sc[0], sc[1], sc[2], sc[3]); pass.draw(36); }');
     expect(host).toContain('const timed = (o?.timed ?? !overrides) && GX_SWITCH.timers;'); // GX_SWITCH.timers: the isolation run's switch (true by default)

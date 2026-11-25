@@ -4,7 +4,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { WgslReflect } from 'wgsl_reflect/wgsl_reflect.module.js';
 import * as THREEG from 'three/webgpu';
-import { volumeWgsl, uniformLayout, PROXY } from '../../docs/vr-wgsl-core.js';
+import { volumeWgsl, uniformLayout, UNIFORM_FIELDS_ALL, PROXY } from '../../docs/vr-wgsl-core.js';
 import { createVrVolumeRenderer, bandRects, scaledRegion, fitSlot } from '../../docs/vr-wgpu.js';
 import { directRegion, directFragmentWgsl, directDiffWgsl, createDirectApi, DIRECT_MIN_PX, DIRECT_DIFF_COUNTERS } from '../../docs/vr-wgpu-direct.js';
 import { createDirectLog, directReport, CHECK_ROWS, CHECK_CLASSES } from '../../docs/vr-direct-log.js';
@@ -145,8 +145,8 @@ const setUpFrame = (api, m, { eyesOn = [0, 1], pxTex = null } = {}) => {
 };
 const makeApi = ({ notes = [], way = null } = {}) => {
   const { device, log } = mockGpu(), m = mockBackend();
-  const layout = uniformLayout();
-  const api = createDirectApi({ way, device, THREE: THREEG, layout, bgl: {}, f16: false, onShader: null, boxBuf: { id: 'box' }, gpuOf: () => null, dummy: kind => ({ kind, createView: () => ({}), __id: 1 }), proxyDummyTex: () => ({ createView: () => ({}), __id: 2 }),
+  const layout = uniformLayout(UNIFORM_FIELDS_ALL);
+  const api = createDirectApi({ way, featBind: () => ({ entries: [], ids: [] }), device, THREE: THREEG, layout, bgl: {}, f16: false, onShader: null, boxBuf: { id: 'box' }, gpuOf: () => null, dummy: kind => ({ kind, createView: () => ({}), __id: 1 }), proxyDummyTex: () => ({ createView: () => ({}), __id: 2 }),
     linear: {}, nearest: {}, texId: t => (t.__id ||= Math.floor(Math.random() * 1e9)), fillUniforms: (u, extra) => { const ab = new ArrayBuffer(layout.byteSize), I = new Int32Array(ab), at = n => layout.fields.find(f => f.name === n).offset / 4; I[at('proxyOn')] = extra.proxyOn; I[at('proxyOrg')] = extra.proxyOrg[0]; I[at('proxyOrg') + 1] = extra.proxyOrg[1]; new Float32Array(ab).set(extra.mvp.elements, at('mvp')); return ab; }, passExtra: () => ({ jumpOn: 0, useSkip: 0 }), pipeFor: () => ({}), bindGroup: () => ({}) });
   api.setNotifier((k, v) => notes.push([k, v]));
   return { api, log, m, device, notes };
@@ -411,7 +411,7 @@ describe('the host: what draw() does with and without the path', () => {
     const { api, m, log } = makeApi(); api.install(m.renderer, m.material);
     const pxTex = { createView: () => ({}), __id: 77 };
     setUpFrame(api, m, { pxTex });
-    const L = uniformLayout(), at = n => L.fields.find(f => f.name === n).offset / 4, U = log.writes.filter(w => w.data.length === L.byteSize / 4);
+    const L = uniformLayout(UNIFORM_FIELDS_ALL), at = n => L.fields.find(f => f.name === n).offset / 4, U = log.writes.filter(w => w.data.length === L.byteSize / 4);
     expect(U).toHaveLength(2);
     expect(U.map(w => [w.data[at('proxyOn')], w.data[at('proxyOrg')], w.data[at('proxyOrg') + 1]])).toEqual([[1, 178 - PROXY.tile * 0 * 36, 128], [1, 178 - PROXY.tile * 1 * 36, 128]]);
     log.writes.length = 0; setUpFrame(api, m, { pxTex: null });
@@ -453,7 +453,7 @@ describe('the flicker guard of the switch (the way the WebGL view guards its pat
     expect(vrView).toMatch(/gxDirGuard=createFlapGuard\(\{fallback:\(\)=>false\}\)/);
     expect(vrView).toMatch(/const want=!!settings\.gxDirect&&f>=1-1e-6&&!!gx\.vol\.direct\?\.installed,ok=gxDirGuard\.step\(want,nowG\);gxDirAsked=want&&ok&&!gxDirGuard\.frozenAt\(nowG\)/);
     expect(vrView).toContain('gx.vol.direct.ask(gxDirAsked);');
-    expect(vrView).toContain('boxes:xrCam?rsEyes:null,identCtx:identRun?.active?identCtxNow():null});'); // (the check's frame state is the only new argument) // the draw call itself is the one of before
+    expect(vrView).toContain('boxes:xrCam?rsEyes:null,identCtx:identRun?.active?identCtxNow():null,extras:gxEx.length?gxEx:null});'); // (the check's frame state is the only new argument) // the draw call itself is the one of before
   });
 });
 
@@ -473,7 +473,7 @@ describe('the setting: off by default, in the diagnostics page, both languages',
   it('the host draw path: with the path not asked the centre pass is called as before (no inner rect), and the new pieces are called only when asked', () => {
     expect(host).toContain("const low = pass('low', f, tmpEye, i => (fovOn ? rectsMeet(boxOf(i), rectOf(i)) : boxOf(i)), innerLow, 0);");
     expect(host).toContain('const innerLow = dReq ? (i, r) =>');
-    expect(host).toContain('const dReq = volume.direct.asked && volume.direct.canUse(');
+    expect(host).toContain('const dReq = !multi && !noDirect && volume.direct.asked && volume.direct.canUse(');
     expect(host).toContain('if (dReq) {'); // the uniforms of the path only for a frame that asked
     expect(host).toContain('scissors: bandRects(r, inner?.(i, r) ?? null, H, scale, shrink)');
     expect(host).toContain("peri = pass('peri', fp, tmpPeri, boxOf, i => rectOf(i), band + Math.ceil(2 / Math.max(fp, 0.05)) + 1);");

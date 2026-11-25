@@ -5,7 +5,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import * as THREEG from 'three/webgpu';
 import { WgslReflect } from 'wgsl_reflect/wgsl_reflect.module.js';
-import { volumeWgsl, uniformLayout, UNIFORM_FIELDS } from '../../docs/vr-wgsl-core.js';
+import { volumeWgsl, uniformLayout, UNIFORM_FIELDS_ALL, UNIFORM_FIELDS } from '../../docs/vr-wgsl-core.js';
 import { SPEC_FIELDS, SPEC_OVERRIDES, SPEC_LEN, specSigFrom, specSigOfUniforms, specSigOfPacked, specConstants, specKey, specializeVolumeWgsl, volumeSpecWgsl, createSpecPipelines } from '../../docs/vr-wgsl-spec.js';
 import { createVrVolumeRenderer } from '../../docs/vr-wgpu.js';
 import { createVolBreakdown, volBreakdownReport, BD_VARIANTS, BD_SPECS } from '../../docs/vr-perf-log.js';
@@ -101,7 +101,7 @@ describe('A4 the signature, the constants and the key', () => {
     expect(sigOf(arr).slice(6, 14)).toEqual([1, 0, 3, -1, 1, 0, 1, 0]);
   });
   it('the signature read from the packed uniform buffer is the one read from the values (the display pass and the breakdown\'s snapshot agree)', () => {
-    const L = uniformLayout(), ab = new ArrayBuffer(L.byteSize), i32 = new Int32Array(ab), f32 = new Float32Array(ab), at = n => L.fields.find(f => f.name === n);
+    const L = uniformLayout(UNIFORM_FIELDS_ALL), ab = new ArrayBuffer(L.byteSize), i32 = new Int32Array(ab), f32 = new Float32Array(ab), at = n => L.fields.find(f => f.name === n);
     const cases = [U(), U({ diag: { value: 4 }, refine: { value: 0 }, editMask: { value: 6 }, editMaskOnly: { value: 2 }, boxEntry: { value: 0 }, capOn: { value: 0 }, planeCount: { value: 3 }, planeCut: { value: 5 }, clsChan: { value: v4(3, 2, 1, 0) }, segA: { value: [0, 1, 2, 3].map(() => v4(0, 1, 1, 1)) }, segC: { value: [v4(0, 0, 0, 1), v4(0, 0, 0, 0), v4(0, 0, 0, 1), v4(0, 0, 0, 1)] } })];
     for (const u of cases) {
       const extra = { jumpOn: 1, useSkip: 0 };
@@ -231,7 +231,7 @@ const hostU = (over = {}) => {
 };
 const draw = (r, u, extra = {}) => r.draw({ u, cams: [eyeCam(640, 480), eyeCam(640, 480)], model: new THREEG.Matrix4(), f: 0.5, fov: false, rects: null, variant: { cls4: false, events: false }, ...extra });
 const frameOf = (r, u, extra) => { draw(r, u, extra); return r.volume.markFrame(); };
-const L = uniformLayout(), at = n => L.fields.find(f => f.name === n).offset / 4;
+const L = uniformLayout(UNIFORM_FIELDS_ALL), at = n => L.fields.find(f => f.name === n).offset / 4;
 const isMain = w => w.data.length === L.byteSize / 4;
 const lowPass = (log, n0) => log.passes.slice(n0).filter(p => p.d.colorAttachments?.length === 2)[0];
 

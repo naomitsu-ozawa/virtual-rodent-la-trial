@@ -3,7 +3,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import * as THREEG from 'three/webgpu';
-import { uniformLayout, PROXY_FIELDS, PROXY, VOLUME_BINDINGS } from '../../docs/vr-wgsl-core.js';
+import { uniformLayout, UNIFORM_FIELDS_ALL, PROXY_FIELDS, PROXY, VOLUME_BINDINGS } from '../../docs/vr-wgsl-core.js';
 import { createVrVolumeRenderer, createGxDiag, startGxHeartbeat, GX_DIAG_KEY, TS_SAMPLE_EVERY } from '../../docs/vr-wgpu.js';
 import { createPerfLog, perfReport, PERF_KEY } from '../../docs/vr-perf-log.js';
 import { createPostFrame, postFrameMode, flushOnHidden } from '../../docs/vr-post-frame.js';
@@ -41,7 +41,7 @@ const mockGpu = (script, { timestamps = true } = {}) => {
 };
 const drawLow = (r, u = {}) => r.draw({ u, cams: [eyeCam(640, 480), eyeCam(640, 480)], model: new THREEG.Matrix4(), f: 0.5, fov: false, rects: null, variant: { cls4: false, events: false } });
 const frame = (r, { u = {} } = {}) => { drawLow(r, u); return r.volume.markFrame(); };
-const L = uniformLayout(), PL = uniformLayout(PROXY_FIELDS);
+const L = uniformLayout(UNIFORM_FIELDS_ALL), PL = uniformLayout(PROXY_FIELDS);
 const at = n => L.fields.find(f => f.name === n).offset / 4, pat = n => PL.fields.find(f => f.name === n).offset / 4;
 const isMain = w => w.data.length === L.byteSize / 4, isPx = w => w.data.length === PL.byteSize / 4;
 // a session's uniforms that let the low pass use the pre-pass: jumps valid (distInCls, useCls), a combined texture on the GPU, no section, two shown slots
@@ -127,7 +127,7 @@ describe('E0 host: the volume timestamps of one frame in N when the page asks (s
   }));
   it('the page asks before every draw: 1 while the breakdown is prepared / recorded, TS_SAMPLE_EVERY otherwise; the default of the host is 1', () => {
     expect(TS_SAMPLE_EVERY).toBe(8);
-    const iSet = vr.indexOf('gx.vol.volume.setTimerEvery?.(gxMeasure()||identRun?.active?1:TS_SAMPLE_EVERY);'), iDraw = vr.indexOf('gx.vol.draw({u:material.uniforms,cams,');
+    const iSet = vr.indexOf('gx.vol.volume.setTimerEvery?.(gxMeasure()||identRun?.active?1:TS_SAMPLE_EVERY);'), iDraw = vr.indexOf('gx.vol.draw({u:(diagAn.noRegion?null:partGxU(vk))||material.uniforms,cams,');
     expect(iSet).toBeGreaterThan(0); expect(iDraw).toBeGreaterThan(iSet);
     expect(vr.slice(iSet, iDraw)).not.toContain('renderer.render(');
   });
@@ -304,14 +304,14 @@ describe('E1: what moved out of the frame callback (WebGPU session; the WebGL se
     expect(vr.match(/helpTick\(\)/g)).toHaveLength(2); // the first frame of the help board (callback), the job
   });
   it('the task is drained at the start of a callback and posted after the last submit of it (volume pass, main render, frame end), once', () => {
-    const fa0 = loop.indexOf('const fa0=performance.now();'), drain = loop.indexOf('if(gx)post.drain();'), draw = loop.indexOf('gx.vol.draw({u:material.uniforms,cams,'), sub = loop.indexOf('gxVolSubmitted(fa0);'), render = loop.indexOf('if(gx)gxRender();else timed('), end = loop.indexOf('if(gx)gxFrameEnd(fa0);'), sched = loop.indexOf('if(gx){post.tail(performance.now()-fa0);post.schedule()}');
+    const fa0 = loop.indexOf('const fa0=performance.now();'), drain = loop.indexOf('if(gx)post.drain();'), draw = loop.indexOf('gx.vol.draw({u:(diagAn.noRegion?null:partGxU(vk))||material.uniforms,cams,'), sub = loop.indexOf('gxVolSubmitted(fa0);'), render = loop.indexOf('if(gx)gxRender();else timed('), end = loop.indexOf('if(gx)gxFrameEnd(fa0);'), sched = loop.indexOf('if(gx){post.tail(performance.now()-fa0);post.schedule()}');
     expect(fa0).toBeGreaterThan(0); expect(drain).toBeGreaterThan(fa0); expect(drain - fa0).toBeLessThan(250);
     expect(draw).toBeGreaterThan(drain); expect(sub).toBeGreaterThan(draw); expect(render).toBeGreaterThan(sub); expect(end).toBeGreaterThan(render); expect(sched).toBeGreaterThan(end);
     expect(loop.match(/post\.schedule\(\)/g)).toHaveLength(1); expect(loop.match(/post\.tail\(/g)).toHaveLength(1); expect(loop.match(/post\.drain\(\)/g)).toHaveLength(1);
     expect(loop.indexOf('labelBatch.flush(renderer,camera);')).toBeLessThan(render); // the cards of this frame are still drawn before the render (their place comes from this frame's pose)
   });
   it('the volume pass is submitted where it was: its draw comes after the controller / placement work and before the late hands / cards / markers and the render (the order of)', () => {
-    const draw = loop.indexOf('gx.vol.draw({u:material.uniforms,cams,'), late = loop.indexOf('if(gx){lateHints();lateScale();lateHud();lateCards();lateMarks()}');
+    const draw = loop.indexOf('gx.vol.draw({u:(diagAn.noRegion?null:partGxU(vk))||material.uniforms,cams,'), late = loop.indexOf('if(gx){lateHints();lateScale();lateHud();lateCards();lateMarks()}');
     expect(draw).toBeGreaterThan(0); expect(late).toBeGreaterThan(draw);
   });
   it('the session\'s end drops what is waiting; the post object exists for both sessions (WebGL: mode off, never scheduled)', () => {

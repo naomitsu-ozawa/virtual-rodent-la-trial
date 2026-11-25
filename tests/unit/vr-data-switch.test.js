@@ -275,7 +275,7 @@ describe('vr-view.js: the data of the session can be replaced (static wiring)', 
     expect(src).toContain("await withTimeout(detail.done,LOAD_TIMEOUT_MS,'opening the data')");
     expect(src).toContain('chooseEventLevel(lv?lv.id:null)');
     // compile before bind (a program set the data needs and the session lacks is compiled with the volume hidden)
-    expect(src).toContain('compile:async Pn=>{const st=getSet(Pn);await compileSet(Pn,st);if(gx)try{await gx.vol.warmWays(gxVariants(P4(Pn)))}'); // the WebGPU view also compiles the display's ways of the new data's variants here
+    expect(src).toContain('compile:async Pn=>{const st=getSet(Pn);await compileSet(Pn,st);if(gx)try{await gx.vol.warmWays(gxVariants(P4(Pn),Pn))}'); // the WebGPU view also compiles the display's ways of the new data's variants here
   });
   it('review fixes: the shared warm-up uniforms let go of the first data, a failed switch can be retried, the reset button waits, the own data gets no switch buttons, a failure clears the flash', () => {
     const rel = src.slice(src.indexOf('const dropWarmRefs='), src.indexOf('const slicedTexture='));

@@ -124,7 +124,7 @@ describe('host: the choice, the per-eye matrices', () => {
 });
 
 describe('the plain label batch (the WebGPU session\'s twin of vr-label-batch.js)', () => {
-  it('draws every shown card as its own plane and every shown leg as a line, at the card\'s world matrix; add / remove keep the scene clean', () => {
+  it('draws every shown card as its own plane and every shown leg as a ribbon mesh, at the card\'s world matrix; add / remove keep the scene clean', () => {
     const scene = new THREE.Scene();
     const b = createPlainLabelBatch(THREE, scene, { w: 0.12, h: 0.036 });
     const tex = new THREE.Texture(), m = Object.assign(new THREE.Object3D(), { material: { map: tex, opacity: 0.8, depthTest: true } });
@@ -135,7 +135,7 @@ describe('the plain label batch (the WebGPU session\'s twin of vr-label-batch.js
     b.flush();
     const [card, leg] = scene.children;
     expect(card.visible && leg.visible).toBe(true); expect(card.matrixWorld.elements[12]).toBe(1); expect(card.material.opacity).toBeCloseTo(0.8);
-    expect(Array.from(leg.geometry.attributes.position.array)).toEqual([0, 0, 0, 1, 1, 1]);
+    expect(Array.from(leg.geometry.attributes.position.array)).toEqual([0, 0, 0, 1, 1, 1, 0, 0, 0, 1, 1, 1]); expect(Array.from(leg.geometry.attributes.other.array)).toEqual([1, 1, 1, 0, 0, 0, 1, 1, 1, 0, 0, 0]); // no `other` on the stub: each end's opposite is the other end
     expect(b.stats).toMatchObject({ cards: 1, legs: 1, draws: 2 });
     m.visible = false; line.visible = false; b.flush(); expect(card.visible || leg.visible).toBe(false);
     b.remove(lb); expect(scene.children.length).toBe(0); expect(b.size).toBe(0);
@@ -153,7 +153,7 @@ describe('vr-view.js wiring (static)', () => {
     expect(vr).toContain('renderer=makeGlRenderer();'); // the WebGPU session was refused: the WebGL one opens in the same click
   });
   it('the WebGPU frame branch: the WGSL pass per eye, then the composite in the main render; the WebGL branches are unchanged below it', () => {
-    expect(vr).toContain('gx.vol.draw({u:material.uniforms,cams,model:mesh.matrixWorld,f:Math.min(1,f),fov,fp,periK:kF,rects:rsFov,band:rsFov[0][4],variant:{cls4:cls4On,events:material.uniforms.planeCount.value>0},decode:renderer.currentColorSpace===THREE.SRGBColorSpace,boxes:xrCam?rsEyes:null,identCtx:identRun?.active?identCtxNow():null});');
+    expect(vr).toContain('gx.vol.draw({u:(diagAn.noRegion?null:partGxU(vk))||material.uniforms,cams,model:mesh.matrixWorld,f:Math.min(1,f),fov,fp,periK:kF,rects:rsFov,band:rsFov[0][4],variant:{cls4:cls4On,events:material.uniforms.planeCount.value>0,...(diagAn.noRegion?{feat:null}:{})},decode:renderer.currentColorSpace===THREE.SRGBColorSpace,boxes:xrCam?rsEyes:null,identCtx:identRun?.active?identCtxNow():null,extras:gxEx.length?gxEx:null});');
     expect(vr).toContain('}else if(f<1&&lowTarget){');
     expect(vr).toContain('else if(!gx)hideFreeCompile(');
   });
@@ -169,9 +169,24 @@ describe('vr-view.js wiring (static)', () => {
     expect(iLoop).toBeGreaterThan(0); expect(iSet).toBeGreaterThan(iLoop); expect(iSet).toBeGreaterThan(iEnd); // after the loop, and after the 'end' handler exists
     expect(vr).toContain('if(!gx)await renderer.xr.setSession(session);'); // WebGL: as before, at the same place
   });
-  it('the part cut-out and the sample pair are off in the WebGPU view (stage 1: the body only)', () => {
-    expect(vr).toContain('pairHost={ready:()=>!gx&&');
-    expect(vr).toContain('if(gx){partDetachRing=()=>{flashMsg(');
+  it('the screenshot is taken in the WebGPU view: the volumes at f = 1 for the left eye, the scene into an sRGB render target, read back (the chain is pinned by tools/wgpu-m6-check.mjs and tools/wgpu-shot-check.mjs)', () => {
+    expect(vr).not.toContain('Screenshots are not available in the WebGPU view'); expect(vr).not.toContain('スクリーンショットは未対応');
+    expect(vr).toContain('if(gx){takeScreenshotGx().catch(');
+    const i = vr.indexOf('const takeScreenshotGx=async()=>{'), j = vr.indexOf('const takeScreenshot=()=>{'); expect(i).toBeGreaterThan(0); expect(j).toBeGreaterThan(i);
+    const f = vr.slice(i, j);
+    expect(f).toContain('const shotArgs={u:shotU,cams:[cam],model:mesh.matrixWorld,f:1,fov:false,fp:1,periK:1,'); expect(f).toContain('material.uniforms.bakeCut.value=0;try{gx.vol.draw(shotArgs)}finally{material.uniforms.bakeCut.value=bakeWas}'); expect(f).toContain("const shotU=(diagAn.noRegion?null:partGxU(cls4On?'full4':'full'))||material.uniforms"); expect(f).toContain('noDirect:true'); expect(f).toContain('gxRec.phase===\'prep\''); expect(f).toContain('decode:true');
+    expect(f).toContain('rt.texture.colorSpace=THREE.SRGBColorSpace'); expect(f).toContain('renderer.readRenderTargetPixelsAsync(rt,0,0,W,H)');
+    expect(f).not.toContain('(H-1-y)'); // the rows come top first
+    expect(f.indexOf('hidden.forEach(o=>{o.visible=true})')).toBeLessThan(f.indexOf('const data=await px')); // the scene is as before at once, only the read-back is waited for
+  });
+  it('the sample pair is drawn in the WebGPU view: the partner is a second volume of the same frame (its uniforms, its pose, the box composite of the volume renderer)', () => {
+    expect(vr).toContain('pairHost={ready:()=>!!running&&!!mesh&&!!material&&!ui.swapBusy,');
+    expect(vr).toContain('comp=gx?gx.vol.composite.boxMaterial(vdN.halfExt,true):new THREE.ShaderMaterial(');
+    expect(vr).toContain('ex.push({u:pt.u,model:pt.mesh.matrixWorld,order:pt.nearer?0.5:1.5,boxes:null,eyes:rsEyes2})'); expect(vr).toContain('for(const x of gxEx)x.boxes=xrCam?x.eyes:null;');
+    // the parts taken out of the body: extra volumes of the same frame with their own uniforms (the P programs), their boxes composite the volume pass' images
+    expect(vr).toContain('for(const q of parts){if(!q.on||!q.mesh.parent)continue;const o=q.nearer?0.5:1.5;q.mesh.renderOrder=o;ex.push({u:q.u,model:q.mesh.matrixWorld,order:o,boxes:null,eyes:q.rsEyes})}');
+    expect(vr).toContain('partRes.comp=gx?gx.vol.composite.boxMaterial(vd.halfExt,true):new THREE.ShaderMaterial(');
+    expect(vr).toContain('await gx.vol.warmWays(gxVariants(P4(P),P,true))');
   });
   it('the choice button sits next to VR / AR, is hidden with them, and the page decides from vrGpuRequested / vrGpuAvailable', () => {
     const shell = read('ui-shell.js');
@@ -586,18 +601,17 @@ describe('WebGPU: only the 256 grid, and what is not supported is said (A5, B5)'
     expect(row[0]).toMatchObject({ label: '256³', value: 1, on: true, disabled: false });
     expect(row[1]).toMatchObject({ label: 'WebGPU版は256のみ', value: 0, on: false, disabled: true });
   });
-  it('vr-view.js: useData and the data switch read the data setting through dataSel, the stored one is never written in the WebGPU view, the classification-off row is disabled', () => {
+  it('vr-view.js: useData and the data switch read the data setting through dataSel, the stored one is never written in the WebGPU view, the classification-off row is the same choice as in the WebGL view', () => {
     expect(vr).toContain('const dataSel=()=>gxDataValue(gx,settings.data);');
     expect(vr).toContain('useData=i=>{\n   if(gx)i=dataSel();'); expect(vr).toContain('dataSetting:dataSel()'); expect(vr).toContain("(dataSel()?'256':'512')");
     expect(vr.match(/settings\.data=v/g)?.length).toBe(1); expect(vr).toContain("else choice(y0+180,L.dt,[{label:'256³',value:1},{label:'512³',value:0}],settings.data,v=>{settings.data=v;applyQuality()});");
     expect(vr).toContain('const r=gxDataRow(L.gxOnly256);'); expect(vr).toContain('{disabled:r[1].disabled,size:28}');
-    expect(vr).toContain('btn(CX,y0+470,MENU_W-X-CX,L.gxNoDiag,false,()=>{},{disabled:true,size:28})');
+    expect(vr).not.toContain('gxNoDiag'); expect(vr).toContain('choice(y0+470,L.clsD,[{label:L.offOn[1],value:0},{label:L.offOn[0],value:1}],settings.clsDiag|0,v=>{settings.clsDiag=v;applyQuality()});');
     expect(vr).toContain("gxOnly256:'WebGPU版は256のみ'"); expect(vr).toContain("gxOnly256:'WebGPU: 256 only'");
   });
-  it('B5: the unsupported results / child segments / hiding are said once, in the VR view, like the part cut-out note', () => {
-    expect(vr).toContain("gxResults:'WebGPU版では結果の色・子セグメント・非表示は未対応です'");
-    expect(vr).toContain("gxResults:'WebGPU: result colours, child segments and hiding are not supported'");
-    expect(vr).toContain('if(gx&&!gxResultsNoted&&(regionList.length||childList.length)){gxResultsNoted=true;flashMsg(L.gxResults,20000)}');
+  it('B5: the results\' colours, the child segments and hiding are drawn by the WGSL pass: no "not supported" note is said any more', () => {
+    expect(vr).not.toContain('gxResults'); expect(vr).not.toContain('gxResultsNoted');
+    expect(vr).toContain('warmWays(gxVariants(P4(Pn),Pn))');
   });
 });
 

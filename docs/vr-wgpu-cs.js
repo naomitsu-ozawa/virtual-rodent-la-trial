@@ -5,8 +5,8 @@
 // that pass is timed apart (callback 'csVposMs'), so the compute ratio is the march alone.
 // Created lazily by vr-wgpu.js on the first shadow pass that names a compute variant (spec.cs); the compute programs compile in the background, a variant answers null (step past) until its programs exist.
 // onShadow kinds added here (same callback as the timings): ('csVposMs', ms, 1), ('diff:<variant>', differing px, compared px), ('csStat:<variant>', hits listed, list overflow), ('csFail:<variant>', 0, 0).
-import { BOX_VERTICES, uniformLayout } from './vr-wgsl-core.js?v=20261125-build762';
-import { CS, CS_VARIANTS, CS_BINDINGS, CS_ARGS_BINDINGS, CS_DIFF_BINDINGS, csLayout, csWgsl, csArgsWgsl, vposWgsl, csDiffWgsl, invert4 } from './vr-wgsl-cs.js?v=20261125-build762';
+import { BOX_VERTICES, uniformLayout } from './vr-wgsl-core.js?v=20261125-build763';
+import { CS, CS_VARIANTS, CS_BINDINGS, CS_ARGS_BINDINGS, CS_DIFF_BINDINGS, csLayout, csWgsl, csArgsWgsl, vposWgsl, csDiffWgsl, invert4 } from './vr-wgsl-cs.js?v=20261125-build763';
 
 const ARGS_SLOT_HITS = 7; // slot of the hit list's arguments in the args buffer (slots 1..waves-1 are the continuation lists')
 const up = (n, m) => Math.ceil(n / m) * m;
