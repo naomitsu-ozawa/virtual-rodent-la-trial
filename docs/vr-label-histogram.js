@@ -16,8 +16,8 @@
 // thread in small row chunks. The main thread only copies slices (and turns 19 x 4096 bin counts into weighted histograms at the end).
 // Time slicing: before each unit of main-thread work (one slice copy, one chunk) the pass checks the time used in this frame plus the recent
 // cost of such a unit (EMA) against the frame budget and waits for the next frame first when it would not fit.
-import { HIST_MIN, HIST_BINS, HU_AXIS } from './histogram.js?v=20261124-build761';
-import { accToHist, createAcc, textureU16 } from './histogram-texture.js?v=20261124-build761';
+import { HIST_MIN, HIST_BINS, HU_AXIS } from './histogram.js?v=20261125-build762';
+import { accToHist, createAcc, textureU16 } from './histogram-texture.js?v=20261125-build762';
 
 export const SLOTS = 4, REGION_COLORS = 14, LABELS = 1 + SLOTS + REGION_COLORS, UNLABELED = 0;
 export const UNLABELED_COLOR = '#8c969c';

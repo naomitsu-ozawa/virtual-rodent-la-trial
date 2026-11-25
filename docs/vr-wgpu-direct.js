@@ -15,7 +15,7 @@
 //
 // Exactness: the composite hands the blender the centre pass' colour at 8 bit per channel and its depth at 24 bit (the packed depth, decoded as the composite does); the wrapper quantises both in the same way, so the eye image
 // gets the same values. A pixel of the rect is the pixel of the centre pass at the same eye pixel (render scale 1: the centre pass' region is the eye image's pixels); the pre-pass' tiles are the centre pass' own (same texture).
-import { volumeWgsl, VOLUME_BINDINGS, PROXY } from './vr-wgsl-core.js?v=20261124-build761';
+import { volumeWgsl, VOLUME_BINDINGS, PROXY } from './vr-wgsl-core.js?v=20261125-build762';
 
 export const DIRECT_MIN_PX = 16; // a rect smaller than this (either side) is not worth a path of its own: the offscreen path draws it
 const intersect = (a, b) => ({ x0: Math.max(a.x0, b.x0), y0: Math.max(a.y0, b.y0), x1: Math.min(a.x1, b.x1), y1: Math.min(a.y1, b.y1) });
@@ -41,13 +41,14 @@ export function directRegion(region, rect, band, H) {
 // of @group(1) (a bundle cannot scissor), (2) runs the march, (3) quantises the colour to 8 bit (round to nearest, as writing it to an rgba8unorm target does) and discards where the quantised alpha is 0 (the composite's Discard),
 // (4) writes the depth the composite writes: the 24-bit packed depth decoded with the composite's own expression. check = the variant of the verification pass: the same rect test and colour, but it writes the packed depth to a
 // second colour output (a scratch image) instead of frag_depth, so a pass can be compared pixel for pixel with the volume's centre pass.
-export function directFragmentWgsl(text, { check = false } = {}) {
+// group = the bind group index of the rect (1 for the display's own text; 2 for the new ways' texts, whose group 1 is the distance texture / the skip marks)
+export function directFragmentWgsl(text, { check = false, group = 1 } = {}) {
   const from = '@fragment fn fs(in:VOut)->FOut{';
   if (text.split(from).length !== 2) throw new Error('directFragmentWgsl: the fragment entry was not found exactly once');
   const t = text.split(from).join('fn fsMain(in:VOut)->FOut{');
   const rectTest = ' let ip=vec2<i32>(floor(in.pos.xy));\n if(ip.x<dp.rect.x||ip.y<dp.rect.y||ip.x>=dp.rect.z||ip.y>=dp.rect.w){discard;return o;}\n';
   const quant = ' let fo=fsMain(in);\n let c=round(clamp(fo.color,vec4<f32>(0.0),vec4<f32>(1.0))*255.0)/255.0;\n if(c.a<=0.0){discard;return o;}\n';
-  const head = '\n// the direct draw (vr-wgpu-direct.js): the volume\'s fragment inside an integer rect of the eye image\nstruct DP{rect:vec4<i32>};\n@group(1) @binding(0) var<uniform> dp:DP;\n';
+  const head = '\n// the direct draw (vr-wgpu-direct.js): the volume\'s fragment inside an integer rect of the eye image\nstruct DP{rect:vec4<i32>};\n@group(' + group + ') @binding(0) var<uniform> dp:DP;\n';
   return t + head + (check
     ? '@fragment fn fs(in:VOut)->FOut{\n var o:FOut;o.color=vec4<f32>(0.0);o.depth=vec4<f32>(0.0);\n' + rectTest + quant + ' o.color=c;o.depth=fo.depth;return o;\n}\n'
     : 'struct FOutD{@location(0) color:vec4<f32>,@builtin(frag_depth) depth:f32};\n@fragment fn fs(in:VOut)->FOutD{\n var o:FOutD;o.color=vec4<f32>(0.0);o.depth=1.0;\n' + rectTest + quant
@@ -115,6 +116,7 @@ fn main(@builtin(global_invocation_id) g:vec3<u32>){
 const vkeyOf = v => (v.cls4 ? 'c4' : 'c3') + (v.events ? 'e' : 'n');
 const errText = e => String(e?.message ?? e?.error?.message ?? e).slice(0, 200);
 
+// p.way (setFrame) = { mode, group1 (the way's bind group 1), tile (the tiles' size) } of the centre pass' way this frame, or null (the display's own program)
 // h = the pieces of createVolumeGpu (vr-wgpu.js) this needs: device, THREE, layout (the volume's uniform layout), bgl (its bind group layout), f16, onShader, boxBuf, gpuOf, dummy, proxyDummyTex, linear, nearest,
 // texId (the id of a GPUTexture, for the bind group cache keys), fillUniforms(u, extra) -> the packed ArrayBuffer, passExtra(u), pipeFor(variant) (the volume's own pipeline), bindGroup(index, u, pxTex) (the centre pass' bind group)
 export function createDirectApi(h) {
@@ -157,6 +159,27 @@ export function createDirectApi(h) {
     try { h.onShader?.(module, { f16, ...variant, abl: check ? 'direct-check' : 'direct' }); } catch { /* diagnostics only */ }
     return module;
   };
+  // the new ways (the display's own, docs/vr-wgpu-newpath.js): h.way = { text(mode, cls4) -> the way's WGSL, group1Layout(mode) -> the bind group layout of the way's group 1, modes(variant) -> the modes a frame of the variant may be drawn with }; the rect is @group(2) there
+  const wayLays = new Map();
+  const wayLayout = mode => { const g1 = h.way.group1Layout(mode); let l = wayLays.get(g1); if (!l) { l = device.createPipelineLayout({ bindGroupLayouts: [bgl, g1, layouts().dBgl] }); wayLays.set(g1, l); } return l; };
+  const wayPipe = (variant, mode) => {
+    const s = st.seen; if (!s || !s.colorFormat || !s.depthFormat || !h.way) return null;
+    const key = 'way:' + mode + ':' + (variant.cls4 ? 'c4' : 'c3') + '|' + sigOf(s);
+    let e = pipes.get(key);
+    if (!e) {
+      e = { state: 'pending', pipe: null }; pipes.set(key, e);
+      try {
+        const module = device.createShaderModule({ code: directFragmentWgsl(h.way.text(mode, !!variant.cls4), { group: 2 }) });
+        try { h.onShader?.(module, { f16, cls4: !!variant.cls4, events: !!variant.events, abl: 'direct', coarse: 'direct ' + mode }); } catch { /* diagnostics only */ }
+        device.createRenderPipelineAsync({ layout: wayLayout(mode), vertex: vertex(module), fragment: { module, entryPoint: 'fs', targets: [{ format: s.colorFormat, blend: { color: ONE, alpha: ONE }, writeMask: 0xf }] },
+          primitive: { topology: 'triangle-list', cullMode: 'front', frontFace: 'ccw' }, depthStencil: { format: s.depthFormat, depthWriteEnabled: true, depthCompare: 'less-equal' }, multisample: { count: s.samples } })
+          .then(p => { e.pipe = p; e.state = 'ready'; note('direct draw pipeline', 'compiled (' + key + ')'); }, err => { e.state = 'error'; note('direct draw pipeline', 'failed (' + key + '): ' + errText(err)); });
+      } catch (err) { e.state = 'error'; note('direct draw pipeline', 'failed (' + key + '): ' + errText(err)); }
+    }
+    return e.state === 'ready' ? e.pipe : null;
+  };
+  // every way's program a frame of the variant may be drawn with is compiled (a frame that asks for the path must find the one it is drawn with: the centre pass has already left the rect out)
+  const waysReady = variant => { if (!h.way) return true; let ok = true; for (const m of h.way.modes(variant)) if (!wayPipe(variant, m)) ok = false; return ok; };
   const vertex = module => ({ module, entryPoint: 'vs', buffers: [{ arrayStride: 12, attributes: [{ shaderLocation: 0, offset: 0, format: 'float32x3' }] }] });
   const ONE = { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' }; // the composite's blend (CustomBlending One / OneMinusSrcAlpha, the alpha with the same factors: three.js takes them when no alpha factors are given)
   const getPipe = variant => {
@@ -202,13 +225,13 @@ export function createDirectApi(h) {
     f.on = false; // once per frame
     const cams = ro.camera?.cameras;
     if (!ro.camera?.isArrayCamera || !cams?.length || !s.layered) { f.miss = 'not a layered pass'; return; }
-    const pipe = getPipe(f.variant);
+    const wy = f.way, pipe = wy ? wayPipe(f.variant, wy.mode) : getPipe(f.variant);
     if (!pipe) { f.miss = 'no pipeline'; return; }
     for (let i = 0; i < cams.length && i < 2; i++) if (f.eyes[i] && !(data.bundleEncoders[i] && data.bundleSets[i])) { f.miss = 'no bundle for eye ' + i; return; } // everything is checked before the first command is recorded
     for (let i = 0; i < cams.length && i < 2; i++) {
       const e = f.eyes[i]; if (!e) continue;
       const enc = data.bundleEncoders[i], sets = data.bundleSets[i];
-      enc.setPipeline(pipe); enc.setBindGroup(0, e.group); enc.setBindGroup(1, e.dgroup); enc.setVertexBuffer(0, boxBuf); enc.draw(36);
+      enc.setPipeline(pipe); enc.setBindGroup(0, e.group); if (wy) { enc.setBindGroup(1, wy.group1); enc.setBindGroup(2, e.dgroup); } else enc.setBindGroup(1, e.dgroup); enc.setVertexBuffer(0, boxBuf); enc.draw(36);
       sets.pipeline = null; sets.index = null; sets.attributes = {}; sets.bindingGroups.length = 0; // three.js' state cache of this encoder no longer holds: its next draw sets everything again
     }
     f.drawn = true; st.lastUse = st.frameNo;
@@ -261,7 +284,8 @@ export function createDirectApi(h) {
     for (let i = 0; i < Math.min(2, cams.length); i++) { const v = cams[i].viewport; if (Math.abs(v.x) > 0.5 || Math.abs(v.y) > 0.5) return 'the eye is not at the origin of its image'; }
     const v0 = cams[0].viewport, sv = s.view;
     if (sv && (sv[0] !== 0 || sv[1] !== 0 || Math.round(v0.z) !== sv[2] || Math.round(v0.w) !== sv[3])) return 'the eye pass viewport ' + sv.join(',') + ' is not the eye ' + Math.round(v0.z) + 'x' + Math.round(v0.w);
-    if (!getPipe(variant)) return 'the pipeline is not compiled yet';
+    const own = h.way ? true : !!getPipe(variant), ways = waysReady(variant); // (with the display's ways the path draws with their programs only: the display's own program is not made for it)
+    if (!own || !ways) return 'the pipeline is not compiled yet';
     return null;
   };
   let lastWhy = null;
@@ -272,14 +296,14 @@ export function createDirectApi(h) {
     eyes ||= [mkEye(), mkEye()];
     const base = h.passExtra(p.u), out = []; let px = 0;
     for (const r of p.rects) {
-      const e = eyes[r.i], proxyOrg = p.pxTex ? [r.region.x0 - PROXY.tile * r.i * r.tilesPerEye, r.region.y0] : [0, 0];
+      const e = eyes[r.i], proxyOrg = p.pxTex ? [r.region.x0 - (p.way?.tile ?? PROXY.tile) * r.i * r.tilesPerEye, r.region.y0] : [0, 0]; // (the tiles' size: 8 for the display's own pre-pass, 4 for the new ways' tiles)
       const ab = h.fillUniforms(p.u, { mvp: r.eye.mvp, origin: r.eye.origin, lightOff: r.eye.lightOff, ...base, proxyOn: p.pxTex ? 1 : 0, proxyOrg });
       device.queue.writeBuffer(e.ubuf, 0, ab);
       e.rect[0] = r.D.x0; e.rect[1] = r.D.y0; e.rect[2] = r.D.x1; e.rect[3] = r.D.y1; device.queue.writeBuffer(e.dbuf, 0, e.rect);
       out[r.i] = { group: makeGroup('d' + r.i, e.ubuf, p.u, p.pxTex), dgroup: e.dgroup };
       px += (r.D.x1 - r.D.x0) * (r.D.y1 - r.D.y0);
     }
-    st.frame = { on: true, model: p.model, variant: p.variant, eyes: out, drawn: false, miss: null };
+    st.frame = { on: true, model: p.model, variant: p.variant, eyes: out, drawn: false, miss: null, way: p.way ? { mode: p.way.mode, group1: p.way.group1 } : null };
     return px;
   };
   // after the frame's main render: a frame that was set up, whose composite was drawn but whose direct draw could not be recorded, has a hole in the centre for that one frame: the path is switched off for the session at once.

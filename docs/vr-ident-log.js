@@ -4,7 +4,7 @@
 //   The run: prep (the check's programs, distance texture and grid are made; the body is left alone) -> auto (5 segments of 45 s, the body moved by the script of docs/vr-bench.js benchPose, at its largest size; the first 2 s of each segment are not counted;
 //   in near/fast and far/slow the first shown tissue is hidden at the middle of the segment and shown again 2 s later) -> hold (1 minute: the body is put within reach and the person holds and moves it) -> done.
 //   What it can say: with N comparisons of a way that really used it and no difference, the rate of a difference per comparison is at most about 3 / N at 95 % (the rule of three). It is no proof of sameness; the counts below decide "not judged".
-import { benchPose, benchSegmentsOf, createBenchScript, BENCH_SCENES, BENCH_SEGMENT_MS, BENCH_DISCARD_MS } from './vr-bench.js?v=20261124-build761';
+import { benchPose, benchSegmentsOf, createBenchScript, BENCH_SCENES, BENCH_SEGMENT_MS, BENCH_DISCARD_MS } from './vr-bench.js?v=20261125-build762';
 
 export const IDENT_WAYS = ['dist', 'coarse', 'both']; // the three new ways (the control `same` and the positive control `pos` are not ways)
 export const IDENT_HELD_MS = 30000;
@@ -203,7 +203,7 @@ export function identResultLine(v, ok, ja = true) {
 // the display's own use of a new way (its switches are code constants, off): frames drawn the new way, frames drawn the old way and why, and what stopped it
 export function newPathLines(np) {
   if (!np) return [];
-  const L = ['display new way: switches dist ' + (np.switches?.dist ? 'on' : 'off') + ' coarse ' + (np.switches?.coarse ? 'on' : 'off') + (np.mode ? ' (' + np.mode + ')' : '') + ' · used ' + np.used + ' frames, old way ' + np.notUsed + (Object.keys(np.reasons || {}).length ? ' (' + Object.entries(np.reasons).map(([k, n]) => k + ' ' + n).join(', ') + ')' : '') + (np.stopped ? ' · STOPPED: ' + np.stopped : '')];
+  const L = ['display ways: drew ' + np.used + ' passes with a way' + (Object.keys(np.byWay || {}).length ? ' (' + Object.entries(np.byWay).map(([k, n]) => k + ' ' + n).join(', ') + ')' : '') + ', no way for ' + np.notUsed + ' passes' + (Object.keys(np.reasons || {}).length ? ' (' + Object.entries(np.reasons).map(([k, n]) => k + ' ' + n).join(', ') + ')' : '') + (np.errors ? ' · GPU errors of its own submits ' + np.errors : '')];
   for (const n of np.notes || []) L.push('  ' + n);
   return L;
 }

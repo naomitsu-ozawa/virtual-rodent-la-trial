@@ -379,10 +379,11 @@ describe('the host (mock device)', () => {
   const eyeCam = (W, H) => ({ viewport: { z: W, w: H }, projectionMatrix: new THREEG.Matrix4().makePerspective(-0.5, 0.5, 0.5, -0.5, 0.1, 20), matrixWorldInverse: new THREEG.Matrix4().makeTranslation(0, 0, -3), matrixWorld: new THREEG.Matrix4().makeTranslation(0, 0, 3) });
   // a device with timestamp-query (and subgroups): the readbacks answer like a device that ran the passes (the count word and the run's number copied back from the buffer the queue wrote); popErrors = what the two error scopes answer
   const mock = ({ subgroups = true, popErrors = null, stale = false } = {}) => {
+    const st = { armed: true }; // the scopes' answers are for the compute variant's submit: the display's own passes (they have error scopes too) get none
     const log = { passes: [], cpasses: [], cmds: [], shaders: [], cpipes: [], rpipes: [], buffers: [], textures: [], bindGroups: [], writes: [], scopes: [] };
     const device = { features: new Set(['timestamp-query', ...(subgroups ? ['subgroups'] : [])]), limits: {} };
     device.queue = { writeBuffer: (b, off, data) => { log.writes.push({ b, off, n: data.byteLength }); if (b.d.size === 8 && off === 4) b.nonce = new Uint32Array(data.buffer ?? data)[0]; }, writeTexture() {}, submit: () => log.cmds.push('submit') };
-    if (popErrors !== undefined) { device.pushErrorScope = f => log.scopes.push(f); device.popErrorScope = async () => (popErrors ? popErrors.shift() ?? null : null); }
+    if (popErrors !== undefined) { device.pushErrorScope = f => log.scopes.push(f); device.popErrorScope = async () => (popErrors && st.armed ? popErrors.shift() ?? null : null); }
     device.createQuerySet = d => ({ d, destroy() {} });
     device.createBuffer = d => { const b = { d, destroyed: false, nonce: 0, destroy() { b.destroyed = true; }, mapAsync: async () => {}, getMappedRange: () => (d.size === 8 ? new Uint32Array([777, stale ? 0 : b.nonce]).buffer : d.size > 16 ? new Uint32Array(d.size / 4).buffer : new BigUint64Array([1000000n, 2000000n]).buffer), unmap() {} }; log.buffers.push(b); return b; };
     device.createTexture = d => { const t = { d, destroyed: false, destroy() { t.destroyed = true; }, createView: () => ({ t }) }; log.textures.push(t); return t; };
@@ -394,9 +395,9 @@ describe('the host (mock device)', () => {
     device.createCommandEncoder = () => ({
       beginRenderPass: d => { const p = { d, draws: 0, viewports: [], scissors: [] }; log.passes.push(p); log.cmds.push('rpass'); return { setPipeline: x => { p.pipeline = x; }, setVertexBuffer() {}, setBindGroup() {}, setViewport: (...a) => p.viewports.push(a), setScissorRect: (...a) => p.scissors.push(a), draw: () => { p.draws++; }, end() {} }; },
       beginComputePass: d => { const p = { d, seq: [] }; log.cpasses.push(p); log.cmds.push('cpass'); return { setPipeline: x => p.seq.push(['pipe', x]), setBindGroup: (i, g) => p.seq.push(['bg', i, g]), dispatchWorkgroups: (...a) => p.seq.push(['dispatch', ...a]), dispatchWorkgroupsIndirect: (b, o) => p.seq.push(['indirect', b, o]), end() {} }; },
-      resolveQuerySet() {}, copyBufferToBuffer: (src, _so, dst) => { if (src.nonce !== undefined) dst.nonce = src.nonce; log.cmds.push('copy'); }, clearBuffer: () => log.cmds.push('clear'), copyTextureToBuffer() {}, finish: () => ({}),
+      resolveQuerySet() {}, copyBufferToTexture() {}, copyBufferToBuffer: (src, _so, dst) => { if (src.nonce !== undefined) dst.nonce = src.nonce; log.cmds.push('copy'); }, clearBuffer: () => log.cmds.push('clear'), copyTextureToBuffer() {}, finish: () => ({}),
     });
-    return { device, log };
+    return { device, log, arm: v => { st.armed = v; } };
   };
   const withGpu = fn => async () => { GLOBALS(); try { await fn(); } finally { vi.unstubAllGlobals(); } };
   const clsTex = () => { const t = new THREEG.Data3DTexture(new Uint8Array(4 * 4 * 4 * 4), 4, 4, 4); t.format = THREEG.RGBAFormat; t.type = THREEG.UnsignedByteType; return t; };
@@ -405,6 +406,7 @@ describe('the host (mock device)', () => {
   const prepared = async (o = {}) => {
     const g = mock(o), got = [], r = createVrVolumeRenderer({ THREE: THREEG, device: g.device, halfExt: [1, 1, 1] });
     await r.breakdown.begin({ cls4: false, events: false }, (...a) => got.push(a));
+    if (o.popErrors) { g.arm(false); const sh = r.breakdown.shadow; r.breakdown.shadow = (...a) => { g.arm(true); try { return sh(...a); } finally { g.arm(false); } }; }
     return { ...g, r, got, u: o.u || u0() };
   };
   // the first ask starts the compile (null); once the programs exist the variant answers

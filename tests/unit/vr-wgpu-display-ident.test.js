@@ -7,10 +7,10 @@ import * as THREEG from 'three/webgpu';
 import { WgslReflect } from 'wgsl_reflect/wgsl_reflect.module.js';
 import { volumeWgsl, uniformLayout, proxyWgsl, proxyDiffWgsl, identDiffWgsl, IDENT_DIFF, identDiffDecode } from '../../docs/vr-wgsl-core.js';
 import * as host from '../../docs/vr-wgpu.js';
-import { createVrVolumeRenderer, DIST_SPLIT_DISPLAY_DEFAULT, COARSE_PROXY_DISPLAY_DEFAULT, NEW_PATH_ALLOW_C4 } from '../../docs/vr-wgpu.js';
+import { createVrVolumeRenderer } from '../../docs/vr-wgpu.js';
 import * as P from '../../docs/vr-wgpu-coarse-proxy.js';
 import * as MR from '../../docs/vr-wgpu-coarse-march.js';
-import { newPathText, newPathGate, modeOfSwitches, modeNeeds, NEW_PATH_MODES, createNewPath } from '../../docs/vr-wgpu-newpath.js';
+import { newPathText, newPathGate, modeNeeds, NEW_PATH_MODES, createNewPath } from '../../docs/vr-wgpu-newpath.js';
 import { identNextMode, IDENT_ROTATION, IDENT_CONTROL_EVERY, IDENT_RING } from '../../docs/vr-wgpu-ident.js';
 import * as L from '../../docs/vr-ident-log.js';
 import { BENCH_SCENES, BENCH_SEGMENTS, BENCH_PLANS, BENCH_SEGMENT_MS, benchPose, benchSegmentsOf, BENCH_HOLDER_SCALE } from '../../docs/vr-bench.js';
@@ -24,29 +24,14 @@ const withGpu = fn => async () => { for (const [k, v] of Object.entries(GPU_GLOB
 const settle = () => new Promise(r => setTimeout(r, 0));
 const vrView = read('vr-view.js'), wgpu = read('vr-wgpu.js');
 
-describe('the switches and what a switch that is off leaves alone', () => {
-  it('both display switches and NEW_PATH_ALLOW_C4 are false (the page changes the constants later, on its own say)', () => {
-    expect(DIST_SPLIT_DISPLAY_DEFAULT).toBe(false); expect(COARSE_PROXY_DISPLAY_DEFAULT).toBe(false); expect(NEW_PATH_ALLOW_C4).toBe(false);
-    expect(modeOfSwitches(false, false)).toBeNull(); expect(modeOfSwitches(true, false)).toBe('dist'); expect(modeOfSwitches(false, true)).toBe('coarse'); expect(modeOfSwitches(true, true)).toBe('both');
+describe('the display has no switch and no way back to the old program', () => {
+  it('the switches, their defaults, NEW_PATH_ALLOW_C4 and the stop of the new ways are gone (13 of the plan: the display\'s four entrances take their programs from the table of ways only)', () => {
+    for (const k of ['DIST_SPLIT_DISPLAY_DEFAULT', 'COARSE_PROXY_DISPLAY_DEFAULT', 'NEW_PATH_ALLOW_C4']) expect(host[k], k).toBeUndefined();
+    for (const w of ['distSplitDisplay', 'coarseDisplay', 'allowC4', 'dnpStop', 'stopNewPath', 'dispMode', 'specOn']) expect(wgpu, w).not.toContain(w);
+    expect(wgpu).not.toContain('specs.pick'); // the specialised program is the breakdown's alone (specShadowPass)
+    expect(read('vr-wgpu-newpath.js')).not.toContain('modeOfSwitches'); expect(read('vr-wgpu-newpath.js')).not.toContain('WAYS_MADE'); expect(read('vr-wgpu-newpath.js')).not.toContain('noway');
+    expect(vrView).not.toContain("newPath.stop(");
   });
-  it('with the switches off the display\'s device calls are those of, call for call (preload, centre + periphery, 100 %, the probe, the breakdown, dispose; with and without timestamp-query): no new texture, buffer, pipeline, module, query set or bind group', withGpu(async () => {
-    const want = fixture('vr-wgpu-display-off-calls.json');
-    for (const ts of [false, true]) {
-      const got = await runScenario(host, { timestamps: ts });
-      expect(got.length).toBe(want['timestamps=' + ts].length);
-      expect(got).toEqual(want['timestamps=' + ts]);
-    }
-  }));
-  it('the same holds when the switches are passed explicitly as false (the specDisplay way of passing a switch) and with a check never started', withGpu(async () => {
-    const want = fixture('vr-wgpu-display-off-calls.json');
-    expect(await runScenario(host, { opts: { distSplitDisplay: false, coarseDisplay: false, allowC4: false } })).toEqual(want['timestamps=false']);
-  }));
-  it('with a switch on the log differs (the pin above has teeth): the new ways make their own objects', withGpu(async () => {
-    const want = fixture('vr-wgpu-display-off-calls.json');
-    const got = await runScenario(host, { opts: { distSplitDisplay: true } });
-    expect(got).not.toEqual(want['timestamps=false']);
-    expect(got.filter(l => l.startsWith('createShaderModule')).length).toBeGreaterThan(want['timestamps=false'].filter(l => l.startsWith('createShaderModule')).length);
-  }));
   it('the WGSL of the programs that already existed is the text of (character for character): the display variants (vr-breakdown.test.js pins them too), the 8 x 8 pre-pass, the comparison, the grid build (default arguments), the 4 x 4 pre-pass, the coarse volume programs, the march variants', () => {
     const core = { proxy: o => proxyWgsl(o), build: o => P.coarseBuildWgsl(o), coarseProxy: o => P.coarseProxyWgsl(o), coarseVolume: o => P.coarseVolumeWgsl({ f16: o.f16, cls4: o.cls4 }, o.tile), march: o => MR.marchWgsl(volumeWgsl({ f16: o.f16, cls4: o.cls4, events: false }), o.kind), diff: () => proxyDiffWgsl() };
     const table = fixture('wgsl-hashes-build760.json');
@@ -68,7 +53,7 @@ describe('the switches and what a switch that is off leaves alone', () => {
     r.dispose();
     expect(made).toBeGreaterThan(0);
     expect(wgpu).toContain("const ident = createIdentGpu({");
-    expect(r.volume.newPath.mode).toBeNull(); expect(r.volume.newPath.stats().used).toBe(0);
+    expect(r.volume.newPath.stats().used).toBe(0);
   }));
 });
 
@@ -132,29 +117,18 @@ describe('the grid key and the rebuild', () => {
     expect(src).not.toContain('uploadGen'); expect(src).not.toContain('rebuildEvery');
     expect(read('vr-wgpu-coarse-proxy.js').slice(read('vr-wgpu-coarse-proxy.js').indexOf('export function createCoarseDisplay'))).not.toMatch(/uploadGen|rebuildEvery|uses %/);
   });
-  it('the ranged build covers every row of cells once: 256^3 -> 8 shares of 8 rows (2 of the 16 workgroup layers), the first row of each share goes to the shader as dims.w, a new key starts again at row 0, the same key makes nothing', withGpu(async () => {
-    const rec = recordingDevice(), writes = [], w0 = rec.device.queue.writeBuffer;
-    rec.device.queue.writeBuffer = (b, o, d) => { writes.push(new Int32Array(d.buffer ? d.buffer.slice(d.byteOffset, d.byteOffset + d.byteLength) : d.slice(0))); return w0(b, o, d); };
-    const cd = P.createCoarseDisplay({ device: rec.device, onShader: null, dropGroups: () => {}, name: 'test' });
+  it('the tiles of a pass: each slot has its own texture, buffer and bind group (the periphery\'s size never makes the centre\'s over); no grid yet (or no program yet) = no tiles; the programs stay when the resources are reset', withGpu(async () => {
+    const rec = recordingDevice(), cd = P.createCoarseDisplay({ device: rec.device, onShader: null, dropGroups: () => {}, name: 'test' });
+    const tex = { createView: () => ({}), destroy() {} }, grid = { alpha: tex, marks: tex }, enc = rec.device.createCommandEncoder(), bytes = new Uint8Array(uniformLayout(P.COARSE_FIELDS).byteSize);
+    const call = (slot, cols, g = grid) => cd.tiles(enc, { bytes, nEyes: 2, tilesPerEye: cols / 2, tilesY: 8, texCols: cols, texRows: 8, dims: [32, 32, 32], cls4: false, grid: g, slot });
+    expect(call('low', 16)).toBeNull(); // the program is not ready
     cd.progs(false); await settle(); await settle(); expect(cd.progs(false).state).toBe('ready');
-    const tex = { createView: () => ({}) }, enc = rec.device.createCommandEncoder(), dims = [256, 256, 256], call = key => cd.build(enc, { key, clsTex: tex, c4Tex: tex, dims, segOn: [1, 1, 0, 0], clsChan: [0, 1, -1, -1], cls4: false });
-    const out = []; for (let i = 0; i < 8; i++) out.push(call('k1'));
-    expect(out).toEqual([...Array(7).fill('building'), 'ready']);
-    const disp = rec.log.filter(l => l.startsWith('compute.dispatch')); expect(disp).toEqual(Array(8).fill('compute.dispatch 4,16,2'));
-    const z0 = writes.filter(x => x.length === uniformLayout(P.BUILD_FIELDS).byteSize / 4).map(x => x[3]); expect(z0).toEqual([0, 8, 16, 24, 32, 40, 48, 56]);
-    const rows = new Array(64).fill(0); for (const z of z0) for (let r = z; r < z + 4 * 2; r++) if (r < 64) rows[r]++;
-    expect(rows.every(n => n === 1)).toBe(true); // every row of cells is made exactly once
-    expect(call('k1')).toBe('ready'); expect(rec.log.filter(l => l.startsWith('compute.dispatch')).length).toBe(8);
-    expect(call('k2')).toBe('building'); expect(writes.filter(x => x.length === uniformLayout(P.BUILD_FIELDS).byteSize / 4).map(x => x[3]).slice(8)).toEqual([0]); // a new key: from the first row; the grid of k1 is not used for k2
-    expect(cd.state.grid.readyKey).toBeNull();
+    expect(call('low', 16, null)).toBeNull();
+    const a = call('low', 16), b = call('peri', 8); expect(a).toBeTruthy(); expect(b).toBeTruthy(); expect(a).not.toBe(b);
+    expect(call('low', 16)).toBe(a); expect(call('peri', 8)).toBe(b); // the same sizes: the same textures
+    expect(rec.stats.textures.filter(t => t.desc.format === 'rg32float')).toHaveLength(2);
+    cd.reset(); expect(cd.progs(false).state).toBe('ready'); expect(call('low', 16)).not.toBe(a); // resources made again, the program kept
     cd.destroy();
-  }));
-  it('a size that is no multiple of the share (48^3: 12 rows of cells) ends with a short share and the guard of the shader keeps the rest out', withGpu(async () => {
-    const rec = recordingDevice(), cd = P.createCoarseDisplay({ device: rec.device, name: 't' });
-    cd.progs(false); await settle(); await settle();
-    const tex = { createView: () => ({}) }, enc = rec.device.createCommandEncoder(), dims = [48, 48, 48];
-    const r1 = cd.build(enc, { key: 'a', clsTex: tex, c4Tex: tex, dims, segOn: [1, 0, 0, 0], clsChan: [0, -1, -1, -1], cls4: false }), r2 = cd.build(enc, { key: 'a', clsTex: tex, c4Tex: tex, dims, segOn: [1, 0, 0, 0], clsChan: [0, -1, -1, -1], cls4: false });
-    expect([r1, r2]).toEqual(['building', 'ready']); expect(rec.log.filter(l => l.startsWith('compute.dispatch'))).toEqual(['compute.dispatch 1,3,2', 'compute.dispatch 1,3,1']);
   }));
 });
 
@@ -184,12 +158,11 @@ describe('the walk limit: a frame whose rays cannot reach 4096 iterations may us
     }
     expect(worst).toBeGreaterThan(0.3); // the test reaches near the bound
   });
-  it('the gate: c4 and a stopped / failed instance use the old way; the limit is asked only of the ways that move the walk\'s ends (coarse, both), never of distSplit', () => {
+  it('the gate (the check\'s explicit ways): a failed instance is refused; the limit is asked only of the ways that move the walk\'s ends (coarse, both), never of distSplit or of tileSkip (its program keeps the loop\'s own limit); c4 is no reason any more', () => {
     const he = [1, 1, 1];
-    expect(newPathGate({ mode: 'dist', cls4: false, halfExt: he, stepSize: 0.01 })).toBe('');
-    expect(newPathGate({ mode: 'dist', cls4: true, halfExt: he, stepSize: 0.01 })).toBe('c4'); expect(newPathGate({ mode: 'dist', cls4: true, allowC4: true, halfExt: he, stepSize: 0.01 })).toBe('');
+    expect(newPathGate({ mode: 'dist', halfExt: he, stepSize: 0.01 })).toBe('');
     for (const mode of ['coarse', 'both']) { expect(newPathGate({ mode, halfExt: he, stepSize: 0.0008 })).toBe('limit'); expect(newPathGate({ mode, halfExt: he, stepSize: 0.01 })).toBe(''); }
-    expect(newPathGate({ mode: 'dist', halfExt: he, stepSize: 0.0008 })).toBe('');
+    expect(newPathGate({ mode: 'dist', halfExt: he, stepSize: 0.0008 })).toBe(''); expect(newPathGate({ mode: 'tileSkip', halfExt: he, stepSize: 0.0008 })).toBe('');
     expect(newPathGate({ mode: 'dist', failed: 'x' })).toBe('failed');
   });
 });
@@ -237,7 +210,7 @@ describe('the distance texture follows the combined texture\'s writes', () => {
 });
 
 // ---- the frame: which way a frame is drawn, with the real renderer and the recording device ----
-const mkR = (opts = {}, timestamps = false, dev = {}) => { const rec = recordingDevice({ timestamps, ...dev }); const r = createVrVolumeRenderer({ THREE: THREEG, device: rec.device, halfExt: [1, 1, 1], ...opts }); return { r, ...rec }; };
+const mkR = (opts = {}, timestamps = false, dev = {}) => { const rec = recordingDevice({ timestamps, ...dev }); const r = createVrVolumeRenderer({ THREE: THREEG, device: rec.device, halfExt: [1, 1, 1], distSplitDisplay: false, coarseDisplay: false, ...opts }); return { r, ...rec }; };
 const frameOf = (r, u, over = {}) => r.draw({ u, cams: [eyeCam(1000, 1000), eyeCam(1000, 1000)], model: new THREEG.Matrix4(), f: 0.5, fov: false, fp: 0.5, rects: null, band: 1, variant: { cls4: false, events: false }, ...over });
 // the low pass's way in the log lines of one frame: the program of its first render pass and whether it had a group 1
 const lowWay = (rec, from) => {
@@ -247,33 +220,76 @@ const lowWay = (rec, from) => {
 };
 const ready = async (r, u, v = [{ cls4: false, events: false }]) => { await r.preload(u, v); await settle(); await settle(); };
 
-describe('the display with a switch on', () => {
-  for (const [mode, opts] of [['dist', { distSplitDisplay: true }], ['coarse', { coarseDisplay: true }], ['both', { distSplitDisplay: true, coarseDisplay: true }]]) {
-    it(mode + ': a frame that meets every condition is drawn the new way (its program; group 1 where the march layout needs it; 4 x 4 tiles for the coarse ways), and counted', withGpu(async () => {
-      const rec = mkR(opts), u = sceneUniforms(); await ready(rec.r, u);
-      expect(rec.r.volume.newPath.mode).toBe(mode);
-      let n0 = rec.log.length; frameOf(rec.r, u); let way = lowWay(rec, n0);
-      for (let i = 0; i < 3 && !way.dist && !way.coarse; i++) { n0 = rec.log.length; frameOf(rec.r, u); way = lowWay(rec, n0); } // (a frame or two to make the distance texture / the grid)
-      expect([way.dist, way.coarse]).toEqual([modeNeeds(mode).dist, modeNeeds(mode).coarse]); expect(way.group1).toBe(modeNeeds(mode).dist);
-      const st = rec.r.volume.newPath.stats(); expect(st.used).toBeGreaterThan(0); expect(st.byMode[mode]).toBe(st.used); expect(st.failed).toBe('');
-      expect(rec.r.stats.np).toMatchObject({ use: true, mode });
-      if (modeNeeds(mode).coarse) expect(rec.log.slice(n0).filter(l => l.startsWith('compute.dispatch'))).toContain('compute.dispatch ' + Math.ceil(Math.ceil(500 / 4) * 2 / 8) + ',' + Math.ceil(Math.ceil(500 / 4) / 8)); // the 4 x 4 tiles: 125 per eye, two eyes, 125 rows
-      else expect(rec.log.slice(n0).filter(l => l.startsWith('compute.dispatch'))).toContain('compute.dispatch ' + Math.ceil(Math.ceil(500 / 8) * 2 / 8) + ',' + Math.ceil(Math.ceil(500 / 8) / 8)); // distSplit keeps the display's 8 x 8 pre-pass
+describe('the display with a switch on: a way is chosen for every pass of every frame (chooseWay) and the old way is what is left where no way is made yet', () => {
+  it('B: a frame that meets every condition is drawn B (the program of both substitutions, group 1 for the march layout, the 4 x 4 tiles over the coarse grid), and counted', withGpu(async () => {
+    const rec = mkR({ distSplitDisplay: true, coarseDisplay: true }), u = sceneUniforms(); await ready(rec.r, u);
+    let n0 = rec.log.length; frameOf(rec.r, u); let way = lowWay(rec, n0);
+    for (let i = 0; i < 4 && !(way.dist && way.coarse); i++) { n0 = rec.log.length; frameOf(rec.r, u); way = lowWay(rec, n0); } // (a frame or two to make the distance texture / the grid)
+    expect([way.dist, way.coarse, way.group1]).toEqual([true, true, true]);
+    const st = rec.r.volume.newPath.stats(); expect(st.used).toBeGreaterThan(0); expect(st.byWay.B).toBeGreaterThan(0); expect(st.failed).toBe('');
+    expect(rec.r.stats.np).toMatchObject({ use: true, mode: 'both', way: 'B' });
+    expect(rec.log.slice(n0).filter(l => l.startsWith('compute.dispatch'))).toContain('compute.dispatch ' + Math.ceil(Math.ceil(500 / 4) * 2 / 8) + ',' + Math.ceil(Math.ceil(500 / 4) / 8)); // the 4 x 4 tiles: 125 per eye, two eyes, 125 rows
+    rec.r.dispose();
+  }));
+  it('the frames that are not B: a step too fine for the walk limit, diag 2 and the grid not ready are D (distSplit with the display\'s 8 x 8 pre-pass); the probe (diag 5), diag 1 and a matrix that cannot be inverted are D0 (no pre-pass); a section plane is EvD (distSplit on the section-plane program); no jumps is S (the skip marks)', withGpu(async () => {
+    const rec = mkR({ distSplitDisplay: true, coarseDisplay: true }), u = sceneUniforms(); await ready(rec.r, u);
+    for (let i = 0; i < 4; i++) frameOf(rec.r, u); expect(rec.r.stats.np).toMatchObject({ use: true, way: 'B' });
+    const way = (setup, expected, over = {}) => { const bak = {}; setup?.(u, bak); frameOf(rec.r, u, over); expect(rec.r.stats.np, expected.reason ?? expected.way).toMatchObject(expected); setup?.(u, bak, true); };
+    way((u2, b, undo) => { u2.stepSize.value = undo ? 0.02 : 0.0008; }, { use: true, way: 'D' });
+    way((u2, b, undo) => { u2.diag.value = undo ? 0 : 2; }, { use: true, way: 'D' });
+    way((u2, b, undo) => { u2.diag.value = undo ? 0 : 5; }, { use: true, way: 'D0' });
+    way((u2, b, undo) => { u2.diag.value = undo ? 0 : 1; }, { use: true, way: 'D0' });
+    way((u2, b, undo) => { u2.planeCount.value = undo ? 0 : 2; }, { use: true, way: 'EvD' });
+    way((u2, b, undo) => { u2.distInCls.value = undo ? 1 : 0; }, { use: true, way: 'S', mode: 'skip' });
+    way(null, { use: true, way: 'EvD' }, { variant: { cls4: false, events: true } });
+    frameOf(rec.r, u); expect(rec.r.stats.np).toMatchObject({ use: true, way: 'B' }); // everything back: B again
+    rec.r.dispose();
+  }));
+  it('the periphery is drawn B too, with tiles of its own: two tile textures (the centre\'s is not made over by the periphery\'s size), a tile compute pass for each, both passes with the coarse program', withGpu(async () => {
+    const rec = mkR({ distSplitDisplay: true, coarseDisplay: true }), u = sceneUniforms(); await ready(rec.r, u);
+    const fov = { fov: true, fp: 0.25, rects: [[300, 300, 700, 700]], band: 8 };
+    for (let i = 0; i < 4; i++) frameOf(rec.r, u, fov);
+    const n0 = rec.log.length; frameOf(rec.r, u, fov); const seg = rec.log.slice(n0);
+    const sets = seg.filter(l => l.startsWith('render.setPipeline')).map(l => rec.codeOfPipe(l.split(' ')[1])); expect(sets).toHaveLength(2); expect(sets.every(c => /coarse-tile=4/.test(c) && /march=distSplit/.test(c))).toBe(true);
+    expect(seg.filter(l => l.startsWith('compute.dispatch'))).toHaveLength(2); // one tile compute for the centre, one for the periphery (the grid is made)
+    const tex = rec.stats.textures.filter(t => t.desc.format === 'rg32float'); expect(tex).toHaveLength(2); expect(tex[0].desc.size.join('x')).not.toBe(tex[1].desc.size.join('x'));
+    const stp = rec.r.volume.newPath.stats(); expect(stp.byWay.B).toBeGreaterThanOrEqual(2);
+    rec.r.dispose();
+  }));
+  it('the scenes of normal use, each in the centre pass AND the periphery pass: the program drawn is one of the ways (B, D, EvD, S, EvS, OS), never the display\'s own text; the probe too', withGpu(async () => {
+    const kind = code => (/skip-marks/.test(code) ? (/tile-walk/.test(code) ? 'OS' : /events=true/.test(code) ? 'EvS' : 'S') : /march=distSplit/.test(code) ? (/coarse-tile/.test(code) ? 'B' : /events=true/.test(code) ? 'EvD' : 'D') : 'OLD');
+    const fov = { fov: true, fp: 0.25, rects: [[300, 300, 700, 700]], band: 8 };
+    const scenes = [
+      ['normal', null, {}, 'B', 'B'], ['walk limit (a fine step)', u => { u.stepSize.value = 0.0008; }, {}, 'D', 'D'], ['diag 2', u => { u.diag.value = 2; }, {}, 'D', 'D'], ['diag 1', u => { u.diag.value = 1; }, {}, 'D', 'D'],
+      ['diag 5 (the probe as the session\'s diagnostic)', u => { u.diag.value = 5; }, {}, 'D', 'D'], ['section plane', u => { u.planeCount.value = 2; }, { variant: { cls4: false, events: true } }, 'EvD', 'EvD'],
+      ['no jumps (no distance field)', u => { u.distInCls.value = 0; }, {}, 'S', 'S'], ['diag 4', u => { u.diag.value = 4; }, {}, 'OS', 'OS'], ['diag 4 and a section plane', u => { u.diag.value = 4; u.planeCount.value = 2; }, { variant: { cls4: false, events: true } }, 'EvS', 'EvS'],
+      ['no jumps and diag 2', u => { u.distInCls.value = 0; u.diag.value = 2; }, {}, 'S', 'S'], ['four segments', null, { variant: { cls4: true, events: false } }, 'B', 'B'],
+    ];
+    for (const [name, setup, over, wantLow, wantPeri] of scenes) {
+      const rec = mkR({ distSplitDisplay: true, coarseDisplay: true }), u = sceneUniforms(); setup?.(u);
+      await ready(rec.r, u, [{ cls4: !!over.variant?.cls4, events: !!over.variant?.events }]);
+      for (let i = 0; i < 4; i++) frameOf(rec.r, u, { ...fov, ...over });
+      const n0 = rec.log.length; frameOf(rec.r, u, { ...fov, ...over });
+      const kinds = rec.log.slice(n0).filter(l => l.startsWith('render.setPipeline')).map(l => kind(rec.codeOfPipe(l.split(' ')[1])));
+      expect(kinds, name).toEqual([wantLow, wantPeri]);
+      expect(rec.r.volume.newPath.stats().reasons, name).toEqual({}); // 8-3: no frame of the scene was a pass without a way ('noproxy' and 'textures' cannot happen: every display pass hands its way choice over and the data is on the GPU before the first frame)
       rec.r.dispose();
-    }));
-  }
-  it('the frames that must be drawn the old way, each for its own reason: c4, a section plane, no jumps, the probe (diag 5), a step too fine for the walk limit (coarse ways only), the pre-pass not ready', withGpu(async () => {
-    const rec = mkR({ coarseDisplay: true }), u = sceneUniforms(); await ready(rec.r, u);
-    for (let i = 0; i < 3; i++) frameOf(rec.r, u); expect(rec.r.stats.np?.use).toBe(true);
-    const old = (setup, reason, over = {}) => { const bak = {}; setup?.(u, bak); const n0 = rec.log.length; frameOf(rec.r, u, over); const w = lowWay(rec, n0); expect(w.dist || w.coarse, reason).toBe(false); expect(rec.r.stats.np, reason).toMatchObject({ use: false, reason }); setup?.(u, bak, true); };
-    old((u2, b, undo) => { if (undo) u2.diag.value = 0; else u2.diag.value = 5; }, 'probe');
-    old((u2, b, undo) => { u2.planeCount.value = undo ? 0 : 2; }, 'section');
-    old((u2, b, undo) => { u2.distInCls.value = undo ? 1 : 0; }, 'nojump');
-    old((u2, b, undo) => { u2.stepSize.value = undo ? 0.02 : 0.0008; }, 'limit');
-    old(null, 'c4', { variant: { cls4: true, events: false } });
-    old(null, 'section', { variant: { cls4: false, events: true } });
-    frameOf(rec.r, u); expect(rec.r.stats.np?.use).toBe(true); // everything back: the new way again
-    const reasons = rec.r.volume.newPath.stats().reasons; expect(Object.keys(reasons).sort()).toEqual(['c4', 'limit', 'nojump', 'probe', 'section']);
+    }
+  }));
+  it('the probe (diag 5 pass) is drawn D0 (the distSplit program, no pre-pass), and a session without any way (the switches off) keeps the display\'s own', withGpu(async () => {
+    const rec = mkR({ distSplitDisplay: true, coarseDisplay: true }), u = sceneUniforms(); await ready(rec.r, u);
+    for (let i = 0; i < 3; i++) frameOf(rec.r, u);
+    const n0 = rec.log.length; const pr = rec.r.probe({ u, cam: eyeCam(1000, 1000), model: new THREEG.Matrix4() }); await settle();
+    const sp = rec.log.slice(n0).filter(l => l.startsWith('render.setPipeline')); expect(sp).toHaveLength(1); expect(/march=distSplit/.test(rec.codeOfPipe(sp[0].split(' ')[1]))).toBe(true); expect(/coarse-tile/.test(rec.codeOfPipe(sp[0].split(' ')[1]))).toBe(false);
+    expect(rec.log.slice(n0).filter(l => l.startsWith('compute.dispatch'))).toEqual([]); void pr;
+    rec.r.dispose();
+  }));
+  it('D0 draws without any pre-pass: no compute pass, proxyOn 0, the distSplit program with group 1', withGpu(async () => {
+    const rec = mkR({ distSplitDisplay: true, coarseDisplay: true }), u = sceneUniforms(); await ready(rec.r, u);
+    for (let i = 0; i < 4; i++) frameOf(rec.r, u);
+    u.diag.value = 1; const n0 = rec.log.length; frameOf(rec.r, u); const w = lowWay(rec, n0);
+    expect(rec.r.stats.np).toMatchObject({ use: true, way: 'D0', mode: 'dist' }); expect(w.dist).toBe(true); expect(w.coarse).toBe(false); expect(w.group1).toBe(true);
+    expect(rec.log.slice(n0).filter(l => l.startsWith('compute.dispatch'))).toEqual([]);
     rec.r.dispose();
   }));
   it('distSplit is not asked for the walk limit', withGpu(async () => {
@@ -281,46 +297,98 @@ describe('the display with a switch on', () => {
     for (let i = 0; i < 3; i++) frameOf(rec.r, u); expect(rec.r.stats.np?.use).toBe(true);
     rec.r.dispose();
   }));
-  it('the programs are not ready yet: the old way draws, and no frame waits for them (ready = false until the compile has finished)', withGpu(async () => {
+  it('the programs of B are not ready yet: D draws, and no frame waits for them', withGpu(async () => {
     const rec = mkR({ coarseDisplay: true }), u = sceneUniforms();
     const slow = rec.device.createRenderPipelineAsync; let release; rec.device.createRenderPipelineAsync = d => (/coarse-tile=4/.test(d.vertex.module.code) ? new Promise(res => { release = () => res(slow(d)); }) : slow(d)); // (the programs of the new way hang until released; the display's own are made as always)
-    await rec.r.preload(u, [{ cls4: false, events: false }]);
-    const n0 = rec.log.length; frameOf(rec.r, u); expect(lowWay(rec, n0).coarse).toBe(false); expect(rec.r.stats.np).toMatchObject({ use: false, reason: 'prep' });
+    void rec.r.preload(u, [{ cls4: false, events: false }]); await settle(); await settle(); // (preload waits for the programs of the ways: this one hangs, so it is not awaited; the frames go on)
+    for (let i = 0; i < 3; i++) frameOf(rec.r, u); // (the distance texture is made at the first frame)
+    const n0 = rec.log.length; frameOf(rec.r, u); expect(lowWay(rec, n0).coarse).toBe(false); expect(rec.r.stats.np).toMatchObject({ use: true, way: 'D' }); // B's program is not there: D (distSplit, the 8 x 8 pre-pass) draws, nothing waits
     rec.r.dispose(); void release;
   }));
-  it('a compile failure or a device error stops the new way for the session: the old way draws, one line is kept, nothing is retried every frame', withGpu(async () => {
+  it('preload (the session start, gx.ready) waits for the programs of every way of the variants, and the first frame finds them ready; the other fourth-segment variant is started and not waited for', withGpu(async () => {
+    const rec = mkR({ distSplitDisplay: true, coarseDisplay: true }), u = sceneUniforms(), slow = rec.device.createRenderPipelineAsync, releases = [];
+    rec.device.createRenderPipelineAsync = d => (/coarse-tile=4|skip-marks/.test(d.vertex.module.code) ? new Promise(res => { releases.push(() => res(slow(d))); }) : slow(d));
+    let done = false; const p = rec.r.preload(u, [{ cls4: false, events: false }]).then(() => { done = true; });
+    await settle(); await settle(); await new Promise(r => setTimeout(r, 30)); expect(done).toBe(false); expect(releases.length).toBeGreaterThan(0); // (held by the programs of the ways)
+    const c4Held = releases.length; for (const r of releases.splice(0)) r(); await p; expect(done).toBe(true);
+    expect(c4Held).toBe(4); // c3: B (both), OS (tileSkip), S (skip) and EvS (skipEv) are the ones held here (the c4 ones are started after the wait, not waited for)
+    await settle(); const progs = rec.stats.shaders.filter(c => /march=distSplit|skip-marks/.test(c)); expect(progs.length).toBeGreaterThanOrEqual(6 + 6); // every way of c3, then (started, not waited for) every way of c4
+    frameOf(rec.r, u); expect(rec.r.stats.np.use).toBe(true);
+    rec.r.dispose();
+  }));
+  it('a compile failure takes away that program\'s ways only (the ladder goes on); one line is kept, nothing is retried every frame', withGpu(async () => {
     const rec = mkR({ coarseDisplay: true }), u = sceneUniforms(), orig = rec.device.createRenderPipelineAsync; let calls = 0;
     rec.device.createRenderPipelineAsync = async d => { if (/coarse-tile=4/.test((d.vertex.module.code))) { calls++; throw new Error('boom'); } return orig(d); };
     await ready(rec.r, u);
     for (let i = 0; i < 4; i++) { const n0 = rec.log.length; frameOf(rec.r, u); expect(lowWay(rec, n0).coarse).toBe(false); }
-    const st = rec.r.volume.newPath.stats(); expect(st.failed).toContain('boom'); expect(st.failLog).toHaveLength(1); expect(calls).toBe(1); expect(rec.r.stats.np.reason).toBe('failed');
+    const st = rec.r.volume.newPath.stats(); expect(st.failed).toContain('boom'); expect(st.failLog).toHaveLength(1); expect(calls).toBe(4); // (B and OS, c3 and c4: each compiled once, never again)
+    expect(rec.r.stats.np).toMatchObject({ use: true, way: 'D' }); // the program that failed fails its own ways only: B falls to D, whose program is fine (a failure does not stop the other ways)
+    u.diag.value = 4; for (let i = 0; i < 2; i++) frameOf(rec.r, u); expect(rec.r.stats.np).toMatchObject({ use: true, way: 'S' }); // OS fell to S the same way
     rec.r.dispose();
-    const r2 = mkR({ distSplitDisplay: true }), u2 = sceneUniforms(); await ready(r2.r, u2); frameOf(r2.r, u2);
-    r2.r.volume.newPath.stop('device error: x'); const n1 = r2.log.length; frameOf(r2.r, u2); expect(lowWay(r2, n1).dist).toBe(false); expect(r2.r.volume.newPath.stats().stopped).toContain('device error'); expect(r2.r.volume.newPath.stats().notes.join()).toContain('stopped for the session');
-    const off = mkR(); off.r.volume.newPath.stop('x'); expect(off.r.volume.newPath.stats().stopped).toBe(''); // (no switch on: nothing to stop, nothing noted)
-    r2.r.dispose(); off.r.dispose();
   }));
-  it('the breakdown\'s recording and the same-picture check leave the display\'s centre pass as it was (their measurements are of the old way)', withGpu(async () => {
-    const rec = mkR({ distSplitDisplay: true }, true), u = sceneUniforms(); await ready(rec.r, u);
-    frameOf(rec.r, u); expect(rec.r.stats.np?.use).toBe(true);
+  it('P7: the breakdown\'s recording and the same-picture check do not switch the display off: it draws its way, the old way is their own ruler in their own images (the recording makes the old 8 x 8 tiles in an encoder of its own)', withGpu(async () => {
+    const rec = mkR({}, true), u = sceneUniforms(); await ready(rec.r, u);
+    for (let i = 0; i < 3; i++) frameOf(rec.r, u); expect(rec.r.stats.np).toMatchObject({ use: true, way: 'B' });
     await rec.r.breakdown.begin({ cls4: false, events: false }, () => {});
-    let n0 = rec.log.length; frameOf(rec.r, u); expect(lowWay(rec, n0).dist).toBe(false); expect(rec.r.stats.np).toBeNull(); rec.r.breakdown.end();
-    n0 = rec.log.length; frameOf(rec.r, u); expect(lowWay(rec, n0).dist).toBe(true);
-    const begun = rec.r.volume.ident.begin({ cls4: false }); n0 = rec.log.length; frameOf(rec.r, u); expect(lowWay(rec, n0).dist).toBe(false); // (the check is asked for: the display is already the old way)
-    await begun; rec.r.volume.ident.end(); n0 = rec.log.length; frameOf(rec.r, u); expect(lowWay(rec, n0).dist).toBe(true);
+    let n0 = rec.log.length; frameOf(rec.r, u); expect(lowWay(rec, n0).dist).toBe(true); expect(lowWay(rec, n0).coarse).toBe(true); expect(rec.r.stats.np).toMatchObject({ use: true, way: 'B' });
+    const old8 = 'compute.dispatch ' + Math.ceil(Math.ceil(500 / 8) * 2 / 8) + ',' + Math.ceil(Math.ceil(500 / 8) / 8);
+    expect(rec.log.slice(n0).filter(l => l.startsWith('compute.dispatch'))).toContain(old8); // the recording's 8 x 8 tiles (the display\'s own are 4 x 4)
+    rec.r.breakdown.end(); n0 = rec.log.length; frameOf(rec.r, u); expect(rec.log.slice(n0).filter(l => l.startsWith('compute.dispatch'))).not.toContain(old8); // nothing of it without a recording
+    const begun = rec.r.volume.ident.begin({ cls4: false }); n0 = rec.log.length; frameOf(rec.r, u); expect(lowWay(rec, n0).dist).toBe(true); expect(rec.r.stats.np.use).toBe(true); // (the check is asked for: the display is not the old way)
+    await begun; for (let i = 0; i < 3; i++) frameOf(rec.r, u); expect(rec.r.stats.np.use).toBe(true); rec.r.volume.ident.end(); n0 = rec.log.length; frameOf(rec.r, u); expect(lowWay(rec, n0).dist).toBe(true);
     rec.r.dispose();
   }));
-  it('the coarse grid is made again only for its key: a write of the combined texture (any range) and a change of the shown set make it again over several frames, during which the old way draws; a write of any other texture makes nothing', withGpu(async () => {
-    const rec = mkR({ coarseDisplay: true }), u = sceneUniforms(48), builds = () => rec.log.filter(l => /^compute\.dispatch \d+,\d+,\d+$/.test(l)).length;
+  it('8-1: a GPU error of the display\'s own submit (its error scopes answer) makes the display\'s resources again at the next frame and it draws on with its ways; the third error in a row (two rebuilds that did not help) ends the session; clean frames count the errors from zero', withGpu(async () => {
+    let bad = false; const fatals = [];
+    const rec = mkR({ onFatal: e => fatals.push(String(e.message)) }, false, { errorScopes: { scopeError: () => bad } }), u = sceneUniforms(); await ready(rec.r, u);
+    for (let i = 0; i < 3; i++) frameOf(rec.r, u); expect(rec.r.stats.np).toMatchObject({ use: true, way: 'B' });
+    const nTex = () => rec.stats.textures.filter(t => t.desc.format === 'r8unorm' && t.desc.dimension === '3d' && t.desc.size[0] > 1).length, t0 = nTex();
+    bad = true; frameOf(rec.r, u); await settle(); bad = false; // the frame's own scopes answer an error
+    expect(rec.r.volume.newPath.stats().errors).toBe(1); expect(fatals).toEqual([]);
+    const n0 = rec.log.length; frameOf(rec.r, u); await settle(); // the next frame makes the resources again
+    expect(rec.r.volume.newPath.stats().notes.join()).toContain('made again after a GPU error (1)'); expect(nTex()).toBe(t0 + 1); expect(rec.r.stats.np.use).toBe(true); expect(lowWay(rec, n0).dist).toBe(true); // the distance texture is made again, the way is still a way
+    for (let i = 0; i < 2; i++) { bad = true; frameOf(rec.r, u); await settle(); frameOf(rec.r, u); await settle(); } // two more errors: the second and the third in a row (each after a rebuild)
+    expect(fatals).toHaveLength(1); expect(fatals[0]).toContain('GPU errors again after 2 rebuilds');
+    bad = false;
+    // a periphery pass too (two passes a frame) and frames drawn before any answer has come back: one error, however many passes and frames it comes with
+    const fv = mkR({ onFatal: e => fatals.push('fv ' + e.message) }, false, { errorScopes: { scopeError: () => bad } }), uf = sceneUniforms(), fovA = { fov: true, fp: 0.25, rects: [[300, 300, 700, 700]], band: 8 }; await ready(fv.r, uf);
+    for (let i = 0; i < 3; i++) frameOf(fv.r, uf, fovA);
+    const nf0 = fatals.length; bad = true; for (let i = 0; i < 4; i++) frameOf(fv.r, uf, fovA); bad = false; await settle();
+    expect(fv.r.volume.newPath.stats().errors).toBe(1); expect(fatals.length).toBe(nf0); // (4 frames, 8 passes, one error)
+    for (let i = 0; i < 3; i++) frameOf(fv.r, uf, fovA); await settle(); expect(fv.r.stats.np.use).toBe(true); fv.r.dispose();
+    // clean frames: the count starts again
+    const ok = mkR({ onFatal: e => fatals.push('x') }, false, { errorScopes: { scopeError: () => bad } }), u2 = sceneUniforms(); await ready(ok.r, u2); frameOf(ok.r, u2);
+    bad = true; frameOf(ok.r, u2); await settle(); bad = false; for (let i = 0; i < 100; i++) frameOf(ok.r, u2); expect(ok.r.volume.newPath.stats().errors).toBe(0);
+    rec.r.dispose(); ok.r.dispose();
+  }));
+  it('5-1 (4): a texture that is disposed (a data switch cancelled half way) takes what was made from it: the distance texture and the marks of the display are let go, and the next use of another texture makes them again', withGpu(async () => {
+    const rec = mkR(), u = sceneUniforms(); await ready(rec.r, u);
+    for (let i = 0; i < 2; i++) frameOf(rec.r, u); expect(rec.r.stats.np.use).toBe(true);
+    const made = f => rec.stats.textures.filter(t => t.desc.format === f && t.desc.dimension === '3d' && t.desc.size[1] > 1), dist = made('r8unorm'), marks = made('rgba8uint');
+    expect(dist).toHaveLength(1); expect(marks.length).toBeGreaterThanOrEqual(2); expect(dist[0].destroyed).toBe(false);
+    u.clsTex.value.dispose(); // the three.js texture's dispose event
+    expect(dist[0].destroyed).toBe(true); expect(marks.every(t => t.destroyed)).toBe(true);
+    const u2 = sceneUniforms(); frameOf(rec.r, u2); expect(rec.r.stats.np.use).toBe(true); expect(made('r8unorm')).toHaveLength(2);
+    rec.r.dispose();
+  }));
+  it('8-3 / the no-way pass: a pass that has no way to draw with (the combined texture is not on the GPU) draws nothing and says so; a pass whose program failed ends the session; one that stays that way for 600 frames ends it too', withGpu(async () => {
+    const fatals = [], rec = mkR({ onFatal: e => fatals.push(String(e.message)) }), u = sceneUniforms(); await ready(rec.r, u);
+    const nu = { ...u, clsTex: { value: null } };
+    for (let i = 0; i < 3; i++) frameOf(rec.r, nu); expect(rec.r.stats.np).toMatchObject({ use: false }); expect(fatals).toEqual([]);
+    for (let i = 0; i < 600; i++) frameOf(rec.r, nu); expect(fatals).toHaveLength(1); expect(fatals[0]).toContain('no way to draw with');
+    rec.r.dispose();
+  }));
+  it('the marks and the two grids are made once (whole, at the first draw) and follow writes row by row; a tissue switch (the shown set, the channels) and the write of any other texture make nothing again, and the frame after a switch is B at once', withGpu(async () => {
+    const rec = mkR({ distSplitDisplay: true, coarseDisplay: true }), u = sceneUniforms(48), marksBuilds = () => rec.log.filter(l => /^compute\.dispatch \d+,\d+,\d+$/.test(l)).length - rec.log.filter(l => l.startsWith('copyBufferToTexture')).length;
     await ready(rec.r, u);
-    const seq = []; for (let i = 0; i < 4; i++) { frameOf(rec.r, u); seq.push(rec.r.stats.np.use ? 1 : 0); } // 12 rows of cells: a share of 8 rows, then 4: the first frame is old, the second new
-    expect(seq).toEqual([0, 1, 1, 1]); expect(builds()).toBe(2);
-    for (const k of ['vol', 'editTex', 'sliceVol']) { u[k].value.needsUpdate = true; frameOf(rec.r, u); expect(rec.r.stats.np.use, k).toBe(true); } // another texture written: no rebuild
-    expect(builds()).toBe(2);
-    u.clsTex.value.needsUpdate = true; const after = []; for (let i = 0; i < 3; i++) { frameOf(rec.r, u); after.push(rec.r.stats.np.use ? 1 : 0); }
-    expect(after).toEqual([0, 1, 1]); expect(builds()).toBe(4); expect(rec.r.stats.np.reason).toBe('');
-    u.segA.value[1].w = 0; const seg2 = []; for (let i = 0; i < 3; i++) { frameOf(rec.r, u); seg2.push(rec.r.stats.np.use ? 1 : 0); } expect(seg2).toEqual([0, 1, 1]); expect(builds()).toBe(6); // another shown set
+    frameOf(rec.r, u); expect(rec.r.stats.np).toMatchObject({ use: true, way: 'B' }); const b1 = marksBuilds(); expect(b1).toBe(1); // (one whole build of the marks and the alpha grid, in the first frame: B draws at once, no frames of D while a grid is made)
+    for (const k of ['vol', 'editTex', 'sliceVol']) { u[k].value.needsUpdate = true; frameOf(rec.r, u); expect(rec.r.stats.np.way, k).toBe('B'); }
+    expect(marksBuilds()).toBe(1);
+    u.segA.value[1].w = 0; frameOf(rec.r, u); expect(rec.r.stats.np).toMatchObject({ use: true, way: 'B' }); expect(marksBuilds()).toBe(1); // another shown set: nothing is made again
+    u.clsChan.value = [1, 0, -1, -1]; frameOf(rec.r, u); expect(rec.r.stats.np.way).toBe('B'); expect(marksBuilds()).toBe(1); // other channels: the same
     u.segA.value[1].w = 1;
+    const n0 = rec.log.length; u.clsTex.value.needsUpdate = true; frameOf(rec.r, u); expect(rec.r.stats.np.way).toBe('B'); // the combined texture written whole: the marks follow in the same call (all rows)
+    expect(rec.log.slice(n0).filter(l => /^compute\.dispatch \d+,\d+,\d+$/.test(l)).length).toBeGreaterThanOrEqual(2); // (the distance texture's and the marks')
     rec.r.dispose();
   }));
   it('the distance texture follows a partial write of the combined texture (copySlab): the next frame is the new way at once, no distance texture is made again', withGpu(async () => {
@@ -405,7 +473,7 @@ describe('the check\'s GPU side', () => {
     const disp = rec.r.volume.newPath; expect(disp.stats().used).toBeGreaterThan(0);
     const ok = await rec.r.volume.ident.begin({ cls4: false }); expect(ok.ok).toBe(true);
     for (let i = 0; i < 6; i++) { frameOf(rec.r, u, { identCtx: { phase: 'auto', measured: true } }); await settle(); }
-    const a = rec.r.volume.ident.np, b = a.host.state, c = a.cd.state;
+    const a = rec.r.volume.ident.np, b = a.host.state, c = a.marks.state;
     expect(a.host).toBeTruthy(); expect(b.dist.destroyed).toBe(false); expect(c.grid.tex.destroyed).toBe(false);
     rec.r.volume.ident.end(); rec.r.dispose();
   }));
@@ -550,9 +618,9 @@ describe('the check: its scenes, run, record and verdict (docs/vr-ident-log.js)'
     expect(L.identResultLine(v, false, false).startsWith('Ended early, comparisons with a difference dist')).toBe(true);
     const inv = feed(L.createIdentLog()); inv.add(R('same', { diff: { ...R('same').diff, pixels: 1 } })); expect(L.identResultLine(inv.verdict(), true, true)).toContain('（検査は無効）');
   });
-  it('the display\'s new way counts: frames used, frames drawn the old way and why, and what stopped it', () => {
-    const t = L.newPathLines({ switches: { dist: true, coarse: false }, mode: 'dist', used: 120, notUsed: 8, reasons: { rebuild: 6, c4: 2 }, stopped: 'device error: x', notes: ['stopped for the session: device error: x'] }).join('\n');
-    expect(t).toContain('switches dist on coarse off (dist) · used 120 frames, old way 8 (rebuild 6, c4 2) · STOPPED: device error: x'); expect(L.newPathLines(null)).toEqual([]);
+  it('the display\'s ways counts: passes drawn with a way (by way), passes with no way and why, and the GPU errors of its own submits', () => {
+    const t = L.newPathLines({ used: 120, notUsed: 8, byWay: { B: 100, D: 20 }, reasons: { prep: 6, nodata: 2 }, errors: 1, notes: ['the display\'s resources made again after a GPU error (1)'] }).join('\n');
+    expect(t).toContain('display ways: drew 120 passes with a way (B 100, D 20), no way for 8 passes (prep 6, nodata 2) · GPU errors of its own submits 1'); expect(t).toContain('made again after a GPU error'); expect(L.newPathLines(null)).toEqual([]);
   });
 });
 
@@ -590,7 +658,6 @@ describe('the button, the guards and the loop of vr-view.js', () => {
   });
   it('the display\'s switches are not read by the check, the page makes no switch row (the constants are changed in code), and the texts of help / settings / i18n are untouched by this change', () => {
     expect(vrView).not.toMatch(/DIST_SPLIT_DISPLAY_DEFAULT|COARSE_PROXY_DISPLAY_DEFAULT|NEW_PATH_ALLOW_C4/);
-    expect(wgpu).toContain('const dispMode = modeOfSwitches(!!distSplitDisplay, !!coarseDisplay);');
     expect(read('vr-wgpu-ident.js')).not.toMatch(/DISPLAY_DEFAULT/);
   });
 });
@@ -606,7 +673,7 @@ describe('a comparison that failed, came back as another\'s, or has no body in i
   it('the draw and the comparison are inside a validation scope and an out-of-memory scope: two pushes before the first pass, two pops after the submit, once per comparison', withGpu(async () => {
     const { rec, results } = await runC(6, { echo: {}, errorScopes: {} });
     const log = rec.log, pushes = log.map((l, i) => (l.startsWith('pushErrorScope') ? i : -1)).filter(i => i >= 0), pops = log.map((l, i) => (l === 'popErrorScope' ? i : -1)).filter(i => i >= 0);
-    expect(pushes.length).toBe(pops.length); expect(pushes.length).toBe(2 * results.length); expect(log[pushes[0]]).toBe('pushErrorScope validation'); expect(log[pushes[1]]).toBe('pushErrorScope out-of-memory');
+    expect(pushes.length).toBe(pops.length); expect(pushes.length).toBe(2 * (results.length + 6)); // (the check's comparisons, and the display's own low pass of each of the 6 frames) expect(log[pushes[0]]).toBe('pushErrorScope validation'); expect(log[pushes[1]]).toBe('pushErrorScope out-of-memory');
     const firstSubmit = log.findIndex((l, i) => i > pushes[1] && l.startsWith('submit')); expect(firstSubmit).toBeGreaterThan(pushes[1]); expect(pops[0]).toBeGreaterThan(firstSubmit);
     expect(log.slice(pushes[1] + 1, firstSubmit).some(l => l.startsWith('beginRenderPass'))).toBe(true);
     for (const r of results) expect(r.error).toBe('');
@@ -730,44 +797,48 @@ describe('the sixth segment (the hold scale), the tissue switch numbers and the 
   });
   it('a destroyed instance no longer follows the combined texture\'s writes', withGpu(async () => {
     const rec = mkR({}, false, { echo: {}, errorScopes: {} }), u = sceneUniforms(); await ready(rec.r, u);
-    expect(rec.r.volume.newPath.writers()).toBe(0);
-    await rec.r.volume.ident.begin({ cls4: false }); expect(rec.r.volume.newPath.writers()).toBe(1);
-    rec.r.volume.ident.end(); expect(rec.r.volume.newPath.writers()).toBe(0);
+    expect(rec.r.volume.newPath.writers()).toBe(1); // the display's own
+    await rec.r.volume.ident.begin({ cls4: false }); expect(rec.r.volume.newPath.writers()).toBe(2);
+    rec.r.volume.ident.end(); expect(rec.r.volume.newPath.writers()).toBe(1);
     rec.r.dispose();
-    const d = mkR({ distSplitDisplay: true }), u2 = sceneUniforms(); await ready(d.r, u2); frameOf(d.r, u2); expect(d.r.volume.newPath.writers()).toBe(1); d.r.dispose(); expect(d.r.volume.newPath.writers()).toBe(0);
+    const d = mkR(), u2 = sceneUniforms(); await ready(d.r, u2); frameOf(d.r, u2); expect(d.r.volume.newPath.writers()).toBe(1); d.r.dispose(); expect(d.r.volume.newPath.writers()).toBe(0);
   }));
 });
 
-describe('distSplit does not use CPU bytes that are not the GPU\'s', () => {
-  it('while the combined texture\'s rebuild is going up (markCpuBusy) the display draws the old way for distSplit and both, with the reason nodata counted; coarse alone is not affected (its grid is made on the GPU); when it is over the new way is back at once', withGpu(async () => {
-    for (const [mode, opts] of [['dist', { distSplitDisplay: true }], ['both', { distSplitDisplay: true, coarseDisplay: true }], ['coarse', { coarseDisplay: true }]]) {
-      const rec = mkR(opts), u = sceneUniforms(); await ready(rec.r, u);
-      for (let i = 0; i < 3; i++) frameOf(rec.r, u); expect(rec.r.stats.np.use, mode).toBe(true);
-      rec.r.volume.markCpuBusy(u.clsTex.value, true);
-      for (let i = 0; i < 3; i++) { const n0 = rec.log.length; frameOf(rec.r, u); const w = lowWay(rec, n0); if (mode === 'coarse') { expect(rec.r.stats.np.use).toBe(true); expect(w.coarse).toBe(true); } else { expect(rec.r.stats.np).toMatchObject({ use: false, reason: 'nodata' }); expect(w.dist || w.coarse).toBe(false); } }
-      if (mode !== 'coarse') expect(rec.r.volume.newPath.stats().reasons.nodata).toBe(3);
-      rec.r.volume.markCpuBusy(u.clsTex.value, false); frameOf(rec.r, u); expect(rec.r.stats.np.use, mode).toBe(true);
-      rec.r.dispose();
-    }
-  }));
-  it('bytes that are not the texture\'s own array going up through copySlab (a bake) mark the texture: distSplit leaves it alone for good; the texture\'s own bytes (the rebuild\'s and the swap\'s upload) do not', withGpu(async () => {
-    const rec = mkR({ distSplitDisplay: true }), u = sceneUniforms(); await ready(rec.r, u);
-    for (let i = 0; i < 2; i++) frameOf(rec.r, u); expect(rec.r.stats.np.use).toBe(true);
-    const t = u.clsTex.value, same = new THREEG.Data3DTexture(t.image.data, 16, 16, 16); same.format = THREEG.RGBAFormat; same.type = THREEG.UnsignedByteType;
-    rec.r.volume.copySlab(same, t, { min: { z: 0 }, max: { z: 2 } }); frameOf(rec.r, u); expect(rec.r.stats.np.use).toBe(true); // the same array (comboSrc, a swap's src): trusted
-    const other = new THREEG.Data3DTexture(new Uint8Array(16 ** 3 * 4), 16, 16, 16); other.format = THREEG.RGBAFormat; other.type = THREEG.UnsignedByteType;
-    rec.r.volume.copySlab(other, t, { min: { z: 0 }, max: { z: 2 } });
-    for (let i = 0; i < 3; i++) { frameOf(rec.r, u); expect(rec.r.stats.np).toMatchObject({ use: false, reason: 'nodata' }); }
+describe('the distance texture is made on the GPU from the GPU\'s own bytes: the CPU\'s copy of the combined texture does not matter', () => {
+  it('while the combined texture\'s rebuild is going up (markCpuBusy) the display keeps drawing B: no frame is the old way and nothing is built from the CPU bytes', withGpu(async () => {
+    const rec = mkR({ distSplitDisplay: true, coarseDisplay: true }), u = sceneUniforms(); await ready(rec.r, u);
+    for (let i = 0; i < 4; i++) frameOf(rec.r, u); expect(rec.r.stats.np).toMatchObject({ use: true, way: 'B' });
+    rec.r.volume.markCpuBusy(u.clsTex.value, true);
+    for (let i = 0; i < 3; i++) { frameOf(rec.r, u); expect(rec.r.stats.np).toMatchObject({ use: true, way: 'B' }); }
+    expect(rec.r.volume.newPath.stats().reasons.nodata ?? 0).toBe(0);
+    rec.r.volume.markCpuBusy(u.clsTex.value, false);
     rec.r.dispose();
   }));
-  it('the check counts such frames as not used with the reason (nodata), and the instance builds nothing from the bytes meanwhile', withGpu(async () => {
-    const rec = mkR({}, false, { echo: {}, errorScopes: {} }), u = sceneUniforms(), results = []; await ready(rec.r, u);
-    await rec.r.volume.ident.begin({ cls4: false, onResult: r => results.push(r) });
-    rec.r.volume.markCpuBusy(u.clsTex.value, true);
-    for (let i = 0; i < 12; i++) { frameOf(rec.r, u, { identCtx: { phase: 'auto', seg: 'a', measured: true } }); await settle(); } await settle();
-    for (const r of results.filter(x => x.mode === 'dist' || x.mode === 'both')) { expect(r.used).toBe(false); expect(r.why).toBe('nodata'); }
-    expect(rec.r.volume.ident.np.host.state).toBeNull(); // (the host's layouts exist for the programs; no distance texture was made)
-    rec.r.volume.ident.end(); rec.r.dispose();
+  it('bytes that are not the texture\'s own array going up through copySlab (a bake) do not stop the new way: the distance texture is made again from the GPU\'s bytes, in the same frame', withGpu(async () => {
+    const rec = mkR({ distSplitDisplay: true, coarseDisplay: true }), u = sceneUniforms(); await ready(rec.r, u);
+    for (let i = 0; i < 4; i++) frameOf(rec.r, u); expect(rec.r.stats.np.use).toBe(true);
+    const t = u.clsTex.value, other = new THREEG.Data3DTexture(new Uint8Array(16 ** 3 * 4), 16, 16, 16); other.format = THREEG.RGBAFormat; other.type = THREEG.UnsignedByteType;
+    const n0 = rec.log.length; rec.r.volume.copySlab(other, t, { min: { z: 0 }, max: { z: 2 } });
+    expect(rec.log.slice(n0).some(l => l.startsWith('copyBufferToTexture'))).toBe(true); // the write is followed by the distance texture's own copy of the same slices
+    for (let i = 0; i < 3; i++) { frameOf(rec.r, u); expect(rec.r.stats.np.use).toBe(true); }
+    rec.r.dispose();
+  }));
+  it('the session start (preload) makes the distance texture whole (compute passes and copies in 64-slice chunks), the first frame finds it and makes nothing, and a write of slices [z0, z1) is followed by a copy of those slices only', withGpu(async () => {
+    const rec = mkR(), u = sceneUniforms(32); const n00 = rec.log.length; await ready(rec.r, u);
+    const cp0 = rec.log.slice(n00).filter(l => l.startsWith('copyBufferToTexture')); expect(cp0).toHaveLength(1); expect(cp0[0]).toMatch(/ 32,32,32 z0$/);
+    const n0 = rec.log.length; frameOf(rec.r, u); expect(rec.r.stats.np.use).toBe(true); expect(rec.log.slice(n0).filter(l => l.startsWith('copyBufferToTexture'))).toEqual([]);
+    const t = u.clsTex.value; const n1 = rec.log.length; rec.r.volume.copySlab(t, t, { min: { z: 10 }, max: { z: 12 } });
+    expect(rec.log.slice(n1).filter(l => l.startsWith('copyBufferToTexture'))).toEqual([expect.stringMatching(/ 32,32,2 z10$/)]);
+    rec.r.dispose();
+  }));
+  it('8-2: a program that no other way can stand in for (the distance texture\'s) that does not compile is asked for once more, and if it fails again the session start (preload) fails with the reason; the ways of B and OS have a fallback and do not fail the start', withGpu(async () => {
+    const rec = mkR(), u = sceneUniforms(32), orig = rec.device.createComputePipelineAsync; let calls = 0;
+    rec.device.createComputePipelineAsync = async d => { if (/distance bytes of the combined texture/.test(d.compute.module.code)) { calls++; throw new Error('nope'); } return orig(d); };
+    await expect(rec.r.preload(u, [{ cls4: false, events: false }])).rejects.toThrow(/did not compile.*nope/); expect(calls).toBe(2);
+    rec.r.dispose();
+    const ok = mkR(), orig2 = ok.device.createRenderPipelineAsync; ok.device.createRenderPipelineAsync = async d => { if (/coarse-tile=4/.test(d.vertex.module.code)) throw new Error('boom'); return orig2(d); };
+    await ok.r.preload(u, [{ cls4: false, events: false }]); frameOf(ok.r, u); expect(ok.r.stats.np).toMatchObject({ use: true, way: 'D' }); ok.r.dispose();
   }));
 });
 

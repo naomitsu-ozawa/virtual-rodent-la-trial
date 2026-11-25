@@ -4,7 +4,7 @@
 //   dist / coarse / both : the new ways (docs/vr-wgpu-newpath.js, the same code the display's switches use: drawPass with `np`)
 //   pos      : the positive control (every 20th comparison): the display's program without the shading maths (the performance record's noShade, abl 'shade'): every pixel of the body that is drawn is lit differently, whatever tissues are shown and whatever the surface search setting: the difference must be there (a picture with no body in it is not counted at all)
 // The check shares nothing with the performance record's breakdown: own instance of the new ways (own distance texture, grid, tiles, uniform buffers 9 and up), own targets, own comparison pipeline / counters, own timestamp query sets.
-import { identDiffWgsl, identDiffDecode, IDENT_DIFF, IDENT_DIFF_BINDINGS } from './vr-wgsl-core.js?v=20261124-build761';
+import { identDiffWgsl, identDiffDecode, IDENT_DIFF, IDENT_DIFF_BINDINGS } from './vr-wgsl-core.js?v=20261125-build762';
 
 export const IDENT_ROTATION = ['same', 'dist', 'coarse', 'both']; // the order the ways take turns in
 export const IDENT_CONTROL_EVERY = 20; // every 20th comparison is the positive control (the rotation goes on without it)
@@ -36,7 +36,7 @@ export function createIdentGpu(ctx) {
     me.np = ctx.makeNp('check', text => me.notes.push(text));
     const failed = [];
     try {
-      if (!me.cls4) for (const m of ['dist', 'coarse', 'both']) me.np.ensure(m, false); // (a c4 session draws the old way in every new way: there is nothing to make)
+      for (const m of ['dist', 'coarse', 'both']) me.np.ensure(m, me.cls4);
       const module = device.createShaderModule({ code: identDiffWgsl() });
       const bgl = device.createBindGroupLayout({ entries: [
         ...[IDENT_DIFF_BINDINGS.colorA, IDENT_DIFF_BINDINGS.depthA, IDENT_DIFF_BINDINGS.colorB, IDENT_DIFF_BINDINGS.depthB].map(binding => ({ binding, visibility: GPUShaderStage.COMPUTE, texture: { sampleType: 'float', viewDimension: '2d' } })),
@@ -80,9 +80,8 @@ export function createIdentGpu(ctx) {
   const ready = () => {
     const me = st; if (!me || me.dead || !me.cmp) return false;
     if ([...me.np.pipes.values()].some(p => p.state === 'pending')) return false;
-    if (me.cls4) return true;
-    const h = me.np.host?.state, g = me.np.cd?.state?.grid;
-    return !!h?.ready && !!g?.readyKey;
+    const h = me.np.host?.state, g = me.np.marks?.state;
+    return !!h?.ready && !!g?.key; // the distance texture and the marks' grids are there
   };
   const msOf = (a, i) => { const b = a[2 * i], e = a[2 * i + 1]; if (b === 0n || e === 0n || e < b) return null; const ms = Number(e - b) / 1e6; return ms < 1000 ? ms : null; };
   const finish = (me, p) => {
@@ -136,7 +135,7 @@ export function createIdentGpu(ctx) {
     if (mode === 'pos') { if (!ctlUnavail) o.pipeline = me.ctl; }
     else if (mode !== 'same') o.np = { inst: me.np, mode, skip: '', buildTsw: tsw(4, 5) };
     slot.busy = true;
-    const frameNo = ctx.frameNo(), rec = ctx.curRec(), builds0 = me.np.cd?.state?.builds | 0;
+    const frameNo = ctx.frameNo(), rec = ctx.curRec(), builds0 = me.np.marks?.state?.builds | 0;
     let res;
     // a failed submit, a validation error or an allocation that did not fit must not read as a clean comparison (the same guard as docs/vr-wgpu-cs.js): the draw and the comparison are inside two error scopes, answered with the counters
     const guarded = typeof device.pushErrorScope === 'function';
@@ -145,7 +144,7 @@ export function createIdentGpu(ctx) {
     const scopes = guarded ? Promise.all([device.popErrorScope(), device.popErrorScope()]) : Promise.resolve([null, null]);
     const used = mode === 'same' ? true : mode === 'pos' ? !ctlUnavail : !!res?.np?.use;
     const why = mode === 'same' ? '' : mode === 'pos' ? (ctlUnavail ? 'control' : '') : (res?.np?.use ? '' : res?.np?.reason || 'unknown');
-    const built = (me.np.cd?.state?.builds | 0) !== builds0; // the grid's build compute was in this frame's submit (its timestamps are there)
+    const built = (me.np.marks?.state?.builds | 0) !== builds0; // the grid's build compute was in this frame's submit (its timestamps are there)
     const p = { mode, used, why, built, frame: frameNo, rec, dispPre: !!F.lowDraw?.proxy, compared: total, cw, ch, ms: { pre: null, vol: null, build: null }, diff: null, sinceRebuild: me.np.readyAt >= 0 ? frameNo - me.np.readyAt : null, ctx: F.cx || null, unavailable: ctlUnavail, done: false, read: false, nonce, gpuError: '' };
     me.pending.push(p);
     const jobs = [scopes.then(([oom, val]) => { const e = oom || val; if (e) p.gpuError = String(e.message ?? e).slice(0, 160) || 'GPU error'; }), slot.rb.mapAsync(GPUMapMode.READ).then(() => { const a = new Uint32Array(slot.rb.getMappedRange().slice(0)); slot.rb.unmap(); p.diff = identDiffDecode(a, cw, ch); })];

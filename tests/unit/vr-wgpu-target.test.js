@@ -29,7 +29,7 @@ const mockGpu = ({ timestamps = false } = {}) => {
   device.createCommandEncoder = () => ({
     beginRenderPass: d => { const p = { d, viewports: [], scissors: [], groups: {} }; log.passes.push(p); return { setPipeline() {}, setVertexBuffer() {}, setBindGroup: (i, g) => { p.groups[i] = g; }, setViewport: (...a) => p.viewports.push(a), setScissorRect: (...a) => p.scissors.push(a), draw() {}, end() {} }; },
     beginComputePass: d => { const p = { d, dispatches: [] }; log.computePasses.push(p); return { setPipeline() {}, setBindGroup() {}, dispatchWorkgroups: (...a) => p.dispatches.push(a), end() {} }; },
-    resolveQuerySet() {}, copyBufferToBuffer() {}, clearBuffer() {}, copyTextureToBuffer() {}, finish: () => ({}),
+    resolveQuerySet() {}, copyBufferToTexture() {}, copyBufferToBuffer() {}, clearBuffer() {}, copyTextureToBuffer() {}, finish: () => ({}),
   });
   return { device, log };
 };
@@ -230,6 +230,7 @@ describe('the pre-pass\'s tiles and the breakdown\'s scratch targets follow the 
   it('the breakdown\'s scratch targets (shadow passes and the proxy comparison) are made once while the regions change; the comparison runs over the part that was drawn', withGpu(async () => {
     const { device, log } = mockGpu({ timestamps: true });
     const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1] }), u = proxyU(), rand = rng(21);
+    await r.preload(u, [VARIANT]); // (the session start: the display's own program is the shadow passes' reference, the ways' are the display's)
     await r.breakdown.begin(VARIANT, () => {});
     const shadow = async () => { const fr = { ...randomFrame(rand), fov: false, rects: null }; drawFrame(r, u, fr); const rec = r.volume.markFrame(); let ok = false; for (let t = 0; t < 20 && !ok; t++) { ok = r.breakdown.shadow(rec, BD_SPECS.noProxy); await settle(); } return ok; };
     expect(await shadow()).toBe(true);

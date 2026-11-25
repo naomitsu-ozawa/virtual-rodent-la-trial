@@ -267,7 +267,7 @@ const mockGpu = script => {
   device.createCommandEncoder = () => ({
     beginRenderPass: d => { const p = { d, pipeline: null, groups: {}, viewports: [], scissors: [], draws: 0 }; log.passes.push(p); log.cmds.push('pass'); return { setPipeline: x => { p.pipeline = x; }, setVertexBuffer() {}, setBindGroup: (i, g) => { p.groups[i] = g; }, setViewport: (...a) => p.viewports.push(a), setScissorRect: (...a) => p.scissors.push(a), draw: () => { p.draws++; }, end() {} }; },
     beginComputePass: d => { const p = { d, pipeline: null, groups: {}, dispatches: [] }; log.computePasses.push(p); log.cmds.push('cpass'); return { setPipeline: x => { p.pipeline = x; }, setBindGroup: (i, g) => { p.groups[i] = g; }, dispatchWorkgroups: (...a) => p.dispatches.push(a), end() {} }; },
-    resolveQuerySet() {}, copyBufferToBuffer: (_s, _o, dst, _d, n) => { if (n === 16 && !(_s.d.usage & 64)) dst.vals = script.shift() ?? [1n, 2n]; log.cmds.push('copyB' + n); }, clearBuffer: () => log.cmds.push('clear'), copyTextureToBuffer() {}, finish: () => ({}),
+    resolveQuerySet() {}, copyBufferToTexture() {}, copyBufferToBuffer: (_s, _o, dst, _d, n) => { if (n === 16 && !(_s.d.usage & 64)) dst.vals = script.shift() ?? [1n, 2n]; log.cmds.push('copyB' + n); }, clearBuffer: () => log.cmds.push('clear'), copyTextureToBuffer() {}, finish: () => ({}),
   });
   return { device, log };
 };
@@ -296,10 +296,10 @@ describe('host: the march variants run as shadow passes with a picture compariso
   }));
   it('a march shadow pass: the program of the variant, group 1 = the grids\' bind group, then the display program with the same group 0 into a second target and a compare compute; delivered as (diff:<name>, count, pixels compared); the timing pair as usual', withGpu(async () => {
     const { device, log } = mockGpu(scriptN(6));
-    const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1] });
+    const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1] }); const u4 = comboU(4); await r.preload(u4, [{ cls4: false, events: false }]); // (the session start: the display's own program is compiled too, the shadow passes' reference)
     const got = []; await begin(r, (...a) => got.push(a));
     const rb = log.buffers.filter(b => b.d.size === 16 && (b.d.usage & 32)).at(-1); rb.vals = [5n, 0n];
-    const rec = frameOf(r, comboU(4)); const np = log.passes.length, nt = log.textures.length;
+    const rec = frameOf(r, u4); const np = log.passes.length, nt = log.textures.length;
     expect(r.breakdown.shadow(rec, BD_SPECS.march2)).toBe(true);
     const [sh, ref] = log.passes.slice(np); expect(sh.d.timestampWrites).toBeTruthy(); expect(ref.d.timestampWrites).toBeUndefined();
     const marchPipe = r.volume.pipeFor ? sh.pipeline : null; expect(marchPipe.d.layout.d.bindGroupLayouts).toHaveLength(2); expect(sh.groups[1]).toBeTruthy(); expect(sh.groups[1].d.entries.map(e => e.binding)).toEqual([0, 1]);
@@ -316,11 +316,11 @@ describe('host: the march variants run as shadow passes with a picture compariso
   it('the grids wait for the combined texture (false = not now, a little made per call), are made once, are made again when its bytes were written, and are let go with the recording; no bytes on the CPU or no texture = no program (null)', withGpu(async () => {
     const { device, log } = mockGpu(scriptN(30));
     const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1] });
-    await begin(r, () => {});
-    const u = comboU(128, 2); // 128^3: 2.1 M texel reads for the distance plane alone, more than one call's budget
+    const u = comboU(128, 2); await r.preload(u, [{ cls4: false, events: false }]); await begin(r, () => {});
+    // 128^3: 2.1 M texel reads for the distance plane alone, more than one call's budget
     let rec = frameOf(r, u), tries = 0, x; while ((x = r.breakdown.shadow(rec, BD_SPECS.distSplit)) === false && tries < 40) { tries++; rec = frameOf(r, u); await settle(); }
     expect(tries).toBeGreaterThan(1); expect(x).toBe(true);
-    const dist = log.textures.filter(t => t.d.format === 'r8unorm' && t.d.size[0] === 128); expect(dist).toHaveLength(1);
+    const dist = log.textures.filter(t => t.d.format === 'r8unorm' && t.d.size[0] === 128).filter(t => log.texWrites.some(w => w.dst.texture === t)); expect(dist).toHaveLength(1); // (the breakdown's distance texture is written from the CPU in slabs; the display's own is made on the GPU)
     const slabs = log.texWrites.filter(w => w.dst.texture === dist[0]); expect(slabs.reduce((a, w) => a + w.size[2], 0)).toBe(128); expect(slabs.map(w => w.dst.origin[2])).toEqual(slabs.map(w => w.dst.origin[2]).slice().sort((a, b) => a - b));
     const n1 = log.textures.length; rec = frameOf(r, u); expect(r.breakdown.shadow(rec, BD_SPECS.march2)).toBe(true); expect(log.textures.length).toBe(n1); // the same grids serve the next variant
     u.clsTex.value.needsUpdate = true; rec = frameOf(r, u); // the bytes are written again (a slab upload / a new version): the grids are made again
@@ -328,7 +328,7 @@ describe('host: the march variants run as shadow passes with a picture compariso
     for (let i = 0; i < 40 && y === false; i++) { rec = frameOf(r, u); y = r.breakdown.shadow(rec, BD_SPECS.march2); await settle(); } expect(y).toBe(true);
     const u2 = comboU(4); u2.clsTex.value.image.data = null; rec = frameOf(r, u2); expect(r.breakdown.shadow(rec, BD_SPECS.march2)).toBeNull();
     const u3 = comboU(4); u3.clsTex.value = null; rec = frameOf(r, u3, {}); expect(r.breakdown.shadow(rec, BD_SPECS.distSplit)).toBeNull();
-    const alive = () => log.textures.filter(t => t.d.format === 'r8unorm' && !t.destroyed).length; expect(alive()).toBeGreaterThan(0);
+    const alive = () => log.textures.filter(t => t.d.format === 'r8unorm' && t.d.size[0] > 1 && !t.destroyed && log.texWrites.some(w => w.dst.texture === t)).length; // (the breakdown's grids; the display's own distance texture stays) expect(alive()).toBeGreaterThan(0);
     r.breakdown.end(); expect(alive()).toBe(0);
     r.dispose();
   }));

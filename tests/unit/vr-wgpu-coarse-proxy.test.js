@@ -294,7 +294,7 @@ describe('the variants of the shadow pass', () => {
     const a = host.indexOf('const shadowPass ='); expect(host.slice(a, a + 260)).toContain('if (spec.coarse) return coarse.shadow(rec, spec);');
     const b = host.indexOf('const bdSnapshot ='); expect(host.slice(b, a)).toContain('s.u = u; s.pxAb = px ? pxSnapshot() : null;');
     expect(host.slice(host.indexOf('function endBreakdown()'), host.indexOf('const coarse = createCoarseProxy')).includes('coarse.end()')).toBe(true);
-    expect(host).toContain("import { createCoarseProxy, tileLayout, tilePxOrg } from './vr-wgpu-coarse-proxy.js?v="); expect(host).toContain('const pxSnapshot = () => px.ab.slice(0);');
+    expect(host).toContain("import { createCoarseProxy, tileLayout, tilePxOrg, walkLimitOk } from './vr-wgpu-coarse-proxy.js?v="); expect(host).toContain('const pxSnapshot = () => px.ab.slice(0);');
     expect(host).toContain("v.coarse ? 'wgsl coarse ' + v.coarse"); // the compiler messages of these programs have a key of their own
     const prefix = host.slice(host.indexOf('const writeRange ='), host.indexOf('const writeRange =') + 80); expect(prefix).toContain('uploadGen++'); // any texture write changes the stamp the grid's key holds
   });

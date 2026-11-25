@@ -6,7 +6,7 @@ import { describe, it, expect, vi } from 'vitest';
 import * as THREEG from 'three/webgpu';
 import { WgslReflect } from 'wgsl_reflect/wgsl_reflect.module.js';
 import { volumeWgsl, uniformLayout, UNIFORM_FIELDS } from '../../docs/vr-wgsl-core.js';
-import { SPEC_FIELDS, SPEC_OVERRIDES, SPEC_LEN, SPEC_DISPLAY_DEFAULT, specSigFrom, specSigOfUniforms, specSigOfPacked, specConstants, specKey, specializeVolumeWgsl, volumeSpecWgsl, createSpecPipelines } from '../../docs/vr-wgsl-spec.js';
+import { SPEC_FIELDS, SPEC_OVERRIDES, SPEC_LEN, specSigFrom, specSigOfUniforms, specSigOfPacked, specConstants, specKey, specializeVolumeWgsl, volumeSpecWgsl, createSpecPipelines } from '../../docs/vr-wgsl-spec.js';
 import { createVrVolumeRenderer } from '../../docs/vr-wgpu.js';
 import { createVolBreakdown, volBreakdownReport, BD_VARIANTS, BD_SPECS } from '../../docs/vr-perf-log.js';
 
@@ -219,7 +219,7 @@ const mockGpu = (script, { failSpec = false } = {}) => {
   device.createCommandEncoder = () => ({
     beginRenderPass: d => { const p = { d, pipeline: null, groups: {}, viewports: [], scissors: [], draws: 0 }; log.passes.push(p); log.cmds.push('pass'); return { setPipeline: x => { p.pipeline = x; }, setVertexBuffer() {}, setBindGroup: (i, g) => { p.groups[i] = g; }, setViewport: (...a) => p.viewports.push(a), setScissorRect: (...a) => p.scissors.push(a), draw: () => { p.draws++; }, end() {} }; },
     beginComputePass: d => { const p = { d, pipeline: null, groups: {}, dispatches: [] }; log.computePasses.push(p); log.cmds.push('cpass'); return { setPipeline: x => { p.pipeline = x; }, setBindGroup: (i, g) => { p.groups[i] = g; }, dispatchWorkgroups: (...a) => p.dispatches.push(a), end() {} }; },
-    resolveQuerySet() {}, copyBufferToBuffer: (_s, _o, dst, _d, n) => { if (n === 16) dst.vals = script.shift() ?? [0n, 0n]; log.cmds.push('copyB' + n); }, clearBuffer: () => log.cmds.push('clear'), copyTextureToBuffer() {}, finish: () => ({}),
+    resolveQuerySet() {}, copyBufferToTexture() {}, copyBufferToBuffer: (_s, _o, dst, _d, n) => { if (n === 16) dst.vals = script.shift() ?? [0n, 0n]; log.cmds.push('copyB' + n); }, clearBuffer: () => log.cmds.push('clear'), copyTextureToBuffer() {}, finish: () => ({}),
   });
   return { device, log };
 };
@@ -235,69 +235,7 @@ const L = uniformLayout(), at = n => L.fields.find(f => f.name === n).offset / 4
 const isMain = w => w.data.length === L.byteSize / 4;
 const lowPass = (log, n0) => log.passes.slice(n0).filter(p => p.d.colorAttachments?.length === 2)[0];
 
-describe('A4 host: the display switch', () => {
-  it('the code constant is off: the display only ever uses the generic program, no specialised pipeline is asked for', withGpu(async () => {
-    expect(SPEC_DISPLAY_DEFAULT).toBe(false);
-    const { device, log } = mockGpu([]);
-    const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1] });
-    expect(r.volume.spec.display()).toBe(false);
-    const n0 = log.pipelines.length; frameOf(r, hostU()); frameOf(r, hostU()); await settle();
-    expect(log.async).toHaveLength(0); expect(log.pipelines.slice(n0).every(p => !p.d.fragment.constants)).toBe(true); expect(r.volume.spec.pipelines.stats.requested).toBe(0);
-    r.dispose();
-  }));
-  it('on: the first frame draws the generic program and asks for the pipeline of its settings; once it is ready the low pass (and the periphery pass) use it, with the constants of those settings', withGpu(async () => {
-    const { device, log } = mockGpu([]);
-    const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1], specDisplay: true });
-    expect(r.volume.spec.display()).toBe(true);
-    const generic = () => r.volume.pipeFor({ cls4: false, events: false });
-    let n0 = log.passes.length; frameOf(r, hostU(), { fov: true, fp: 0.25, rects: [[160, 120, 480, 360]], band: 8 });
-    const first = log.passes.slice(n0).filter(p => p.pipeline); expect(first.length).toBeGreaterThanOrEqual(2); expect(first.every(p => p.pipeline === generic() || p.compute)).toBe(true);
-    expect(log.async).toHaveLength(1); await settle();
-    const sp = log.async[0]; expect(sp.d.fragment.constants).toEqual(specConstants(sigOf(hostU(), { jumpOn: 1, useSkip: 0 })));
-    n0 = log.passes.length; frameOf(r, hostU(), { fov: true, fp: 0.25, rects: [[160, 120, 480, 360]], band: 8 });
-    const rendered = log.passes.slice(n0).filter(p => p.d.colorAttachments?.length === 2 && p.draws > 0); expect(rendered.length).toBe(2); // low + periphery
-    expect(rendered.every(p => p.pipeline === sp)).toBe(true); expect(log.async).toHaveLength(1);
-    r.dispose();
-  }));
-  it('a changed setting draws generic until its own pipeline is ready (a shown slot turned off; a second request only for a setting not seen), and the old settings find theirs again', withGpu(async () => {
-    const { device, log } = mockGpu([]);
-    const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1], specDisplay: true });
-    frameOf(r, hostU()); await settle(); const a = log.async[0];
-    const u2 = hostU(); u2.segA.value[1].w = 0; // slot 1 hidden (e.g. a part held)
-    let n0 = log.passes.length; frameOf(r, u2); expect(log.async).toHaveLength(2); expect(lowPass(log, n0).pipeline).toBe(r.volume.pipeFor({ cls4: false, events: false }));
-    await settle(); n0 = log.passes.length; frameOf(r, u2); expect(lowPass(log, n0).pipeline).toBe(log.async[1]); expect(log.async[1].d.fragment.constants.K_CH1).toBe(-1);
-    n0 = log.passes.length; frameOf(r, hostU()); expect(lowPass(log, n0).pipeline).toBe(a); expect(log.async).toHaveLength(2);
-    r.dispose();
-  }));
-  it('a pass with overrides (the diag 5 probe) keeps the generic program even when the switch is on and the pipeline is ready; so does a pass with a pipeline of its own', withGpu(async () => {
-    const { device, log } = mockGpu([]);
-    const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1], specDisplay: true });
-    const u = hostU(); frameOf(r, u); await settle(); const target = r.volume.getTarget(64, 64), eye = { x: 0, y: 0, w: 48, h: 48, mvp: new THREEG.Matrix4(), origin: new THREEG.Vector3(), lightOff: new THREEG.Vector3() };
-    let n0 = log.passes.length; r.volume.drawPass(target, [eye], u, { cls4: false, events: false }, 3, { diag: 5 }, null);
-    expect(log.passes[n0].pipeline).toBe(r.volume.pipeFor({ cls4: false, events: false }));
-    const own = { own: true }; n0 = log.passes.length; r.volume.drawPass(target, [eye], u, { cls4: false, events: false }, 3, null, null, { pipeline: own }); expect(log.passes[n0].pipeline).toBe(own);
-    n0 = log.passes.length; r.volume.drawPass(target, [eye], u, { cls4: false, events: false }, 3, null, null); expect(log.passes[n0].pipeline).toBe(log.async[0]); // the same pass without overrides does use it
-    r.dispose();
-  }));
-  it('a pipeline that fails to build leaves the display on the generic program for good (no retry), and tells the breakdown\'s record', withGpu(async () => {
-    const { device, log } = mockGpu([], { failSpec: true });
-    const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1], specDisplay: true });
-    const got = []; await r.breakdown.begin({ cls4: false, events: false }, (...a) => got.push(a));
-    for (let i = 0; i < 3; i++) { const n0 = log.passes.length; frameOf(r, hostU()); await settle(); expect(lowPass(log, n0).pipeline).toBe(r.volume.pipeFor({ cls4: false, events: false })); }
-    expect(log.pipelines.filter(p => p.d.fragment.constants)).toHaveLength(1); expect(got.find(x => x[0] === 'specFail')).toBeTruthy();
-    expect(got.find(x => String(x[0]).startsWith('specErr:'))[0]).toMatch(/^specErr:c3n\|[-.\d]+ constant rejected$/); // the reason reaches the record, with the key of the settings
-    r.dispose();
-  }));
-  it('setDisplay switches the display at run time (the program of the pass, not the pipelines)', withGpu(async () => {
-    const { device, log } = mockGpu([]);
-    const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1] });
-    frameOf(r, hostU()); expect(log.async).toHaveLength(0); r.volume.spec.setDisplay(true); frameOf(r, hostU()); await settle(); expect(log.async).toHaveLength(1);
-    const n0 = log.passes.length; frameOf(r, hostU()); expect(lowPass(log, n0).pipeline).toBe(log.async[0]);
-    r.volume.spec.setDisplay(false); const n1 = log.passes.length; frameOf(r, hostU()); expect(lowPass(log, n1).pipeline).toBe(r.volume.pipeFor({ cls4: false, events: false }));
-    r.dispose();
-  }));
-});
-
+// (A4's display switch is gone: the display draws with its ways only; the specialised program is the breakdown's 'specCfg' shadow pass's alone)
 describe('A4 the breakdown\'s specCfg variant', () => {
   it('is registered: the fifth variant, a program (not a uniform) change, away from noProxy', () => {
     { const ten = ['same', 'box', 'simple', 'noGrad', 'specCfg', 'noRefine', 'noShade', 'withCreep', 'noJump', 'noProxy']; expect(BD_VARIANTS.filter(v => ten.includes(v))).toEqual(ten); } // (the order of these ten; the variants of the other groups are registered between them)
@@ -307,7 +245,7 @@ describe('A4 the breakdown\'s specCfg variant', () => {
   });
   it('the shadow pass: null (and the build started) while the pipeline is not ready; then the specialised program timed into a scratch target, the generic one again into a second, the counting compute, 4 bytes read back as diff:specCfg', withGpu(async () => {
     const { device, log } = mockGpu([[1_000_000n, 3_000_000n], [3_000_000n, 13_000_000n], [13_100_000n, 13_200_000n], [20_000_000n, 28_000_000n]]);
-    const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1] });
+    const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1] }); await r.preload(hostU(), [{ cls4: false, events: false }]); // (the session start: the display's ways are compiled before the first frame)
     const got = []; const res = await r.breakdown.begin({ cls4: false, events: false }, (...a) => got.push(a)); expect(res.failed).toEqual([]);
     const rb = log.buffers.filter(b => b.d.size === 16 && (b.d.usage & 32)).at(-1); rb.vals = [5n, 0n]; // the comparison's read-back buffer (4 u32 since the generic pixel comparison; this pass reads the first)
     const rec = frameOf(r, hostU()); let np = log.passes.length;
@@ -335,7 +273,7 @@ describe('A4 the breakdown\'s specCfg variant', () => {
   }));
   it('a frame of other settings has its own pipeline; a failed build is a step past (null), with the failure told', withGpu(async () => {
     const { device, log } = mockGpu([], { failSpec: true });
-    const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1] });
+    const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1] }); await r.preload(hostU(), [{ cls4: false, events: false }]); // (the session start: the display's ways are compiled before the first frame)
     const got = []; await r.breakdown.begin({ cls4: false, events: false }, (...a) => got.push(a));
     const rec = frameOf(r, hostU()); expect(r.breakdown.shadow(rec, BD_SPECS.specCfg)).toBeNull(); await settle();
     expect(r.breakdown.shadow(rec, BD_SPECS.specCfg)).toBeNull(); expect(log.pipelines.filter(p => p.d.fragment.constants)).toHaveLength(1); expect(got.find(x => x[0] === 'specFail')).toBeTruthy();
@@ -343,20 +281,20 @@ describe('A4 the breakdown\'s specCfg variant', () => {
   }));
   it('a recording that begins later is told of the builds made before it (their ms, and a failure with its reason), once', withGpu(async () => {
     const { device, log } = mockGpu([]);
-    const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1], specDisplay: true });
-    frameOf(r, hostU()); await settle(); expect(log.async).toHaveLength(1); // built while no recording ran
+    const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1] });
+    r.volume.spec.pipelines.pick({ cls4: false, events: false }, hostU(), { jumpOn: 1, useSkip: 0 }); await settle(); expect(log.async).toHaveLength(1); // built while no recording ran (asked for directly: nothing in the display asks any more)
     const got = []; await r.breakdown.begin({ cls4: false, events: false }, (...a) => got.push(a));
     expect(got.filter(x => x[0] === 'specMs')).toHaveLength(1); expect(got.find(x => x[0] === 'specMs')[1]).toBeGreaterThanOrEqual(0);
     r.breakdown.end(); const got2 = []; await r.breakdown.begin({ cls4: false, events: false }, (...a) => got2.push(a)); expect(got2.filter(x => x[0] === 'specMs')).toHaveLength(1); // a second recording is told again
     r.dispose();
-    const m2 = mockGpu([], { failSpec: true }); const r2 = createVrVolumeRenderer({ THREE: THREEG, device: m2.device, halfExt: [1, 1, 1], specDisplay: true });
-    frameOf(r2, hostU()); await settle(); const got3 = []; await r2.breakdown.begin({ cls4: false, events: false }, (...a) => got3.push(a));
+    const m2 = mockGpu([], { failSpec: true }); const r2 = createVrVolumeRenderer({ THREE: THREEG, device: m2.device, halfExt: [1, 1, 1] });
+    r2.volume.spec.pipelines.pick({ cls4: false, events: false }, hostU(), { jumpOn: 1, useSkip: 0 }); await settle(); const got3 = []; await r2.breakdown.begin({ cls4: false, events: false }, (...a) => got3.push(a));
     expect(got3.find(x => x[0] === 'specFail')).toBeTruthy(); expect(got3.find(x => String(x[0]).startsWith('specErr:'))[0]).toContain('constant rejected');
     r2.dispose();
   }));
   it('a frame that has no snapshot of its own, or a record that is not the snapshot\'s, is not now (false), like the other variants', withGpu(async () => {
     const { device } = mockGpu([]);
-    const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1] });
+    const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1] }); await r.preload(hostU(), [{ cls4: false, events: false }]); // (the session start: the display's ways are compiled before the first frame)
     expect(r.breakdown.shadow({}, BD_SPECS.specCfg)).toBe(false); await r.breakdown.begin({ cls4: false, events: false }, () => {}); expect(r.breakdown.shadow({}, BD_SPECS.specCfg)).toBe(false);
     r.dispose();
   }));

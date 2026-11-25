@@ -35,7 +35,7 @@ export function recordingDevice({ timestamps = false, hash = sha16, echo = null,
     createCommandEncoder: () => ({
       beginRenderPass: d => { log.push('beginRenderPass ' + d.colorAttachments.length + ' ts=' + !!d.timestampWrites); return pass('render', d); },
       beginComputePass: d => { log.push('beginComputePass ts=' + !!d?.timestampWrites); return pass('compute', d); },
-      resolveQuerySet: (qs, a, b, dst, off) => log.push('resolveQuerySet ' + a + ',' + b + ' ' + nm(dst) + ' ' + off), copyBufferToBuffer: (a, ao, b, bo, sz) => { if (echo) rbSrc.set(b, a); log.push('copyBufferToBuffer ' + nm(a) + ' ' + nm(b) + ' ' + sz); }, copyTextureToBuffer: () => log.push('copyTextureToBuffer'),
+      resolveQuerySet: (qs, a, b, dst, off) => log.push('resolveQuerySet ' + a + ',' + b + ' ' + nm(dst) + ' ' + off), copyBufferToBuffer: (a, ao, b, bo, sz) => { if (echo) rbSrc.set(b, a); log.push('copyBufferToBuffer ' + nm(a) + ' ' + nm(b) + ' ' + sz); }, copyTextureToBuffer: () => log.push('copyTextureToBuffer'), copyBufferToTexture: (src, dst, size) => log.push('copyBufferToTexture ' + nm(src.buffer) + ' ' + nm(dst.texture) + ' ' + [].concat(size).join(',') + ' z' + (dst.origin?.[2] ?? 0)),
       clearBuffer: b => log.push('clearBuffer ' + nm(b)), finish: () => { log.push('finish'); return {}; },
     }),
   };

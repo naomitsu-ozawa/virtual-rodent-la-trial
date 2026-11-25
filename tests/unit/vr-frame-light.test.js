@@ -35,7 +35,7 @@ const mockGpu = (script, { timestamps = true } = {}) => {
   device.createCommandEncoder = () => ({
     beginRenderPass: d => { const p = { d, pipeline: null, groups: {}, viewports: [], scissors: [], draws: 0 }; log.passes.push(p); log.cmds.push('pass'); return { setPipeline: x => { p.pipeline = x; }, setVertexBuffer() {}, setBindGroup: (i, g) => { p.groups[i] = g; }, setViewport: (...a) => p.viewports.push(a), setScissorRect: (...a) => p.scissors.push(a), draw: () => { p.draws++; }, end() {} }; },
     beginComputePass: d => { const p = { d, pipeline: null, groups: {}, dispatches: [], at: log.cmds.length }; log.computePasses.push(p); log.cmds.push('cpass'); return { setPipeline: x => { p.pipeline = x; }, setBindGroup: (i, g) => { p.groups[i] = g; }, dispatchWorkgroups: (...a) => p.dispatches.push(a), end() {} }; },
-    resolveQuerySet() {}, copyBufferToBuffer: (_s, _o, dst, _d, n) => { if (n === 16) dst.vals = script.shift(); log.cmds.push('copyB' + n); }, clearBuffer: () => log.cmds.push('clear'), copyTextureToBuffer() {}, finish: () => ({}),
+    resolveQuerySet() {}, copyBufferToTexture() {}, copyBufferToBuffer: (_s, _o, dst, _d, n) => { if (n === 16) dst.vals = script.shift(); log.cmds.push('copyB' + n); }, clearBuffer: () => log.cmds.push('clear'), copyTextureToBuffer() {}, finish: () => ({}),
   });
   return { device, log };
 };
@@ -85,7 +85,7 @@ describe('E0 host: the volume timestamps of one frame in N when the page asks (s
   it('a sampled frame with the pre-pass: compute + low pass are both timed or both not (the frame is one sample: 2 ms + 10 ms = 12 ms, n 1)', withGpu(async () => {
     const { device, c, log } = counted(Array.from({ length: 6 }, () => [1_000_000n, 3_000_000n]).flatMap(() => [[1_000_000n, 3_000_000n], [3_000_000n, 13_000_000n]]));
     const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1] });
-    r.volume.setTimerEvery(4); const u = proxyU();
+    r.volume.setTimerEvery(4); const u = proxyU(); await r.preload(u, [{ cls4: false, events: false }]); log.computePasses.length = 0; // (the session start made the ways' programs and the data's grids)
     for (let i = 0; i < 8; i++) { frameOff(r, u); await settle(); }
     expect(log.computePasses).toHaveLength(8); expect(log.computePasses.filter(p => p.d?.timestampWrites).length).toBe(2); // the compute pass of an untimed frame has no slot
     expect(c.maps).toBe(4); // frames 1 and 5: two passes each
@@ -358,8 +358,9 @@ describe('host gauges: ml (mapAsync latency), gd (GPU start gap minus CPU submit
   it('leftovers(): the timer period, the busy slots, whether the breakdown exists, bind groups, pipelines and uniform buffers', withGpu(async () => {
     const { device } = counted([[1_000_000n, 11_000_000n]], [0]); // the read-back stays pending: its slot stays in use
     const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1] });
-    expect(r.volume.leftovers()).toMatchObject({ every: 1, slotsBusy: 0, bd: false, ubufs: 4 });
-    frameOff(r, {}); await settle(); const o = r.volume.leftovers();
+    const u0 = proxyU(); await r.preload(u0, [{ cls4: false, events: false }]);
+    expect(r.volume.leftovers()).toMatchObject({ every: 1, slotsBusy: 0, bd: false });
+    frameOff(r, u0); await settle(); const o = r.volume.leftovers();
     expect(o.slotsBusy).toBe(1); expect(o.slots).toBeGreaterThan(1); expect(o.groups).toBeGreaterThan(0); expect(o.pipes).toBeGreaterThan(0);
     r.volume.setTimerEvery(8); expect(r.volume.leftovers().every).toBe(8);
     r.dispose();

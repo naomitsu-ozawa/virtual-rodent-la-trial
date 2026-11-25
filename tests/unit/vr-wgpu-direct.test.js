@@ -115,7 +115,7 @@ const mockGpu = () => {
   device.addEventListener = (type, fn) => { (log.listeners[type] ||= []).push(fn); }; device.removeEventListener = (type, fn) => { log.listeners[type] = (log.listeners[type] || []).filter(x => x !== fn); };
   device.createCommandEncoder = () => ({
     beginRenderPass: d => { const p = { d, pipeline: null, groups: {}, viewports: [], scissors: [], draws: 0 }; log.passes.push(p); return { setPipeline: x => { p.pipeline = x; }, setVertexBuffer() {}, setBindGroup: (i, g) => { p.groups[i] = g; }, setViewport: (...a) => p.viewports.push(a), setScissorRect: (...a) => p.scissors.push(a), draw: () => { p.draws++; }, end() {} }; },
-    beginComputePass: () => ({ setPipeline() {}, setBindGroup() {}, dispatchWorkgroups() {}, end() {} }), resolveQuerySet() {}, copyBufferToBuffer() {}, clearBuffer() {}, copyTextureToBuffer() {}, finish: () => ({}),
+    beginComputePass: () => ({ setPipeline() {}, setBindGroup() {}, dispatchWorkgroups() {}, end() {} }), resolveQuerySet() {}, copyBufferToTexture() {}, copyBufferToBuffer() {}, clearBuffer() {}, copyTextureToBuffer() {}, finish: () => ({}),
   });
   return { device, log };
 };
@@ -143,10 +143,10 @@ const setUpFrame = (api, m, { eyesOn = [0, 1], pxTex = null } = {}) => {
   const rects = eyesOn.map(i => ({ i, D: { x0: 191, y0: 141, x1: 449, y1: 339 }, region: { x0: 178, y0: 128, x1: 462, y1: 352 }, eye: { mvp: new THREEG.Matrix4(), origin: new THREEG.Vector3(0, 0, 3), lightOff: new THREEG.Vector3(0.1, 0.2, 0.3) }, tilesPerEye: 36 }));
   return api.setFrame({ u: {}, variant: { cls4: false, events: false }, model: m.model, rects, pxTex });
 };
-const makeApi = ({ notes = [] } = {}) => {
+const makeApi = ({ notes = [], way = null } = {}) => {
   const { device, log } = mockGpu(), m = mockBackend();
   const layout = uniformLayout();
-  const api = createDirectApi({ device, THREE: THREEG, layout, bgl: {}, f16: false, onShader: null, boxBuf: { id: 'box' }, gpuOf: () => null, dummy: kind => ({ kind, createView: () => ({}), __id: 1 }), proxyDummyTex: () => ({ createView: () => ({}), __id: 2 }),
+  const api = createDirectApi({ way, device, THREE: THREEG, layout, bgl: {}, f16: false, onShader: null, boxBuf: { id: 'box' }, gpuOf: () => null, dummy: kind => ({ kind, createView: () => ({}), __id: 1 }), proxyDummyTex: () => ({ createView: () => ({}), __id: 2 }),
     linear: {}, nearest: {}, texId: t => (t.__id ||= Math.floor(Math.random() * 1e9)), fillUniforms: (u, extra) => { const ab = new ArrayBuffer(layout.byteSize), I = new Int32Array(ab), at = n => layout.fields.find(f => f.name === n).offset / 4; I[at('proxyOn')] = extra.proxyOn; I[at('proxyOrg')] = extra.proxyOrg[0]; I[at('proxyOrg') + 1] = extra.proxyOrg[1]; new Float32Array(ab).set(extra.mvp.elements, at('mvp')); return ab; }, passExtra: () => ({ jumpOn: 0, useSkip: 0 }), pipeFor: () => ({}), bindGroup: () => ({}) });
   api.setNotifier((k, v) => notes.push([k, v]));
   return { api, log, m, device, notes };
@@ -195,6 +195,27 @@ describe('the hook on the backend draw', () => {
       expect(e.cmds[0][1]).toBe(log.asyncPipelines[0]); expect(e.cmds[1][1]).toBe(0); expect(e.cmds[2][1]).toBe(1); expect(e.cmds[3][2]).toEqual({ id: 'box' }); expect(e.cmds[4][1]).toBe(36);
     }
     for (const s of m.data.bundleSets) expect(s).toEqual({ attributes: {}, bindingGroups: [], pipeline: null, index: null }); // three.js sets its pipeline, bind groups and buffers again
+    expect(api.afterRender()).toBe('direct');
+  }));
+
+  it('with the display\'s ways (h.way): the programs of every way of the variant are compiled before the path is asked for, the way\'s group 1 and the rect (group 2) are recorded, and the rect test is at @group(2)', withGpu(async () => {
+    const g1 = { id: 'g1layout' }, way = { text: (mode, cls4) => volumeWgsl({ f16: false, cls4, events: mode.endsWith('Ev') }), group1Layout: () => g1, modes: v => (v.events ? ['distEv', 'skipEv'] : ['both', 'dist', 'skip', 'tileSkip']) };
+    const { api, m, log, device } = makeApi({ way }); api.install(m.renderer, m.material);
+    const layouts = []; const mk = device.createPipelineLayout; device.createPipelineLayout = d => { layouts.push(d.bindGroupLayouts); return mk ? mk(d) : {}; };
+    m.backend.draw(m.ro());
+    const variant = { cls4: false, events: false }, ask = () => api.canUse({ f: 1, cams: m.cams, decode: false, model: m.model, variant });
+    expect(ask()).toBe(false); await settle(); expect(ask()).toBe(true); // the four ways' programs, compiled
+    expect(log.asyncPipelines).toHaveLength(4); // the four ways' programs (with the display's ways the path never compiles the display's own program)
+    expect(layouts.some(l => l.length === 3 && l[1] === g1)).toBe(true); // [the volume's group 0, the way's group 1, the rect's group 2]
+    expect(log.shaders.filter(c => c.includes('@group(2) @binding(0) var<uniform> dp:DP;'))).toHaveLength(4);
+    expect(log.shaders.filter(c => c.includes('@group(1) @binding(0) var<uniform> dp:DP;'))).toHaveLength(0);
+    m.data.bundleEncoders.forEach(e => { e.cmds.length = 0; });
+    api.beginFrame();
+    const rects = [0, 1].map(i => ({ i, D: { x0: 191, y0: 141, x1: 449, y1: 339 }, region: { x0: 178, y0: 128, x1: 462, y1: 352 }, eye: { mvp: new THREEG.Matrix4(), origin: new THREEG.Vector3(0, 0, 3), lightOff: new THREEG.Vector3() }, tilesPerEye: 71 }));
+    const g1group = { id: 'g1group' };
+    api.setFrame({ u: {}, variant, model: m.model, rects, pxTex: { createView: () => ({}), __id: 5 }, way: { mode: 'both', group1: g1group, tile: 4 } });
+    m.backend.draw(m.ro());
+    for (const e of m.data.bundleEncoders) { expect(e.cmds.map(c => c[0])).toEqual(['setPipeline', 'setBindGroup', 'setBindGroup', 'setBindGroup', 'setVertexBuffer', 'draw', 'threeDraw']); expect(e.cmds.filter(c => c[0] === 'setBindGroup').map(c => c[1])).toEqual([0, 1, 2]); expect(e.cmds[2][2]).toBe(g1group); }
     expect(api.afterRender()).toBe('direct');
   }));
 
@@ -324,14 +345,16 @@ describe('the check (the recording only): the centre pass again over the rect, t
 
 describe('the host: what draw() does with and without the path', () => {
   const rects = [[180, 130, 460, 350, 10], [180, 130, 460, 350, 10]], variant = { cls4: false, events: false };
+  let sharedU = null; // the session's uniforms: a combined texture on the GPU (a centre pass that has no way draws nothing, and then there is nothing for the path to record)
+  const dU = () => sharedU ||= (() => { const t = new THREEG.Data3DTexture(new Uint8Array(4 * 4 * 4 * 4), 4, 4, 4); t.format = THREEG.RGBAFormat; t.type = THREEG.UnsignedByteType; t.needsUpdate = true; return { distInCls: { value: 1 }, useCls: { value: 1 }, diag: { value: 0 }, planeCount: { value: 0 }, clsTex: { value: t }, halfExt: { value: new THREEG.Vector3(1, 1, 1) }, voxelMin: { value: 0.02 }, stepSize: { value: 0.02 }, clsChan: { value: new THREEG.Vector4(0, 1, -1, -1) }, segA: { value: [0, 1, 2, 3].map(i => new THREEG.Vector4(0, 0, 1, i < 2 ? 1 : 0)) } }; })();
   const setup = async ({ install = true } = {}) => {
     const { device, log } = mockGpu(), m = mockBackend();
-    const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1] });
+    const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1] }); await r.preload(dU(), [{ cls4: false, events: false }]); log.passes.length = 0; log.writes.length = 0; /* the session start */
     m.material.label = 'composite'; // the hook compares the material it was given
     const inst = install ? r.installDirect({ backend: m.backend, xr: m.renderer.xr, reversedDepthBuffer: false }) : null;
     return { r, log, m, device, inst };
   };
-  const drawArgs = (m, over = {}) => ({ u: {}, cams: m.cams, model: m.model, f: 1, fov: true, fp: 0.5, rects, band: 10, periK: 0.5, variant, ...over });
+  const drawArgs = (m, over = {}) => ({ u: dU(), cams: m.cams, model: m.model, f: 1, fov: true, fp: 0.5, rects, band: 10, periK: 0.5, variant, ...over });
   const go = (r, m, direct, over = {}) => { r.direct.ask(direct); return r.draw(drawArgs(m, over)); }; // the page asks, then calls draw as before
   const lowPass = log => log.passes[0]; // the first render pass of the frame (the centre pass; the periphery pass is the second)
 
@@ -346,8 +369,7 @@ describe('the host: what draw() does with and without the path', () => {
     expect(lowPass(log).scissors).toEqual([whole, [stride, 0, whole[2], whole[3]]]);
     expect(r.stats.direct).toBe(0); expect(r.direct.disabled).toBeNull();
     expect(log.buffers.length).toBe(nBuf); expect(log.layouts).toBe(nLay); // the second frame made nothing new (the path's buffers, bind groups and layouts are made only when it is asked for)
-    expect(log.asyncPipelines).toHaveLength(0);
-    expect(log.writes.length - nWrite).toBeGreaterThan(0); // (the passes' own uniforms are written each frame)
+    expect(log.shaders.some(c => /var<uniform> dp:DP/.test(c))).toBe(false); // (no program of the path: the display's ways compile as they always do)
     expect(log.writes.some(w => w.data.length === 4)).toBe(false); // no rect of the path
     expect(r.direct.seen).toBeNull();
   }));
@@ -381,7 +403,7 @@ describe('the host: what draw() does with and without the path', () => {
     // the hook records it in the next three.js draw
     m.data.bundleEncoders.forEach(e => { e.cmds.length = 0; });
     m.backend.draw(m.ro({ material: r.material, object: { matrixWorld: m.model } }));
-    for (const e of m.data.bundleEncoders) expect(e.cmds.map(c => c[0])).toEqual(['setPipeline', 'setBindGroup', 'setBindGroup', 'setVertexBuffer', 'draw', 'threeDraw']);
+    for (const e of m.data.bundleEncoders) expect(e.cmds.map(c => c[0])).toEqual(['setPipeline', 'setBindGroup', 'setBindGroup', 'setBindGroup', 'setVertexBuffer', 'draw', 'threeDraw']);
     expect(r.direct.afterRender()).toBe('direct');
   }));
 

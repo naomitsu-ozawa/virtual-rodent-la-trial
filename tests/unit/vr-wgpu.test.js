@@ -193,7 +193,7 @@ const mockDevice = () => {
     features: new Set(), queue: { writeBuffer() {}, writeTexture() {}, submit() {} },
     createBindGroupLayout: () => ({}), createPipelineLayout: () => ({}), createSampler: () => ({}), createBuffer: () => ({ destroy() {} }), createShaderModule: () => ({}),
     createRenderPipeline: () => ({}), createRenderPipelineAsync: async () => ({}), createComputePipeline: () => ({}), createComputePipelineAsync: async () => ({}), createTexture: mkTex,
-    createBindGroup: d => ({ d }), createCommandEncoder: () => ({ beginRenderPass: () => pass, finish: () => ({}), copyTextureToBuffer() {} }),
+    createBindGroup: d => ({ d }), createCommandEncoder: () => ({ beginRenderPass: () => pass, finish: () => ({}), copyBufferToTexture() {}, copyTextureToBuffer() {} }),
   };
   return { device, log };
 };
@@ -711,7 +711,8 @@ describe('WebGPU diagnostics: the heartbeat (a frame loop of its own on the sess
     const { device } = mockDevice(); const seen = [];
     const r = createVrVolumeRenderer({ THREE: THREEG, device, halfExt: [1, 1, 1], onShader: (m, v) => seen.push(v) });
     await r.preload({}, [{ cls4: false, events: false }, { cls4: true, events: true }]);
-    expect(seen).toEqual([{ f16: false, cls4: false, events: false }, { f16: false, cls4: true, events: true }, { proxy: true, cls4: false }]); // the display variants, then the pre-pass of the first (a section variant has none)
+    expect(seen.slice(0, 3)).toEqual([{ f16: false, cls4: false, events: false }, { f16: false, cls4: true, events: true }, { proxy: true, cls4: false }]); // the display variants, then the pre-pass of the first (a section variant has none); the ways' programs follow (docs/vr-wgpu-newpath.js)
+    expect(seen.length).toBeGreaterThan(3); expect(seen.slice(3).every(v => v.coarse || v.marks || v.f16 !== undefined)).toBe(true);
     r.dispose();
   }));
 });
