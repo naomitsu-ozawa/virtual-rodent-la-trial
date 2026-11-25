@@ -2,22 +2,17 @@
 // (the three.js Data3DTexture objects stay the holders of the data, a GPUTexture is made from one on first use and again when its version changes), the volume render pass per eye,
 // the offscreen targets (colour + depth packed in rgba8, both eyes side by side, reduced scale and the periphery target), and the composite material (three.js NodeMaterial, TSL) that
 // puts the offscreen image into the headset's frame with the volume's depth. Plain WebGPU; three.js (the WebGPU build) is passed in.
-import { volumeWgsl, uniformLayout, BOX_VERTICES, VOLUME_BINDINGS, COUNTER_FIELDS, ABLATIONS, COUNTER_CFG_BINDING, PROXY, PROXY_FIELDS, PROXY_BINDINGS, PROXY_DIFF_BINDINGS, proxyWgsl, proxyDiffWgsl } from './vr-wgsl-core.js?v=20261124-build761';
-import { FOVEA_K } from './vr-render-scale.js?v=20261124-build761';
-import { MARCH_VARIANTS, marchWgsl, createMarchHost } from './vr-wgpu-coarse-march.js?v=20261124-build761';
-import { createCoarseProxy, tileLayout, tilePxOrg } from './vr-wgpu-coarse-proxy.js?v=20261124-build761'; // the coarse distance grid and its pre-pass variants of the shadow pass (group 2); the 4 x 4 tiles' layout of the display's new way
-import { createNewPath, modeOfSwitches } from './vr-wgpu-newpath.js?v=20261124-build761'; // distSplit / proxyCoarse / both as the display's own low pass (the switches below, off); the same code is what the same-picture check draws
-import { createIdentGpu } from './vr-wgpu-ident.js?v=20261124-build761'; // the same-picture check's GPU side (nothing is made until the page starts a check)
-import { createCsShadow } from './vr-wgpu-cs.js?v=20261124-build761';
-import { createDirectApi, directRegion } from './vr-wgpu-direct.js?v=20261124-build761'; // the direct draw trial (the centre of the volume drawn straight into the eye image; off unless the diagnostic setting asks)
-import { createSpecPipelines, specSigOfPacked, SPEC_DISPLAY_DEFAULT } from './vr-wgsl-spec.js?v=20261124-build761'; // A4: the specialised program (override constants for the settings that do not change per frame)
+import { volumeWgsl, uniformLayout, BOX_VERTICES, VOLUME_BINDINGS, COUNTER_FIELDS, ABLATIONS, COUNTER_CFG_BINDING, PROXY, PROXY_FIELDS, PROXY_BINDINGS, PROXY_DIFF_BINDINGS, proxyWgsl, proxyDiffWgsl } from './vr-wgsl-core.js?v=20261125-build762';
+import { FOVEA_K } from './vr-render-scale.js?v=20261125-build762';
+import { MARCH_VARIANTS, marchWgsl, createMarchHost } from './vr-wgpu-coarse-march.js?v=20261125-build762';
+import { createCoarseProxy, tileLayout, tilePxOrg, walkLimitOk } from './vr-wgpu-coarse-proxy.js?v=20261125-build762'; // the coarse distance grid and its pre-pass variants of the shadow pass (group 2); the 4 x 4 tiles' layout of the display's new way
+import { createNewPath, chooseWay, newPathText } from './vr-wgpu-newpath.js?v=20261125-build762'; // distSplit / proxyCoarse / both as the display's own low pass (the switches below, off); the same code is what the same-picture check draws
+import { createIdentGpu } from './vr-wgpu-ident.js?v=20261125-build762'; // the same-picture check's GPU side (nothing is made until the page starts a check)
+import { createCsShadow } from './vr-wgpu-cs.js?v=20261125-build762';
+import { createDirectApi, directRegion } from './vr-wgpu-direct.js?v=20261125-build762'; // the direct draw trial (the centre of the volume drawn straight into the eye image; off unless the diagnostic setting asks)
+import { createSpecPipelines, specSigOfPacked } from './vr-wgsl-spec.js?v=20261125-build762'; // A4: the specialised program (override constants for the settings that do not change per frame)
 // run-time switch of the comparison bench (docs/vr-bench.js createIsolation): the volume pass's own GPU timestamps (the per-frame timestamp read-back: one mapAsync per pass) can be turned off for an isolation run. Default = as always (on).
 export const GX_SWITCH = { timers: true };
-// the code constants of the display switches of the two new ways of the centre pass (the page's choice comes later, by changing the constants; the check of the same-picture button never reads them): false = the display draws as it always did
-// (no program, texture or buffer of the new ways is made); true = a frame that meets every condition (docs/vr-wgpu-newpath.js plan) is drawn the new way, any other frame the old way. Both true = a third way (both substitutions in one program).
-export const DIST_SPLIT_DISPLAY_DEFAULT = false, COARSE_PROXY_DISPLAY_DEFAULT = false;
-export const NEW_PATH_ALLOW_C4 = false; // c4 (the fourth segment's own texture) is drawn the old way until a check has passed with c4 data
-
 export const VRGPU_STORE_KEY = 'vrl-vr-gpu';
 export const TS_SAMPLE_EVERY = 8; // E0: while no breakdown is prepared or recorded the page asks for the volume timestamps on one frame in 8 (volume.setTimerEvery); a recording asks for every frame
 // the choice of the page's 「WebGPUで開く」 button (kept per browser; no URL parameter: the public build's gate takes no unknown URL keys). Default: the WebGL view.
@@ -175,7 +170,7 @@ export function bandRects(r, inner, H, scale, shrink) {
   return out;
 }
 
-export function createVolumeGpu({ device, THREE, f16 = false, onTargetFreed = null, onShader = null, specDisplay = SPEC_DISPLAY_DEFAULT, distSplitDisplay = DIST_SPLIT_DISPLAY_DEFAULT, coarseDisplay = COARSE_PROXY_DISPLAY_DEFAULT, allowC4 = NEW_PATH_ALLOW_C4 }) {
+export function createVolumeGpu({ device, THREE, f16 = false, onTargetFreed = null, onShader = null, onFatal = null }) {
   const layout = uniformLayout();
   const bgl = device.createBindGroupLayout({ entries: [
     { binding: VOLUME_BINDINGS.uniforms, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
@@ -215,28 +210,50 @@ export function createVolumeGpu({ device, THREE, f16 = false, onTargetFreed = nu
     await Promise.all(variants.map(async v => {
       const k = vkey(v); if (!pipes.has(k)) { const p = await device.createRenderPipelineAsync(pipeDesc(v)); pipes.set(k, p); }
       if (!v.events) await warmProxy(!!v.cls4); // the pre-pass of the same display variant (a variant with section planes never uses it)
-      if (dispMode && !v.events && (!v.cls4 || allowC4)) { try { dispNp().ensure(dispMode, !!v.cls4); } catch (e) { stopNewPath('warm: ' + String(e?.message ?? e)); } } // a display switch is on: the new way's programs are made in the background (the old way draws until they are ready)
     }));
+    await warmWays(variants);
   };
+  // the display's ways (docs/vr-wgpu-newpath.js): the programs of every way of the listed variants are made and WAITED for (the session's first frame, and the data switch's compile stage, find them ready: no frame is drawn another way while they compile);
+  // the programs of the other fourth-segment variant (a data switch to or from four stored segments) are started and not waited for
+  const warmWays = async variants => {
+    const want = new Set(variants.map(v => !!v.cls4)), np = dispNp();
+    for (const c of want) np.ensureAll(c);
+    await np.whenReady();
+    let bad = np.failedRequired(); // a program that no other way can stand in for (the ones of B and OS have a fallback in the ladder: D, S)
+    if (bad.length) { np.retryFailed(); for (const c of want) np.ensureAll(c); await np.whenReady(); bad = np.failedRequired(); } // once more
+    if (bad.length) throw new Error('the display programs did not compile: ' + bad.join(', ')); // the session start (preload) fails: nothing could be drawn
+    for (const c of [false, true]) if (!want.has(c)) np.ensureAll(c);
+  };
+  // P3: the data of the first frame is made at the start too (the distance texture, the marks and grids): the frame finds them
+  const primeWays = (u, variants) => { const np = dispNp(); for (const c of new Set(variants.map(v => !!v.cls4))) { try { np.prime({ cls: clsInfoOf(u?.clsTex?.value), c4: c ? (() => { const i = clsInfoOf(u?.cls4Tex?.value); return i && { tex: u.cls4Tex.value, gen: i.gen, gpu: i.gpu }; })() : null, cls4: c }); } catch (e) { dnpNotes.push('prime threw: ' + String(e?.message ?? e).slice(0, 120)); } } };
   const pipeFor = v => { const k = vkey(v); let p = pipes.get(k); if (!p) { p = device.createRenderPipeline(pipeDesc(v)); pipes.set(k, p); } return p; }; // an unexpected variant compiles on the spot (a hitch, once)
-  // ---- the specialised program (A4, docs/vr-wgsl-spec.js): a pipeline per (display variant, the settings that are override constants), made asynchronously when asked for; the generic program draws until it is ready.
-  // specOn = the display switch (code constant SPEC_DISPLAY_DEFAULT, off): a display pass (no overrides, no pipeline of its own) uses the specialised pipeline of its own settings when it is ready. The breakdown's 'specCfg' shadow pass uses it either way.
-  let specOn = !!specDisplay;
+  // ---- the specialised program (A4, docs/vr-wgsl-spec.js): a pipeline per (display variant, the settings that are override constants), made asynchronously when asked for; the breakdown's 'specCfg' shadow pass draws with it.
+  // (the display never draws with a specialised pipeline: the breakdown's 'specCfg' shadow pass is the only user)
   const specs = createSpecPipelines({ device, f16, onShader, makeDesc: (module, constants, v) => pipeDesc(v, module, constants),
     onBuild: info => { try { bd?.onShadow?.(info.ok ? 'specMs' : 'specFail', info.ms, 1); if (!info.ok) bd?.onShadow?.('specErr:' + info.key + ' ' + info.error, 0, 1); } catch { /* the page's callback */ } } });
 
-  // ---- the new ways of the centre pass (docs/vr-wgpu-newpath.js): distSplit / proxyCoarse / both. The display uses one when its switch is on (code constants above; off: nothing below makes anything); the same-picture check (docs/vr-wgpu-ident.js)
-  // draws with its own instance of the same code. Each instance keeps its own distance texture, grid, tiles and uniform buffers, none of the breakdown's (mx, coarse, bd.tgt / tgt2 / diff, uniform buffers 4..8).
-  const npWriters = new Set(); // the instances that follow the combined texture's writes (their distance texture is written with the same bytes, the same range)
-  const makeNp = (tag, note) => { const np = createNewPath({ device, f16, bgl, renderDesc: (module, lay) => pipeDesc({}, module, null, lay), onShader, dropGroups: t => dropGroups(t), dummy: k => dummy(k), entryOf: t => entries.get(t), tag, allowC4, onFail: note }); npWriters.add(np.onWrite); const destroy0 = np.destroy; np.destroy = () => { npWriters.delete(np.onWrite); destroy0(); }; return np; }; // (a destroyed instance no longer follows the writes)
-  const dispMode = modeOfSwitches(!!distSplitDisplay, !!coarseDisplay);
-  let dnp = null, dnpStop = '', dnpNotes = []; // the display's instance (made when a frame first asks, or by warm), why it was stopped for the session ('' = not), the lines for the record
+  // ---- the ways of the display (docs/vr-wgpu-newpath.js): B, D, D0, EvD, S, OS, EvS. The display draws every pass with one of them; the same-picture check (docs/vr-wgpu-ident.js) draws with its own instance of the same code (and, as its ruler, the display's own
+  // program into a work image of its own). Each instance keeps its own distance texture, marks, grids, tiles and uniform buffers, none of the breakdown's (mx, coarse, bd.tgt / tgt2 / diff, uniform buffers 4..8).
+  const npWriters = new Set(); // the instances that follow the combined texture's writes (their distance texture and marks are written from the same GPU bytes, the same range)
+  const npDroppers = new Set(); // the instances that let go of what they made from a texture when it is disposed (a data switch cancelled half way)
+  const makeNp = (tag, note) => { const np = createNewPath({ device, f16, bgl, renderDesc: (module, lay) => pipeDesc({}, module, null, lay), onShader, dropGroups: t => dropGroups(t), dummy: k => dummy(k), entryOf: t => entries.get(t), tag, onFail: note }); npWriters.add(np.onWrite); npDroppers.add(np.onTexGone); const destroy0 = np.destroy; np.destroy = () => { npWriters.delete(np.onWrite); npDroppers.delete(np.onTexGone); destroy0(); }; return np; }; // (a destroyed instance no longer follows the writes)
+  let dnp = null; const dnpNotes = []; // the display's instance (made when a frame first asks, or by warm), the lines for the record
   const dispNp = () => { if (!dnp) dnp = makeNp('display', text => { dnpNotes.push(text); }); return dnp; };
-  const stopNewPath = why => { if (!dispMode) return; if (!dnpStop) { dnpStop = String(why || 'stopped').slice(0, 200); dnpNotes.push('stopped for the session: ' + dnpStop); } dnp?.fail(dnpStop); };
-  // the display's choice for the low pass of this frame: { inst, mode } or null (a switch is off, or this frame is the breakdown's / the check's: the old way). The breakdown (its shadow passes compare against the low pass as it always was) and the check (it compares the display with the new ways) both leave the display as it was.
-  let identOn = false;
-  const displayNp = () => (dispMode && !dnpStop && !bd && !identOn ? { inst: dispNp(), mode: dispMode } : null);
-  const newPathStats = () => ({ switches: { dist: !!distSplitDisplay, coarse: !!coarseDisplay }, mode: dispMode, stopped: dnpStop, notes: dnpNotes.slice(), ...(dnp ? dnp.stats() : { used: 0, notUsed: 0, reasons: {}, byMode: {} }) });
+  // the display's choice for a pass of this frame: always an instance (a way is chosen in drawPass for every frame). The breakdown and the check do not switch it off: they draw their own work images.
+  let identOn = false; // (the check is running: kept for the record)
+  const displayNp = () => ({ inst: dispNp() });
+  // GPU errors of the display's own submits (an error scope around each pass), and what a pass that has no way does (8-1, 8-2 of the plan): an own error makes the next frame make the display's resources again and draw on with the ways; the third error in a row
+  // (the first and two rebuilds that did not help) ends the session; so does a pass with no way that lasts, or whose program failed
+  const FATAL = { errors: 2, noWayFrames: 600, cleanFrames: 90 };
+  let fatalSent = false, rebuildPending = false, errRun = 0, errClean = 0; const noWayRun = { low: 0, peri: 0, probe: 0 };
+  const fatal = why => { dnpNotes.push('session ended: ' + why); if (fatalSent) return; fatalSent = true; try { onFatal?.(new Error(why)); } catch { /* the page's callback */ } };
+  let rebuiltAt = -1, lastErrFrame = -1; // the last frame drawn before the latest rebuild (an error recorded in it or before it is the old resources'), the last frame an error was counted for (the frame's passes count once)
+  // (rebuiltAt below: every frame drawn so far was drawn with the resources that are about to be made again, their late answers are not new errors)
+  const noteOwnError = (text, frame = frameNo) => { dnpNotes.push('GPU error in a display pass: ' + text); if (frame <= rebuiltAt || frame === lastErrFrame) return; lastErrFrame = frame; errRun++; errClean = 0; rebuiltAt = Math.max(rebuiltAt, frameNo); if (errRun > FATAL.errors) fatal('GPU errors again after ' + FATAL.errors + ' rebuilds of the display\'s resources: ' + text); else rebuildPending = true; };
+  const noteDeviceError = text => { dnpNotes.push('device error outside a display submit (recorded only): ' + String(text).slice(0, 160)); };
+  const rebuildDisplay = () => { rebuiltAt = frameNo - 1; try { dnp?.reset(); } catch (e) { dnpNotes.push('reset threw: ' + String(e?.message ?? e).slice(0, 120)); } groups.clear(); dnpNotes.push('the display\'s resources made again after a GPU error (' + errRun + ')'); };
+  const noteNoWay = (pass, reason) => { noWayRun[pass] = (noWayRun[pass] | 0) + 1; if (reason === 'failed') fatal('no way of drawing the ' + pass + ' pass is usable: ' + (dnp?.failed || 'a program failed')); else if (noWayRun[pass] > FATAL.noWayFrames) fatal('the ' + pass + ' pass has had no way to draw with for ' + FATAL.noWayFrames + ' frames (' + reason + ')'); };
+  const newPathStats = () => ({ stopped: '', notes: dnpNotes.slice(), errors: errRun, ...(dnp ? dnp.stats() : { used: 0, notUsed: 0, reasons: {}, byMode: {}, byWay: {} }) });
 
   // ---- textures made from three.js Data3DTexture objects ----
   const entries = new WeakMap();
@@ -278,7 +295,7 @@ export function createVolumeGpu({ device, THREE, f16 = false, onTargetFreed = nu
       if (e) { dropGroups(e.gpu); e.gpu.destroy(); }
       e = { ...d, gpu: device.createTexture({ size: [d.w, d.h, d.d], dimension: '3d', format: d.format, usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST }), version: -1 };
       entries.set(tex, e);
-      tex.addEventListener('dispose', () => { const x = entries.get(tex); if (x) { dropGroups(x.gpu); x.gpu.destroy(); entries.delete(tex); } });
+      tex.addEventListener('dispose', () => { for (const f of npDroppers) { try { f(tex); } catch { /* gone */ } } const x = entries.get(tex); if (x) { dropGroups(x.gpu); x.gpu.destroy(); entries.delete(tex); } });
     }
     if (e.version !== tex.version) {
       e.version = tex.version;
@@ -303,7 +320,7 @@ export function createVolumeGpu({ device, THREE, f16 = false, onTargetFreed = nu
   const counts = { target: 0, tex: 0, group: 0, slot: 0, peri: 0, maps: 0 }; // running totals of what was made (the performance record reads the differences once a frame: target = offscreen target, tex = tile texture, group = bind group; slot / peri are counted by createVrVolumeRenderer)
   const pool = [];
   let frameNo = 0; // a target used in this frame is never let go in it
-  const beginFrame = () => { frameNo++; };
+  const beginFrame = () => { frameNo++; if (rebuildPending) { rebuildPending = false; rebuildDisplay(); } else if (errRun > 0 && ++errClean >= FATAL.cleanFrames) { errRun = 0; errClean = 0; } };
   const getTarget = (w, h) => {
     const W = upTo(w, 64), H = upTo(h, 64);
     let t = pool.find(x => x.w === W && x.h === H);
@@ -468,10 +485,10 @@ export function createVolumeGpu({ device, THREE, f16 = false, onTargetFreed = nu
   // The same slots give the frame's GPU timeline (performance record only): per XR frame the first volume pass's start and the end of a marker pass that markFrame() submits after the frame's last submit
   // (tiny render pass, no draw). span = marker end - first start; gap = first start - the previous frame's marker end (the GPU idle between two frames). All values are this device's own timestamps (one clock);
   // three.js' own timestamps (trackTimestamp) are durations only and are not placed on this clock. takeFrameStats() = { gaps, spans } in ms since the last call.
-  // per frame up to 4 slots: the pre-pass (compute), the low pass, the periphery pass, the marker. A slot is free again once its result has been mapped, which takes a frame or two (more when the GPU is behind);
-  // a frame that finds no free slot is no sample (rec.bad) and its low pass is not timed. 24 = 6 frames of 4 slots, so the read-back may lag up to 5 frames behind before a frame loses its timestamps.
+  // per frame up to 5 slots: the pre-pass (compute) of the centre, the low pass, the periphery's tiles (compute), the periphery pass, the marker. A slot is free again once its result has been mapped, which takes a frame or two (more when the GPU is behind);
+  // a frame that finds no free slot is no sample (rec.bad) and its low pass is not timed. 30 = 6 frames of 5 slots, so the read-back may lag up to 5 frames behind before a frame loses its timestamps.
   // The query set (2 per slot) and the resolve buffer (256 bytes per slot, the offset a resolve needs) follow this number.
-  const TS_SLOTS = 24;
+  const TS_SLOTS = 30;
   // E0: the page may ask for the volume timestamps on one XR frame in `every` (setTimerEvery; 1 = every frame, the default and what a recording uses). Which frames: the frame records with (id - 1) % every === 0,
   // decided once per frame record, so the pre-pass, the low pass and the periphery pass of a frame are all timed or all untimed (no slot, no resolve / copy, no mapAsync for an untimed frame). In a sampled frame
   // (every > 1) the frame enters sumMs / count as a whole (rec.atomic: when its last pass is read back, and only if every pass was timed and valid), so takeGpuMs = { ms, n } stays the mean per drawn frame, n = sampled frames.
@@ -567,12 +584,22 @@ export function createVolumeGpu({ device, THREE, f16 = false, onTargetFreed = nu
     for (const fd of pxLayout.fields) put(fd, fd.name in ex ? ex[fd.name] : u[fd.name]?.value, px4f, px4i);
     return new Uint8Array(px4ab);
   };
-  const planNewPath = (enc, np, u, variant, eyes, pinfo, tsw) => {
-    const cls4 = !!variant.cls4, he = u.halfExt?.value, cc = u.clsChan?.value, t4 = pinfo.tile4;
+  const matrixOkOf = eyes => {
+    const n = Math.min(2, eyes.length);
+    for (let k = 0; k < n; k++) { const m = eyes[k].mvp, d = m.determinant(); if (!Number.isFinite(d) || Math.abs(d) < 1e-30) return false; px.inv[k].copy(m).invert(); if (!px.inv[k].elements.every(Number.isFinite)) return false; }
+    return true;
+  };
+  // np.auto (the display): the frame's way is chosen here (docs/vr-wgpu-newpath.js chooseWay) from what the pass is and what the frame holds; np.mode (the check) names the way itself
+  const planNewPath = (enc, np, u, variant, eyes, pinfo, tsw, base = null, overrides = null) => {
+    const cls4 = !!variant.cls4, he = u.halfExt?.value, cc = u.clsChan?.value, t4 = pinfo?.tile4;
     const cls = clsInfoOf(u.clsTex?.value), c4i = cls4 ? clsInfoOf(u.cls4Tex?.value) : null;
-    return np.inst.plan(enc, { mode: np.mode, skip: np.skip || '', cls4, halfExt: [vget(he, 0), vget(he, 1), vget(he, 2)], stepSize: +u.stepSize?.value, cls, c4: c4i && { gen: c4i.gen, gpu: c4i.gpu },
+    const auto = np.auto ? { way: chooseWay({ pass: np.pass || 'low', jumpOn: base?.jumpOn === 1, section: !!variant.events || (u.planeCount?.value | 0) !== 0, diag: (overrides?.diag ?? u.diag?.value) | 0,
+      distField: (u.distInCls?.value > 0 && u.useCls?.value > 0), walkOk: walkLimitOk([vget(he, 0), vget(he, 1), vget(he, 2)], +u.stepSize?.value), matrixOk: matrixOkOf(eyes), gridReady: true }),
+      slot: np.pass === 'peri' ? 'peri' : 'low' } : null;
+    const frame = { mode: np.mode, skip: np.skip || '', cls4, halfExt: [vget(he, 0), vget(he, 1), vget(he, 2)], stepSize: +u.stepSize?.value, cls, c4: c4i && { gen: c4i.gen, gpu: c4i.gpu },
       segOn: [0, 1, 2, 3].map(s => ((u.segA?.value?.[s]?.w ?? u.segA?.value?.[s]?.[3] ?? 0) > 0.5 ? 1 : 0)), clsChan: [0, 1, 2, 3].map(k => vget(cc, k) | 0),
-      proxyBytes: () => proxyBytes4(u, eyes, t4), tiles: { nEyes: Math.min(2, eyes.length), tilesPerEye: t4.tilesPerEye, tilesY: t4.tilesY, texCols: t4.texCols, texRows: t4.texRows }, tswTiles: tsw, tswBuild: np.buildTsw || null, frame: frameNo });
+      proxyBytes: () => proxyBytes4(u, eyes, t4), tiles: t4 ? { nEyes: Math.min(2, eyes.length), tilesPerEye: t4.tilesPerEye, tilesY: t4.tilesY, texCols: t4.texCols, texRows: t4.texRows } : null, tswTiles: tsw, tswBuild: np.buildTsw || null, frame: frameNo, ...(auto || {}) };
+    return auto ? np.inst.planWay(enc, frame) : np.inst.plan(enc, frame);
   };
   // why a frame that asked for a new way could not even try (the pre-pass is not usable in it)
   const npReasonOf = (u, variant, base, overrides, o) => (o.np.skip ? o.np.skip : !o.proxy ? 'noproxy' : variant.events || (u.planeCount?.value | 0) !== 0 ? 'section' : base.jumpOn !== 1 ? 'nojump' : (u.diag?.value | 0) === 5 || (overrides?.diag | 0) === 5 ? 'probe' : 'textures');
@@ -582,7 +609,7 @@ export function createVolumeGpu({ device, THREE, f16 = false, onTargetFreed = nu
   // pipeline = a pipeline of its own, tsw = timestampWrites of its own, group1 = a second bind group, before(enc) / after(enc) = commands encoded before / after the pass,
   // proxy = { tilesPerEye, tilesY }: the pre-pass runs first (its compute pass has a timestamp slot of its own; its ms is in the vol numbers, not in rec.lowMs) when the pass may use it (proxyUsable).
   // Returns { proxy: { tex } | null }: the tiles the pass read (the breakdown's snapshot carries them to its shadow passes).
-  const drawPass = (target, eyes, u, variant, slot0, overrides = null, readback = null, o = null) => {
+  const drawPassInner = (target, eyes, u, variant, slot0, overrides = null, readback = null, o = null) => {
     const timed = (o?.timed ?? !overrides) && GX_SWITCH.timers; // GX_SWITCH.timers = false (an isolation run of the comparison bench): no timestamp slot, no read-back
     const stamped = timed && timedFrame(); // E0: a frame the page does not sample (setTimerEvery) takes no timestamp slot at all (and is no `bad` frame)
     const enc = device.createCommandEncoder();
@@ -593,12 +620,14 @@ export function createVolumeGpu({ device, THREE, f16 = false, onTargetFreed = nu
     if (rec && slot < 0) { rec.bad = true; if (sampled) rec.vbad = true; }
     const base = passExtra(u);
     let pxTex = null, slotC = -1, npd = null; // npd: this frame's decision of a new way of the centre pass (o.np: the display's switch, or the same-picture check); null = none asked: everything below is the old way
-    if (o?.proxy && proxyUsable(u, variant, base, overrides)) {
+    const autoNp = o?.np?.auto ? o.np : null; // the display's pass: a way is chosen for every frame (docs/vr-wgpu-newpath.js chooseWay), also where the pre-pass cannot be used (D0, the probe, the periphery)
+    const pu = !!o?.proxy && proxyUsable(u, variant, base, overrides);
+    if (pu || autoNp) {
       slotC = ts && stamped ? ts.slots.findIndex((x, i) => !x.busy && i !== slot) : -1;
       if (rec && slotC < 0) { rec.bad = true; if (sampled) rec.vbad = true; }
       const tswC = o.proxyTsw ?? (slotC >= 0 ? { querySet: ts.qs, beginningOfPassWriteIndex: 2 * slotC, endOfPassWriteIndex: 2 * slotC + 1 } : null);
-      if (o.np) npd = planNewPath(enc, o.np, u, variant, eyes, o.proxy, tswC);
-      pxTex = npd?.pxTex ?? encodeProxy(enc, u, eyes, variant, o.proxy, tswC);
+      if (o.np) npd = planNewPath(enc, o.np, u, variant, eyes, o.proxy, tswC, base, overrides);
+      pxTex = npd?.pxTex ?? (npd?.use && npd.noTiles ? null : pu && !(autoNp && autoNp.pass !== 'low') ? encodeProxy(enc, u, eyes, variant, o.proxy, tswC) : null); // D0 (use, noTiles): no pre-pass at all; the periphery drawn the old way keeps its old form (no pre-pass)
       if (!pxTex) slotC = -1;
       else if (slotC >= 0) { enc.resolveQuerySet(ts.qs, 2 * slotC, 2, ts.resolve, 256 * slotC); enc.copyBufferToBuffer(ts.resolve, 256 * slotC, ts.slots[slotC].buf, 0, 16); ts.slots[slotC].busy = true; rec.pend++; rec.vpend++; }
     }
@@ -609,10 +638,13 @@ export function createVolumeGpu({ device, THREE, f16 = false, onTargetFreed = nu
       { view: target.colorView, loadOp: 'clear', storeOp: 'store', clearValue: { r: 0, g: 0, b: 0, a: 0 } },
       { view: target.depthView, loadOp: 'clear', storeOp: 'store', clearValue: { r: 0, g: 0, b: 0, a: 0 } },
     ] });
-    pass.setPipeline(o?.pipeline ?? (npd?.use ? npd.pipeline : null) ?? (specOn && !overrides ? specs.pick(variant, u, base) : null) ?? pipeFor(variant));
+    // the display's pass (auto) draws with its way's program or not at all (noWay: nothing a way can draw is ready: the pass is cleared, the reason is counted and, if it lasts, the session is ended); every other pass (the check's and the breakdown's own) draws the display's own program
+    const noWay = !!autoNp && !npd?.use;
+    if (!noWay) pass.setPipeline(o?.pipeline ?? (npd?.use ? npd.pipeline : null) ?? pipeFor(variant));
     pass.setVertexBuffer(0, boxBuf);
     if (o?.group1) pass.setBindGroup(1, o.group1); else if (npd?.use && npd.group1) pass.setBindGroup(1, npd.group1);
-    eyes.forEach((e, i) => {
+    if (noWay) eyes.forEach(e => { pass.setViewport(e.vx ?? e.x, e.vy ?? e.y, e.vw ?? e.w, e.vh ?? e.h, 0, 1); for (const sc of e.scissors || [[e.x, e.y, e.w, e.h]]) pass.setScissorRect(sc[0], sc[1], sc[2], sc[3]); }); // (nothing is drawn: the region is still set, so the pass is the same cleared image)
+    else eyes.forEach((e, i) => {
       packUniforms(u, { mvp: e.mvp, origin: e.origin, lightOff: e.lightOff, ...base, proxyOn: pxTex ? 1 : 0, proxyOrg: pxTex ? (npd?.pxTex ? e.pxOrg4 : e.pxOrg) : [0, 0], ...overrides }, slot0 + i);
       pass.setBindGroup(0, bindGroup(slot0 + i, u, pxTex));
       pass.setViewport(e.vx ?? e.x, e.vy ?? e.y, e.vw ?? e.w, e.vh ?? e.h, 0, 1);
@@ -623,16 +655,25 @@ export function createVolumeGpu({ device, THREE, f16 = false, onTargetFreed = nu
     o?.after?.(enc);
     if (slot >= 0) { enc.resolveQuerySet(ts.qs, 2 * slot, 2, ts.resolve, 256 * slot); enc.copyBufferToBuffer(ts.resolve, 256 * slot, ts.slots[slot].buf, 0, 16); ts.slots[slot].busy = true; rec.pend++; rec.vols++; rec.vpend++; } // (a query resolve lands on a 256-byte offset)
     device.queue.submit([enc.finish()]);
+    if (autoNp) { const pn = autoNp.pass || 'low'; if (npd?.use) noWayRun[pn] = 0; else noteNoWay(pn, npd?.reason || 'unknown'); }
     if (rec && rec.sub === null) rec.sub = performance.now(); // the CPU time of the frame's first timed submit (gd above)
-    if (slotC >= 0) readSlot(slotC, rec, false, ms => { if (ms >= 0 && ms < 1000) { if (!rec.atomic) ts.sumMs += ms; rec.vms += ms; rec.preMs = ms; try { bd?.onShadow?.('proxyMs', ms, 1); } catch { /* the page's callback */ } } else rec.vbad = true; volDone(rec); });
+    if (slotC >= 0) readSlot(slotC, rec, false, ms => { if (ms >= 0 && ms < 1000) { if (!rec.atomic) ts.sumMs += ms; rec.vms += ms; if (slot0 === 0) { rec.preMs = ms; try { bd?.onShadow?.('proxyMs', ms, 1); } catch { /* the page's callback */ } } } else rec.vbad = true; volDone(rec); });
     if (slot >= 0) {
       const isLow = slot0 === 0;
       readSlot(slot, rec, false, ms => { if (ms >= 0 && ms < 1000) { if (!rec.atomic) ts.sumMs += ms; rec.vms += ms; if (isLow) { if (!rec.atomic) ts.count++; rec.hadLow = true; rec.lowMs = ms; lowDone(rec); } } else { rec.vbad = true; if (isLow) { rec.lowMs = -1; lowDone(rec); } } volDone(rec); });
     }
     let npr = null; // what the new way did this frame (the check and the display's counts read it)
-    if (npd) npr = { use: !!npd.use, reason: npd.reason || '', mode: npd.mode };
+    if (npd) npr = { use: !!npd.use, reason: npd.reason || '', mode: npd.mode, way: npd.way || '', group1: npd.use ? npd.group1 || null : null, tiles4: !!(npd.use && npd.pxTex) };
     else if (o?.np) { const reason = npReasonOf(u, variant, base, overrides, o); o.np.inst.count(reason, o.np.mode); npr = { use: false, reason, mode: o.np.mode }; } // the frame cannot use the pre-pass at all (sections, no jumps, the probe, ...): the old way, counted
     return { proxy: pxTex ? { tex: pxTex } : null, np: npr };
+  };
+  // the display's own pass (o.np.auto) runs inside a validation and an out-of-memory error scope (8-1): an error of its commands is its own, counted against the frame it was recorded in (the answer comes a frame or two later), and the scopes are closed whatever happens inside
+  const drawPass = (target, eyes, u, variant, slot0, overrides = null, readback = null, o = null) => {
+    if (!(o?.np?.auto && typeof device.pushErrorScope === 'function')) return drawPassInner(target, eyes, u, variant, slot0, overrides, readback, o);
+    const frame = frameNo; device.pushErrorScope('validation'); device.pushErrorScope('out-of-memory');
+    try { return drawPassInner(target, eyes, u, variant, slot0, overrides, readback, o); } finally {
+      Promise.all([device.popErrorScope(), device.popErrorScope()]).then(([oom, val]) => { const e = oom || val; if (e) noteOwnError(String(e.message ?? e).slice(0, 160) || 'GPU error', frame); }, () => {});
+    }
   };
 
   // ---- the volume breakdown (performance record only; nothing here exists until beginBreakdown, the button of the detail tab) ----
@@ -720,6 +761,16 @@ export function createVolumeGpu({ device, THREE, f16 = false, onTargetFreed = nu
     displayPipe: v => pipes.get(vkey(v)), uploadGen: () => uploadGen,
   });
   const bdActive = () => !!bd;
+  // P7: while the breakdown records, the display draws its own way; the shadow passes and the native-pitch probe are the old way's and read the display's own 8 x 8 pre-pass tiles. This makes them in an encoder of its own (the recording's, not the display's frame):
+  // the pre-pass of the frame's low pass when it already is the 8 x 8 one (the way D), else a compute pass of the old pre-pass over the same eyes. null = the old way would not have used the pre-pass in this frame (no jumps, sections, the probe, ...).
+  const bdTiles = (u, eyes, variant, pinfo, lowDraw) => {
+    if (lowDraw?.np?.use && lowDraw.proxy && !lowDraw.np.tiles4) return lowDraw.proxy;
+    if (!pinfo || !proxyUsable(u, variant, passExtra(u), null)) return null;
+    const enc = device.createCommandEncoder(), tex = encodeProxy(enc, u, eyes, variant, pinfo, null);
+    if (!tex) return null;
+    device.queue.submit([enc.finish()]);
+    return { tex };
+  };
   // after the low pass of the frame (same frame, before markFrame): what the shadow pass needs of it (geometry, the packed uniforms of each eye as the low pass had them, the textures' bind groups)
   // px = what drawPass returned as proxy ({ tex }) when the low pass used the pre-pass, else null: the shadow passes then run with the same proxyOn / proxyOrg / tiles as the low pass had (without them every shadow pass would run with the pre-pass off)
   const bdSnapshot = (target, eyes, u, variant, px = null) => {
@@ -910,7 +961,7 @@ export function createVolumeGpu({ device, THREE, f16 = false, onTargetFreed = nu
       d.busy = true;
     }
     device.queue.submit([enc.finish()]);
-    try { b.onShadow?.('specKey:' + specs.keyOf(s.variant, sig), 0, 1); b.onShadow?.('specDisplay', specOn ? 1 : 0, 1); } catch { /* the page's callback */ }
+    try { b.onShadow?.('specKey:' + specs.keyOf(s.variant, sig), 0, 1); b.onShadow?.('specDisplay', 0, 1); } catch { /* the page's callback */ }
     if (wantsDiff) {
       const d = b.diff;
       d.rb.mapAsync(GPUMapMode.READ).then(() => { const n = new Uint32Array(d.rb.getMappedRange().slice(0))[0]; d.rb.unmap(); d.busy = false; try { b.onShadow?.('diff:specCfg', n, diffTotal); } catch { /* the page's callback */ } }).catch(() => { d.busy = false; });
@@ -959,7 +1010,8 @@ export function createVolumeGpu({ device, THREE, f16 = false, onTargetFreed = nu
   };
 
   // the direct draw trial (vr-wgpu-direct.js): the pieces it needs of this renderer; nothing of it runs until the page installs its hook and asks for it per frame
-  const direct = createDirectApi({ device, THREE, layout, bgl, f16, onShader, boxBuf, gpuOf, dummy, proxyDummyTex, linear, nearest, texId: t => (t.__id ||= ++idSeq), fillUniforms: (u, extra) => { fillUniforms(u, extra); return uAb; }, passExtra, pipeFor, bindGroup, dropSnapshot: () => { if (bd) bd.snap.rec = null; } });
+  const directWay = { text: (mode, cls4) => newPathText({ f16, cls4, mode }), group1Layout: mode => dispNp().layoutOf(mode), modes: v => (v.events ? ['distEv', 'skipEv'] : ['both', 'dist', 'skip', 'tileSkip']) }; // the display's ways, for the direct draw's programs (vr-wgpu-direct.js h.way)
+  const direct = createDirectApi({ way: directWay, device, THREE, layout, bgl, f16, onShader, boxBuf, gpuOf, dummy, proxyDummyTex, linear, nearest, texId: t => (t.__id ||= ++idSeq), fillUniforms: (u, extra) => { fillUniforms(u, extra); return uAb; }, passExtra, pipeFor, bindGroup, dropSnapshot: () => { if (bd) bd.snap.rec = null; } });
 
   // the same-picture check (vr-wgpu-ident.js): nothing is made until the page's button starts it
   const ident = createIdentGpu({ device, f16, hasTimer: !!ts, drawPass, makeNp, controlPipeDesc: cls4 => pipeDesc({ cls4: !!cls4, events: false, abl: 'shade' }), setIdentOn: v => { identOn = !!v; }, curRec: () => (ts ? ts.cur : null), frameNo: () => frameNo });
@@ -977,9 +1029,9 @@ export function createVolumeGpu({ device, THREE, f16 = false, onTargetFreed = nu
     if (ts) { try { ts.qs.destroy(); ts.resolve.destroy(); ts.slots.forEach(x => x.buf.destroy()); ts.markTex.destroy(); } catch { /* gone */ } }
   };
   return { counts, device, f16, layout, warm, pipeFor, gpuOf, copySlab, initTexture, getTarget, fixedTarget, dropTarget, drawPass, dispose, takeGpuMs, takeFrameStats, takeGauges, leftovers: () => ({ every: ts ? ts.every : null, slots: ts ? ts.slots.length : 0, slotsBusy: ts ? ts.slots.reduce((n, x) => n + (x.busy ? 1 : 0), 0) : 0, bd: !!bd, groups: groups.size, pipes: pipes.size, ubufs: ubufs.reduce((n, x) => n + (x ? 1 : 0), 0) }), onFrameVolMs, markFrame, setTimerEvery, beginFrame, hasTimer: !!ts, poolSize: () => pool.length,
-    beginBreakdown, endBreakdown, bdActive, bdSnapshot, shadowPass, probeCounters, direct, ident, displayNp, markCpuBusy,
-    newPath: { stats: newPathStats, stop: stopNewPath, mode: dispMode, writers: () => npWriters.size },
-    spec: { pipelines: specs, setDisplay: v => { specOn = !!v; }, display: () => specOn } };
+    primeWays, beginBreakdown, endBreakdown, bdActive, bdTiles, bdSnapshot, shadowPass, probeCounters, direct, ident, displayNp, markCpuBusy, warmWays,
+    newPath: { stats: newPathStats, noteDeviceError, writers: () => npWriters.size, rebuild: () => { rebuildPending = true; } },
+    spec: { pipelines: specs } };
 }
 
 // ---- the per-eye matrices of one volume pass: mvp = projection * view * model; origin = the eye in the volume's object space; lightOff = the shared headlight (lighting.js) in object space ----
@@ -1097,9 +1149,9 @@ export function createComposite({ THREE, halfExt = [1, 1, 1], device }) {
 // tswBegin on the first pass and tswEnd on the last when it draws more than one. It returns nothing (done), or null / false = no program for this frame (the caller steps past it); a throw is listed as a failure of the variant. The turn then compares the target with the display's own pass if the table entry says diff: true.
 const shadowEncoders = new Map();
 export function registerShadowEncoder(name, fn) { if (typeof fn === 'function') shadowEncoders.set(name, fn); else shadowEncoders.delete(name); }
-export function createVrVolumeRenderer({ THREE, device, f16 = false, halfExt = [1, 1, 1], onShader = null, specDisplay = SPEC_DISPLAY_DEFAULT, distSplitDisplay = DIST_SPLIT_DISPLAY_DEFAULT, coarseDisplay = COARSE_PROXY_DISPLAY_DEFAULT, allowC4 = NEW_PATH_ALLOW_C4 }) {
+export function createVrVolumeRenderer({ THREE, device, f16 = false, halfExt = [1, 1, 1], onShader = null, onFatal = null }) {
   const composite = createComposite({ THREE, halfExt, device });
-  const volume = createVolumeGpu({ device, THREE, f16, onShader, specDisplay, distSplitDisplay, coarseDisplay, allowC4, onTargetFreed: t => composite.forget(t.color, t.depth) });
+  const volume = createVolumeGpu({ device, THREE, f16, onShader, onFatal, onTargetFreed: t => composite.forget(t.color, t.depth) });
   const tmpEye = [{}, {}], tmpPeri = [{}, {}];
   const stats = { w: 0, h: 0, lowW: 0, lowH: 0, lowPx: 0, regions: null, direct: 0, np: null }; // direct = px the direct draw takes this frame (0 = the offscreen path drew the whole centre)
   const held = { low: null, peri: null }; // the slot size of each pass (fitSlot keeps it while the need stays near it)
@@ -1157,30 +1209,33 @@ export function createVrVolumeRenderer({ THREE, device, f16 = false, halfExt = [
     // the centre (or the whole picture): the box's rect, in the fovea mode only its part inside the centre rect
     const low = pass('low', f, tmpEye, i => (fovOn ? rectsMeet(boxOf(i), rectOf(i)) : boxOf(i)), innerLow, 0);
     const dnp = volume.displayNp(); // the display's new way (a code switch, off: null) for this frame; the breakdown and the same-picture check leave the display as it was
-    const lowDraw = volume.drawPass(low.target, low.eyes, u, vr, 0, null, null, dnp ? { proxy: low.px, np: { ...dnp, skip: dReq ? 'direct' : '' } } : { proxy: low.px }); // the low pass (and no other) runs the pre-pass; the periphery and the probes do not
+    const lowDraw = volume.drawPass(low.target, low.eyes, u, vr, 0, null, null, dnp ? { proxy: low.px, np: { ...dnp, auto: true, pass: 'low', skip: '' } } : { proxy: low.px }); // the low pass (and no other) runs the pre-pass; the periphery and the probes do not
     stats.np = lowDraw?.np ?? null;
     if (volume.ident.active) volume.ident.frame({ low, lowDraw, u, vr, dReq, n, cx: identCtx }); // the same-picture check: this frame's centre pass once more with one of the ways, compared with the picture just drawn
     let directPx = 0;
-    if (dReq) { // the uniforms and bind groups of the direct draw (the tiles of the pre-pass are the centre pass' own)
+    if (dReq) { // the uniforms and bind groups of the direct draw (the tiles of the pre-pass are the centre pass' own); a centre pass that had no way this frame (nothing is drawn) has nothing to record either: the display's own program is never drawn
       try {
-        const rs = []; for (let i = 0; i < n; i++) if (dRect[i]) rs.push({ i, D: dRect[i], region: dReg[i], eye: tmpEye[i], tilesPerEye: low.px.tilesPerEye });
-        if (rs.length) directPx = volume.direct.setFrame({ u, variant: vr, model, rects: rs, pxTex: lowDraw?.proxy?.tex ?? null });
+        const wy = lowDraw?.np?.use && lowDraw.np.group1 ? { mode: lowDraw.np.mode, group1: lowDraw.np.group1, tile: lowDraw.np.tiles4 ? 4 : 8 } : null; // the centre pass' way this frame (its program, its group 1, the size of its tiles); null = the display's own program
+        const tpe = wy && wy.tile === 4 ? low.px.tile4.tilesPerEye : low.px.tilesPerEye;
+        const rs = []; for (let i = 0; i < n; i++) if (dRect[i]) rs.push({ i, D: dRect[i], region: dReg[i], eye: tmpEye[i], tilesPerEye: tpe });
+        if (rs.length && wy) directPx = volume.direct.setFrame({ u, variant: vr, model, rects: rs, pxTex: lowDraw?.proxy?.tex ?? null, way: wy });
       } catch (e) { volume.direct.fail('setting up the frame threw: ' + String(e?.message ?? e).slice(0, 160)); }
     }
     stats.direct = directPx;
+    const bdPx = volume.bdActive() ? volume.bdTiles(u, low.eyes, vr, low.px, lowDraw) : null; // the 8 x 8 tiles of the old way, for the recording's shadow passes (the display's own way may have none or 4 x 4)
     if (volume.bdActive() && f >= 1 - 1e-6 && n > 0) { // the recording's check of the direct material against the centre pass (eye 0, this frame's camera): whatever the switch is
       const r0 = low.regs[0], reg = { x0: r0[0], y0: r0[1], x1: r0[0] + r0[2], y1: r0[1] + r0[3] }, D0 = dRect[0] || directRegion(reg, fovOn ? rectOf(0) : null, band, H), e0 = tmpEye[0];
-      if (D0) volume.direct.noteForCheck({ u, variant: vr, W, H, eye: { mvp: e0.mvp.clone(), origin: e0.origin.clone(), lightOff: e0.lightOff.clone() }, region: reg, D: D0, pxTex: lowDraw?.proxy?.tex ?? null });
+      if (D0) volume.direct.noteForCheck({ u, variant: vr, W, H, eye: { mvp: e0.mvp.clone(), origin: e0.origin.clone(), lightOff: e0.lightOff.clone() }, region: reg, D: D0, pxTex: bdPx?.tex ?? null });
     }
     if (volume.bdActive()) { // the performance record's breakdown is recording: what its shadow pass and its native-pitch probe need of this frame's low pass
-      try { volume.bdSnapshot(low.target, low.eyes, u, vr, lowDraw?.proxy ?? null); } catch (e) { console.warn('WebGPU breakdown snapshot:', e); } // never lets the frame's drawing throw
+      try { volume.bdSnapshot(low.target, low.eyes, u, vr, bdPx); } catch (e) { console.warn('WebGPU breakdown snapshot:', e); } // never lets the frame's drawing throw
       bdLow.r = low.regs[0]; bdLow.Wu = Math.max(1, Math.ceil(W * f)); bdLow.Hu = Math.max(1, Math.ceil(H * f)); bdLow.variant = vr; bdLow.ok = n > 0;
     }
     if (directPx) volume.direct.dropSnapshot(); // a direct frame's centre pass holds the band only: no shadow pass is taken of it
     let peri = null;
     if (fovOn) { // the periphery: the box's rect at the lower scale, only outside the centre rect shrunk by the blend band (what the composite reads from it) and the bilinear margin
       peri = pass('peri', fp, tmpPeri, boxOf, i => rectOf(i), band + Math.ceil(2 / Math.max(fp, 0.05)) + 1);
-      volume.drawPass(peri.target, peri.eyes, u, vr, 2);
+      volume.drawPass(peri.target, peri.eyes, u, vr, 2, null, null, dnp ? { proxy: peri.px, np: { ...dnp, auto: true, pass: 'peri', skip: '' } } : null);
     }
     const topLeft = fovOn ? rects.map(R => [R[0], H - R[3], R[2], H - R[1]]) : null;
     composite.update({ low, peri, fov: fovOn, rects: topLeft, band, decode });
@@ -1196,7 +1251,8 @@ export function createVrVolumeRenderer({ THREE, device, f16 = false, halfExt = [
     probeBuf.busy = true;
     try {
       const target = volume.getTarget(64, 64), e = eyeUniforms(THREE, model, cam, {});
-      volume.drawPass(target, [{ x: 0, y: 0, w: 48, h: 48, mvp: e.mvp, origin: e.origin, lightOff: e.lightOff }], u, variantOf(u), 3, { diag: 5 }, probeBuf);
+      const pnp = volume.displayNp(); // the probe is the display's own pass too: D0 (it has no tiles)
+      volume.drawPass(target, [{ x: 0, y: 0, w: 48, h: 48, mvp: e.mvp, origin: e.origin, lightOff: e.lightOff }], u, variantOf(u), 3, { diag: 5 }, probeBuf, pnp ? { np: { ...pnp, auto: true, pass: 'probe', skip: '' } } : null);
       await probeBuf.buffer.mapAsync(GPUMapMode.READ);
       const raw = new Uint8Array(probeBuf.buffer.getMappedRange()), out = new Uint8Array(48 * 48 * 4);
       for (let y = 0; y < 48; y++) out.set(raw.subarray(y * 256, y * 256 + 192), y * 192);
@@ -1233,9 +1289,10 @@ export function createVrVolumeRenderer({ THREE, device, f16 = false, halfExt = [
   const preload = async (u, variants) => {
     for (const k of ['vol', 'clsTex', 'cls4Tex', 'skipTex', 'editTex', 'sliceVol']) volume.gpuOf(u[k]?.value);
     await volume.warm(variants);
+    volume.primeWays(u, variants);
   };
   const dispose = () => { composite.dispose(); volume.dispose(); try { probeBuf?.buffer.destroy(); } catch { /* gone */ } };
-  return { volume, composite, draw, probe, preload, dispose, breakdown, material: composite.material, stats, direct: volume.direct, installDirect: renderer => volume.direct.install(renderer, composite.material) };
+  return { volume, composite, draw, probe, preload, warmWays: variants => volume.warmWays(variants), dispose, breakdown, material: composite.material, stats, direct: volume.direct, installDirect: renderer => volume.direct.install(renderer, composite.material) };
 }
 
 // ---- the WebGPU session's diagnostic record (the trial: what happened in a session the headset showed black) ----

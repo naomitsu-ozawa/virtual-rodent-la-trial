@@ -27,7 +27,7 @@
 // ---- what the volume pass does with (tA, tB) ----
 // The march starts one grid point before the one tA falls on (k = floor((tA - t0) / stp) - 1, never below 0: the display's rule, so a hit k* >= k + 1) and its end is min(endT, tB): the loop ends when t > endT, and no sample past tB is inside a shown segment,
 // so no hit, no accumulated colour and no depth mark happens there. Only the start and the end move; the samples, jumps, hit bracket, search and shading are the march's own.
-import { uniformLayout, uniformStruct, PROXY, PROXY_FIELDS, PROXY_DIFF_BINDINGS, volumeWgsl } from './vr-wgsl-core.js?v=20261124-build761';
+import { uniformLayout, uniformStruct, PROXY, PROXY_FIELDS, PROXY_DIFF_BINDINGS, volumeWgsl } from './vr-wgsl-core.js?v=20261125-build762';
 
 export const COARSE = { cell: 4, perTexel: 4, empty: PROXY.empty, rebuildEvery: 6 };
 // the variants of the shadow pass (docs/vr-perf-log.js BD_SPECS carries the same table under `coarse`)
@@ -44,7 +44,7 @@ export const COARSE_FIELDS = [...PROXY_FIELDS, ['texDims', 'vec3f'], ['cdims', '
 export const BUILD_FIELDS = [['dims', 'vec4i'], ['cdims', 'vec4i'], ['clsChan', 'vec4i'], ['segOn', 'vec4i']];
 export const BUILD_BINDINGS = { params: 0, cls: 1, cls4: 2, out: 3 };
 export const FINE_BINDINGS = { params: 0, cls: 1, cls4: 2, sampler: 3, out: 4 };
-export const COARSE_BINDINGS = { params: 0, grid: 1, out: 4 };
+export const COARSE_BINDINGS = { params: 0, grid: 1, marks: 2, out: 4 };
 
 // the cells of a texture of dims [w, h, d], and the packed texture (4 cells along x per rgba8uint texel)
 export const coarseDims = dims => dims.map(n => Math.ceil(n / COARSE.cell));
@@ -97,12 +97,12 @@ fn vox(p:vec3<i32>)->u32{
 // mode 'fine' reads the combined texture like the display's pre-pass (a filtered fetch at the nearest box point); mode 'coarse' reads the grid (textureLoad of the cell).
 export function coarseProxyWgsl({ cls4 = false, mode = 'coarse', tile = 4 } = {}) {
   const C = PROXY;
-  if (mode !== 'fine' && mode !== 'coarse') throw new Error('coarseProxyWgsl: unknown mode ' + mode);
+  if (mode !== 'fine' && mode !== 'coarse' && mode !== 'marks') throw new Error('coarseProxyWgsl: unknown mode ' + mode);
   const bindings = mode === 'fine'
     ? `@group(0) @binding(1) var clsTex:texture_3d<f32>;
 @group(0) @binding(2) var cls4Tex:texture_3d<f32>;
 @group(0) @binding(3) var smp:sampler;`
-    : '@group(0) @binding(1) var gridTex:texture_3d<u32>;';
+    : mode === 'marks' ? '@group(0) @binding(1) var gridTex:texture_3d<u32>;\n@group(0) @binding(2) var markTex:texture_3d<u32>;' : '@group(0) @binding(1) var gridTex:texture_3d<u32>;';
   const ball = mode === 'fine'
     ? `fn anyInside(q:vec4<f32>)->bool{
  for(var s=0;s<4;s++){let c=p.clsChan[s];if(c>=0&&p.segOn[s]!=0&&q[c]>=0.5-${F(C.classMargin)}){return true;}}
@@ -116,7 +116,19 @@ fn ballAt(xc:vec3<f32>)->f32{
  if(anyInside(q)){return -1.0e30;}
  return (dd-${F(C.ddMargin)}-${F(C.slack)})*p.voxelMin;
 }`
-    : `// the radius of a tissue-free ball around xc (a point of the box), from the grid's cell that contains it (the value is the minimum over everything a fetch of the cell can read)
+    : mode === 'marks' ? `// the radius of a tissue-free ball around xc (a point of the box), from the cell that contains it: 0 where a shown channel may be inside anywhere a fetch of the cell can read (the marks), else the least distance byte there
+fn ballAt(xc:vec3<f32>)->f32{
+ let tc=cl(texCoord(xc));
+ let v=tc*p.texDims;
+ let c=min(vec3<i32>(v)/${COARSE.cell},p.cdims.xyz-vec3<i32>(1));
+ let at=vec3<i32>(c.x/${COARSE.perTexel},c.y,c.z);
+ let t=textureLoad(gridTex,at,0);let mk=textureLoad(markTex,at,0);
+ var shown=0u;
+ for(var s=0;s<4;s++){let ch=p.clsChan[s];if(ch>=0&&p.segOn[s]!=0){shown=shown|(1u<<u32(ch));}}
+ var d=f32(t[c.x%${COARSE.perTexel}]);
+ if((mk[c.x%${COARSE.perTexel}]&shown)!=0u){d=0.0;}
+ return (d-${F(C.ddMargin)}-${F(C.slack)})*p.voxelMin;
+}` : `// the radius of a tissue-free ball around xc (a point of the box), from the grid's cell that contains it (the value is the minimum over everything a fetch of the cell can read)
 fn ballAt(xc:vec3<f32>)->f32{
  let tc=cl(texCoord(xc));
  let v=tc*p.texDims;
@@ -510,23 +522,19 @@ export const walkLimitOk = (halfExt, stepSize) => Number.isFinite(stepSize) && w
 
 const DB_BUILD_FIELDS = BUILD_FIELDS; // (the uniform of the build is the performance record's: dims.w carries the first z row)
 // the host (made by docs/vr-wgpu-newpath.js, one per user: the display and the same-picture check have one each; nothing of it is made until a method is called):
-// ctx = { device, onShader, dropGroups(gpuTexture) }. Its programs are made asynchronously (progs(cls4).state: 'pending' | 'ready' | 'failed'); the grid, the tiles' texture and the two uniform buffers on first use.
+// ctx = { device, onShader, dropGroups(gpuTexture) }. The 4 x 4 pre-pass (a compute program, made asynchronously: progs(cls4).state: 'pending' | 'ready' | 'failed') reads the skip marks' two grids (docs/vr-wgpu-marks.js: the channel marks and the least
+// distance byte of every cell) and takes the cell's reach as D = (marks & shown channels) ? 0 : least alpha, the value the older grid held for the shown set: nothing here depends on which tissues are shown, so a tissue switch rebuilds nothing.
 export function createCoarseDisplay(ctx) {
   const { device } = ctx;
-  const cpLayout = uniformLayout(COARSE_FIELDS), pxLayout = uniformLayout(PROXY_FIELDS), buildLayout = uniformLayout(DB_BUILD_FIELDS);
+  const cpLayout = uniformLayout(COARSE_FIELDS), pxLayout = uniformLayout(PROXY_FIELDS);
   const fld = (L, n) => L.fields.find(f => f.name === n);
-  const st = { layouts: null, progs: new Map(), grid: null, tiles: null, cpBuf: null, buildBuf: null, buildBg: null, tilesBg: null, builds: 0, seq: 0, ids: new WeakMap(), dead: false };
+  const st = { layouts: null, progs: new Map(), tileSets: new Map(), seq: 0, ids: new WeakMap(), dead: false };
   const idOf = t => { let i = st.ids.get(t); if (!i) { i = ++st.seq; st.ids.set(t, i); } return i; };
   const layouts = () => st.layouts ||= {
-    build: device.createBindGroupLayout({ entries: [
-      { binding: BUILD_BINDINGS.params, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
-      { binding: BUILD_BINDINGS.cls, visibility: GPUShaderStage.COMPUTE, texture: { sampleType: 'float', viewDimension: '3d' } },
-      { binding: BUILD_BINDINGS.cls4, visibility: GPUShaderStage.COMPUTE, texture: { sampleType: 'float', viewDimension: '3d' } },
-      { binding: BUILD_BINDINGS.out, visibility: GPUShaderStage.COMPUTE, storageTexture: { access: 'write-only', format: 'rgba8uint', viewDimension: '3d' } },
-    ] }),
     coarse: device.createBindGroupLayout({ entries: [
       { binding: COARSE_BINDINGS.params, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
       { binding: COARSE_BINDINGS.grid, visibility: GPUShaderStage.COMPUTE, texture: { sampleType: 'uint', viewDimension: '3d' } },
+      { binding: COARSE_BINDINGS.marks, visibility: GPUShaderStage.COMPUTE, texture: { sampleType: 'uint', viewDimension: '3d' } },
       { binding: COARSE_BINDINGS.out, visibility: GPUShaderStage.COMPUTE, storageTexture: { access: 'write-only', format: 'rg32float', viewDimension: '2d' } },
     ] }),
   };
@@ -535,90 +543,52 @@ export function createCoarseDisplay(ctx) {
     try { ctx.onShader?.(module, info); } catch { /* diagnostics only */ }
     return { layout: device.createPipelineLayout({ bindGroupLayouts: [L] }), compute: { module, entryPoint: 'main' } };
   };
-  // the two compute programs of a display variant (the 4 x 4 pre-pass over the grid, the ranged build): made once, asynchronously
+  // the compute program of a display variant (the 4 x 4 pre-pass over the marks' grids): made once, asynchronously
   const progs = cls4 => {
     const key = cls4 ? 'c4' : 'c3', have = st.progs.get(key);
     if (have) return have;
-    const p = { state: 'pending', proxy: null, build: null, msg: '' };
+    const p = { state: 'pending', proxy: null, msg: '' };
     st.progs.set(key, p);
     (async () => {
-      const L = layouts();
-      const [proxy, build] = await Promise.all([
-        device.createComputePipelineAsync(computeDesc(L.coarse, coarseProxyWgsl({ cls4, mode: 'coarse', tile: COARSE_DISPLAY.tile }), { coarse: ctx.name + ' tiles', cls4 })),
-        device.createComputePipelineAsync(computeDesc(L.build, coarseBuildWgsl({ cls4, zRange: true }), { coarse: ctx.name + ' build', cls4 })),
-      ]);
+      const proxy = await device.createComputePipelineAsync(computeDesc(layouts().coarse, coarseProxyWgsl({ cls4, mode: 'marks', tile: COARSE_DISPLAY.tile }), { coarse: ctx.name + ' tiles', cls4 }));
       if (st.dead) return;
-      p.proxy = proxy; p.build = build; p.state = 'ready';
+      p.proxy = proxy; p.state = 'ready';
     })().catch(e => { p.state = 'failed'; p.msg = String(e?.message ?? e).slice(0, 160); });
     return p;
   };
   const makeTex = (size, format, usage, dimension) => device.createTexture({ size, format, usage, ...(dimension ? { dimension } : {}) });
-  const gridFor = dimsP => {
-    let g = st.grid;
-    if (g && g.dims.join() === dimsP.join()) return g;
-    if (g) { ctx.dropGroups?.(g.tex); g.tex.destroy(); st.buildBg = null; st.tilesBg = null; }
-    g = st.grid = { dims: dimsP, tex: makeTex(dimsP, 'rgba8uint', GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING, '3d'), readyKey: null, building: null };
-    return g;
-  };
-  // one frame's share of the build for `key` (the grid's key, coarseGridKey): 'ready' = the grid holds exactly this key (the compute of the last share is in enc, in front of whatever reads the grid after it);
-  // 'building' = more shares to come (the caller draws the way it did before); null = no program (yet). A key that differs from the one being built starts again from the first row: a grid is never used for a key it was not built for.
-  // clsTex / c4Tex = the GPUTextures; dims = the combined texture's size; segOn / clsChan = the four shown flags and channels of the key; tsw = timestampWrites of this share (optional)
-  const build = (enc, { key, clsTex, c4Tex, dims, segOn, clsChan, cls4, tsw = null }) => {
+  // the tiles (the 4 x 4 pre-pass) from the marks' grids: bytes = the PROXY_FIELDS bytes of this pass with this tile layout (tilesPerEye, tilesY of tileLayout); grid = { alpha, marks } (the GPUTextures of the marks host); returns the tiles' texture (texCols x texRows, rg32float) or null (no program yet)
+  // slot = which pass the tiles are for ('low' by default, 'peri'): each slot has its own tiles' texture, uniform buffer and bind group, so a pass whose size differs (the periphery's) never makes the centre's texture over, and the direct draw (which reads the centre's tiles in the second half of the frame) is not touched by the periphery's pass
+  const tiles = (enc, { bytes, nEyes, tilesPerEye, tilesY, texCols, texRows, dims, cls4, grid, tsw = null, slot = 'low' }) => {
     const pr = progs(cls4);
-    if (pr.state !== 'ready') return pr.state === 'failed' ? 'failed' : null;
-    const cd = coarseDims(dims), pd = packedDims(dims), g = gridFor(pd);
-    if (g.readyKey === key) return 'ready';
-    if (!g.building || g.building.key !== key) { g.readyKey = null; g.building = { key, next: 0 }; }
-    const z0 = g.building.next, n = Math.min(COARSE_DISPLAY.buildRows, cd[2] - z0), L = layouts();
-    const bb = new ArrayBuffer(buildLayout.byteSize), BI = new Int32Array(bb);
-    [...dims, z0].forEach((x, k) => { BI[fld(buildLayout, 'dims').offset / 4 + k] = x; }); [...cd, 0].forEach((x, k) => { BI[fld(buildLayout, 'cdims').offset / 4 + k] = x; });
-    clsChan.forEach((x, k) => { BI[fld(buildLayout, 'clsChan').offset / 4 + k] = x; }); segOn.forEach((x, k) => { BI[fld(buildLayout, 'segOn').offset / 4 + k] = x; });
-    st.buildBuf ||= device.createBuffer({ size: buildLayout.byteSize, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
-    device.queue.writeBuffer(st.buildBuf, 0, bb);
-    const ids = [clsTex, c4Tex, g.tex].map(idOf).join('.');
-    if (!st.buildBg || st.buildBg.ids !== ids) {
-      st.buildBg = { ids, g: device.createBindGroup({ layout: L.build, entries: [
-        { binding: BUILD_BINDINGS.params, resource: { buffer: st.buildBuf } }, { binding: BUILD_BINDINGS.cls, resource: clsTex.createView({ dimension: '3d' }) },
-        { binding: BUILD_BINDINGS.cls4, resource: c4Tex.createView({ dimension: '3d' }) }, { binding: BUILD_BINDINGS.out, resource: g.tex.createView({ dimension: '3d' }) },
-      ] }) };
-    }
-    const cp = enc.beginComputePass(tsw ? { timestampWrites: tsw } : {});
-    cp.setPipeline(pr.build); cp.setBindGroup(0, st.buildBg.g); cp.dispatchWorkgroups(Math.ceil(pd[0] / 4), Math.ceil(pd[1] / 4), Math.ceil(n / 4)); cp.end();
-    st.builds++;
-    g.building.next = z0 + n;
-    if (g.building.next >= cd[2]) { g.readyKey = key; g.building = null; return 'ready'; }
-    return 'building';
-  };
-  // the tiles (the 4 x 4 pre-pass) from the grid: bytes = the PROXY_FIELDS bytes of this pass with this tile layout (tilesPerEye, tilesY of tileLayout); returns the tiles' texture (texCols x texRows, rg32float) or null (no program / no grid)
-  const tiles = (enc, { bytes, nEyes, tilesPerEye, tilesY, texCols, texRows, dims, cls4, tsw = null }) => {
-    const pr = progs(cls4), g = st.grid;
-    if (pr.state !== 'ready' || !g) return null;
+    if (pr.state !== 'ready' || !grid) return null;
+    const ts = st.tileSets.get(slot) || (st.tileSets.set(slot, { tiles: null, bg: null, cpBuf: null }), st.tileSets.get(slot));
     const cd = coarseDims(dims), ab = new ArrayBuffer(cpLayout.byteSize), CF = new Float32Array(ab), CI = new Int32Array(ab);
     new Uint8Array(ab).set(new Uint8Array(bytes.buffer ?? bytes, bytes.byteOffset ?? 0, pxLayout.byteSize));
     dims.forEach((v, k) => { CF[fld(cpLayout, 'texDims').offset / 4 + k] = v; }); cd.forEach((v, k) => { CI[fld(cpLayout, 'cdims').offset / 4 + k] = v; });
-    st.cpBuf ||= device.createBuffer({ size: cpLayout.byteSize, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
-    device.queue.writeBuffer(st.cpBuf, 0, ab);
-    if (!st.tiles || st.tiles.cols !== texCols || st.tiles.rows !== texRows) {
-      if (st.tiles) { ctx.dropGroups?.(st.tiles.tex); st.tiles.tex.destroy(); st.tilesBg = null; }
-      st.tiles = { cols: texCols, rows: texRows, tex: makeTex([texCols, texRows, 1], 'rg32float', GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING) };
+    ts.cpBuf ||= device.createBuffer({ size: cpLayout.byteSize, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    device.queue.writeBuffer(ts.cpBuf, 0, ab);
+    if (!ts.tiles || ts.tiles.cols !== texCols || ts.tiles.rows !== texRows) {
+      if (ts.tiles) { ctx.dropGroups?.(ts.tiles.tex); ts.tiles.tex.destroy(); ts.bg = null; }
+      ts.tiles = { cols: texCols, rows: texRows, tex: makeTex([texCols, texRows, 1], 'rg32float', GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING) };
     }
-    const ids = [g.tex, st.tiles.tex].map(idOf).join('.');
-    if (!st.tilesBg || st.tilesBg.ids !== ids) {
-      st.tilesBg = { ids, g: device.createBindGroup({ layout: layouts().coarse, entries: [
-        { binding: COARSE_BINDINGS.params, resource: { buffer: st.cpBuf } }, { binding: COARSE_BINDINGS.grid, resource: g.tex.createView({ dimension: '3d' }) }, { binding: COARSE_BINDINGS.out, resource: st.tiles.tex.createView() },
+    const ids = [grid.alpha, grid.marks, ts.tiles.tex].map(idOf).join('.');
+    if (!ts.bg || ts.bg.ids !== ids) {
+      ts.bg = { ids, g: device.createBindGroup({ layout: layouts().coarse, entries: [
+        { binding: COARSE_BINDINGS.params, resource: { buffer: ts.cpBuf } }, { binding: COARSE_BINDINGS.grid, resource: grid.alpha.createView({ dimension: '3d' }) },
+        { binding: COARSE_BINDINGS.marks, resource: grid.marks.createView({ dimension: '3d' }) }, { binding: COARSE_BINDINGS.out, resource: ts.tiles.tex.createView() },
       ] }) };
     }
     const cp = enc.beginComputePass(tsw ? { timestampWrites: tsw } : {});
-    cp.setPipeline(pr.proxy); cp.setBindGroup(0, st.tilesBg.g); cp.dispatchWorkgroups(Math.ceil(tilesPerEye * nEyes / 8), Math.ceil(tilesY / 8)); cp.end();
-    return st.tiles.tex;
+    cp.setPipeline(pr.proxy); cp.setBindGroup(0, ts.bg.g); cp.dispatchWorkgroups(Math.ceil(tilesPerEye * nEyes / 8), Math.ceil(tilesY / 8)); cp.end();
+    return ts.tiles.tex;
   };
-  const destroy = () => {
-    st.dead = true;
+  // the tiles' textures, buffers and bind groups let go, the programs kept (a rebuild after a GPU error)
+  const reset = () => {
     const kill = x => { try { x?.destroy(); } catch { /* gone */ } };
-    if (st.grid) { ctx.dropGroups?.(st.grid.tex); kill(st.grid.tex); }
-    if (st.tiles) { ctx.dropGroups?.(st.tiles.tex); kill(st.tiles.tex); }
-    kill(st.cpBuf); kill(st.buildBuf);
-    st.grid = null; st.tiles = null; st.cpBuf = null; st.buildBuf = null; st.buildBg = null; st.tilesBg = null; st.progs.clear(); st.layouts = null;
+    for (const ts of st.tileSets.values()) { if (ts.tiles) { ctx.dropGroups?.(ts.tiles.tex); kill(ts.tiles.tex); } kill(ts.cpBuf); }
+    st.tileSets.clear();
   };
-  return { progs, build, tiles, destroy, get state() { return st; } };
+  const destroy = () => { st.dead = true; reset(); st.progs.clear(); st.layouts = null; };
+  return { progs, tiles, reset, destroy, get state() { return st; } };
 }

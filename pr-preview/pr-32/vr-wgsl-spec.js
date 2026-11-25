@@ -1,17 +1,16 @@
 // WebGPU (WGSL) volume pass, the "specialised" program (A4): the settings that do not change from frame to frame (the debug view, the surface search, the jump / creep switches, the processing-mask bits,
 // the channel and the simple flag of each of the four segment slots, the content box's entry flag, the cap switch, the number of section planes and which of them clip) are WGSL `override` constants, given when the pipeline is made (GPUProgrammableStage.constants), instead of members of the uniform buffer.
 // The text is the display variant's (docs/vr-wgsl-core.js volumeWgsl) with exact substitutions, like the breakdown's `ablate`: every anchor must occur exactly the expected number of times, else this throws (so a change of
-// the core's text can never silently leave a uniform read behind). The core is not touched; nothing here runs unless the host asks (the display switch SPEC_DISPLAY_DEFAULT is off; the breakdown's 'specCfg' shadow pass uses it).
+// the core's text can never silently leave a uniform read behind). The core is not touched; nothing here runs unless the host asks (the breakdown's specCfg shadow pass is the only user).
 // What is the same: every expression that reads one of these values is the display's own expression with the uniform read replaced by the constant (the one-hot selectors are the same vectors, built by kSel / kOff from the constants),
 // so the result is the same bit for bit when the generic and the specialised pass run with the same values (the performance record's 'specCfg' comparison counts the pixels that differ: expected 0).
 // What is NOT specialised (continuous values, flags that are tests on a continuous value, and per-pass values): stepSize, texDims, halfExt, calib, voxelSize, boxC / boxH (the content box's size; its test boxH.x > 0 reads a float that is also used in arithmetic),
 // segA x y z (thresholds, alpha), segC rgb, segM, ctShade / ctShadeBright / ctShadeContrast / ctShadeRange, cutPlanes, sliceWindow / sliceAir / sliceTint / sliceOpacity / sliceSegOnly (tests on floats that the slice code also uses as values; section variant only),
 // proxyOn / proxyOrg (differ per pass and per eye), mvp / origin / lightOff (per eye and frame). A folded division / pow / normalize could round differently from the run-time one.
-import { volumeWgsl, uniformLayout } from './vr-wgsl-core.js?v=20261124-build761';
+import { volumeWgsl, uniformLayout } from './vr-wgsl-core.js?v=20261125-build762';
 
 // the code constant of the display switch (the diagnostics' / the page's choice comes later): false = the display always uses the generic program, true = the display uses the specialised program of its
 // current settings as soon as it is made (the generic program draws until then), see createVolumeGpu({ specDisplay }) in docs/vr-wgpu.js
-export const SPEC_DISPLAY_DEFAULT = false;
 
 // the signature of a pass's settings: 18 integers (canonical, see specSig*), in this order; the override of each
 export const SPEC_FIELDS = ['diag', 'refine', 'useSkip', 'jumpOn', 'editMask', 'editMaskOnly', 'ch0', 'ch1', 'ch2', 'ch3', 'simple0', 'simple1', 'simple2', 'simple3', 'boxEntry', 'capOn', 'planeCount', 'planeCut'];

@@ -103,7 +103,7 @@ const F = x => (Number.isInteger(x) ? x.toFixed(1) : String(x));
 export function marchWgsl(base, kind) {
   const v = MARCH_VARIANTS[kind];
   if (!v) throw new Error('march variants: unknown kind ' + kind);
-  if (/variant f16=\w+ cls4=\w+ events=true/.test(base)) throw new Error('march variants: the section-plane variant is not supported');
+  if (kind !== 'distSplit' && /variant f16=\w+ cls4=\w+ events=true/.test(base)) throw new Error('march variants: the section-plane variant is not supported'); // (distSplit alone moves no sample: the slices and the cut face are visited at the same grid points; the coarse variants move the walk's start and jumps, which the section program's order does not allow)
   let t = base;
   t = subOnce(t, '@group(0) @binding(9) var proxyTex:texture_2d<f32>;\n', '@group(0) @binding(9) var proxyTex:texture_2d<f32>;\n'
     + '@group(' + MARCH_BINDINGS.group + ') @binding(' + MARCH_BINDINGS.dist + ') var distTex:texture_3d<f32>;\n@group(' + MARCH_BINDINGS.group + ') @binding(' + MARCH_BINDINGS.coarse + ') var coarseTex:texture_3d<f32>;\n'
@@ -130,6 +130,30 @@ export function marchWgsl(base, kind) {
       + '  }\n');
   }
   return t.replace(/(\/\/ VR \/ AR volume pass \(WGSL\), variant [^\n]*)\n/, '$1 march=' + kind + '\n');
+}
+
+// ---- the distance texture made ON the GPU from the combined texture's own GPU bytes (the display's host; P1 of the allopt plan) ----
+// r8unorm cannot be a storage texture in core WebGPU, so a compute pass packs the alpha bytes of z slices [z0, z0 + n) into a storage buffer (4 texels a u32, rows padded to the 256 bytes a buffer-to-texture copy needs) and the buffer is copied into the r8unorm texture.
+// The bytes are those the sampler reads (the combined texture's alpha, as written to the GPU), so nothing depends on the CPU's copy of them: no frames of making, no 'bytes not the GPU's' case.
+export const DIST_GPU = { chunkSlices: 64, rowAlign: 256 };
+export const distGpuPitch = w => Math.ceil(w / DIST_GPU.rowAlign) * DIST_GPU.rowAlign; // bytes of one row of the packed buffer
+export function distGpuWgsl() {
+  return `// distance bytes of the combined texture's alpha -> packed u32 (4 texels each), for the copy into the r8unorm distance texture
+struct P { dims: vec4<u32>, pitch: vec4<u32> } // dims = (w, h, d, z0); pitch = (u32 per row, slices of this chunk, 0, 0)
+@group(0) @binding(0) var<uniform> p: P;
+@group(0) @binding(1) var cls: texture_3d<f32>;
+@group(0) @binding(2) var<storage, read_write> outp: array<u32>;
+@compute @workgroup_size(8, 8, 4)
+fn main(@builtin(global_invocation_id) g: vec3<u32>) {
+  if (g.x >= p.pitch.x || g.y >= p.dims.y || g.z >= p.pitch.y) { return; }
+  var v: u32 = 0u;
+  for (var i: u32 = 0u; i < 4u; i = i + 1u) {
+    let x = g.x * 4u + i;
+    if (x < p.dims.x) { let a = textureLoad(cls, vec3<i32>(vec3<u32>(x, g.y, p.dims.w + g.z)), 0).a; v = v | (u32(a * 255.0 + 0.5) << (8u * i)); }
+  }
+  outp[(g.z * p.dims.y + g.y) * p.pitch.x + g.x] = v;
+}
+`;
 }
 
 // ---- the GPU side (used by docs/vr-wgpu.js createVolumeGpu): the group-1 layout, the grids as textures, the bind group per variant ----
@@ -190,5 +214,58 @@ export function createMarchHost({ device, bgl0, cells = MARCH_CELLS }) {
     st.gen = gen;
     return true;
   };
-  return { layouts, prepare, group, writeRange, destroy: killAll, get state() { return st; } };
+  // ---- the display's way (P1): everything on the GPU, from the combined texture's GPU texture ----
+  let gp = null; // { state: 'pending' | 'ready' | 'failed', pipe, bgl, ubuf, buf, bufSlices, msg }
+  const gpuProg = () => {
+    if (gp) return gp;
+    const me = gp = { state: 'pending', pipe: null, bgl: null, ubuf: null, buf: null, bufBytes: 0, msg: '' }; // (a host let go meanwhile: the compile that comes back later finds gp is another object and leaves it)
+    try {
+      const module = device.createShaderModule({ code: distGpuWgsl() });
+      me.bgl = device.createBindGroupLayout({ entries: [
+        { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
+        { binding: 1, visibility: GPUShaderStage.COMPUTE, texture: { sampleType: 'float', viewDimension: '3d' } },
+        { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+      ] });
+      Promise.resolve(device.createComputePipelineAsync({ layout: device.createPipelineLayout({ bindGroupLayouts: [me.bgl] }), compute: { module, entryPoint: 'main' } })).then(p => { me.pipe = p; me.state = 'ready'; }, e => { me.state = 'failed'; me.msg = String(e?.message ?? e).slice(0, 160); });
+    } catch (e) { me.state = 'failed'; me.msg = String(e?.message ?? e).slice(0, 160); }
+    return me;
+  };
+  // the alpha bytes of slices [z0, z1) of clsGpu (the combined texture's GPUTexture) into the host's distance texture, in chunks of DIST_GPU.chunkSlices (each its own submit: the uniform and the buffer are the chunk's)
+  const encodeDist = (clsGpu, dist, dims, z0, z1) => {
+    const [w, h, d] = dims, pitch = distGpuPitch(w), per = Math.min(DIST_GPU.chunkSlices, d), need = pitch * h * per;
+    if (!gp.buf || gp.bufBytes < need) { try { gp.buf?.destroy(); } catch { /* gone */ } gp.buf = device.createBuffer({ size: need, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC }); gp.bufBytes = need; }
+    gp.ubuf ||= device.createBuffer({ size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    for (let z = z0; z < z1; z += per) {
+      const n = Math.min(per, z1 - z);
+      device.queue.writeBuffer(gp.ubuf, 0, new Uint32Array([w, h, d, z, pitch / 4, n, 0, 0]));
+      const bg = device.createBindGroup({ layout: gp.bgl, entries: [{ binding: 0, resource: { buffer: gp.ubuf } }, { binding: 1, resource: clsGpu.createView({ dimension: '3d' }) }, { binding: 2, resource: { buffer: gp.buf } }] });
+      const enc = device.createCommandEncoder(), cp = enc.beginComputePass();
+      cp.setPipeline(gp.pipe); cp.setBindGroup(0, bg); cp.dispatchWorkgroups(Math.ceil(pitch / 4 / 8), Math.ceil(h / 8), Math.ceil(n / 4)); cp.end();
+      enc.copyBufferToTexture({ buffer: gp.buf, bytesPerRow: pitch, rowsPerImage: h }, { texture: dist, origin: [0, 0, z] }, [w, h, n]);
+      device.queue.submit([enc.finish()]);
+    }
+  };
+  // tex = the combined texture's object, gen = its write number on the GPU (the entry's), clsGpu = its GPUTexture: 'ready' (the distance texture holds exactly this version; made now, at once, from the GPU's bytes), 'wait' (the program is still being compiled), null (failed)
+  const prepareGpu = (tex, gen, clsGpu, dims) => {
+    const pr = gpuProg();
+    if (pr.state === 'failed') return null;
+    if (pr.state !== 'ready') return 'wait';
+    if (st && (st.tex !== tex || st.dims.some((x, i) => x !== dims[i]) || !st.gpuMade)) kill();
+    if (!st) { st = { tex, gen: -1, dims: dims.slice(), dist: mk3(dims, 0), builder: null, coarse: new Map(), groups: new Map(), ready: false, gpuMade: true }; }
+    if (st.gen !== gen || !st.ready) { encodeDist(clsGpu, st.dist, st.dims, 0, st.dims[2]); st.gen = gen; st.ready = true; }
+    return 'ready';
+  };
+  // the display's host: slices [z0, z1) of the combined texture were just written to the GPU (the same call as the texture's own write): the distance texture's same slices follow, from the GPU's bytes; false = nothing to follow (no distance texture of this texture yet: it is made whole at the first draw)
+  const writeRangeGpu = (tex, gen, clsGpu, z0, z1) => {
+    if (!st || !st.gpuMade || st.tex !== tex || !st.ready || gp?.state !== 'ready') return false;
+    if (z1 <= z0 || z0 < 0 || z1 > st.dims[2]) return false;
+    encodeDist(clsGpu, st.dist, st.dims, z0, z1);
+    st.gen = gen;
+    return true;
+  };
+  // the textures and buffers let go, the program kept (a rebuild after a GPU error: the next prepareGpu makes the distance texture whole again)
+  const reset = () => { kill(); try { gp?.buf?.destroy(); gp?.ubuf?.destroy(); } catch { /* gone */ } if (gp) { gp.buf = null; gp.ubuf = null; gp.bufBytes = 0; } };
+  const retryProg = () => { if (gp?.state === 'failed') gp = null; };
+  const killAllGpu = () => { killAll(); try { gp?.buf?.destroy(); gp?.ubuf?.destroy(); } catch { /* gone */ } gp = null; };
+  return { layouts, prepare, prepareGpu, writeRangeGpu, gpuProg, reset, retryProg, group, writeRange, destroy: killAllGpu, get state() { return st; } };
 }
