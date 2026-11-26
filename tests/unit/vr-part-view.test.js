@@ -1,6 +1,6 @@
 // (first prototype): a region / child segment taken out of the body (docs/vr-part-view.js) and its wiring in docs/vr-view.js.
 // vr-view.js is not runnable here: the wiring is checked on its source, the rules run for real.
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { PART_GLSL, PART_CALL_SITES, hideIndexPlane, partOwnRegionLut, partOwnChildLut, PART_OWN, PART_EXTRA, partUniforms, partTargetOf, partSame, regionSlotMask, patchRegionLut, patchChildLut, patchRegionLutMany, patchChildLutMany, anyHiddenIn, partBoundsOf, partProxyBox, partRayRange, partKeepVoxelOf, PART_TEXT, PART_BTN_X, PART_RESTORE_W, PART_OUT_M, PART_ANIM_MS } from '../../docs/vr-part-view.js';
 import * as PV from '../../docs/vr-part-view.js';
@@ -89,7 +89,7 @@ describe('the hide index plane (an earlier change: the part goes by G)', () => {
     expect(hideIndexPlane(null)).toBe(null);
   });
   it('the cut-out reads the plane of the kept RG array (P.region.rg / P.child.rg: the index has no ids field any more)', () => {
-    expect(src).toContain('ids=hideIndexPlane(src?.rg)');
+    expect(src).toContain('ids=gx?hideIndexPlaneCached(src?.rg):hideIndexPlane(src?.rg)');
   });
 });
 
@@ -240,6 +240,23 @@ describe('the part\'s own box', () => {
     const edge = new Uint8Array(8 * 8 * 8); edge[0] = 9;
     const be = partBoundsOf(edge, [8, 8, 8], 9, [4, 4, 4], 2);
     expect(be.c[0] - be.h[0]).toBeCloseTo(-4, 12); // clamped at the box's face
+  });
+  it('perf2 (4-6): the one-pass table of every id\'s box gives partBoundsOf the very same answer as its own scan (every id, with pad, edge and single voxels, none), and is made once per plane', () => {
+    const d = [13, 9, 7], n = d[0] * d[1] * d[2], pl = new Uint8Array(n); let seed = 12345; const rnd = () => (seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 4294967296;
+    for (let i = 0; i < n; i++) { const r = rnd(); pl[i] = r < 0.6 ? 0 : 1 + Math.floor(rnd() * 5); }
+    pl[0] = 200; pl[n - 1] = 255; pl[5 + 13 * (4 + 9 * 3)] = 77;
+    const he = [3, 2, 1.5], tb = PV.partIdBoxesOf(pl, d); expect(PV.partIdBoxesOf(pl, d)).toBe(tb); // the same table again
+    for (const id of [1, 2, 3, 4, 5, 77, 200, 255, 99]) for (const pad of [0, 2]) expect(partBoundsOf(pl, d, id, he, pad, tb), id + ' pad ' + pad).toEqual(partBoundsOf(pl, d, id, he, pad));
+    expect(partBoundsOf(pl, d, 99, he, 2, tb)).toBeNull(); expect(tb.sig).toBe('13x9x7');
+    expect(partBoundsOf(pl, d, 3, he, 2, { ...tb, sig: 'other' })).toEqual(partBoundsOf(pl, d, 3, he, 2)); // a table of another grid is not used
+    expect(PV.partIdBoxesOf(null, d)).toBeNull();
+  });
+  it('perf2 (4-6): hideIndexPlaneCached is hideIndexPlane\'s bytes made once per index array', () => {
+    const rg = new Uint8Array(2 * 50); for (let i = 0; i < rg.length; i++) rg[i] = (i * 7) & 255;
+    const a = PV.hideIndexPlaneCached(rg); expect(Array.from(a)).toEqual(Array.from(hideIndexPlane(rg))); expect(PV.hideIndexPlaneCached(rg)).toBe(a);
+    expect(PV.hideIndexPlaneCached(rg.slice())).not.toBe(a); expect(PV.hideIndexPlaneCached(null)).toBeNull();
+    const vr = readFileSync(new URL('../../docs/vr-view.js', import.meta.url), 'utf8');
+    expect(vr).toContain('ids=gx?hideIndexPlaneCached(src?.rg):hideIndexPlane(src?.rg)'); expect(vr).toContain('partBoundsOf(ids,dims,tg.id,vrHalfExt,2,gx&&ids&&dims?partIdBoxesOf(ids,dims):null)'); // the WebGPU view only: the WebGL view loops as it did
   });
   it('an id nothing has: null (the target is gone); no data: null', () => {
     expect(partBoundsOf(ids, dims, 99, [1, 1, 1])).toBeNull();
@@ -746,6 +763,44 @@ describe('n734: the cut baked into the data the ordinary program reads', () => {
     try { const got = await runner.bake(job()); expect(Array.from(got.rgba)).toEqual(Array.from(want.rgba)); expect(got.slots).toBe(want.slots); } finally { runner.dispose(); }
     await expect(runner.bake(job())).rejects.toThrow(/closed/);
   }, 60000);
+  it('perf2 (4-4): partFieldSet gives every part its occupancy with its field (the very bytes partOccOf makes), the runner without a Worker keeps them, and the worker\'s source has the function and its constant', async () => {
+    const mkField = (c, rad) => { const lo = c.map(v => Math.max(0, Math.floor(v - rad - 5))), hi = c.map(v => Math.min(N - 1, Math.ceil(v + rad + 5))), size = [0, 1, 2].map(a => hi[a] - lo[a] + 1), codes = new Uint8Array(size[0] * size[1] * size[2]);
+      for (let z = 0, i = 0; z < size[2]; z++) for (let y = 0; y < size[1]; y++) for (let x = 0; x < size[0]; x++, i++) if (Math.hypot(lo[0] + x - c[0], lo[1] + y - c[1], lo[2] + z - c[2]) <= rad) codes[i] = 1;
+      return { data: partFieldOf(codes, size, PART_FIELD), lo, size, mask: S3, kind: 'region' }; };
+    const set = await partFieldSet([mkField([10, 10, 10], 4), mkField([30, 30, 20], 5)], async (lab, sz, nn, opt) => partGroupFieldsOf(lab, sz, nn, opt));
+    expect(set.parts).toHaveLength(2);
+    for (const pf of set.parts) { expect(pf.occ).toBeTruthy(); const w = PV.partOccOf(pf); expect(pf.occ.dims).toEqual(w.dims); expect(Array.from(pf.occ.data)).toEqual(Array.from(w.data)); expect(pf.occ.data.some(v => v === 255)).toBe(true); }
+    const runner = createPartSetRunner(); // no Worker here: the thread's own
+    try { const got = await runner.run([mkField([10, 10, 10], 4)]); expect(Array.from(got.parts[0].occ.data)).toEqual(Array.from(PV.partOccOf(got.parts[0]).data)); } finally { runner.dispose(); }
+    const ctx = { postMessage: () => {}, console }; vm.runInNewContext(partSetWorkerSource(), ctx);
+    expect(typeof ctx.partOccOf).toBe('function'); expect(vm.runInContext('PART_OCC_B', ctx)).toBe(PV.PART_OCC_B);
+    expect(Array.from(ctx.partOccOf(set.parts[0]).data)).toEqual(Array.from(set.parts[0].occ.data)); // the worker's own copy of the text makes the same bytes
+    expect(readFileSync(new URL('../../docs/vr-view.js', import.meta.url), 'utf8')).toContain('const occTexture=pf=>{const o=pf.occ||partOccOf(pf),t=');
+    expect(partSetWorkerSource()).toContain('for(const x of set.parts)if(x.occ)tr.add(x.occ.data.buffer)'); // the answer hands the bytes over (transfer), no copy
+    // the WebGL view's runner makes none (it computes the occupancy as before): wantOcc / cfg.partOcc false = no occ; the page passes partOcc: !!gx
+    const none = await partFieldSet([mkField([10, 10, 10], 4)], async (lab, sz, nn, opt) => partGroupFieldsOf(lab, sz, nn, opt), PART_FIELD, null, false); expect(none.parts[0].occ).toBeUndefined();
+    const r2 = createPartSetRunner(undefined, { partOcc: false }); try { const got = await r2.run([mkField([10, 10, 10], 4)]); expect(got.parts[0].occ).toBeUndefined(); } finally { r2.dispose(); }
+    expect(partSetWorkerSource()).toContain('m.occ!==false');
+    expect(readFileSync(new URL('../../docs/vr-view.js', import.meta.url), 'utf8')).toContain('const partRunnerOf=()=>createPartSetRunner(undefined,{partOcc:!!gx,give:!!gx});');
+  }, 60000);
+  it('perf2 (4-6): the worker gets the box\'s arrays and the hide arrays by transfer (no second copy), the body\'s field by copy; a view of a larger buffer is copied; the job\'s arrays are given away', async () => {
+    const posts = [], FakeWorker = class { postMessage(m, tr) { posts.push({ m, tr }); } terminate() {} };
+    vi.stubGlobal('Worker', FakeWorker); vi.stubGlobal('Blob', class {}); vi.stubGlobal('URL', { createObjectURL: () => 'blob:x', revokeObjectURL: () => {} });
+    try {
+      const runner = createPartSetRunner(undefined, { give: true }), rgba = new Uint8Array(64), c4 = new Uint8Array(16), body = new Uint8Array(32), ids = new Uint8Array(16), bits = new Uint8Array(256), view = new Uint8Array(new ArrayBuffer(100), 4, 16);
+      void runner.bake({ rgba, c4, box: {}, body: { data: body }, hide: { sources: [{ ids, bits }, { ids: view, bits: new Uint8Array(256) }] } }).catch(() => {});
+      expect(posts).toHaveLength(1); const { m, tr } = posts[0];
+      expect(m.job.rgba).toBe(rgba); expect(m.job.c4).toBe(c4); expect(m.job.hide.sources[0].ids).toBe(ids); expect(m.job.hide.sources[0].bits).toBe(bits); // the very arrays: nothing copied
+      expect(m.job.body.data).not.toBe(body); expect(m.job.hide.sources[1].ids).not.toBe(view); expect(m.job.hide.sources[1].ids.byteLength).toBe(16); // copied
+      for (const a of [rgba, c4, ids, bits]) expect(tr).toContain(a.buffer);
+      expect(tr).not.toContain(body.buffer); expect(tr).not.toContain(view.buffer); expect(new Set(tr).size).toBe(tr.length);
+      expect(tr).toContain(m.job.body.data.buffer); expect(tr).toContain(m.job.hide.sources[1].ids.buffer);
+      runner.dispose();
+      // without cfg.give (the WebGL view) every array is copied, as before
+      posts.length = 0; const r0 = createPartSetRunner(), rg2 = new Uint8Array(64); void r0.bake({ rgba: rg2, c4: null, box: {}, body: { data: new Uint8Array(8) }, hide: null }).catch(() => {});
+      expect(posts[0].m.job.rgba).not.toBe(rg2); expect(posts[0].tr).not.toContain(rg2.buffer); expect(posts[0].m.job.rgba.byteLength).toBe(64); r0.dispose();
+    } finally { vi.unstubAllGlobals(); }
+  });
   it('the GPU tables of the baked body: every target\'s entry is empty (no colour, no hidden bits, no cut bit), the others and the source table stay; the any-hidden flags come from the copy', () => {
     const a = new Float32Array(256 * 4); a[1 * 4 + 3] = PV.PART_CUT_REGION_BIT | (3 << 8); a[2 * 4 + 3] = 3; a[3 * 4 + 3] = (1 << 8); const keep = a.slice(), out = new Float32Array(a.length);
     expect(bakeRegionLut(a, out, [0])).toBe(1); expect(out[1 * 4 + 3]).toBe(0); expect(out[2 * 4 + 3]).toBe(3); expect(out[3 * 4 + 3]).toBe(1 << 8); expect(Array.from(a)).toEqual(Array.from(keep)); // the CPU table (the laser's rule) is not touched

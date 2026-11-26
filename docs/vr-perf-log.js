@@ -2,17 +2,20 @@
 // Pure (no DOM, no three.js): vr-view.js feeds it (frame / add / row) and shows the text on the page after the session. Nothing here changes what is drawn.
 // A row: fps, how many frame intervals were 1 / 2 / 3+ refresh periods, the GPU ms of the volume pass and of the main render (WebGL: EXT_disjoint_timer_query; WebGPU: timestamp-query / three's timestamps),
 // the JS ms of the app's frame, the CPU ms of renderer.render(), (WebGPU only) the frame's GPU timeline and CPU timeline: span / gap / oth / cpu / swd, and wake / pre / vlat / vdrop (see the note lines of the report), and the state the drawing choices were made in (scale f, periphery, data cap, auto level / step, step in voxels, covered px, size, menu, target Hz, foveation).
-import { directReport } from './vr-direct-log.js?v=20261126-build764';
+import { directReport } from './vr-direct-log.js?v=20261126-build766';
 export const PERF_KEY = 'vrl-vr-perf'; // + '-webgl' / '-webgpu': one mirror per kind (a WebGPU session does not overwrite the WebGL one)
 export const PERF_MIRROR_ROWS = 120; // the last rows the localStorage mirror keeps (the whole log stays in memory and in the page's text)
 export const PERF_MAX_ROWS = 600; // 10 minutes of rows
 export const PERF_MIRROR_STALLS = 30; // the last stall lines the localStorage mirror keeps
 export const PERF_MAX_STALLS = 60;
+export const PERF_CUT_NEAR_MS = 2000; // a stall line within this many ms of a cut-out event (before or after) is kept outside the PERF_MAX_STALLS limit (up to PERF_MAX_STALLS_KEPT of them)
+export const PERF_MAX_STALLS_KEPT = 240;
+export const PERF_MAX_CUTEV = 400; // the cut-out timeline's lines kept (the newest)
 export const PERF_MAX_SLOWCB = 60; // the slow-callback lines kept (the newest)
 export const SLOWCB_MS = 20; // a frame callback of at least this many CPU ms gets a line with its stages
 const STAGES = ['pa', 'bk', 'bs', 'rn', 'js']; // the CPU ms of the stages, summed since the previous frame callback started: pa = partApply (the part fields, their textures and uploads, all its steps), bk = partBakeFrame (the baked cut: guard / build / switch), bs = the baking steps inside bk, rn = the render, js = the app's JS before the render // the stall lines kept (the newest; older ones are counted in stallsDropped)
 const COUNTS = ['mk', 'tg', 'slotc', 'perc']; // per-second counts of what the WebGPU renderer made / changed: mk = targets + tile textures + bind groups made, tg = targets made, slotc = slot size changes, perc = periphery pass on / off switches
-const MEANS = ['vol', 'main', 'js', 'render', 'cpu', 'swd', 'wake', 'pre', 'vlat', 'vdrop', 'late', 'lpx', 'nv', 'rp', 'bk']; // the per-frame ms, averaged over the second (lpx: px; nv: volumes drawn per frame (1 = the body alone); rp: render passes of the volume renderer per frame; bk: share of the frames the body was drawn from the baked cut)
+const MEANS = ['vol', 'main', 'js', 'render', 'cpu', 'swd', 'wake', 'pre', 'vlat', 'vdrop', 'late', 'lpx', 'nv', 'rp', 'bk', 'cvb', 'cvp', 'rbs']; // the per-frame ms, averaged over the second (cvb / cvp: the covered px of the body / of the parts taken out; rbs: share of the frames the combined texture was being rebuilt) (lpx: px; nv: volumes drawn per frame (1 = the body alone); rp: render passes of the volume renderer per frame; bk: share of the frames the body was drawn from the baked cut)
 const MEDIANS = ['span', 'gap']; // the per-frame ms, the median of the second (WebGPU: the frame's GPU span and the GPU idle before it)
 const median = a => { const v = a.filter(x => Number.isFinite(x)).sort((p, q) => p - q); if (!v.length) return null; const m = v.length >> 1; return v.length & 1 ? v[m] : (v[m - 1] + v[m]) / 2; };
 export const perfMedian = median;
@@ -29,7 +32,8 @@ export function createPerfLog({ kind = 'webgl', mode = 'vr', now = () => perform
   const ipBins = new Uint16Array(IP_BINS); let ipN = 0; // the second's frame intervals as a frequency table (no array made per frame)
   let gfixOn = 0, fmin = Infinity, fsum = 0, fn = 0; // the second's: a guard held the scale / periphery (0 / 1), the lowest and the sum of the scale f over the frames
   const stg = { pa: 0, bk: 0, bs: 0, rn: 0, js: 0 }, slowCbs = []; let slowCbsDropped = 0; // stg: the stages' CPU ms since the previous callback started; slowCbs: one entry per callback of SLOWCB_MS or more
-  const stalls = []; // one entry per frame interval of two or more periods (up to PERF_MAX_STALLS)
+  const stalls = []; // one entry per frame interval of two or more periods (up to PERF_MAX_STALLS; the lines near a cut-out event are kept beside them: PERF_MAX_STALLS_KEPT)
+  const cuts = [], tallies = {}; let cutsDropped = 0, cutNearUntil = -Infinity; // cuts: the cut-out timeline (cut()); tallies: named counters (tally()); cutNearUntil: ms (page clock) until which a new stall line counts as near a cut-out
   let saveOff = false, saves = 0; // saveOff: the periodic localStorage mirror is paused (an isolation run of the comparison bench, docs/vr-bench.js; a forced save still writes); saves = how many times the mirror was written
   const sections = [], ext = {}; // sections: text blocks the report shows after its header (each a string array, or a function returning one); ext: extra JSON the mirror keeps (the bench results)
   const acc = Object.fromEntries(MEANS.map(k => [k, { s: 0, n: 0 }])), smp = Object.fromEntries(MEDIANS.map(k => [k, []]));
@@ -45,8 +49,13 @@ export function createPerfLog({ kind = 'webgl', mode = 'vr', now = () => perform
       const g = ts - lastTs, b = gapBucket(g, budgetMs); gaps[b]++; if (g > gmax) gmax = g;
       ipBins[Math.min(IP_BINS - 1, (g / IP_BIN_MS) | 0)]++; ipN++;
       if (b >= 1) { // a frame interval of two or more periods: one line (the flags are what happened in the callback of the frame before: since the previous frame() call)
-        if (stalls.length >= PERF_MAX_STALLS) { stalls.shift(); stallsDropped++; }
-        stalls.push({ t: r1((ts - t0) / 1000), gap: r1(g), span: lastSpan, vol: lastVol, hold, slot: since.slotc > 0 ? 1 : 0, tg: since.tg > 0 ? 1 : 0, per: since.perc > 0 ? 1 : 0, cov: Number.isFinite(cov) ? Math.round(cov) : null, pa: r1(stg.pa), bk: r1(stg.bk), bs: r1(stg.bs), rn: r1(stg.rn), js: r1(stg.js) }); // pa / bk / bs / rn / js: the stages' CPU ms of the interval before (see STAGES)
+        const near = ts <= cutNearUntil ? 1 : 0; // within PERF_CUT_NEAR_MS after a cut-out event (the lines before one are marked by cut())
+        if (stalls.length >= PERF_MAX_STALLS) { // the newest PERF_MAX_STALLS lines that are not near a cut-out are kept, and the near ones beside them (never more than PERF_MAX_STALLS + PERF_MAX_STALLS_KEPT in all: then the oldest goes)
+          let plain = 0; for (const x of stalls) if (!x.cut) plain++;
+          const i = stalls.length >= PERF_MAX_STALLS + PERF_MAX_STALLS_KEPT ? 0 : !near && plain >= PERF_MAX_STALLS ? stalls.findIndex(x => !x.cut) : -1; // (a line near a cut-out is kept: it takes no plain line's place)
+          if (i >= 0) { stalls.splice(i, 1); stallsDropped++; }
+        }
+        stalls.push({ t: r1((ts - t0) / 1000), ...(near ? { cut: 1 } : {}), gap: r1(g), span: lastSpan, vol: lastVol, hold, slot: since.slotc > 0 ? 1 : 0, tg: since.tg > 0 ? 1 : 0, per: since.perc > 0 ? 1 : 0, cov: Number.isFinite(cov) ? Math.round(cov) : null, pa: r1(stg.pa), bk: r1(stg.bk), bs: r1(stg.bs), rn: r1(stg.rn), js: r1(stg.js) }); // pa / bk / bs / rn / js: the stages' CPU ms of the interval before (see STAGES)
       }
     }
     for (const k of STAGES) stg[k] = 0;
@@ -62,6 +71,16 @@ export function createPerfLog({ kind = 'webgl', mode = 'vr', now = () => perform
   };
   // a count of the WebGPU renderer (see COUNTS)
   const count = (k, n = 1) => { if (k in cnt && n > 0) { cnt[k] += n; since[k] += n; } };
+  // perf2 (measurement only): the cut-out timeline. k = what happened ('op' the operation, 'own' the part's own field was made, 'calc' the set of fields was made on the worker, 'upload' their textures were up, 'attach' the part was shown, 'bake+' a baked cut was started, 'bake-' it was dropped (d.why = the reason),
+  // 'bake*' the body went back to the baked cut, 'put' a part was put back), n = the number of the cut-out, d = free fields. Every event also protects the stall lines within PERF_CUT_NEAR_MS before and after it from the PERF_MAX_STALLS limit.
+  const cut = (k, n = 0, d = null, at = now()) => {
+    if (cuts.length >= PERF_MAX_CUTEV) { cuts.shift(); cutsDropped++; }
+    cuts.push({ t: r2((at - t0) / 1000), n, k, ...(d ? { d } : {}) });
+    cutNearUntil = at + PERF_CUT_NEAR_MS;
+    for (let i = stalls.length - 1; i >= 0; i--) { const x = stalls[i]; if (x.t * 1000 + t0 < at - PERF_CUT_NEAR_MS) break; x.cut = 1; } // (the stalls are in time order; a line's t is in 0.1 s)
+  };
+  // a named counter: tally('bake', 'drop:rbBusy') -> the report's counter lines
+  const tally = (group, key, n = 1) => { const g = tallies[group] || (tallies[group] = {}); g[key] = (g[key] | 0) + n; };
   // the volume's movement since the previous frame (cm, deg), summed over the second
   const move = (cm, deg) => { if (Number.isFinite(cm) && cm >= 0) mvp += cm; if (Number.isFinite(deg) && deg >= 0) mvr += deg; };
   // a ms value (n = how many frames it stands for: a sum taken over n frames)
@@ -81,7 +100,7 @@ export function createPerfLog({ kind = 'webgl', mode = 'vr', now = () => perform
   const save = (at = now(), force = false) => {
     if (!force && (saveOff || at - savedAt < saveEveryMs)) return;
     savedAt = at; saves++;
-    try { store?.setItem(key, JSON.stringify({ kind, mode, dropped, meta, rows: rows.slice(-PERF_MIRROR_ROWS), stalls: stalls.slice(-PERF_MIRROR_STALLS), slowCbs: slowCbs.slice(-PERF_MIRROR_STALLS), ...(Object.keys(ext).length ? { ext } : {}) })); } catch { /* private window / full */ }
+    try { store?.setItem(key, JSON.stringify({ kind, mode, dropped, meta, rows: rows.slice(-PERF_MIRROR_ROWS), stalls: stalls.filter(x => x.cut).slice(-PERF_MIRROR_STALLS).concat(stalls.filter(x => !x.cut).slice(-PERF_MIRROR_STALLS)), cuts: cuts.slice(-PERF_MIRROR_STALLS * 2), tallies, slowCbs: slowCbs.slice(-PERF_MIRROR_STALLS), ...(Object.keys(ext).length ? { ext } : {}) })); } catch { /* private window / full */ }
   };
   // the end of a second: the row = the accumulators + the state given; they start again. snap = { f, per, cap, auto, lv, si, step, cov, size, menu, hz, fov, ... }
   const row = (snap = {}, at = now()) => {
@@ -108,10 +127,10 @@ export function createPerfLog({ kind = 'webgl', mode = 'vr', now = () => perform
     const recLeft = rows.filter(r => !r.menu && r.rec && r.fps > 0).length;
     return { rows: rows.length, closedRows: closed.length, recLeft, dropped, fps: pick('fps'), vol: pick('vol'), main: pick('main'), render: pick('render'), js: pick('js'), span: pick('span'), gap: pick('gap'), oth: pick('oth'), cpu: pick('cpu'), swd: pick('swd'), wake: pick('wake'), pre: pick('pre'), vlat: pick('vlat'), vdrop: pick('vdrop'), f: pick('f'), step: pick('step'), g1: closed.reduce((s, r) => s + r.g1, 0), g2: closed.reduce((s, r) => s + r.g2, 0), g3: closed.reduce((s, r) => s + r.g3, 0) };
   };
-  return { kind, mode, rows, stalls, slowCbs, meta, sections, ext, setSaveOff(v) { saveOff = !!v; }, get saves() { return saves; }, get dropped() { return dropped; }, get stallsDropped() { return stallsDropped; }, get slowCbsDropped() { return slowCbsDropped; }, stage, endCb, frame, fval, count, move, add, sample, row, get lastDrops() { const r = rows[rows.length - 1]; return r ? r.g2 + r.g3 : null; }, save, flush, summary };
+  return { kind, mode, rows, stalls, slowCbs, cuts, tallies, meta, sections, ext, setSaveOff(v) { saveOff = !!v; }, get saves() { return saves; }, get dropped() { return dropped; }, get stallsDropped() { return stallsDropped; }, get slowCbsDropped() { return slowCbsDropped; }, get cutsDropped() { return cutsDropped; }, cut, tally, stage, endCb, frame, fval, count, move, add, sample, row, get lastDrops() { const r = rows[rows.length - 1]; return r ? r.g2 + r.g3 : null; }, save, flush, summary };
 }
-const COLS = [['t', 4], ['fps', 5], ['g1', 4], ['g2', 3], ['g3', 3], ['vol', 6], ['main', 6], ['render', 6], ['js', 6], ['span', 6], ['gap', 6], ['oth', 6], ['cpu', 6], ['swd', 6], ['wake', 6], ['pre', 6], ['vlat', 6], ['vdrop', 6], ['f', 5], ['per', 5], ['cap', 5], ['auto', 4], ['lv', 5], ['si', 3], ['step', 5], ['cov', 8], ['w', 5], ['h', 5], ['size', 6], ['menu', 4], ['hz', 4], ['fov', 4], ['rec', 3], ['hold', 4], ['mv', 6], ['mvr', 6], ['imax', 6], ['mk', 3], ['slotc', 5], ['perc', 4], ['hset', 5], ['hk', 5], ['gfix', 4], ['mlow', 4], ['tab', 3], ['fmin', 6], ['favg', 6], ['late', 5], ['ip95', 6], ['lpx', 8], ['nv', 4], ['rp', 4], ['bk', 4]];
-const STALL_COLS = [['t', 6], ['gap', 6], ['span', 6], ['vol', 6], ['hold', 4], ['slot', 4], ['tg', 3], ['per', 3], ['cov', 8], ['pa', 6], ['bk', 6], ['bs', 6], ['rn', 6], ['js', 6]];
+const COLS = [['t', 4], ['fps', 5], ['g1', 4], ['g2', 3], ['g3', 3], ['vol', 6], ['main', 6], ['render', 6], ['js', 6], ['span', 6], ['gap', 6], ['oth', 6], ['cpu', 6], ['swd', 6], ['wake', 6], ['pre', 6], ['vlat', 6], ['vdrop', 6], ['f', 5], ['per', 5], ['cap', 5], ['auto', 4], ['lv', 5], ['si', 3], ['step', 5], ['cov', 8], ['w', 5], ['h', 5], ['size', 6], ['menu', 4], ['hz', 4], ['fov', 4], ['rec', 3], ['hold', 4], ['mv', 6], ['mvr', 6], ['imax', 6], ['mk', 3], ['slotc', 5], ['perc', 4], ['hset', 5], ['hk', 5], ['gfix', 4], ['mlow', 4], ['tab', 3], ['fmin', 6], ['favg', 6], ['late', 5], ['ip95', 6], ['lpx', 8], ['nv', 4], ['rp', 4], ['bk', 4], ['cvb', 8], ['cvp', 8], ['rbs', 4]];
+const STALL_COLS = [['t', 6], ['gap', 6], ['span', 6], ['vol', 6], ['hold', 4], ['slot', 4], ['tg', 3], ['per', 3], ['cut', 3], ['cov', 8], ['pa', 6], ['bk', 6], ['bs', 6], ['rn', 6], ['js', 6]];
 const SLOWCB_COLS = [['t', 6], ['cb', 6], ['js', 6], ['pa', 6], ['bk', 6], ['bs', 6], ['rn', 6], ['mk', 3], ['tg', 3]];
 const cell = (v, w) => String(v === null || v === undefined ? '-' : (typeof v === 'boolean' ? +v : v)).padStart(w);
 // the text of the page panel / the copy button / the saved file: the header, the summary, then the rows
@@ -151,8 +170,21 @@ export function perfReport(p, { build = '', ua = '', hz = null } = {}) {
   L.push('-- slow callbacks: frame callbacks of ' + SLOWCB_MS + ' ms or more of CPU, ' + sc.length + (p.slowCbsDropped ? ' newest (' + p.slowCbsDropped + ' older dropped)' : '') + ' (t s; cb = the callback\'s CPU ms; js = the app JS before the render; pa = partApply (part fields / textures / uploads, also its steps between callbacks); bk = partBakeFrame; bs = the baking steps inside bk; rn = the render; stage ms are summed since the previous callback started; mk / tg = objects / targets made in that time)');
   L.push(SLOWCB_COLS.map(([k, w]) => k.padStart(w)).join(' '));
   for (const r of sc) L.push(SLOWCB_COLS.map(([k, w]) => cell(r[k], w)).join(' '));
+  for (const t of cutReport(p)) L.push(t);
   if (p.direct) for (const t of directReport(p)) L.push(t); // the WebGPU view's direct draw trial (vr-direct-log.js; nothing unless it was asked for)
   return L.join('\n');
+}
+// the cut-out timeline and the counters (perf2, measurement only): one line per event, then the named counters
+const dtext = d => (d ? Object.entries(d).map(([k, v]) => k + '=' + (typeof v === 'number' ? (Number.isInteger(v) ? v : r2(v)) : String(v))).join(' ') : '');
+export function cutReport(p) {
+  const L = [], cu = p.cuts || [], tl = p.tallies || {};
+  L.push('-- cut-out timeline: ' + cu.length + ' event(s)' + (p.cutsDropped ? ' newest (' + p.cutsDropped + ' older dropped)' : '') + ' (t s since the start; n = the number of the cut-out in this session; op = the operation started, own = the part\'s own field made, calc = the set of fields made on the worker (in the WebGPU view with the parts\' occupancy), upload = the textures are up, attach = the part is shown, bake+ = a baked cut started, bake- = dropped (why = notOk / src / rbBusy / mask / bodyGen / gen / applying / worker / grid / apply), bake* = the body went back to the baked cut (ms since its start), put = a part put back; bake-wait counters = the frames a bake could not start, by reason, hideRebuild = the hidden-state rebuild of the combined texture was asked for first (WebGPU view))');
+  for (const e of cu) L.push('  ' + String(e.t).padStart(8) + ' n' + String(e.n).padEnd(3) + ' ' + e.k.padEnd(7) + ' ' + dtext(e.d));
+  const g = Object.entries(tl);
+  L.push('-- counters: ' + (g.length ? '' : 'none'));
+  for (const [name, o] of g) L.push('  ' + name + ': ' + Object.entries(o).map(([k, n]) => k + ' ' + n).join(' · '));
+  L.push('note: stall lines within ' + PERF_CUT_NEAR_MS / 1000 + ' s of a cut-out event (cut = 1) are kept beside the newest ' + PERF_MAX_STALLS + ' (up to ' + PERF_MAX_STALLS_KEPT + ' of them). cvb / cvp = covered px of the body / of the parts taken out (mean of the second), rbs = share of the frames the combined texture was being rebuilt (0-1); nv / bk are filled by the WebGL view too (nv = the body + the partner + the parts shown; bk = share of the frames the body was drawn from the baked cut; rp stays WebGPU only).');
+  return L;
 }
 // the file name of the saved record: WebGPU keeps the diagnostics' name (its text starts with the stages), WebGL gets vrl-vr-perf-webgl-<build>-<date>-<time>.txt (both carry the log)
 export function perfFileName(kind, build, now = new Date()) {

@@ -74,9 +74,56 @@ describe('partBakeStep: the baked texture holds the whole original plus the bake
     s.b.patch = s.patch; partBakeStep(s.b, s.t, 1 << 30, ops);
     expect(s.b.ready).toBe(true);
   });
+  it('perf2 (4-5): with ops.gpuCopy (the WebGPU view) the whole original is one GPU copy (the colour texture and the fourth channel\'s together), no wrapper is made, no slab is sent; the box then follows from the worker\'s bytes; the result is the same bytes', () => {
+    for (const four of [false, true]) {
+      const s = scene(four), { ops, log } = fakeOps(), calls = [];
+      ops.gpuCopy = (pairs, done) => { calls.push(pairs.map(([a, b]) => [a, b])); for (const [a, b] of pairs) b.bytes.set(a.image.data); done(true); return true; }; // the GPU's copy of the original's bytes (the device's answer: valid)
+      partBakeStep(s.b, s.t, 1, ops);
+      expect(calls).toHaveLength(1); expect(calls[0].map(([a, b]) => [a, b])).toEqual(four ? [[s.t.combo, s.b.tex], [s.t.cls4, s.b.cls4Tex]] : [[s.t.combo, s.b.tex]]);
+      expect(s.b.z).toBe(s.t.dims[2]); expect(s.b.ready).toBe(false); expect(log.wraps).toHaveLength(0); expect(log.copies).toHaveLength(0);
+      for (let i = 0; i < 5; i++) partBakeStep(s.b, s.t, 1, ops); expect(s.b.ready).toBe(false); // the box waits for the worker
+      s.b.patch = s.patch; let n = 0; while (!s.b.ready && n++ < 100) partBakeStep(s.b, s.t, 1 << 30, ops);
+      expect(calls).toHaveLength(1); // not copied again
+      expect(Array.from(s.b.tex.bytes)).toEqual(Array.from(expected(s.t, s.patch, s.box, 4, s.t.combo.image.data, s.patch.rgba)));
+      if (four) expect(Array.from(s.b.cls4Tex.bytes)).toEqual(Array.from(expected(s.t, s.patch, s.box, 1, s.t.cls4.image.data, s.patch.c4)));
+      expect(log.copies.every(c => c.s.wrap)).toBe(true); // only the box's patch went from memory
+    }
+  });
+  it('perf2 (4-5): a GPU copy that cannot be made (false) falls back to the copy from memory for the whole bake, once', () => {
+    const s = scene(true), { ops, log } = fakeOps(); let asked = 0; ops.gpuCopy = () => { asked++; return false; };
+    let steps = 0; while (!s.b.ready && steps < 1000) { if (steps === 3) s.b.patch = s.patch; partBakeStep(s.b, s.t, 1 << 30, ops); steps++; }
+    expect(asked).toBe(1); expect(s.b.ready).toBe(true); expect(Array.from(s.b.tex.bytes)).toEqual(Array.from(expected(s.t, s.patch, s.box, 4, s.t.combo.image.data, s.patch.rgba)));
+    expect(log.copies.every(c => c.s.wrap)).toBe(true);
+  });
+  it('perf2: the bake is not ready until the device has said the GPU copy was valid (b.gpuOk); no answer yet = it waits, with the box already in', () => {
+    const s = scene(true), { ops } = fakeOps(); let answer = null, calls = 0;
+    ops.gpuCopy = (pairs, done) => { calls++; for (const [a, b] of pairs) b.bytes.set(a.image.data); answer = done; return true; };
+    partBakeStep(s.b, s.t, 1, ops); s.b.patch = s.patch; for (let i = 0; i < 20; i++) partBakeStep(s.b, s.t, 1 << 30, ops);
+    expect(s.b.ready).toBe(false); expect(s.b.gpuOk).toBeNull(); expect(s.b.patch).not.toBeNull();
+    answer(true); expect(s.b.gpuOk).toBe(true); expect(partBakeStep(s.b, s.t, 1 << 30, ops)).toBe(true); expect(s.b.ready).toBe(true); expect(s.b.patch).toBeNull(); expect(calls).toBe(1);
+    expect(Array.from(s.b.tex.bytes)).toEqual(Array.from(expected(s.t, s.patch, s.box, 4, s.t.combo.image.data, s.patch.rgba)));
+  });
+  it('perf2: a GPU copy the device reports as failed (b.gpuOk false) is made again from memory (z and the box start over, noGpu), and the result is the same bytes', () => {
+    for (const early of [false, true]) {
+      const s = scene(true), { ops, log } = fakeOps(); let answer = null, calls = 0;
+      ops.gpuCopy = (pairs, done) => { calls++; answer = done; return true; }; // nothing arrives on the GPU's side
+      partBakeStep(s.b, s.t, 1, ops); s.b.patch = s.patch;
+      if (early) { for (let i = 0; i < 20; i++) partBakeStep(s.b, s.t, 1 << 30, ops); expect(s.b.ready).toBe(false); } // the box was copied before the answer
+      answer(false); let n = 0; while (!s.b.ready && n++ < 1000) partBakeStep(s.b, s.t, 1 << 30, ops);
+      expect(calls).toBe(1); expect(s.b.noGpu).toBe(true); expect(s.b.ready).toBe(true); expect(log.wraps.length).toBeGreaterThan(0);
+      expect(Array.from(s.b.tex.bytes)).toEqual(Array.from(expected(s.t, s.patch, s.box, 4, s.t.combo.image.data, s.patch.rgba)));
+      expect(Array.from(s.b.cls4Tex.bytes)).toEqual(Array.from(expected(s.t, s.patch, s.box, 1, s.t.cls4.image.data, s.patch.c4)));
+    }
+  });
+  it('vr-view.js: the WebGPU view gives the step the GPU copy (with the device\'s answer, a failure counted as bake gpuCopyErr), the WebGL view none; vr-wgpu.js copyGpu reads a validation error scope around the copy', () => {
+    expect(src).toContain("gpuCopy:gx?(pairs,done)=>gx.vol.volume.copyGpu(pairs,ok=>{if(!ok)perfLog?.tally('bake','gpuCopyErr');done(ok)}):null");
+    const w = readFileSync(new URL('../../docs/vr-wgpu.js', import.meta.url), 'utf8');
+    expect(w).toContain("device.pushErrorScope('validation')"); expect(w).toContain('device.popErrorScope().then(err => done(!err), () => done(false))');
+    expect(w.indexOf("device.pushErrorScope('validation')")).toBeLessThan(w.indexOf('enc.copyTextureToTexture({ texture: a.gpu }')); expect(w.indexOf('device.queue.submit([enc.finish()]);', w.indexOf('const copyGpu'))).toBeLessThan(w.indexOf('device.popErrorScope().then(err => done(!err)'));
+  });
   it('vr-view.js: the step runs through partBakeStep, and a dropped bake releases the wrappers of the original too', () => {
     expect(src).toContain('partBakeStep(b,t,uploadQueue.bytesPerTickNow,bakeOps)');
-    const drop = src.slice(src.indexOf('const bakeDrop=()=>{'), src.indexOf('partBakeDrop=bakeDrop;'));
+    const drop = src.slice(src.indexOf('const bakeDrop=why=>{'), src.indexOf('partBakeDrop=bakeDrop;'));
     for (const k of ['b.origTex', 'b.orig4Tex', 'b.srcTex', 'b.src4Tex']) expect(drop).toContain(k);
   });
 });
@@ -106,7 +153,7 @@ describe('the light of a baked cut', () => {
     expect(g).toContain('vec3 vx=2.0*halfExt*d;return vec3(g.x/max(vx.x,1e-6),-g.y/max(vx.y,1e-6),g.z/max(vx.z,1e-6));');
   });
   it('vr-view.js: bakeSet sets the light with the textures (from the body\'s field) and clears it when the bake goes; volumeUniforms has the keys (0 / null), the partner keeps its own', () => {
-    const set = src.slice(src.indexOf('const bakeSet=on=>{'), src.indexOf('const bakeDrop=()=>{'));
+    const set = src.slice(src.indexOf('const bakeSet=on=>{'), src.indexOf('const bakeDrop=why=>{'));
     expect(set).toContain('bakeLight(on?b:null);');
     expect(set).toContain('const bakeLight=b=>{const u=material.uniforms,f=b&&partRes?.body?.u;u.bakeCut.value=f?b.cut|0:0;u.bakeField.value=f?f.partField.value:null;');
     expect(src).toContain('bakeCut:{value:0},bakeField:{value:null},');

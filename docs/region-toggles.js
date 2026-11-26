@@ -3,7 +3,7 @@
 //   表示 = the shape: off = the whole shape is hidden, so what lies behind it shows (region.hidden, child.visible:false).
 // Wording is FIXED: the label never changes with the state. On / off is the pressed look + aria-pressed (pressed = colour on / shape shown, the usual state). No mode: both are plain buttons, they do not depend on each other.
 // Pure spec (unit-tested, tests/unit/region-toggles.test.js) + the small DOM builder the three views share.
-import { tr } from './i18n.js?v=20261126-build764';
+import { tr } from './i18n.js?v=20261126-build766';
 export const SHOW_TOGGLE_KEYS = Object.freeze({ color: 'regionColorToggle', shape: 'regionShapeToggle' });
 // canToggle false = the parent tissue is off: the region / child is hidden with it, so both rest (greyed, the title says why: regionSegmentHidden)
 export function showToggleSpec({ colorOn, shapeOn, canToggle = true }) {

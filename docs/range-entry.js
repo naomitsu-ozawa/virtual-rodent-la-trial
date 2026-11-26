@@ -10,7 +10,7 @@
 // the slider's current span is clamped, except where a bounds hook widens it (the CT sliders: the data's full range).
 // Values shown 1-based ("257 / 512", slice positions) are typed 1-based; data-range-entry-invert marks a slider that runs
 // opposite to the value it shows.
-import { clampRangeValue } from './utils.js?v=20261126-build764';
+import { clampRangeValue } from './utils.js?v=20261126-build766';
 
 export const WHEEL_NOTCH_PX=50,WHEEL_SMOOTH_PX=42;
 // state {acc}: returns the signed number of steps for one wheel event (deltaMode 0 px, 1 line, 2 page)

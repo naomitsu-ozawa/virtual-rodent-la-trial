@@ -4,15 +4,15 @@
 //   coarse : the display program with the 4 x 4 tiles and the far end tB (coarseVolumeWgsl), the pre-pass over the coarse grid (256 KB).
 //   both   : the two substitutions in one program (marchWgsl of the coarse program; group 1 = the march layout). Not measured before, and not the product of the two ratios.
 // A frame uses a new way only when everything it needs is there and agrees with this frame (plan() below, the rules of 1-5 of the plan); any other frame is drawn the way it always was (the caller keeps its own path: plan() says use: false and why).
-import { volumeWgsl } from './vr-wgsl-core.js?v=20261126-build764';
-import { marchWgsl, createMarchHost } from './vr-wgpu-coarse-march.js?v=20261126-build764';
-import { coarseVolumeWgsl, createCoarseDisplay, walkLimitOk } from './vr-wgpu-coarse-proxy.js?v=20261126-build764';
-import { skipText, createMarkHost } from './vr-wgpu-marks.js?v=20261126-build764'; // S / OS / EvS: the skip marks and their programs
-import { featOf, featKey } from './vr-wgsl-feat.js?v=20261126-build764';
-import { createHuMarkHost } from './vr-wgpu-humarks.js?v=20261126-build764'; // the HU marks of the general loop's S for the classification-off diagnostic
-import { depthWgsl } from './vr-wgsl-depth.js?v=20261126-build764'; // the depth axis (frames that draw several volumes into one target)
-import { createCompileGate } from './vr-wgpu-gate.js?v=20261126-build764'; // the programs go to the GPU through the gate (a task of their own each, a few at a time), never all in one task
-import { generalWgsl } from './vr-wgsl-general.js?v=20261126-build764'; // the general loop (bricks, no jumps) of the frames that do not use the combined texture // the feature axis of the texts (the results' colours, the child segments, hiding)
+import { volumeWgsl } from './vr-wgsl-core.js?v=20261126-build766';
+import { marchWgsl, createMarchHost } from './vr-wgpu-coarse-march.js?v=20261126-build766';
+import { coarseVolumeWgsl, createCoarseDisplay, walkLimitOk } from './vr-wgpu-coarse-proxy.js?v=20261126-build766';
+import { skipText, createMarkHost } from './vr-wgpu-marks.js?v=20261126-build766'; // S / OS / EvS: the skip marks and their programs
+import { featOf, featKey } from './vr-wgsl-feat.js?v=20261126-build766';
+import { createHuMarkHost } from './vr-wgpu-humarks.js?v=20261126-build766'; // the HU marks of the general loop's S for the classification-off diagnostic
+import { depthWgsl } from './vr-wgsl-depth.js?v=20261126-build766'; // the depth axis (frames that draw several volumes into one target)
+import { createCompileGate } from './vr-wgpu-gate.js?v=20261126-build766'; // the programs go to the GPU through the gate (a task of their own each, a few at a time), never all in one task
+import { generalWgsl } from './vr-wgsl-general.js?v=20261126-build766'; // the general loop (bricks, no jumps) of the frames that do not use the combined texture // the feature axis of the texts (the results' colours, the child segments, hiding)
 
 export const NEW_PATH_MODES = ['dist', 'coarse', 'both'];
 // the display program text of a mode (f16 = half precision march as the display's; cls4 = the fourth segment's own texture)
@@ -94,13 +94,13 @@ export function createNewPath(ctx) {
   const pipeOf = (mode, cls4, feat = null, z = false) => {
     const key = pipeKey(mode, cls4, feat, z), have = pipes.get(key);
     if (have) return have;
-    const p = { state: 'pending', pipe: null, msg: '' };
+    const p = { state: 'pending', pipe: null, msg: '', t0: performance.now(), t1: null, draws: 0 }; // t0 / t1: the compile's start and end (ms on the page clock), draws: the passes of the display planned with it (perf2, measurement only)
     pipes.set(key, p);
     try {
       const module = device.createShaderModule({ code: z ? depthWgsl(newPathText({ f16: !!ctx.f16, cls4, mode, feat })) : newPathText({ f16: !!ctx.f16, cls4, mode, feat }) });
       try { ctx.onShader?.(module, { f16: !!ctx.f16, cls4, events: false, coarse: ctx.tag + ' ' + mode + (featOf(feat) ? ' ' + featKey(feat) : '') + (z ? ' z' : '') }); } catch { /* diagnostics only */ }
       const lay = modeNeeds(mode).marks || modeNeeds(mode).hu ? mkOf().layouts().pipeLayout : modeNeeds(mode).dist ? hostOf().layouts().pipeLayout : null;
-      Promise.resolve(device.createRenderPipelineAsync(ctx.renderDesc(module, lay, z))).then(pipe => { p.pipe = pipe; p.state = 'ready'; }, e => { p.state = 'failed'; p.msg = String(e?.message ?? e).slice(0, 160); fail(mode + ' program: ' + p.msg); });
+      Promise.resolve(device.createRenderPipelineAsync(ctx.renderDesc(module, lay, z))).then(pipe => { p.pipe = pipe; p.state = 'ready'; p.t1 = performance.now(); }, e => { p.state = 'failed'; p.t1 = performance.now(); p.msg = String(e?.message ?? e).slice(0, 160); fail(mode + ' program: ' + p.msg); });
     } catch (e) { p.state = 'failed'; p.msg = String(e?.message ?? e).slice(0, 160); fail(mode + ' program: ' + p.msg); }
     return p;
   };
@@ -176,6 +176,7 @@ export function createNewPath(ctx) {
       pxTex = cd.tiles(enc, { slot: F.tileSlot || F.slot || 'low', grid: { alpha: S.mk.alphaTex, marks: S.mk.markTex }, bytes, nEyes: F.tiles.nEyes, tilesPerEye: F.tiles.tilesPerEye, tilesY: F.tiles.tilesY, texCols: F.tiles.texCols, texRows: F.tiles.texRows, dims: ci.dims, cls4: !!F.cls4, tsw: F.tswTiles || null });
       if (!pxTex) return no('prep');
     }
+    if (F.way) pipe.draws++; // the display's pass draws with it (a pass of the check or of the breakdown has no way)
     return { use: true, mode, pipeline: pipe.pipe, group1: g1, pxTex, noTiles: !!F.noTiles };
   };
   const plan = (enc, F) => { const r = tryMode(enc, F); return note(r, F.mode); };
@@ -270,6 +271,6 @@ export function createNewPath(ctx) {
     try { cd?.destroy(); } catch { /* gone */ }
     srcs.clear(); srcOf('*'); cd = null; pipes.clear();
   };
-  return { plan, planWay, ensure, ensureAll, queueAll, waitFor, gate, progress: () => gate.progress(), prime, reset, onTexGone, failedRequired, retryFailed, whenReady, pending, layoutOf, onWrite, destroy, count: (reason, mode) => note({ use: false, reason, mode }, mode), stats: () => ({ tag: inst.tag, used: inst.counts.used, notUsed: inst.counts.notUsed, reasons: { ...inst.counts.reasons }, byMode: { ...inst.counts.byMode }, byWay: { ...inst.counts.byWay }, failed: inst.failed, failLog: inst.failLog.slice() }),
+  return { plan, planWay, ensure, ensureAll, queueAll, waitFor, gate, progress: () => gate.progress(), prime, reset, onTexGone, failedRequired, retryFailed, whenReady, pending, layoutOf, onWrite, destroy, count: (reason, mode) => note({ use: false, reason, mode }, mode), stats: () => ({ tag: inst.tag, used: inst.counts.used, notUsed: inst.counts.notUsed, reasons: { ...inst.counts.reasons }, byMode: { ...inst.counts.byMode }, byWay: { ...inst.counts.byWay }, failed: inst.failed, failLog: inst.failLog.slice(), progs: [...pipes].map(([k, p]) => ({ k, state: p.state, t0: p.t0, t1: p.t1, draws: p.draws })), gateTrace: gate.trace ? gate.trace() : [] }),
     fail, get failed() { return inst.failed; }, get readyAt() { return inst.readyAt; }, get host() { return firstOf('host'); }, get cd() { return cd; }, get marks() { return firstOf('mk'); }, get huMarks() { return firstOf('hk'); }, get sources() { return srcs.size; }, get pipes() { return pipes; } };
 }

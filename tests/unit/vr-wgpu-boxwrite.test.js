@@ -30,3 +30,28 @@ describe('copySlab writes a box of the source array at a position of the texture
     r.dispose();
   }));
 });
+
+describe('perf2 (4-5): copyGpu copies a whole texture into another on the GPU', () => {
+  it('one copyTextureToTexture of the whole size per pair in one submit, nothing written from the CPU; the source is filled first, the destination only made; false (and nothing done) for a pair that differs in size or format; the entries have COPY_SRC', withGpu(async () => {
+    const rec = recordingDevice({}), copies = [], submits = [], writes = [], made = [];
+    const ce = rec.device.createCommandEncoder; rec.device.createCommandEncoder = () => { const e = ce(); e.copyTextureToTexture = (a, b, size) => copies.push({ a: a.texture, b: b.texture, size }); return e; };
+    rec.device.queue.submit = c => { submits.push(c); }; const wt = rec.device.queue.writeTexture; rec.device.queue.writeTexture = (...a) => { writes.push(a); return wt(...a); };
+    const ct = rec.device.createTexture; rec.device.createTexture = d => { made.push(d); return ct(d); };
+    const r = createVrVolumeRenderer({ THREE: THREEG, device: rec.device, halfExt: [1, 1, 1] }), u = sceneUniforms(16), t = u.clsTex.value;
+    const mk = (w, h, d, fmt, data) => { const x = new THREEG.Data3DTexture(data, w, h, d); x.format = fmt; x.type = THREEG.UnsignedByteType; x.source.dataReady = false; return x; };
+    const dst = mk(16, 16, 16, THREEG.RGBAFormat, t.image.data), c4 = new THREEG.Data3DTexture(new Uint8Array(16 * 16 * 16), 16, 16, 16); c4.format = THREEG.RedFormat; c4.type = THREEG.UnsignedByteType; c4.needsUpdate = true;
+    const d4 = mk(16, 16, 16, THREEG.RedFormat, c4.image.data);
+    r.volume.initTexture(dst); r.volume.initTexture(d4);
+    const g0 = r.volume.gpuOf(t); writes.length = 0; submits.length = 0; copies.length = 0;
+    expect(r.volume.copyGpu([[t, dst], [c4, d4]])).toBe(true);
+    expect(copies).toHaveLength(2); expect(copies[0].a).toBe(g0); expect(copies[0].b).toBe(r.volume.gpuOf(dst)); expect(copies[0].size).toEqual([16, 16, 16]); expect(copies[1].size).toEqual([16, 16, 16]);
+    expect(submits).toHaveLength(1); expect(writes.filter(w => w[0].texture === copies[0].b)).toHaveLength(0); // the destination got nothing from the CPU
+    expect(writes.some(w => w[0].texture === copies[1].a)).toBe(true); // the source that had not been sent yet was (c4: first use)
+    expect(made.every(d => (d.usage & 1) === 1 || d.dimension !== '3d')).toBe(true); // every 3D data texture can be a copy source (COPY_SRC = 1)
+    copies.length = 0; submits.length = 0;
+    const small = mk(8, 8, 8, THREEG.RGBAFormat, new Uint8Array(8 * 8 * 8 * 4)); r.volume.initTexture(small);
+    expect(r.volume.copyGpu([[t, dst], [t, small]])).toBe(false); expect(copies).toHaveLength(0); expect(submits).toHaveLength(0); // all or nothing
+    const bad = mk(16, 16, 16, THREEG.RedFormat, new Uint8Array(16 * 16 * 16)); expect(r.volume.copyGpu([[t, bad]])).toBe(false);
+    r.dispose();
+  }));
+});

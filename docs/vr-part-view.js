@@ -6,10 +6,10 @@
 //   - which uniforms the part owns (the rest is the body's by reference: PART_OWN), the target a grip takes (partTargetOf), the part's own box (partBoundsOf), the laser's rule on the CPU (partKeepVoxelOf),
 //   - several parts at once: every part has its own box, uniforms and pose; the tables are patched for all of them (patchRegionLutMany / patchChildLutMany); a part's proxy box is its own bounding box (partProxyBox) and its laser march
 //     runs only inside it (partRayRange), the texts. The way in is the long-press ring (region-ring.js 切り出す / 戻す); the grip stays the body's grab and takes a part only where the laser meets one.
-import { regionLutAlpha } from './region-visibility.js?v=20261126-build764';
-import { boxFromRange } from './vr-content-box.js?v=20261126-build764';
-import { euclideanDistanceBytes, morph3 } from './distance-field.js?v=20261126-build764';
-import { hiddenClassBytes } from './vr-hide-field.js?v=20261126-build764';
+import { regionLutAlpha } from './region-visibility.js?v=20261126-build766';
+import { boxFromRange } from './vr-content-box.js?v=20261126-build766';
+import { euclideanDistanceBytes, morph3 } from './distance-field.js?v=20261126-build766';
+import { hiddenClassBytes } from './vr-hide-field.js?v=20261126-build766';
 
 // ---- the shader block. Spliced into the volume fragment shader once (vr-view.js ${PART_GLSL}, after the hidden-shape block A and BEFORE the an earlier change hide helpers hideAnyOn / hideAt / hideGrad, so that they read the re-pointed functions too), so that no existing line of the shader has to change. Without VRL_PART (every program but the
 // part's) the preprocessor drops all of it: the body's programs are the ones they were. With VRL_PART the two functions the marching loops ask "is this voxel a hidden shape?" (regionHiddenAt / childHiddenAt) are
@@ -198,14 +198,35 @@ export function hideIndexPlane(rg) {
   for (let i = 0, o = 1; i < n; i++, o += 2) out[i] = rg[o];
   return out;
 }
+// perf2 (4-6): the same plane made ONCE per index array (the page's result index / the children's: read only in VR, so the array is the key): a cut-out used to loop the whole volume for it every time. The plane is only ever read.
+const planeCache = new WeakMap(), boxesCache = new WeakMap();
+export function hideIndexPlaneCached(rg) {
+  if (!rg) return null;
+  let p = planeCache.get(rg); if (!p) { p = hideIndexPlane(rg); planeCache.set(rg, p); }
+  return p;
+}
+// perf2 (4-6): the voxel box of EVERY id (1..255) of an index plane in one pass, made once per plane (ids: x fastest, then y, then z; dims [w, h, d]) -> {sig, x0, x1, y0, y1, z0, z1, count} (Int32Array(256) each; x1 = -1 where the id has no voxel).
+// partBoundsOf takes it (its `table` argument) in place of its own scan of the grid for the one id: the same numbers (the least / greatest x, y, z of the id's voxels, and their count)
+export function partIdBoxesOf(ids, dims) {
+  if (!ids || !dims) return null;
+  const sig = dims.join('x'), have = boxesCache.get(ids); if (have && have.sig === sig) return have;
+  const [w, h, d] = dims, x0 = new Int32Array(256).fill(w), x1 = new Int32Array(256).fill(-1), y0 = new Int32Array(256).fill(h), y1 = new Int32Array(256).fill(-1), z0 = new Int32Array(256).fill(d), z1 = new Int32Array(256).fill(-1), count = new Int32Array(256);
+  for (let z = 0, k = 0; z < d; z++) for (let y = 0; y < h; y++) for (let x = 0; x < w; x++, k++) {
+    const v = ids[k]; if (v === 0) continue;
+    count[v]++; if (x < x0[v]) x0[v] = x; if (x > x1[v]) x1[v] = x; if (y < y0[v]) y0[v] = y; if (y > y1[v]) y1[v] = y; if (z < z0[v]) z0[v] = z; if (z > z1[v]) z1[v] = z;
+  }
+  const t = { sig, x0, x1, y0, y1, z0, z1, count }; boxesCache.set(ids, t);
+  return t;
+}
 
 // ---- the part's own box. ids = the index texture's bytes (x fastest, then y, then z; dims [w, h, d]), id = the target's value; the box covers its voxels plus `pad` voxels (the trilinear footprint of a surface sample).
 // -> {c: [3], h: [3], count, full} in object space (vr-content-box.js boxFromRange: the data box half extents he), or null when no voxel has that id
-export function partBoundsOf(ids, dims, id, he, pad = 2) {
+export function partBoundsOf(ids, dims, id, he, pad = 2, table = null) {
   if (!ids || !dims || !he) return null;
   const [w, h, d] = dims;
   let x0 = w, x1 = -1, y0 = h, y1 = -1, z0 = d, z1 = -1, count = 0;
-  for (let z = 0; z < d; z++) {
+  if (table && table.sig === dims.join('x') && id >= 1 && id < 256) { x0 = table.x0[id]; x1 = table.x1[id]; y0 = table.y0[id]; y1 = table.y1[id]; z0 = table.z0[id]; z1 = table.z1[id]; count = table.count[id]; } // perf2 (4-6): from the one-pass table (partIdBoxesOf), no scan
+  else for (let z = 0; z < d; z++) {
     let zHit = false;
     for (let y = 0, k = w * h * z; y < h; y++, k += w) {
       let first = -1, last = -1;
@@ -683,7 +704,7 @@ export function partGroupPlain(lab, size, n) {
 // a point exactly on a seam (S_k = 0.5 to the last bit: the same interpolated number read on both sides) is the later part's: part k keeps S_k > 0.5 (its own seam's b = -2^-24, one step of a 32-bit float at 0.5: S_k - 2^-24 >= 0.5
 // is S_k > 0.5 for every float S_k), an earlier part's seam keeps S_j <= 0.5 (1 - S_j >= 0.5). Without it, that point was drawn by both
 export const PART_SEAM_TIE = 2 ** -24;
-export async function partFieldSet(fields, run = runPartGroup, opt = PART_FIELD, state = null) {
+export async function partFieldSet(fields, run = runPartGroup, opt = PART_FIELD, state = null, wantOcc = true) { // wantOcc (perf2, 4-4): each part gets its occupancy (occ) with its field; false = none (the caller makes it, as before)
   const g0 = partFieldChannels(fields);
   if (!g0) return null;
   if (state) { // the parts' ages (G): a part seen before keeps its age, a new one is the newest (later in `fields`: newer), a part that is gone is forgotten (it is new when it comes back)
@@ -882,10 +903,10 @@ export async function partFieldSet(fields, run = runPartGroup, opt = PART_FIELD,
       for (const e of [{ ch: add(jOf.get(chOf[s])), a: 1, b: 0 }, ...sm.filter(x => x.slots.includes(s)).map(x => ({ ch: add(x.src), a: x.a, b: x.a < 0 ? 1 : x.own ? -PART_SEAM_TIE : 0 }))]) { a[s][e.ch] = e.a; b[s][e.ch] = e.b; }
     }
     if (chans.length > 4) throw new Error('part seams: more than 4 channels on one part');
-    if (chans.length === 1) return { data: chans[0], lo: f.lo, size: f.size, C: 1, a, b };
+    if (chans.length === 1) return { data: chans[0], lo: f.lo, size: f.size, C: 1, a, b, ...(wantOcc ? { occ: partOccOf({ data: chans[0], size: f.size, C: 1, a, b }) } : {}) }; // perf2 (4-4): the part's occupancy (the shader's partOcc) is made here, where the field is (on the worker), as the body's is
     const Cp = chans.length === 3 ? 4 : chans.length, out = new Uint8Array(nf * Cp);
     chans.forEach((x, ch) => { for (let i = 0, q = ch; i < nf; i++, q += Cp) out[q] = x[i]; });
-    return { data: out, lo: f.lo, size: f.size, C: Cp, a, b };
+    return { data: out, lo: f.lo, size: f.size, C: Cp, a, b, ...(wantOcc ? { occ: partOccOf({ data: out, size: f.size, C: Cp, a, b }) } : {}) };
   });
   const a = [0, 1, 2, 3].map(s => [0, 1, 2, 3].map(c => (chOf[s] === c ? 1 : 0))), b = [0, 1, 2, 3].map(s => [0, 1, 2, 3].map(c => (chOf[s] < 0 ? 0 : chOf[s] === c ? 0 : 1)));
   return { body: { data, lo, size, C, a, b, mask: un.mask, occ: partBodyOccOf({ data, size, C, a, b }) }, parts, plain, merged, own: ownOut.sort((u, v) => u.p - v.p) };
@@ -1006,18 +1027,18 @@ function partCachedOps(cache, stats, ops) {
 // a result's bytes as a signature (the same bytes, the same channels and box: the same texture)
 function partSigOf(x) { return partHash64(x.data) + ':' + x.C + ':' + x.size.join('x'); }
 export function partSetWorkerSource(limit = PART_CACHE_BYTES) {
-  return ['const PART_SEAM_TIE=' + PART_SEAM_TIE + ';', 'const partBoxesMeet=' + partBoxesMeet.toString() + ';', 'const partIsChild=' + partIsChild.toString() + ';', 'const PART_FIELD=' + JSON.stringify(PART_FIELD) + ';',
+  return ['const PART_SEAM_TIE=' + PART_SEAM_TIE + ';', 'const partBoxesMeet=' + partBoxesMeet.toString() + ';', 'const partIsChild=' + partIsChild.toString() + ';', 'const PART_FIELD=' + JSON.stringify(PART_FIELD) + ';', 'const PART_OCC_B=' + PART_OCC_B + ';',
     partHash64, partGroupCacheOf, partCachedOps, partSigOf, partOpsOfRun,
-    partFieldOf, partFieldPlain, partGroupLabelOf, partGroupJointOf, partFieldHaloOf, partBodyHidOf, partBodyOccOf, partFieldReach, partFieldDilate, partFieldNearOf, partFieldChannels, partFieldUnion, partFieldPutMax, partFieldTouching, partSeamOrder, partFieldJointGroups, partFieldSet, morph3, euclideanDistanceBytes, hiddenClassBytes, partBakeCls, partBakeAlpha, partBakeRun, 'const PART_BAKE_LIB={edt:euclideanDistanceBytes,hidden:hiddenClassBytes};'].map(f => (typeof f === 'string' ? f : f.toString())).join('\n') +
+    partFieldOf, partFieldPlain, partGroupLabelOf, partGroupJointOf, partFieldHaloOf, partBodyHidOf, partBodyOccOf, partOccOf, partFieldReach, partFieldDilate, partFieldNearOf, partFieldChannels, partFieldUnion, partFieldPutMax, partFieldTouching, partSeamOrder, partFieldJointGroups, partFieldSet, morph3, euclideanDistanceBytes, hiddenClassBytes, partBakeCls, partBakeAlpha, partBakeRun, 'const PART_BAKE_LIB={edt:euclideanDistanceBytes,hidden:hiddenClassBytes};'].map(f => (typeof f === 'string' ? f : f.toString())).join('\n') +
     '\nconst cache=partGroupCacheOf(' + (+limit || 0) + '),state={rank:new Map(),next:0};let seq=0;const pend=new Map(),rpc=(msg,buf)=>new Promise((res,rej)=>{const id=++seq;pend.set(id,{res,rej});postMessage({...msg,id},[buf])});' +
     '\nconst taskOf=(kind,k,bytes,size,opt)=>{const c=bytes.slice(),o=opt||{};return rpc({rpc:"task",kind,k,bytes:c.buffer,size:[...size],opt:{band:o.band,sigma:o.sigma,margin:o.margin,budget:o.budget}},c.buffer).then(r=>new Uint8Array(r.bytes))};' +
     '\nconst rpcOps={joint:(lab,size,opt)=>taskOf("J",0,lab,size,opt),label:(lab,size,k,opt)=>taskOf("L",k,lab,size,opt),smooth:(codes,size,opt)=>taskOf("F",0,codes,size,opt)};' +
     '\nconst localOps={joint:async(lab,size,opt)=>partGroupJointOf(lab,size,opt),label:async(lab,size,k)=>partGroupLabelOf(lab,size,k),smooth:async(codes,size,opt)=>partFieldOf(codes,size,opt)};' +
     '\nconst noOps={joint:async()=>{throw new Error("plain only")},label:async()=>{throw new Error("plain only")},smooth:async(codes,size,opt,ctx)=>{if(ctx&&ctx.own)return partFieldOf(codes,size,opt);throw new Error("plain only")}};' +
     '\nonmessage=async e=>{const m=e.data;if(m.reply){const p=pend.get(m.id);pend.delete(m.id);if(p){if(m.ok)p.res(m);else p.rej(new Error(m.message))}return}if(m.clear){cache.clear();state.rank.clear();state.next=0;return}if(m.bake){try{const r=partBakeRun(m.job);postMessage({bake:true,id:m.id,ok:true,lowered:r.lowered,alphaLowered:r.alphaLowered,slots:r.slots,rgba:r.rgba.buffer,c4:r.c4?r.c4.buffer:null},r.c4?[r.rgba.buffer,r.c4.buffer]:[r.rgba.buffer])}catch(err){postMessage({bake:true,id:m.id,ok:false,message:String(err&&err.message||err)})}return}try{const fields=m.fields.map(f=>{const b=new Uint8Array(f.bytes);return f.codes?{data:partFieldPlain(b,f.size),plain:true,lo:f.lo,size:f.size,mask:f.mask,kind:f.kind,id:f.id}:{data:b,lo:f.lo,size:f.size,mask:f.mask,kind:f.kind,id:f.id}});' +
-    'const stats={hit:0,miss:0},base=m.plainOnly?noOps:m.pool?rpcOps:localOps,set=await partFieldSet(fields,m.plainOnly?base:partCachedOps(cache,stats,base),m.opt,m.plainOnly?null:state);' +
+    'const stats={hit:0,miss:0},base=m.plainOnly?noOps:m.pool?rpcOps:localOps,set=await partFieldSet(fields,m.plainOnly?base:partCachedOps(cache,stats,base),m.opt,m.plainOnly?null:state,m.occ!==false);' +
     'if(!set){postMessage({ok:true,id:m.id,set:null});return}const idx=new Map(fields.map((f,i)=>[f.data,i])),tr=new Set(),pack=x=>{const i=idx.get(x.data);if(i!==undefined&&!fields[i].plain)return{...x,data:null,same:i,sig:partSigOf(x)};tr.add(x.data.buffer);return{...x,sig:partSigOf(x)}};' +
-    'if(set.body.hid)tr.add(set.body.hid.buffer);if(set.body.occ)tr.add(set.body.occ.data.buffer);const body=pack(set.body),parts=set.parts.map(pack),own=set.own.map(o=>{tr.add(o.data.buffer);return o});postMessage({ok:true,id:m.id,set:{body,parts,plain:set.plain,merged:set.merged,own,cache:{...stats,...cache.stats()}}},[...tr])}catch(err){postMessage({ok:false,id:m.id,message:String(err&&err.message||err)})}};';
+    'if(set.body.hid)tr.add(set.body.hid.buffer);if(set.body.occ)tr.add(set.body.occ.data.buffer);for(const x of set.parts)if(x.occ)tr.add(x.occ.data.buffer);const body=pack(set.body),parts=set.parts.map(pack),own=set.own.map(o=>{tr.add(o.data.buffer);return o});postMessage({ok:true,id:m.id,set:{body,parts,plain:set.plain,merged:set.merged,own,cache:{...stats,...cache.stats()}}},[...tr])}catch(err){postMessage({ok:false,id:m.id,message:String(err&&err.message||err)})}};';
 }
 // partFieldSet on a worker that stays (so that its memory of the groups' answers does) -> {run(fields) -> Promise of {body, parts, plain, merged, own, cache} | null, clear(), dispose()}. A set is partFieldSet's answer, but for
 //  - a part's / the body's `data` is the very array of its field where partFieldSet gives that (a part alone in its channels), and every one has a `sig` (its bytes' signature: the same sig = the same texture),
@@ -1039,7 +1060,7 @@ export function createPartSetRunner(opt = PART_FIELD, cfg = {}) {
     const tick = f => (...a) => new Promise((res, rej) => setTimeout(() => { try { res(f(...a)); } catch (e) { rej(e); } }, 0));
     const ops = plainOnly ? { joint: no, label: no, smooth: async (codes, size, op, ctx) => { if (ctx && ctx.own) return partFieldOf(codes, size, op); throw new Error('plain only'); } }
       : { joint: tick(partGroupJointOf), label: tick(partGroupLabelOf), smooth: tick((codes, size, op) => partFieldOf(codes, size, op)) };
-    const set = await partFieldSet(valid.map(f => (f.data ? f : { ...f, data: partFieldPlain(f.codes, f.size), plain: true })), plainOnly ? ops : partCachedOps(localCache, stats, ops), o, plainOnly ? null : localState);
+    const set = await partFieldSet(valid.map(f => (f.data ? f : { ...f, data: partFieldPlain(f.codes, f.size), plain: true })), plainOnly ? ops : partCachedOps(localCache, stats, ops), o, plainOnly ? null : localState, cfg.partOcc !== false);
     if (!set) return null;
     return { ...set, body: { ...set.body, sig: partSigOf(set.body) }, parts: set.parts.map(x => ({ ...x, sig: partSigOf(x) })), cache: { ...stats, ...localCache.stats() } };
   };
@@ -1074,7 +1095,7 @@ export function createPartSetRunner(opt = PART_FIELD, cfg = {}) {
     const fail = m => { if (!over) { finish(); if (cur === st) kill(); rej(new Error(m)); } };
     st.job = { valid, res, rej, finish, fail }; timer = setTimeout(() => fail('part set worker: no answer in ' + timeoutMs + ' ms'), timeoutMs);
     const copies = valid.map(f => (f.data || f.codes).slice());
-    try { st.w.postMessage({ id: 0, fields: valid.map((f, i) => ({ bytes: copies[i].buffer, codes: !f.data, lo: f.lo, size: f.size, mask: f.mask, kind: f.kind, id: f.id })), opt: o, plainOnly, pool: true }, copies.map(c => c.buffer)); } catch (e) { fail('part set worker: ' + (e && e.message || e)); }
+    try { st.w.postMessage({ id: 0, fields: valid.map((f, i) => ({ bytes: copies[i].buffer, codes: !f.data, lo: f.lo, size: f.size, mask: f.mask, kind: f.kind, id: f.id })), opt: o, plainOnly, pool: true, occ: cfg.partOcc !== false }, copies.map(c => c.buffer)); } catch (e) { fail('part set worker: ' + (e && e.message || e)); }
   });
   const runOne = fields => {
     const valid = validOf(fields);
@@ -1082,15 +1103,17 @@ export function createPartSetRunner(opt = PART_FIELD, cfg = {}) {
     if (!threads) return local(valid, false);
     return once(valid, false).catch(e => { if (gone || (e && e.answered)) throw e; console.warn('[VR] part set worker failed, tried once more:', e && e.message || e); return once(valid, false); }).catch(e => { if (gone || (e && e.answered)) throw e; console.warn('[VR] part set worker failed twice, the groups are made unsmoothed:', e && e.message || e); return once(valid, true); }); // a failure is first made again by the same path (the same speed), the unsmoothed groups only when it fails again
   };
-  // n734: the cut baked into the combined texture's box (partBakeRun) on this worker (job's arrays are COPIED to it: the caller keeps its own) -> Promise of {rgba, c4, lowered, alphaLowered, slots}. No Worker (tests): the same on this thread after a task.
+  // n734: the cut baked into the combined texture's box (partBakeRun) on this worker -> Promise of {rgba, c4, lowered, alphaLowered, slots}. No Worker (tests): the same on this thread after a task.
+  // perf2 (4-6): with cfg.give (the WebGPU view) job.rgba / job.c4 / job.hide's arrays are GIVEN to the worker (transferred, not copied: the box's crop was made for this job alone; the caller must not use them afterwards; an array that is a view of a larger buffer is copied as before);
+  // without it (the WebGL view, the default) they are copied as before. job.body.data is the body's field the caller keeps (bodySet): always copied.
   let bseq = 0;
   const bake = job => {
     if (gone) return Promise.reject(new Error('the runner is closed'));
-    if (!threads) return new Promise((res, rej) => setTimeout(() => { try { res(partBakeRun({ ...job, rgba: job.rgba.slice(), c4: job.c4 ? job.c4.slice() : null })); } catch (e) { rej(e); } }, 0));
+    if (!threads) return new Promise((res, rej) => setTimeout(() => { try { res(partBakeRun(cfg.give ? { ...job } : { ...job, rgba: job.rgba.slice(), c4: job.c4 ? job.c4.slice() : null })); } catch (e) { rej(e); } }, 0)); // (cfg.give: the given arrays are worked on in place and handed back)
     return new Promise((res, rej) => {
       let st; try { cur = cur || spawn(); st = cur; } catch (e) { kill(); rej(e); return; }
-      const id = ++bseq, tr = [], cp = a => { const c = a.slice(); tr.push(c.buffer); return c; };
-      const wire = { ...job, rgba: cp(job.rgba), c4: job.c4 ? cp(job.c4) : null, body: { ...job.body, data: cp(job.body.data) }, hide: job.hide ? { sources: job.hide.sources.map(x => ({ ids: cp(x.ids), bits: cp(x.bits) })) } : null };
+      const id = ++bseq, tr = [], cp = a => { const c = a.slice(); tr.push(c.buffer); return c; }, give = a => { if (cfg.give && a.byteOffset === 0 && a.byteLength === a.buffer.byteLength && !tr.includes(a.buffer)) { tr.push(a.buffer); return a; } return cp(a); };
+      const wire = { ...job, rgba: give(job.rgba), c4: job.c4 ? give(job.c4) : null, body: { ...job.body, data: cp(job.body.data) }, hide: job.hide ? { sources: job.hide.sources.map(x => ({ ids: give(x.ids), bits: give(x.bits) })) } : null };
       const timer = setTimeout(() => { if (st.bakes.delete(id)) rej(new Error('part bake: no answer in ' + timeoutMs + ' ms')); }, timeoutMs);
       st.bakes.set(id, { res, rej, timer });
       try { st.w.postMessage({ bake: true, id, job: wire }, tr); } catch (e) { st.bakes.delete(id); clearTimeout(timer); rej(new Error('part bake: ' + (e && e.message || e))); }
@@ -1297,6 +1320,12 @@ export function partBakeRun(job) {
 // copyTextureToTexture, drop(src)}. -> true once b.tex holds the whole baked volume (b.ready)
 export function partBakeStep(b, t, budget, ops) {
   const [W, H, D] = t.dims;
+  if (b.z < D && ops.gpuCopy && !b.noGpu) { // perf2 (4-5): the whole original on the GPU in one copy (the WebGPU view: ops.gpuCopy([[src, dst], ...]) -> false when it cannot, then the way below), nothing sent from the CPU
+    const pairs = [[t.combo, b.tex]]; if (b.cls4Tex && t.cls4) pairs.push([t.cls4, b.cls4Tex]);
+    b.gpuOk = null; if (ops.gpuCopy(pairs, ok => { b.gpuOk = !!ok; })) { b.z = D; b.gpu = true; return false; } // b.gpuOk: null until the device answers (the copy's error scope), then true / false
+    b.noGpu = true;
+  }
+  if (b.gpu && b.gpuOk === false) { b.gpu = false; b.noGpu = true; b.z = 0; b.pz = 0; } // the GPU's copy failed validation: the original and then the box again from memory, as without the GPU copy
   if (b.z < D) { // the original from its bytes in memory (t.combo.image.data, the path uploadCombo takes), not by a GPU-to-GPU copy of t.combo (framebuffer layer + copyTexSubImage3D)
     if (!b.origTex) { b.origTex = ops.wrap(t.combo.image.data, t.dims, 4); if (b.cls4Tex && t.cls4) b.orig4Tex = ops.wrap(t.cls4.image.data, t.dims, 1); }
     const k = Math.max(1, Math.floor(budget / (W * H * 4))), z1 = Math.min(D, b.z + k);
@@ -1307,13 +1336,15 @@ export function partBakeStep(b, t, budget, ops) {
   }
   if (!b.patch) return false;
   const [bw, bh, bd] = b.box.size;
+  if (b.pz >= bd) { if (b.gpu && b.gpuOk === true) finishBake(b, ops); return b.ready; } // the box is in; waits for the answer of the GPU's copy
   if (!b.srcTex) { b.srcTex = ops.wrap(b.patch.rgba, [bw, bh, bd], 4); if (b.patch.c4 && b.cls4Tex) b.src4Tex = ops.wrap(b.patch.c4, [bw, bh, bd], 1); }
   const k = Math.max(1, Math.floor(budget / (bw * bh * 4))), z1 = Math.min(bd, b.pz + k), at = [b.box.lo[0], b.box.lo[1], b.box.lo[2] + b.pz];
   ops.copy(b.srcTex, b.tex, [0, 0, b.pz], [bw, bh, z1], at); if (b.src4Tex) ops.copy(b.src4Tex, b.cls4Tex, [0, 0, b.pz], [bw, bh, z1], at);
   b.pz = z1;
-  if (z1 >= bd) { b.ready = true; b.patch = null; ops.drop(b.srcTex); b.srcTex = null; if (b.src4Tex) ops.drop(b.src4Tex); b.src4Tex = null; }
+  if (b.pz >= bd && (!b.gpu || b.gpuOk === true)) finishBake(b, ops); // not ready before the GPU's copy is known to have been valid
   return b.ready;
 }
+function finishBake(b, ops) { b.ready = true; b.patch = null; ops.drop(b.srcTex); b.srcTex = null; if (b.src4Tex) ops.drop(b.src4Tex); b.src4Tex = null; }
 // a region of a 3D texture's bytes (x fastest, bytes per voxel `bpv`) cut out into its own array: the box's bytes of the combined texture (bpv 4) / of the fourth channel's texture (bpv 1)
 export function partBakeCrop(src, dims, box, bpv) {
   const [bw, bh, bd] = box.size, [bx, by, bz] = box.lo, out = new Uint8Array(bw * bh * bd * bpv);

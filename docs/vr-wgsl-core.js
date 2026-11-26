@@ -6,8 +6,8 @@
 // the sample pair's second volume, the general (non-combined) loop and the HU path.
 // The ray: the box is drawn with its back faces (like the WebGL program), vPos is the back-face point, the ray starts at the eye (origin, object space).
 // Output: colour 0 = the premultiplied colour, colour 1 = the depth of the first thing shown (NDC z, 24 bit in rgb) for the composite.
-import { lightingWGSL } from './lighting.js?v=20261126-build764';
-import { featParts, featKey, FEAT_FIELDS } from './vr-wgsl-feat.js?v=20261126-build764';
+import { lightingWGSL } from './lighting.js?v=20261126-build766';
+import { featParts, featKey, FEAT_FIELDS } from './vr-wgsl-feat.js?v=20261126-build766';
 
 // ---- the uniform buffer: one struct, every member laid out by the WGSL rules (vec3 = 16-aligned, 12 bytes; arrays of vec4 only) ----
 // [name, type, count]; the packer (vr-wgpu.js) writes by this table, the struct text is made from it, a unit test checks both against wgsl_reflect
@@ -477,6 +477,10 @@ export const ABLATIONS = ['grad', 'refine', 'shade'];
 export const COUNTER_FIELDS = ['outcome', 'iters', 'creep', 'jumps', 'skipReads', 'clsReads', 'refineReads', 'gradReads', 'near4Steps', 'near4Jumps', 'near8Steps', 'near8Jumps', 'near16Steps', 'near16Jumps', 'toTA', 'last4Steps', 'last8Steps', 'last16Steps'];
 // group 1 binding 1 of the counting twin (one uniform, 8 f32): sc = (sx, sy, ox, oy): the probe pixel p reads the tile of the low pass's region pixel floor(p * (sx, sy)) + (ox, oy) (the window's place in the region); lim = (w, h, mode, 0): the region's size in px (a pixel outside it has no tile: tA 0 = the ray starts as it would without the pre-pass), mode 1 = the host bound the display's tiles (proxyTex, the same tiles the low pass read) and the twin may read tA, 0 = no tiles
 export const COUNTER_CFG_BINDING = { group: 1, binding: 1, floats: 8 };
+// the parts' counting twin (counters: 'part', n764 4-1 stage 0: the measurement of the parts' own tiles; only the performance record's part probe runs it, never the display, and counters: true keeps the text and the record above byte for byte): the record is COUNTER_FIELDS and then
+// partSkips = the loop iterations that the partOcc 8^3 blocks ended with a jump (the body of `if(occOut)`; every one also fetches the class texture once at its far side: that fetch is not in clsReads), partSkips0 = those made while the ray had not yet read a march sample (clsReads 0: before the
+// ray's first read), partSkipSteps = the grid points those jumps passed over. A ray whose every iteration was such a jump (iters > 0 and partSkips == iters) ended on partOcc alone. Needs a text with feat P (the anchor is in the parts' block; without it volumeWgsl throws).
+export const PART_COUNTER_FIELDS = [...COUNTER_FIELDS, 'partSkips', 'partSkips0', 'partSkipSteps'];
 export const COUNTER_OUTCOME = { none: 0, hit: 1, pass: 2, accstop: 3, discard: 4 }; // 0 = not covered; hit = the ray ended on a surface; pass = marched to its end with nothing; accstop = stopped at the opacity limit; discard = left before the march (outside the box / content / section)
 export const COUNTER_BINDING = { group: 1, binding: 0 };
 const sub = (t, from, to, n = 1) => {
@@ -490,6 +494,7 @@ const cut = (t, from, to) => {
   return t.slice(0, i) + t.slice(j);
 };
 function ablate(t, abl, counters) {
+  const part = counters === 'part'; // the parts' twin (PART_COUNTER_FIELDS): the same text and record as counters: true, plus the partOcc counts
   if (abl && !ABLATIONS.includes(abl)) throw new Error('volumeWgsl: unknown abl ' + abl);
   if (abl === 'grad') t = sub(t, 'if(!hitSimple){if(onFace){n=entryFaceNormal(o,dir);}else{n=gradientAtS(tc,idx);}}', 'if(!hitSimple){if(onFace){n=entryFaceNormal(o,dir);}}');
   else if (abl === 'refine') t = cut(t, '  if(hitSimple){}\n  else if(hitIso){', '  let hp=o+dir*hi;');
@@ -499,6 +504,7 @@ function ablate(t, abl, counters) {
       + 'var<private> gOut:u32=2u;var<private> gIters:u32=0u;var<private> gCreep:u32=0u;var<private> gJumps:u32=0u;var<private> gSkipRd:u32=0u;var<private> gClsRd:u32=0u;var<private> gRefRd:u32=0u;var<private> gGradRd:u32=0u;\n'
       + 'var<private> gN4:u32=0u;var<private> gJ4:u32=0u;var<private> gN8:u32=0u;var<private> gJ8:u32=0u;var<private> gN16:u32=0u;var<private> gJ16:u32=0u;\n'
       + 'var<private> gA:u32=0u;var<private> gKs:i32=0;var<private> gL4:u32=0u;var<private> gL8:u32=0u;var<private> gL16:u32=0u;\n'
+      + (part ? 'var<private> gPS:u32=0u;var<private> gPS0:u32=0u;var<private> gPSS:u32=0u;\n' : '')
       + 'fn cntNear(dd:f32){if(gN4==0u&&dd<=4.0){gN4=gIters;gJ4=gJumps;}if(gN8==0u&&dd<=8.0){gN8=gIters;gJ8=gJumps;}if(gN16==0u&&dd<=16.0){gN16=gIters;gJ16=gJumps;}if(dd<=4.0){gL4=gIters;}if(dd<=8.0){gL8=gIters;}if(dd<=16.0){gL16=gIters;}}\n'
       + 'struct CntCfg{sc:vec4<f32>,lim:vec4<f32>};\n@group(1) @binding(1) var<uniform> cntCfg:CntCfg;\n'
       + 'fn cntTileA(p:vec2<f32>)->f32{\n if(cntCfg.lim.z<0.5){return 0.0;}\n let q=vec2<i32>(floor(p*cntCfg.sc.xy))+vec2<i32>(cntCfg.sc.zw);\n if(q.x<0||q.y<0||q.x>=i32(cntCfg.lim.x)||q.y>=i32(cntCfg.lim.y)){return 0.0;}\n return textureLoad(proxyTex,q/8,0).r;\n}\n'
@@ -512,6 +518,7 @@ function ablate(t, abl, counters) {
     const PXSTART = ' if(u.proxyOn==1){\n  let tA=textureLoad(proxyTex,(vec2<i32>(in.pos.xy)-u.proxyOrg)/8,0).r;\n  if(tA>endT){emptyRay=true;}else if(tA>t0){k=max(0,i32(floor((tA-t0)/stp))-1);}\n }\n';
     if (t.includes(PXSTART)) t = sub(t, PXSTART, ' {\n  let tA=cntTileA(in.pos.xy);var kS=0;var em=false;\n  if(tA>endT){em=true;}else if(tA>t0){kS=max(0,i32(floor((tA-t0)/stp))-1);}\n  if(cntCfg.lim.z>0.5){gKs=select(kS,1073741824,em);}\n  if(u.proxyOn==1){if(em){emptyRay=true;}else{k=kS;}}\n }\n'); // (a text without the pre-pass start, the section variant, has no toTA: 0)
     t = sub(t, 'prevValid=true;prevSkip=true;lastIndex=-1;', 'gCreep+=1u;prevValid=true;prevSkip=true;lastIndex=-1;');
+    if (part) t = sub(t, 'prevValid=true;prevSkip=false;lastIndex=-1;k+=pm;continue;', 'gPS+=1u;gPSS+=u32(pm);if(gClsRd==0u){gPS0+=1u;}prevValid=true;prevSkip=false;lastIndex=-1;k+=pm;continue;');
     t = sub(t, 'jumpLen+=nextJ-t;', 'jumpLen+=nextJ-t;gJumps+=1u;');
     t = sub(t, 'if(u.jumpOn==0){dd=0.0;}', 'cntNear(dd);if(u.jumpOn==0){dd=0.0;}'); // the approach counts read the distance the march jumps by, before the jumpOn override
     t = sub(t, 'skBlk=sb;skBits=textureLoad(skipTex,sb,0).rg;', 'skBlk=sb;gSkipRd+=1u;skBits=textureLoad(skipTex,sb,0).rg;');
@@ -524,7 +531,7 @@ function ablate(t, abl, counters) {
     t = sub(t, 'depthMark(hi,1.0);', 'gOut=1u;depthMark(hi,1.0);');
     t = sub(t, 'if(acc.a>ACC_STOP){hitEnd=true;}', 'if(acc.a>ACC_STOP){hitEnd=true;if(gOut!=1u){gOut=3u;}}');
     t = sub(t, '@fragment fn fs(in:VOut)->FOut{', 'fn fsMain(in:VOut)->FOut{');
-    t += '@fragment fn fs(in:VOut)->FOut{\n let fo=fsMain(in);\n let b=(u32(in.pos.y)*CNT_W+u32(in.pos.x))*'+COUNTER_FIELDS.length+'u;\n cnt[b]=gOut;cnt[b+1u]=gIters;cnt[b+2u]=gCreep;cnt[b+3u]=gJumps;cnt[b+4u]=gSkipRd;cnt[b+5u]=gClsRd;cnt[b+6u]=gRefRd;cnt[b+7u]=gGradRd;cnt[b+8u]=gN4;cnt[b+9u]=gJ4;cnt[b+10u]=gN8;cnt[b+11u]=gJ8;cnt[b+12u]=gN16;cnt[b+13u]=gJ16;cnt[b+14u]=gA;cnt[b+15u]=gL4;cnt[b+16u]=gL8;cnt[b+17u]=gL16;\n return fo;\n}\n';
+    t += '@fragment fn fs(in:VOut)->FOut{\n let fo=fsMain(in);\n let b=(u32(in.pos.y)*CNT_W+u32(in.pos.x))*'+(part ? PART_COUNTER_FIELDS : COUNTER_FIELDS).length+'u;\n cnt[b]=gOut;cnt[b+1u]=gIters;cnt[b+2u]=gCreep;cnt[b+3u]=gJumps;cnt[b+4u]=gSkipRd;cnt[b+5u]=gClsRd;cnt[b+6u]=gRefRd;cnt[b+7u]=gGradRd;cnt[b+8u]=gN4;cnt[b+9u]=gJ4;cnt[b+10u]=gN8;cnt[b+11u]=gJ8;cnt[b+12u]=gN16;cnt[b+13u]=gJ16;cnt[b+14u]=gA;cnt[b+15u]=gL4;cnt[b+16u]=gL8;cnt[b+17u]=gL16;'+(part ? 'cnt[b+18u]=gPS;cnt[b+19u]=gPS0;cnt[b+20u]=gPSS;' : '')+'\n return fo;\n}\n';
   }
   return t.replace(/(\/\/ VR \/ AR volume pass \(WGSL\), variant [^\n]*)\n/, '$1 abl=' + (abl || 'none') + ' counters=' + counters + '\n');
 }

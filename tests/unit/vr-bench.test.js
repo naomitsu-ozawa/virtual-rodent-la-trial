@@ -5,7 +5,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import * as THREEG from 'three/webgpu';
 import {
-  BENCH_SCENES, BENCH_SEGMENTS, BENCH_SEGMENT_MS, BENCH_MOTION, BENCH_SPEED, BENCH_HOLDER_SCALE, BENCH_DISCARD_MS, BENCH_PLANS, ISO_MODES, RING_SIZE, RING_SLOW_MS, BENCH_COUNT, quantile, statsOf,
+  BENCH_SCENES, BENCH_SEGMENTS, BENCH_SEGMENT_MS, BENCH_MOTION, BENCH_SPEED, BENCH_HOLDER_SCALE, BENCH_DISCARD_MS, BENCH_PLANS, ISO_MODES, RING_SIZE, RING_HEAD, RING_SLOW_MS, BENCH_COUNT, quantile, statsOf,
   benchPose, benchWarp, benchSegmentsOf, quatYXZ, quatAngleDeg,
   createBenchScript, createFrameRing, createLongTaskWatcher, createIsolation, createCompareBench, tapPerfLog, benchReportLines, ringReportLines, leftoverReportLines, readHeapBytes, RING_SAMPLES,
 } from '../../docs/vr-bench.js';
@@ -370,8 +370,18 @@ describe('the frame ring', () => {
     const heads = L.find(l => l.includes('menu') && l.includes('flag')); expect(heads).toBeTruthy();
     expect(row).toMatch(/\*H\s*$/); // the slow frame, and the hands holding started in it
     expect(L.find(l => /^\s+12 /.test(l))).toMatch(/F\s*$/); expect(L.find(l => /^\s+13 /.test(l))).toMatch(/P\s*$/); // the render scale changed at 12, the periphery scale at 13
-    expect(L.filter(l => /^\s+\d+ /.test(l))).toHaveLength(7);
+    const hi = L.findIndex(l => l.startsWith('-- the first ')); expect(hi).toBeGreaterThan(0); // the first frames are listed after the windows
+    expect(L.slice(0, hi).filter(l => /^\s+\d+ /.test(l))).toHaveLength(7);
+    expect(L.slice(hi).filter(l => /^\s+\d+ /.test(l))).toHaveLength(30); // (all 30 frames of the session: it is shorter than the head)
     const none = ringReportLines(createFrameRing(), {}); expect(none[0]).toContain('0 of 0 frames'); expect(none.some(l => l.includes('0 window(s)'))).toBe(true);
+  });
+  it('the first frames of the session are kept whatever the ring has overwritten since (the head), and the text lists them', () => {
+    const ring = createFrameRing({ size: 50, headSize: 20 }); ring.frame(1000, {}); feed(ring, 200, { t0: 1000, c: i => ({ hold: i }) });
+    expect(ring.count).toBe(200); expect(ring.records()[0].n).toBe(150); // the ring holds the last 50
+    const h = ring.first(); expect(h).toHaveLength(20); expect(h[0].n).toBe(0); expect(h[19].n).toBe(19); expect(h[19].hold).toBe(19);
+    const L = ringReportLines(ring, { sinceMs: 1000 }), hi = L.findIndex(l => l.startsWith('-- the first 20 frames'));
+    expect(hi).toBeGreaterThan(0); expect(L.slice(hi).filter(l => /^\s+\d+ /.test(l))).toHaveLength(20);
+    expect(createFrameRing().first()).toEqual([]); expect(RING_HEAD).toBe(600);
   });
   it('fv / pz / pms are running totals (the ring keeps the differences); ml / gd / vol / lag / ph are the frame\'s own values (NaN = none)', () => {
     const ring = createFrameRing(); const c = { fv: 0, pz: 0, pms: 0 };

@@ -12,6 +12,14 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const read = f => readFileSync(new URL('../../docs/' + f, import.meta.url), 'utf8');
 
 describe('the compile gate', () => {
+  it('perf2: trace() lists every job with its queued / started / settled time (the startup record); a job still running has no end', async () => {
+    const g = createCompileGate({ limit: 2, pollMs: 1 }); let release; const hold = new Promise(r => { release = r; });
+    const p1 = g.queue(() => sleep(3), { label: 'a' }), p2 = g.queue(() => hold, { label: 'b' }); await p1; await sleep(5);
+    const tr = g.trace(); expect(tr.map(j => j.label)).toEqual(['a', 'b']); expect(tr[0].q).toBeLessThanOrEqual(tr[0].s); expect(tr[0].s).toBeLessThanOrEqual(tr[0].e); expect(tr[1].e).toBeNull();
+    release(); await p2; expect(g.trace()[1].e).toBeGreaterThanOrEqual(g.trace()[1].s);
+    // the record is small: only the four fields, and the stored entries are not the jobs (no function or callback is kept)
+    for (const r of g.trace()) expect(Object.keys(r).sort()).toEqual(['e', 'label', 'q', 's']);
+  });
   it('runs every job in a task of its own: the main thread is given back between two jobs', async () => {
     const g = createCompileGate({ limit: 8 }), order = [], fired = [];
     const ps = Array.from({ length: 12 }, (_, i) => g.queue(() => { order.push(i); fired[i] = false; setTimeout(() => { fired[i] = true; }, 0); if (i) expect(fired[i - 1], 'a timer task ran between job ' + (i - 1) + ' and ' + i).toBe(true); }));

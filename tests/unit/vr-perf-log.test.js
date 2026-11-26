@@ -1,7 +1,7 @@
 // The VR performance record (docs/vr-perf-log.js) and its wiring in vr-view.js: the same rows for the WebGL and the WebGPU session, a ring buffer, the summary of the menu-closed stretch, the file names.
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { createPerfLog, perfReport, perfFileName, gapBucket, perfMedian, PERF_KEY, PERF_MAX_ROWS, PERF_MIRROR_ROWS, PERF_MAX_STALLS, PERF_MAX_SLOWCB } from '../../docs/vr-perf-log.js';
+import { createPerfLog, perfReport, perfFileName, gapBucket, perfMedian, PERF_KEY, PERF_MAX_ROWS, PERF_MIRROR_ROWS, PERF_MAX_STALLS, PERF_MAX_SLOWCB, PERF_MAX_STALLS_KEPT, PERF_CUT_NEAR_MS, cutReport } from '../../docs/vr-perf-log.js';
 import { saveGxDiagText } from '../../docs/vr-wgpu.js';
 
 const vr = readFileSync(new URL('../../docs/vr-view.js', import.meta.url), 'utf8');
@@ -359,12 +359,12 @@ describe('the hold / movement / stall columns', () => {
     let clock = 0; const st = memStore(), log = createPerfLog({ kind: 'webgpu', now: () => clock, store: st, saveEveryMs: 0 });
     log.frame(0, BUDGET, 1, 9); log.frame(BUDGET * 3, BUDGET, 1, 9); clock = 1000; log.row({ menu: 0, f: 1 }, clock);
     const t = perfReport(log, {}).split('\n'), h = t.findIndex(l => /^\s*t\s+fps\s+g1/.test(l));
-    expect(t[h]).toMatch(/rec\s+hold\s+mv\s+mvr\s+imax\s+mk\s+slotc\s+perc\s+hset\s+hk\s+gfix\s+mlow\s+tab\s+fmin\s+favg\s+late\s+ip95\s+lpx\s+nv\s+rp\s+bk$/);
+    expect(t[h]).toMatch(/rec\s+hold\s+mv\s+mvr\s+imax\s+mk\s+slotc\s+perc\s+hset\s+hk\s+gfix\s+mlow\s+tab\s+fmin\s+favg\s+late\s+ip95\s+lpx\s+nv\s+rp\s+bk\s+cvb\s+cvp\s+rbs$/);
     expect(t[h + 1].trim().split(/\s+/)).toHaveLength(t[h].trim().split(/\s+/).length);
     const s = t.findIndex(l => l.startsWith('-- stalls'));
     expect(s).toBeGreaterThan(h + 1); expect(t[s]).toContain('1 ');
-    expect(t[s + 1]).toMatch(/^\s*t\s+gap\s+span\s+vol\s+hold\s+slot\s+tg\s+per\s+cov\s+pa\s+bk\s+bs\s+rn\s+js$/);
-    expect(t[s + 2].trim().split(/\s+/)).toHaveLength(14);
+    expect(t[s + 1]).toMatch(/^\s*t\s+gap\s+span\s+vol\s+hold\s+slot\s+tg\s+per\s+cut\s+cov\s+pa\s+bk\s+bs\s+rn\s+js$/);
+    expect(t[s + 2].trim().split(/\s+/)).toHaveLength(15);
     const all = t.join('\n'); for (const w of ['note: hold = the most hands', 'note: mk = offscreen targets', 'note: stall lines']) expect(all, w).toContain(w);
     expect(JSON.parse(st.m.get(PERF_KEY + '-webgpu')).stalls).toHaveLength(1);
   });
@@ -406,5 +406,56 @@ describe('the hold / movement / stall columns', () => {
     for (let i = 0; i < PERF_MAX_SLOWCB + 3; i++) log.endCb(21, 200);
     expect(log.slowCbs).toHaveLength(PERF_MAX_SLOWCB); expect(log.slowCbsDropped).toBe(5);
     expect(perfReport(log)).toContain('-- slow callbacks');
+  });
+});
+
+describe('perf2 (measurement only): the cut-out timeline, the counters, the stalls near a cut-out, the columns cvb / cvp / rbs', () => {
+  const B = 1000 / 72;
+  it('cut() puts a line on the timeline (t since the start, n, k, d); the newest are kept; tally() counts by group and key; both are in the mirror and the report', () => {
+    let clock = 5000; const st = { m: new Map(), getItem(k) { return this.m.get(k) ?? null; }, setItem(k, v) { this.m.set(k, v); } };
+    const log = createPerfLog({ kind: 'webgpu', now: () => clock, store: st, saveEveryMs: 0 });
+    clock = 6500; log.cut('op', 1, { kind: 'region', id: 3 }); clock = 7000; log.cut('bake+', 1, { g: 2 }); log.cut('bake-', 1, { why: 'rbBusy', age: 120 });
+    log.tally('bake', 'start'); log.tally('bake', 'start'); log.tally('bake-drop', 'rbBusy'); log.tally('bake-wait', 'hideRebuild', 3);
+    expect(log.cuts.map(e => [e.t, e.n, e.k])).toEqual([[1.5, 1, 'op'], [2, 1, 'bake+'], [2, 1, 'bake-']]); expect(log.cuts[0].d).toEqual({ kind: 'region', id: 3 }); expect(log.cuts[1].d).toEqual({ g: 2 });
+    expect(log.tallies).toEqual({ bake: { start: 2 }, 'bake-drop': { rbBusy: 1 }, 'bake-wait': { hideRebuild: 3 } });
+    log.flush(); const m = JSON.parse(st.m.get(PERF_KEY + '-webgpu')); expect(m.cuts).toHaveLength(3); expect(m.tallies.bake.start).toBe(2);
+    const text = perfReport(log, {}); expect(text).toContain('-- cut-out timeline: 3 event(s)'); expect(text).toMatch(/\n\s+1\.5 n1\s+op\s+kind=region id=3/); expect(text).toMatch(/why=rbBusy age=120/);
+    expect(text).toContain('bake: start 2'); expect(text).toContain('bake-drop: rbBusy 1'); expect(text).toContain('bake-wait: hideRebuild 3');
+    const small = createPerfLog({ now: () => 0, store: null }); for (let i = 0; i < 405; i++) small.cut('x', i); expect(small.cuts).toHaveLength(400); expect(small.cutsDropped).toBe(5); expect(small.cuts[0].n).toBe(5);
+    expect(cutReport({ cuts: [], tallies: {} }).join('\n')).toContain('counters: none');
+    const legend = cutReport({ cuts: [], tallies: {} }).join('\n'), vr = readFileSync(new URL('../../docs/vr-view.js', import.meta.url), 'utf8');
+    for (const k of new Set([...vr.matchAll(/cutEv\('([a-z+*]+)'/g)].map(m => m[1]))) expect(legend, 'the legend names ' + k).toMatch(new RegExp('(^|[ (])' + k.replace(/[+*]/g, '\\$&') + ' = '));
+  });
+  it('the stall lines within 2 s of a cut-out event (before and after) are not pushed out by the limit of 60; the other lines are, as before', () => {
+    let clock = 0; const log = createPerfLog({ kind: 'webgpu', now: () => clock, store: null }); let t = 0;
+    const stall = () => { t += B * 3; log.frame(t, B, 0, 1); }; // a 3-period interval each
+    log.frame(0, B, 0, 1);
+    for (let i = 0; i < 30; i++) stall(); // t is about 1.25 s
+    clock = t; log.cut('op', 1); // the lines of the 2 s before are kept
+    const keptBefore = log.stalls.filter(x => x.cut).length; expect(keptBefore).toBeGreaterThan(20);
+    for (let i = 0; i < 40; i++) stall(); // after the event: 2 s are about 48 stalls here: the ones within 2 s are kept
+    for (let i = 0; i < 400; i++) stall(); // far after: ordinary lines, the limit holds for them
+    const kept = log.stalls.filter(x => x.cut), plain = log.stalls.filter(x => !x.cut);
+    expect(kept.length).toBeGreaterThanOrEqual(keptBefore + 30); expect(kept.length).toBeLessThanOrEqual(PERF_MAX_STALLS_KEPT); expect(plain.length).toBe(PERF_MAX_STALLS);
+    expect(kept.every(x => x.t <= (t0Of(kept) + 2 + 3.4))).toBe(true);
+    expect(log.stalls.length).toBeLessThanOrEqual(PERF_MAX_STALLS + PERF_MAX_STALLS_KEPT); expect(log.stallsDropped).toBeGreaterThan(300);
+    expect(perfReport(log, {})).toMatch(/per\s+cut\s+cov/);
+    function t0Of(a) { return a[0].t; }
+    expect(PERF_CUT_NEAR_MS).toBe(2000);
+  });
+  it('the new columns cvb / cvp / rbs are per-second means in the row; nothing without a feed', () => {
+    let clock = 0; const log = createPerfLog({ kind: 'webgl', now: () => clock, store: null });
+    log.frame(0, B, 0, 1); log.add('cvb', 1000); log.add('cvb', 3000); log.add('cvp', 500); log.add('rbs', 1); log.add('rbs', 0); log.add('nv', 2); log.add('bk', 1); clock = 1000;
+    const r = log.row({ menu: 0 }, clock); expect([r.cvb, r.cvp, r.rbs, r.nv, r.bk]).toEqual([2000, 500, 0.5, 2, 1]);
+    clock = 2000; const r2 = log.row({ menu: 0 }, clock); expect([r2.cvb, r2.cvp, r2.rbs]).toEqual([null, null, null]);
+  });
+  it('vr-view feeds them: cut events at the operation, the fields, the upload, the attach, the bake (start, drop with its reason, back), the put-back; the WebGL view feeds nv / bk', () => {
+    const vr = readFileSync(new URL('../../docs/vr-view.js', import.meta.url), 'utf8');
+    for (const k of ["cutEv('op',", "cutEv('own')", "cutEv('calc')", "cutEv('upload',", "cutEv('attach')", "cutEv('bake*',", "cutEv('bake+',", "cutEv('bake-',", "cutEv('put')"]) expect(vr, k).toContain(k);
+    for (const k of ["perfLog.add('cvb',rs.coverB)", "perfLog.add('cvp',rs.coverP)", "perfLog.add('rbs',comboT?.rb?.busy?1:0)", "perfLog.add('nv',nv);perfLog.add('bk',partBakeOn()?1:0)", "perfLog?.tally('bake-drop',w)", "perfLog?.tally('bake-wait',why)"]) expect(vr, k).toContain(k);
+    for (const why of ['notOk', 'src', 'rbBusy', 'mask', 'bodyGen', 'gen', 'applying', 'worker', 'grid']) expect(vr, why).toContain("'" + why + "'");
+    // 4-3 is the WebGPU view's only: the WebGL view starts the bake as it did
+    expect(vr).toContain("if(gx){hideTick(comboShaderMask(),shownMask());if(t.rb?.busy){perfLog?.tally('bake-wait','hideRebuild');return}}");
+    expect(vr).toContain("const w=why||'apply'");
   });
 });

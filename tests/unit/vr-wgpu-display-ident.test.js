@@ -231,7 +231,7 @@ describe('the display with a switch on: a way is chosen for every pass of every 
     let n0 = rec.log.length; frameOf(rec.r, u); let way = lowWay(rec, n0);
     for (let i = 0; i < 4 && !(way.dist && way.coarse); i++) { n0 = rec.log.length; frameOf(rec.r, u); way = lowWay(rec, n0); } // (a frame or two to make the distance texture / the grid)
     expect([way.dist, way.coarse, way.group1]).toEqual([true, true, true]);
-    const st = rec.r.volume.newPath.stats(); expect(st.used).toBeGreaterThan(0); expect(st.byWay.B).toBeGreaterThan(0); expect(st.failed).toBe('');
+    const st = rec.r.volume.newPath.stats(); expect(st.used).toBeGreaterThan(0); expect(st.byWay.B).toBeGreaterThan(0); expect(st.failed).toBe(''); expect(st.progs.some(p => p.draws > 0 && p.state === 'ready' && p.t1 >= p.t0)).toBe(true); // perf2: a program's record has its compile times and the passes drawn with it
     expect(rec.r.stats.np).toMatchObject({ use: true, mode: 'both', way: 'B' });
     expect(rec.log.slice(n0).filter(l => l.startsWith('compute.dispatch'))).toContain('compute.dispatch ' + Math.ceil(Math.ceil(500 / 4) * 2 / 8) + ',' + Math.ceil(Math.ceil(500 / 4) / 8)); // the 4 x 4 tiles: 125 per eye, two eyes, 125 rows
     rec.r.dispose();
@@ -631,6 +631,13 @@ describe('the check: its scenes, run, record and verdict (docs/vr-ident-log.js)'
   it('the display\'s ways counts: passes drawn with a way (by way), passes with no way and why, and the GPU errors of its own submits', () => {
     const t = L.newPathLines({ used: 120, notUsed: 8, byWay: { B: 100, D: 20 }, reasons: { prep: 6, nodata: 2 }, errors: 1, notes: ['the display\'s resources made again after a GPU error (1)'] }).join('\n');
     expect(t).toContain('display ways: drew 120 passes with a way (B 100, D 20), no way for 8 passes (prep 6, nodata 2) · GPU errors of its own submits 1'); expect(t).toContain('made again after a GPU error'); expect(L.newPathLines(null)).toEqual([]);
+  });
+  it('perf2: the startup record lists each display program with its compile start / end and the passes drawn with it, and the gate jobs; times are since the session start when asked for', () => {
+    const np = { used: 1, notUsed: 0, byWay: {}, reasons: {}, progs: [{ k: 'B:c3', state: 'ready', t0: 1000, t1: 1400, draws: 7 }, { k: 'D:c3', state: 'ready', t0: 1000, t1: 2500, draws: 0 }, { k: 'S:c3', state: 'pending', t0: 900, t1: null, draws: 0 }], gateTrace: [{ label: 'core c3n', q: 800, s: 810, e: 1900 }] };
+    const t = L.newPathLines(np, { sinceMs: 500 }).join('\n');
+    expect(t).toContain('display programs (3)'); expect(t).toMatch(/B:c3\s+ready\s+0\.50\s+0\.90\s+400 ms · drawn 7/); expect(t).toMatch(/D:c3\s+ready\s+0\.50\s+2\.00\s+1500 ms · drawn 0/); expect(t).toMatch(/S:c3\s+pending\s+0\.40\s+-\s+- ms · drawn 0/);
+    expect(t).toContain('2 of 3 programs were never drawn with'); expect(t).toMatch(/core c3n\s+0\.30\s+0\.31\s+1\.40/);
+    expect(L.newPathLines({ used: 0, notUsed: 0 }).length).toBe(1);
   });
 });
 

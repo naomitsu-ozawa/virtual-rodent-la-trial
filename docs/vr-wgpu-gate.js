@@ -15,6 +15,7 @@ export function createCompileGate({ limit = GATE.limit, pollMs = GATE.pollMs } =
   const jobs = []; // { run, front, resolve, reject, label }
   const sources = new Set(); // functions that return how many programs are compiling (the display's instance counts its own)
   let own = 0, pumping = false, started = 0, total = 0, maxInflight = 0, tasks = 0;
+  const trace = []; // perf2 (measurement only): one small record per job { label, q (queued), s (started), e (settled; null while running) } in ms on the page clock, the newest 600 (the job itself is not kept: its function and callbacks go when it has run) (the startup record's program list)
   const inflight = () => { let n = own; for (const s of sources) { try { n += s() | 0; } catch { /* a source that is gone counts nothing */ } } return n; };
   const pump = async () => {
     if (pumping) return; pumping = true;
@@ -23,11 +24,11 @@ export function createCompileGate({ limit = GATE.limit, pollMs = GATE.pollMs } =
         let waited = 0;
         while (jobs.length && inflight() >= limit) { await sleep(pollMs); waited += pollMs; } // room first: the programs in flight finish while the frames go on
         if (!jobs.length) break;
-        const j = jobs.shift(); started++;
+        const j = jobs.shift(); started++; j.rec.s = performance.now();
         tasks++; if (globalThis.__gateTrace) globalThis.__gateTrace.push([performance.now(), j.label]); // (a measurement's own list: tools/wgpu-load-check.mjs)
         try {
           const r = j.run();
-          if (r && typeof r.then === 'function') { own++; maxInflight = Math.max(maxInflight, inflight()); r.then(v => { own--; j.resolve(v); }, e => { own--; j.reject(e); }); } else { maxInflight = Math.max(maxInflight, inflight()); j.resolve(r); }
+          if (r && typeof r.then === 'function') { own++; maxInflight = Math.max(maxInflight, inflight()); r.then(v => { own--; j.rec.e = performance.now(); j.resolve(v); }, e => { own--; j.rec.e = performance.now(); j.reject(e); }); } else { maxInflight = Math.max(maxInflight, inflight()); j.rec.e = performance.now(); j.resolve(r); }
         } catch (e) { j.reject(e); }
         await sleep(0); // the main thread goes back to the page (a frame callback, a message) before the next job
       }
@@ -38,7 +39,7 @@ export function createCompileGate({ limit = GATE.limit, pollMs = GATE.pollMs } =
     queue(run, { front = false, label = '' } = {}) {
       if (!jobs.length && !pumping && !inflight()) { started = 0; total = 0; } // a new batch: the progress starts over
       total++;
-      const p = new Promise((resolve, reject) => { const j = { run, front, resolve, reject, label }; if (front) jobs.unshift(j); else jobs.push(j); });
+      const p = new Promise((resolve, reject) => { const rec = { label, q: performance.now(), s: null, e: null }; const j = { run, front, resolve, reject, label, rec }; if (trace.length >= 600) trace.shift(); trace.push(rec); if (front) jobs.unshift(j); else jobs.push(j); });
       pump(); return p;
     },
     // the jobs that wait are dropped (their promises resolve with nothing: the device they were for is going away)
@@ -51,6 +52,7 @@ export function createCompileGate({ limit = GATE.limit, pollMs = GATE.pollMs } =
     // done / total of the batch that is running (started jobs less the programs still compiling)
     progress() { const t = Math.max(total, 1), done = Math.max(0, Math.min(total, started - Math.min(inflight(), started))); return { done: total ? done : 1, total: total || 1, fraction: total ? done / t : 1 }; },
     stats: () => ({ limit, started, total, maxInflight, tasks, queued: jobs.length }),
+    trace: () => trace.map(r => ({ label: r.label, q: r.q, s: r.s, e: r.e })),
     limit,
   };
 }

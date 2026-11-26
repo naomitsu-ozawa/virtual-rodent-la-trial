@@ -347,7 +347,7 @@ describe('the heartbeat hands the posed frames to the hook, and the hook cannot 
   it('the hook of the page reads the trial layer\'s sub image once, then runs the foveation check on the frames', () => {
     const rec = { publish: vi.fn(), layer: { trial: { destroy: vi.fn() } } };
     const binding = { getViewSubImage: vi.fn(() => ({ colorTexture: { usage: 30 } })) };
-    const hook = capsFrameHook(rec, { features: new Set() }, { startAfter: 1000 });
+    const hook = capsFrameHook(rec, { features: new Set() }, { fovea: true, startAfter: 1000 });
     hook({}, { views: [{ eye: 'left' }] }, { binding, layer: {} }); hook({}, { views: [{ eye: 'left' }] }, { binding, layer: {} });
     expect(rec.layer.trialSub[0].usage).toBe(30); expect(binding.getViewSubImage).toHaveBeenCalledTimes(1); expect(rec.fovea.state).toBe('waiting');
   });
@@ -355,7 +355,7 @@ describe('the heartbeat hands the posed frames to the hook, and the hook cannot 
   it('the page\'s hook: not done = called on every frame (the check ends within its first frames); done = only on every poseEvery-th frame again; the record never says "not run" once the hook has run', () => {
     const s = fakeSession(), g = createGxDiag({ store: null }), st = bound(); let t = 0; const states = [];
     const rec = { publish: vi.fn(() => states.push(rec.fovea ? rec.fovea.state : 'none')), layer: { trial: { destroy: vi.fn() } } };
-    const hook = capsFrameHook(rec, { features: new Set() }, { startAfter: 3 }); expect(hook.done).toBe(false);
+    const hook = capsFrameHook(rec, { features: new Set() }, { fovea: true, startAfter: 3 }); expect(hook.done).toBe(false);
     const hb = startGxHeartbeat({ session: s, diag: g, state: () => st, onFrame: hook, poseEvery: 16, now: () => (t += 0.5), stallFrames: 1e9 });
     for (let i = 0; i < 40; i++) s.frame({ views: [{ eye: 'left' }] });
     expect(hook.done).toBe(true); expect(rec.fovea.state).toBe('unsupported'); expect(rec.fovea.events.map(e => e.k)).toEqual(['unsupported']);
@@ -371,5 +371,20 @@ describe('the heartbeat hands the posed frames to the hook, and the hook cannot 
     const c = mk(undefined); for (let i = 0; i < 64; i++) c.s.frame({ views: [{}] }); expect(c.hook).toHaveBeenCalledTimes(5); expect(c.hb.stats.poseReads).toBe(5);
     const s = fakeSession(), g = createGxDiag({ store: null }), hb = startGxHeartbeat({ session: s, diag: g, state: () => bound(), poseEvery: 16, stallFrames: 1e9 }); for (let i = 0; i < 33; i++) s.frame({ views: [{}] }); expect(hb.stats.poseReads).toBe(1 + 2); expect(g.d.counts.poses).toBe(1 + 2 * 16);
   });
-  it('vr-view hands the hook to the heartbeat', () => { expect(src('vr-view.js')).toContain("onFrame:gxCaps?capsFrameHook(gxCaps,gx.device):null"); });
+  it('vr-view hands the hook to the heartbeat', () => { expect(src('vr-view.js')).toContain("onFrame:gxCaps?capsFrameHook(gxCaps,gx.device,{fovea:false}):null"); });
+  it('without the switch (the ordinary session) the foveation check is never made: no probe, no draws, done from the first frame, the record says it is off; the trial layer sub image is still read once', () => {
+    const s = fakeSession(), g = createGxDiag({ store: null }), st = bound(); let t = 0;
+    const rec = { publish: vi.fn(), layer: { trial: { destroy: vi.fn() } }, foveaDraws: 0 };
+    const device = { features: new Set(['timestamp-query']), createShaderModule: vi.fn(), createRenderPipeline: vi.fn(), createQuerySet: vi.fn() };
+    const hook = capsFrameHook(rec, device); expect(hook.done).toBe(false);
+    const hb = startGxHeartbeat({ session: s, diag: g, state: () => st, onFrame: hook, poseEvery: 16, now: () => (t += 0.5), stallFrames: 1e9 });
+    for (let i = 0; i < 40; i++) s.frame({ views: [{ eye: 'left' }] });
+    expect(hook.done).toBe(true); expect(rec.fovea.state).toBe('off'); expect(rec.foveaDraws).toBe(0);
+    expect(device.createShaderModule).not.toHaveBeenCalled(); expect(device.createRenderPipeline).not.toHaveBeenCalled(); expect(device.createQuerySet).not.toHaveBeenCalled();
+    expect(hb.stats.poseReads).toBe(1 + 2); // the first frame (the sub images and the trial layer), then the 16th and 32nd: not every frame for 120 frames
+  });
+  it('there is no debug switch gxFovea: the page always passes fovea false (the check is off)', () => {
+    expect(DEBUG_SWITCHES.find(d => d.id === 'gxFovea')).toBeUndefined(); expect(SETTINGS_DEFAULTS.gxFovea).toBeUndefined(); expect(DEBUG_SETTING_DEFAULTS.gxFovea).toBeUndefined();
+    for (const lang of ['ja', 'en']) { expect(I18N[lang].dbgGxFovea).toBeUndefined(); expect(I18N[lang].dbgGxFoveaNote).toBeUndefined(); }
+  });
 });
