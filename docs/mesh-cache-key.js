@@ -3,10 +3,10 @@
 //
 // A key must hold EVERY input that can change the mesh: a missing input would show an old mesh for new settings, which is a
 // wrong result, not a slow one. The functions below therefore throw on a missing input instead of leaving it out of the key.
-import { cacheKey } from './gpu-volume-cache.js?v=20261119-build751';
-import { datasetFingerprint } from './project-file.js?v=20261119-build751';
-import { segmentKeyFields } from './segment-cache-key.js?v=20261119-build751';
-import { packRuns } from './run-pack.js?v=20261119-build751';
+import { cacheKey } from './gpu-volume-cache.js?v=20261126-build765';
+import { datasetFingerprint } from './project-file.js?v=20261126-build765';
+import { segmentKeyFields } from './segment-cache-key.js?v=20261126-build765';
+import { packRuns } from './run-pack.js?v=20261126-build765';
 
 // Version of the mesh GENERATION. Raise it whenever a change makes the same inputs build a different mesh: the surface
 // extraction (GPU surface nets / run faces), the smoothing (constrained-smooth.js), the chunking and halo, the vertex merge or

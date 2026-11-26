@@ -79,6 +79,21 @@ describe('partBakeStep: the baked texture holds the whole original plus the bake
     const drop = src.slice(src.indexOf('const bakeDrop=()=>{'), src.indexOf('partBakeDrop=bakeDrop;'));
     for (const k of ['b.origTex', 'b.orig4Tex', 'b.srcTex', 'b.src4Tex']) expect(drop).toContain(k);
   });
+  it('vr-view.js: partApply keeps the bound bake until the new set is installed (the drop is in the same step as the body\'s change, before done() and before the old field is dropped)', () => {
+    const fn = src.slice(src.indexOf('const partApply=('), src.indexOf('const partBodySetRaw='));
+    const head = fn.slice(0, fn.indexOf('const run=async()=>{'));
+    expect(head).not.toContain('bakeDrop()'); // not at the start: the wait draws by the baked bytes
+    const emptyAt = fn.indexOf('if(!list.length){bakeDrop();'), keepAt = fn.indexOf('if(!keepB){const ob=b.tex'), dropAt = fn.lastIndexOf('bakeDrop();', keepAt);
+    expect(emptyAt).toBeGreaterThan(0); // the branch that removes the last part drops before it changes the body
+    expect(dropAt).toBeGreaterThan(fn.indexOf('const stale=partRes!==r')); // after the last await and the staleness check
+    expect(fn.indexOf('return false}', fn.indexOf('const stale=partRes!==r'))).toBeLessThan(dropAt); // a failed set (return false) leaves the bake alone
+    expect(dropAt).toBeLessThan(fn.indexOf('done();return true;\n     }\n     return false;')); // before done() (it calls refreshRegionLut)
+    expect(dropAt).toBeLessThan(keepAt);
+    // partBakeFrame: a part change in flight only stops a NEW bake; the ready one is kept
+    const frame = src.slice(src.indexOf('partBakeFrame=()=>{'), src.indexOf('let cfgChain='));
+    expect(frame).toContain('(bakeApplying>0&&!b.ready)))bakeDrop()');
+    expect(frame).toContain('if(bakeApplying>0||t.rb?.busy');
+  });
 });
 
 // n740: the baked cut is lit as the VRL_PART body lights it (vr-view.js VRL_BAKE_CUT / bakeGrad); the pictures: tools/vr-part-bake-check.mjs (SwiftShader)
