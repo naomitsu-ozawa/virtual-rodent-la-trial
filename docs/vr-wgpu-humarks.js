@@ -8,9 +8,9 @@
 //     program's edit test is editTex[s] >= 0.5 of a linear (or nearest) read, a convex combination of footprint texels, so it can only pass when the greatest byte is not below 0.498 (a byte of 126 or more: 126 / 255 = 0.494, with the rounding margin).
 // A sample is skipped when the cell has no shown slot s with (the slot does not gate on the edit mask or its edit maximum can pass) and (the slot is the processing mask alone, or the cell's HU range meets [segA.x, segA.y]): the display would read it and find idx = -1.
 // One rgba16uint texel per cell: r = least raw, g = greatest raw, b = edit maxima of slots 0 | 1 << 8, a = slots 2 | 3 << 8.
-import { uniformLayout, uniformStruct } from './vr-wgsl-core.js?v=20261126-build766';
-import { COARSE, coarseDims } from './vr-wgpu-coarse-proxy.js?v=20261126-build766';
-import { MARK_GROUP } from './vr-wgpu-marks.js?v=20261126-build766';
+import { uniformLayout, uniformStruct } from './vr-wgsl-core.js?v=20261126-build767';
+import { COARSE, coarseDims } from './vr-wgpu-coarse-proxy.js?v=20261126-build767';
+import { MARK_GROUP } from './vr-wgpu-marks.js?v=20261126-build767';
 
 export const HU_FIELDS = [['dims', 'vec4i'], ['cdims', 'vec4i'], ['edims', 'vec4i']]; // dims = the data (w, h, d), cdims = the cells (x, y, z), edims = the edit texture
 export const HU_BINDINGS = { params: 0, vol: 1, edit: 2, out: 3 };

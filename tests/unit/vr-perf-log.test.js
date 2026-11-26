@@ -451,7 +451,7 @@ describe('perf2 (measurement only): the cut-out timeline, the counters, the stal
   });
   it('vr-view feeds them: cut events at the operation, the fields, the upload, the attach, the bake (start, drop with its reason, back), the put-back; the WebGL view feeds nv / bk', () => {
     const vr = readFileSync(new URL('../../docs/vr-view.js', import.meta.url), 'utf8');
-    for (const k of ["cutEv('op',", "cutEv('own')", "cutEv('calc')", "cutEv('upload',", "cutEv('attach')", "cutEv('bake*',", "cutEv('bake+',", "cutEv('bake-',", "cutEv('put')"]) expect(vr, k).toContain(k);
+    for (const k of ["cutEv('op',", "cutEv('own')", "cutEv('calc',", "cutEv('upload',", "cutEv('attach')", "cutEv('bake*',", "cutEv('bake+',", "cutEv('bake-',", "cutEv('put')"]) expect(vr, k).toContain(k);
     for (const k of ["perfLog.add('cvb',rs.coverB)", "perfLog.add('cvp',rs.coverP)", "perfLog.add('rbs',comboT?.rb?.busy?1:0)", "perfLog.add('nv',nv);perfLog.add('bk',partBakeOn()?1:0)", "perfLog?.tally('bake-drop',w)", "perfLog?.tally('bake-wait',why)"]) expect(vr, k).toContain(k);
     for (const why of ['notOk', 'src', 'rbBusy', 'mask', 'bodyGen', 'gen', 'applying', 'worker', 'grid']) expect(vr, why).toContain("'" + why + "'");
     // 4-3 is the WebGPU view's only: the WebGL view starts the bake as it did

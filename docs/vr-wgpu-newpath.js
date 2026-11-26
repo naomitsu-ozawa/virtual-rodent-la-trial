@@ -4,15 +4,15 @@
 //   coarse : the display program with the 4 x 4 tiles and the far end tB (coarseVolumeWgsl), the pre-pass over the coarse grid (256 KB).
 //   both   : the two substitutions in one program (marchWgsl of the coarse program; group 1 = the march layout). Not measured before, and not the product of the two ratios.
 // A frame uses a new way only when everything it needs is there and agrees with this frame (plan() below, the rules of 1-5 of the plan); any other frame is drawn the way it always was (the caller keeps its own path: plan() says use: false and why).
-import { volumeWgsl } from './vr-wgsl-core.js?v=20261126-build766';
-import { marchWgsl, createMarchHost } from './vr-wgpu-coarse-march.js?v=20261126-build766';
-import { coarseVolumeWgsl, createCoarseDisplay, walkLimitOk } from './vr-wgpu-coarse-proxy.js?v=20261126-build766';
-import { skipText, createMarkHost } from './vr-wgpu-marks.js?v=20261126-build766'; // S / OS / EvS: the skip marks and their programs
-import { featOf, featKey } from './vr-wgsl-feat.js?v=20261126-build766';
-import { createHuMarkHost } from './vr-wgpu-humarks.js?v=20261126-build766'; // the HU marks of the general loop's S for the classification-off diagnostic
-import { depthWgsl } from './vr-wgsl-depth.js?v=20261126-build766'; // the depth axis (frames that draw several volumes into one target)
-import { createCompileGate } from './vr-wgpu-gate.js?v=20261126-build766'; // the programs go to the GPU through the gate (a task of their own each, a few at a time), never all in one task
-import { generalWgsl } from './vr-wgsl-general.js?v=20261126-build766'; // the general loop (bricks, no jumps) of the frames that do not use the combined texture // the feature axis of the texts (the results' colours, the child segments, hiding)
+import { volumeWgsl } from './vr-wgsl-core.js?v=20261126-build767';
+import { marchWgsl, createMarchHost } from './vr-wgpu-coarse-march.js?v=20261126-build767';
+import { coarseVolumeWgsl, createCoarseDisplay, walkLimitOk } from './vr-wgpu-coarse-proxy.js?v=20261126-build767';
+import { skipText, createMarkHost } from './vr-wgpu-marks.js?v=20261126-build767'; // S / OS / EvS: the skip marks and their programs
+import { featOf, featKey } from './vr-wgsl-feat.js?v=20261126-build767';
+import { createHuMarkHost } from './vr-wgpu-humarks.js?v=20261126-build767'; // the HU marks of the general loop's S for the classification-off diagnostic
+import { depthWgsl } from './vr-wgsl-depth.js?v=20261126-build767'; // the depth axis (frames that draw several volumes into one target)
+import { createCompileGate } from './vr-wgpu-gate.js?v=20261126-build767'; // the programs go to the GPU through the gate (a task of their own each, a few at a time), never all in one task
+import { generalWgsl } from './vr-wgsl-general.js?v=20261126-build767'; // the general loop (bricks, no jumps) of the frames that do not use the combined texture // the feature axis of the texts (the results' colours, the child segments, hiding)
 
 export const NEW_PATH_MODES = ['dist', 'coarse', 'both'];
 // the display program text of a mode (f16 = half precision march as the display's; cls4 = the fourth segment's own texture)
@@ -39,11 +39,12 @@ export function newPathGate({ mode, halfExt = [1, 1, 1], stepSize = 0.01, failed
 }
 
 // ---- the display's own choice of a way for one pass of one frame (the table of the plan's chapter 6: there is no branch that returns the old way) ----
-// ways: B = distSplit + the 4 x 4 tiles over the coarse grid (the display's own tiles of the periphery pass are a texture of their own); D = distSplit + the 8 x 8 pre-pass of the display; D0 = distSplit without any pre-pass (proxyOn 0);
+// ways: B = distSplit + the 4 x 4 tiles over the coarse grid (the display's own tiles of the periphery pass are a texture of their own); D = distSplit + the 8 x 8 pre-pass of the display (a part's own: the cone through its partOcc, docs/vr-wgpu-part-tile.js); D0 = distSplit without any pre-pass (proxyOn 0);
 //   EvD = distSplit on the section-plane program (the slices and the cut face are visited at the same grid points as in the display's program); S / OS / EvS = the ways for a frame without jumps (the skip marks, docs/vr-wgpu-marks.js).
 // F = { pass: 'low' | 'peri' | 'probe', jumpOn (bool: the distance bytes are valid and jumps are on), section (bool: a section plane is on or the program is the section one), diag (0..5, the diagnostic of the pass; the probe is 5),
 //   distField (bool: the distance bytes are valid, whatever the diagnostic says), walkOk (walkLimitOk: no ray can reach the loop's 4096 iterations), matrixOk (both eyes' matrices can be inverted: the tiles can be made), gridReady (the coarse grid holds the shown set's marks;
-//   false while its rows are being made), boxed (bool: the volume is a part taken out of the body: its rays start at its own content box, so the tiles' start (tA) gains nothing, and a pre-pass over the whole pass would be work for a small box) }
+//   false while its rows are being made), boxed (bool: the volume is a part taken out of the body: its rays start at its own content box, so the tiles' start (tA) of the body's pre-pass gains nothing, and a pre-pass over the whole pass would be work for a small box),
+//   partTiles (bool, with boxed: the part has tiles of its own, the cone through its partOcc: D; the part's pass, not the body's, is what they are made for) }
 export const WAYS = ['B', 'D', 'D0', 'EvD', 'S', 'OS', 'EvS'];
 export function chooseWay(F) {
   const peri = F.pass === 'peri', probe = F.pass === 'probe' || (F.diag | 0) === 5, diag = F.diag | 0;
@@ -56,8 +57,8 @@ export function chooseWay(F) {
   }
   if (probe || diag === 1) return 'D0'; // the probe has no tiles of its own; diag 1 returns before the loop (iters are 0 everywhere), nothing to walk
   if (!F.matrixOk) return 'D0';
-  if (F.boxed) return 'D0'; // a part: its rays start at the box it is made of (boxEntry), the 4 x 4 / 8 x 8 pre-pass of the whole pass would only find starts that lie before it
   if (diag === 2) return 'D0'; // diag 2 draws the loop's count: the 8 x 8 pre-pass of D moves a ray's start (fewer iterations), so the picture would differ from the display's own loop count; D0 walks the display's loop
+  if (F.boxed) return F.partTiles && !peri ? 'D' : 'D0'; // a part: its rays start at the box it is made of (boxEntry), the 4 x 4 / 8 x 8 pre-pass of the whole pass would only find starts that lie before it. Its own tiles (docs/vr-wgpu-part-tile.js: a cone through its partOcc, built for the pass's own rects) make it D in the centre pass when it has them (F.partTiles: a part with the blocks of its field on the GPU); the periphery has no 8 x 8 pre-pass, a part without blocks is drawn from its box
   if (peri) return !F.walkOk || !F.gridReady ? 'D0' : 'B';
   return !F.walkOk || !F.gridReady ? 'D' : 'B';
 }

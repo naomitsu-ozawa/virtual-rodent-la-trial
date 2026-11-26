@@ -5,11 +5,11 @@
 // so everything outside the march is the core's own. Nothing of the march is shared with the core's loop: the samples are at t = t0 + n * step only until a brick is skipped, so the core's grid index k does not exist here.
 // skip: the way of the display for these frames (the plan's chapter 5-2): the marks of docs/vr-wgpu-marks.js (group 1) tell that the sample is outside every shown segment, and then its read is left out: the loop's state after it is the state after a read that finds
 // no segment (lastIndex -1, prevValid, previousT = t, the same next t), and prevSkip makes a hit that follows read the outside value (prevF) at previousT; the bricks, the nextT, the iteration count are the baseline's own.
-import { volumeWgsl } from './vr-wgsl-core.js?v=20261126-build766';
-import { featParts, featOf } from './vr-wgsl-feat.js?v=20261126-build766';
-import { COARSE } from './vr-wgpu-coarse-proxy.js?v=20261126-build766';
-import { MARK_GROUP } from './vr-wgpu-marks.js?v=20261126-build766';
-import { HU_MAY_WGSL } from './vr-wgpu-humarks.js?v=20261126-build766'; // the HU marks' test of the classification-off diagnostic
+import { volumeWgsl } from './vr-wgsl-core.js?v=20261126-build767';
+import { featParts, featOf } from './vr-wgsl-feat.js?v=20261126-build767';
+import { COARSE } from './vr-wgpu-coarse-proxy.js?v=20261126-build767';
+import { MARK_GROUP } from './vr-wgpu-marks.js?v=20261126-build767';
+import { HU_MAY_WGSL } from './vr-wgpu-humarks.js?v=20261126-build767'; // the HU marks' test of the classification-off diagnostic
 
 export const BRICKS_BINDING = 14; // rgba32float, 3d, one texel per 8^3 brick: R, G = the HU min / max of the brick (one voxel of overlap), B = the occupancy nibble of the mask-only segments
 const once = (t, from) => { const i = t.indexOf(from); if (i < 0 || t.indexOf(from, i + 1) >= 0) throw new Error('general loop: anchor not found exactly once: ' + from.slice(0, 70)); return i; };

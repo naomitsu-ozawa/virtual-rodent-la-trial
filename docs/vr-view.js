@@ -7,115 +7,115 @@
 // fragment shader is a GLSL port of volumeShader() (medical-volume.js): same
 // segment test, 6-step hit refinement, gradient normal and shading constants.
 // Not shown yet: processed edits, cuts, section view, MPR planes.
-import { effectiveFlag } from './debug-flags.js?v=20261126-build766';
+import { effectiveFlag } from './debug-flags.js?v=20261126-build767';
 import * as THREE from './vendor/three@0.187.0/build/three.module.js';
 import * as THREEG from './vendor/three@0.187.0/build/three.webgpu.js'; // the WebGPU build: its WebGPURenderer / NodeMaterial / TSL are used only when the session opens on WebGPU (vr-wgpu.js); the classes of both builds are the same objects
-import { vrGpuRequested, vrGpuAvailable, discardXrDepth, requestVrGpuDevice, createVrVolumeRenderer, gxDataValue, gxDataRow, failGxSession, bindGxSession, releaseXrLoop, disposeGxRenderer, watchDeviceLost, createGxDiag, gxDiagReport, saveGxDiagText, watchGxErrors, gxSessionValues, startGxHeartbeat, gxShaderInfo, useMaterialSrgbOutput, TS_SAMPLE_EVERY, GX_POSE_EVERY, GX_ESCAPE_POLL_MS } from './vr-wgpu.js?v=20261126-build766'; // WebGPU VR / AR trial: the volume pass in WGSL (vr-wgsl-core.js), the WebGL one below stays the default
-import { startGxCaps, installLayerWrap, capsFrameHook, createWaitProbe } from './vr-wgpu-caps.js?v=20261126-build766'; // WebGPU VR: what the headset's browser offers (features / limits, fixed foveation in the eye pass, textureUsage layer, the wait after the submit) into the diagnostic record's 'device caps' entry
-import { createDirectLog } from './vr-direct-log.js?v=20261126-build766'; // the WebGPU view's direct draw trial (vr-wgpu-direct.js): its part of the performance record
-import { reduceSliceArea, packedRgSlice, packCtSlice, gpuRunsForTexture } from './medical-volume.js?v=20261126-build766';
-import { ensureSegmentBaseRuns } from './segment-runs.js?v=20261126-build766';
-import { gpuVolumeTarget, gpuVolumeEditDescriptors, volumeCache, volumeCacheBudget, volumeCacheBudgetInfo } from './gpu-volume-data.js?v=20261126-build766';
-import { pruneOtherFilterSettings } from './gpu-volume-cache.js?v=20261126-build766';
-import { packEntry, storeEntry, loadEntry, pruneSiblings, removeOldBuilds, storeStatus, noteStore, partsOf, keyOfParts, explainMiss, isStandardOpen, copyPackedSlice } from './vr-prep-cache.js?v=20261126-build766';
-import { vrStateSignature } from './vr-data-key.js?v=20261126-build766'; // the state of the page now, to tell whether a practice level is still in its standard state //: the finished VR data is kept on the device (vr-prep-cache.js)
-import { SEGMENT_PRESET_ORDER, gpuSegmentOrder, segmentHasProcessedMask, segmentState, segmentEditState, segmentSourceSignature, segmentShadeRange, segmentShadeSpan, setSegmentShadeEnd, resetSegmentShadeRange, shadeDataRange, applyShadeAutoHistograms, onShadeAutoChange } from './segments.js?v=20261126-build766'; import { segmentById, childRenderEntries, onChildRenderChange, setChildLook } from './segments.js?v=20261126-build766'; import { setShadeAutoPageHeld } from './segments.js?v=20261126-build766';
-import { sceneState, analysisRegions, activeSeries } from './state.js?v=20261126-build766';
-import { datasetFingerprint, unpackProject } from './project-file.js?v=20261126-build766';
-import { PAIR_UNIFORMS, pairUniforms, pairShapeShown, pairOffsetX, pairBoxHas, pairSectionOwnerIn, planeNearerPartner, grabTargetOf, pairGrabPlan, PLANE_PARK_W, pairShownMask, pairHeldMask, pairSlotShown, createAtlasIndex, atlasPrimary } from './vr-pair-view.js?v=20261126-build766'; // stage 2 of the sample pairs: the partner volume drawn beside the primary (the rules; the GPU side is the `pair` block of startVrView)
-import { PART_GLSL, PART_OWN, PART_OUT_M, PART_ANIM_MS, partUniforms, partSame, regionSlotMask, patchRegionLutMany, patchChildLutMany, anyHiddenIn, hideIndexPlane, partBoundsOf, partIdBoxesOf, hideIndexPlaneCached, partProxyBox, partRayRange, partKeepVoxelOf,  partOwnRegionLut, partOwnChildLut, partHideOnlyRegionLut, partHideOnlyChildLut, PART_TEXT, PART_BTN_X, PART_RESTORE_W, runPartField, partFieldPlain, partFieldBoxOf, PART_FIELD, partFieldCodesAsync, createPartSetRunner, partOccOf, partBodyHidOf, partFieldNeedsOwn, partFieldMap, partAirOf, markCutRegionLut, markCutChildLut, partBakeBoxOf, partBakeSlots, partBakeCrop, bakeRegionLut, bakeChildLut, bakeRegionAnyHidden, bakeChildAnyHidden, partBakeStep } from './vr-part-view.js?v=20261126-build766'; // an earlier change: regions / child segments taken out of the body (the rules; the GPU side is the `part` block of startVrView)
-import { partnerInputs, unitsPerMmOfSeries, resultRepresentativeVoxel } from './vr-pair-data.js?v=20261126-build766';
-import { findSamplePartners, loadSamplePartnerFiles, loadSamplePartnerProject, loadSamplePairs } from './data-load.js?v=20261126-build766';
-import { samplePartners } from './sample-sets.js?v=20261126-build766';
-import { analysisRunsContain } from './run-length.js?v=20261126-build766';
-import { createPairStore, isPairId } from './vr-pair-store.js?v=20261126-build766'; // stage 3: the partner's own points / distances
-import { loadPartnerName, practiceSeriesName } from './sample-registry.js?v=20261126-build766'; // the sample pair row of the menu (stage 3): which partner the open dataset has (sample-pairs.json) and its name (the partner's sample.json)
-import { parseFiles, groupSeries } from './dicom.js?v=20261126-build766';
-import { HAND_PICK_TOL, sectionRayHit, recordVrPoint, resolveTriggerTarget, volumeGripAllowed, pressDragSection, createTriggerPress, dragShouldStart, DRAG_RECORD, sectionFollowStart, sectionFollowStep, sectionWristTurn, snapPlaneCenterIntoBox, rayLocalPlaneX, squareBandContains, squareContains, createHoverPulse, qMul, qInv, qRot, qAngleDeg, clampPlaneCenter, HAPTIC, normalizePointMode, surfaceVoxelFromHit, voxelToLocal, voxelSize, createStickGate, deleteSelected, createUndoStack, applyUndo, pointIsHidden } from './vr-point.js?v=20261126-build766';
-import { createVrPointMarkers, createSurfaceCursor } from './vr-point-markers.js?v=20261126-build766';
-import { createAnchorDots, dotBehindCard, ANCHOR_DOT_DIAMETER_M, LEG_WIDTH_M, LEG_MIN_ANGLE } from './vr-anchor-dots.js?v=20261126-build766'; // the dot at the foot of a pinned label's leader
-import { createLabelBatch, createPlainLabelBatch } from './vr-label-batch.js?v=20261126-build766'; // the name cards and their legs drawn in a few calls
-import { buildClsData } from './point-cls.js?v=20261126-build766';
-import { createHiddenClsManager } from './hidden-cls-state.js?v=20261126-build766';
-import { onDatasetChange } from './dataset-reset.js?v=20261126-build766';
-import { shadeRangeStep, shadeValueAt, shadePosOf, createShadeAutoScheduler } from './cap-shade.js?v=20261126-build766'; // the per-segment shading range (slider positions <-> data values);: the scheduler of the auto range
-import { STEP_PRESS, stepClamp, createStepHold } from './value-step.js?v=20261126-build766'; // ＋ / − of the data-value sliders: 10 per press, hold repeats and speeds up to 100
-import { formatCtValue } from './utils.js?v=20261126-build766';
-import { createHoldTracker, createHoldRing, HOLD_RING_RADIUS, HOLD_RING_MIN_DIST } from './vr-hold-ring.js?v=20261126-build766';
-import { WHEEL_ITEMS, DEFAULT_WHEEL, normalizeWheelItems, migrateWheelSectionFlip, setWheelItem, moveWheelItem, clearWheelItem, createRingMenu, createWheelStick, createButtonPress } from './vr-ring.js?v=20261126-build766';
-import { getComments, getMarkersShown, onCommentsChange, commentMatchesSeries, removeComment, restoreComment, updateCommentPosition, updateCommentText, updateCommentColor } from './comments.js?v=20261126-build766';
-import { POINT_PALETTE, pointColor, normalizeColor } from './point-colors.js?v=20261126-build766';
-import { combineClassificationDistance, fourthChannelBytes } from './distance-field.js?v=20261126-build766';
-export { WebGlVolumeRenderer, webglVolumeEnabled } from './webgl-volume.js?v=20261126-build766'; // the page's WebGL volume (no WebGPU) is handed to app.js through this module's existing lazy load
-import { BRICK as PREP_BRICK, thinHuData, sourceRangeInit, sourceRangeAdd, computeBricksOf, halveData, buildEditMaskOf, buildChildIndexOf, packIndexRg, createVolumePrep } from './vr-volume-prep.js?v=20261126-build766'; // the heavy pure steps of the preparation (bricks, the 256 copy, classification, distance field) run in a worker
-import { createSwapGuard, runDataSwap, createUploadQueue, createSettleGate, createFrameGapMonitor, swapPlan, SWAP_STAGES, SETTLE_TIMEOUT_MS, LOAD_TIMEOUT_MS, CACHE_READ_TIMEOUT_MS, VR_STORE_FLUSH_MS, saveShouldWait, withTimeout } from './vr-data-switch.js?v=20261126-build766'; // switching the data inside a running session
-import { classifiedAt, marchClassificationHitInfo } from './vr-pick.js?v=20261126-build766';
-import { VR_TARGET_SIDE, volumeMeta, editDescsOf, regionItemsOf, childItemsOf, classifyStateOf, shownMask as shownMaskOf, shownRegions as shownRegionsOf, shownChildren as shownChildrenOf } from './vr-prep-inputs.js?v=20261126-build766'; // stage 1 of the sample pairs: what the preparation reads is ONE object (inp); the page's own is pageInputs below
-import { createSkipState, skipGrid } from './vr-skip-occupancy.js?v=20261126-build766'; // the creep-skip occupancy bits of the combined texture (VR max-zoom cost)
-import { createComboRebuild } from './vr-combo-rebuild.js?v=20261126-build766';
-import { hideBitsOn, hideBitsSame, hideBitsAny } from './vr-hide-field.js?v=20261126-build766'; // the distance field of the visible content while a result / child is hidden //: the combined texture rebuilt off the frame when the shown segments change
-import { setBusySlot, reportBusyProgress } from './progress-modal.js?v=20261126-build766';
-import { tr } from './i18n.js?v=20261126-build766';
-import { regionCustomName, regionChipTitle } from './region-name.js?v=20261126-build766'; // the shared region name rule (name, else ID <atlas id>)
+import { vrGpuRequested, vrGpuAvailable, discardXrDepth, requestVrGpuDevice, createVrVolumeRenderer, gxDataValue, gxDataRow, failGxSession, bindGxSession, releaseXrLoop, disposeGxRenderer, watchDeviceLost, createGxDiag, gxDiagReport, saveGxDiagText, watchGxErrors, gxSessionValues, startGxHeartbeat, gxShaderInfo, useMaterialSrgbOutput, TS_SAMPLE_EVERY, GX_POSE_EVERY, GX_ESCAPE_POLL_MS } from './vr-wgpu.js?v=20261126-build767'; // WebGPU VR / AR trial: the volume pass in WGSL (vr-wgsl-core.js), the WebGL one below stays the default
+import { startGxCaps, installLayerWrap, capsFrameHook, createWaitProbe } from './vr-wgpu-caps.js?v=20261126-build767'; // WebGPU VR: what the headset's browser offers (features / limits, fixed foveation in the eye pass, textureUsage layer, the wait after the submit) into the diagnostic record's 'device caps' entry
+import { createDirectLog } from './vr-direct-log.js?v=20261126-build767'; // the WebGPU view's direct draw trial (vr-wgpu-direct.js): its part of the performance record
+import { reduceSliceArea, packedRgSlice, packCtSlice, gpuRunsForTexture } from './medical-volume.js?v=20261126-build767';
+import { ensureSegmentBaseRuns } from './segment-runs.js?v=20261126-build767';
+import { gpuVolumeTarget, gpuVolumeEditDescriptors, volumeCache, volumeCacheBudget, volumeCacheBudgetInfo } from './gpu-volume-data.js?v=20261126-build767';
+import { pruneOtherFilterSettings } from './gpu-volume-cache.js?v=20261126-build767';
+import { packEntry, storeEntry, loadEntry, pruneSiblings, removeOldBuilds, storeStatus, noteStore, partsOf, keyOfParts, explainMiss, isStandardOpen, copyPackedSlice } from './vr-prep-cache.js?v=20261126-build767';
+import { vrStateSignature } from './vr-data-key.js?v=20261126-build767'; // the state of the page now, to tell whether a practice level is still in its standard state //: the finished VR data is kept on the device (vr-prep-cache.js)
+import { SEGMENT_PRESET_ORDER, gpuSegmentOrder, segmentHasProcessedMask, segmentState, segmentEditState, segmentSourceSignature, segmentShadeRange, segmentShadeSpan, setSegmentShadeEnd, resetSegmentShadeRange, shadeDataRange, applyShadeAutoHistograms, onShadeAutoChange } from './segments.js?v=20261126-build767'; import { segmentById, childRenderEntries, onChildRenderChange, setChildLook } from './segments.js?v=20261126-build767'; import { setShadeAutoPageHeld } from './segments.js?v=20261126-build767';
+import { sceneState, analysisRegions, activeSeries } from './state.js?v=20261126-build767';
+import { datasetFingerprint, unpackProject } from './project-file.js?v=20261126-build767';
+import { PAIR_UNIFORMS, pairUniforms, pairShapeShown, pairOffsetX, pairBoxHas, pairSectionOwnerIn, planeNearerPartner, grabTargetOf, pairGrabPlan, PLANE_PARK_W, pairShownMask, pairHeldMask, pairSlotShown, createAtlasIndex, atlasPrimary } from './vr-pair-view.js?v=20261126-build767'; // stage 2 of the sample pairs: the partner volume drawn beside the primary (the rules; the GPU side is the `pair` block of startVrView)
+import { PART_GLSL, PART_OWN, PART_OUT_M, PART_ANIM_MS, partUniforms, partSame, regionSlotMask, patchRegionLutMany, patchChildLutMany, anyHiddenIn, hideIndexPlane, partBoundsOf, partIdBoxesOf, hideIndexPlaneCached, partProxyBox, partRayRange, partKeepVoxelOf,  partOwnRegionLut, partOwnChildLut, partHideOnlyRegionLut, partHideOnlyChildLut, PART_TEXT, PART_BTN_X, PART_RESTORE_W, runPartField, partFieldPlain, partFieldBoxOf, PART_FIELD, partFieldCodesAsync, createPartSetRunner, partOccOf, partBodyHidOf, partFieldNeedsOwn, partFieldMap, partAirOf, markCutRegionLut, markCutChildLut, partBakeBoxOf, partBakeSlots, partBakeCrop, bakeRegionLut, bakeChildLut, bakeRegionAnyHidden, bakeChildAnyHidden, partBakeStep } from './vr-part-view.js?v=20261126-build767'; // an earlier change: regions / child segments taken out of the body (the rules; the GPU side is the `part` block of startVrView)
+import { partnerInputs, unitsPerMmOfSeries, resultRepresentativeVoxel } from './vr-pair-data.js?v=20261126-build767';
+import { findSamplePartners, loadSamplePartnerFiles, loadSamplePartnerProject, loadSamplePairs } from './data-load.js?v=20261126-build767';
+import { samplePartners } from './sample-sets.js?v=20261126-build767';
+import { analysisRunsContain } from './run-length.js?v=20261126-build767';
+import { createPairStore, isPairId } from './vr-pair-store.js?v=20261126-build767'; // stage 3: the partner's own points / distances
+import { loadPartnerName, practiceSeriesName } from './sample-registry.js?v=20261126-build767'; // the sample pair row of the menu (stage 3): which partner the open dataset has (sample-pairs.json) and its name (the partner's sample.json)
+import { parseFiles, groupSeries } from './dicom.js?v=20261126-build767';
+import { HAND_PICK_TOL, sectionRayHit, recordVrPoint, resolveTriggerTarget, volumeGripAllowed, pressDragSection, createTriggerPress, dragShouldStart, DRAG_RECORD, sectionFollowStart, sectionFollowStep, sectionWristTurn, snapPlaneCenterIntoBox, rayLocalPlaneX, squareBandContains, squareContains, createHoverPulse, qMul, qInv, qRot, qAngleDeg, clampPlaneCenter, HAPTIC, normalizePointMode, surfaceVoxelFromHit, voxelToLocal, voxelSize, createStickGate, deleteSelected, createUndoStack, applyUndo, pointIsHidden } from './vr-point.js?v=20261126-build767';
+import { createVrPointMarkers, createSurfaceCursor } from './vr-point-markers.js?v=20261126-build767';
+import { createAnchorDots, dotBehindCard, ANCHOR_DOT_DIAMETER_M, LEG_WIDTH_M, LEG_MIN_ANGLE } from './vr-anchor-dots.js?v=20261126-build767'; // the dot at the foot of a pinned label's leader
+import { createLabelBatch, createPlainLabelBatch } from './vr-label-batch.js?v=20261126-build767'; // the name cards and their legs drawn in a few calls
+import { buildClsData } from './point-cls.js?v=20261126-build767';
+import { createHiddenClsManager } from './hidden-cls-state.js?v=20261126-build767';
+import { onDatasetChange } from './dataset-reset.js?v=20261126-build767';
+import { shadeRangeStep, shadeValueAt, shadePosOf, createShadeAutoScheduler } from './cap-shade.js?v=20261126-build767'; // the per-segment shading range (slider positions <-> data values);: the scheduler of the auto range
+import { STEP_PRESS, stepClamp, createStepHold } from './value-step.js?v=20261126-build767'; // ＋ / − of the data-value sliders: 10 per press, hold repeats and speeds up to 100
+import { formatCtValue } from './utils.js?v=20261126-build767';
+import { createHoldTracker, createHoldRing, HOLD_RING_RADIUS, HOLD_RING_MIN_DIST } from './vr-hold-ring.js?v=20261126-build767';
+import { WHEEL_ITEMS, DEFAULT_WHEEL, normalizeWheelItems, migrateWheelSectionFlip, setWheelItem, moveWheelItem, clearWheelItem, createRingMenu, createWheelStick, createButtonPress } from './vr-ring.js?v=20261126-build767';
+import { getComments, getMarkersShown, onCommentsChange, commentMatchesSeries, removeComment, restoreComment, updateCommentPosition, updateCommentText, updateCommentColor } from './comments.js?v=20261126-build767';
+import { POINT_PALETTE, pointColor, normalizeColor } from './point-colors.js?v=20261126-build767';
+import { combineClassificationDistance, fourthChannelBytes } from './distance-field.js?v=20261126-build767';
+export { WebGlVolumeRenderer, webglVolumeEnabled } from './webgl-volume.js?v=20261126-build767'; // the page's WebGL volume (no WebGPU) is handed to app.js through this module's existing lazy load
+import { BRICK as PREP_BRICK, thinHuData, sourceRangeInit, sourceRangeAdd, computeBricksOf, halveData, buildEditMaskOf, buildChildIndexOf, packIndexRg, createVolumePrep } from './vr-volume-prep.js?v=20261126-build767'; // the heavy pure steps of the preparation (bricks, the 256 copy, classification, distance field) run in a worker
+import { createSwapGuard, runDataSwap, createUploadQueue, createSettleGate, createFrameGapMonitor, swapPlan, SWAP_STAGES, SETTLE_TIMEOUT_MS, LOAD_TIMEOUT_MS, CACHE_READ_TIMEOUT_MS, VR_STORE_FLUSH_MS, saveShouldWait, withTimeout } from './vr-data-switch.js?v=20261126-build767'; // switching the data inside a running session
+import { classifiedAt, marchClassificationHitInfo } from './vr-pick.js?v=20261126-build767';
+import { VR_TARGET_SIDE, volumeMeta, editDescsOf, regionItemsOf, childItemsOf, classifyStateOf, shownMask as shownMaskOf, shownRegions as shownRegionsOf, shownChildren as shownChildrenOf } from './vr-prep-inputs.js?v=20261126-build767'; // stage 1 of the sample pairs: what the preparation reads is ONE object (inp); the page's own is pageInputs below
+import { createSkipState, skipGrid } from './vr-skip-occupancy.js?v=20261126-build767'; // the creep-skip occupancy bits of the combined texture (VR max-zoom cost)
+import { createComboRebuild } from './vr-combo-rebuild.js?v=20261126-build767';
+import { hideBitsOn, hideBitsSame, hideBitsAny } from './vr-hide-field.js?v=20261126-build767'; // the distance field of the visible content while a result / child is hidden //: the combined texture rebuilt off the frame when the shown segments change
+import { setBusySlot, reportBusyProgress } from './progress-modal.js?v=20261126-build767';
+import { tr } from './i18n.js?v=20261126-build767';
+import { regionCustomName, regionChipTitle } from './region-name.js?v=20261126-build767'; // the shared region name rule (name, else ID <atlas id>)
 // ONE name rule for a result in every list (the 3D chip, the VR tree rows, the VR 解析 tab, the かんたん menu): "<number>. <name | ID <atlasId> | the segment names joined with +>" (region-name.js regionChipTitle)
 const vrChipTitle=r=>{const g=analysisRegions.find(x=>x.id===r.rid);return g?regionChipTitle(g,tr):r.rid+'. '+r.segmentKeys.map(k=>tr(k)||k).join('+')};
-import { wrapMenuText, stackMenuRows } from './vr-menu-text.js?v=20261126-build766';
-import { activeEventLevel, levelForSample, chooseEventLevel, levelSwitchItems, sampleHasLevel, levelSwitchTargets, canSwitchData, EVENT_LEVELS, datasetForSample, datasetLabel, eventModeOn, missionLines, simpleMenuSegments, triggerModeRow, labelTargets, triggerMode, TRIGGER_AT_START, resetPress, resetArmed, RESET_ARM_MS, simpleMenuLayout, SIMPLE_MENU, sliceOpacityValue, sliceDrawState, sliderHitTest, sliderGrabOffset, sliderValueAt, KNOB_GRAB_PX } from './event-mode.js?v=20261126-build766'; // 体験会モード - the chosen level's mission on the help board, the かんたん menu
-import { VIEW_TOGGLE_ID, VIEW_TOGGLE_BUTTON, SECTION_DELETE_ID, createViewToggle, createDoublePress, ringIdsFor } from './vr-view-toggle.js?v=20261126-build766';
-import { vrSpacingNote, vrVolumeText } from './vr-spacing-note.js?v=20261126-build766';
-import { NORM_LONG, physicalExtentsMm, longestMm, realMagnification, realHolderScale, startHolderScale, tutorialHolderScale, smallForTutorial, TUT_VOLUME_FWD, TUT_VOLUME_DOWN, magnificationText, createScaleTag, clampScale, pinchScale, scaleLimits, oversizeNote, planeFrameLocalScale, planeTagLocalScale, scaleLineText, scalePosOf, posToScale, scaleStep, viewTabScaleLayout } from './vr-real-scale.js?v=20261126-build766';
-import { createPostFrame, flushOnHidden } from './vr-post-frame.js?v=20261126-build766'; // E1: work after the XR frame callback; the perf record's save when the page is hidden
-import { createPartProbeLog } from './vr-part-probe-log.js?v=20261126-build766'; // n764 4-1 stage 0: the parts' rays in the loop (decoded from the parts' counting probe, a section of the performance record)
-import { createPerfLog, perfReport, perfFileName, createVolBreakdown, BD_VARIANTS, BD_SPECS } from './vr-perf-log.js?v=20261126-build766'; // the VR performance record (one row a second, WebGL and WebGPU alike; shown on the page after the session)
-import { createIdentRun, createIdentLog, identReportLines, identResultLine, newPathLines } from './vr-ident-log.js?v=20261126-build766'; // the same-picture check (button on the self-check page): its run, its record and its text (a section of the performance record)
-import { createCompareBench, createFrameRing, createLongTaskWatcher, createIsolation, tapPerfLog, benchReportLines, ringReportLines, leftoverReportLines, readHeapBytes, BENCH_COUNT, BENCH_HOLDER_SCALE } from './vr-bench.js?v=20261126-build766'; // the comparison bench, the per-frame ring and the isolation switches (button on the 詳細 tab; their text is a section of the performance record)
-import { createGxLaserMaterial, createGxDome } from './vr-gx-looks.js?v=20261126-build766'; // the WebGPU view's laser ribbon and background dome
-import { GX_SWITCH } from './vr-wgpu.js?v=20261126-build766'; // the isolation run's switch of the volume pass's GPU timestamps
-import { createAutoQuality, autoFloor, STEP_LEVELS, STEP_CHOICES, stepChoiceScale, marchStep, freeVolMs } from './vr-auto-quality.js?v=20261126-build766';
-import { createVrHuLine } from './vr-hu-line.js?v=20261126-build766';
-import { huMenuTexts, voxelFromHits } from './vr-hu-line-core.js?v=20261126-build766';
-import { setHuLineDeferred } from './hu-line-model.js?v=20261126-build766';
-import { createVrMeasure, LABEL_LIT_SCALE } from './vr-measure.js?v=20261126-build766';
-import { resetUserState } from './event-fresh.js?v=20261126-build766'; // 最初から in the tutorial (practice data only, see tutorial-ui.js resetTutorialAll)
-import { tutorialModeOn, createTutorialVr, createSlideViewer, panelTabs, TAB_H, PAGE_H, layoutLevelSlide, levelBoardH, menuAnnotation, menuTargetRect } from './tutorial-vr.js?v=20261126-build766'; // チュートリアル on the help board (only made when tutorialMode is on);: the read-only guide, the level slide, the menu pointer
-import { levelSlide, createSlideImages } from './tutorial-slides.js?v=20261126-build766'; // the 体験会 level slides (ev board: the slide's picture)
-import { vrInitialScaleOf } from './sample-registry.js?v=20261126-build766';
-import { TUT_SAMPLE } from './tutorial-data.js?v=20261126-build766'; // the live tutorial runs on its practice data only
-import { emit, scaleChanged, poseMoved } from './tutorial-signal.js?v=20261126-build766'; // tutorial: one-line signals at the action sites (no-op without a listener)
-import { horizAngleDeg } from './tutorial-orient.js?v=20261126-build766'; // the tutorial's entry guidance (look right / left): head turn toward a board
-import { createControllerHints, createEdgeArrow, createBoardArrow, boardSide, edgeArrowShown } from './tutorial-3d.js?v=20261126-build766'; // the tutorial's 3D guides (controller button, edge arrow, arrow over the menu)
-import { MAX_SECTION_PLANES, nextPlaneColor, frameDepthTest, ARROW_LEN, ARROW_FLASH_MS, arrowFade, arrowShown, tagBehindTissue, sectionPage, pageOfPlane, SECTION_ROWS_PER_PAGE, FLING_UNDO_MS, FLING_DEBUG_MS, createVelocityTracker, flingDecision, frameOutOfView, outOfViewNow, createOutOfViewTracker, outOfViewRelease, flingDebugLines, capVelocity, flyStep, makeSectionSnapshot, restorePlan, createSectionUndo, undoButtonPlace } from './vr-section-frame.js?v=20261126-build766';
-import { createUndoButton } from './vr-undo-button.js?v=20261126-build766';
-import { createFlingDebugTag } from './vr-fling-debug.js?v=20261126-build766';
-import { EMPTY_PINCH, isHand, wristScrollGain, wristScrollSign, wristScrollKeep, NEAR_KINDS, boxDist, centeredBoxDist, squareOutlineDist, pickNearGrab, HAND_RAY_MODES, normalizeHandRay } from './vr-hand.js?v=20261126-build766'; // hand tracking (Quest 3): pure helpers
-import { createHandInput, HAND_LABEL_MOVE_M } from './vr-hand-view.js?v=20261126-build766'; // the hand's ray, wrist menu, fingertips
-import { LABEL_HIDE_DEFAULT, normalizeLabelHide, gpuOcclusionActive, depthVoxelSize, boardVisible, GHOST_ALPHA, EMBEDDED_ALPHA, occludedPass, pinMaterialState } from './vr-depth.js?v=20261126-build766';
-import { highlightColor, highlightIndex, createHighlightTracker, anyLit } from './region-highlight.js?v=20261126-build766';
-import { pinLine, pinPlaceLimited, pinPulledIntoTissue, pinDue, pinJudge, createScaleSettle, createLabelThinner, setLeaderIfMoved, createFaceCache, clippedAt, rayCovered, CARD_W0, CARD_H0, cardLayout, cardHalfW, cardHalfH } from './vr-label-occlusion.js?v=20261126-build766';
-import { brickOccupancy, writeBrickOccupancy } from './vr-brick-occupancy.js?v=20261126-build766';
-import { createProbeGate } from './measure-label.js?v=20261126-build766';
-import { sliceIndex, sliceRange, boxFromRange, createSegScan, segScanStart, segScanStep, segsSubset, segsFromUniforms, contentKeyChanged, KEY_LEN, createContentBox } from './vr-content-box.js?v=20261126-build766'; // the proxy box = the box of what can be drawn
-import { regionVisible, setRegionVisible, onRegionVisibleChange, regionHidden, setRegionHidden, onRegionHiddenChange, regionLutAlpha, regionLutHiddenSlots, hiddenRegionVoxelOf, anyHiddenVoxel } from './region-visibility.js?v=20261126-build766';
-import { buildSegmentTree, pageTreeLines, ellipsize } from './segment-tree.js?v=20261126-build766';
-import { setRegionLabel, setRegionLabelOffset, withOffset, surfaceAnchor, voxelFromLocalVr, clampVoxel, labelLocal, offsetForLocal, vrVoxelStep, rectEdgePoint, leaderVisible, labelSegmentsShown, glowRid, keepLengthFactor, scaledStep, normalizeLabelOverlap, thinActive, LABEL_OVERLAP_MODES } from './analysis-label.js?v=20261126-build766';
-import { childLabelItem, childLabelItems, childLabelItemById, hasChildLabels, childLabelTitle, childVolumeMm3, childKeyAtHit, hitLabelRids, labelToggle, pairShifts } from './child-labels.js?v=20261126-build766'; // a child segment's name label (hover card, pinned card) is the analysis label's, kept on the child
-import { childByKey } from './child-segments.js?v=20261126-build766';
-import { hiddenShapeCount, showAllHiddenShapes } from './segments.js?v=20261126-build766'; // stage 3: 「すべて表示（隠 N）」 of the かんたん menu
-import { ringState, regionRingItems, partRingItems, regionRingName, applyRingItem, ringTargetOf } from './region-ring.js?v=20261126-build766'; // stage 3: the long-press ring of a region / a child
-import { createVrSelfCheck, selfCheckTexts } from './vr-self-check.js?v=20261126-build766'; // 詳細 > 自己診断 (automated frame-time scenarios)
-import { createScaleGuard, createFlapGuard, variantFallback } from './vr-flicker-guard.js?v=20261126-build766'; // flicker safety guard
-import { eyeMetrics, capFromPpv, capFromBudget, nextCap, foveaRect, outsideFovea, foveaWorth, qualityText, FOVEA_K, CAP_MIN, addVolumeEye, boxCoversView, pairComposites, holdScaleOf, holdAllowed, holdScaleValue, createHoldGate, HOLD_MIN, HOLD_MAX, HOLD_STEP, applyHoldScale } from './vr-render-scale.js?v=20261126-build766'; // data-resolution render scale + offscreen foveation
-import { getMeasureStart, startMeasure, cancelMeasure, pickMeasureEnd, onMeasureStartChange, removeMeasurement, restoreMeasurements, measurementsOfPoint, seriesSpacing } from './measurements.js?v=20261126-build766';
-import { APP_BUILD } from './version.js?v=20261126-build766';
-import { wc, ww } from './ui-shell.js?v=20261126-build766';
-import { VOLUME_FWD, VOLUME_DOWN, MENU_OFFSET, HELP_OFFSET, HU_PANEL_OFFSET, EV_OFFSET, EV_WIDTH, EV_RES, MENU_WIDTH, MENU_CANVAS, HELP_WIDTH, HELP_RES, HIST_OFFSET, HIST_WIDTH, FOLLOW_ANGLE, FOLLOW_DIST } from './vr-layout.js?v=20261126-build766';
-import { onHistogramChange, getHistogramRange, getHistogramLog, setHistogramLog, setHistogramRange } from './histogram-ui.js?v=20261126-build766';
-import { createVrLabelHistogram, UNLABELED_COLOR, labelSlot, labelRegion } from './vr-label-histogram.js?v=20261126-build766';
-import { rangeRes } from './vr-histogram-layout.js?v=20261126-build766';
-import { dataAxis } from './segments.js?v=20261126-build766'; // the histogram axis of the data (histogram.js axisFor + the series' value step)
-import { getHuMode, setHuMode, HU_MODE_FILTERED, HU_MODE_RAW } from './effective-hu.js?v=20261126-build766';
-import { createVrHistogramPanel } from './vr-histogram-panel.js?v=20261126-build766';
-import { lightingGLSL, lightingVertexGLSL, materialVec, MATERIALS, materialKey } from './lighting.js?v=20261126-build766'; // one lighting model for the desktop volume, this VR / AR volume and the 3D-view meshes
+import { wrapMenuText, stackMenuRows } from './vr-menu-text.js?v=20261126-build767';
+import { activeEventLevel, levelForSample, chooseEventLevel, levelSwitchItems, sampleHasLevel, levelSwitchTargets, canSwitchData, EVENT_LEVELS, datasetForSample, datasetLabel, eventModeOn, missionLines, simpleMenuSegments, triggerModeRow, labelTargets, triggerMode, TRIGGER_AT_START, resetPress, resetArmed, RESET_ARM_MS, simpleMenuLayout, SIMPLE_MENU, sliceOpacityValue, sliceDrawState, sliderHitTest, sliderGrabOffset, sliderValueAt, KNOB_GRAB_PX } from './event-mode.js?v=20261126-build767'; // 体験会モード - the chosen level's mission on the help board, the かんたん menu
+import { VIEW_TOGGLE_ID, VIEW_TOGGLE_BUTTON, SECTION_DELETE_ID, createViewToggle, createDoublePress, ringIdsFor } from './vr-view-toggle.js?v=20261126-build767';
+import { vrSpacingNote, vrVolumeText } from './vr-spacing-note.js?v=20261126-build767';
+import { NORM_LONG, physicalExtentsMm, longestMm, realMagnification, realHolderScale, startHolderScale, tutorialHolderScale, smallForTutorial, TUT_VOLUME_FWD, TUT_VOLUME_DOWN, magnificationText, createScaleTag, clampScale, pinchScale, scaleLimits, oversizeNote, planeFrameLocalScale, planeTagLocalScale, scaleLineText, scalePosOf, posToScale, scaleStep, viewTabScaleLayout } from './vr-real-scale.js?v=20261126-build767';
+import { createPostFrame, flushOnHidden } from './vr-post-frame.js?v=20261126-build767'; // E1: work after the XR frame callback; the perf record's save when the page is hidden
+import { createPartProbeLog } from './vr-part-probe-log.js?v=20261126-build767'; // n764 4-1 stage 0: the parts' rays in the loop (decoded from the parts' counting probe, a section of the performance record)
+import { createPerfLog, perfReport, perfFileName, createVolBreakdown, BD_VARIANTS, BD_SPECS } from './vr-perf-log.js?v=20261126-build767'; // the VR performance record (one row a second, WebGL and WebGPU alike; shown on the page after the session)
+import { createIdentRun, createIdentLog, identReportLines, identResultLine, newPathLines } from './vr-ident-log.js?v=20261126-build767'; // the same-picture check (button on the self-check page): its run, its record and its text (a section of the performance record)
+import { createCompareBench, createFrameRing, createLongTaskWatcher, createIsolation, tapPerfLog, benchReportLines, ringReportLines, leftoverReportLines, readHeapBytes, BENCH_COUNT, BENCH_HOLDER_SCALE } from './vr-bench.js?v=20261126-build767'; // the comparison bench, the per-frame ring and the isolation switches (button on the 詳細 tab; their text is a section of the performance record)
+import { createGxLaserMaterial, createGxDome } from './vr-gx-looks.js?v=20261126-build767'; // the WebGPU view's laser ribbon and background dome
+import { GX_SWITCH } from './vr-wgpu.js?v=20261126-build767'; // the isolation run's switch of the volume pass's GPU timestamps
+import { createAutoQuality, autoFloor, STEP_LEVELS, STEP_CHOICES, stepChoiceScale, marchStep, freeVolMs } from './vr-auto-quality.js?v=20261126-build767';
+import { createVrHuLine } from './vr-hu-line.js?v=20261126-build767';
+import { huMenuTexts, voxelFromHits } from './vr-hu-line-core.js?v=20261126-build767';
+import { setHuLineDeferred } from './hu-line-model.js?v=20261126-build767';
+import { createVrMeasure, LABEL_LIT_SCALE } from './vr-measure.js?v=20261126-build767';
+import { resetUserState } from './event-fresh.js?v=20261126-build767'; // 最初から in the tutorial (practice data only, see tutorial-ui.js resetTutorialAll)
+import { tutorialModeOn, createTutorialVr, createSlideViewer, panelTabs, TAB_H, PAGE_H, layoutLevelSlide, levelBoardH, menuAnnotation, menuTargetRect } from './tutorial-vr.js?v=20261126-build767'; // チュートリアル on the help board (only made when tutorialMode is on);: the read-only guide, the level slide, the menu pointer
+import { levelSlide, createSlideImages } from './tutorial-slides.js?v=20261126-build767'; // the 体験会 level slides (ev board: the slide's picture)
+import { vrInitialScaleOf } from './sample-registry.js?v=20261126-build767';
+import { TUT_SAMPLE } from './tutorial-data.js?v=20261126-build767'; // the live tutorial runs on its practice data only
+import { emit, scaleChanged, poseMoved } from './tutorial-signal.js?v=20261126-build767'; // tutorial: one-line signals at the action sites (no-op without a listener)
+import { horizAngleDeg } from './tutorial-orient.js?v=20261126-build767'; // the tutorial's entry guidance (look right / left): head turn toward a board
+import { createControllerHints, createEdgeArrow, createBoardArrow, boardSide, edgeArrowShown } from './tutorial-3d.js?v=20261126-build767'; // the tutorial's 3D guides (controller button, edge arrow, arrow over the menu)
+import { MAX_SECTION_PLANES, nextPlaneColor, frameDepthTest, ARROW_LEN, ARROW_FLASH_MS, arrowFade, arrowShown, tagBehindTissue, sectionPage, pageOfPlane, SECTION_ROWS_PER_PAGE, FLING_UNDO_MS, FLING_DEBUG_MS, createVelocityTracker, flingDecision, frameOutOfView, outOfViewNow, createOutOfViewTracker, outOfViewRelease, flingDebugLines, capVelocity, flyStep, makeSectionSnapshot, restorePlan, createSectionUndo, undoButtonPlace } from './vr-section-frame.js?v=20261126-build767';
+import { createUndoButton } from './vr-undo-button.js?v=20261126-build767';
+import { createFlingDebugTag } from './vr-fling-debug.js?v=20261126-build767';
+import { EMPTY_PINCH, isHand, wristScrollGain, wristScrollSign, wristScrollKeep, NEAR_KINDS, boxDist, centeredBoxDist, squareOutlineDist, pickNearGrab, HAND_RAY_MODES, normalizeHandRay } from './vr-hand.js?v=20261126-build767'; // hand tracking (Quest 3): pure helpers
+import { createHandInput, HAND_LABEL_MOVE_M } from './vr-hand-view.js?v=20261126-build767'; // the hand's ray, wrist menu, fingertips
+import { LABEL_HIDE_DEFAULT, normalizeLabelHide, gpuOcclusionActive, depthVoxelSize, boardVisible, GHOST_ALPHA, EMBEDDED_ALPHA, occludedPass, pinMaterialState } from './vr-depth.js?v=20261126-build767';
+import { highlightColor, highlightIndex, createHighlightTracker, anyLit } from './region-highlight.js?v=20261126-build767';
+import { pinLine, pinPlaceLimited, pinPulledIntoTissue, pinDue, pinJudge, createScaleSettle, createLabelThinner, setLeaderIfMoved, createFaceCache, clippedAt, rayCovered, CARD_W0, CARD_H0, cardLayout, cardHalfW, cardHalfH } from './vr-label-occlusion.js?v=20261126-build767';
+import { brickOccupancy, writeBrickOccupancy } from './vr-brick-occupancy.js?v=20261126-build767';
+import { createProbeGate } from './measure-label.js?v=20261126-build767';
+import { sliceIndex, sliceRange, boxFromRange, createSegScan, segScanStart, segScanStep, segsSubset, segsFromUniforms, contentKeyChanged, KEY_LEN, createContentBox } from './vr-content-box.js?v=20261126-build767'; // the proxy box = the box of what can be drawn
+import { regionVisible, setRegionVisible, onRegionVisibleChange, regionHidden, setRegionHidden, onRegionHiddenChange, regionLutAlpha, regionLutHiddenSlots, hiddenRegionVoxelOf, anyHiddenVoxel } from './region-visibility.js?v=20261126-build767';
+import { buildSegmentTree, pageTreeLines, ellipsize } from './segment-tree.js?v=20261126-build767';
+import { setRegionLabel, setRegionLabelOffset, withOffset, surfaceAnchor, voxelFromLocalVr, clampVoxel, labelLocal, offsetForLocal, vrVoxelStep, rectEdgePoint, leaderVisible, labelSegmentsShown, glowRid, keepLengthFactor, scaledStep, normalizeLabelOverlap, thinActive, LABEL_OVERLAP_MODES } from './analysis-label.js?v=20261126-build767';
+import { childLabelItem, childLabelItems, childLabelItemById, hasChildLabels, childLabelTitle, childVolumeMm3, childKeyAtHit, hitLabelRids, labelToggle, pairShifts } from './child-labels.js?v=20261126-build767'; // a child segment's name label (hover card, pinned card) is the analysis label's, kept on the child
+import { childByKey } from './child-segments.js?v=20261126-build767';
+import { hiddenShapeCount, showAllHiddenShapes } from './segments.js?v=20261126-build767'; // stage 3: 「すべて表示（隠 N）」 of the かんたん menu
+import { ringState, regionRingItems, partRingItems, regionRingName, applyRingItem, ringTargetOf } from './region-ring.js?v=20261126-build767'; // stage 3: the long-press ring of a region / a child
+import { createVrSelfCheck, selfCheckTexts } from './vr-self-check.js?v=20261126-build767'; // 詳細 > 自己診断 (automated frame-time scenarios)
+import { createScaleGuard, createFlapGuard, variantFallback } from './vr-flicker-guard.js?v=20261126-build767'; // flicker safety guard
+import { eyeMetrics, capFromPpv, capFromBudget, nextCap, foveaRect, outsideFovea, foveaWorth, qualityText, FOVEA_K, CAP_MIN, addVolumeEye, boxCoversView, pairComposites, holdScaleOf, holdAllowed, holdScaleValue, createHoldGate, HOLD_MIN, HOLD_MAX, HOLD_STEP, applyHoldScale } from './vr-render-scale.js?v=20261126-build767'; // data-resolution render scale + offscreen foveation
+import { getMeasureStart, startMeasure, cancelMeasure, pickMeasureEnd, onMeasureStartChange, removeMeasurement, restoreMeasurements, measurementsOfPoint, seriesSpacing } from './measurements.js?v=20261126-build767';
+import { APP_BUILD } from './version.js?v=20261126-build767';
+import { wc, ww } from './ui-shell.js?v=20261126-build767';
+import { VOLUME_FWD, VOLUME_DOWN, MENU_OFFSET, HELP_OFFSET, HU_PANEL_OFFSET, EV_OFFSET, EV_WIDTH, EV_RES, MENU_WIDTH, MENU_CANVAS, HELP_WIDTH, HELP_RES, HIST_OFFSET, HIST_WIDTH, FOLLOW_ANGLE, FOLLOW_DIST } from './vr-layout.js?v=20261126-build767';
+import { onHistogramChange, getHistogramRange, getHistogramLog, setHistogramLog, setHistogramRange } from './histogram-ui.js?v=20261126-build767';
+import { createVrLabelHistogram, UNLABELED_COLOR, labelSlot, labelRegion } from './vr-label-histogram.js?v=20261126-build767';
+import { rangeRes } from './vr-histogram-layout.js?v=20261126-build767';
+import { dataAxis } from './segments.js?v=20261126-build767'; // the histogram axis of the data (histogram.js axisFor + the series' value step)
+import { getHuMode, setHuMode, HU_MODE_FILTERED, HU_MODE_RAW } from './effective-hu.js?v=20261126-build767';
+import { createVrHistogramPanel } from './vr-histogram-panel.js?v=20261126-build767';
+import { lightingGLSL, lightingVertexGLSL, materialVec, MATERIALS, materialKey } from './lighting.js?v=20261126-build767'; // one lighting model for the desktop volume, this VR / AR volume and the 3D-view meshes
 
 const BG=new THREE.Color(0.035,0.045,0.05);
 const BRICK=PREP_BRICK;
@@ -6076,7 +6076,7 @@ async function startVrViewRun({language='ja',mode='vr',onStep=()=>{}}={}){
    // channel's), made once per set of parts off the frame (vr-part-view.js partBakeRun on the part-set worker: the classification bytes lowered where the field cuts a slot, the distance alpha made conservative for the new surfaces; only the field's box),
    // so that the body is drawn by the ORDINARY program (no VRL_PART: no partOcc / partField / hideAt reads in its rays; the hide-free program while the page hides nothing). The parts keep reading the ORIGINAL texture (PART_OWN clsTex / cls4Tex).
    // The state: r.bake = {tex, cls4Tex (GPU copies), ready (mirrored and the box patched), gen, bodyGen, mask, src (the combined texture it was made from)}, r.bakeBound = the body reads it NOW (the textures, the GPU tables, the programs: one synchronous step,
-   // bakeSet). Any change of what it was made from drops it AT ONCE (bakeDrop: the body reads the original again and draws by its field, as 734 does): a change of the parts (partApply), of the shown set or of the combined texture's bytes (a rebuild is running,
+   // bakeSet). Any change of what it was made from drops it AT ONCE (bakeDrop: the body reads the original again and draws by its field, as 734 does): a change of the parts (partApply: at its start; the WebGPU view's cut-out keeps it until the new set is installed), of the shown set or of the combined texture's bytes (a rebuild is running,
    // another texture), of the diagnostic, of the data. Nothing happens without a part.
    let bakeApplying=0,bakeGen=0; // partApply calls in flight (no bake starts meanwhile); the number of the bake wanted (a stale answer is dropped)
    const bakeBoxR=new THREE.Box3(),bakeAt=new THREE.Vector3();
@@ -6146,7 +6146,7 @@ async function startVrViewRun({language='ja',mode='vr',onStep=()=>{}}={}){
     const r=partRes;if(!r)return;
     const t=comboT,b=r.bake;
     const ok=bakeOkNow(r);
-    if(b){const why=!ok?'notOk':b.src!==t.combo?'src':t.rb?.busy?'rbBusy':t.comboMask!==b.mask?'mask':b.bodyGen!==r.bodyGen?'bodyGen':b.gen!==bakeGen?'gen':bakeApplying>0?'applying':'';if(why)bakeDrop(why)} // anything it was made from changed: the original again, at once (why: the first reason that holds, counted in the record)
+    if(b){const why=!ok?'notOk':b.src!==t.combo?'src':t.rb?.busy?'rbBusy':t.comboMask!==b.mask?'mask':b.bodyGen!==r.bodyGen?'bodyGen':b.gen!==bakeGen?'gen':'';if(why)bakeDrop(why)} // anything it was made from changed: the original again, at once (why: the first reason that holds, counted in the record)
     if(!ok){if(r.bakeBound)bakeSet(false);return}
     if(!r.bake){
      const why=bakeApplying>0?'applying':t.rb?.busy?'rbBusy':r.bakeSkip===r.bodyGen?'skipSet':ui.swapBusy?'swap':(t.comboMask!==comboMask||comboMask<0)?'mask':'';
@@ -6162,8 +6162,8 @@ async function startVrViewRun({language='ja',mode='vr',onStep=()=>{}}={}){
    };
    {const f0=partBakeFrame;partBakeFrame=()=>{const t0=performance.now();try{f0()}finally{perfLog?.stage('bk',performance.now()-t0)}}} // the CPU ms of the baked cut's per-frame step (the record's bk column)
    let cfgChain=Promise.resolve();
-   const partApply=(listOf,done=()=>{},upStage=()=>{})=>{
-    bakeDrop();bakeApplying++; // n734: the parts are about to change: the baked bytes are the old set's (the body draws by its field until the new set is in place and baked again)
+   const partApply=(listOf,done=()=>{},upStage=()=>{},hold=false)=>{
+    if(!hold)bakeDrop();bakeApplying++; // n734: the parts are about to change: the baked bytes are the old set's (the body draws by its field until the new set is in place and baked again)
     const run=async()=>{
      let pm=performance.now(); // the CPU ms of each stretch of this function between its awaits goes to the record's pa column
      const paEnd=()=>perfLog?.stage('pa',performance.now()-pm);
@@ -6176,12 +6176,15 @@ async function startVrViewRun({language='ja',mode='vr',onStep=()=>{}}={}){
       if(!set)return false;if(set.plain)console.warn('[VR] part seams: unsmoothed in '+set.plain+' group(s) (the worker failed)');if(set.merged)console.warn('[VR] part seams: '+set.merged+' merged (more than 4 on a part)');
       for(const o of set.own){const q=list[o.p];if(q&&!q.freed&&!q.field.data){q.field.data=o.data;q.field.codes=null}} // the own fields it smoothed (a part that was alone): kept, the next set reads them
       if(partRes!==r||!running)return false;
-      cutEv('calc');upStage(); // n736: the fields are made: the uploads / the installation follow (the cut-out board: 仕上げ中)
+      {const tm=set.tm,r1=v=>Math.round(v*10)/10,nImg=(b.tex&&b.sig===set.body.sig?0:1)+list.filter((q,i)=>{const pf=set.parts[i];return !(q.ftex&&q.fsig===pf.sig&&q.fC===pf.C)}).length; // (measurement only) the set's timing record (partFieldSet tm), the cache's hits / misses and the fields whose texture is made again (img: the textures of the 'upload' line)
+       cutEv('calc',{parts:list.length,img:nImg,own:set.own.length,hit:set.cache?.hit??0,miss:set.cache?.miss??0,...(tm?{tot:r1(tm.tot),ownMs:r1(tm.own),ownWall:r1(tm.ow),occ:r1(tm.occ),grp:tm.groups.slice(0,8).map(g=>'c'+g.c+'/'+g.n+'p j'+r1(g.j)+' l'+r1(g.l)+' s'+r1(g.s)+' w'+r1(g.w)+' h'+g.h+' m'+g.m).join(' ; ')+(tm.groups.length>8?' ; +'+(tm.groups.length-8)+' more':'')}:{})})}
+      upStage(); // n736: the fields are made: the uploads / the installation follow (the cut-out board: 仕上げ中)
       // a field whose bytes are those the texture has (the same sig) keeps its texture: nothing is made or uploaded again (the body's after a set that came out as before; a part whose group did not change)
       const keepB=b.tex&&b.sig===set.body.sig,ups=keepB?[]:[fieldTexture(set.body,set.body.C)],pts=list.map((q,i)=>{const pf=set.parts[i];if(q.ftex&&q.fsig===pf.sig&&q.fC===pf.C)return null;const t=fieldTexture(pf,pf.C);ups.push(t);return t});
       const oksP=Promise.all(ups.map(t=>t.done.catch(()=>false)));paEnd();const oks=await oksP;pm=performance.now();cutEv('upload',{n:ups.length});
       const stale=partRes!==r||!running||list.some(q=>q.freed);
       if(stale||oks.some(x=>!x)){for(const t of ups)fieldDrop(t.tex,t.key);if(stale&&partRes===r&&running&&!listOf()?.some(q=>q.freed))continue;return false}
+      if(hold)bakeDrop('install'); // perf2 (4-9, the WebGPU view's cut-out only): the baked bytes were held while the new set was made (the body's field and tables are still the old set's, the bake is the same picture); here, in the one step that puts the new set in place, they go (the next frame reads the new field: never the old bake with the new set)
       if(!keepB){const ob=b.tex,obk=b.texKey;b.tex=ups[0].tex;b.texKey=ups[0].key;b.sig=set.body.sig;fieldDrop(ob,obk)}
       fieldUniforms(b.u,set.body,b.tex,set.body.a,set.body.b,dims);if(set.body.occ){const ot=b.otex;b.otex=occBodyTexture(set.body.occ);b.u.partOcc.value=b.otex;ot?.dispose()}else{b.u.partOcc.value=r.occBodyDummy;b.otex?.dispose();b.otex=null}b.ok=true;r.bodyGen++;r.bodySet={body:set.body,dims:dims.slice()};if(!keepB||(!r.hide&&!r.hidArgs))partHideSet(r,set.body,dims); // n731 perf ③: the body's cut as a hide source, with the field it is made from
       list.forEach((q,i)=>{const pf=set.parts[i],t=pts[i];if(t){fieldDrop(q.ftex,q.ftexKey);q.ftex=t.tex;q.ftexKey=t.key;q.fsig=pf.sig;q.fC=pf.C}fieldUniforms(q.u,pf,q.ftex,pf.a,pf.b,dims);
@@ -6292,7 +6295,7 @@ async function startVrViewRun({language='ja',mode='vr',onStep=()=>{}}={}){
       parts.push(q);
       refreshRegionLut();refreshChildLut(); // the body's tables lose the target (partPatch*), the parts' copies keep it
       partShow(q);partPose();cutEv('attach');
-     },()=>cutStage('finish')).catch(e=>{console.warn('part fields:',e);return false});
+     },()=>cutStage('finish'),!!gx).catch(e=>{console.warn('part fields:',e);return false}); // hold (4-9): the WebGPU view keeps the earlier bake until the new set is installed (partApply); the put direction (partApplyLeft) and the WebGL view drop it at the start
      if(!shown||!running||P!==P0||partRes!==res||!material){if(!parts.includes(q))partFree(q);return false}
      flashMsg(PT.done,3500);return true;
     }catch(e){console.warn('part cut-out:',e);if(running)flashMsg(PT.failed,3500);return false}

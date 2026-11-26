@@ -28,17 +28,21 @@ describe('chooseWay: the table of chapter 6', () => {
     expect(ch({ jumpOn: false, diag: 4 })).toBe('OS'); expect(ch({ jumpOn: false, diag: 4, pass: 'peri' })).toBe('OS');
     for (const o of [{ diag: 2 }, { diag: 5 }, { pass: 'probe', diag: 4 }, { diag: 4, matrixOk: false }, { diag: 4, distField: false }, { diag: 0, distField: false }, { diag: 4, gridReady: false }]) expect(ch({ jumpOn: false, ...o }), JSON.stringify(o)).toBe('S');
   });
-  it('a part taken out of the body (boxed: its rays start at its own box) never uses a way that makes a pre-pass over the whole pass: D0 where the whole-pass way would be B or D, S where it would be OS; the other rows of the table are the same', () => {
+  it('a part taken out of the body (boxed: its rays start at its own box) never uses a way that makes a pre-pass over the whole pass: without tiles of its own (partTiles false) it is D0 where the whole-pass way would be B or D, S where it would be OS; with them (partTiles: the cone through its partOcc) it is D in the centre pass and D0 in the periphery (no 8 x 8 pre-pass there); the other rows of the table are the same', () => {
     for (const diag of [0, 3]) for (const pass of ['low', 'peri']) expect(ch({ pass, diag, boxed: true })).toBe('D0');
     for (const o of [{ walkOk: false }, { gridReady: false }]) for (const pass of ['low', 'peri']) expect(ch({ ...o, pass, boxed: true })).toBe('D0');
-    for (const pass of ['low', 'peri', 'probe']) for (const diag of [0, 1, 2, 3, 5]) expect(ch({ pass, diag, boxed: true, section: true })).toBe('EvD'); // (a section row is not changed: the parts have none)
-    expect(ch({ jumpOn: false, diag: 4, boxed: true })).toBe('S'); expect(ch({ jumpOn: false, diag: 4, boxed: true, pass: 'peri' })).toBe('S');
-    expect(ch({ distField: false, jumpOn: false, boxed: true })).toBe('S'); // the general loop's rows: S whatever
-    expect(chooseWay({ ...base, general: true, boxed: true })).toBe('S');
-    for (const pass of ['low', 'peri', 'probe']) for (const jumpOn of [true, false]) for (const diag of [0, 1, 2, 3, 4, 5]) for (const distField of [true, false]) for (const walkOk of [true, false]) for (const matrixOk of [true, false]) for (const gridReady of [true, false]) {
-      const o = { pass, jumpOn, section: false, diag, distField, walkOk, matrixOk, gridReady }, w = chooseWay({ ...o, boxed: true });
-      expect(['D0', 'S'], JSON.stringify(o)).toContain(w);
+    for (const o of [{}, { walkOk: false }, { gridReady: false }]) for (const diag of [0, 3, 4]) { expect(ch({ ...o, diag, pass: 'low', boxed: true, partTiles: true })).toBe('D'); expect(ch({ ...o, diag, pass: 'peri', boxed: true, partTiles: true })).toBe('D0'); }
+    for (const pass of ['low', 'peri', 'probe']) for (const diag of [1, 2, 5]) expect(ch({ pass, diag, boxed: true, partTiles: true })).toBe('D0'); // (diag 1 draws before the loop, diag 2 draws the loop's count, 5 is the probe: no tiles)
+    expect(ch({ pass: 'probe', diag: 0, boxed: true, partTiles: true })).toBe('D0'); expect(ch({ matrixOk: false, boxed: true, partTiles: true })).toBe('D0');
+    expect(ch({ diag: 0, partTiles: true })).toBe(ch({ diag: 0 })); // (a volume that is not boxed ignores it)
+    for (const pass of ['low', 'peri', 'probe']) for (const diag of [0, 1, 2, 3, 5]) for (const partTiles of [false, true]) expect(ch({ pass, diag, boxed: true, section: true, partTiles })).toBe('EvD'); // (a section row is not changed: the parts have none)
+    for (const partTiles of [false, true]) { expect(ch({ jumpOn: false, diag: 4, boxed: true, partTiles })).toBe('S'); expect(ch({ jumpOn: false, diag: 4, boxed: true, pass: 'peri', partTiles })).toBe('S'); }
+    for (const partTiles of [false, true]) { expect(ch({ distField: false, jumpOn: false, boxed: true, partTiles })).toBe('S'); expect(chooseWay({ ...base, general: true, boxed: true, partTiles })).toBe('S'); } // the general loop's rows: S whatever
+    for (const partTiles of [false, true]) for (const pass of ['low', 'peri', 'probe']) for (const jumpOn of [true, false]) for (const diag of [0, 1, 2, 3, 4, 5]) for (const distField of [true, false]) for (const walkOk of [true, false]) for (const matrixOk of [true, false]) for (const gridReady of [true, false]) {
+      const o = { pass, jumpOn, section: false, diag, distField, walkOk, matrixOk, gridReady }, w = chooseWay({ ...o, boxed: true, partTiles });
+      expect(partTiles ? ['D', 'D0', 'S'] : ['D0', 'S'], JSON.stringify(o)).toContain(w);
       if (!['B', 'D', 'OS'].includes(chooseWay(o))) expect(w, JSON.stringify(o)).toBe(chooseWay(o)); // a row that was not a whole-pass way is the same
+      if (partTiles && w === 'D') expect([pass, jumpOn, matrixOk, diag === 1 || diag === 2 || diag === 5], JSON.stringify(o)).toEqual(['low', true, true, false]); // D only in the centre pass, with jumps, a matrix that inverts and none of the diagnostics that draw before / count the loop
     }
   });
   it('over the whole product of what the choice reads, a way of the list comes back: there is no branch that returns the old way (or nothing)', () => {

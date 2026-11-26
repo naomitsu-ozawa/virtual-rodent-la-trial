@@ -6,10 +6,10 @@
 //   - which uniforms the part owns (the rest is the body's by reference: PART_OWN), the target a grip takes (partTargetOf), the part's own box (partBoundsOf), the laser's rule on the CPU (partKeepVoxelOf),
 //   - several parts at once: every part has its own box, uniforms and pose; the tables are patched for all of them (patchRegionLutMany / patchChildLutMany); a part's proxy box is its own bounding box (partProxyBox) and its laser march
 //     runs only inside it (partRayRange), the texts. The way in is the long-press ring (region-ring.js 切り出す / 戻す); the grip stays the body's grab and takes a part only where the laser meets one.
-import { regionLutAlpha } from './region-visibility.js?v=20261126-build766';
-import { boxFromRange } from './vr-content-box.js?v=20261126-build766';
-import { euclideanDistanceBytes, morph3 } from './distance-field.js?v=20261126-build766';
-import { hiddenClassBytes } from './vr-hide-field.js?v=20261126-build766';
+import { regionLutAlpha } from './region-visibility.js?v=20261126-build767';
+import { boxFromRange } from './vr-content-box.js?v=20261126-build767';
+import { euclideanDistanceBytes, morph3 } from './distance-field.js?v=20261126-build767';
+import { hiddenClassBytes } from './vr-hide-field.js?v=20261126-build767';
 
 // ---- the shader block. Spliced into the volume fragment shader once (vr-view.js ${PART_GLSL}, after the hidden-shape block A and BEFORE the an earlier change hide helpers hideAnyOn / hideAt / hideGrad, so that they read the re-pointed functions too), so that no existing line of the shader has to change. Without VRL_PART (every program but the
 // part's) the preprocessor drops all of it: the body's programs are the ones they were. With VRL_PART the two functions the marching loops ask "is this voxel a hidden shape?" (regionHiddenAt / childHiddenAt) are
@@ -711,7 +711,14 @@ export async function partFieldSet(fields, run = runPartGroup, opt = PART_FIELD,
     const ids = new Set(g0.list.map(f => f.id).filter(v => v != null)); for (const id of [...state.rank.keys()]) if (!ids.has(id)) state.rank.delete(id);
     for (const f of g0.list) if (f.id != null && !state.rank.has(f.id)) state.rank.set(f.id, state.next++);
   }
-  const ops = typeof run === 'function' ? partOpsOfRun(run) : run; // the tasks of a group: ops.joint / ops.label / ops.smooth (partOpsOfRun); a function is the whole group at once, as before
+  const ops0 = typeof run === 'function' ? partOpsOfRun(run) : run; // the tasks of a group: ops.joint / ops.label / ops.smooth (partOpsOfRun); a function is the whole group at once, as before
+  // (measurement only, no effect on the answer) the timing record `tm` of this call: per group the ms of its joint / label / smooth tasks (j / l / s: the sum of the tasks' own waits, tasks that run at the same time add up), w = the group's wall ms,
+  // h / m = the cache's hits / misses in it; own = the ms of the parts' own smoothing (ow = its wall ms), occ = the ms of the occupancy fields, tot = the whole call's ms. `gt` = the group being made (the groups are made one after the other)
+  const nowMs = () => (typeof performance !== 'undefined' ? performance.now() : Date.now()); // (a worker run in a bare context has no `performance`)
+  const T0 = nowMs(), tm = { groups: [], own: 0, ow: 0, occ: 0, tot: 0 }; let gt = null;
+  const timed = (key, f) => async (...a) => { const t = nowMs(); try { return await f(...a); } finally { const dt = nowMs() - t; if (key === 's' && a[3] && a[3].own) tm.own += dt; else if (gt) gt[key] += dt; } };
+  const ops = { joint: timed('j', (...a) => ops0.joint(...a)), label: timed('l', (...a) => ops0.label(...a)), smooth: timed('s', (...a) => ops0.smooth(...a)) };
+  const occT = f => { const t = nowMs(); try { return f(); } finally { tm.occ += nowMs() - t; } };
   const near = partFieldNearOf(g0.list, PART_FIELD.pad), groups = partFieldJointGroups(fields, near), ownOut = []; // ownOut: [{p, data}] the own fields this call smoothed (a field given with plain = true: the unsmoothed bytes, 255 on the part and its skin, 0 elsewhere)
   // a part in a group, on every channel it has, takes its bytes from the group's joint field and seams (the own smoothing is not read: the labels are its bytes >= 128, which the unsmoothed ones give as the smoothed ones do):
   // only a part that is alone on some channel it has needs its own smoothed field (the union and its own box read it there)
@@ -725,7 +732,9 @@ export async function partFieldSet(fields, run = runPartGroup, opt = PART_FIELD,
     let d; try { d = await ops.smooth(c, f.size, opt, { own: true }); } catch (e) { plain++; fieldsNow[p] = { ...f, plain: false }; return; }
     fieldsNow[p] = { ...f, data: d, plain: false }; ownOut.push({ p, data: d });
   };
+  const tOw = nowMs();
   await Promise.all(fieldsNow.map((f, p) => (f.plain && [0, 1, 2, 3].some(s => ((g0.masks[p] >> s) & 1) && !inGroup[p].has(g0.chOf[s])) ? smoothField(p) : null))); // together when there are several (own: on workers, in parallel)
+  tm.ow = nowMs() - tOw;
   const skip = new Set(); for (const { channel, parts } of groups) for (const p of parts) skip.add(p + '|' + channel); // a group's parts are not in the union: the group's joint field is (below)
   const g = partFieldChannels(fieldsNow), un = partFieldUnion(fieldsNow, skip.size ? skip : undefined);
   const { list, C, chOf } = g, size = un.size, lo = un.lo, data = un.data; // partFieldUnion made its own bytes (a group has two or more parts, and skip is given)
@@ -737,6 +746,7 @@ export async function partFieldSet(fields, run = runPartGroup, opt = PART_FIELD,
   const asks = order => order.map((p, k) => (k < order.length - 1 ? 1 : 0) + order.slice(0, k).filter(q => meet(p, q)).length); // per position
   const over = (order, ask) => order.reduce((t, p, k) => t + Math.max(0, used[p] + ask[k] - 4), 0);
   for (const { channel: c, parts: gr0 } of groups) {
+    gt = { c, n: gr0.length, j: 0, l: 0, s: 0, w: 0, h: 0, m: 0 }; const gT0 = nowMs(), st0 = ops0.stats ? { h: ops0.stats.hit, m: ops0.stats.miss } : null; tm.groups.push(gt); // (measurement only) this group's timing record
     // G: the newest part goes FIRST (it has no earlier neighbour, and the seams of the older parts are the same as before it came: they are not made again). The smallest-last order (partSeamOrder) is kept where it matters: the order
     // is decided by what each part really reads (the plan: the joint field and the seams' voxels, before any smoothing), the newest first when it asks no more than the 4 a part can read, or when every part of the group meets every other
     // (every order asks the same), or when it asks fewer than the smallest-last order (with as many: the smallest-last order where the boxes said so, as did). Only the order taken is smoothed (n731 perf ⑤: smoothed
@@ -848,6 +858,7 @@ export async function partFieldSet(fields, run = runPartGroup, opt = PART_FIELD,
       else { const mG = await (pG || prep(gr0)), oG = overOf(mG, gr0); mk = oN < oG || (boxOk && oN === oG) ? mN : mG; }
     }
     mk = await smoothOf(mk);
+    gt.w = nowMs() - gT0; if (st0) { gt.h = ops0.stats.hit - st0.h; gt.m = ops0.stats.miss - st0.m; } gt = null; // (measurement only)
     const gr = mk.gr, { J, S, pl } = mk; if (mk.failed) plain++;
     gr.forEach((p, k) => { used[p] += pl[k].js.length; });
     // the group's joint field over each of its parts' own field boxes, as the larger byte there (a part of the channel that is not in the group can have its box over a part of this one: what it has is not overwritten; the parts of the group
@@ -903,13 +914,14 @@ export async function partFieldSet(fields, run = runPartGroup, opt = PART_FIELD,
       for (const e of [{ ch: add(jOf.get(chOf[s])), a: 1, b: 0 }, ...sm.filter(x => x.slots.includes(s)).map(x => ({ ch: add(x.src), a: x.a, b: x.a < 0 ? 1 : x.own ? -PART_SEAM_TIE : 0 }))]) { a[s][e.ch] = e.a; b[s][e.ch] = e.b; }
     }
     if (chans.length > 4) throw new Error('part seams: more than 4 channels on one part');
-    if (chans.length === 1) return { data: chans[0], lo: f.lo, size: f.size, C: 1, a, b, ...(wantOcc ? { occ: partOccOf({ data: chans[0], size: f.size, C: 1, a, b }) } : {}) }; // perf2 (4-4): the part's occupancy (the shader's partOcc) is made here, where the field is (on the worker), as the body's is
+    if (chans.length === 1) return { data: chans[0], lo: f.lo, size: f.size, C: 1, a, b, ...(wantOcc ? { occ: occT(() => partOccOf({ data: chans[0], size: f.size, C: 1, a, b })) } : {}) }; // perf2 (4-4): the part's occupancy (the shader's partOcc) is made here, where the field is (on the worker), as the body's is
     const Cp = chans.length === 3 ? 4 : chans.length, out = new Uint8Array(nf * Cp);
     chans.forEach((x, ch) => { for (let i = 0, q = ch; i < nf; i++, q += Cp) out[q] = x[i]; });
-    return { data: out, lo: f.lo, size: f.size, C: Cp, a, b, ...(wantOcc ? { occ: partOccOf({ data: out, size: f.size, C: Cp, a, b }) } : {}) };
+    return { data: out, lo: f.lo, size: f.size, C: Cp, a, b, ...(wantOcc ? { occ: occT(() => partOccOf({ data: out, size: f.size, C: Cp, a, b })) } : {}) };
   });
   const a = [0, 1, 2, 3].map(s => [0, 1, 2, 3].map(c => (chOf[s] === c ? 1 : 0))), b = [0, 1, 2, 3].map(s => [0, 1, 2, 3].map(c => (chOf[s] < 0 ? 0 : chOf[s] === c ? 0 : 1)));
-  return { body: { data, lo, size, C, a, b, mask: un.mask, occ: partBodyOccOf({ data, size, C, a, b }) }, parts, plain, merged, own: ownOut.sort((u, v) => u.p - v.p) };
+  const bodyOcc = occT(() => partBodyOccOf({ data, size, C, a, b })); tm.tot = nowMs() - T0;
+  return { body: { data, lo, size, C, a, b, mask: un.mask, occ: bodyOcc }, parts, plain, merged, own: ownOut.sort((u, v) => u.p - v.p), tm };
 }
 // n731 perf ③: the voxels the body's cut surely hides, for the distance field of the visible content (vr-hide-field.js: an index source, bit c of a voxel's byte = channel c of the body's field hides it). A voxel counts only when
 // the field's byte is at least PART_HID_MIN on that channel at the voxel and at all 26 of its neighbours inside the box (a voxel on the box's edge never): every sample whose nearest voxel it is reads the field LINEAR from those 8
@@ -1022,6 +1034,7 @@ function partCachedOps(cache, stats, ops) {
     joint: (lab, size, opt, ctx) => through('J|' + keyOf(lab, size) + '|' + no(opt), async () => { const r = await jointNear(lab, size, opt, ctx); if (ctx && ctx.glo) { r.vrAt = [...ctx.glo]; r.vrGs = [...size]; } return r; }),
     label: (lab, size, k, opt) => through('L' + k + '|' + keyOf(lab, size), () => ops.label(lab, size, k, opt)),
     smooth: (codes, size, opt, ctx) => (ctx && ctx.own ? ops.smooth(codes, size, opt, ctx) : through('F|' + keyOf(codes, size) + '|' + no(opt), () => ops.smooth(codes, size, opt, ctx))),
+    stats, // (measurement only) the counters above, read by partFieldSet's timing record (tm) for the hit / miss of each group
   };
 }
 // a result's bytes as a signature (the same bytes, the same channels and box: the same texture)
@@ -1038,7 +1051,7 @@ export function partSetWorkerSource(limit = PART_CACHE_BYTES) {
     '\nonmessage=async e=>{const m=e.data;if(m.reply){const p=pend.get(m.id);pend.delete(m.id);if(p){if(m.ok)p.res(m);else p.rej(new Error(m.message))}return}if(m.clear){cache.clear();state.rank.clear();state.next=0;return}if(m.bake){try{const r=partBakeRun(m.job);postMessage({bake:true,id:m.id,ok:true,lowered:r.lowered,alphaLowered:r.alphaLowered,slots:r.slots,rgba:r.rgba.buffer,c4:r.c4?r.c4.buffer:null},r.c4?[r.rgba.buffer,r.c4.buffer]:[r.rgba.buffer])}catch(err){postMessage({bake:true,id:m.id,ok:false,message:String(err&&err.message||err)})}return}try{const fields=m.fields.map(f=>{const b=new Uint8Array(f.bytes);return f.codes?{data:partFieldPlain(b,f.size),plain:true,lo:f.lo,size:f.size,mask:f.mask,kind:f.kind,id:f.id}:{data:b,lo:f.lo,size:f.size,mask:f.mask,kind:f.kind,id:f.id}});' +
     'const stats={hit:0,miss:0},base=m.plainOnly?noOps:m.pool?rpcOps:localOps,set=await partFieldSet(fields,m.plainOnly?base:partCachedOps(cache,stats,base),m.opt,m.plainOnly?null:state,m.occ!==false);' +
     'if(!set){postMessage({ok:true,id:m.id,set:null});return}const idx=new Map(fields.map((f,i)=>[f.data,i])),tr=new Set(),pack=x=>{const i=idx.get(x.data);if(i!==undefined&&!fields[i].plain)return{...x,data:null,same:i,sig:partSigOf(x)};tr.add(x.data.buffer);return{...x,sig:partSigOf(x)}};' +
-    'if(set.body.hid)tr.add(set.body.hid.buffer);if(set.body.occ)tr.add(set.body.occ.data.buffer);for(const x of set.parts)if(x.occ)tr.add(x.occ.data.buffer);const body=pack(set.body),parts=set.parts.map(pack),own=set.own.map(o=>{tr.add(o.data.buffer);return o});postMessage({ok:true,id:m.id,set:{body,parts,plain:set.plain,merged:set.merged,own,cache:{...stats,...cache.stats()}}},[...tr])}catch(err){postMessage({ok:false,id:m.id,message:String(err&&err.message||err)})}};';
+    'if(set.body.hid)tr.add(set.body.hid.buffer);if(set.body.occ)tr.add(set.body.occ.data.buffer);for(const x of set.parts)if(x.occ)tr.add(x.occ.data.buffer);const body=pack(set.body),parts=set.parts.map(pack),own=set.own.map(o=>{tr.add(o.data.buffer);return o});postMessage({ok:true,id:m.id,set:{body,parts,plain:set.plain,merged:set.merged,own,tm:set.tm,cache:{...stats,...cache.stats()}}},[...tr])}catch(err){postMessage({ok:false,id:m.id,message:String(err&&err.message||err)})}};';
 }
 // partFieldSet on a worker that stays (so that its memory of the groups' answers does) -> {run(fields) -> Promise of {body, parts, plain, merged, own, cache} | null, clear(), dispose()}. A set is partFieldSet's answer, but for
 //  - a part's / the body's `data` is the very array of its field where partFieldSet gives that (a part alone in its channels), and every one has a `sig` (its bytes' signature: the same sig = the same texture),
@@ -1079,8 +1092,8 @@ export function createPartSetRunner(opt = PART_FIELD, cfg = {}) {
       j.finish();
       if (!d || !d.ok) { const er = new Error('part set: ' + (d && d.message)); er.answered = true; j.rej(er); return; } // answered: partFieldSet itself threw (as it does on this thread): not a worker failure, not tried again
       if (!d.set) { j.res(null); return; }
-      const back = x => { if (x.same == null) return x; const r = { ...x, data: j.valid[x.same].data }; delete r.same; return r; }, { body, parts, plain, merged, own, cache } = d.set;
-      j.res({ body: back(body), parts: parts.map(back), plain, merged, own, cache });
+      const back = x => { if (x.same == null) return x; const r = { ...x, data: j.valid[x.same].data }; delete r.same; return r; }, { body, parts, plain, merged, own, cache, tm } = d.set;
+      j.res({ body: back(body), parts: parts.map(back), plain, merged, own, cache, tm });
     };
     w.onerror = ev => { if (ev && ev.preventDefault) ev.preventDefault(); if (st.job) st.job.fail('part set worker: ' + ((ev && ev.message) || 'error')); failBakes(st, 'part set worker: ' + ((ev && ev.message) || 'error')); };
     w.onmessageerror = () => { if (st.job) st.job.fail('part set worker: message error'); failBakes(st, 'part set worker: message error'); };

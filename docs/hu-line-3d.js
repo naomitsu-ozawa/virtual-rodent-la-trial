@@ -7,14 +7,14 @@
 // canvas handlers (rotate / pan / comment taps) see it; moves and releases are followed on the document. The line is an SVG overlay
 // projected like the comment / measure lines (voxelToLocal3D -> object matrix -> camera), updated after every 3D frame.
 import * as THREE from './vendor/three@0.187.0/build/three.webgpu.js';
-import { sceneState, volume, current3DVolume, threeRenderMode, analysisEditTool, sectionViewOpen, sectionViewPlane } from './state.js?v=20261126-build766';
-import { voxelToLocal3D } from './crosshair.js?v=20261126-build766';
-import { surfacePointerVoxel } from './analysis-ops.js?v=20261126-build766';
-import { segmentState, gpuSegmentOrder } from './segments.js?v=20261126-build766';
-import { sectionLocalPoint, sectionLocalNormal } from './section-view.js?v=20261126-build766';
-import { request3DRender } from './scene3d.js?v=20261126-build766';
-import { getHuLine, setHuLine, clearHuLine, onHuLineChange, getHuLineHover, onHuLineHoverChange, localToVoxel, voxelInside, rayPlaneT } from './hu-line-model.js?v=20261126-build766';
-import { createLiveScheduler } from './hu-line-live.js?v=20261126-build766';
+import { sceneState, volume, current3DVolume, threeRenderMode, analysisEditTool, sectionViewOpen, sectionViewPlane } from './state.js?v=20261126-build767';
+import { voxelToLocal3D } from './crosshair.js?v=20261126-build767';
+import { surfacePointerVoxel } from './analysis-ops.js?v=20261126-build767';
+import { segmentState, gpuSegmentOrder } from './segments.js?v=20261126-build767';
+import { sectionLocalPoint, sectionLocalNormal } from './section-view.js?v=20261126-build767';
+import { request3DRender } from './scene3d.js?v=20261126-build767';
+import { getHuLine, setHuLine, clearHuLine, onHuLineChange, getHuLineHover, onHuLineHoverChange, localToVoxel, voxelInside, rayPlaneT } from './hu-line-model.js?v=20261126-build767';
+import { createLiveScheduler } from './hu-line-live.js?v=20261126-build767';
 const DRAG_PX = 6, CYAN = '#35e0ff', ORANGE = '#ffb13b';
 let host = null, svg = null, armed = false;
 const armedListeners = new Set();

@@ -11,8 +11,8 @@
 //     as the performance record counts them) and how far the head moved.
 //  2. createFrameRing: the last 2000 frames, one record each, with what happened in that frame interval; windows around the frames over 30 ms are kept for the report.
 //  3. createIsolation: the switches of the isolation run (volume timestamps and their read-back, the menu's once-a-second redraw, the diagnostics' heartbeat save, the performance record's 5 s save).
-import { gapBucket } from './vr-perf-log.js?v=20261126-build766';
-import { MAX_LONG_M, NORM_LONG } from './vr-real-scale.js?v=20261126-build766';
+import { gapBucket } from './vr-perf-log.js?v=20261126-build767';
+import { MAX_LONG_M, NORM_LONG } from './vr-real-scale.js?v=20261126-build767';
 
 export const BENCH_DISCARD_MS = 2000; // the first 2 s of every segment are left out of its numbers
 export const BENCH_SEGMENT_MS = 45000; // one segment (a scene in one period)
