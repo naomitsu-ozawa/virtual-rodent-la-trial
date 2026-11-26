@@ -20,6 +20,21 @@ export function fakeXrInit(opts = {}) {
     this.framebuffer = fb; st.fbo = fb; }
     getViewport(view) { return { x: view.eye === 'left' ? 0 : W, y: 0, width: W, height: H }; } }
   window.XRWebGLLayer = FakeLayer;
+  // opts.gpu: a WebGPU session too (XRGPUBinding, the 'webgpu' and 'layers' features): the projection layer is a texture array of two layers (one per eye, size x size px) on the app's own device, the views draw into it by a
+  // view descriptor each, as the headset's binding hands them out (three.js' XR manager, docs/vendor three.webgpu.js _initWebGPUSession / _getWebGPUViewData). st.gpuLayerTex: that texture (a test may read it back)
+  if (opts.gpu) {
+    class FakeGpuBinding {
+      constructor(session, device) { this.session = session; this.device = device; }
+      getPreferredColorFormat() { return 'rgba8unorm'; }
+      createProjectionLayer() { return { textureWidth: W, textureHeight: H, textureArrayLength: 2, ignoreDepthValues: true }; }
+      getViewSubImage(layer, view) {
+        const tex = st.gpuLayerTex ||= this.device.createTexture({ size: [W, H, 2], format: 'rgba8unorm', usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC });
+        const i = view.eye === 'left' ? 0 : 1;
+        return { colorTexture: tex, depthStencilTexture: null, viewport: { x: 0, y: 0, width: W, height: H }, getViewDescriptor: () => ({ format: 'rgba8unorm', dimension: '2d', baseArrayLayer: i, arrayLayerCount: 1 }) };
+      }
+    }
+    window.XRGPUBinding = FakeGpuBinding;
+  }
   // holdRaf: the page's window rAF / rIC do not run while an immersive session is presented
   const held = [], realRaf = window.requestAnimationFrame.bind(window), realCancel = window.cancelAnimationFrame.bind(window), realRic = window.requestIdleCallback?.bind(window), realCic = window.cancelIdleCallback?.bind(window);
   let hold = false, hid = 1e9;
@@ -35,7 +50,7 @@ export function fakeXrInit(opts = {}) {
     const list = held.splice(0); st.rafHeld = 0; for (const h of list) realRaf(t => h.cb(t));
   };
   class FakeSession extends EventTarget {
-    constructor(mode) { super(); this.mode = mode; this.renderState = { baseLayer: null, depthNear: 0.1, depthFar: 1000 }; this.inputSources = []; this.enabledFeatures = ['local-floor']; this.environmentBlendMode = 'opaque'; this.visibilityState = 'visible'; this.supportedFrameRates = new Float32Array([72, 90]); this.frameRate = 72; st.session = this; if (opts.holdRaf) st.holdOn(); }
+    constructor(mode, init) { super(); this.mode = mode; this.renderState = { baseLayer: null, depthNear: 0.1, depthFar: 1000 }; this.inputSources = []; this.enabledFeatures = ['local-floor', ...(opts.gpu && (init?.requiredFeatures || []).includes('webgpu') ? ['webgpu', 'layers'] : [])]; this.environmentBlendMode = 'opaque'; this.visibilityState = 'visible'; this.supportedFrameRates = new Float32Array([72, 90]); this.frameRate = 72; st.session = this; if (opts.holdRaf) st.holdOn(); }
     updateRenderState(o) { Object.assign(this.renderState, o); }
     async requestReferenceSpace() { const s = { getOffsetReferenceSpace: () => s, addEventListener() {} }; return s; }
     requestAnimationFrame(cb) { const id = ++st.id; st.cbs.set(id, cb); return id; }
@@ -43,7 +58,7 @@ export function fakeXrInit(opts = {}) {
     async updateTargetFrameRate(r) { this.frameRate = r; }
     async end() { st.ended++; st.stop(); st.holdOff(); this.dispatchEvent(new Event('end')); }
   }
-  Object.defineProperty(navigator, 'xr', { configurable: true, value: { isSessionSupported: async () => true, requestSession: async m => new FakeSession(m), addEventListener() {} } });
+  Object.defineProperty(navigator, 'xr', { configurable: true, value: { isSessionSupported: async () => true, requestSession: async (m, init) => new FakeSession(m, init), addEventListener() {} } });
   // one XR frame: the layer is cleared (as the compositor's fresh buffer; the app's GL state is restored after), then the callbacks run
   st.frame = () => {
     const gl = st.gl; st.t += 1000 / 72;

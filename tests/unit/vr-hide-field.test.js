@@ -155,7 +155,7 @@ describe('vr-view.js wiring of the visible-content field', () => {
     // a part taken out (n731 perf ③): the old rule unless the body's cut is a hide source for the field the body draws with, and the VRL_PART programs draw the body; the state leaves every part's target out
     expect(vsrc).toContain('if(!t||!(u.distInCls.value>0)){u.hideVMode.value=0;return}');
     expect(vsrc).not.toContain('if(parts.length&&(!partHideSrc()||diagAn.noRegion||!partBodySet(variantKey()))){u.hideVMode.value=0;return}'); // no state keeps the old rule now: hideCur is that of the way the body is drawn (bodyCutDraws)
-    expect(vsrc).toContain('const bodyCutDraws=()=>!!(parts.length&&partHideSrc()&&!diagAn.noRegion&&partBodyDraws(variantKey()));'); // n734: partBodyDraws = partBodySet without the bake (the baked body has the same hidden state)
+    expect(vsrc).toContain('const bodyCutDraws=()=>!!(parts.length&&(partHideSrc()||(gx&&!pageHides()&&partBakeCan()))&&!diagAn.noRegion&&partBodyDraws(variantKey()));'); // n734: partBodyDraws = partBodySet without the bake (the baked body has the same hidden state); perf2 4-3: the WebGPU view also counts a bake that can start while the page hides nothing
     expect(vsrc).toContain('const cur=hideCur();let rb=t.rb;');
     expect(vsrc).toContain("for(const q of parts){const tg=q.target,i=(tg?.index|0)+1;if(i>0&&i<256)(tg.kind==='region'?hideCurR:hideCurC)[i]=0}");
     expect(vsrc).toContain("(tg.kind==='region'?hideCurR:hideCurC)[i]|=q.mask");

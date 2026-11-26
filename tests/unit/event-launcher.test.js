@@ -212,10 +212,10 @@ describe('no double preparation', () => {
   });
   it('vr-view.js: the prepare panel and the card press share the GPU run (prepareVrGpuOnce); the button takes the panel while it runs (vrGpuBusy)', () => {
     const vr = SRC('vr-view.js'), app = SRC('app.js');
-    expect(vr).toContain('g=await prepareVrGpuOnce(p,mode)}');
+    expect(vr).toContain('g=await prepareVrGpuOnce(p,mode,pr=>');
     expect(vr).toContain('if(gpuInflight&&gpuInflight.key===P.key&&gpuInflight.mode===mode)return gpuInflight.promise;');
     expect(vr).toContain('export const vrGpuBusy=()=>!!gpuInflight;');
-    expect(app).toContain('if(m.vrReady()&&!m.vrGpuBusy())await go();else{');
+    expect(app).toContain('if(m.vrReady(mode)&&!m.vrGpuBusy())await go();else{');
     const ui = SRC('event-launcher.js');
     expect(ui).toContain("inflight.run('vr', async () => {");
     expect(ui).not.toMatch(/\bimport\(/); // the VR module comes from app.js (event 'vrl-vr-module'): no second loader (the export gate pins the dynamic imports of the pages)
@@ -517,11 +517,11 @@ describe('the views are not drawn while the page is on, and the layout is not an
   });
   it('vr-view.js prepareVrGpuOnce is a no-op (resolved null) while an XR session runs, before it touches anything', () => {
     const vr = SRC('vr-view.js');
-    const i = vr.indexOf("export function prepareVrGpuOnce(P,mode='vr'){");
+    const i = vr.indexOf("export function prepareVrGpuOnce(P,mode='vr',onProgress=null){");
     expect(i).toBeGreaterThan(0);
     const body = vr.slice(i, vr.indexOf('\n}\n', i)).replace(/\/\/.*$/gm, '');
     expect(body.split('\n')[1].trim()).toContain('if(running)return Promise.resolve(null);');
-    expect(body.indexOf('if(running)')).toBeLessThan(body.indexOf('prepareVrGpu(P,mode)'));
+    expect(body.indexOf('if(running)')).toBeLessThan(body.indexOf('prepareVrGpu(P,mode'));
     expect(body).not.toMatch(/initialVrModes|P\.combo|P\.cls4/);
   });
   it('event mode off: the layout code is idle (enable only from the switch; no class, no flag, no element until then)', () => {

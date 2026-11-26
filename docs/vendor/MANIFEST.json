@@ -1,7 +1,7 @@
 {
   "generatedBy": "tools/vendor-libs.mjs",
   "packages": {
-    "three@0.186.0": "sha512-cr/fIM2ddMSVbYVgkfD4jLJv7Fh/8ZTjvo+7gQeSVGUZHxpx9FDwoL5iC7hUz/LiRA8wMbqfnb90xKfm1/HHkQ==",
+    "three@0.187.0": "sha512-Qiu7R+Cmh8CstZsY1uJOSWnVlfo7ZtNLV7mF8Jltk3LB3AtDu9cRZlcnRKkAk8Y4z6KKw35z7Y7Urd7jWY8etA==",
     "dicom-parser@1.8.21": "sha512-lYCweHQDsC8UFpXErPlg86Px2A8bay0HiUY+wzoG3xv5GzgqVHU3lziwSc/Gzn7VV7y2KeP072SzCviuOoU02w==",
     "fflate@0.8.2": "sha512-cPJU47OaAoCbg0pBvzsgpTPhmhqI5eJjh/JIu8tPj5q+T7iLvW/JAYUqmE7KOB4R1ZyEhzBaIQpQpardBF5z8A=="
   },
@@ -22,21 +22,25 @@
       "sha256": "8cc1f687e0159e977addb6b85e274dbd11e622cf151f4fcb7b85d49622ea43e7",
       "size": 89198
     },
-    "three@0.186.0/LICENSE": {
+    "three@0.187.0/LICENSE": {
       "sha256": "8b378ebe60e2fe500158cb0ac71cb5e8b7d92953c2abcc63a0eb90499653b5bc",
       "size": 1081
     },
-    "three@0.186.0/build/three.core.js": {
-      "sha256": "9edde002b066a9a05676a6127f67735b62baf399bdea529f2f7e31657da769e6",
-      "size": 1458113
+    "three@0.187.0/build/three.core.js": {
+      "sha256": "613e370f76638fdef83926642bf256dc9615684922de1ce1f63a8583e5d78578",
+      "size": 1474799
     },
-    "three@0.186.0/build/three.module.js": {
-      "sha256": "9052042d676cb0fdc1ddfefe193053f34b7ac0513a616fdac4535d49987812ea",
-      "size": 662772
+    "three@0.187.0/build/three.module.js": {
+      "sha256": "104f56145899722094556490d787aae0617cc2fc3382f31df02d724ea1aee341",
+      "size": 658900
     },
-    "three@0.186.0/build/three.webgpu.js": {
-      "sha256": "a78400fa1d359e81fcc12b84ed0a89a7fbecb4b8373e28ae8f9d2b11f6ea13bc",
-      "size": 2284823
+    "three@0.187.0/build/three.tsl.js": {
+      "sha256": "d8f3cdb8b85b799a5631bd9a8d77e185d88ce1eb1bb051f48b332728a5423e3f",
+      "size": 1065544
+    },
+    "three@0.187.0/build/three.webgpu.js": {
+      "sha256": "eafead3154ec06093f3108bddceab360f048a6fcebd7c085d5aae0ab5404bd25",
+      "size": 1350894
     }
   }
 }

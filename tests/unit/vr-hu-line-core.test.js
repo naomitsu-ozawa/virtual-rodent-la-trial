@@ -191,12 +191,12 @@ describe('vr-view.js wiring of the HU line (source guard; the file is a WebXR mo
     expect(src.slice(se, se + 400)).toContain('huLine.end(c)'); // after the hand guard line (a hand's system selectend) and the histogram end
   });
   it('is updated in the frame loop, disposed on exit, and has its own tab id that collides neither with the quick-ring editor (7) nor the self-check page (8)', () => {
-    expect(src).toContain('huLine.update(js0)'); expect(src).toContain('huLine.dispose()');
+    expect(src).toContain('huLine.update(lf.js0)'); expect(src).toContain('lf.js0=js0;'); expect(src).toContain('huLine.dispose()'); // the frame's js0 is handed to lateHud (WebGPU: it runs after the volume pass is submitted)
     expect(src).toContain('setHuLineDeferred(true)'); expect(src).toContain('setHuLineDeferred(false)');
     expect(src).toContain('TAB_IDS=[0,1,2,3,4,5,6,9,11]'); expect(src).toContain('ui.tab===9'); expect(src).toContain('ui.tab===8'); expect(src).toContain('ui.tab===7'); // 8 is the self-check page
   });
   it('the pick reuses the controller loop\'s hit (no second march) and runs after that loop', () => {
-    const iUpd = src.indexOf('huLine.update(js0)'), iLoop = src.indexOf('for(const c of controllers){\n   // this hand');
+    const iUpd = src.indexOf('lf.js0=js0;'), iLoop = src.indexOf('for(const c of controllers){\n   // this hand');
     expect(iLoop).toBeGreaterThan(0); expect(iUpd).toBeGreaterThan(src.indexOf('c.userData.gate.update(')); // after the whole controller loop body
     expect(src).toContain('u.vhFrame===frameNo?u.volHit:volumeHit(c)'); expect(src).toContain('c.userData.vhFrame=frameNo'); expect(src).toContain('c.userData.secHit=sh');
   });

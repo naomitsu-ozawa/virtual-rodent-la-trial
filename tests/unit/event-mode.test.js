@@ -580,7 +580,7 @@ describe('最初の状態に戻す: segment visibility, window and view settings
     expect(src).toContain('const initialVrModes=()=>{if(!eventModeOn())return;for(const k of Object.keys(segMode))delete segMode[k];');
   });
 });
-// 初期表示セグメント: what each practice dataset starts with shown (the project files are the truth, EVENT_INITIAL_SEGMENTS the agreed table)
+// 初期表示セグメント: what each practice dataset starts with shown (the project files are the truth, EVENT_INITIAL_SEGMENTS the table)
 describe('initial segments of the practice datasets', () => {
   const NAMES = { sample4: '骨梁', sample3: 'マウス頭部', sample2: 'マウス腹部', sample1: 'ラット腹部' };
   it('the table: 骨梁 = 骨, マウス頭部 = 骨, マウス腹部 = 骨 + 軟部組織, ラット腹部 = 骨 + 軟部組織', () => {

@@ -74,8 +74,8 @@ describe('the out-of-view release in vr-view.js', () => {
     expect(u).toContain('if(c&&!front){c.getWorldPosition(tmpFv)}else{readHead();tmpFv.copy(head).addScaledVector(headFwd,0.45)');
     expect(src).toContain('secUndo.push(snap,performance.now());showUndoBoard(c,i+1,front);');
   });
-  it('the frame points are its 4 corners (square(h) of makePlane, h = 0.12) + the centre, against every XR eye', () => {
-    expect(src).toContain('const square=(h)=>new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,-h,-h),new THREE.Vector3(0,h,-h),new THREE.Vector3(0,h,h),new THREE.Vector3(0,-h,h)]);');
+  it('the frame points are its 4 corners (square(h) of makePlane, plus the first corner again to close the Line, h = 0.12) + the centre, against every XR eye', () => {
+    expect(src).toContain('const square=(h)=>new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,-h,-h),new THREE.Vector3(0,h,-h),new THREE.Vector3(0,h,h),new THREE.Vector3(0,-h,h),new THREE.Vector3(0,-h,-h)]);');
     expect(src).toContain('h=0.12; // ');
     const s = src.slice(src.indexOf('const sectionOutOfView='), src.indexOf('const tryFling='));
     expect(s).toContain('[[0,-h,-h],[0,h,-h],[0,h,h],[0,-h,h],[0,0,0]]'); expect(s).toContain('const h=0.12;');

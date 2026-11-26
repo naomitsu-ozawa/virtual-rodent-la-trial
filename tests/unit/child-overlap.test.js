@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterEach } from 'vitest';
 import { readFileSync } from 'node:fs';
-import * as THREE from '../../docs/vendor/three@0.186.0/build/three.module.js';
+import * as THREE from '../../docs/vendor/three@0.187.0/build/three.module.js';
 import { installDomStub, importApp } from '../helpers/dom-stub.js';
 import { setRegionLabel, glowRid, glowPairOf, glowRegionOf } from '../../docs/analysis-label.js';
 import { highlightColor, highlightIndex, anyLit, createHighlightTracker, HIGHLIGHT_WHITE_MIX, HIGHLIGHT_DIM_MIX } from '../../docs/region-highlight.js';

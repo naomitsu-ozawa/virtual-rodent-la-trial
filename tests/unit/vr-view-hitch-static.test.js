@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 const src = readFileSync(new URL('../../docs/vr-view.js', import.meta.url), 'utf8');
 const loopStart = src.indexOf('renderer.setAnimationLoop(xrTs=>{'), loopEnd = src.indexOf(' const cleanup=()=>{');
 const loop = src.slice(loopStart, loopEnd);
-const secondTick = loop.slice(loop.indexOf('if(now-fpsAt>=1000){'));
+const secondTick = src.slice(src.indexOf(' const secondTick=now=>{'), loopStart); // E1: the once-a-second block is a function the callback calls (WebGL) or posts (WebGPU); its text is what it was
 
 describe('vr-view.js: the closed menu costs nothing once a second (V1)', () => {
   it('the frame loop is where expected', () => { expect(loopStart).toBeGreaterThan(0); expect(loopEnd).toBeGreaterThan(loopStart); expect(secondTick.length).toBeGreaterThan(100); });
@@ -18,8 +18,9 @@ describe('vr-view.js: the closed menu costs nothing once a second (V1)', () => {
     expect(secondTick).not.toMatch(/[;{]\s*if\(ui\.tab===4\)/);
   });
   it('the menu canvas is redrawn / uploaded only while it is shown; opening it refreshes it', () => {
-    expect(loop).toContain('if(ui.open)menu.flush();');
+    expect(loop).toContain('if(ui.open&&(!gx||!boardLive.menu))menu.flush();'); // E1: the WebGPU session redraws a menu that was already up after the callback (jBoards: also only while it is open)
     expect(loop.match(/menu\.flush\(\)/g)).toHaveLength(1);
+    expect(src).toContain('const jBoards=post.job(()=>{if(running?.session!==session)return;if(boardLive.menu)menu.flush();');
     expect(src).toContain('const setMenuOpen=open=>{if(open)emit(\'menu-open\');else emit(\'menu-close\');ui.open=open;menu.mesh.visible=open;if(open){placeMenuNow();ui.probeOnOpen=true}menu.refresh()};');
   });
   it('opening the menu on 詳細 measures once on the next frame (numbers not up to 1 s stale), only if it is still open there', () => {
@@ -37,7 +38,7 @@ describe('vr-view.js: the closed menu costs nothing once a second (V1)', () => {
 describe('vr-view.js: the no-jump interim of a rebuild does not lock the auto-quality ladder low', () => {
   it('samples taken while a shown segment waits for its texture (useDist off) are dropped', () => {
     expect(loop).toContain('const comboInterim=!!comboT?.rb?.busy&&!!uA&&!uA.useDist.value;');
-    expect(loop).toContain('if(!comboInterim){const r=aq.update({volMs,mainMs,interval,budget,ctx:ctxKey,cover:rs.cover});');
+    expect(loop).toContain('if(!comboInterim){const r=aq.update({volMs,mainMs,interval,budget,ctx:ctxKey,cover:rs.cover,held:heldWin});');
     expect(loop.match(/aq\.update\(/g)).toHaveLength(1);
   });
   it('distInCls is part of the context key, so the return of the jumps clears a lock taken meanwhile', () => {

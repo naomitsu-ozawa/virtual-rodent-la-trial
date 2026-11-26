@@ -7,104 +7,115 @@
 // fragment shader is a GLSL port of volumeShader() (medical-volume.js): same
 // segment test, 6-step hit refinement, gradient normal and shading constants.
 // Not shown yet: processed edits, cuts, section view, MPR planes.
-import { effectiveFlag } from './debug-flags.js?v=20261119-build751';
-import * as THREE from './vendor/three@0.186.0/build/three.module.js';
-import { reduceSliceArea, packedRgSlice, packCtSlice, gpuRunsForTexture } from './medical-volume.js?v=20261119-build751';
-import { ensureSegmentBaseRuns } from './segment-runs.js?v=20261119-build751';
-import { gpuVolumeTarget, gpuVolumeEditDescriptors, volumeCache, volumeCacheBudget, volumeCacheBudgetInfo } from './gpu-volume-data.js?v=20261119-build751';
-import { pruneOtherFilterSettings } from './gpu-volume-cache.js?v=20261119-build751';
-import { packEntry, storeEntry, loadEntry, pruneSiblings, removeOldBuilds, storeStatus, noteStore, partsOf, keyOfParts, explainMiss, isStandardOpen, copyPackedSlice } from './vr-prep-cache.js?v=20261119-build751';
-import { vrStateSignature } from './vr-data-key.js?v=20261119-build751'; // the state of the page now, to tell whether a practice level is still in its standard state //: the finished VR data is kept on the device (vr-prep-cache.js)
-import { SEGMENT_PRESET_ORDER, gpuSegmentOrder, segmentHasProcessedMask, segmentState, segmentEditState, segmentSourceSignature, segmentShadeRange, segmentShadeSpan, setSegmentShadeEnd, resetSegmentShadeRange, shadeDataRange, applyShadeAutoHistograms, onShadeAutoChange } from './segments.js?v=20261119-build751'; import { segmentById, childRenderEntries, onChildRenderChange, setChildLook } from './segments.js?v=20261119-build751'; import { setShadeAutoPageHeld } from './segments.js?v=20261119-build751';
-import { sceneState, analysisRegions, activeSeries } from './state.js?v=20261119-build751';
-import { datasetFingerprint, unpackProject } from './project-file.js?v=20261119-build751';
-import { PAIR_UNIFORMS, pairUniforms, pairShapeShown, pairOffsetX, pairBoxHas, pairSectionOwnerIn, planeNearerPartner, grabTargetOf, pairGrabPlan, PLANE_PARK_W, pairShownMask, pairHeldMask, pairSlotShown, createAtlasIndex, atlasPrimary } from './vr-pair-view.js?v=20261119-build751'; // stage 2 of the sample pairs: the partner volume drawn beside the primary (the rules; the GPU side is the `pair` block of startVrView)
-import { PART_GLSL, PART_OWN, PART_OUT_M, PART_ANIM_MS, partUniforms, partSame, regionSlotMask, patchRegionLutMany, patchChildLutMany, anyHiddenIn, partBoundsOf, partProxyBox, partRayRange, partKeepVoxelOf, hideIndexPlane, partOwnRegionLut, partOwnChildLut, partHideOnlyRegionLut, partHideOnlyChildLut, PART_TEXT, PART_BTN_X, PART_RESTORE_W, runPartField, partFieldPlain, partFieldBoxOf, PART_FIELD, partFieldCodesAsync, createPartSetRunner, partOccOf, partBodyHidOf, partFieldNeedsOwn, partFieldMap, partAirOf, markCutRegionLut, markCutChildLut, partBakeBoxOf, partBakeSlots, partBakeCrop, partBakeStep, bakeRegionLut, bakeChildLut, bakeRegionAnyHidden, bakeChildAnyHidden } from './vr-part-view.js?v=20261119-build751'; // an earlier change: regions / child segments taken out of the body (the rules; the GPU side is the `part` block of startVrView)
-import { partnerInputs, unitsPerMmOfSeries, resultRepresentativeVoxel } from './vr-pair-data.js?v=20261119-build751';
-import { findSamplePartners, loadSamplePartnerFiles, loadSamplePartnerProject, loadSamplePairs } from './data-load.js?v=20261119-build751';
-import { samplePartners } from './sample-sets.js?v=20261119-build751';
-import { analysisRunsContain } from './run-length.js?v=20261119-build751';
-import { createPairStore, isPairId } from './vr-pair-store.js?v=20261119-build751'; // stage 3: the partner's own points / distances
-import { loadPartnerName, practiceSeriesName } from './sample-registry.js?v=20261119-build751'; // the sample pair row of the menu (stage 3): which partner the open dataset has (sample-pairs.json) and its name (the partner's sample.json)
-import { parseFiles, groupSeries } from './dicom.js?v=20261119-build751';
-import { HAND_PICK_TOL, sectionRayHit, recordVrPoint, resolveTriggerTarget, volumeGripAllowed, pressDragSection, createTriggerPress, dragShouldStart, DRAG_RECORD, sectionFollowStart, sectionFollowStep, sectionWristTurn, snapPlaneCenterIntoBox, rayLocalPlaneX, squareBandContains, squareContains, createHoverPulse, qMul, qInv, qRot, qAngleDeg, clampPlaneCenter, HAPTIC, normalizePointMode, surfaceVoxelFromHit, voxelToLocal, voxelSize, createStickGate, deleteSelected, createUndoStack, applyUndo, pointIsHidden } from './vr-point.js?v=20261119-build751';
-import { createVrPointMarkers, createSurfaceCursor } from './vr-point-markers.js?v=20261119-build751';
-import { createAnchorDots, dotBehindCard, ANCHOR_DOT_DIAMETER_M, LEG_WIDTH_M, LEG_MIN_ANGLE } from './vr-anchor-dots.js?v=20261119-build751'; // the dot at the foot of a pinned label's leader
-import { createLabelBatch } from './vr-label-batch.js?v=20261119-build751'; // the name cards and their legs drawn in a few calls
-import { buildClsData } from './point-cls.js?v=20261119-build751';
-import { createHiddenClsManager } from './hidden-cls-state.js?v=20261119-build751';
-import { onDatasetChange } from './dataset-reset.js?v=20261119-build751';
-import { shadeRangeStep, shadeValueAt, shadePosOf, createShadeAutoScheduler } from './cap-shade.js?v=20261119-build751'; // the per-segment shading range (slider positions <-> data values);: the scheduler of the auto range
-import { STEP_PRESS, stepClamp, createStepHold } from './value-step.js?v=20261119-build751'; // ＋ / − of the data-value sliders: 10 per press, hold repeats and speeds up to 100
-import { formatCtValue } from './utils.js?v=20261119-build751';
-import { createHoldTracker, createHoldRing, HOLD_RING_RADIUS, HOLD_RING_MIN_DIST } from './vr-hold-ring.js?v=20261119-build751';
-import { WHEEL_ITEMS, DEFAULT_WHEEL, normalizeWheelItems, migrateWheelSectionFlip, setWheelItem, moveWheelItem, clearWheelItem, createRingMenu, createWheelStick, createButtonPress } from './vr-ring.js?v=20261119-build751';
-import { getComments, getMarkersShown, onCommentsChange, commentMatchesSeries, removeComment, restoreComment, updateCommentPosition, updateCommentText, updateCommentColor } from './comments.js?v=20261119-build751';
-import { POINT_PALETTE, pointColor, normalizeColor } from './point-colors.js?v=20261119-build751';
-import { combineClassificationDistance, fourthChannelBytes } from './distance-field.js?v=20261119-build751';
-export { WebGlVolumeRenderer, webglVolumeEnabled } from './webgl-volume.js?v=20261119-build751'; // the page's WebGL volume (no WebGPU) is handed to app.js through this module's existing lazy load
-import { BRICK as PREP_BRICK, thinHuData, sourceRangeInit, sourceRangeAdd, computeBricksOf, halveData, buildEditMaskOf, buildChildIndexOf, packIndexRg, createVolumePrep } from './vr-volume-prep.js?v=20261119-build751'; // the heavy pure steps of the preparation (bricks, the 256 copy, classification, distance field) run in a worker
-import { createSwapGuard, runDataSwap, createUploadQueue, createSettleGate, createFrameGapMonitor, swapPlan, SWAP_STAGES, SETTLE_TIMEOUT_MS, LOAD_TIMEOUT_MS, CACHE_READ_TIMEOUT_MS, VR_STORE_FLUSH_MS, saveShouldWait, withTimeout } from './vr-data-switch.js?v=20261119-build751'; // switching the data inside a running session
-import { classifiedAt, marchClassificationHitInfo } from './vr-pick.js?v=20261119-build751';
-import { VR_TARGET_SIDE, volumeMeta, editDescsOf, regionItemsOf, childItemsOf, classifyStateOf, shownMask as shownMaskOf, shownRegions as shownRegionsOf, shownChildren as shownChildrenOf } from './vr-prep-inputs.js?v=20261119-build751'; // stage 1 of the sample pairs: what the preparation reads is ONE object (inp); the page's own is pageInputs below
-import { createSkipState, skipGrid } from './vr-skip-occupancy.js?v=20261119-build751'; // the creep-skip occupancy bits of the combined texture (VR max-zoom cost)
-import { createComboRebuild } from './vr-combo-rebuild.js?v=20261119-build751';
-import { hideBitsOn, hideBitsSame, hideBitsAny } from './vr-hide-field.js?v=20261119-build751'; // the distance field of the visible content while a result / child is hidden //: the combined texture rebuilt off the frame when the shown segments change
-import { setBusySlot, reportBusyProgress } from './progress-modal.js?v=20261119-build751';
-import { tr } from './i18n.js?v=20261119-build751';
-import { regionCustomName, regionChipTitle } from './region-name.js?v=20261119-build751'; // the shared region name rule (name, else ID <atlas id>)
+import { effectiveFlag } from './debug-flags.js?v=20261126-build767';
+import * as THREE from './vendor/three@0.187.0/build/three.module.js';
+import * as THREEG from './vendor/three@0.187.0/build/three.webgpu.js'; // the WebGPU build: its WebGPURenderer / NodeMaterial / TSL are used only when the session opens on WebGPU (vr-wgpu.js); the classes of both builds are the same objects
+import { vrGpuRequested, vrGpuAvailable, discardXrDepth, requestVrGpuDevice, createVrVolumeRenderer, gxDataValue, gxDataRow, failGxSession, bindGxSession, releaseXrLoop, disposeGxRenderer, watchDeviceLost, createGxDiag, gxDiagReport, saveGxDiagText, watchGxErrors, gxSessionValues, startGxHeartbeat, gxShaderInfo, useMaterialSrgbOutput, TS_SAMPLE_EVERY, GX_POSE_EVERY, GX_ESCAPE_POLL_MS } from './vr-wgpu.js?v=20261126-build767'; // WebGPU VR / AR trial: the volume pass in WGSL (vr-wgsl-core.js), the WebGL one below stays the default
+import { startGxCaps, installLayerWrap, capsFrameHook, createWaitProbe } from './vr-wgpu-caps.js?v=20261126-build767'; // WebGPU VR: what the headset's browser offers (features / limits, fixed foveation in the eye pass, textureUsage layer, the wait after the submit) into the diagnostic record's 'device caps' entry
+import { createDirectLog } from './vr-direct-log.js?v=20261126-build767'; // the WebGPU view's direct draw trial (vr-wgpu-direct.js): its part of the performance record
+import { reduceSliceArea, packedRgSlice, packCtSlice, gpuRunsForTexture } from './medical-volume.js?v=20261126-build767';
+import { ensureSegmentBaseRuns } from './segment-runs.js?v=20261126-build767';
+import { gpuVolumeTarget, gpuVolumeEditDescriptors, volumeCache, volumeCacheBudget, volumeCacheBudgetInfo } from './gpu-volume-data.js?v=20261126-build767';
+import { pruneOtherFilterSettings } from './gpu-volume-cache.js?v=20261126-build767';
+import { packEntry, storeEntry, loadEntry, pruneSiblings, removeOldBuilds, storeStatus, noteStore, partsOf, keyOfParts, explainMiss, isStandardOpen, copyPackedSlice } from './vr-prep-cache.js?v=20261126-build767';
+import { vrStateSignature } from './vr-data-key.js?v=20261126-build767'; // the state of the page now, to tell whether a practice level is still in its standard state //: the finished VR data is kept on the device (vr-prep-cache.js)
+import { SEGMENT_PRESET_ORDER, gpuSegmentOrder, segmentHasProcessedMask, segmentState, segmentEditState, segmentSourceSignature, segmentShadeRange, segmentShadeSpan, setSegmentShadeEnd, resetSegmentShadeRange, shadeDataRange, applyShadeAutoHistograms, onShadeAutoChange } from './segments.js?v=20261126-build767'; import { segmentById, childRenderEntries, onChildRenderChange, setChildLook } from './segments.js?v=20261126-build767'; import { setShadeAutoPageHeld } from './segments.js?v=20261126-build767';
+import { sceneState, analysisRegions, activeSeries } from './state.js?v=20261126-build767';
+import { datasetFingerprint, unpackProject } from './project-file.js?v=20261126-build767';
+import { PAIR_UNIFORMS, pairUniforms, pairShapeShown, pairOffsetX, pairBoxHas, pairSectionOwnerIn, planeNearerPartner, grabTargetOf, pairGrabPlan, PLANE_PARK_W, pairShownMask, pairHeldMask, pairSlotShown, createAtlasIndex, atlasPrimary } from './vr-pair-view.js?v=20261126-build767'; // stage 2 of the sample pairs: the partner volume drawn beside the primary (the rules; the GPU side is the `pair` block of startVrView)
+import { PART_GLSL, PART_OWN, PART_OUT_M, PART_ANIM_MS, partUniforms, partSame, regionSlotMask, patchRegionLutMany, patchChildLutMany, anyHiddenIn, hideIndexPlane, partBoundsOf, partIdBoxesOf, hideIndexPlaneCached, partProxyBox, partRayRange, partKeepVoxelOf,  partOwnRegionLut, partOwnChildLut, partHideOnlyRegionLut, partHideOnlyChildLut, PART_TEXT, PART_BTN_X, PART_RESTORE_W, runPartField, partFieldPlain, partFieldBoxOf, PART_FIELD, partFieldCodesAsync, createPartSetRunner, partOccOf, partBodyHidOf, partFieldNeedsOwn, partFieldMap, partAirOf, markCutRegionLut, markCutChildLut, partBakeBoxOf, partBakeSlots, partBakeCrop, bakeRegionLut, bakeChildLut, bakeRegionAnyHidden, bakeChildAnyHidden, partBakeStep } from './vr-part-view.js?v=20261126-build767'; // an earlier change: regions / child segments taken out of the body (the rules; the GPU side is the `part` block of startVrView)
+import { partnerInputs, unitsPerMmOfSeries, resultRepresentativeVoxel } from './vr-pair-data.js?v=20261126-build767';
+import { findSamplePartners, loadSamplePartnerFiles, loadSamplePartnerProject, loadSamplePairs } from './data-load.js?v=20261126-build767';
+import { samplePartners } from './sample-sets.js?v=20261126-build767';
+import { analysisRunsContain } from './run-length.js?v=20261126-build767';
+import { createPairStore, isPairId } from './vr-pair-store.js?v=20261126-build767'; // stage 3: the partner's own points / distances
+import { loadPartnerName, practiceSeriesName } from './sample-registry.js?v=20261126-build767'; // the sample pair row of the menu (stage 3): which partner the open dataset has (sample-pairs.json) and its name (the partner's sample.json)
+import { parseFiles, groupSeries } from './dicom.js?v=20261126-build767';
+import { HAND_PICK_TOL, sectionRayHit, recordVrPoint, resolveTriggerTarget, volumeGripAllowed, pressDragSection, createTriggerPress, dragShouldStart, DRAG_RECORD, sectionFollowStart, sectionFollowStep, sectionWristTurn, snapPlaneCenterIntoBox, rayLocalPlaneX, squareBandContains, squareContains, createHoverPulse, qMul, qInv, qRot, qAngleDeg, clampPlaneCenter, HAPTIC, normalizePointMode, surfaceVoxelFromHit, voxelToLocal, voxelSize, createStickGate, deleteSelected, createUndoStack, applyUndo, pointIsHidden } from './vr-point.js?v=20261126-build767';
+import { createVrPointMarkers, createSurfaceCursor } from './vr-point-markers.js?v=20261126-build767';
+import { createAnchorDots, dotBehindCard, ANCHOR_DOT_DIAMETER_M, LEG_WIDTH_M, LEG_MIN_ANGLE } from './vr-anchor-dots.js?v=20261126-build767'; // the dot at the foot of a pinned label's leader
+import { createLabelBatch, createPlainLabelBatch } from './vr-label-batch.js?v=20261126-build767'; // the name cards and their legs drawn in a few calls
+import { buildClsData } from './point-cls.js?v=20261126-build767';
+import { createHiddenClsManager } from './hidden-cls-state.js?v=20261126-build767';
+import { onDatasetChange } from './dataset-reset.js?v=20261126-build767';
+import { shadeRangeStep, shadeValueAt, shadePosOf, createShadeAutoScheduler } from './cap-shade.js?v=20261126-build767'; // the per-segment shading range (slider positions <-> data values);: the scheduler of the auto range
+import { STEP_PRESS, stepClamp, createStepHold } from './value-step.js?v=20261126-build767'; // ＋ / − of the data-value sliders: 10 per press, hold repeats and speeds up to 100
+import { formatCtValue } from './utils.js?v=20261126-build767';
+import { createHoldTracker, createHoldRing, HOLD_RING_RADIUS, HOLD_RING_MIN_DIST } from './vr-hold-ring.js?v=20261126-build767';
+import { WHEEL_ITEMS, DEFAULT_WHEEL, normalizeWheelItems, migrateWheelSectionFlip, setWheelItem, moveWheelItem, clearWheelItem, createRingMenu, createWheelStick, createButtonPress } from './vr-ring.js?v=20261126-build767';
+import { getComments, getMarkersShown, onCommentsChange, commentMatchesSeries, removeComment, restoreComment, updateCommentPosition, updateCommentText, updateCommentColor } from './comments.js?v=20261126-build767';
+import { POINT_PALETTE, pointColor, normalizeColor } from './point-colors.js?v=20261126-build767';
+import { combineClassificationDistance, fourthChannelBytes } from './distance-field.js?v=20261126-build767';
+export { WebGlVolumeRenderer, webglVolumeEnabled } from './webgl-volume.js?v=20261126-build767'; // the page's WebGL volume (no WebGPU) is handed to app.js through this module's existing lazy load
+import { BRICK as PREP_BRICK, thinHuData, sourceRangeInit, sourceRangeAdd, computeBricksOf, halveData, buildEditMaskOf, buildChildIndexOf, packIndexRg, createVolumePrep } from './vr-volume-prep.js?v=20261126-build767'; // the heavy pure steps of the preparation (bricks, the 256 copy, classification, distance field) run in a worker
+import { createSwapGuard, runDataSwap, createUploadQueue, createSettleGate, createFrameGapMonitor, swapPlan, SWAP_STAGES, SETTLE_TIMEOUT_MS, LOAD_TIMEOUT_MS, CACHE_READ_TIMEOUT_MS, VR_STORE_FLUSH_MS, saveShouldWait, withTimeout } from './vr-data-switch.js?v=20261126-build767'; // switching the data inside a running session
+import { classifiedAt, marchClassificationHitInfo } from './vr-pick.js?v=20261126-build767';
+import { VR_TARGET_SIDE, volumeMeta, editDescsOf, regionItemsOf, childItemsOf, classifyStateOf, shownMask as shownMaskOf, shownRegions as shownRegionsOf, shownChildren as shownChildrenOf } from './vr-prep-inputs.js?v=20261126-build767'; // stage 1 of the sample pairs: what the preparation reads is ONE object (inp); the page's own is pageInputs below
+import { createSkipState, skipGrid } from './vr-skip-occupancy.js?v=20261126-build767'; // the creep-skip occupancy bits of the combined texture (VR max-zoom cost)
+import { createComboRebuild } from './vr-combo-rebuild.js?v=20261126-build767';
+import { hideBitsOn, hideBitsSame, hideBitsAny } from './vr-hide-field.js?v=20261126-build767'; // the distance field of the visible content while a result / child is hidden //: the combined texture rebuilt off the frame when the shown segments change
+import { setBusySlot, reportBusyProgress } from './progress-modal.js?v=20261126-build767';
+import { tr } from './i18n.js?v=20261126-build767';
+import { regionCustomName, regionChipTitle } from './region-name.js?v=20261126-build767'; // the shared region name rule (name, else ID <atlas id>)
 // ONE name rule for a result in every list (the 3D chip, the VR tree rows, the VR 解析 tab, the かんたん menu): "<number>. <name | ID <atlasId> | the segment names joined with +>" (region-name.js regionChipTitle)
 const vrChipTitle=r=>{const g=analysisRegions.find(x=>x.id===r.rid);return g?regionChipTitle(g,tr):r.rid+'. '+r.segmentKeys.map(k=>tr(k)||k).join('+')};
-import { wrapMenuText, stackMenuRows } from './vr-menu-text.js?v=20261119-build751';
-import { activeEventLevel, levelForSample, chooseEventLevel, levelSwitchItems, sampleHasLevel, levelSwitchTargets, canSwitchData, EVENT_LEVELS, datasetForSample, datasetLabel, eventModeOn, missionLines, simpleMenuSegments, triggerModeRow, labelTargets, triggerMode, TRIGGER_AT_START, resetPress, resetArmed, RESET_ARM_MS, simpleMenuLayout, SIMPLE_MENU, sliceOpacityValue, sliceDrawState, sliderHitTest, sliderGrabOffset, sliderValueAt, KNOB_GRAB_PX } from './event-mode.js?v=20261119-build751'; // 体験会モード - the chosen level's mission on the help board, the かんたん menu
-import { VIEW_TOGGLE_ID, VIEW_TOGGLE_BUTTON, SECTION_DELETE_ID, createViewToggle, createDoublePress, ringIdsFor } from './vr-view-toggle.js?v=20261119-build751';
-import { vrSpacingNote, vrVolumeText } from './vr-spacing-note.js?v=20261119-build751';
-import { NORM_LONG, physicalExtentsMm, longestMm, realMagnification, realHolderScale, startHolderScale, tutorialHolderScale, smallForTutorial, TUT_VOLUME_FWD, TUT_VOLUME_DOWN, magnificationText, createScaleTag, clampScale, pinchScale, scaleLimits, oversizeNote, planeFrameLocalScale, planeTagLocalScale, scaleLineText, scalePosOf, posToScale, scaleStep, viewTabScaleLayout } from './vr-real-scale.js?v=20261119-build751';
-import { createAutoQuality, autoFloor, STEP_LEVELS, STEP_CHOICES, stepChoiceScale, marchStep } from './vr-auto-quality.js?v=20261119-build751';
-import { createVrHuLine } from './vr-hu-line.js?v=20261119-build751';
-import { huMenuTexts, voxelFromHits } from './vr-hu-line-core.js?v=20261119-build751';
-import { setHuLineDeferred } from './hu-line-model.js?v=20261119-build751';
-import { createVrMeasure, LABEL_LIT_SCALE } from './vr-measure.js?v=20261119-build751';
-import { resetUserState } from './event-fresh.js?v=20261119-build751'; // 最初から in the tutorial (practice data only, see tutorial-ui.js resetTutorialAll)
-import { tutorialModeOn, createTutorialVr, createSlideViewer, panelTabs, TAB_H, PAGE_H, layoutLevelSlide, levelBoardH, menuAnnotation, menuTargetRect } from './tutorial-vr.js?v=20261119-build751'; // チュートリアル on the help board (only made when tutorialMode is on);: the read-only guide, the level slide, the menu pointer
-import { levelSlide, createSlideImages } from './tutorial-slides.js?v=20261119-build751'; // the 体験会 level slides (ev board: the slide's picture)
-import { vrInitialScaleOf } from './sample-registry.js?v=20261119-build751';
-import { TUT_SAMPLE } from './tutorial-data.js?v=20261119-build751'; // the live tutorial runs on its practice data only
-import { emit, scaleChanged, poseMoved } from './tutorial-signal.js?v=20261119-build751'; // tutorial: one-line signals at the action sites (no-op without a listener)
-import { horizAngleDeg } from './tutorial-orient.js?v=20261119-build751'; // the tutorial's entry guidance (look right / left): head turn toward a board
-import { createControllerHints, createEdgeArrow, createBoardArrow, boardSide, edgeArrowShown } from './tutorial-3d.js?v=20261119-build751'; // the tutorial's 3D guides (controller button, edge arrow, arrow over the menu)
-import { MAX_SECTION_PLANES, nextPlaneColor, frameDepthTest, ARROW_LEN, ARROW_FLASH_MS, arrowFade, arrowShown, tagBehindTissue, sectionPage, pageOfPlane, SECTION_ROWS_PER_PAGE, FLING_UNDO_MS, FLING_DEBUG_MS, createVelocityTracker, flingDecision, frameOutOfView, outOfViewNow, createOutOfViewTracker, outOfViewRelease, flingDebugLines, capVelocity, flyStep, makeSectionSnapshot, restorePlan, createSectionUndo, undoButtonPlace } from './vr-section-frame.js?v=20261119-build751';
-import { createUndoButton } from './vr-undo-button.js?v=20261119-build751';
-import { createFlingDebugTag } from './vr-fling-debug.js?v=20261119-build751';
-import { EMPTY_PINCH, isHand, wristScrollGain, wristScrollSign, wristScrollKeep, NEAR_KINDS, boxDist, centeredBoxDist, squareOutlineDist, pickNearGrab, HAND_RAY_MODES, normalizeHandRay } from './vr-hand.js?v=20261119-build751'; // hand tracking (Quest 3): pure helpers
-import { createHandInput, HAND_LABEL_MOVE_M } from './vr-hand-view.js?v=20261119-build751'; // the hand's ray, wrist menu, fingertips
-import { LABEL_HIDE_DEFAULT, normalizeLabelHide, gpuOcclusionActive, depthVoxelSize, boardVisible, GHOST_ALPHA, EMBEDDED_ALPHA, occludedPass, pinMaterialState } from './vr-depth.js?v=20261119-build751';
-import { highlightColor, highlightIndex, createHighlightTracker, anyLit } from './region-highlight.js?v=20261119-build751';
-import { pinLine, pinPlaceLimited, pinPulledIntoTissue, pinDue, pinJudge, createScaleSettle, createLabelThinner, setLeaderIfMoved, createFaceCache, clippedAt, rayCovered, CARD_W0, CARD_H0, cardLayout, cardHalfW, cardHalfH } from './vr-label-occlusion.js?v=20261119-build751';
-import { brickOccupancy, writeBrickOccupancy } from './vr-brick-occupancy.js?v=20261119-build751';
-import { createProbeGate } from './measure-label.js?v=20261119-build751';
-import { sliceIndex, sliceRange, boxFromRange, createSegScan, segScanStart, segScanStep, segsSubset, segsFromUniforms, contentKeyChanged, KEY_LEN, createContentBox } from './vr-content-box.js?v=20261119-build751'; // the proxy box = the box of what can be drawn
-import { regionVisible, setRegionVisible, onRegionVisibleChange, regionHidden, setRegionHidden, onRegionHiddenChange, regionLutAlpha, regionLutHiddenSlots, hiddenRegionVoxelOf, anyHiddenVoxel } from './region-visibility.js?v=20261119-build751';
-import { buildSegmentTree, pageTreeLines, ellipsize } from './segment-tree.js?v=20261119-build751';
-import { setRegionLabel, setRegionLabelOffset, withOffset, surfaceAnchor, voxelFromLocalVr, clampVoxel, labelLocal, offsetForLocal, vrVoxelStep, rectEdgePoint, leaderVisible, labelSegmentsShown, glowRid, keepLengthFactor, scaledStep, normalizeLabelOverlap, thinActive, LABEL_OVERLAP_MODES } from './analysis-label.js?v=20261119-build751';
-import { childLabelItem, childLabelItems, childLabelItemById, hasChildLabels, childLabelTitle, childVolumeMm3, childKeyAtHit, hitLabelRids, labelToggle, pairShifts } from './child-labels.js?v=20261119-build751'; // a child segment's name label (hover card, pinned card) is the analysis label's, kept on the child
-import { childByKey } from './child-segments.js?v=20261119-build751';
-import { hiddenShapeCount, showAllHiddenShapes } from './segments.js?v=20261119-build751'; // stage 3: 「すべて表示（隠 N）」 of the かんたん menu
-import { ringState, regionRingItems, partRingItems, regionRingName, applyRingItem, ringTargetOf } from './region-ring.js?v=20261119-build751'; // stage 3: the long-press ring of a region / a child
-import { createVrSelfCheck, selfCheckTexts } from './vr-self-check.js?v=20261119-build751'; // 詳細 > 自己診断 (automated frame-time scenarios)
-import { createScaleGuard, createFlapGuard, variantFallback } from './vr-flicker-guard.js?v=20261119-build751'; // flicker safety guard
-import { eyeMetrics, capFromPpv, capFromBudget, nextCap, foveaRect, outsideFovea, foveaWorth, qualityText, FOVEA_K, CAP_MIN, addVolumeEye, boxCoversView, pairComposites } from './vr-render-scale.js?v=20261119-build751'; // data-resolution render scale + offscreen foveation
-import { getMeasureStart, startMeasure, cancelMeasure, pickMeasureEnd, onMeasureStartChange, removeMeasurement, restoreMeasurements, measurementsOfPoint, seriesSpacing } from './measurements.js?v=20261119-build751';
-import { APP_BUILD } from './version.js?v=20261119-build751';
-import { wc, ww } from './ui-shell.js?v=20261119-build751';
-import { VOLUME_FWD, VOLUME_DOWN, MENU_OFFSET, HELP_OFFSET, HU_PANEL_OFFSET, EV_OFFSET, EV_WIDTH, EV_RES, MENU_WIDTH, MENU_CANVAS, HELP_WIDTH, HELP_RES, HIST_OFFSET, HIST_WIDTH, FOLLOW_ANGLE, FOLLOW_DIST } from './vr-layout.js?v=20261119-build751';
-import { onHistogramChange, getHistogramRange, getHistogramLog, setHistogramLog, setHistogramRange } from './histogram-ui.js?v=20261119-build751';
-import { createVrLabelHistogram, UNLABELED_COLOR, labelSlot, labelRegion } from './vr-label-histogram.js?v=20261119-build751';
-import { rangeRes } from './vr-histogram-layout.js?v=20261119-build751';
-import { dataAxis } from './segments.js?v=20261119-build751'; // the histogram axis of the data (histogram.js axisFor + the series' value step)
-import { getHuMode, setHuMode, HU_MODE_FILTERED, HU_MODE_RAW } from './effective-hu.js?v=20261119-build751';
-import { createVrHistogramPanel } from './vr-histogram-panel.js?v=20261119-build751';
-import { lightingGLSL, lightingVertexGLSL, materialVec, MATERIALS, materialKey } from './lighting.js?v=20261119-build751'; // one lighting model for the desktop volume, this VR / AR volume and the 3D-view meshes
+import { wrapMenuText, stackMenuRows } from './vr-menu-text.js?v=20261126-build767';
+import { activeEventLevel, levelForSample, chooseEventLevel, levelSwitchItems, sampleHasLevel, levelSwitchTargets, canSwitchData, EVENT_LEVELS, datasetForSample, datasetLabel, eventModeOn, missionLines, simpleMenuSegments, triggerModeRow, labelTargets, triggerMode, TRIGGER_AT_START, resetPress, resetArmed, RESET_ARM_MS, simpleMenuLayout, SIMPLE_MENU, sliceOpacityValue, sliceDrawState, sliderHitTest, sliderGrabOffset, sliderValueAt, KNOB_GRAB_PX } from './event-mode.js?v=20261126-build767'; // 体験会モード - the chosen level's mission on the help board, the かんたん menu
+import { VIEW_TOGGLE_ID, VIEW_TOGGLE_BUTTON, SECTION_DELETE_ID, createViewToggle, createDoublePress, ringIdsFor } from './vr-view-toggle.js?v=20261126-build767';
+import { vrSpacingNote, vrVolumeText } from './vr-spacing-note.js?v=20261126-build767';
+import { NORM_LONG, physicalExtentsMm, longestMm, realMagnification, realHolderScale, startHolderScale, tutorialHolderScale, smallForTutorial, TUT_VOLUME_FWD, TUT_VOLUME_DOWN, magnificationText, createScaleTag, clampScale, pinchScale, scaleLimits, oversizeNote, planeFrameLocalScale, planeTagLocalScale, scaleLineText, scalePosOf, posToScale, scaleStep, viewTabScaleLayout } from './vr-real-scale.js?v=20261126-build767';
+import { createPostFrame, flushOnHidden } from './vr-post-frame.js?v=20261126-build767'; // E1: work after the XR frame callback; the perf record's save when the page is hidden
+import { createPartProbeLog } from './vr-part-probe-log.js?v=20261126-build767'; // n764 4-1 stage 0: the parts' rays in the loop (decoded from the parts' counting probe, a section of the performance record)
+import { createPerfLog, perfReport, perfFileName, createVolBreakdown, BD_VARIANTS, BD_SPECS } from './vr-perf-log.js?v=20261126-build767'; // the VR performance record (one row a second, WebGL and WebGPU alike; shown on the page after the session)
+import { createIdentRun, createIdentLog, identReportLines, identResultLine, newPathLines } from './vr-ident-log.js?v=20261126-build767'; // the same-picture check (button on the self-check page): its run, its record and its text (a section of the performance record)
+import { createCompareBench, createFrameRing, createLongTaskWatcher, createIsolation, tapPerfLog, benchReportLines, ringReportLines, leftoverReportLines, readHeapBytes, BENCH_COUNT, BENCH_HOLDER_SCALE } from './vr-bench.js?v=20261126-build767'; // the comparison bench, the per-frame ring and the isolation switches (button on the 詳細 tab; their text is a section of the performance record)
+import { createGxLaserMaterial, createGxDome } from './vr-gx-looks.js?v=20261126-build767'; // the WebGPU view's laser ribbon and background dome
+import { GX_SWITCH } from './vr-wgpu.js?v=20261126-build767'; // the isolation run's switch of the volume pass's GPU timestamps
+import { createAutoQuality, autoFloor, STEP_LEVELS, STEP_CHOICES, stepChoiceScale, marchStep, freeVolMs } from './vr-auto-quality.js?v=20261126-build767';
+import { createVrHuLine } from './vr-hu-line.js?v=20261126-build767';
+import { huMenuTexts, voxelFromHits } from './vr-hu-line-core.js?v=20261126-build767';
+import { setHuLineDeferred } from './hu-line-model.js?v=20261126-build767';
+import { createVrMeasure, LABEL_LIT_SCALE } from './vr-measure.js?v=20261126-build767';
+import { resetUserState } from './event-fresh.js?v=20261126-build767'; // 最初から in the tutorial (practice data only, see tutorial-ui.js resetTutorialAll)
+import { tutorialModeOn, createTutorialVr, createSlideViewer, panelTabs, TAB_H, PAGE_H, layoutLevelSlide, levelBoardH, menuAnnotation, menuTargetRect } from './tutorial-vr.js?v=20261126-build767'; // チュートリアル on the help board (only made when tutorialMode is on);: the read-only guide, the level slide, the menu pointer
+import { levelSlide, createSlideImages } from './tutorial-slides.js?v=20261126-build767'; // the 体験会 level slides (ev board: the slide's picture)
+import { vrInitialScaleOf } from './sample-registry.js?v=20261126-build767';
+import { TUT_SAMPLE } from './tutorial-data.js?v=20261126-build767'; // the live tutorial runs on its practice data only
+import { emit, scaleChanged, poseMoved } from './tutorial-signal.js?v=20261126-build767'; // tutorial: one-line signals at the action sites (no-op without a listener)
+import { horizAngleDeg } from './tutorial-orient.js?v=20261126-build767'; // the tutorial's entry guidance (look right / left): head turn toward a board
+import { createControllerHints, createEdgeArrow, createBoardArrow, boardSide, edgeArrowShown } from './tutorial-3d.js?v=20261126-build767'; // the tutorial's 3D guides (controller button, edge arrow, arrow over the menu)
+import { MAX_SECTION_PLANES, nextPlaneColor, frameDepthTest, ARROW_LEN, ARROW_FLASH_MS, arrowFade, arrowShown, tagBehindTissue, sectionPage, pageOfPlane, SECTION_ROWS_PER_PAGE, FLING_UNDO_MS, FLING_DEBUG_MS, createVelocityTracker, flingDecision, frameOutOfView, outOfViewNow, createOutOfViewTracker, outOfViewRelease, flingDebugLines, capVelocity, flyStep, makeSectionSnapshot, restorePlan, createSectionUndo, undoButtonPlace } from './vr-section-frame.js?v=20261126-build767';
+import { createUndoButton } from './vr-undo-button.js?v=20261126-build767';
+import { createFlingDebugTag } from './vr-fling-debug.js?v=20261126-build767';
+import { EMPTY_PINCH, isHand, wristScrollGain, wristScrollSign, wristScrollKeep, NEAR_KINDS, boxDist, centeredBoxDist, squareOutlineDist, pickNearGrab, HAND_RAY_MODES, normalizeHandRay } from './vr-hand.js?v=20261126-build767'; // hand tracking (Quest 3): pure helpers
+import { createHandInput, HAND_LABEL_MOVE_M } from './vr-hand-view.js?v=20261126-build767'; // the hand's ray, wrist menu, fingertips
+import { LABEL_HIDE_DEFAULT, normalizeLabelHide, gpuOcclusionActive, depthVoxelSize, boardVisible, GHOST_ALPHA, EMBEDDED_ALPHA, occludedPass, pinMaterialState } from './vr-depth.js?v=20261126-build767';
+import { highlightColor, highlightIndex, createHighlightTracker, anyLit } from './region-highlight.js?v=20261126-build767';
+import { pinLine, pinPlaceLimited, pinPulledIntoTissue, pinDue, pinJudge, createScaleSettle, createLabelThinner, setLeaderIfMoved, createFaceCache, clippedAt, rayCovered, CARD_W0, CARD_H0, cardLayout, cardHalfW, cardHalfH } from './vr-label-occlusion.js?v=20261126-build767';
+import { brickOccupancy, writeBrickOccupancy } from './vr-brick-occupancy.js?v=20261126-build767';
+import { createProbeGate } from './measure-label.js?v=20261126-build767';
+import { sliceIndex, sliceRange, boxFromRange, createSegScan, segScanStart, segScanStep, segsSubset, segsFromUniforms, contentKeyChanged, KEY_LEN, createContentBox } from './vr-content-box.js?v=20261126-build767'; // the proxy box = the box of what can be drawn
+import { regionVisible, setRegionVisible, onRegionVisibleChange, regionHidden, setRegionHidden, onRegionHiddenChange, regionLutAlpha, regionLutHiddenSlots, hiddenRegionVoxelOf, anyHiddenVoxel } from './region-visibility.js?v=20261126-build767';
+import { buildSegmentTree, pageTreeLines, ellipsize } from './segment-tree.js?v=20261126-build767';
+import { setRegionLabel, setRegionLabelOffset, withOffset, surfaceAnchor, voxelFromLocalVr, clampVoxel, labelLocal, offsetForLocal, vrVoxelStep, rectEdgePoint, leaderVisible, labelSegmentsShown, glowRid, keepLengthFactor, scaledStep, normalizeLabelOverlap, thinActive, LABEL_OVERLAP_MODES } from './analysis-label.js?v=20261126-build767';
+import { childLabelItem, childLabelItems, childLabelItemById, hasChildLabels, childLabelTitle, childVolumeMm3, childKeyAtHit, hitLabelRids, labelToggle, pairShifts } from './child-labels.js?v=20261126-build767'; // a child segment's name label (hover card, pinned card) is the analysis label's, kept on the child
+import { childByKey } from './child-segments.js?v=20261126-build767';
+import { hiddenShapeCount, showAllHiddenShapes } from './segments.js?v=20261126-build767'; // stage 3: 「すべて表示（隠 N）」 of the かんたん menu
+import { ringState, regionRingItems, partRingItems, regionRingName, applyRingItem, ringTargetOf } from './region-ring.js?v=20261126-build767'; // stage 3: the long-press ring of a region / a child
+import { createVrSelfCheck, selfCheckTexts } from './vr-self-check.js?v=20261126-build767'; // 詳細 > 自己診断 (automated frame-time scenarios)
+import { createScaleGuard, createFlapGuard, variantFallback } from './vr-flicker-guard.js?v=20261126-build767'; // flicker safety guard
+import { eyeMetrics, capFromPpv, capFromBudget, nextCap, foveaRect, outsideFovea, foveaWorth, qualityText, FOVEA_K, CAP_MIN, addVolumeEye, boxCoversView, pairComposites, holdScaleOf, holdAllowed, holdScaleValue, createHoldGate, HOLD_MIN, HOLD_MAX, HOLD_STEP, applyHoldScale } from './vr-render-scale.js?v=20261126-build767'; // data-resolution render scale + offscreen foveation
+import { getMeasureStart, startMeasure, cancelMeasure, pickMeasureEnd, onMeasureStartChange, removeMeasurement, restoreMeasurements, measurementsOfPoint, seriesSpacing } from './measurements.js?v=20261126-build767';
+import { APP_BUILD } from './version.js?v=20261126-build767';
+import { wc, ww } from './ui-shell.js?v=20261126-build767';
+import { VOLUME_FWD, VOLUME_DOWN, MENU_OFFSET, HELP_OFFSET, HU_PANEL_OFFSET, EV_OFFSET, EV_WIDTH, EV_RES, MENU_WIDTH, MENU_CANVAS, HELP_WIDTH, HELP_RES, HIST_OFFSET, HIST_WIDTH, FOLLOW_ANGLE, FOLLOW_DIST } from './vr-layout.js?v=20261126-build767';
+import { onHistogramChange, getHistogramRange, getHistogramLog, setHistogramLog, setHistogramRange } from './histogram-ui.js?v=20261126-build767';
+import { createVrLabelHistogram, UNLABELED_COLOR, labelSlot, labelRegion } from './vr-label-histogram.js?v=20261126-build767';
+import { rangeRes } from './vr-histogram-layout.js?v=20261126-build767';
+import { dataAxis } from './segments.js?v=20261126-build767'; // the histogram axis of the data (histogram.js axisFor + the series' value step)
+import { getHuMode, setHuMode, HU_MODE_FILTERED, HU_MODE_RAW } from './effective-hu.js?v=20261126-build767';
+import { createVrHistogramPanel } from './vr-histogram-panel.js?v=20261126-build767';
+import { lightingGLSL, lightingVertexGLSL, materialVec, MATERIALS, materialKey } from './lighting.js?v=20261126-build767'; // one lighting model for the desktop volume, this VR / AR volume and the 3D-view meshes
 
 const BG=new THREE.Color(0.035,0.045,0.05);
 const BRICK=PREP_BRICK;
@@ -1417,7 +1428,7 @@ const SETTINGS_KEY='vrl-vr-settings-5',OLD_KEYS=['vrl-vr-settings-4','vrl-vr-set
 // dv 4: レーザーの見た目 帯・太 (laserStyle 2) — only that key is put back, once (the laser was hard to see for first-time visitors); a later choice in the menu is kept
 const DEFAULTS_VERSION=4,DEFAULTS_VERSION_KEYS=['sliceAir','sliceTint','sliceOpacity','menuMode','help','cut'],DEFAULTS_VERSION_STEPS=[[2,DEFAULTS_VERSION_KEYS],[3,['ctShadeBright','ctShadeContrast']],[4,['laserStyle']]];
 // menuMode 0 follows the head lazily, 1 stays where it is (the default now; help: 0 hidden / 1 follows / 2 fixed, default 2; cut: 0 off / 1 near side / 2 one side, default 2)
-const DEFAULTS={cap:1,sliceAir:-600,sliceTint:0.45,menuMode:1,wheel:[...DEFAULT_WHEEL],wheelMig:0,cut:2,sliceOpacity:0.6,data:1,quality:0,vres:0,autoMin:0,foveation:2,rate:0,help:2,refine:1,labelSize:0,labelHide:LABEL_HIDE_DEFAULT,ctShade:1,ctShadeBright:1.8,ctShadeContrast:1.7,laserStyle:2,stickShort:0}; // stickShort: the stick click's short press with no section, 0 = the regions' colours shown / hidden (default), 1 = the labels (a menu preference of the 解析 tab, saved like the others; not in EVENT_VIEW_KEYS). labelHide: 1 = distance labels / lines hidden for real behind the tissue (GPU depth), 0 = faded (CPU probes)
+const DEFAULTS={cap:1,sliceAir:-600,sliceTint:0.45,menuMode:1,wheel:[...DEFAULT_WHEEL],wheelMig:0,cut:2,sliceOpacity:0.6,data:1,quality:0,vres:0,autoMin:0,foveation:2,rate:0,help:2,refine:1,moveLow:1,moveLowK:0.8,labelSize:0,labelHide:LABEL_HIDE_DEFAULT,ctShade:1,ctShadeBright:1.8,ctShadeContrast:1.7,laserStyle:2,stickShort:0}; // stickShort: the stick click's short press with no section, 0 = the regions' colours shown / hidden (default), 1 = the labels (a menu preference of the 解析 tab, saved like the others; not in EVENT_VIEW_KEYS). labelHide: 1 = distance labels / lines hidden for real behind the tissue (GPU depth), 0 = faded (CPU probes)
 // ctShade: how the slice's segment fill is drawn — 1 = segment colour x CT value (default; also at 0 % / cleared, where only the segments' region is drawn), 0 = the flat segment colour as before; the 3D surface / cap never use it
 // ctShadeBright: brightness of that shading, 0.5..2 in steps of 0.1 (default 1.8; it was 1.3, and the first CT shading is 1.0); only used with ctShade 1. Like ctShade it is not in EVENT_VIEW_KEYS (a menu preference, not a view value)
 const CT_BRIGHT_MIN=0.5,CT_BRIGHT_MAX=2,CT_BRIGHT_STEP=0.1,ctBrightOf=v=>{v=+v;return Number.isFinite(v)?Math.min(CT_BRIGHT_MAX,Math.max(CT_BRIGHT_MIN,Math.round(v*10)/10)):DEFAULTS.ctShadeBright};
@@ -1490,12 +1501,13 @@ const compositeUniforms=halfExt=>({img:{value:null},depthImg:{value:null},invSiz
 
 // background: a dark gradient dome and a floor grid (a few triangles, no
 // cost next to the ray marching)
-function makeBackground(){
+function makeBackground(gpuMode=false,encoded=false){ // gpuMode: the WebGPU session (plain material); encoded: three.js encodes its output to sRGB there, so the dome's display values are decoded first (the GLSL dome writes them raw)
  const g=new THREE.Group();
+ const grid=new THREE.GridHelper(12,24,0x3a5a70,0x1e2e3a);grid.material.transparent=true;grid.material.opacity=0.55;grid.renderOrder=-1;
+ if(gpuMode){g.add(createGxDome({encoded}),grid);return g} // WebGPU: the dome's gradient per pixel (docs/vr-gx-looks.js, the GLSL dome's smoothstep); encoded: three.js encodes its output to sRGB there
  const dome=new THREE.Mesh(new THREE.SphereGeometry(30,32,16),new THREE.ShaderMaterial({side:THREE.BackSide,depthWrite:false,toneMapped:false,
   vertexShader:'varying float h;void main(){h=normalize(position).y;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}',
   fragmentShader:'varying float h;void main(){vec3 lo=vec3(0.035,0.045,0.05);vec3 hi=vec3(0.10,0.14,0.20);gl_FragColor=vec4(mix(lo,hi,smoothstep(-0.1,0.8,h)),1.0);}'}));
- const grid=new THREE.GridHelper(12,24,0x3a5a70,0x1e2e3a);grid.material.transparent=true;grid.material.opacity=0.55;grid.renderOrder=-1;
  g.add(dome,grid);return g;
 }
 
@@ -1537,7 +1549,7 @@ function makeMenu(W=MENU_W,H=MENU_H,widthM=0.5,res=1){
    let fg='#fff';if(w.on&&w.color){const c=new THREE.Color(w.color);if(0.2126*c.r+0.7152*c.g+0.0722*c.b>0.6)fg='#111'}
    if(w.disabled)fg='#6b7885';ctx.fillStyle=fg;ctx.font=(w.size||30)+'px system-ui,sans-serif';ctx.textAlign='center';ctx.fillText(w.label,w.x+w.w/2,w.y+w.h/2+1,Math.max(10,w.w-8)); // a long label shrinks horizontally instead of leaving its button
   });
-  ctx.textAlign='left';ctx.textBaseline='alphabetic';tex.needsUpdate=true;dirty=false;
+  ctx.textAlign='left';ctx.textBaseline='alphabetic';tex.needsUpdate=true;dirty=false;BENCH_COUNT.menu++;BENCH_COUNT.tex++; // the frame ring counts the board redraws / texture uploads (vr-bench.js)
  };
  const at=uv=>({x:uv.x*W,y:(1-uv.y)*H});
  return{mesh,
@@ -1571,7 +1583,7 @@ function makeToast(){
  const tex=new THREE.CanvasTexture(canvas);tex.colorSpace=THREE.SRGBColorSpace;
  const mesh=new THREE.Mesh(new THREE.PlaneGeometry(0.10,0.024),new THREE.MeshBasicMaterial({map:tex,transparent:true,opacity:0.8,toneMapped:false}));
  mesh.position.set(0,0.108,0.02);mesh.rotation.x=-0.6;mesh.visible=false;
- const api={mesh,text:'',until:0,set(text){if(api.text===text)return;api.text=text;ctx.clearRect(0,0,512,120);ctx.fillStyle='rgba(14,20,27,.92)';ctx.beginPath();ctx.roundRect(0,0,512,120,28);ctx.fill();ctx.strokeStyle='#ffd27a';ctx.lineWidth=5;ctx.stroke();ctx.fillStyle='#fff';ctx.font='bold 40px system-ui,sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(text,256,62,480);tex.needsUpdate=true},dispose(){tex.dispose();mesh.geometry.dispose();mesh.material.dispose()}};
+ const api={mesh,text:'',until:0,set(text){if(api.text===text)return;api.text=text;ctx.clearRect(0,0,512,120);ctx.fillStyle='rgba(14,20,27,.92)';ctx.beginPath();ctx.roundRect(0,0,512,120,28);ctx.fill();ctx.strokeStyle='#ffd27a';ctx.lineWidth=5;ctx.stroke();ctx.fillStyle='#fff';ctx.font='bold 40px system-ui,sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(text,256,62,480);tex.needsUpdate=true;BENCH_COUNT.tex++},dispose(){tex.dispose();mesh.geometry.dispose();mesh.material.dispose()}};
  return api;
 }
 
@@ -1580,6 +1592,7 @@ function makeToast(){
 // not reliable)
 const shots=[];
 let lastBench=null;
+const ISO=createIsolation(); // the isolation switches (vr-bench.js ISO_MODES): the default is what the view always did; the comparison bench sets them for its runs and puts them back
 function showBenchPanel(ja){
  if(!lastBench)return;
  document.getElementById('vr-bench-panel')?.remove();
@@ -1591,6 +1604,23 @@ function showBenchPanel(ja){
  const copy=document.createElement('button');copy.type='button';copy.textContent=ja?'コピー':'Copy';copy.onclick=()=>{navigator.clipboard?.writeText(text).catch(()=>{})};
  const close=document.createElement('button');close.type='button';close.textContent=ja?'閉じる':'Close';close.onclick=()=>panel.remove();
  row.append(copy,close);panel.append(row);document.body.append(panel);
+}
+// the session's record on the page once it has ended, with copy / save buttons (top left: the bench / shots panels sit at the bottom): the WebGPU trial's diagnostics (vr-wgpu.js createGxDiag; null in a WebGL session)
+// and the performance log (vr-perf-log.js; both kinds of session). The text is the one the copy and save buttons take.
+function showGxDiagPanel(ja,diag,perf=null){
+ if(!diag&&!perf)return;
+ document.getElementById('vr-gpu-diag-panel')?.remove();
+ const panel=document.createElement('div');panel.id='vr-gpu-diag-panel';
+ Object.assign(panel.style,{position:'fixed',left:'16px',top:'16px',zIndex:'9999',background:'#111d',backdropFilter:'blur(6px)',color:'#fff',padding:'12px',borderRadius:'12px',maxWidth:'min(92vw,720px)',maxHeight:'70vh',overflow:'auto',font:'14px system-ui,sans-serif'});
+ const ua=globalThis.navigator?.userAgent||'',text=[diag?gxDiagReport(diag.d,{build:APP_BUILD,ua}):'',perf?perfReport(perf,{build:APP_BUILD,ua:diag?'':ua}):''].filter(Boolean).join('\n\n');
+ const head=document.createElement('div');head.style.cssText='margin-bottom:8px;font-weight:600';head.textContent=diag?(ja?'WebGPU版VRの診断情報（「コピー」で全文をコピーできます）':'WebGPU VR diagnostics (Copy takes the full text)'):(ja?'WebGL版VRの性能記録（「コピー」で全文をコピーできます）':'WebGL VR performance log (Copy takes the full text)');panel.append(head);
+ const pre=document.createElement('pre');pre.style.cssText='margin:0 0 8px;white-space:pre-wrap;word-break:break-all;font:12px ui-monospace,monospace';pre.textContent=text;panel.append(pre);
+ const row=document.createElement('div');row.style.cssText='display:flex;gap:8px;align-items:center';
+ const msg=document.createElement('span');
+ const copy=document.createElement('button');copy.type='button';copy.textContent=ja?'コピー':'Copy';copy.onclick=()=>{const p=navigator.clipboard?.writeText(text);if(p)p.then(()=>{msg.textContent=ja?'コピーしました':'Copied'},()=>{msg.textContent=ja?'コピーできませんでした（上の文字を選択してください）':'Could not copy (select the text above)'});else msg.textContent=ja?'コピーできませんでした（上の文字を選択してください）':'Could not copy (select the text above)'};
+ const save=document.createElement('button');save.type='button';save.textContent=ja?'保存':'Save';save.onclick=()=>{try{saveGxDiagText(text,{build:APP_BUILD,name:diag?null:perfFileName(perf.kind,APP_BUILD)})}catch{}};
+ const close=document.createElement('button');close.type='button';close.textContent=ja?'閉じる':'Close';close.onclick=()=>panel.remove();
+ row.append(copy,save,close,msg);panel.append(row);document.body.append(panel);
 }
 function showShotsPanel(ja){
  if(!shots.length)return;
@@ -1696,6 +1726,8 @@ const volumeUniforms=(vd,full,settings)=>({vol:{value:full.v},bricks:{value:full
 // then the GPU is waited for; the session reuses the renderer, so nothing is
 // compiled or uploaded on the first frames in the headset.
 const segMode={};
+// the 表示 tab's three buttons of a tissue (通常 / 簡易 / 非表示): the tutorial's signals and the mode; m = the mode the button was drawn with (the menu's own captured value; the current mode when the same-picture check calls this)
+const setSegModeFromMenu=(key,j,m=segMode[key]|0)=>{emit('seg-toggle');if(j===2&&m!==2)emit('seg-hide');else if(j!==2&&m===2)emit('seg-show');segMode[key]=j};
 // 体験会モード: a segment the practice data's project file keeps in the list but not shown (active, not enabled: e.g. 脂肪 / 肺 at the start) is still PREPARED for VR (classification, processing
 // masks, analysis results) and listed in the かんたん menu, so that showing it in VR works at once and needs no new preparation. Outside event mode only shown segments count, as before.
 // The session starts with what the page shows (initialVrModes: not enabled -> 非表示); segMode (VR-local) switches it from there.
@@ -1726,6 +1758,7 @@ const hideFreeBase=(k,u)=>makeVolumeBase({...definesOfKey(k),VRL_NOHIDE:''},u),N
 // offscreen (ray) copies and any extra material, asynchronously (the link runs off the main thread where the browser can); returns the materials (keep them alive: they own the programs)
 async function compileVariantPrograms(renderer,direct,rays,extra=[],alive=()=>true){
  const keys=direct,mats=[...direct,...rays,...extra];
+ if(renderer.isWebGPURenderer)return mats; // the WebGPU session has no GLSL programs to compile (its WGSL pipelines are made by vr-wgpu.js); the materials here only carry the uniform values
  const sc=new THREE.Scene(),geo=new THREE.BoxGeometry(2,2,2),cam=new THREE.PerspectiveCamera();
  for(const m of mats){const mesh=new THREE.Mesh(geo,m);mesh.frustumCulled=false;sc.add(mesh)}
  await renderer.compileAsync(sc,cam);
@@ -1738,8 +1771,56 @@ async function compileVariantPrograms(renderer,direct,rays,extra=[],alive=()=>tr
  return mats;
 }
 let gpuPrepared=null;
-export async function prepareVrGpu(P,mode='vr',settings=loadSettings()){
+// ---- the WebGPU view's GPU side made BEFORE the session (the page's prepare panel / the event cards' preparation): the device (an XR-compatible adapter), three.js' WebGPURenderer on it, the volume renderer, and every program the data set's
+// display can ask for (made through the compile gate, docs/vr-wgpu-gate.js: a few at a time, the page's frames go on). The session takes it as it is (startVrViewRun: gxPrepared) and only has the textures to send; a session that finds none
+// makes the same things itself (with the 「読み込み中」 board in the air, and the frames going on). One set, single use: the device is destroyed when the session ends.
+let gxPrepared=null; // { key, mode, state: 'ok' | 'failed', gx, gxD, gxCaps, gxWait, times }
+// the display programs a data set's session asks for: four stored segments or not x the section on or off, with the feature axis of the data (results / child segments) and, for those, the parts (the depth axis programs)
+// multi: the data set can draw several volumes in one frame (the partner of a pair); feat: the same test as the index textures made of the data (makeRegionTexture / makeChildTexture)
+const gxVariantsOf=(four4,Pn=null,multi=false)=>[{cls4:false,events:false},{cls4:false,events:true},...(four4?[{cls4:true,events:false},{cls4:true,events:true}]:[])].map(v=>{if(!Pn)return v;const R=!!(Pn.region?.data&&Pn.region.rg),C=!!Pn.child?.rg;return{...v,feat:{R,C},...((R||C)&&!multi?{parts:true}:{})}}).map(v=>multi?{...v,multi:true}:v);
+// the device, the renderer and the diagnostic record of a WebGPU view (used by the session itself and by the page's preparation): returns { gx, gxCaps, gxWait }; what was made before a failure is let go and the error is thrown
+async function makeGxSide({ar,gxD}){
+ let d=null,r=null;const holder={gx:null};
+ try{
+  d=await requestVrGpuDevice();gxD.stage('device',{f16:d.f16,timestamps:d.timestamps});
+  let gxCaps=null,gxWait=null;
+  try{gxCaps=startGxCaps(gxD,d);if(effectiveFlag('gxWait3',false))gxWait=createWaitProbe({device:d.device,rec:gxCaps,volMs:cb=>holder.gx?.vol?.volume.onFrameVolMs?.(cb)})}catch(e){gxD.error('caps',e)}
+  r=new THREEG.WebGPURenderer({device:d.device,antialias:false,alpha:ar,forceWebGL:false,trackTimestamp:true});r.xr.enabled=true;await r.init();gxD.stage('renderer init');const out=useMaterialSrgbOutput(r,THREEG);gxD.value('output path',out.text);gxD.value('xr depth',discardXrDepth(r).text);const mainTs=!!r.backend?.trackTimestamp;if(mainTs)r.backend.trackTimestamp=false; // mainTs = three's main-render timestamps exist (trackTimestamp survived init); the backend reads its flag for every pass it encodes (vendor three.js is not edited)
+  const gx={renderer:r,device:d.device,f16:d.f16,timestamps:d.timestamps,mainTs,vol:null,ready:false,out,hooks:{fatal:e=>{gx.broken=e}},broken:null,lost:null}; // hooks: what the volume renderer's callbacks call (the session sets them: a callback made before the session cannot name the session's own functions)
+  holder.gx=gx;
+  watchDeviceLost(gx.device,info=>{gx.lost=info;gx.hooks.lost?.(info)}); // a lost device draws nothing from now on (before the session: the prepared side is not used)
+  return {gx,gxCaps,gxWait};
+ }catch(e){disposeGxRenderer(r);try{d?.device.destroy()}catch{}throw e} // what was made before the failure is let go (a device and a renderer each hold GPU memory)
+}
+// the volume renderer (the WGSL pass + the composite material) on a made side
+function makeGxVol(gx,gxD){gx.vol=createVrVolumeRenderer({THREE:THREEG,device:gx.device,f16:gx.f16&&VR_MEDIUMP,halfExt:[1,1,1],onShader:(m,v)=>gxShaderInfo(gxD,m,v),onFatal:e=>gx.hooks.fatal(e)})} // the half-precision march only where shader-f16 exists (and ?vrprec=highp has not asked for 32 bit)
+const disposeGxSide=g=>{if(!g)return;try{g.gx.vol?.dispose()}catch{}try{disposeGxRenderer(g.gx.renderer)}catch{}try{g.gx.renderer.domElement.remove()}catch{}try{g.gx.device.destroy()}catch{}};
+export function disposeGxPrepared(){const g=gxPrepared;gxPrepared=null;if(g?.gx)disposeGxSide(g)}
+// the page's preparation for the WebGPU view: onProgress({done,total,fraction}) while the programs are made. Returns { key, mode, times } (or null when the side could not be made: the session then makes its own, as before)
+async function prepareGxGpu(P,mode,onProgress=null){
+ // the diagnostic record is written to the store only from the session on (persist.on): the trail of the last session stays in the store until the next session starts to write its own
+ const persist={on:false},realStore=(()=>{try{return globalThis.localStorage??null}catch{return null}})(),gen=prepareGen,t0=performance.now(),gxD=createGxDiag({store:{setItem:(k,v)=>{if(persist.on)realStore?.setItem(k,v)}}});gxD.stage('start',{mode,prepared:true});
+ const mine={key:P.key,mode,state:'preparing',gx:null,gxD,gxCaps:null,gxWait:null,times:{},persist};
+ gxPrepared=mine;
+ try{
+  const side=await makeGxSide({ar:mode==='ar',gxD});Object.assign(mine,side);
+  if(gen!==prepareGen||gxPrepared!==mine){disposeGxSide(mine);if(gxPrepared===mine)gxPrepared=null;return null}
+  makeGxVol(mine.gx,gxD);mine.times.device=performance.now()-t0;
+  await mine.gx.vol.warm(gxVariantsOf(!!P.cls?.chan.includes(3),P),onProgress,{all:true}); // every program of the data set, both fourth-segment variants (the textures are the session's: they follow the data in the session)
+  mine.times.compile=performance.now()-t0-mine.times.device;
+  if(gen!==prepareGen||gxPrepared!==mine){disposeGxSide(mine);if(gxPrepared===mine)gxPrepared=null;return null}
+  if(mine.gx.broken||mine.gx.lost)throw new Error('the device was lost while the programs were made');
+  mine.state='ok';mine.times.total=performance.now()-t0;gxD.stage('prepared before the session',{ms:Math.round(mine.times.total)});
+  return mine;
+ }catch(e){
+  console.warn('WebGPU preparation before VR failed; the session will prepare on its own.',e);try{gxD.error('prepare',e)}catch{}
+  if(gxPrepared===mine){disposeGxSide(mine);mine.gx=null;mine.state='failed'}
+  return null;
+ }
+}
+export async function prepareVrGpu(P,mode='vr',settings=loadSettings(),onProgress=null){
  disposeGpuPrepared();const gen=prepareGen;
+ if(vrGpuRequested()&&vrGpuAvailable())return prepareGxGpu(P,mode,onProgress); // WebGPU trial: the page keeps no WebGL renderer for it; the GPU side is made here (device, renderer, volume renderer, every display program) for the session to take
  const ar=mode==='ar',renderer=new THREE.WebGLRenderer({antialias:false,alpha:ar,preserveDrawingBuffer:false});
  renderer.setPixelRatio(1);renderer.setSize(8,8,false);
  Object.assign(renderer.domElement.style,{position:'fixed',left:'0',top:'0',width:'1px',height:'1px',opacity:'0',pointerEvents:'none'});
@@ -1800,6 +1881,7 @@ export async function prepareVrGpu(P,mode='vr',settings=loadSettings()){
  }catch(e){console.warn('GPU preparation before VR failed; the session will prepare on its own.',e);try{renderer.dispose();renderer.domElement.remove()}catch{}return null}
 }
 export function disposeGpuPrepared(){
+ disposeGxPrepared();
  const g=gpuPrepared;if(!g)return;gpuPrepared=null;
  for(const t of [g.full,g.half])if(t){t.vThin?.dispose();t.v.dispose();t.b.dispose();t.combo?.dispose();t.cls4?.dispose()}
  g.edit?.dispose();g.region?.dispose();g.child?.dispose();g.warm.forEach(m=>m.dispose());(g.warmMore||[]).forEach(m=>m.dispose());g.renderer.dispose();
@@ -1823,17 +1905,18 @@ function releaseVrForSwap(){abortVrPrepare();prepareGen++;prepared=null;preparin
 // what is held right now (tests / ?debug): the prepared CPU data, the building one, the page-side GPU assets
 export function vrPreparedState(){return{prepared:!!prepared,preparing:!!preparing,gpu:!!gpuPrepared,session:!!running}}
 if(typeof document!=='undefined')onDatasetChange(()=>releaseVrPrepared());
-export function vrReady(){return !!prepared&&prepared.key===vrDataKey()}
+// ready = the data is prepared and, in the WebGPU view, its GPU side was tried (made, or it failed: the session makes its own then) for this mode
+export function vrReady(mode='vr'){return !!prepared&&prepared.key===vrDataKey()&&(!(vrGpuRequested()&&vrGpuAvailable())||(!!gxPrepared&&gxPrepared.state!=='preparing'&&gxPrepared.key===prepared.key&&gxPrepared.mode===mode))}
 // the GPU preparation of one (data, mode) is never started twice: the card press of the 体験会 page (event-launcher.js) and the prepare panel (showPreparePanel) both come here, so a button pressed while
 // the page is preparing waits for the run in flight instead of disposing it and starting its own (prepareVrGpu disposes what is held at its start). A run for another (data, mode) waits for the one in flight first.
 let gpuInflight=null;
 export const vrGpuBusy=()=>!!gpuInflight; // a GPU preparation is running (a start now would build its own beside it: the page's button takes the prepare panel, which shares the run)
-export function prepareVrGpuOnce(P,mode='vr'){
+export function prepareVrGpuOnce(P,mode='vr',onProgress=null){
  if(running)return Promise.resolve(null); // an XR session holds the GPU assets (startVrView took gpuPrepared): a preparation now would build a second renderer + textures beside it (and touch the shared P.combo / P.cls4 / initialVrModes)
  if(gpuPrepared&&gpuPrepared.key===P.key&&gpuPrepared.mode===mode)return Promise.resolve(gpuPrepared);
  if(gpuInflight&&gpuInflight.key===P.key&&gpuInflight.mode===mode)return gpuInflight.promise;
  const prev=gpuInflight?gpuInflight.promise.catch(()=>{}):Promise.resolve(),e={key:P.key,mode};
- e.promise=prev.then(()=>prepareVrGpu(P,mode)).finally(()=>{if(gpuInflight===e)gpuInflight=null});
+ e.promise=prev.then(()=>gxPrepared&&gxPrepared.state!=='preparing'&&gxPrepared.key===P.key&&gxPrepared.mode===mode&&vrGpuRequested()&&vrGpuAvailable()?(gxPrepared.state==='ok'?gxPrepared:null):prepareVrGpu(P,mode,undefined,onProgress)).finally(()=>{if(gpuInflight===e)gpuInflight=null});
  gpuInflight=e;return e.promise;
 }
 // remembered (it asked a whole new WebGL context for one number: seconds of main thread on SwiftShader, and a context start inside a running session); the session's own context answers once it exists
@@ -2193,7 +2276,7 @@ export function showPreparePanel({language='ja',mode='vr',onStart,onStep=()=>{}}
   q('.bar').style.width='100%';
   // upload, compile and wait on the GPU before the session (skipped when already prepared for this data and mode)
   let g=gpuPrepared&&gpuPrepared.key===p.key&&gpuPrepared.mode===mode?gpuPrepared:null;
-  if(!g){q('.ph').textContent=ja?'GPU の準備（転送・コンパイル）':'Preparing the GPU (upload, compile)';onStep({step:'prepare',text:q('.ph').textContent});reportBusyProgress('vr',1,1,q('.ph').textContent);g=await prepareVrGpuOnce(p,mode)}
+  if(!g){q('.ph').textContent=ja?'GPU の準備（転送・コンパイル）':'Preparing the GPU (upload, compile)';onStep({step:'prepare',text:q('.ph').textContent});reportBusyProgress('vr',1,1,q('.ph').textContent);g=await prepareVrGpuOnce(p,mode,pr=>{const t=(ja?'GPU の準備（描画プログラム ':'Preparing the GPU (display programs ')+pr.done+' / '+pr.total+(ja?'）':')');if(q('.ph').textContent!==t){q('.ph').textContent=t;onStep({step:'prepare',text:t});reportBusyProgress('vr',pr.fraction,1,t)}})}
   q('.ph').textContent=ja?'準備ができました':'Ready';
   const gpuLine=g?.times?((ja?'GPU: ':'GPU: ')+(g.times.total/1000).toFixed(1)+' s'):'';
   q('.tm').textContent=allPhases.filter(k=>p.times[k]!=null).map(k=>names[k]+': '+(p.times[k]/1000).toFixed(1)+' s').concat(gpuLine?[gpuLine]:[]).concat(vrCacheText(ja)?[vrCacheText(ja)]:[]).join('\n');
@@ -2257,27 +2340,101 @@ if(typeof document!=='undefined'){document.addEventListener('vrl-event-fresh',on
  if(eventModeOn()&&(globalThis.__vrlEventFreshCount|0)>0)onEventFresh()} // a board the last visitor pinned in place (grip) follows the head again
 // the point menu's 「コメント」 (a hidden text field; the Quest system keyboard in an immersive session is unverified): off unless localStorage vrl-vr-point-comment is '1'
 const VR_POINT_COMMENT=(()=>{try{return localStorage.getItem('vrl-vr-point-comment')==='1'}catch{return false}})();
-export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
+// WebGPU trial: the open WebGPU session and its record while startVrView runs (startVrView below ends that session when the start throws: the page catches the error, the headset would stay black)
+let gxLive=null;
+export async function startVrView(opts={}){
+ try{return await startVrViewRun(opts)}
+ catch(e){const g=gxLive;if(g){gxLive=null;g.diag.error('start',e);g.diag.stage('start threw: session ended');try{g.session.end()?.catch?.(()=>{})}catch{}}throw e}
+}
+async function startVrViewRun({language='ja',mode='vr',onStep=()=>{}}={}){
  if(running)return;
  const step=n=>{try{onStep(n)}catch(e){console.warn(e)}}; // 'session' (asking the headset) / 'in-session' (it exists) / 'ended' - the page shows the matching feedback
- const ja=language==='ja',settings=loadSettings();settings.diag=0;settings.editDiag=0;settings.clsDiag=0;settings.distDiag=0;settings.boxDiag=0;settings.skipDiag=effectiveFlag('vrNoSkip',false)?0:1;
+ const ja=language==='ja',settings=loadSettings();settings.diag=0;settings.editDiag=0;settings.clsDiag=0;settings.distDiag=0;settings.boxDiag=0;settings.gxDirect=0;settings.skipDiag=effectiveFlag('vrNoSkip',false)?0:1;
  const vrWindow={c:+wc.value||0,w:Math.max(1,+ww.value||1)}; // VR-local CT window: starts from the app's sliders, not written back
  // a renderer prepared on the page (textures uploaded, programs compiled) is reused; otherwise a fresh one
- let gpu=gpuPrepared&&gpuPrepared.key===vrDataKey()&&gpuPrepared.mode===mode?gpuPrepared:null;if(gpu)gpuPrepared=null;else disposeGpuPrepared(); // let (the page-prepared assets are let go once the session holds them)
- const ar=mode==='ar',renderer=gpu?.renderer||new THREE.WebGLRenderer({antialias:false,alpha:ar,preserveDrawingBuffer:false});
- renderer.setPixelRatio(1);renderer.setSize(8,8,false);renderer.xr.enabled=true;try{const g=renderer.getContext();maxTex3dKnown||(maxTex3dKnown=g.getParameter(g.MAX_3D_TEXTURE_SIZE)||0)}catch{} // the limit from the session's own context (see maxTexture3D)
- renderer.xr.setReferenceSpaceType('local-floor');
- if(!gpu){Object.assign(renderer.domElement.style,{position:'fixed',left:'0',top:'0',width:'1px',height:'1px',opacity:'0',pointerEvents:'none'});document.body.appendChild(renderer.domElement)}
+ let gpu=gpuPrepared&&gpuPrepared.key===vrDataKey()&&gpuPrepared.mode===mode?gpuPrepared:null;if(gpu)gpuPrepared=null;
+ // the WebGPU view's GPU side made on the page (prepareGxGpu): taken now, once (an unusable one, or one of another data / mode, is let go)
+ const preGx=gxPrepared&&gxPrepared.state==='ok'&&gxPrepared.key===vrDataKey()&&gxPrepared.mode===mode&&gxPrepared.gx&&!gxPrepared.gx.broken&&!gxPrepared.gx.lost&&vrGpuRequested()&&vrGpuAvailable()?gxPrepared:null;if(preGx)gxPrepared=null;
+ if(!gpu)disposeGpuPrepared(); // let (the page-prepared assets are let go once the session holds them)
+ const ar=mode==='ar';
+ // WebGPU trial (the page's 「WebGPUで開く」 choice, vr-wgpu.js vrGpuRequested): the volume is drawn by the WGSL pass of vr-wgpu.js and three.js' WebGPURenderer draws the rest of the scene. gx = that side's state
+ // (device, the volume renderer once the data is bound), null = the WebGL session as always. Anything that goes wrong on the way here (no WebGPU XR, the session refuses the 'webgpu' feature) opens the WebGL session instead and says so (gxNote).
+ let gx=null,gxNote='',gxD=null,perfLog=null; // gxD: the WebGPU side's diagnostic record (vr-wgpu.js createGxDiag), made whenever the WebGPU view is asked for and can be tried; shown on the page after the session
+ let gxPose=null; // the heartbeat's running totals { poseReads, poseMs } (vr-wgpu.js startGxHeartbeat stats): the frame ring's columns pz / pms
+ let gxCaps=null,gxWait=null,gxUndoWrap=null; // vr-wgpu-caps.js: the record of the device caps checks (WebGPU view only), the wait probe (debug switch gxWait3), what puts three.js' createProjectionLayer call back
+ const dataSel=()=>gxDataValue(gx,settings.data); // the data grid in use: 256 (1) in the WebGPU view (the WGSL pass has no 512 grid), the stored setting (0 = 512, 1 = 256) otherwise
+ if(vrGpuRequested()){
+  if(!vrGpuAvailable())gxNote='unavailable';
+  else if(preGx){gx=preGx.gx;gxD=preGx.gxD;gxCaps=preGx.gxCaps;gxWait=preGx.gxWait;preGx.persist.on=true;gxD.stage('prepared side taken',{ms:Math.round(preGx.times.total||0)})} // device, renderer, volume renderer and its programs were made on the page
+  else{let d=null,r=null;gxD=createGxDiag();gxD.stage('start',{mode});
+   try{d=await requestVrGpuDevice();gxD.stage('device',{f16:d.f16,timestamps:d.timestamps});try{gxCaps=startGxCaps(gxD,d);if(effectiveFlag('gxWait3',false))gxWait=createWaitProbe({device:d.device,rec:gxCaps,volMs:cb=>gx?.vol?.volume.onFrameVolMs?.(cb)})}catch(e){gxD.error('caps',e)}r=new THREEG.WebGPURenderer({device:d.device,antialias:false,alpha:ar,forceWebGL:false,trackTimestamp:true});r.xr.enabled=true;await r.init();gxD.stage('renderer init');const out=useMaterialSrgbOutput(r,THREEG);gxD.value('output path',out.text);gxD.value('xr depth',discardXrDepth(r).text);const mainTs=!!r.backend?.trackTimestamp;if(mainTs)r.backend.trackTimestamp=false;gx={renderer:r,device:d.device,f16:d.f16,timestamps:d.timestamps,mainTs,vol:null,ready:false,out}} // mainTs = three's main-render timestamps exist (trackTimestamp survived init); the backend reads its flag for every pass it encodes (vendor three.webgpu.js initTimestampQuery), so they run only while gxMeasure() // the output is encoded to sRGB inside each material (vr-wgpu.js useMaterialSrgbOutput), not by three.js' frame buffer pass
+   catch(e){console.warn('WebGPU VR: the device / renderer could not be made, opening WebGL instead:',e);gxNote='failed';gxD.error('setup',e);gxD.stage('device / renderer failed: WebGL instead');gx=null;disposeGxRenderer(r);try{d?.device.destroy()}catch{}} // what was made before the failure is let go (a device and a renderer each hold GPU memory)
+  }
+  if(gx&&gpu){gpuPrepared=gpu;disposeGpuPrepared();gpu=null} // a WebGL page-side preparation is of no use to the WebGPU session
+ }
+ const makeGlRenderer=()=>{
+  const r=gpu?.renderer||new THREE.WebGLRenderer({antialias:false,alpha:ar,preserveDrawingBuffer:false});
+  r.setPixelRatio(1);r.setSize(8,8,false);r.xr.enabled=true;try{const g=r.getContext();maxTex3dKnown||(maxTex3dKnown=g.getParameter(g.MAX_3D_TEXTURE_SIZE)||0)}catch{} // the limit from the session's own context (see maxTexture3D)
+  r.xr.setReferenceSpaceType('local-floor');
+  if(!gpu){Object.assign(r.domElement.style,{position:'fixed',left:'0',top:'0',width:'1px',height:'1px',opacity:'0',pointerEvents:'none'});document.body.appendChild(r.domElement)}
+  return r;
+ };
+ let renderer;
+ if(gx){renderer=gx.renderer;renderer.setPixelRatio(1);renderer.setSize(8,8,false);renderer.xr.setReferenceSpaceType('local-floor');maxTex3dKnown||(maxTex3dKnown=gx.device.limits.maxTextureDimension3D||0);Object.assign(renderer.domElement.style,{position:'fixed',left:'0',top:'0',width:'1px',height:'1px',opacity:'0',pointerEvents:'none'});document.body.appendChild(renderer.domElement)}
+ else renderer=makeGlRenderer();
  const sessionAt=performance.now();let firstDrawMs=-1;
+ const startMarks=globalThis.__vrStartMarks=[],markStart=n=>{startMarks.push([n,Math.round(performance.now()-sessionAt)])}; // where the session start spends its time (ms since the device / session were asked for): the console line of the first load and the tests print them
  // requestSession must run inside the click; the texture is built afterwards
  // while the headset shows progress
  let session;
- step('session');
- try{session=await navigator.xr.requestSession(ar?'immersive-ar':'immersive-vr',{optionalFeatures:['local-floor','hand-tracking']})}
- catch(e){if(gpu)gpuPrepared=gpu;else{renderer.dispose();renderer.domElement.remove()}throw e}
+ step('session');if(gxD)gxD.stage('requestSession',{webgpu:!!gx});
+ const sessionMode=ar?'immersive-ar':'immersive-vr',sessionOpts={optionalFeatures:['local-floor','hand-tracking']};
+ try{session=await navigator.xr.requestSession(sessionMode,gx?{...sessionOpts,optionalFeatures:[...sessionOpts.optionalFeatures,'layers'],requiredFeatures:['webgpu']}:sessionOpts)}
+ catch(e){
+  if(gx){ // this browser / headset does not give a WebGPU session: the WebGL one instead (the click's permission is still valid)
+   console.warn("WebGPU VR: the 'webgpu' session was refused, opening WebGL instead:",e);gxNote='refused';gxD.error('requestSession',e);gxD.stage('webgpu session refused: WebGL instead');
+   try{gx.renderer.dispose();gx.renderer.domElement.remove()}catch{}try{gx.device.destroy()}catch{}
+   gx=null;renderer=makeGlRenderer();
+   try{session=await navigator.xr.requestSession(sessionMode,sessionOpts)}
+   catch(e2){renderer.dispose();renderer.domElement.remove();throw e2}
+  }else{if(gpu)gpuPrepared=gpu;else{renderer.dispose();renderer.domElement.remove()}throw e}
+ }
+ markStart('session');
+ if(gxNote)step('gpu-'+gxNote); // the page shows why the WebGL view opened (vr-launch: onStep)
+ // WebGPU trial diagnostics: the session's own frame count / escape / stall guard (startGxHeartbeat), the errors from outside the app's try blocks (watchGxErrors), and the record on the page once the
+ // session ends (whatever ended it: this listener exists before any of the WebGPU steps below can fail). gxS = what the heartbeat reads each frame
+ const gxS={bound:false,rendered:0,binding:null,layer:null,ref:null};
+ if(gxD){gxD.stage('session',{features:(()=>{try{return [...(session.enabledFeatures||[])]}catch{return null}})()});
+  const gxHb=gx?startGxHeartbeat({session,diag:gxD,state:()=>gxS,saveOn:()=>ISO.state.diagSave,onFrame:gxCaps?capsFrameHook(gxCaps,gx.device,{fovea:false}):null,onEnd:()=>step('gpu-closed'),poseEvery:GX_POSE_EVERY,escapePollMs:GX_ESCAPE_POLL_MS}):null,gxUnwatch=gx?watchGxErrors({device:gx.device,diag:gxD,three:THREEG}):null;
+  if(gx)gxLive={session,diag:gxD};
+  gxPose=gxHb?gxHb.stats:null;
+  session.addEventListener('end',()=>{if(gxLive?.session===session)gxLive=null;gxHb?.stop();gxUnwatch?.();gxD.stage('session end',{frames:gxD.d.counts.xrFrames,rendered:gxD.d.counts.rendered});gxD.flush();const dg=gxD;perfLog?.flush();const pl=perfLog;setTimeout(()=>showGxDiagPanel(ja,dg,pl),0)},{once:true})}
+
+ const gxVariants=gxVariantsOf; // (module level: the page's preparation asks for the same programs) // parts: a data set with results / child segments can have parts cut out of it: their programs (feat P, the depth axis) are made with the rest (a partner's call, multi, never has parts) // multi: the data set can draw several volumes in one frame (the depth axis programs, vr-wgsl-depth.js) // the feature axis of the WGSL programs of a data set: the same test as the index textures made of it (makeRegionTexture / makeChildTexture) // the pipelines a session can ask for (the section on or off; four stored segments)
+ const gxExtras=()=>{const ex=[],pt=pair;if(pt&&pt.on&&pt.mesh.parent){pt.mesh.renderOrder=pt.nearer?0.5:1.5;ex.push({u:pt.u,model:pt.mesh.matrixWorld,order:pt.nearer?0.5:1.5,boxes:null,eyes:rsEyes2})}
+  for(const q of parts){if(!q.on||!q.mesh.parent)continue;const o=q.nearer?0.5:1.5;q.mesh.renderOrder=o;ex.push({u:q.u,model:q.mesh.matrixWorld,order:o,boxes:null,eyes:q.rsEyes})} // the parts taken out of the body (their own uniforms: the P programs; the WebGL view's low-resolution order: the nearer box first)
+  return ex}; // the volumes besides the body that this frame draws (a sample pair's partner, the parts); eyes = each one's covered rects of this frame (eyeMetrics)
+ // the WebGPU side failed after the session had opened: the session is ended (an immersive view that draws nothing is of no use) and the page says so (app.js: 'gpu-closed')
+ const gxFail=e=>{console.warn('WebGPU VR: closed after the session had opened:',e);gxD?.error('closed',e);gxD?.stage('closed after the session had opened');step('gpu-closed');failGxSession(session,null,e)};
+ // the direct draw trial's record, its flicker guard and the last frame's state (gx sessions only; the loop below reads them)
+ const gxDirLog=createDirectLog(),gxDirGuard=createFlapGuard({fallback:()=>false});let gxDirAsked=false,gxDirUsed=false;
+ const GXD=ja?{row:'直接描く（試験）',used:'使用中（中央を目の画像へ直接描いています）',wait:'待機中（描画倍率100%などの条件が揃うと使います）',off:'使えません: '}:{row:'Direct draw (trial)',used:'In use (the centre is drawn straight into the eye image)',wait:'Standby (used at 100% scale when everything is ready)',off:'Unavailable: '}; // the diagnostics page's row (WebGPU only): the labels in both languages
+ if(gx){
+  if(preGx)gx.hooks.fatal=e=>gxFail(e); // the volume renderer of the page's preparation was made before the session: its callbacks name the session's functions from here on
+  if(!gx.vol){
+  try{gx.vol=createVrVolumeRenderer({THREE:THREEG,device:gx.device,f16:gx.f16&&VR_MEDIUMP,halfExt:[1,1,1],onShader:(m,v)=>gxShaderInfo(gxD,m,v),onFatal:e=>gxFail(e)})}
+  catch(e){disposeGxRenderer(gx.renderer);try{gx.renderer.domElement.remove()}catch{}try{gx.device.destroy()}catch{}gxFail(e);return}
+  }
+  try{gx.device.addEventListener('uncapturederror',ev=>{try{gx.vol.volume.newPath.noteDeviceError(String(ev?.error?.message??ev?.error??''))}catch{}})}catch{} // a device error that no display pass caught is only recorded (a display pass's own errors come through its error scopes: the display's resources are made again, and the session ends only when that does not help; the WebGPU view never goes back to another program)
+ // the direct draw trial (diagnostic setting 「直接描く（試験）」, off at every session start): the hook on three.js' backend that records the volume's draw into the eye pass; a failure of any part only leaves the setting unavailable (the offscreen path is the one that always draws)
+ try{gx.vol.direct.setNotifier((k,t)=>{gxDirLog.note(k,t);try{gxD?.value(k,t)}catch{}});const di=gx.vol.installDirect(gx.renderer);gxDirLog.note('direct draw',di.text);gxD?.value('direct draw',di.text)}catch(e){console.warn('WebGPU direct draw: not installed:',e);gxDirLog.note('direct draw','not available ('+String(e?.message??e).slice(0,160)+')')}
+  watchDeviceLost(gx.device,info=>{gxD.stage('device lost',{reason:info?.reason,message:info?.message});if(running&&running.session===session)gxFail(info)}); // a lost device draws nothing from now on
+  // the places below that upload textures call renderer.initTexture / copyTextureToTexture (WebGL); on this renderer they write through the WebGPU volume's own device
+  renderer.initTexture=t=>gx.vol.volume.initTexture(t);renderer.copyTextureToTexture=(src,dst,box,at)=>gx.vol.volume.copySlab(src,dst,box,at)} // the volume's WGSL pass + the composite material; the half-precision march only where shader-f16 exists (and ?vrprec=highp has not asked for 32 bit)
  running={session};setShadeAutoPageHeld(true);vrHold(true);step('in-session');if(ar)emit('ar-start');else emit('vr-start');
  const scene=new THREE.Scene();scene.background=ar?null:BG.clone();
- const background=makeBackground();if(ar){background.visible=false;renderer.setClearColor(0x000000,0)}else scene.add(background);
+ const background=makeBackground(!!gx,!!gx&&(gx.out?.materialSrgb||renderer.currentColorSpace===THREE.SRGBColorSpace)); // the dome's material is encoded to sRGB either way (inside the material, or by three.js' frame buffer pass): its display values are decoded first
+ if(ar){background.visible=false;renderer.setClearColor(0x000000,0)}else scene.add(background);
  // AR only: in-session switch passthrough <-> "VR view" (opaque background drawn instead of the transparent clear; nothing else is touched). A new session starts as passthrough.
  const vt=createViewToggle(ar),applyView=()=>{if(!vt.canToggle)return;const on=vt.vrView;scene.background=on?BG.clone():null;background.visible=on;if(on)scene.add(background);else scene.remove(background);renderer.setClearColor(on?BG:0x000000,on?1:0)};
  const camera=new THREE.PerspectiveCamera(70,1,0.01,50);
@@ -2285,10 +2442,10 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    seg:'セグメント',segModes:['通常','簡易','非表示'],noSeg:'表示中のセグメントがありません（アプリで閾値を設定）',home:'正面に戻す',clsD:'事前計算（診断）',distD:'距離場（診断）',skipD:'空き領域スキップ',bench:'ベンチ（約 35 秒）',anBench:'解析の重さ（約 12 秒）',benchRun:'ベンチ中 ',benchHelp:'断面を動かし回転させながら、16.5/30 cm × 表示中／骨＋脂肪／骨のみ × 100%／50% の fps。終了後、VR を出た画面に結果が出ます',samples:'サンプル数／画素 ',samplesNote:'（覆う画素の平均、48×48で計測）',refineL:'表面の探索',refineV:['高速','精密'],editD:'加工マスク（診断）',editDv:['なめらか','ボクセル','オフ'],shot:'スクリーンショット',exit:'終了',
    sec:'断面',addPlane:'＋追加',planeN:'断面',clipOn:'切る',clipOff:'切らない',remove:'消す',maxPlanes:'断面は10枚までです',sliceWait:'高精細版を転送中のため、断面は少しお待ちください',byHelp:'B/Y：短く押す＝表示／非表示、長押し＝断面を追加',scrollHelp:['スティック上下：選んだ断面（一覧で色付き）を法線方向に動かします','何もない所でトリガーを押したまま動かすと、選んだ断面が動きます（枠は手の色で光ります）'],snapL:'選んだ断面を',snapModes:['軸位','冠状','矢状'],offOn:['オフ','オン'],cap:'キャップ',tint:'スライスの色付け',ctSh:'スライスの塗り',ctShV:['単色','CT濃淡'],ctBr:'濃淡の明るさ',ctCo:'濃淡のコントラスト',shRange:'濃淡の範囲',shT:'濃淡の範囲',shBtn:'濃淡',shHelp:'スライス画像を隠したとき（スライスの不透明度0%）の、断面の濃淡の範囲です。セグメントごとに、下限より暗く、上限より明るくなります。',shLower:'下限',shUpper:'上限',shReset:'自動に戻す',shNone:'表示中のセグメントがありません',cut:'切り取り',cutModes:['オフ','手前','片側'],flip:'向きを反転',cutHelp:['オフ：切らずにスライスだけ映します','手前：見ている側を消します（向きは自動）','片側：矢印の側を消します。「反転」で入れ替え'],sl:'スライス不透明度',sliceT:'スライス：',sliceClear:'透明',labelT:'ラベル：',regColT:'領域の色：',labelHid:'非表示',labelShow:'表示',
    handR:'右',handL:'左',secHelp:'枠の細い線・番号札・何もない所（3Dに触れていない所）をトリガーで押したまま動かすと、断面が手に付いて動く（番号の下＝最後に動かした手）',secOff:'「オン」かB/Yボタンで断面を出します',
-   r:'ボリューム解像度',auto:'自動',am:'自動の下限',amv:['最低 50%','最低 35%','最低 25%'],dt:'データ',q:'描画の細かさ',stp:'刻み',qv:['標準','粗め','最粗'],f:'周辺の簡略化',fv:['なし','中','強'],hz:'リフレッシュレート',diag:'診断',dv:['通常','箱のみ','ループ数','陰影なし','スキップなし'],
+   r:'ボリューム解像度',moveLow:'持つ間は簡略化',moveLowK:'持つ間の縮小率',auto:'自動',am:'自動の下限',amv:['最低 50%','最低 35%','最低 25%'],dt:'データ',q:'描画の細かさ',stp:'刻み',qv:['標準','粗め','最粗'],f:'周辺の簡略化',fv:['なし','中','強'],hz:'リフレッシュレート',diag:'診断',dv:['通常','箱のみ','ループ数','陰影なし','スキップなし'],
    hist:'HU分布',histTitle:'HU分布',histAuto:'自動',histApprox:'概算',histBusy:'計算中',histX:'HU値',histY:'ボクセル数',histYLog:'ボクセル数（対数）',histNone:'セグメント外',histEmpty:'データがありません',histLin:'線形',histLog:'対数',
    stHeld:'断面：動かしています',stFixed:'断面：固定中',stNone:'グリップでつかむ・両手で拡大縮小',preparing:'VRボリューム準備中… ',uploading:'画像をGPUへ転送中…（数秒止まって見えることがあります）',compiling:'描画の準備中…（もう少しで表示されます）',failed:'VR準備に失敗: ',shotDone:'スクリーンショットを撮りました（終了後にページで保存）',filtered:' フィルター適用',
-   dataOwn:'ご自身のデータを開いているため、ここでは切り替えられません（練習データの時だけ使えます）',dataT:'データ',dataHead:'練習データを切り替える',dataHelp:'押してから、もう一度押すと切り替わります（今の断面・ポイント・ラベルは消えます。VRは続いたままです）',dataAgain:'もう一度',dataHint:'もう一度押すと切り替え（今の断面・ポイントは消えます）：',dataNone:'データを切り替えている間は選べません',
+   dataOwn:'ご自身のデータを開いているため、ここでは切り替えられません（練習データの時だけ使えます）',dataT:'データ',dataHead:'練習データを切り替える',dataHelp:'押してから、もう一度押すと切り替わります（今の断面・ポイント・ラベルは消えます。VRは続いたままです）',dataAgain:'もう一度',dataHint:'もう一度押すと切り替え（今の断面・ポイントは消えます）：',dataNone:'データを切り替えている間は選べません',gxOnly256:'WebGPU版は256のみ',
    sw:{saving:'VR用データを保存中',title:'データを読み込み中',failed:'読み込みに失敗しました',retry:'メニューの「データ」からもう一度選んでください',note:'経過 {s} 秒（VRは続いています。そのままお待ちください）',
     stages:{release:'前のデータを手放し中',load:'データを読み込み中',settle:'読み込みの仕上げ中',prepare:'VR用に変換中',compile:'描画の準備中',upload:'GPUへ転送中',bind:'表示します',refine:'高精細版を転送中（表示は続きます）',done:'完了'},
     phases:{copy:'3D画面から写す',read:'データ読み込み',cache:'保存済みのVR用データを読込',half:'256³を作成',mask:'加工マスク',cls:'判定用データ・距離場',dist:'距離場'}}}
@@ -2296,10 +2453,10 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    seg:'Segments',segModes:['Normal','Simple','Hidden'],noSeg:'No segment shown (set thresholds in the app)',home:'Bring to front',clsD:'Precomputed (diag.)',distD:'Distance field (diag.)',skipD:'Skip empty space',bench:'Benchmark (about 35 s)',anBench:'Analysis cost (about 12 s)',benchRun:'benchmark ',benchHelp:'fps while a section sweeps and the volume turns: 16.5/30 cm × shown / bone+fat / bone only × 100% / 50%; the result is shown after leaving VR',samples:'samples / pixel ',samplesNote:' (mean over covered pixels, 48×48 probe)',refineL:'Surface search',refineV:['Fast','Exact'],editD:'Processing mask (diag.)',editDv:['Smooth','Voxel','Off'],shot:'Screenshot',exit:'Exit',
    sec:'Sections',addPlane:'+ Add',planeN:'Plane ',clipOn:'Clips',clipOff:'No clip',remove:'Remove',maxPlanes:'Up to 10 planes',sliceWait:'Cross-sections are available when the high-resolution grid has arrived',byHelp:'B/Y: press = show / hide, long press = add a plane',scrollHelp:['Thumbstick up / down moves the selected plane (highlighted in the list) on its normal','Hold the trigger on empty space and move: the selected plane moves (its frame glows in the hand colour)'],snapL:'Selected plane',snapModes:['Axial','Coronal','Sagittal'],offOn:['Off','On'],cap:'Cap',tint:'Slice colouring',ctSh:'Slice fill',ctShV:['Solid','CT shading'],ctBr:'Shading brightness',ctCo:'Shading contrast',shRange:'Shading range',shT:'Shading range',shBtn:'Shade',shHelp:'The range of the cut-face shading when the slice image is hidden (slice opacity 0%). Per segment: darkest at the lower end, brightest at the upper end.',shLower:'Lower',shUpper:'Upper',shReset:'Back to auto',shNone:'No segment is shown',cut:'Clip',cutModes:['Off','Near side','One side'],flip:'Flip side',cutHelp:['Off: nothing is cut, only the slice is shown','Near side: the side you look from is removed (follows you)','One side: the arrow side is removed; Flip swaps it'],sl:'Slice opacity',sliceT:'Slice: ',sliceClear:'transparent',labelT:'Labels: ',regColT:'Region colours: ',labelHid:'hidden',labelShow:'shown',
    handR:'R',handL:'L',secHelp:'Trigger on a thin frame line, number tag or empty space (not on the 3D object), hold and move: the section sticks to the hand (under the number: last hand)',secOff:'Turn it on here or press B/Y',
-   r:'Volume resolution',auto:'Auto',am:'Auto floor',amv:['Min 50%','Min 35%','Min 25%'],dt:'Data',q:'Detail',stp:'Step',qv:['Normal','Coarse','Coarsest'],f:'Foveation',fv:['Off','Mid','High'],hz:'Refresh rate',diag:'Diagnostics',dv:['Normal','Box only','Loop count','No shading','No skipping'],
+   r:'Volume resolution',moveLow:'Simplify while held',moveLowK:'Held scale',auto:'Auto',am:'Auto floor',amv:['Min 50%','Min 35%','Min 25%'],dt:'Data',q:'Detail',stp:'Step',qv:['Normal','Coarse','Coarsest'],f:'Foveation',fv:['Off','Mid','High'],hz:'Refresh rate',diag:'Diagnostics',dv:['Normal','Box only','Loop count','No shading','No skipping'],
    hist:'HU histogram',histTitle:'HU histogram',histAuto:'Auto',histApprox:'approx.',histBusy:'Calculating',histX:'HU',histY:'Voxels',histYLog:'Voxels (log)',histNone:'Unlabeled',histEmpty:'No data',histLin:'Linear',histLog:'Log',
    stHeld:'Section: being moved',stFixed:'Section: fixed',stNone:'Grip to grab, both hands to scale',preparing:'Preparing VR volume… ',uploading:'Uploading the image to the GPU… (the view may pause for a few seconds)',compiling:'Preparing the renderer… (almost there)',failed:'VR failed: ',shotDone:'Screenshot taken (save it on the page after exit)',filtered:' filtered',
-   dataOwn:'Your own data is open, so it cannot be switched here (practice data only)',dataT:'Data',dataHead:'Switch the practice data',dataHelp:'Press, then press again to switch (the sections, points and labels now in view are dropped; VR keeps running)',dataAgain:'Again',dataHint:'Press again to switch (sections and points in view are dropped): ',dataNone:'Not available while the data is being switched',
+   dataOwn:'Your own data is open, so it cannot be switched here (practice data only)',dataT:'Data',dataHead:'Switch the practice data',dataHelp:'Press, then press again to switch (the sections, points and labels now in view are dropped; VR keeps running)',dataAgain:'Again',dataHint:'Press again to switch (sections and points in view are dropped): ',dataNone:'Not available while the data is being switched',gxOnly256:'WebGPU: 256 only',
    sw:{saving:'Saving the VR data',title:'Loading the data',failed:'Loading failed',retry:'Pick the data again from Data in the menu',note:'{s} s elapsed (VR keeps running; please wait)',
     stages:{release:'Releasing the previous data',load:'Loading the data',settle:'Finishing the load',prepare:'Converting for VR',compile:'Preparing the renderer',upload:'Sending to the GPU',bind:'Showing it',refine:'Sending the fine version (the view continues)',done:'Done'},
     phases:{copy:'Copy from the 3D view',read:'Reading data',cache:'Reading the saved VR data',half:'Building 256³',mask:'Processing mask',cls:'Classification, distance field',dist:'Distance field'}}};
@@ -2312,6 +2469,10 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
  const menu=makeMenu(MENU_W,MENU_H,MENU_WIDTH);menu.mesh.visible=evMenu;scene.add(menu.mesh);
  vrCacheNotify=()=>{if(running)menu.refresh()};void refreshVrCapacity(); // the 詳細 tab shows the state of the VR data cache (a store's progress, the storage numbers)
  const ui={sliceClear:false,tab:evMenu?10:0,open:evMenu,status:L.preparing,fpsLine:'',sizeLine:'',flash:'',flashUntil:0,benchLine:'',qualityLine:'',swapBusy:false,swapFailed:false,swapArm:null,swapLine:''};
+ let identRun=null,identSeqApplied=0,identSeqSig=-1,identHoldKA=1,identLog=null,identDone=false,identT0=0,identSaved=null,identFail=''; // identFail: the line of a check that could not start (its button stays pressable) // the same-picture check (declared here: the guards of the other recordings and the frame loop read them)
+ const gxRec={phase:'idle',on:false,t0:0,until:0,vi:0,probeAt:0,probeKind:0,freeAt:0,vb:null,gen:0,sec:0,pp:null,ppKind:0}; // the WebGPU volume breakdown's state (see gxRecStart below); declared here because the menu's rows and the benchmark starts read it
+ const gxMeasure=()=>gxRec.phase==='prep'||gxRec.on; // the breakdown recording is being prepared or runs: the only time the fine timers run (frame marker pass: span / gap / oth, three's main-render timestamps: main, swd / vlat / wake); the volume pass's timestamps (vol) always run (the performance record's column; the WebGPU auto quality steps by the frame interval and does not read vol)
+ if(gxNote){ui.flash=ja?'WebGPUでは開けなかったため、WebGL版で開きました':'WebGPU could not be used here, so the WebGL view was opened';ui.flashUntil=performance.now()+20000;console.warn('WebGPU VR not used:',gxNote)} // the WebGPU choice could not be honoured (no XR WebGPU / refused / device failed)
  const holder=new THREE.Group();holder.position.set(0,1.3,-VOLUME_FWD);scene.add(holder);
  let childSyncBusy=false,childSyncAgain=false,childSyncTimer=0,childSyncSeq=0;
  let syncChildSegments=()=>{}; // assigned in the data section below (a child added / removed / its mask changed while the session runs)
@@ -2332,7 +2493,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
  let parts=[],partHideSrc=()=>null,partBodySet=()=>null,partPatchRegion=()=>{},partPatchChild=()=>{},partPose=()=>{},partFrame=()=>{},partRender=()=>{},partGripStart=()=>false,partGripEnd=()=>false,partRestoreAll=()=>{},partDispose=()=>{},partMenuInfo=()=>null,partRestorePress=()=>{},partRingStart=()=>false,partBackPress=()=>false,partDetachRing=()=>{};
  // n734: the baked cut (the `part` block below): partBakeOn = the body is drawn by the ordinary program on the baked bytes, partBakeTex = {tex, cls4} it reads (or null), partBakeFrame = once per frame (guard, build, switch),
  // partBakeDrop = the baked bytes are not valid any more (the body reads the original again at once), partBakeRegion / partBakeChild = the GPU's copy of the tables while the bake is on, partClsSync = the parts read the ORIGINAL classification, partBodyDraws = partBodySet without the bake
- let partBakeOn=()=>false,partBakeTex=()=>null,partBakeFrame=()=>{},partBakeDrop=()=>{},partBakeRegion=()=>{},partBakeChild=()=>{},partClsSync=()=>{},partBodyDraws=()=>null;
+ let partBakeOn=()=>false,partBakeCan=()=>false,partBakeTex=()=>null,partBakeFrame=()=>{},partBakeDrop=()=>{},partBakeRegion=()=>{},partBakeChild=()=>{},partClsSync=()=>{},partBodyDraws=()=>null,partGxU=()=>null; // partGxU(vk) = the body's uniforms while parts are out (the P programs of the WebGPU pass), or null
  // stage 3 (the laser / points / distances / name cards of the partner): the functions of the pair block below, called from the controller loop and the frame; no-ops while there is no partner
  const NO_CARDS=new Map(),px={hit:()=>null,sec:()=>null,sectionTissue:()=>false,pins:()=>{},primaryOf:()=>null,card:()=>null,toggle:()=>false,unpin:()=>false,drag:()=>false,reset:()=>false,cards:()=>NO_CARDS};
  // the data of the session can be REPLACED (swapData, in the try block at the end): everything bound to the data is a variable (P: the prepared CPU data, vd: its full grid, full / half: the
@@ -2435,7 +2596,8 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
  // the laser is a beam of light, a flat ribbon along local z=0..-1 (scale.z = its length) that turns
  // around the ray axis to face each eye (cameraPosition is per eye in WebXR); 2 mm wide at the hand tapering to 0.6 mm at the tip, bright core, feathered edges, additive, fading toward the tip; ray.material.color / .opacity / .depthTest work as before
  const makeLaser=()=>{const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute([-1,0,0,1,0,0,-1,0,-1,1,0,-1],3));g.setIndex([0,1,2,1,3,2]);
-  const m=new THREE.ShaderMaterial({uniforms:{color:{value:new THREE.Color(0x88ccff)},opacity:{value:1},width:{value:0.001},taper:{value:0.3}},transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,side:THREE.DoubleSide,toneMapped:false,
+  // WebGPU session: the ribbon is a node material (docs/vr-gx-looks.js) with the GLSL ribbon's uniform-style fields
+  const m=gx?createGxLaserMaterial():new THREE.ShaderMaterial({uniforms:{color:{value:new THREE.Color(0x88ccff)},opacity:{value:1},width:{value:0.001},taper:{value:0.3}},transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,side:THREE.DoubleSide,toneMapped:false,
    vertexShader:'uniform float width,taper;varying vec2 vU;varying float vL;void main(){float t=-position.z;vec3 a=(modelMatrix*vec4(0.,0.,0.,1.)).xyz,b=(modelMatrix*vec4(0.,0.,-1.,1.)).xyz,d=b-a;float L=length(d);d=L>1e-6?d/L:vec3(0.,0.,-1.);vec3 c=mix(a,b,t),s=cross(d,cameraPosition-c);float sl=length(s);s=sl>1e-9?s/sl:vec3(1.,0.,0.);vU=vec2(position.x,t);vL=L;gl_Position=projectionMatrix*viewMatrix*vec4(c+s*position.x*width*mix(1.,taper,min(t*L,1.)),1.);}',
    fragmentShader:'uniform vec3 color;uniform float opacity;varying vec2 vU;varying float vL;void main(){float x=abs(vU.x),e=1.-smoothstep(0.,1.,x),core=smoothstep(0.55,0.,x);float p=max(2.-log(max(opacity,0.05))/log(0.22),0.3),al=pow(e,p)*mix(1.,0.3,min(vU.y*vL,1.))*opacity;gl_FragColor=vec4(mix(color,vec3(1.),core*0.6),al);\n#include <colorspace_fragment>\n}'});
   m.color=m.uniforms.color.value;Object.defineProperty(m,'opacity',{get(){return m.uniforms.opacity.value},set(v){m.uniforms.opacity.value=v},configurable:true});
@@ -2637,7 +2799,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
  // the floating 「元に戻す」 board shown for FLING_UNDO_MS after a section was deleted (laser-clickable; hidden until then)
  const undoBtn=createUndoButton(THREE);scene.add(undoBtn.mesh);
  // the board that says 「読み込み中」 while the data is switched (the volume is hidden then): the data, the step, the time. Redrawn at most twice a second.
- let loadInfo=null,loadDrawn=0;
+ let loadInfo=null,loadDrawn=0;const FIRST_LOAD_STAGES=['upload','compile'];
  const loadBoard=makeMenu(820,300,0.46,HELP_RES);loadBoard.mesh.visible=false;scene.add(loadBoard.mesh);
  // n736: the same board says 「切り出し中」 while a part is being cut out (loadInfo.cut: set by partDetach, which ends it; the stages / the title / the line of seconds are PART_TEXT's). partCutLive (the part block): a cut is under way.
  // partCutEnd(info): the board of THAT cut goes (info omitted: whichever cut is on it), a board of the data switch / the pair is never touched. The frame ends a cut board whose cut is over (belt and braces), the page / headset going hidden ends it too.
@@ -2646,7 +2808,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
  const partCutVis=()=>{if(document.visibilityState==='hidden'||session?.visibilityState==='hidden')partCutEnd()};
  loadBoard.onDraw(()=>{
   const li=loadInfo,w=[];if(!li)return w;
-  const cut=!!li.cut,seq=cut?PART_CUT_STAGES:SWAP_STAGES,PTc=PART_TEXT[ja?'ja':'en'];
+  const cut=!!li.cut,seq=cut?PART_CUT_STAGES:li.first?FIRST_LOAD_STAGES:SWAP_STAGES,PTc=PART_TEXT[ja?'ja':'en']; // first: the session's own first load (the textures, then the display programs: li.sub is the share of the programs made)
   const st=cut?{prep:PTc.cutPrep,calc:PTc.cutCalc,finish:PTc.cutFinish}[li.stage]||'':L.sw.stages[li.stage]||'',idx=Math.max(0,seq.indexOf(li.stage)),f=cut?Math.min(1,(idx+0.5)/seq.length):Math.min(1,(idx+(li.sub||0))/seq.length),secs=Math.round((performance.now()-li.t0)/1000); // a cut: the share of the stages (an estimate: the middle of the stage it is in)
   w.push({type:'label',x:36,y:62,text:cut?PTc.cutTitle:li.error?L.sw.failed:L.sw.title,bold:true,size:40,color:li.error?'#ff8a80':'#fff'});
   w.push({type:'label',x:36,y:128,text:li.name,size:34,color:'#ffd27a'});
@@ -2807,12 +2969,12 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
  // selection: selected = the plane the thumbstick moves
  // sections are moved with the trigger (drag in holder space, c.userData.drag); the grip only moves the volume
  const section={on:false,selected:null},planes=[];
- const square=(h)=>new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,-h,-h),new THREE.Vector3(0,h,-h),new THREE.Vector3(0,h,h),new THREE.Vector3(0,-h,h)]);
+ const square=(h)=>new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,-h,-h),new THREE.Vector3(0,h,-h),new THREE.Vector3(0,h,h),new THREE.Vector3(0,-h,h),new THREE.Vector3(0,-h,-h)]); // the first corner again at the end: a closed loop as a plain Line (LineLoop does not draw in WebGPU)
  // handle corner per plane index: (+y,+z), (+y,−z), (−y,−z), (−y,+z)
  const HANDLE_CORNERS=[[1,1],[1,-1],[-1,-1],[-1,1]],HANDLE=0.034;
  const makePlane=(color,cut)=>{
   const obj=new THREE.Group(),mat=new THREE.LineBasicMaterial({color,transparent:true,depthTest:false,depthWrite:false}),h=0.12; // the frame lies inside the volume, which now writes depth: no depth test, drawn after it (renderOrder 2).: depthTest is switched per frame (frameDepthTest: tested = hidden behind tissue under 「実際に隠す」, on top while lit / without GPU occlusion); depthWrite is never on (a thin frame must not clip the labels drawn after it)
-  const frameLine=new THREE.LineLoop(square(h),mat);frameLine.renderOrder=2;obj.add(frameLine);
+  const frameLine=new THREE.Line(square(h),mat);frameLine.renderOrder=2;obj.add(frameLine);
   // glow: a band over the frame: white when pointed at, the holding hand's laser colour when held (set in the frame update loop)
   const go=h+0.0015,gi=h-0.0015,gs=new THREE.Shape([new THREE.Vector2(-go,-go),new THREE.Vector2(go,-go),new THREE.Vector2(go,go),new THREE.Vector2(-go,go)]);
   gs.holes.push(new THREE.Path([new THREE.Vector2(-gi,-gi),new THREE.Vector2(-gi,gi),new THREE.Vector2(gi,gi),new THREE.Vector2(gi,-gi)]));
@@ -3100,7 +3262,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
  // hidden behind tissue: refreshed about 10 times a second (not every frame); the rule is vr-point.js pointIsHidden. The head is the middle of both eyes.
  // the distances' probes (9 per line, up to ~890 march steps each) are re-judged only when an input of pointIsHidden changed (createProbeGate), not every 100 ms
  const measGate=createProbeGate(0.005);let vpHidden=new Set(),vpHiddenAt=0,vpMeasHidden=new Set(),vpAnchorHidden=new Set();const tmpEyeL=new THREE.Vector3(),tmpEyeR=new THREE.Vector3(),tmpHp=new THREE.Vector3();
- const occlusionGpu=()=>gpuOcclusionActive(settings.labelHide,renderer.capabilities); // 「実際に隠す」 and the renderer's depth is the standard one
+ const occlusionGpu=()=>gpuOcclusionActive(settings.labelHide,gx?{}:renderer.capabilities); // 「実際に隠す」 and the renderer's depth is the standard one
  const updateHidden=now=>{
   vpHiddenAt=now;
   // the distance lines / labels are judged by the same rule (vpMeasure.probes(): 9 samples of every line + a dragged label) and drawn faint when hidden (vr-measure.js)
@@ -3173,7 +3335,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
  // faint label of what it points at (result: colour, number as in the 解析 tab, segment, mm³; else the segment name and
  // 解析結果なし); the trigger pins / unpins the label of a result at that point. Labels stay at their point in the volume
  // (re-placed every frame), face the viewer, and are linked to the point by a thin line.
- const LABEL_W=0.12,LABEL_H=0.036,labelBatch=createLabelBatch(THREE,scene,{w:0.12,h:0.036,legWidth:LEG_WIDTH_M,legMinAngle:LEG_MIN_ANGLE}),pins=new Map(),pinLit=new Set(),pinGlow=new Set(),pinHeld=new Set(),tmpLb=new THREE.Vector3(),tmpLe=new THREE.Vector3(); // pins = region id -> pinned card, rebuilt every frame from region.label (analysis-label.js: saved in the project, shared with the PC 3D view); pinLit: the pinned cards the laser is on / holds
+ const LABEL_W=0.12,LABEL_H=0.036,labelBatch=gx?createPlainLabelBatch(THREE,scene,{w:0.12,h:0.036}):createLabelBatch(THREE,scene,{w:0.12,h:0.036,legWidth:LEG_WIDTH_M,legMinAngle:LEG_MIN_ANGLE}),pins=new Map(),pinLit=new Set(),pinGlow=new Set(),pinHeld=new Set(),tmpLb=new THREE.Vector3(),tmpLe=new THREE.Vector3(); // pins = region id -> pinned card, rebuilt every frame from region.label (analysis-label.js: saved in the project, shared with the PC 3D view); pinLit: the pinned cards the laser is on / holds
  // 小 / 中 / 大 = 50 / 70 / 100 % of the 12 cm label (大 = up to 425)
  // default 小; the pointing label is a chip above its own
  // controller (never over the volume, always at reading distance), framed in that hand's laser colour, same size setting
@@ -3969,8 +4131,8 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
  const rates=[...(session.supportedFrameRates||[])].filter(r=>r>=60).sort((a,b)=>a-b);
  const targetRate=()=>session.frameRate||(rates.length?rates[Math.min(settings.rate,rates.length-1)]:72);
  // flicker safety: the render scale / path, the offscreen foveation and the volume variant may not alternate more than a few times a second (vr-flicker-guard.js)
- const scaleGuard=createScaleGuard(),fovGuard=createFlapGuard({fallback:(v,cur)=>cur}),variantGuard=createFlapGuard({fallback:variantFallback});let guardFreezes=0;
- const aq=createAutoQuality({min:autoFloor(settings.autoMin),baseStep:settings.quality|0});let autoFrames=0,autoAt=performance.now();const stepFor=k=>baseStep*stepChoiceScale(stepSel)*(STEP[k]??1); // stepSize uniform = base step (0.85 voxel x the menu's step choice, session only) x the quality rung; a uniform, so no recompile // starts at 100 % (72 fps there at the default size) and only drops when the frames say so
+ let hkMin=1;const scaleGuard=createScaleGuard(),holdGate=createHoldGate(),fovGuard=createFlapGuard({fallback:(v,cur)=>cur}),variantGuard=createFlapGuard({fallback:variantFallback});let guardFreezes=0;
+ const aq=createAutoQuality({min:autoFloor(settings.autoMin),baseStep:settings.quality|0});let autoFrames=0,heldWin=false,autoAt=performance.now();const stepFor=k=>baseStep*stepChoiceScale(stepSel)*(STEP[k]??1); const effStepTxt=fb=>{const u=material?.uniforms;if(!u)return String(fb);const vx=Math.min(2*u.halfExt.value.x/Math.max(1,u.texDims.value.x),2*u.halfExt.value.y/Math.max(1,u.texDims.value.y),2*u.halfExt.value.z/Math.max(1,u.texDims.value.z));return vx>0?String(+(u.stepSize.value/vx).toFixed(2)):String(fb)}; // the step actually handed to the shader in voxels (same as the record's step column), 2 decimals, trailing zeros dropped; // stepSize uniform = base step (0.85 voxel x the menu's step choice, session only) x the quality rung; a uniform, so no recompile // starts at 100 % (72 fps there at the default size) and only drops when the frames say so
  let frames=0,fpsAt=performance.now(),fps=0;
  // benchmark — 12 phases (3 sizes × shown segments / bone only × 100 % / 50 %), 0.8 s settle + 2 s count each;
  // the state is restored afterwards and the result goes to the 画質 tab, the console, localStorage (vrl-vr-bench) and a
@@ -3981,7 +4143,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
  // as is / no result colours / no laser march and labels / neither; with labels on, both hands' rays are replaced by a
  // ray from the head to the volume centre so a label is drawn and placed every frame as when pointing at the volume
  const anBench={active:false,i:-1,at:0,measureAt:0,frames:0,results:[],phases:[{noRegion:false,noLabels:false},{noRegion:true,noLabels:false},{noRegion:false,noLabels:true},{noRegion:true,noLabels:true}]};
- const startAnBench=()=>{if(anBench.active||bench.active||!mesh)return;anBench.results=[];anBench.i=-1;anBench.active=true;anBenchNext()};
+ const startAnBench=()=>{if(anBench.active||bench.active||cmpBench.active||identRun?.active||!mesh||gxRec.phase==='prep'||gxRec.on)return;anBench.results=[];anBench.i=-1;anBench.active=true;anBenchNext()};
  const anBenchNext=()=>{anBench.i++;if(anBench.i>=anBench.phases.length){anBenchFinish();return}Object.assign(diagAn,anBench.phases[anBench.i]);anBench.at=performance.now();anBench.measureAt=0;anBench.frames=0;ui.benchLine=L.benchRun+(anBench.i+1)+' / '+anBench.phases.length;menu.refresh()};
  const anBenchTick=()=>{
   if(!anBench.active)return;const now=performance.now();
@@ -3998,7 +4160,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
   console.log('[VR analysis bench]',headLine,line);ui.benchLine=line;menu.refresh();
  };
  const startBench=()=>{
-  if(bench.active||!mesh)return;
+  if(bench.active||cmpBench.active||identRun?.active||!mesh||gxRec.phase==='prep'||gxRec.on)return;
   endAllDrags(); // the bench moves the plane in the volume's space
   // every phase runs with a section plane sweeping through the
   // volume and the volume slowly turning; segment sets: as shown, bone + fat, bone only
@@ -4038,6 +4200,53 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
   console.log('[VR bench]',head,lines);
   ui.benchLine=lines.join(' | ');menu.refresh();
  };
+ // ---- the comparison bench (docs/vr-bench.js; the two buttons at the bottom of the 詳細 tab) ----
+ // A scripted run of four segments (two scenes, the body held 0.45 m and 0.30 m from the head, each with a violent and a slow period) with the body at its largest size (0.30 m longest side), no section plane, 100 %, auto quality off,
+ // the periphery setting at its default, the hold scale off, the menu closed; the pose is a function of the time since the scene began and of the head's position and heading taken once at the start (vr-bench.js benchPose), so the WebGL and
+ // the WebGPU view move alike. The second button runs it twice (the state the records were taken in, then isolated: see ISO_MODES). The result is a section of the performance record.
+ // Also here: the frame ring (the last 2000 frames) and the long-task observer, which run in every session, bench or not. Nothing here changes what is drawn outside a bench run.
+ let benchPh=0;const benchG={ml:NaN,gd:NaN,vol:NaN},benchLag={fv:0,pz:0,pms:0},gxLeft=[]; // benchPh = the breakdown recording's phase for the frame ring (0 before it is prepared, 1 from its preparation until its resources are let go, 2 after); benchG = the volume renderer's gauges taken once a frame; benchLag = the heartbeat's totals (fv / pz / pms) as of the previous frame (the heartbeat's tick runs before this callback in a frame, so its work of frame N-1 is what slowed the interval that ends at frame N); gxLeft = what is left of the recording (three dumps, text made at save time)
+ let benchRing=null,benchLt=null,benchPre=NaN,benchT0=0,benchNo=0;const benchAll=[]; // benchAll = the runs of every bench of this session (the report's section)
+ const benchRingC={menu:0,tex:0,dsave:0,psave:0,mk:0,maps:0,fv:0,pz:0,pms:0,ph:0,ml:NaN,gd:NaN,vol:NaN,lag:NaN,heap:0,hold:0,f:1,per:1,cov:0},cmpHead={x:0,y:0,z:0,qx:0,qy:0,qz:0,qw:1},cmpRead={cover:0,f:1,cap:1,head:cmpHead},cmpP0=new THREE.Vector3(),cmpFwd=new THREE.Vector3(),cmpQ=new THREE.Quaternion();let cmpSaved=null;
+ const cmpCam=()=>{renderer.xr.updateCamera(camera);const cam=renderer.xr.getCamera();cam.getWorldPosition(cmpP0);cam.getWorldQuaternion(cmpQ)}; // the head now (the camera's world pose): cmpP0 / cmpQ
+ const cmpRestore=()=>{const sv=cmpSaved;cmpSaved=null;if(!sv)return;bench.noSection=sv.noSection;settings.vres=sv.vres;settings.foveation=sv.foveation;try{applyQuality()}catch(e){console.warn(e)}holder.position.copy(sv.pos);holder.quaternion.copy(sv.quat);holder.scale.setScalar(sv.scale)};
+ const cmpBench=createCompareBench({
+  now:()=>performance.now(),
+  budgetMs:()=>1000/Math.max(1,targetRate()||72),
+  can:()=>{
+   if(!mesh||!material)return ja?'ボリュームがありません':'No volume';
+   if(bench.active||anBench.active||selfCheck.active||identRun?.active||gxRec.phase!=='idle'||gxRec.on)return ja?'ほかのベンチ・記録が動いています':'Another benchmark or recording is running';
+   if(gx&&!gx.ready)return ja?'WebGPUの準備中です。少し待ってからもう一度':'The WebGPU view is not ready yet; try again in a moment';
+   if(uploadQueue.pending||loadInfo||comboT?.rb?.busy)return ja?'データの準備中です。終わってからもう一度':'Data is still being prepared; try again when it is done';
+   return '';
+  },
+  enter:()=>{
+   endAllDrags();
+   cmpSaved={vres:settings.vres,foveation:settings.foveation,pos:holder.position.clone(),quat:holder.quaternion.clone(),scale:holder.scale.x,noSection:bench.noSection};
+   bench.noSection=true; // no section plane (a plane turns the WebGPU pre-pass off: proxyUsable needs planeCount 0), and none drawn into the picture
+   settings.vres=1;settings.foveation=2;applyQuality(); // 100 % (auto off), the periphery setting at its default (強): the same for both views
+   bringVolumeFront(); // the body is let go of (no hand holds it) and attached to the scene; the bench puts it where it goes from the first frame on
+  },
+  leave:ok=>{
+   cmpRestore();
+   if(ok){ui.tab=4;setMenuOpen(true);for(const c of controllers)pulse(c,0.5,60)} // done: the menu comes back on the 詳細 tab with the result line and the controllers buzz
+  },
+  iso:st=>{GX_SWITCH.timers=!!st.timers;perfLog?.setSaveOff(!st.perfSave)},
+  menu:m=>{if(m==='open'){ui.tab=4;if(ui.open)menu.refresh();else setMenuOpen(true)}else if(ui.open)setMenuOpen(false)},
+  ref:()=>{cmpCam();cmpFwd.set(0,0,-1).applyQuaternion(cmpQ);cmpFwd.y=0;if(cmpFwd.lengthSq()<1e-6)cmpFwd.set(0,0,-1);cmpFwd.normalize();return{x:cmpP0.x,y:cmpP0.y,z:cmpP0.z,yaw:Math.atan2(-cmpFwd.x,-cmpFwd.z)}}, // the head's position and its heading (about the vertical axis; 0 = looking along -z): taken once, when the bench starts
+  settings:()=>({section:bench.noSection?'off':'on',periphery:settings.foveation|0,rate:targetRate()}), // what the run was made under (the section plane is off in a bench; the periphery setting and the refresh rate as they are)
+  pose:p=>{holder.position.set(p.pos[0],p.pos[1],p.pos[2]);holder.quaternion.set(p.quat[0],p.quat[1],p.quat[2],p.quat[3]);holder.scale.setScalar(p.scale)}, // where the body is: world space, at the largest size
+  read:()=>{cmpCam();cmpHead.x=cmpP0.x;cmpHead.y=cmpP0.y;cmpHead.z=cmpP0.z;cmpHead.qx=cmpQ.x;cmpHead.qy=cmpQ.y;cmpHead.qz=cmpQ.z;cmpHead.qw=cmpQ.w;cmpRead.cover=rs.cover;cmpRead.f=rs.eff;cmpRead.cap=rs.cap;return cmpRead},
+  progress:p=>{ui.cmpLine=(ja?'比較ベンチ 実行中 ':'Compare bench running ')+(p.runs>1?(ja?'（'+p.run+'/'+p.runs+'回目）':'(run '+p.run+'/'+p.runs+') '):'')+p.scene+'/'+p.scenes+' '+p.id+' '+p.sec+'/'+p.of+' s'}, // no redraw of its own: with the menu open (the as-is run) the 詳細 tab's once-a-second redraw shows it, and the as-is run must not get one more
+  done:(runs,ok)=>{
+   benchNo++;runs.forEach((r,i)=>{r.n=benchNo;r.hz=targetRate();r.label='bench '+benchNo+' · run '+(i+1)+' of '+runs.length;benchAll.push(r)});
+   if(perfLog){perfLog.ext.bench=benchAll.slice();perfLog.flush()} // the saves are back on (the isolation run turned them off): the result is in the mirror now
+   const last=runs[runs.length-1],drops=last?last.scenes.filter(x=>x.reached).map(x=>x.id+' '+(x.drop===null?'-':(x.drop*100).toFixed(2))).join(' / '):'';
+   ui.cmpLine=(ok?(ja?'完了 落ち% ':'Done, drop% '):(ja?'途中終了 落ち% ':'Ended early, drop% '))+drops; // short: it is one line of the menu (shrunk to fit by maxW)
+   flashMsg(ok?(ja?'比較ベンチ完了。VRを終了して性能記録を保存してください':'Compare bench done. Leave VR and save the performance record'):(ja?'比較ベンチは途中で終わりました':'The compare bench ended early'),120000);
+  },
+ },ISO);
+ session.addEventListener('end',()=>cmpBench.abort(),{once:true}); // the session ended in the middle of a bench: the numbers so far are kept (an incomplete run) and the settings put back
  const applyQuality=()=>{
   if(material){aq.setFloor(autoFloor(settings.autoMin));aq.setBaseStep(settings.quality|0);material.uniforms.stepSize.value=stepFor(VRES[settings.vres]?settings.quality:aq.stepIdx);material.uniforms.diag.value=settings.diag|0;material.uniforms.refine.value=settings.refine|0;useData(settings.data|0)}
   renderer.xr.setFoveation?.(FOVEATION[settings.foveation]??1);
@@ -4046,7 +4255,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
  };
  // VR self-check (vr-self-check.js). Scenarios: 基準 / 回転 / 断面 / 再描画 / 拡大 2倍・4倍・最大・最大 90°静止・接近 (+ whatever other modules register); env = what they may touch
  const SC=selfCheckTexts(ja),selfCheck=createVrSelfCheck({ja,getTargetHz:targetRate,meta:{build:APP_BUILD},onChange:()=>menu.refresh(),storage:{setItem:(k,v)=>{try{localStorage.setItem(k,v)}catch{}}},env:{holder,
-  ready:()=>!mesh||!material?(ja?'ボリュームがありません':'No volume'):bench.active||anBench.active?(ja?'ベンチ実行中です':'A benchmark is running'):'',
+  ready:()=>!mesh||!material?(ja?'ボリュームがありません':'No volume'):bench.active||anBench.active||cmpBench.active||identRun?.active?(ja?'ベンチ実行中です':'A benchmark is running'):'',
   begin:()=>{endAllDrags();const sv={pos:holder.position.clone(),quat:holder.quaternion.clone(),scale:holder.scale.x,sm:{...segMode}};bringVolumeFront();return()=>{holder.position.copy(sv.pos);holder.quaternion.copy(sv.quat);holder.scale.setScalar(sv.scale);Object.assign(segMode,sv.sm)}},
   // magnified views (smooth at 1x, janky when magnified). mag = displayed size / real size, as the scale tag shows (1x = the start pose); the user's two-hand grip reaches up to 30 cm longest side.
   zoom:(()=>{let sv=null;const lm=()=>realLongMm(),s1=()=>startHolderScale(lm(),baseScale);return{
@@ -4065,6 +4274,66 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    begin:()=>{if(!material||!vrHalfExt)return null;sweepOn=true;wasOn=section.on;tmp=planes.length<MAX_PLANES?addPlane(null,planes.length===0):null;pl=tmp||planes[0];if(!pl){sweepOn=false;return null}base=pl.obj.position.clone();return{set:u=>{tmpB.set(1,0,0).applyQuaternion(pl.obj.quaternion);pl.obj.position.copy(base).addScaledVector(tmpB,u*0.8*vrHalfExt[0])}}},
    end:()=>{if(pl&&!tmp)pl.obj.position.copy(base);if(tmp)removePlane(tmp);if(!wasOn&&planes.length)setSection(false);tmp=pl=null;sweepOn=false}}})(),
   renderToggle:(()=>{let sv={};return{begin:()=>{sv={...segMode}},set:on=>{for(const k in sv)segMode[k]=sv[k]===2?2:on?1:sv[k]},end:()=>{Object.assign(segMode,sv)}}})()}});
+ // ---- the same-picture check (docs/vr-ident-log.js: the run and the record; docs/vr-wgpu-ident.js: the GPU side): the button on the self-check page (WebGPU only). One press, then wait: the program, the distance texture and the grid of the new ways are made (prepare),
+ // the body is moved by the script of the comparison bench for about 3 min 45 s (the first tissue is hidden and shown again in two segments), then the person holds and moves the body for 1 min. Every frame the centre pass is drawn once more with one of the ways and
+ // compared with the picture the display drew; the display itself draws the old way meanwhile. Nothing else is touched: the settings, the pose, the size, the tissues and the menu are put back at the end or when the session ends.
+ const identMv={cm:0,deg:0,at:0,dt:0.0139},identCan=()=>{
+  if(!gx?.vol||!gx.ready)return ja?'WebGPUで開いている必要があります':'Open with WebGPU first';
+  if(!mesh||!material)return ja?'ボリュームがありません':'No volume';
+  if(bench.active||anBench.active||cmpBench.active||selfCheck.active||identRun?.active||gxRec.phase!=='idle'||gxRec.on)return ja?'ほかの記録・ベンチが終わってから押してください':'Press after the other recording or bench ends';
+  if(tutLive&&!tutEnded)return ja?'チュートリアルの最中は使えません':'Not available during the tutorial';
+  if(uploadQueue.pending||loadInfo||comboT?.rb?.busy)return ja?'データの準備中です。終わってからもう一度':'Data is still being prepared; try again when it is done';
+  return '';
+ };
+ identRun=createIdentRun({
+  now:()=>performance.now(),
+  can:identCan,
+  enter:()=>{
+   endAllDrags();
+   identSaved={vres:settings.vres,foveation:settings.foveation,pos:holder.position.clone(),quat:holder.quaternion.clone(),scale:holder.scale.x,noSection:bench.noSection};
+   bench.noSection=true; // no section plane (a plane turns the pre-pass off: proxyUsable needs planeCount 0), as in the comparison bench
+   settings.vres=1;settings.foveation=2;applyQuality(); // 100 % (auto off), the periphery setting at its default: the same as the comparison bench
+   bringVolumeFront();if(ui.open)setMenuOpen(false);
+   identLog=createIdentLog();identDone=false;identFail='';identT0=performance.now();ui.identLine='';
+   gx.vol.volume.ident.begin({cls4:cls4On,onResult:r=>{try{identLog?.add(r)}catch(e){console.warn('same-picture check:',e)}}}).then(r=>{
+    if(!identRun.active)return;
+    if(!r.ok){identFail=(ja?'検査を始められませんでした: ':'The check could not start: ')+r.failed.join('; ').slice(0,160);gxD?.stage('same-picture check not started',r.failed.join(' | ').slice(0,200));identRun.abort()}
+   },e=>{identFail=(ja?'検査を始められませんでした: ':'The check could not start: ')+String(e?.message??e).slice(0,160);identRun.abort()});
+   menu.refresh();
+  },
+  ready:()=>gx.vol.volume.ident.ready(),
+  holdStart:()=>{if(identSaved){bench.noSection=identSaved.noSection;settings.vres=identSaved.vres;settings.foveation=identSaved.foveation;try{applyQuality()}catch(e){console.warn(e)}}}, // the hold part runs with the person's own settings
+  leave:()=>{
+   const sv=identSaved;identSaved=null;
+   if(sv){bench.noSection=sv.noSection;settings.vres=sv.vres;settings.foveation=sv.foveation;try{applyQuality()}catch(e){console.warn(e)}holder.position.copy(sv.pos);holder.quaternion.copy(sv.quat);holder.scale.setScalar(sv.scale)}
+   if(running?.session===session){try{ui.tab=8;setMenuOpen(true);for(const c of controllers)pulse(c,0.5,60)}catch{}}
+  },
+  ref:()=>{cmpCam();cmpFwd.set(0,0,-1).applyQuaternion(cmpQ);cmpFwd.y=0;if(cmpFwd.lengthSq()<1e-6)cmpFwd.set(0,0,-1);cmpFwd.normalize();return{x:cmpP0.x,y:cmpP0.y,z:cmpP0.z,yaw:Math.atan2(-cmpFwd.x,-cmpFwd.z)}},
+  pose:p=>{holder.position.set(p.pos[0],p.pos[1],p.pos[2]);holder.quaternion.set(p.quat[0],p.quat[1],p.quat[2],p.quat[3]);holder.scale.setScalar(p.scale)},
+  segState:()=>({...segMode}),
+  setSegMode:(key,j)=>setSegModeFromMenu(key,j), // the 表示 tab's own action (the tutorial's signals included)
+  shownKey:()=>SEGMENT_PRESET_ORDER.find(k=>vrSegShown(k)&&((segMode[k]|0)===0||(segMode[k]|0)===1))??null,
+  cue:left=>flashMsg(ja?'体を手で持って動かしてください 残り'+left+'秒':'Hold the body and move it, '+left+' s left',1500),
+  progress:p=>{ui.identLine=p.phase==='prep'?(ja?'同じ絵の検査 準備中 ':'Same-picture check preparing ')+p.sec+' s':(ja?'同じ絵の検査 実行中 ':'Same-picture check running ')+p.seg+'/'+p.segs+' '+p.id+' '+p.sec+'/'+p.of+' s'},
+  done:(ok)=>{
+   if(identFail){ // the check never started (its programs did not compile): the reason stays on the page, nothing is "checked", the button can be pressed again
+    identDone=false;ui.identLine=identFail;identFail='';flashMsg(ui.identLine,8000);menu.refresh();
+    setTimeout(()=>{try{if(!identRun.active)gx?.vol?.volume.ident.end()}catch{}},0);
+    return;
+   }
+   identDone=true;
+   try{const v=identLog.verdict({cls4:cls4On});ui.identLine=identResultLine(v,ok,ja);gxD?.stage('same-picture check '+(ok?'done':'ended early'),ui.identLine.slice(0,200))}catch(e){console.warn('same-picture check:',e)}
+   perfLog?.flush();
+   flashMsg(ok?(ja?'同じ絵の検査完了。VRを終了して性能記録を保存してください':'Same-picture check done. Leave VR and save the performance record'):(ja?'同じ絵の検査は途中で終わりました':'The same-picture check ended early'),120000);
+   setTimeout(()=>{try{if(!identRun.active)gx?.vol?.volume.ident.end()}catch{}},1500); // the last read-backs arrive first
+  },
+ },{budgetMs:1000/Math.max(1,targetRate()||72)});
+ session.addEventListener('end',()=>{try{identRun.abort()}catch{}try{gx?.vol?.volume.ident.end()}catch{}},{once:true}); // the session ended in the middle of the check: what was compared is kept (an incomplete run); the check's resources go
+ const identCtxNow=()=>{ // this frame's state for the record (a fresh object: the GPU side keeps it until the comparison's read-backs are in)
+  const s=identRun.state;cmpCam();
+  const hands=controllers.reduce((n,c)=>n+(grabbing.has(c)&&c.userData.source?1:0),0),k=identMv.dt>0?1/identMv.dt:0;
+  return{phase:s.phase,seg:s.seg,measured:!!s.measured,sinceSwitch:s.sinceSwitch,switchSeq:identSeqApplied,simHold:!!s.simHold,cov:Math.round(rs.cover),per:rs.per,f:rs.eff,hk:identHoldKA,hands,cmps:identMv.cm*k,degps:identMv.deg*k,headM:holder.position.distanceTo(cmpP0),size:holder.scale.x/BENCH_HOLDER_SCALE,t:performance.now()-identT0};
+ };
  selfCheck.env.histogram={isOpen:()=>hist.isOpen,open:()=>setHistOpen(true),close:()=>setHistOpen(false),forceCompute:histForce,busy:()=>labelHist.busy}; // ヒストグラム scenario (vr-histogram-panel.js)
  // HU線 scenario (vr-hu-line.js): the synthetic laser (huSynth) stretches a line across the middle of the data (20 % -> 80 % of the columns and rows,
  // the middle slice), then releases it (full read timed by the scenario); cancel() puts the line, the panel and the armed state back (huLine.restoreState)
@@ -4147,7 +4416,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    const kidsOf=new Map(treeGroups.map(g=>[g.key,g])),treeOn=!!ui.segTree&&treeGroups.length>0;
    // name + display mode. (VR / AR objects need no transparency): segments are always opaque, the opacity slider and its % are gone
    const segRow=(key,y)=>{const seg=segmentState[key],m=segMode[key]|0,g=kidsOf.get(key);label(X,y+36,tr(key),{color:seg.color||'#fff',bold:true,size:28});
-    L.segModes.forEach((t,j)=>btn(250+j*160,y,150,t,m===j,()=>{emit('seg-toggle');if(j===2&&m!==2)emit('seg-hide');else if(j!==2&&m===2)emit('seg-show');segMode[key]=j},{color:j===0?seg.color:undefined,size:28}));
+    L.segModes.forEach((t,j)=>btn(250+j*160,y,150,t,m===j,()=>setSegModeFromMenu(key,j,m),{color:j===0?seg.color:undefined,size:28}));
     if(g)btn(730,y,MENU_W-X-730,(treeOn?'▾ ':'▸ ')+tr('analysisRegions')+' '+g.count,treeOn,()=>{ui.segTree=!ui.segTree;ui.treePage=0},{size:22})};
    const yb=MENU_H-110;
    if(treeOn){
@@ -4250,12 +4519,17 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
   }else if(ui.tab===3){
    choice(y0,L.r,VRES.map((r,i)=>({label:r?Math.round(r*100)+'%':L.auto,value:i})),settings.vres,v=>{settings.vres=v;applyQuality()});
    choice(y0+90,L.am,L.amv.map((t,i)=>({label:t,value:i})),settings.autoMin|0,v=>{settings.autoMin=v;applyQuality()});
-   choice(y0+180,L.dt,[{label:'256³',value:1},{label:'512³',value:0}],settings.data,v=>{settings.data=v;applyQuality()});
+   if(gx){label(X,y0+216,L.dt);const r=gxDataRow(L.gxOnly256);btn(CX,y0+180,220,r[0].label,r[0].on,()=>{},{disabled:r[0].disabled});btn(CX+232,y0+180,MENU_W-X-CX-232,r[1].label,r[1].on,()=>{},{disabled:r[1].disabled,size:28})} // WebGPU: 256 only; the 512 slot is not pressable and says why (the stored setting is not touched)
+   else choice(y0+180,L.dt,[{label:'256³',value:1},{label:'512³',value:0}],settings.data,v=>{settings.data=v;applyQuality()});
    choice(y0+270,L.q,L.qv.map((t,i)=>({label:t,value:i})),settings.quality,v=>{settings.quality=v;applyQuality()});
    choice(y0+360,L.f,L.fv.map((t,i)=>({label:t,value:i})),settings.foveation,v=>{settings.foveation=v;applyQuality()});
    if(rates.length>1)choice(y0+450,L.hz,rates.slice(0,4).map((r,i)=>({label:r+' Hz',value:i})),settings.rate,v=>{settings.rate=v;applyQuality()});
    choice(y0+540,L.stp,STEP_CHOICES.map((c,i)=>({label:c===1?'1.0':String(c),value:i})),stepSel,v=>{stepSel=v;applyQuality()}); // the base ray-march step in voxels, switched live (a uniform: stepFor), not saved: every session starts at 1.5 (STEP_CHOICES[3])
    if(ui.qualityLine)label(X,y0+825,ui.qualityLine,{size:24,color:'#cfe3f0'}); // what is drawn now (data-resolution cap)
+   if(gx)choice(y0+880,L.moveLow,[{label:L.offOn[0],value:0},{label:L.offOn[1],value:1}],settings.moveLow?1:0,v=>{settings.moveLow=v;saveSettings(settings);menu.refresh()}); // WebGPU only: a coarser volume while it is held in a hand (default on)
+   if(gx){const hk=holdScaleValue(settings.moveLowK),dis=!settings.moveLow,put=k=>{settings.moveLowK=holdScaleValue(k);saveSettings(settings);menu.refresh()}; // WebGPU only: how much coarser the held volume is drawn (the render scale x this, HOLD_MIN .. HOLD_MAX in HOLD_STEP; vr-render-scale.js); greyed while the setting above is off
+    label(X,y0+996,L.moveLowK);w.push({type:'slider',x:CX+26,y:y0+960,w:300,h:72,value:(hk-HOLD_MIN)/(HOLD_MAX-HOLD_MIN),text:Math.round(hk*100)+'%',...(dis?{disabled:true}:{}),set:v=>{settings.moveLowK=holdScaleValue(HOLD_MIN+v*(HOLD_MAX-HOLD_MIN))}}); // saved on release, like the other sliders
+    btn(800,y0+960,70,'−',false,()=>put(hk-HOLD_STEP),{size:30,...(dis?{disabled:true}:{})});btn(890,y0+960,70,'＋',false,()=>put(hk+HOLD_STEP),{size:30,...(dis?{disabled:true}:{})})}
    // in-VR benchmark (numbers need not be read off the headset one by one)
    btn(X,y0+640,460,L.bench,bench.active,()=>startBench(),{size:28});btn(X+480,y0+640,440,L.anBench,anBench.active,()=>startAnBench(),{size:28});if(ui.benchLine)label(X,y0+740,ui.benchLine,{size:26,color:'#9fb3c3'});label(X,y0+780,L.benchHelp,{size:22,color:'#9fb3c3'});
   }else if(ui.tab===5){
@@ -4377,6 +4651,13 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    const v=selfCheck.view(); // self-check page (opened from 詳細)
    label(X,y0+10,v.title,{bold:true,size:30});let yy=y0+66;v.lines.forEach(l=>{const ls=wrapMenuText(l.text,MENU_W-2*X,t=>menu.measure(t,26));label(X,yy,ls[0],{lines:ls,lh:30,size:26,color:l.color});yy+=ls.length*30+12});
    btn(X,MENU_H-200,560,v.buttonLabel,v.running,()=>selfCheck.toggle(),{size:30});btn(X,MENU_H-100,260,L.back,false,()=>{ui.tab=4;menu.refresh()},{size:28});
+   { // the same-picture check (WebGPU only; docs/vr-ident-log.js): one press, then wait; its result line stands above the buttons
+    const run=identRun,ph=run?.phase||'idle',left=run?.active?Math.ceil(run.leftMs(performance.now())/1000):0,
+     txt=ph==='prep'?(ja?'準備中':'Preparing'):ph==='auto'||ph==='hold'?(ja?'検査中 残り'+left+'秒':'Checking '+left+' s left'):identDone?(ja?'検査済み':'Checked'):(ja?'同じ絵の検査（約5分）':'Same-picture check (5 min)'),
+     grey=!gx?.vol||!mesh||!material||bench.active||anBench.active||cmpBench.active||selfCheck.active||gxRec.phase!=='idle'||gxRec.on||(tutLive&&!tutEnded);
+    btn(620,MENU_H-200,364,txt,!!run?.active,()=>{const why=identRun.start();if(why)flashMsg(why,6000);else menu.refresh()},{size:26,disabled:grey||!!run?.active||identDone});
+    if(ui.identLine)label(X,MENU_H-250,ui.identLine,{size:22,color:'#9fb3c3',maxW:MENU_W-2*X});
+   }
   }else if(ui.tab===4){
    // the long lines wrap inside the menu width (' · ' separators) and the rows are stacked from y0+10, all above the first button row (y0+200);
    // a block too tall for that is scaled down (line height and font) instead of overlapping
@@ -4393,19 +4674,37 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    choice(y0+290,'',L.dv.slice(3).map((t,i)=>({label:t,value:i+3})),settings.diag,v=>{settings.diag=v;applyQuality()});
    btn(X,y0+740,520,SC.button,selfCheck.active,()=>{ui.tab=8;menu.refresh()},{size:28});
    {const on=(settings.boxDiag|0)===0;btn(X+540,y0+740,MENU_W-2*X-540,(ja?'内容ボックス ':'content box ')+(on?L.offOn[1]:L.offOn[0]),on,()=>{settings.boxDiag=on?1:0;refreshContentBox();menu.refresh()},{size:26})} // diagnostic: オフ = the full data box as the proxy
+   if(gx){const ph=gxRec.phase,sec=Math.max(0,Math.ceil((gxRec.until-performance.now())/1000)),txt=ph==='prep'?(ja?'準備中':'Preparing'):ph==='rec'?(ja?'記録中 残り'+sec+'秒':'Recording '+sec+' s left'):ph==='done'?(ja?'記録済み':'Recorded'):(ja?'内訳を記録（30秒）':'Record breakdown (30 s)');
+    btn(X,y0+1020,(MENU_W-2*X-40)/3,txt,ph!=='idle',()=>gxRecStart(),{size:28,disabled:ph!=='idle'})} // WebGPU only: the volume breakdown (one recording of 30 s into the performance record; gxRec below)
+   {const go=n=>{const why=cmpBench.start(n);if(why)flashMsg(why,6000)},on=cmpBench.active,bw=gx?(MENU_W-2*X-40)/3:(MENU_W-2*X-20)/2,by=gx?y0+1020:y0+1010,bx1=gx?X+bw+20:X,bx2=gx?X+2*(bw+20):X+bw+20; // the comparison bench (vr-bench.js; both views): one press, then wait; the menu closes by itself and comes back with the result line. Needs the controllers left alone
+    btn(bx1,by,bw,ja?'比較ベンチ（約3分）':'Compare bench (3 min)',on,()=>go('cmp'),{size:26,disabled:on});btn(bx2,by,bw,ja?'比較ベンチ＋切り分け（約6分）':'Compare bench + isolation (6 min)',on,()=>go('iso'),{size:24,disabled:on});
+    if(ui.cmpLine)label(X,y0+1110,ui.cmpLine,{size:22,color:'#9fb3c3',maxW:MENU_W-2*X})}
+   if(gx){const di=gx.vol?.direct,live=!!di?.installed&&!di?.disabled,st=live?(gxDirUsed?GXD.used:GXD.wait):GXD.off+String(di?.disabled||di?.text||'').slice(0,40);choice(y0+920,GXD.row,[{label:L.offOn[0],value:0},{label:L.offOn[1],value:1}],settings.gxDirect?1:0,v=>{settings.gxDirect=v;menu.refresh()});label(X,y0+1006,st,{size:22,color:'#9fb3c3'})} // WebGPU only (trial): 直接描く（試験）: the centre of the volume is drawn straight into the eye image (vr-wgpu-direct.js); off at every session start, not saved
   }
   return w;
  });
- await renderer.xr.setSession(session);
+ if(!gx)await renderer.xr.setSession(session); // WebGPU: set below, after the animation loop is set (three.js' XR manager keeps the loop that exists when the session is set and chains to it; one set later would replace the XR frame handler)
  applyQuality();menu.refresh();
  let lastT=0;const tmpS=new THREE.Vector3(); // scroll: previous frame time, parent scale
  const color=new THREE.Color(),tmpP=new THREE.Vector3(),tmpQ=new THREE.Vector3(),tmpN=new THREE.Vector3(),tmpE=new THREE.Vector3(),tmpE2=new THREE.Vector3(),tmpD=new THREE.Vector3();
  // GPU time per pass (EXT_disjoint_timer_query_webgl2, when offered) and JS
  // time per frame, averaged over the fps window
- const gl=renderer.getContext(),timerExt=gl.getExtension('EXT_disjoint_timer_query_webgl2');
+ const gl=gx?null:renderer.getContext(),timerExt=gl?gl.getExtension('EXT_disjoint_timer_query_webgl2'):null; // the WebGPU session has no GPU timer here (the frame interval drives the auto quality, as on a device without the extension)
+ perfLog=createPerfLog({kind:gx?'webgpu':'webgl',mode,saveEveryMs:Infinity}); // the performance record of this session (vr-perf-log.js): fed by the loop below, one row a second. E0: its localStorage mirror is no longer written every 5 s: flush() at the end of the session (below) and when the page / the headset session is hidden (perfHideOff)
+ if(gx){perfLog.direct=gxDirLog;const row0=perfLog.row;perfLog.row=(snap,at)=>row0({...snap,...gxDirLog.takeRow()},at)} // the direct draw trial: its per-second numbers (dir, dmiss) join each row
+ const perfHideOff=flushOnHidden(()=>perfLog?.flush(),{session}); // removed in cleanup: a stale listener would overwrite a newer session's mirror
+ if(!gxD)session.addEventListener('end',()=>{perfLog.flush();const pl=perfLog;setTimeout(()=>showGxDiagPanel(ja,null,pl),0)},{once:true}); // the WebGL session: the same panel (the WebGPU one shows it from the diagnostics' end listener above)
+ benchRing=createFrameRing();benchLt=createLongTaskWatcher();benchLt.start();benchT0=performance.now();benchPre=NaN;benchAll.length=0;benchNo=0; // the frame ring and the long-task observer of this session (vr-bench.js), and the bench's / the ring's text as sections of the performance record
+ tapPerfLog(perfLog,{add:(k,ms,n)=>{if(k==='vol'||k==='main')cmpBench.sample(k,ms/(n>0?n:1));else if(k==='pre')benchPre=ms},sample:(k,ms)=>{if(k==='span')cmpBench.sample('span',ms)},move:(cm,deg)=>{cmpBench.move(cm,deg);{const n=performance.now();identMv.cm=cm;identMv.deg=deg;if(identMv.at>0){const d=(n-identMv.at)/1000;if(d>0&&d<1)identMv.dt=d}identMv.at=n}}}); // the same-picture check reads the body's movement of the frame (cm, deg and the time since the last call); the bench reads vol / main / span / pre and the volume's movement (mv / mvr) from the calls the view already makes
+ perfLog.sections.push(()=>benchReportLines(benchAll,{kind:perfLog.kind,build:APP_BUILD,hz:benchAll.length?benchAll[benchAll.length-1].hz:null}),()=>ringReportLines(benchRing,{longTasks:benchLt,sinceMs:benchT0}));
+ if(gx)perfLog.sections.push(()=>identLog?identReportLines(identLog,{variant:{},newPath:gx.vol?.volume.newPath?.stats(),sinceMs:benchT0,runInfo:identRun?.reason||''}):newPathLines(gx.vol?.volume.newPath?.stats(),{sinceMs:benchT0})); // the same-picture check's record (its text is made when the record is saved), or only the display's ways' counts
+ if(gx)perfLog.sections.push(()=>gxRec.pp?gxRec.pp.lines():[]); // the parts' rays in the loop (the part probe of the last breakdown recording)
+ if(gx)perfLog.sections.push(()=>leftoverReportLines(gxLeft,{sinceMs:benchT0})); // what the breakdown recording left behind (the text is made when the record is saved)
+ session.addEventListener('end',()=>benchLt.stop(),{once:true});
+ perfLog.meta['GPU timers']=gx?'volume '+(gx.vol?.volume.hasTimer?'timestamp-query (one frame in '+TS_SAMPLE_EVERY+' unless the breakdown is recorded)':'none')+' · main '+(gx.mainTs?'timestamp-query (three, every 4th frame, only while the breakdown is prepared or recorded)':'none'):(timerExt?'EXT_disjoint_timer_query_webgl2':'none (no GPU time)');
  const pending=[],sums={vol:0,main:0,js:0},counts={vol:0,main:0,js:0},ctrl={vol:0,main:0},ctrlN={vol:0,main:0};let sizes='';
  const timed=(kind,fn)=>{
-  if(!timerExt||pending.length>12){fn();return}
+  if(!timerExt||!ISO.state.timers||pending.length>12){fn();return}
   const q=gl.createQuery();gl.beginQuery(timerExt.TIME_ELAPSED_EXT,q);fn();gl.endQuery(timerExt.TIME_ELAPSED_EXT);pending.push({q,kind});
  };
  const pollTimers=()=>{
@@ -4413,14 +4712,37 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    const {q,kind}=pending[0];
    if(!gl.getQueryParameter(q,gl.QUERY_RESULT_AVAILABLE))break;
    pending.shift();
-   if(!gl.getParameter(timerExt.GPU_DISJOINT_EXT)){const ms=gl.getQueryParameter(q,gl.QUERY_RESULT)/1e6;sums[kind]+=ms;counts[kind]++;if(kind in ctrl){ctrl[kind]+=ms;ctrlN[kind]++}}
+   if(!gl.getParameter(timerExt.GPU_DISJOINT_EXT)){const ms=gl.getQueryParameter(q,gl.QUERY_RESULT)/1e6;sums[kind]+=ms;counts[kind]++;if(kind in ctrl){ctrl[kind]+=ms;ctrlN[kind]++;perfLog.add(kind,ms)}}
    gl.deleteQuery(q);
   }
  };
  const avg=k=>counts[k]?(sums[k]/counts[k]).toFixed(1):'–';
  // screenshot: the left eye's view rendered again at full resolution into
  // an offscreen target (menu and controller rays hidden), read back as PNG
+ // WebGPU: the same picture at 1600 px wide from the left eye's camera: the volumes drawn at f = 1 into the volume renderer's target for this camera (the same passes and programs as on screen: the bodies and the other volumes of the frame), the scene (the composite
+ // of every volume box, the background, the labels; the menu and the rays hidden) rendered into a render target, read back (three.js' readRenderTargetPixelsAsync: the rows come top first, the target's colour space is sRGB as the screen's)
+ const takeScreenshotGx=async()=>{
+  const sub=renderer.xr.getCamera().cameras[0];if(!sub||!mesh||!material||!gx.ready)return;
+  if(bench.active||anBench.active||cmpBench.active||identRun?.active||gxRec.phase==='prep'||gxRec.on){flashMsg(ja?'計測中は撮影できません':'A screenshot cannot be taken while measuring',3000);return} // the volume renderer's passes of the measurements are not to be disturbed
+  const v=sub.viewport,W=1600,H=Math.max(1,Math.round(W*v.w/Math.max(1,v.z)));
+  const cam=sub.clone();cam.viewport=new THREE.Vector4(0,0,W,H);cam.updateMatrixWorld(true);scene.updateMatrixWorld();
+  const exs=gxExtras(),prevOrders=exs.map(x=>x.order);void prevOrders;
+  const shotU=(diagAn.noRegion?null:partGxU(cls4On?'full4':'full'))||material.uniforms,bakeWas=material.uniforms.bakeCut.value; // while parts are out the body's cut as on screen (its P uniforms); the baked body without the field's light: the WebGL view's screenshot draws it with the 'full' program, which has none
+  const shotArgs={u:shotU,cams:[cam],model:mesh.matrixWorld,f:1,fov:false,fp:1,periK:1,rects:null,band:1,variant:{cls4:cls4On,events:material.uniforms.planeCount.value>0,...(diagAn.noRegion?{feat:null}:{})},decode:true,boxes:null,noDirect:true,extras:exs.length?exs.map(x=>({...x,boxes:null})):null};material.uniforms.bakeCut.value=0;try{gx.vol.draw(shotArgs)}finally{material.uniforms.bakeCut.value=bakeWas} // noDirect: the whole picture is drawn into the volume's own target (the direct draw trial would leave the centre to the eye image)
+  const rt=new THREE.RenderTarget(W,H,{depthBuffer:true});rt.texture.colorSpace=THREE.SRGBColorSpace;
+  const hidden=[menu.mesh,badge,sliceToast.mesh,help.mesh,hist.group,huLine.panel,ev?.mesh,wheel.mesh,pointWheel.mesh,edgeArrow.mesh,...ctlHints.groups(),...controllers.map(c=>c.userData.ray)].filter(o=>o&&o.visible);
+  hidden.forEach(o=>{o.visible=false});
+  let px=null;const xrWas=renderer.xr.enabled,prevRt=renderer.getRenderTarget(),cc=renderer.getClearColor(new THREE.Color()),ca=renderer.getClearAlpha();
+  try{renderer.xr.enabled=false;renderer.setRenderTarget(rt);renderer.setClearColor(vt.passthrough?0x000000:BG,vt.passthrough?0:1);renderer.clear();renderer.render(scene,cam);px=renderer.readRenderTargetPixelsAsync(rt,0,0,W,H)}
+  finally{renderer.setRenderTarget(prevRt);renderer.xr.enabled=xrWas;renderer.setClearColor(cc,ca);hidden.forEach(o=>{o.visible=true})} // the scene is as before at once; the read-back arrives later
+  const data=await px;rt.dispose();
+  const cv=document.createElement('canvas');cv.width=W;cv.height=H;const cx=cv.getContext('2d'),img=cx.createImageData(W,H);img.data.set(data instanceof Uint8Array||data instanceof Uint8ClampedArray?data:new Uint8Array(data.buffer||data));cx.putImageData(img,0,0);
+  const d=new Date(),pad=n=>String(n).padStart(2,'0'),name='vrl-'+(vt.passthrough?'ar':'vr')+'-'+d.getFullYear()+pad(d.getMonth()+1)+pad(d.getDate())+'-'+pad(d.getHours())+pad(d.getMinutes())+pad(d.getSeconds())+'.png';
+  cv.toBlob(b=>{if(b)shots.push({name,url:URL.createObjectURL(b)})},'image/png');
+  ui.flash=L.shotDone+' ('+(shots.length+1)+')';ui.flashUntil=performance.now()+3000;menu.refresh();for(const c of controllers)pulse(c,0.5,40);
+ };
  const takeScreenshot=()=>{
+  if(gx){takeScreenshotGx().catch(e=>{console.warn('WebGPU screenshot:',e);flashMsg(ja?'スクリーンショットに失敗しました':'The screenshot failed',3000)});return}
   const sub=renderer.xr.getCamera().cameras[0];if(!sub||!mesh)return;
   const v=sub.viewport,W=1600,H=Math.max(1,Math.round(W*v.w/Math.max(1,v.z)));
   const rt=new THREE.WebGLRenderTarget(W,H),prev=renderer.getRenderTarget(),hidden=[menu.mesh,badge,sliceToast.mesh,help.mesh,hist.group,huLine.panel,ev?.mesh,wheel.mesh,pointWheel.mesh,edgeArrow.mesh,...ctlHints.groups(),...controllers.map(c=>c.userData.ray)].filter(o=>o&&o.visible);
@@ -4456,9 +4778,9 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
  const probeTarget=new THREE.WebGLRenderTarget(48,48,{depthBuffer:false}),probePx=new Uint8Array(48*48*4);let probe=null,probeReq=null;
  // render-scale state (vr-render-scale.js), preallocated: cap = data-resolution cap, cover = covered px (both eyes), ppv / ppvFar = screen px per voxel
  // (centre / far corner, smaller eye), eff = the volume scale in use, per = periphery factor of the offscreen foveation (1 = off)
- const rs={cap:1,cover:0,outside:0,ppv:0,ppvFar:0,eff:1,per:1,split:1e9,low:false,w:0,h:0,eyes:0},rsHalf=[1,1,1],rsDims=[1,1,1],rsEyes=[{},{}],rsBoxV={c:[0,0,0],h:[1,1,1]},rsEyes2=[{},{}],rsBoxV2={c:[0,0,0],h:[1,1,1]},rsHalf2=[1,1,1],rsDims2=[1,1,1],cmpHalf=[1,1,1],rsAcc={cover:0,outside:0,need:0},rsFov=[[0,0,0,0,1],[0,0,0,0,1]];
+ const rs={cap:1,cover:0,coverB:0,coverP:0,outside:0,ppv:0,ppvFar:0,eff:1,per:1,split:1e9,low:false,w:0,h:0,eyes:0},rsHalf=[1,1,1],rsDims=[1,1,1],rsEyes=[{},{}],rsBoxV={c:[0,0,0],h:[1,1,1]},rsEyes2=[{},{}],rsBoxV2={c:[0,0,0],h:[1,1,1]},rsHalf2=[1,1,1],rsDims2=[1,1,1],cmpHalf=[1,1,1],rsAcc={cover:0,outside:0,need:0},rsFov=[[0,0,0,0,1],[0,0,0,0,1]];
  const qualityReadout=()=>(ja?'描画中: ':'drawing: ')+qualityText({auto:!VRES[settings.vres],modeF:VRES[settings.vres]||aq.level,eff:rs.eff,periphery:rs.per},ja)+(rs.cover>0&&Number.isFinite(rs.ppv)?(ja?' · 1ボクセル ':' · voxel ')+rs.ppv.toFixed(1)+' px':'');
- const PERI_MAX=Math.max(...FOVEA_K.filter(k=>k<1)),INV_ATT=[gl.COLOR_ATTACHMENT0,gl.DEPTH_ATTACHMENT];
+ const PERI_MAX=Math.max(...FOVEA_K.filter(k=>k<1)),INV_ATT=gl?[gl.COLOR_ATTACHMENT0,gl.DEPTH_ATTACHMENT]:[];
  const newLowTarget=(w,h)=>new THREE.WebGLRenderTarget(w,h,{depthBuffer:true,depthTexture:new THREE.DepthTexture(w,h),minFilter:THREE.LinearFilter,magFilter:THREE.LinearFilter}); // the volume pass writes depth; the composite samples it (24 bit, nearest)
  // the targets are made once per session at full size and cleared once right away (the GPU allocates them now, not on the first f < 1 frame)
  const touchTarget=t=>{const prev=renderer.getRenderTarget(),wasXr=renderer.xr.enabled;renderer.xr.enabled=false;const cc=renderer.getClearColor(new THREE.Color()),ca=renderer.getClearAlpha();t.scissorTest=false;renderer.setRenderTarget(t);renderer.setClearColor(0x000000,0);renderer.clear(true,true,false);renderer.setRenderTarget(prev);renderer.xr.enabled=wasXr;renderer.setClearColor(cc,ca)};
@@ -4469,6 +4791,13 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
  // clear only the used corner (cw x ch) of a full-size target; invalidating first tells a tiled GPU (Quest) not to load the old contents
  const clearCorner=(t,cw,ch)=>{t.scissor.set(0,0,Math.min(t.width,cw),Math.min(t.height,ch));t.scissorTest=true;renderer.setRenderTarget(t);try{gl.invalidateFramebuffer(gl.FRAMEBUFFER,INV_ATT)}catch{}renderer.clear(true,true,false)};
  const measureSamples=()=>{
+  if(gx){ // the 48 x 48 probe of the left eye through the WGSL pass; the read-back arrives a frame or two later
+   const sub=renderer.xr.getCamera().cameras[0];if(!mesh||!material||!sub||!gx.vol)return;scene.updateMatrixWorld();
+   void gx.vol.probe({u:(diagAn.noRegion?null:partGxU(variantKey()))||material.uniforms,cam:sub,model:mesh.matrixWorld}).then(px=>{if(!px)return;let sum=0,hit=0,skip=0,n=0;for(let i=0;i<px.length;i+=4)if(px[i+3]>0){sum+=px[i]/255*1024;hit+=px[i+1]/255;skip+=px[i+2]/255;n++}
+    let p95=0,mx=0;if(n){const r=[];for(let i=0;i<px.length;i+=4)if(px[i+3]>0)r.push(px[i]);r.sort((a,b)=>a-b);p95=Math.round(r[Math.min(n-1,Math.ceil(0.95*n)-1)]/255*1024);mx=Math.round(r[n-1]/255*1024)}
+    probe=n?{samples:sum/n,hit:hit/n,skip:skip/n,p95,max:mx,px:n}:null;ui.sampleLine=probe?L.samples+probe.samples.toFixed(0)+L.samplesNote:'';if(ui.open&&ui.tab===4)menu.refresh()},e=>console.warn('WebGPU probe:',e));
+   return;
+  }
   if(!mesh||!material||!rayMesh)return;
   const sub=renderer.xr.getCamera().cameras[0]||camera,prev=renderer.getRenderTarget(),wasXr=renderer.xr.enabled,d0=material.uniforms.diag.value,clearC=renderer.getClearColor(new THREE.Color()),clearA=renderer.getClearAlpha();
   material.uniforms.diag.value=5;renderer.xr.enabled=false;renderer.setRenderTarget(probeTarget);renderer.setClearColor(0x000000,0);renderer.clear();
@@ -4481,9 +4810,162 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
   probe=n?{samples:sum/n,hit:hit/n,skip:skip/n,p95,max:mx,px:n}:null;
   ui.sampleLine=probe?L.samples+probe.samples.toFixed(0)+L.samplesNote:'';
  };
+ // WebGPU: the main render, counted for the heartbeat's stall guard (the session draws with the renderer's sRGB output from its first frame)
+ let gxTsBusy=false,gxMainOn=false,gxMainSkip=false; // gxMainOn = three's trackTimestamp is switched on now; gxMainSkip = drop the first resolve after switching on (it holds the passes left from before)
+ const gxDirectDone=()=>{try{const r=gx.vol.direct.afterRender();gxDirUsed=r==='direct';gxDirLog.frame(gxDirAsked,gxDirUsed)}catch(e){console.warn('WebGPU direct draw:',e)}gxDirAsked=false};
+ const gxRender=()=>{
+  gxD.count('render');
+  {const want=!!gx.mainTs&&gxMeasure();if(want!==gxMainOn){renderer.backend.trackTimestamp=want;gxMainOn=want;if(want)gxMainSkip=true}} // the flag is read per pass, so it follows the recording
+  timed('main',()=>renderer.render(scene,camera));
+  gxS.rendered++;gxD.count('rendered');if(gxS.rendered===1)gxD.stage('first main render returned');
+  // the GPU ms of the main render (three's timestamp-query: trackTimestamp on the renderer) for the performance record only; resolved every 4th frame and only one at a time (three warns for none of this)
+  if(gxMainOn&&!gxTsBusy&&(gxS.rendered&3)===0){gxTsBusy=true;renderer.resolveTimestampsAsync('render').then(ms=>{if(gxMainSkip){gxMainSkip=false;return}if(Number.isFinite(ms)&&ms>0)perfLog.add('main',ms)},()=>{}).finally(()=>{gxTsBusy=false})}
+ };
+ // WebGPU, the performance record only: the frame's last submit is done (the main render has returned): the marker pass closes the GPU timeline of the frame (vr-wgpu.js markFrame), cpu = XR frame callback start to here,
+ // swd = from here to queue.onSubmittedWorkDone, asked on every 4th frame and one at a time (awaiting it every frame would disturb the pipeline)
+ // wake = from the return of that onSubmittedWorkDone to the start of the next XR frame callback (gxWakeAt is set only when no frame has started since; read and cleared at the next frame's start)
+ // vlat = from the volume pass submit to its onSubmittedWorkDone, minus that frame's volume GPU ms, for the samples above the floor of the CPU time to the end of the callback (the others are counted in vdrop); every 4th frame (a phase of its own, two frames after the swd's and before the next one), the one wait at a time is shared with swd
+ let gxSwdBusy=false,gxWakeAt=0,gxVolPend=null;
+ // the volume breakdown (WebGPU; the button of the detail tab, one recording of 30 s): idle -> prep (its programs are compiled) -> rec (a shadow pass of the frame's low pass every 4th frame, a counting probe every second) -> done (the buffers are let go
+ // 1.5 s later, so the last read-backs arrive). on = rec: the rows get rec = 1 and swd / vlat / wake are not sampled (they would measure the shadow passes). vr-wgpu.js beginBreakdown / shadowPass / probeCounters, vr-perf-log.js createVolBreakdown.
+ const GX_REC_MS=30000;
+ const gxLeftDump=at=>{try{const o=gx?.vol?.volume.leftovers?.()||{};gxLeft.push({at,t:performance.now(),...o,track:renderer.backend?.trackTimestamp,heap:readHeapBytes()})}catch{}}; // numbers only (a few small objects per recording)
+ const gxRecAbort=()=>{gxRec.gen++;gxRec.phase='idle';gxRec.on=false;gxRec.freeAt=0;try{gx?.vol?.breakdown.end()}catch{}if(benchPh===1){benchPh=2;gxLeftDump('freed (abort)')}menu.refresh()}; // an aborted preparation lets its resources go here: the frame ring's phase ends too
+ const gxRecStart=()=>{
+  if(!gx?.vol||!gx.ready||gxRec.phase!=='idle'||bench.active||anBench.active||cmpBench.active||identRun?.active||!mesh||!material)return; // not together with the benchmarks (the comparison bench included: its as-is run has the 詳細 tab, where this button is, open)
+  const gen=++gxRec.gen,vb=createVolBreakdown(),variant={cls4:cls4On,events:material.uniforms.planeCount.value>0};
+  gxRec.phase='prep';benchPh=1;gxRec.leftAt=0;gxLeftDump('prepare');gxD.stage('breakdown prepare');menu.refresh();
+  gx.vol.breakdown.begin(variant,(name,shadowMs,lowMs)=>{vb.add(name,shadowMs,lowMs)}).then(r=>{
+   if(gen!==gxRec.gen||running?.session!==session)return; // ended or cancelled meanwhile
+   if(!r){gxRecAbort();return}
+   if(r.failed.length){perfLog.meta['vol breakdown']='variants not compiled: '+r.failed.join(' | ');gxD.error('breakdown',r.failed.join(' | '))}
+   gxRec.vb=vb;gxRec.pp=createPartProbeLog();gxRec.ppKind=0;perfLog.vb=vb;gxRec.t0=performance.now();gxRec.until=gxRec.t0+GX_REC_MS;gxRec.vi=0;gxRec.probeAt=gxRec.t0;gxRec.probeKind=0;gxRec.phase='rec';gxRec.on=true;
+   gxD.stage('breakdown start',{shadow:r.shadow,probe:r.probe});menu.refresh();
+  },e=>{if(gen!==gxRec.gen)return;gxD.error('breakdown',e);gxD.stage('breakdown failed');gxRecAbort()});
+ };
+ // after markFrame of every frame while a recording runs or is being closed: the clock, the shadow pass (phase 1 of 4 frames) and the probe (phase 3, never the frame of a shadow pass); frec = the frame record markFrame closed
+ const gxRecFrame=(frec,tn)=>{
+  if(gxRec.phase==='done'){if(gxRec.freeAt&&tn>=gxRec.freeAt){gxRec.freeAt=0;try{gx.vol.breakdown.end()}catch{}benchPh=2;gxLeftDump('freed');gxRec.leftAt=tn+10000}else if(gxRec.leftAt&&tn>=gxRec.leftAt){gxRec.leftAt=0;gxLeftDump('freed +10 s')}return}
+  if(!gxRec.on)return;
+  if(gxRec.vb)gxRec.vb.seconds=Math.min(GX_REC_MS,tn-gxRec.t0)/1000;
+  if(tn>=gxRec.until){gxRec.on=false;gxRec.phase='done';gxRec.freeAt=tn+1500;const sm=gxRec.vb?.summary();gxD.stage('breakdown end',{n:sm?BD_VARIANTS.map(v=>sm.variants[v].n):null,probes:sm?[sm.probes.whole?.windows|0,sm.probes.native?.windows|0]:null});menu.refresh();return}
+  const ph=gxS.rendered&3;
+  if(ph===1){try{if(gx.vol.breakdown.shadow(frec,BD_SPECS[BD_VARIANTS[gxRec.vi%BD_VARIANTS.length]])!==false)gxRec.vi++}catch(e){console.warn('WebGPU breakdown shadow:',e)}} // true = thrown, null = this variant has no program (step past it), false = not now (the same variant next time)
+  else if(ph===3&&tn-gxRec.probeAt>=1000){
+   gxRec.probeAt=tn;const kind=gxRec.probeKind===0?'whole':'native';
+   try{gx.vol.breakdown.probe(material.uniforms,kind,frec).then(r=>{if(r&&gxRec.vb){gxRec.vb.addProbe(r.kind,r.counters,r.w,r.h);gxRec.probeKind^=1}},e=>console.warn('WebGPU breakdown probe:',e))}catch(e){console.warn('WebGPU breakdown probe:',e)}
+   try{const pp=gxRec.pp,pk=gxRec.ppKind===0?'whole':'native';gxRec.ppKind^=1;if(pp)gx.vol.breakdown.partProbe(pk,frec).then(rs=>{pp.round(rs);for(const r of rs.items){if(r.note)pp.note(r.note);else pp.add(r.part,r.kind,r.counters,r.w,r.h)}},e=>console.warn('WebGPU part probe:',e))}catch(e){console.warn('WebGPU part probe:',e)} // n764 4-1 stage 0: the parts' counting probe (each part of this frame's centre pass; whole / native alternate)
+  }
+  else if(ph===2&&(gxS.rendered&7)===2){try{const cx={t:(tn-gxRec.t0)/1000,per:rs.per,hold:hkMin};gx.vol.direct.check(r=>gxDirLog.check(r,cx),frec)}catch(e){console.warn('WebGPU direct check:',e)}} // the direct draw trial: the direct material against the centre pass (eye 0 of this frame), once in 8 frames, after the frame's marker, in a frame of neither the shadow pass nor the probe
+ };
+ const gxFrameEnd=fa0=>{
+  let frec=null;
+  if(gxRec.on)gxRec.sec=1; // a frame of the recording ran in this second: its row gets rec = 1 (also the second the recording ends in; the row is written after gxRec.on is already false)
+  try{frec=gx.vol?.volume.markFrame?.(gxMeasure()||ISO.state.span)}catch(e){console.warn('WebGPU frame marker:',e)}
+  const t1=performance.now();perfLog.add('cpu',t1-fa0);if(gxVolPend&&gxVolPend.t1===null)gxVolPend.t1=t1;gxWait?.frameEnd(t1);
+  if(gxRec.phase==='rec'||gxRec.phase==='done'){try{gxRecFrame(frec,t1)}catch(e){console.warn('WebGPU breakdown:',e)}} // never lets the frame loop throw
+  if(gxMeasure()&&!gxRec.on&&!gxSwdBusy&&(gxS.rendered&3)===2){gxSwdBusy=true;const fn=frameNo;gx.device.queue.onSubmittedWorkDone().then(()=>{const n=performance.now();perfLog.add('swd',n-t1);if(frameNo===fn){gxWakeAt=n;perfLog.add('late',0)}else perfLog.add('late',1)},()=>{}).finally(()=>{gxSwdBusy=false})}
+ };
+ const gxVolSubmitted=fa0=>{
+  const tv=performance.now();perfLog.add('pre',tv-fa0);
+  if(gxMeasure()&&!gxRec.on&&!gxSwdBusy&&(gxS.rendered&3)===3){
+   gxSwdBusy=true;
+   try{
+    const p={tv,t1:null,d:null,v:null};gxVolPend=p;
+    // onSubmittedWorkDone resolves only after this frame callback has returned, so d includes the CPU time from the submit to the end of the callback (t1 - tv): a sample at that floor (d <= t1 - tv + 0.5 ms) means the GPU had already finished, and is not counted in vlat (counted in vdrop)
+    const fin=()=>{if(p.d===null||p.v===null)return;const floor=p.t1===null?0:p.t1-p.tv;if(p.d<=floor+0.5){perfLog.add('vdrop',1);return}perfLog.add('vdrop',0);perfLog.add('vlat',Math.max(0,p.d-p.v))};
+    gx.vol.volume.onFrameVolMs?.(ms=>{p.v=ms;fin()});
+    gx.device.queue.onSubmittedWorkDone().then(()=>{p.d=performance.now()-p.tv;if(gxVolPend===p)gxVolPend=null;fin()},()=>{}).finally(()=>{gxSwdBusy=false})
+   }catch(e){gxSwdBusy=false;gxVolPend=null;console.warn('WebGPU vlat sample:',e)}
+  }
+  if(gxWait&&!gxMeasure())gxWait.afterSubmit(); // debug switch gxWait3: every 8th frame waits 3 ms here on purpose (vr-wgpu-caps.js createWaitProbe); not while the breakdown recording measures
+ };
+ // WebGPU: work that does not feed the volume pass runs after the pass is submitted (the loop below calls these where the WebGL session always did, or after the submit)
+ const lf={hover:-1,tutHov:-1,undoLit:false,histHov:null,hoverIds:null,js0:0}; // this frame's values of the controller loop, read by lateHud / lateMarks
+ const lateScale=()=>{const lm=realLongMm(),lim=scaleLimits(lm);
+    scaleTag.mesh.visible=!!(mesh&&vrHalfExt&&lm>0);
+    if(scaleTag.mesh.visible){scaleTag.setText(magnificationText(realMagnification(holder.scale.x,lm),language)+(lim.locked?'\n'+(ja?'30cmに縮小・固定':'fitted to 30 cm, locked'):''));readHead();scaleTag.place(holder,vrHalfExt,head);scaleTag.setOcclusion(occlusionGpu(),GHOST_ALPHA)}
+    if(ui.open&&(ui.tab===10||ui.tab===0)){const k=holder.scale.x+'|'+lm+'|'+lim.locked,now=performance.now();if(k!==scaleMenuKey&&now-scaleMenuAt>90){scaleMenuKey=k;scaleMenuAt=now;menu.refresh()}} // the 拡大率 slider (knob and text) follows a scale changed by the pinch, 実寸, 正面に戻す or a data switch // the tag follows 「ラベルの隠れ方」: 実際に隠す = hidden behind the volume (faint ghost), 薄くする = on top as before
+ };
+ const lateHints=()=>{
+   { // the 3D guides: the controller's button (blinking ring + moving arrow), the direction arrow at the edge of the view towards the menu while it is out of view, the arrow over the menu's button
+    const tn=performance.now(),okT=tutVr&&!tutBad,sb=okT?tutVr.stepBoard():null;ctlHints.update(tn,okT?tutVr.controllerHint():null);
+    let es=null;if(sb==='menu'&&!(okT&&tutVr.stepFree())&&menuPlaced&&ui.open&&poseAt){menu.mesh.getWorldPosition(lookV);const bs=boardSide(headGaze.x,headGaze.z,headLeft.x,headLeft.z,lookV.x-head.x,lookV.z-head.z);if(bs&&edgeArrowShown(bs.deg))es={show:true,side:bs.side,head,gaze:headGaze,left:headLeft}}
+    edgeArrow.update(tn,es);boardArrow.update(tn,sb==='menu'&&ui.open&&ui.tab===10&&menu.mesh.visible&&tutMenuRect?{rect:tutMenuRect.rect,from:tutMenuRect.from,W:MENU_W,H:MENU_H,widthM:MENU_WIDTH}:null);
+   }
+   {const eb=tutVr&&!tutBad?tutVr.entryBoard():null,pl=0.45+0.55*(0.5+0.5*Math.cos(performance.now()/1000*4*Math.PI)); // 2 Hz blink
+    glowHelp.visible=eb==='help';glowMenu.visible=eb==='menu';if(eb){const m=(eb==='help'?glowHelp:glowMenu).material;m.opacity=pl}} // the board the entry guidance points at blinks
+ };
+ const lateHud=()=>{const hover=lf.hover,tutHov=lf.tutHov,undoLit=lf.undoLit,histHov=lf.histHov;
+ huLine.update(lf.js0); // after the controller loop (it reuses that loop's hits): the HU line's pick / sampling (while the trigger is held) and its mesh
+ menu.setHover(hover);help.setHover(tutHov);
+ if(hist.isOpen)hist.setAxisHover(histAxis?null:histHov); // the lit grab target (none while an end is dragged: that one is lit by the panel)
+ if(undoBtn.mesh.visible){const nowU=performance.now();if(!secUndo.peek(nowU))undoBtn.hide();else undoBtn.update(secUndo.remainingMs(nowU)/FLING_UNDO_MS,undoLit)}
+ flingDbg?.update(performance.now()); // debug readout hides after FLING_DEBUG_MS
+ };
+ const lateCards=()=>{
+    syncPins();for(const lb of pins.values()){lb.glow=!pinLit.has(lb.rid)&&pinGlow.has(lb.rid);if(lb.glow!==lb.glowLine)lineGlow(lb)} // glowing = under a laser and not already lit as a card (a flag read by placeLabel / the line colour; the depth / thin / cover rules treat a glowing card like a lit one: always shown, on top)
+    {const occ=occlusionGpu();if(occ&&pins.size){const now=performance.now();embedInputs(now);embBudget=EMB_PER_FRAME;pinSettled=pinSettle.step(holder.scale.x,now)}for(const lb of pins.values()){lb.lit=pinLit.has(lb.rid);embedLabel(lb,occ,pinHeld.has(lb.rid));placeLabel(lb)}thinPins(occ);for(const lb of pins.values())pinOcclusion(lb,lb.lit||lb.glow);syncAnchorDots(occ)}px.pins()
+ };
+ const lateMarks=()=>{const hoverIds=lf.hoverIds;
+   {const nowH=performance.now();if(nowH-vpHiddenAt>=100)updateHidden(nowH);
+    let previewArg=null;for(const x of controllers)if(x.userData.moving){const mp=x.userData.placement;previewArg={id:x.userData.moving.id,voxel:mp&&!!mp.pair===isPairId(x.userData.moving.id)?mp.voxel||null:null};break}
+    lblLit.clear();for(const x of controllers){const r=x.userData.res;if(r&&r.kind==='mlabel'&&r.ref&&!r.ref.pin)lblLit.add(r.ref.id);if(x.userData.lblDrag&&!x.userData.lblDrag.pin&&x.userData.press)lblLit.add(x.userData.lblDrag.id)} // the label the laser is on stays lit while it is grabbed
+    // the active section = the selected one while sections are on, as the shader's plane (object space, unit normal, same index as planes)
+    let secPl=null;if(section.on&&section.selected&&material&&!bench.noSection&&!planeOwnerPair(section.selected)){const i=planes.indexOf(section.selected);if(i>=0&&i<material.uniforms.planeCount.value){const q=material.uniforms.cutPlanes.value[i];secPl={x:q.x,y:q.y,z:q.z,w:q.w}}}
+    vpMarkers.update({fingerprint:vrFp,dims:vrDims,halfExt:vrHalfExt,mesh:mesh?.parent?mesh:null,head,hidden:vpHidden,section:secPl,selectedId:vpSel,hover:hoverIds,preview:previewArg,occlusion:occlusionGpu()});
+    const msId=getMeasureStart(),mh=msId&&measureHintHand?.id===msId&&measureHintHand.c.visible!==false?measureHintHand.c:null; // the hint floats above the controller that placed the start point
+    if(mh){mh.updateWorldMatrix(true,false);mh.getWorldPosition(tmpHintHand)}
+    vpMeasure.update({fingerprint:vrFp,dims:vrDims,halfExt:vrHalfExt,mesh:mesh?.parent?mesh:null,head,spacing:vrSpacing,warn:!!spacingNote(),startId:getMeasureStart(),hint:measureHint(),gaze:headGaze,handPos:mh?tmpHintHand:null,now:nowH,preview:previewArg,lit:lblLit,hidden:vpMeasHidden,occlusion:occlusionGpu()});
+    const pt2=pair;if(pt2?.markers){ // stage 3: the partner's points and distances (its own store, its own box; nothing is judged hidden on the CPU for them: the GPU depth does it, or they are always drawn)
+     const mesh2=pt2.on&&pt2.mesh.parent?pt2.mesh:null;let secP2=null;if(mesh2&&section.on&&section.selected&&!bench.noSection&&planeOwnerPair(section.selected)){const i=planes.indexOf(section.selected);if(i>=0&&i<pt2.u.planeCount.value){const q=pt2.u.cutPlanes.value[i];secP2={x:q.x,y:q.y,z:q.z,w:q.w}}}
+     pt2.markers.update({fingerprint:pt2.fp,dims:pt2.srcDims,halfExt:pt2.halfExt,mesh:mesh2,head,hidden:null,section:secP2,selectedId:vpSel,hover:hoverIds,preview:previewArg,occlusion:occlusionGpu()});
+     pt2.measure.update({fingerprint:pt2.fp,dims:pt2.srcDims,halfExt:pt2.halfExt,mesh:mesh2,head,spacing:pt2.spacing,warn:!!spacingNote(),startId:pt2.store.getMeasureStart(),hint:measureHint(),gaze:headGaze,handPos:null,now:nowH,preview:previewArg,lit:lblLit,hidden:null,occlusion:occlusionGpu()});
+    }}
+ };
+ const pcN={mk:0,tg:0,slotc:0,perc:0},pmP=new THREE.Vector3(),pmP0=new THREE.Vector3(),pmQ=new THREE.Quaternion(),pmQ0=new THREE.Quaternion(),pmS=new THREE.Vector3();let pmOk=false; // performance record: the renderer's running totals last seen; the volume's last world pose
+ // E1: the once-a-second block (the status lines, the record's row, the menu's probe / refresh) of the frame callback; the WebGPU session runs it after the callback (post.request below), the WebGL one inside it as before. now = the callback's time.
+ const secondTick=now=>{
+  const auto=!VRES[settings.vres]; // (the callback's own `auto` is the same expression)
+  if(gx){const ps=post.stats();perfLog.meta['post frame']=post.mode+' · jobs '+ps.ran+' in '+ps.runs+' runs · late '+ps.late+' · run max '+ps.msMax.toFixed(2)+' ms · wait max '+ps.wait.toFixed(2)+' ms · callback (whole) mean '+(ps.cbN?ps.cbMs/ps.cbN:0).toFixed(2)+' max '+ps.cbMax.toFixed(2)+' ms'}
+   ui.fpsLine=(firstDrawMs>=0?(ja?'初回描画 ':'first draw ')+Math.round(firstDrawMs)+' ms · ':'')+fps.toFixed(0)+' fps'+(perfLog.lastDrops!==null?' · '+(ja?'落ち ':'drops ')+perfLog.lastDrops:'')+' · '+(ja?'ボリューム ':'volume ')+avg('vol')+' ms · '+(ja?'本描画 ':'main ')+avg('main')+' ms · JS '+avg('js')+' ms'+((timerExt||gx?.vol?.volume.hasTimer)?'':(ja?'（GPU計測なし）':' (no GPU timer)'));
+   if(gx&&gx.vol?.stats.regions)gxD.d.values['drawn region']={eye:[rs.w,rs.h],...gx.vol.stats.regions}; // the size of what the volume pass drew (px of the scaled image per eye, the target slot, the periphery), once a second; set in the record only; saved with the rest of the record when the session ends or the page is hidden (value() would write localStorage a second time; E0: the heartbeat no longer saves once a second)
+   const f1s=rs.eff,fps1=f1s*rs.per;sizes=rs.low?(ja?'縮小描画 ':'low ')+Math.round(f1s*100)+'% '+Math.ceil(rs.w*f1s)+'×'+Math.ceil(rs.h*f1s)+(rs.per<1?(ja?' 周辺 ':' periphery ')+Math.round(fps1*100)+'%':'')+' / XR '+rs.w+'×'+rs.h+' ('+rs.eyes+(ja?'眼':' eyes')+')':(ja?'直接描画 ':'direct ')+'XR '+rs.w+'×'+rs.h;
+   // the honest quality readout: the mode and, when the data-resolution cap draws fewer pixels, the effective scale (+ px per voxel, covered px)
+   {const q=qualityReadout();if(q!==ui.qualityLine){ui.qualityLine=q;if(ui.open&&ui.tab===3)menu.refresh()}}
+   ui.sizeLine=(gx?'WebGPU'+(gx.vol?.volume.f16?' f16':'')+' · ':'')+sizes+' · '+scaleLineText(holder.scale.x,realLongMm(),language)+' · '+info+' · '+(ja?'データ ':'data ')+(dataSel()?'256':'512')+(ja?' · 表示セグメント ':' · shown segments ')+SEGMENT_PRESET_ORDER.filter(k=>{const g=segmentState[k];return g?.active&&g?.enabled&&segMode[k]!==2}).length;
+   // one line for the Quest numbers: fps / auto % / step / samples per ray / ended by hit / skipped by jumps / GPU ms
+   ui.diagLine=fps.toFixed(0)+' fps · '+qualityText({auto:!VRES[settings.vres],modeF:VRES[settings.vres]||aq.level,eff:rs.eff,periphery:rs.per},ja)+' · '+(ja?'刻み ':'step ')+effStepTxt(STEP[VRES[settings.vres]?settings.quality|0:aq.stepIdx])+(probe?' · '+(ja?'反復 ':'samples ')+probe.samples.toFixed(0)+(ja?' · hit終了 ':' · hit end ')+Math.round(probe.hit*100)+'% · '+(ja?'跳躍 ':'jump ')+Math.round(probe.skip*100)+'%':'')+' · vol '+avg('vol')+' ms · '+(ja?'本 ':'main ')+avg('main')+' ms';
+   // only while the menu is open. Closed, these ran every second anyway: the 48×48 probe (a synchronous
+   // readRenderTargetPixels, a GPU stall) and a full redraw of the 1024×1180 menu canvas (+ texture upload): a once-a-second hitch on the
+   // Quest that also fed the auto-quality downgrade. The self-check's probe (env.probe, probeReq above) is separate and unchanged.
+   if(ui.open&&ui.tab===4)try{measureSamples()}catch(e){console.warn(e)}
+   if(ui.open&&(ui.tab===4||ui.flash))menu.refresh();
+   if(ui.flash&&now>ui.flashUntil)ui.flash='';
+   {const uP=material?.uniforms,vxP=uP?Math.min(2*uP.halfExt.value.x/Math.max(1,uP.texDims.value.x),2*uP.halfExt.value.y/Math.max(1,uP.texDims.value.y),2*uP.halfExt.value.z/Math.max(1,uP.texDims.value.z)):0;let fovX=null;try{fovX=(gx?renderer.xr._glProjLayer?.fixedFoveation:renderer.xr.getFoveation?.())??null}catch{}
+    perfLog.row({f:rs.eff,per:rs.per,cap:rs.cap,auto:auto?1:0,lv:aq.level,si:aq.stepIdx,step:vxP>0?uP.stepSize.value/vxP:null,cov:Math.round(rs.cover),w:rs.w,h:rs.h,size:holder.scale.x,menu:ui.open?1:0,hz:targetRate(),fov:fovX,tab:ui.open?ui.tab:'-',mlow:gx?(settings.moveLow?1:0):null,...(gx?{rec:(gxRec.on||gxRec.sec)?1:0,hset:settings.moveLow?holdScaleValue(settings.moveLowK):0,hk:hkMin}:{})},now);hkMin=1;gxRec.sec=0} // the performance record's row of this second (the state the drawing choices above were made in; step in voxels)
+   for(const k in sums){sums[k]=0;counts[k]=0}
+ };
+ // E1: the WebGPU session's work that feeds no pose and nothing the frame's render reads is run after the callback (vr-post-frame.js: one task, after the XR frame is submitted; the WebGL session runs it
+ // in the callback as before): the canvas redraw of the boards (menu, help, loading), and the once-a-second block (secondTick: status text, the record's row, the menu's probe and refresh).
+ // What shows one frame late: a board's picture that was already up (a hover tint, a pressed button, a new line of text, the help board's text): the canvas is redrawn after this frame and goes up to the GPU in the next frame's render.
+ // A board that has just appeared is drawn in its first frame (boardLive: no stale picture), and a mesh's place is never late. The texture upload stays in renderer.render (it is not moved).
+ const post=createPostFrame({mode:gx?'task':'off'}),boardLive={menu:false,help:false,load:false};
+ const helpTick=()=>{const hk=[section.on,ui.open,ui.open&&ui.tab===10,helpShow].join()+(tutVr?tutVr.drawKey():'')+(tutPreview&&helpShow==='detail'?tutPreview.drawKey():'');if(hk!==helpKey){helpKey=hk;help.refresh()}help.flush()};
+ const jBoards=post.job(()=>{if(running?.session!==session)return;if(boardLive.menu)menu.flush();if(boardLive.help)helpTick();if(boardLive.load)loadBoard.flush()});
+ const jSecond=post.job(now=>{if(running?.session!==session)return;secondTick(now)});
  renderer.setAnimationLoop(xrTs=>{
   selfCheck.tick(xrTs); // XR frame time -> self-check frame intervals
+  const fa0=performance.now(); // the XR frame callback's start (the performance record's cpu column)
+  if(gx)post.drain(); // E1: what the task after the previous callback has not run yet runs now (counted in 'late' of the record's header)
+  if(gxWakeAt>0){if(gxMeasure()&&!gxRec.on&&fa0-gxWakeAt<1000)perfLog.add('wake',fa0-gxWakeAt);gxWakeAt=0}
+  if(gx){gxD.count('loop');if(gxD.d.counts.loop===1)gxD.stage('first app frame')} // WebGPU diagnostics: the app's loop was entered (the heartbeat compares it with the frames the headset gave)
   {const fr=vrSaveGate.frame,nf=performance.now(),dtf=nf-fr.last;fr.last=nf;fr.live=true;if(dtf>0&&dtf<500){fr.fast=fr.fast?fr.fast*0.75+dtf*0.25:dtf;fr.slow=fr.slow?fr.slow*0.98+dtf*0.02:dtf}if((fr.n++&127)===0)fr.target=1000/Math.max(30,targetRate()||72)} // the frame time the saves are paced by (vrCalm)
+  if(gx){const cc=gx.vol?.volume.counts;if(cc){const d=cc.target+cc.tex+cc.group-pcN.mk,dt=cc.target-pcN.tg,ds=cc.slot-pcN.slotc,dp=cc.peri-pcN.perc;pcN.mk+=d;pcN.tg+=dt;pcN.slotc+=ds;pcN.perc+=dp;if(d)perfLog.count('mk',d);if(dt)perfLog.count('tg',dt);if(ds)perfLog.count('slotc',ds);if(dp)perfLog.count('perc',dp)}} // the performance record: what the WebGPU renderer made / changed in the frame before (running totals, differences; nothing allocated)
+  perfLog.frame(xrTs||performance.now(),1000/Math.max(1,targetRate()||72),grabbing.size,rs.cover,(scaleGuard.frozenAt(fa0)||fovGuard.frozenAt(fa0))?1:0); // the performance record: the gap since the previous frame, the hands holding the volume, the covered px
+  perfLog.add('cvb',rs.coverB);perfLog.add('cvp',rs.coverP);perfLog.add('rbs',comboT?.rb?.busy?1:0); // perf2 (measurement only): the covered px of the body / of the parts, and the share of the frames the combined texture is being rebuilt
+  {const cc=gx?.vol?.volume.counts,c=benchRingC;c.menu=BENCH_COUNT.menu;c.tex=BENCH_COUNT.tex;c.dsave=gx&&gxD?gxD.saves:0;c.psave=perfLog.saves;c.mk=cc?cc.target+cc.tex+cc.group:0;c.maps=cc?cc.maps:0;{const fvN=gxCaps?gxCaps.foveaDraws|0:0,pzN=gxPose?gxPose.poseReads:0,pmN=gxPose?gxPose.poseMs:0;c.fv=benchLag.fv;c.pz=benchLag.pz;c.pms=benchLag.pms;benchLag.fv=fvN;benchLag.pz=pzN;benchLag.pms=pmN}c.ph=benchPh;gx?.vol?.volume.takeGauges?.(benchG);c.ml=benchG.ml;c.gd=benchG.gd;c.vol=benchG.vol;c.lag=xrTs?fa0-xrTs:NaN;c.heap=readHeapBytes();c.hold=grabbing.size;c.f=rs.eff;c.per=rs.per;c.cov=rs.cover;
+   benchRing.frame(xrTs||performance.now(),c);cmpBench.frame(xrTs||performance.now())} // the frame ring (the state is the previous frame's) and the comparison bench's frame interval
   frameGaps.tick(performance.now()); // the gap between two XR frames (the longest one during a data switch is read on the device)
   if(probeReq&&!selfCheck.measuring){const q=probeReq;if(q.stage===0){q.stage=1;try{measureSamples();q.out=probe?{mean:+probe.samples.toFixed(1),p95:probe.p95,max:probe.max,hit:+probe.hit.toFixed(3),skip:+probe.skip.toFixed(3),px:probe.px}:null}catch(e){console.warn(e)}}else{probeReq=null;q.res(q.out)}} // never inside a measured window
   if(ui.probeOnOpen){ui.probeOnOpen=false;if(ui.open&&ui.tab===4&&!selfCheck.measuring){try{measureSamples()}catch(e){console.warn(e)}menu.refresh()}} // (setMenuOpen)
@@ -4500,13 +4982,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
   help.mesh.visible=(settings.help|0)>0||!!tutVr; // with the tutorial on the board is shown
   if(ev){ev.mesh.visible=(settings.help|0)>0&&!!evSlide;if(ev.mesh.visible&&!evPlaced&&poseAt)placeEvNow()} // the mission board follows the help setting (it was a part of the help board); placed once;: follows the head with help=Follow (below) the head
   if(tutVr&&!tutBad){try{tutVr.update(performance.now())}catch(e){tutFail(e);help.refresh()}}
-  { // the 3D guides: the controller's button (blinking ring + moving arrow), the direction arrow at the edge of the view towards the menu while it is out of view, the arrow over the menu's button
-   const tn=performance.now(),okT=tutVr&&!tutBad,sb=okT?tutVr.stepBoard():null;ctlHints.update(tn,okT?tutVr.controllerHint():null);
-   let es=null;if(sb==='menu'&&!(okT&&tutVr.stepFree())&&menuPlaced&&ui.open&&poseAt){menu.mesh.getWorldPosition(lookV);const bs=boardSide(headGaze.x,headGaze.z,headLeft.x,headLeft.z,lookV.x-head.x,lookV.z-head.z);if(bs&&edgeArrowShown(bs.deg))es={show:true,side:bs.side,head,gaze:headGaze,left:headLeft}}
-   edgeArrow.update(tn,es);boardArrow.update(tn,sb==='menu'&&ui.open&&ui.tab===10&&menu.mesh.visible&&tutMenuRect?{rect:tutMenuRect.rect,from:tutMenuRect.from,W:MENU_W,H:MENU_H,widthM:MENU_WIDTH}:null);
-  }
-  {const eb=tutVr&&!tutBad?tutVr.entryBoard():null,pl=0.45+0.55*(0.5+0.5*Math.cos(performance.now()/1000*4*Math.PI)); // 2 Hz blink
-   glowHelp.visible=eb==='help';glowMenu.visible=eb==='menu';if(eb){const m=(eb==='help'?glowHelp:glowMenu).material;m.opacity=pl}} // the board the entry guidance points at blinks
+  if(!gx)lateHints();
   if(help.mesh.visible&&!helpPlaced&&poseAt)placeHelpNow();
   if(help.mesh.visible&&settings.help===1&&!helpHeld){computeHelpTarget();helpMoving=lazyFollow(help.mesh,helpTarget,helpMoving,false)}
   if(ev&&ev.mesh.visible&&evPlaced&&settings.help===1&&!evHeld){computeEvTarget();evMoving=lazyFollow(ev.mesh,evTarget,evMoving,false)} // the mission board follows the head like the help board (the same setting, the same rule)
@@ -4518,11 +4994,9 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
   pairPose(); // a pair: the partner's own pose (a grip moves one dataset, the other stays where it is in the room); the frames put on it go with it. Nothing without a partner
   for(let k=flying.length-1;k>=0;k--){const f=flying[k],o=f.pl.obj,r=flyStep({pos:o.position,v:f.v,age:f.age},dt);o.position.set(r.pos.x,r.pos.y,r.pos.z);f.age=r.age;f.pl.mat.opacity=r.opacity;f.pl.handle.material.opacity=r.opacity;if(r.done){disposePlane(f.pl);flying.splice(k,1)}} // the thrown frame flies on and fades
   for(const pl of planes)applyFrameScale(pl); // the section square is capped at 1.5x its design size (36 cm), the number tag at 1x (3.4 cm), above the default 16.5 cm display
-  {const lm=realLongMm(),lim=scaleLimits(lm);
+  {const lm=realLongMm();
    if(lm>0&&!bench.active&&!anBench.active){const cs=clampScale(holder.scale.x,lm);if(cs!==holder.scale.x)holder.scale.setScalar(cs)} // initial placement, restored or any other out-of-range scale
-   scaleTag.mesh.visible=!!(mesh&&vrHalfExt&&lm>0);
-   if(scaleTag.mesh.visible){scaleTag.setText(magnificationText(realMagnification(holder.scale.x,lm),language)+(lim.locked?'\n'+(ja?'30cmに縮小・固定':'fitted to 30 cm, locked'):''));readHead();scaleTag.place(holder,vrHalfExt,head);scaleTag.setOcclusion(occlusionGpu(),GHOST_ALPHA)}
-   if(ui.open&&(ui.tab===10||ui.tab===0)){const k=holder.scale.x+'|'+lm+'|'+lim.locked,now=performance.now();if(k!==scaleMenuKey&&now-scaleMenuAt>90){scaleMenuKey=k;scaleMenuAt=now;menu.refresh()}}} // the 拡大率 slider (knob and text) follows a scale changed by the pinch, 実寸, 正面に戻す or a data switch // the tag follows 「ラベルの隠れ方」: 実際に隠す = hidden behind the volume (faint ghost), 薄くする = on top as before
+   if(!gx)lateScale()} // the tag and the slider follow the scale (WebGPU: after the volume pass is submitted)
   let tutHov=-1,hover=-1,scroll=0,undoLit=false,histHov=null;const hoverIds=new Set();
   if(sliceToast.until&&performance.now()>sliceToast.until){sliceToast.until=0;sliceToast.mesh.visible=false}
   badge.visible=!(wheelOwner&&wheelOwner===leftHand()); // the cue hides while the left hand's ring is open
@@ -4620,11 +5094,8 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    if(!b&&c.userData.bDown){if(ring.parent===c)ring.visible=false;if(!c.userData.bLong&&!c.userData.vCancel)setSection(!section.on)}
    if(!b)c.userData.vCancel=false;c.userData.bDown=b;
   }
-  huLine.update(js0); // after the controller loop (it reuses that loop's hits): the HU line's pick / sampling (while the trigger is held) and its mesh
-  menu.setHover(hover);help.setHover(tutHov);
-  if(hist.isOpen)hist.setAxisHover(histAxis?null:histHov); // the lit grab target (none while an end is dragged: that one is lit by the panel)
-  if(undoBtn.mesh.visible){const nowU=performance.now();if(!secUndo.peek(nowU))undoBtn.hide();else undoBtn.update(secUndo.remainingMs(nowU)/FLING_UNDO_MS,undoLit)}
-  flingDbg?.update(performance.now()); // debug readout hides after FLING_DEBUG_MS
+  lf.js0=js0;lf.hover=hover;lf.tutHov=tutHov;lf.undoLit=undoLit;lf.histHov=histHov;lf.hoverIds=hoverIds;
+  if(!gx)lateHud();
   // faint label of what each laser points at (not when that result is already pinned); pinned labels follow the volume
   {snFrame=undefined;const on=labelMode()&&!diagAn.noLabels;if(on||pins.size||analysisRegions.some(r=>r.label)||hasChildLabels()||pair?.on)readHead();anBenchTick();
    for(const c of controllers){const u=c.userData,ph=on&&u.pairHit&&(!u.volHit||u.pairHit.distance<u.volHit.distance)?u.pairHit:null,hit=on?(ph||u.volHit):null;if(ph)(u.hrids||(u.hrids=[])).length=0;hoverCards(c,hit,ph?u.hrids:hitLabelRids(hit,regionList,childByKey,u.hrids||(u.hrids=[])));
@@ -4636,8 +5107,8 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
      hh.push({key:x,pin:pin>0?pin:0,hover:pin<0?0:hover}); // the laser on a child's card lights that child, not the result behind it (as the laser on a result's card lights that result alone)
      if(childList.length)hc.push({key:x,pin:pin<0?pin:0,hover:pin>0?0:hoverC})} // no child segments: no child tracker work
     setRegionHighlight(hlTracker.update(hh,true),childList.length?hlChildTracker.update(hc,true):0)}
-   syncPins();for(const lb of pins.values()){lb.glow=!pinLit.has(lb.rid)&&pinGlow.has(lb.rid);if(lb.glow!==lb.glowLine)lineGlow(lb)} // glowing = under a laser and not already lit as a card (a flag read by placeLabel / the line colour; the depth / thin / cover rules treat a glowing card like a lit one: always shown, on top)
-   {const occ=occlusionGpu();if(occ&&pins.size){const now=performance.now();embedInputs(now);embBudget=EMB_PER_FRAME;pinSettled=pinSettle.step(holder.scale.x,now)}for(const lb of pins.values()){lb.lit=pinLit.has(lb.rid);embedLabel(lb,occ,pinHeld.has(lb.rid));placeLabel(lb)}thinPins(occ);for(const lb of pins.values())pinOcclusion(lb,lb.lit||lb.glow);syncAnchorDots(occ)}px.pins()}
+  }
+  if(!gx)lateCards();
   // thumbstick scroll: the selected plane along its own normal, same world speed fixed in the scaled holder or held
   const sp=section.selected;
   if(section.on&&sp&&scroll&&dt&&!controllers.some(c=>c.userData.drag?.pl===sp)){
@@ -4700,22 +5171,12 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    skipTick(); // after the shader's shown set of the frame is set
    pairFrame(); // the partner (no-op without a pair): after the primary's planes / slice state / shown set of this frame
    partFrame(); // an earlier change: the part (no-op without one): after the shown set of this frame is written
+   // the check's tissue-switch number as the PICTURE carries it: it moves at the frame whose segA / segC (the shown flag of each slot, the simple flag of a shown one) differ from the frame before, not at the frame identRun.tick moved the mode. A hide shows at once (the next frame); a show only when the combined texture's alpha is up and the tissue is inside comboShaderMask (safeMask), so the frames of the rebuild keep the old number. Plain variables, read before identRun.tick (below): nothing else of the frame changes
+   if(identRun?.active){let sg=0;for(let i=0;i<4;i++)sg=sg*3+(u.segA.value[i].w>0.5?1+(u.segC.value[i].w>0.5?1:0):0);if(sg!==identSeqSig){identSeqSig=sg;identSeqApplied=identRun.state.switchSeq}}else identSeqSig=-1;
   }
-  benchTick();
-  {const nowH=performance.now();if(nowH-vpHiddenAt>=100)updateHidden(nowH);
-   let previewArg=null;for(const x of controllers)if(x.userData.moving){const mp=x.userData.placement;previewArg={id:x.userData.moving.id,voxel:mp&&!!mp.pair===isPairId(x.userData.moving.id)?mp.voxel||null:null};break}
-   lblLit.clear();for(const x of controllers){const r=x.userData.res;if(r&&r.kind==='mlabel'&&r.ref&&!r.ref.pin)lblLit.add(r.ref.id);if(x.userData.lblDrag&&!x.userData.lblDrag.pin&&x.userData.press)lblLit.add(x.userData.lblDrag.id)} // the label the laser is on stays lit while it is grabbed
-   // the active section = the selected one while sections are on, as the shader's plane (object space, unit normal, same index as planes)
-   let secPl=null;if(section.on&&section.selected&&material&&!bench.noSection&&!planeOwnerPair(section.selected)){const i=planes.indexOf(section.selected);if(i>=0&&i<material.uniforms.planeCount.value){const q=material.uniforms.cutPlanes.value[i];secPl={x:q.x,y:q.y,z:q.z,w:q.w}}}
-   vpMarkers.update({fingerprint:vrFp,dims:vrDims,halfExt:vrHalfExt,mesh:mesh?.parent?mesh:null,head,hidden:vpHidden,section:secPl,selectedId:vpSel,hover:hoverIds,preview:previewArg,occlusion:occlusionGpu()});
-   const msId=getMeasureStart(),mh=msId&&measureHintHand?.id===msId&&measureHintHand.c.visible!==false?measureHintHand.c:null; // the hint floats above the controller that placed the start point
-   if(mh){mh.updateWorldMatrix(true,false);mh.getWorldPosition(tmpHintHand)}
-   vpMeasure.update({fingerprint:vrFp,dims:vrDims,halfExt:vrHalfExt,mesh:mesh?.parent?mesh:null,head,spacing:vrSpacing,warn:!!spacingNote(),startId:getMeasureStart(),hint:measureHint(),gaze:headGaze,handPos:mh?tmpHintHand:null,now:nowH,preview:previewArg,lit:lblLit,hidden:vpMeasHidden,occlusion:occlusionGpu()});
-   const pt2=pair;if(pt2?.markers){ // stage 3: the partner's points and distances (its own store, its own box; nothing is judged hidden on the CPU for them: the GPU depth does it, or they are always drawn)
-    const mesh2=pt2.on&&pt2.mesh.parent?pt2.mesh:null;let secP2=null;if(mesh2&&section.on&&section.selected&&!bench.noSection&&planeOwnerPair(section.selected)){const i=planes.indexOf(section.selected);if(i>=0&&i<pt2.u.planeCount.value){const q=pt2.u.cutPlanes.value[i];secP2={x:q.x,y:q.y,z:q.z,w:q.w}}}
-    pt2.markers.update({fingerprint:pt2.fp,dims:pt2.srcDims,halfExt:pt2.halfExt,mesh:mesh2,head,hidden:null,section:secP2,selectedId:vpSel,hover:hoverIds,preview:previewArg,occlusion:occlusionGpu()});
-    pt2.measure.update({fingerprint:pt2.fp,dims:pt2.srcDims,halfExt:pt2.halfExt,mesh:mesh2,head,spacing:pt2.spacing,warn:!!spacingNote(),startId:pt2.store.getMeasureStart(),hint:measureHint(),gaze:headGaze,handPos:null,now:nowH,preview:previewArg,lit:lblLit,hidden:null,occlusion:occlusionGpu()});
-   }}
+  benchTick();cmpBench.tick(performance.now()); // the comparison bench's scene, pose and cover tuning (nothing when it is not running)
+  if(identRun?.active)identRun.tick(performance.now()); // the same-picture check's script: the body's pose, the tissue switch, the hold part (nothing when it is not running)
+  if(!gx)lateMarks();
   // data-resolution cap (vr-render-scale.js): the volume box projected with each eye's camera gives the covered pixels and the screen
   // pixels per voxel; the render scale is capped where every voxel still gets PPV_CENTER (centre) / PPV_FAR (far corner) pixels. Decided every
   // frame, so a zoom or a step towards the volume changes it at once (no ramp). In every mode, 100 % included (100 % = full data detail).
@@ -4726,7 +5187,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    if(cams.length){
     mesh.updateWorldMatrix(true,false);rsHalf[0]=u.halfExt.value.x;rsHalf[1]=u.halfExt.value.y;rsHalf[2]=u.halfExt.value.z;rsDims[0]=u.texDims.value.x;rsDims[1]=u.texDims.value.y;rsDims[2]=u.texDims.value.z;
     const bH=u.boxH.value,bC=u.boxC.value;let rsBox=null;if(bH.x>0){rsBoxV.c[0]=bC.x;rsBoxV.c[1]=bC.y;rsBoxV.c[2]=bC.z;rsBoxV.h[0]=bH.x;rsBoxV.h[1]=bH.y;rsBoxV.h[2]=bH.z;rsBox=rsBoxV}
-    let cov=0,outF=0,raw=CAP_MIN,ppv=Infinity,ppvFar=Infinity;
+    let cov=0,covB=0,covP=0,outF=0,raw=CAP_MIN,ppv=Infinity,ppvFar=Infinity;
     // the partner of a sample pair is drawn in the same volume pass at the same scale: its covered pixels count in the ray budget too (addVolumeEye), measured on its own content box and grid. No partner: nothing below runs (one volume, as before)
     const pt2=pair&&pair.on&&pair.mesh.parent?pair:null;let rsBox2=null;
     if(pt2){const u2=pt2.u,h2=pt2.halfExt,bH2=u2.boxH.value,bC2=u2.boxC.value;pt2.mesh.updateWorldMatrix(true,false);rsHalf2[0]=h2[0];rsHalf2[1]=h2[1];rsHalf2[2]=h2[2];rsDims2[0]=u2.texDims.value.x;rsDims2[1]=u2.texDims.value.y;rsDims2[2]=u2.texDims.value.z;
@@ -4734,13 +5195,13 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
     for(const q of parts){if(!q.on||!q.mesh.parent)continue;q.mesh.updateWorldMatrix(true,false);const bH3=q.u.boxH.value,bC3=q.u.boxC.value,rb=q.rsBox;rb.c[0]=bC3.x;rb.c[1]=bC3.y;rb.c[2]=bC3.z;rb.h[0]=bH3.x;rb.h[1]=bH3.y;rb.h[2]=bH3.z} // an earlier change: each part's content box for the ray budget (none without parts)
     for(let i=0;i<cams.length&&i<2;i++){const sub=cams[i],v=sub.viewport,rsEye=rsEyes[i];
      eyeMetrics(mesh.matrixWorld.elements,rsHalf,rsDims,sub.matrixWorldInverse.elements,sub.projectionMatrix.elements,v.z,v.w,rsEye,rsBox); // on the content box
-     cov+=rsEye.cover;if(rsEye.cover>0){raw=Math.max(raw,capFromPpv(rsEye.ppvCenter,rsEye.ppvFar));ppv=Math.min(ppv,rsEye.ppvCenter);ppvFar=Math.min(ppvFar,rsEye.ppvFar)}
+     cov+=rsEye.cover;covB+=rsEye.cover;if(rsEye.cover>0){raw=Math.max(raw,capFromPpv(rsEye.ppvCenter,rsEye.ppvFar));ppv=Math.min(ppv,rsEye.ppvCenter);ppvFar=Math.min(ppvFar,rsEye.ppvFar)}
      foveaRect(rsEye.cx,rsEye.cy,v.z,v.w,rsFov[i]);outF+=outsideFovea(rsEye,rsFov[i]);
      if(pt2){const e2=rsEyes2[i];eyeMetrics(pt2.mesh.matrixWorld.elements,rsHalf2,rsDims2,sub.matrixWorldInverse.elements,sub.projectionMatrix.elements,v.z,v.w,e2,rsBox2);
       rsAcc.cover=cov;rsAcc.outside=outF;rsAcc.need=raw;addVolumeEye(rsAcc,e2,rsFov[i]);cov=rsAcc.cover;outF=rsAcc.outside;raw=rsAcc.need} // the fovea rect is the eye's (the optical axis), not the volume's
-     for(const q of parts){if(!q.on||!q.mesh.parent)continue;const e3=q.rsEyes[i];eyeMetrics(q.mesh.matrixWorld.elements,rsHalf,rsDims,sub.matrixWorldInverse.elements,sub.projectionMatrix.elements,v.z,v.w,e3,q.rsBox);rsAcc.cover=cov;rsAcc.outside=outF;rsAcc.need=raw;addVolumeEye(rsAcc,e3,rsFov[i]);cov=rsAcc.cover;outF=rsAcc.outside;raw=rsAcc.need} // an earlier change: every part, drawn in the same volume pass at the same scale, on its own content box
+     for(const q of parts){if(!q.on||!q.mesh.parent)continue;const e3=q.rsEyes[i];eyeMetrics(q.mesh.matrixWorld.elements,rsHalf,rsDims,sub.matrixWorldInverse.elements,sub.projectionMatrix.elements,v.z,v.w,e3,q.rsBox);covP+=e3.cover;rsAcc.cover=cov;rsAcc.outside=outF;rsAcc.need=raw;addVolumeEye(rsAcc,e3,rsFov[i]);cov=rsAcc.cover;outF=rsAcc.outside;raw=rsAcc.need} // an earlier change: every part, drawn in the same volume pass at the same scale, on its own content box
      rsFov[i][0]+=v.x;rsFov[i][2]+=v.x;rsFov[i][1]+=v.y;rsFov[i][3]+=v.y}
-    rs.cover=cov;rs.outside=outF;if(cov>0){raw=Math.min(raw,capFromBudget(cov));rs.cap=nextCap(rs.cap,raw);rs.ppv=ppv;rs.ppvFar=ppvFar} // nothing covered: keep the last cap
+    rs.cover=cov;rs.coverB=covB;rs.coverP=covP;rs.outside=outF;if(cov>0){raw=Math.min(raw,capFromBudget(cov));rs.cap=nextCap(rs.cap,raw);rs.ppv=ppv;rs.ppvFar=ppvFar} // nothing covered: keep the last cap
     rs.split=cams.length>1?cams[1].viewport.x:1e9;
    }
    if(bench.active||anBench.active)rs.cap=1; // benchmarks measure the resolutions they set
@@ -4750,6 +5211,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
   aq.setCeiling(rs.cap);
   if(auto){
    autoFrames++;const nowA=performance.now();
+   if(gxRec.phase==='prep'||gxRec.on){autoFrames=0;heldWin=false;autoAt=nowA;ctrl.vol=ctrl.main=0;ctrlN.vol=ctrlN.main=0} // the WebGPU volume breakdown is being prepared / recording: its frame drops must not move the ladder (the picture stays as it was); the window starts again after it
    if(!bench.active&&!anBench.active)aq.anticipate(holder.scale.x,nowA); // a fast zoom-in lowers the resolution at once (vr-auto-quality.js anticipate), before the 0.5 s window measures the slow frames
    if(nowA-autoAt>=500){
     const interval=(nowA-autoAt)/autoFrames,budget=1000/(targetRate()||72);
@@ -4760,28 +5222,54 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
     // while a shown segment's texture is being rebuilt the march runs without jumps (applyCombo, about 0.5-1 s): those samples are dropped (the
     // ladder would step down and keep that level locked for FAIL_LAPSE); distInCls in ctxKey also clears a lock taken then once the jumps are back
     const comboInterim=!!comboT?.rb?.busy&&!!uA&&!uA.useDist.value;
-    if(!comboInterim){const r=aq.update({volMs,mainMs,interval,budget,ctx:ctxKey,cover:rs.cover}); // a jump in the covered screen pixels makes the ladder react on the first sample.: the screen coverage only, not x eff² (the ladder's own scale fed back as a coverage change made it oscillate 0.70 <-> 0.60 every 0.5 s)
+    if(!comboInterim){const r=aq.update({volMs,mainMs,interval,budget,ctx:ctxKey,cover:rs.cover,held:heldWin}); // a jump in the covered screen pixels makes the ladder react on the first sample.: the screen coverage only, not x eff² (the ladder's own scale fed back as a coverage change made it oscillate 0.70 <-> 0.60 every 0.5 s)
     if(r.stepChanged&&material)material.uniforms.stepSize.value=stepFor(aq.stepIdx);}
-    const stepTxt=(ja?' · 刻み ':' · step ')+STEP[aq.stepIdx];
+    const stepTxt=(ja?' · 刻み ':' · step ')+effStepTxt(STEP[aq.stepIdx]);
     ui.autoLine=mainMs>0?(ja?'自動: GPU ボリューム ':'auto: GPU volume ')+volMs.toFixed(1)+' ms · '+(ja?'本描画 ':'main ')+mainMs.toFixed(1)+' ms / '+(ja?'予算 ':'budget ')+budget.toFixed(1)+' ms → '+Math.round(aq.f*100)+'%'+stepTxt
      :(ja?'自動（間隔）: ':'auto (interval): ')+interval.toFixed(1)+' ms / '+budget.toFixed(1)+' ms → '+Math.round(aq.f*100)+'%'+stepTxt;
-    ctrl.vol=ctrl.main=0;ctrlN.vol=ctrlN.main=0;autoFrames=0;autoAt=nowA;
+    ctrl.vol=ctrl.main=0;ctrlN.vol=ctrlN.main=0;autoFrames=0;heldWin=false;autoAt=nowA;
    }
   }
-  const benchOn=bench.active||anBench.active,nowG=performance.now(),fRaw=auto?aq.f:Math.min(VRES[settings.vres]??1,rs.cap);
-  const f=benchOn?fRaw:scaleGuard.step(fRaw,nowG); // flicker guard: path hysteresis (direct holds down to 90 %) + frozen while it would flap (benchmarks set their own scales)
+  const benchOn=bench.active||anBench.active,nowG=performance.now();
+  // WebGPU only: while a hand / controller holds the volume the scale is lowered by the menu's factor (settings.moveLowK, vr-render-scale.js). The hold has its own state (createHoldGate: it ends 600 ms after the last hold, and
+  // once off stays off 400 ms), applied AFTER the scale guard: the guard sees the scale without the hold, so grab / release are not counted as flaps and cannot freeze the scale, while the gate keeps the picture from alternating
+  const heldTracked=controllers.reduce((n,c)=>n+(grabbing.has(c)&&c.userData.source?1:0),0)+(identRun?.active&&identRun.state.simHold?1:0),hCond={enabled:!!settings.moveLow,webgpu:!!gx,live:running?.session===session,recording:gxRec.phase==='prep'||gxRec.on,bench:benchOn||cmpBench.active},
+   holdOn=holdGate.step(heldTracked>0,nowG,{allowed:holdAllowed(hCond)}),holdK=holdScaleOf({...hCond,heldTracked:holdOn?1:0,scale:settings.moveLowK}),
+   fRaw=auto?aq.f:Math.min(VRES[settings.vres]??1,rs.cap);
+  const fG=benchOn?fRaw:scaleGuard.step(fRaw,nowG),f=applyHoldScale(fG,holdK),holdKA=holdK<1&&fG>0?Math.min(1,f/fG):1; // flicker guard: path hysteresis (direct holds down to 90 %) + frozen while it would flap (benchmarks set their own scales). holdKA = the factor really applied (CAP_MIN can limit it)
+  if(holdKA<hkMin)hkMin=holdKA; // the performance record's row: the lowest factor of the second
   // offscreen foveation. The direct path (f = 1) has the headset's fixed foveation (setFoveation); the offscreen pass had none, so
   // the centre rect (about +-30 deg) is drawn at f and the whole eye at f x FOVEA_K (周辺の簡略化: なし 1 / 中 0.75 / 強 0.5) into a second target
-  const kF=FOVEA_K[settings.foveation|0]??1,fovRaw=f<1&&foveaWorth(rs.outside,rs.cover,kF,rs.per<1)&&!bench.active&&!anBench.active&&!!xrCam&&xrCam.cameras.length>0,fov=f<1&&fovGuard.step(fovRaw,nowG),fp=fov?f*kF:f; // only when enough of the volume lies outside the rect; not in the benchmarks (comparable with earlier builds)
-  rs.eff=f;rs.per=fov?kF:1;
+  const kF=FOVEA_K[settings.foveation|0]??1,fovRaw=(f<1||gx)&&foveaWorth(rs.outside,rs.cover,kF,rs.per<1)&&!bench.active&&!anBench.active&&!!xrCam&&xrCam.cameras.length>0,fov=(f<1||gx)&&fovGuard.step(fovRaw,nowG),fp=fov?f*kF:f; // only when enough of the volume lies outside the rect; not in the benchmarks (comparable with earlier builds) // the WebGPU view has no fixed foveation of the headset (the direct path of the WebGL view has), so there the periphery is drawn coarser at 100 % too (gx)
+  rs.eff=f;rs.per=fov?kF:1;perfLog.fval(f);
   {const nF=scaleGuard.freezes+fovGuard.freezes+variantGuard.freezes;if(nF>guardFreezes){guardFreezes=nF;console.warn('VR flicker guard: a drawing choice alternated too fast and is held',{f:fRaw,fov:fovRaw})}}
   if(mesh){
    const vk=benchOn?variantKey():variantGuard.step(variantKey(),nowG); // flicker guard: a variant flapping is drawn with 'full' (every state correct) for a while
-   const xrTarget=renderer.getRenderTarget(),w=xrTarget?.width||1,h=xrTarget?.height||1;
+   const xrTarget=gx?null:renderer.getRenderTarget(),w=xrTarget?.width||1,h=xrTarget?.height||1; // WebGPU: the eye size comes from the cameras' viewports
    // both offscreen targets are allocated once per session at their largest size (the XR framebuffer, the periphery at the largest
    // FOVEA_K below 1) as soon as the XR framebuffer exists, and only the used corner is cleared / drawn / sampled: changing f never reallocates
    if(xrTarget)ensureLowTargets(w,h);
-   if(f<1&&lowTarget){
+   if(gx){
+    // WebGPU session: the WGSL volume pass of every eye into the offscreen image(s) (vr-wgpu.js), then the composite on the box (the main render below). Always offscreen, also at 100 %. Not yet ready (textures / pipelines still being made): nothing is drawn.
+    const cams=xrCam?xrCam.cameras:[];
+    if(gx.ready&&cams.length){
+     scene.updateMatrixWorld();
+     gx.vol.volume.setTimerEvery?.(gxMeasure()||identRun?.active?1:TS_SAMPLE_EVERY); // E0: the volume timestamps (resolve, copy, mapAsync) of one frame in TS_SAMPLE_EVERY; every frame while the breakdown is prepared / recorded
+     gx.vol.volume.markCpuBusy?.(material.uniforms.clsTex?.value,!!comboT?.rb?.busy); // the combined texture's rebuild is going up (its CPU bytes run ahead of the GPU's): the new ways that build from the CPU bytes leave it alone meanwhile
+     // the direct draw trial (the setting on the diagnostics page, off by default): asked for only at scale 1; the flicker guard (the path <-> the offscreen path, as the scale guard / the periphery guard of the WebGL view) falls back to the offscreen path while it holds
+     {const want=!!settings.gxDirect&&f>=1-1e-6&&!!gx.vol.direct?.installed,ok=gxDirGuard.step(want,nowG);gxDirAsked=want&&ok&&!gxDirGuard.frozenAt(nowG)}
+     gx.vol.direct.ask(gxDirAsked); // the renderer's draw() below reads it (the draw call itself is the one of before)
+     identHoldKA=holdKA; // the factor of the hold scale really applied this frame, for the check's record (the draw's context below reads it)
+     const gxEx=gxExtras();for(const x of gxEx)x.boxes=xrCam?x.eyes:null; // the other volumes of the frame (the partner of a sample pair): drawn into the same target, nearest hit wins (its composite is the box's own material, the nearer box first)
+     gx.vol.draw({u:(diagAn.noRegion?null:partGxU(vk))||material.uniforms,cams,model:mesh.matrixWorld,f:Math.min(1,f),fov,fp,periK:kF,rects:rsFov,band:rsFov[0][4],variant:{cls4:cls4On,events:material.uniforms.planeCount.value>0,...(diagAn.noRegion?{feat:null}:{})},decode:renderer.currentColorSpace===THREE.SRGBColorSpace,boxes:xrCam?rsEyes:null,identCtx:identRun?.active?identCtxNow():null,extras:gxEx.length?gxEx:null}); // the same-picture check's state of this frame (null: no check running);: boxes = eyeMetrics' covered rect of each eye (this frame's): the pass draws only there
+    if(auto&&holdKA<1)heldWin=true; // a frame really drawn at the hold scale (holdKA is the factor applied; 1 = not shrunk): the ladder's window gets no rise from it (aq.update held); the next window starts clean
+     if(identRun?.active)identRun.frame(); // the frames since the tissue switch
+     gxVolSubmitted(fa0); // the performance record: pre, and vlat on every 4th frame
+     rs.low=true;rs.w=gx.vol.stats.w;rs.h=gx.vol.stats.h;rs.eyes=cams.length;gxD.count('vol');
+    }
+    {const gt=gx.vol.volume.takeGpuMs();if(gt){sums.vol+=gt.ms;counts.vol+=gt.n;ctrl.vol+=freeVolMs(gt.ms,holdKA);ctrlN.vol+=gt.n;perfLog.add('vol',gt.ms,gt.n)}} // the ladder is fed the volume time as it would be without the hold scale (freeVolMs: / holdK^2; unchanged at holdK = 1); this acts only where the ladder reads volMs (mainMs > 0), not on the WebGPU frame-interval path (mainMs stays 0), which heldWin guards instead; the performance record keeps the measured time // the volume pass's GPU time (timestamp-query; none where the device has not got it)
+    {const fs=gx.vol.volume.takeFrameStats?.();if(fs){for(const v of fs.spans)perfLog.sample('span',v);for(const v of fs.gaps)perfLog.sample('gap',v)}} // the GPU timeline of the frames read back since the last frame (vr-wgpu.js markFrame): span and the idle gap before each frame
+   }else if(f<1&&lowTarget){
     // own pass per eye into the offscreen target, then the composite material on the same box upscales it inside the main XR render
     const tw=lowTarget.width,th=lowTarget.height,cams=xrCam.cameras;
     scene.updateMatrixWorld();rayMesh.matrixWorld.copy(mesh.matrixWorld);{const pb=diagAn.noRegion?null:partBodySet(vk);rayMesh.material=pb?pb.rays[pb.k]:(diagAn.noRegion?plainSets().ray:hideFreeOf(msets.get(setKey),material.uniforms,vk,!parts.length||partBakeOn())?.rays||rayVariants)[vk]} // an earlier change: while a part is out the body's cut is drawn by the VRL_PART programs (partBodySet; null: as before)
@@ -4820,52 +5308,60 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
      const pc=pairComposites(pa,false);compMaterial.visible=pc.primary;if(pt)pt.comp.visible=pc.partner}
    }else{{const pb=diagAn.noRegion?null:partBodySet(vk);mesh.material=pb?pb.vars[pb.k]:(diagAn.noRegion?plainSets().vars:hideFreeOf(msets.get(setKey),material.uniforms,vk,!parts.length||partBakeOn())?.variants||variants)[vk]}pairRender(false);partRender(false);rs.low=false;rs.w=w;rs.h=h}
    if(firstDrawMs<0)firstDrawMs=performance.now()-sessionAt;
-   else hideFreeCompile(msets.get(setKey),material.uniforms,cls4On||four,()=>!!running); // view-perf: the hide-free copy of the set in use, from the second drawn frame on (a no-op once made, for a set without results / children, or without a parallel compile)
+   else if(!gx)hideFreeCompile(msets.get(setKey),material.uniforms,cls4On||four,()=>!!running); // view-perf: the hide-free copy of the set in use, from the second drawn frame on (a no-op once made, for a set without results / children, or without a parallel compile)
   }
+  if(gx){lateHints();lateScale();lateHud();lateCards();lateMarks()} // WebGPU: the volume pass is submitted (above): the guides', scale tag's, hands', cards' and markers' bookkeeping that does not feed it runs now, while the GPU works
   if(tutVr&&ui.open&&ui.tab===10){const mk=tutVr.menuKey();if(mk!==tutMenuKey){tutMenuKey=mk;menu.refresh()}} // the menu's tutorial pointer animates (at most 2 redraws a second, only while a step lights a widget, and still 20 s after the board last changed)
   if(loadInfo?.cut&&!partCutLive())partCutEnd(loadInfo); // n736: a cut board is shown only while its cut runs
-  if(loadInfo){loadBoard.mesh.visible=true;const nl=performance.now();if(nl-loadDrawn>=500){loadDrawn=nl;if(loadInfo.stage==='upload'||loadInfo.stage==='refine'){const left=uploadQueue.bytesLeft;loadInfo.peak=Math.max(loadInfo.peak||0,left);loadInfo.sub=loadInfo.peak?1-left/loadInfo.peak:0}loadBoard.refresh()}loadBoard.flush()}else if(loadBoard.mesh.visible)loadBoard.mesh.visible=false; // the 「読み込み中」 board
-  if(ui.open)menu.flush(); // a closed menu is not redrawn / re-sent (its texture is not drawn); setMenuOpen(true) refreshes it
-  const hk=[section.on,ui.open,ui.open&&ui.tab===10,helpShow].join()+(tutVr?tutVr.drawKey():'')+(tutPreview&&helpShow==='detail'?tutPreview.drawKey():'');if(hk!==helpKey){helpKey=hk;help.refresh()}help.flush();
-  sums.js+=performance.now()-js0;counts.js++;
+  if(loadInfo){loadBoard.mesh.visible=true;const nl=performance.now();if(nl-loadDrawn>=500){loadDrawn=nl;if(loadInfo.stage==='upload'||loadInfo.stage==='refine'){const left=uploadQueue.bytesLeft;loadInfo.peak=Math.max(loadInfo.peak||0,left);loadInfo.sub=loadInfo.peak?1-left/loadInfo.peak:0}loadBoard.refresh()}if(!gx||!boardLive.load)loadBoard.flush()}else if(loadBoard.mesh.visible)loadBoard.mesh.visible=false; // the 「読み込み中」 board
+  if(ui.open&&(!gx||!boardLive.menu))menu.flush(); // a closed menu is not redrawn / re-sent (its texture is not drawn); setMenuOpen(true) refreshes it. E1: the WebGPU session redraws a board that was already shown after the callback (jBoards); the first frame of a board is drawn here
+  if(!gx||!boardLive.help||!help.mesh.visible)helpTick();
+  if(gx){boardLive.menu=ui.open;boardLive.help=help.mesh.visible;boardLive.load=!!loadInfo;post.request(jBoards)} // the picture of a board that is up (its canvas redraw: 2D raster of 1024 px wide boards) follows one frame later; its mesh stays where this frame's pose put it
+  {const jm=performance.now()-js0;sums.js+=jm;counts.js++;perfLog.add('js',jm)}
   labelBatch.flush(renderer,camera); // the cards and legs of this frame, drawn in a few calls (vr-label-batch.js)
-  timed('main',()=>renderer.render(scene,camera));
+  if(gx){const lp=gx.vol?.stats.lowPx;if(lp>0)perfLog.add('lpx',lp);if(lp>0){perfLog.add('nv',gx.vol.stats.volumes);perfLog.add('rp',gx.vol.stats.passes);perfLog.add('bk',partBakeOn()?1:0)}}
+  else{let nv=1;if(pair&&pair.on&&pair.mesh.parent)nv++;for(const q of parts)if(q.on&&q.mesh.parent)nv++;perfLog.add('nv',nv);perfLog.add('bk',partBakeOn()?1:0)} // perf2 (measurement only): the WebGL view's nv (the body + the partner + the parts shown) and bk (the body drawn from the baked cut), as the WebGPU view's
+  const rc0=performance.now();
+  if(gx)gxRender();else timed('main',()=>renderer.render(scene,camera));
+  perfLog.add('render',performance.now()-rc0); // the CPU ms of renderer.render() (WebGPU: with gxRender's bookkeeping)
+  if(gx)gxFrameEnd(fa0);
   if(shotRequested){shotRequested=false;try{takeScreenshot()}catch(e){console.error(e)}}
+  perfLog.endCb(performance.now()-fa0); // a callback of 20 ms or more gets a line with its stages (vr-perf-log.js)
+  if(gx)gxDirectDone(); // the direct draw trial: what the frame did (its record; a frame set up but not recorded switches the path off)
+  {holder.matrixWorld.decompose(pmP,pmQ,pmS);if(pmOk){perfLog.move(pmP.distanceTo(pmP0)*100,pmQ.angleTo(pmQ0)*57.29578)}pmP0.copy(pmP);pmQ0.copy(pmQ);pmOk=true} // the performance record: the volume's world movement since the previous frame (cm, deg); held or not
   frames++;const now=performance.now();
   if(hist.isOpen){histCbMs=now-js0;histPerMs=1000/targetRate()} // the histogram pass's budget in this frame (histBudget)
   if(now-fpsAt>=1000){
    fps=frames*1000/(now-fpsAt);frames=0;fpsAt=now;
-   ui.fpsLine=(firstDrawMs>=0?(ja?'初回描画 ':'first draw ')+Math.round(firstDrawMs)+' ms · ':'')+fps.toFixed(0)+' fps · '+(ja?'ボリューム ':'volume ')+avg('vol')+' ms · '+(ja?'本描画 ':'main ')+avg('main')+' ms · JS '+avg('js')+' ms'+(timerExt?'':(ja?'（GPU計測なし）':' (no GPU timer)'));
-   const f1s=rs.eff,fps1=f1s*rs.per;sizes=rs.low?(ja?'縮小描画 ':'low ')+Math.round(f1s*100)+'% '+Math.ceil(rs.w*f1s)+'×'+Math.ceil(rs.h*f1s)+(rs.per<1?(ja?' 周辺 ':' periphery ')+Math.round(fps1*100)+'%':'')+' / XR '+rs.w+'×'+rs.h+' ('+rs.eyes+(ja?'眼':' eyes')+')':(ja?'直接描画 ':'direct ')+'XR '+rs.w+'×'+rs.h;
-   // the honest quality readout: the mode and, when the data-resolution cap draws fewer pixels, the effective scale (+ px per voxel, covered px)
-   {const q=qualityReadout();if(q!==ui.qualityLine){ui.qualityLine=q;if(ui.open&&ui.tab===3)menu.refresh()}}
-   ui.sizeLine=sizes+' · '+scaleLineText(holder.scale.x,realLongMm(),language)+' · '+info+' · '+(ja?'データ ':'data ')+((settings.data|0)?'256':'512')+(ja?' · 表示セグメント ':' · shown segments ')+SEGMENT_PRESET_ORDER.filter(k=>{const g=segmentState[k];return g?.active&&g?.enabled&&segMode[k]!==2}).length;
-   // one line for the Quest numbers: fps / auto % / step / samples per ray / ended by hit / skipped by jumps / GPU ms
-   ui.diagLine=fps.toFixed(0)+' fps · '+qualityText({auto:!VRES[settings.vres],modeF:VRES[settings.vres]||aq.level,eff:rs.eff,periphery:rs.per},ja)+' · '+(ja?'刻み ':'step ')+STEP[VRES[settings.vres]?settings.quality|0:aq.stepIdx]+(probe?' · '+(ja?'反復 ':'samples ')+probe.samples.toFixed(0)+(ja?' · hit終了 ':' · hit end ')+Math.round(probe.hit*100)+'% · '+(ja?'跳躍 ':'jump ')+Math.round(probe.skip*100)+'%':'')+' · vol '+avg('vol')+' ms · '+(ja?'本 ':'main ')+avg('main')+' ms';
-   // only while the menu is open. Closed, these ran every second anyway: the 48×48 probe (a synchronous
-   // readRenderTargetPixels, a GPU stall) and a full redraw of the 1024×1180 menu canvas (+ texture upload): a once-a-second hitch on the
-   // Quest that also fed the auto-quality downgrade. The self-check's probe (env.probe, probeReq above) is separate and unchanged.
-   if(ui.open&&ui.tab===4)try{measureSamples()}catch(e){console.warn(e)}
-   if(ui.open&&(ui.tab===4||ui.flash))menu.refresh();
-   if(ui.flash&&now>ui.flashUntil)ui.flash='';
-   for(const k in sums){sums[k]=0;counts[k]=0}
+   if(gx)post.request(jSecond,now);else secondTick(now);
   }
+  benchRing.callback(performance.now()-fa0,benchPre);benchPre=NaN; // the frame ring: this callback's total CPU ms and the ms to the volume pass submit (WebGPU), shown with the interval that follows
+  if(gx){post.tail(performance.now()-fa0);post.schedule()} // the work above is posted: it runs after this callback returns (vr-post-frame.js)
  });
- const cleanup=()=>{document.removeEventListener('visibilitychange',partCutVis);try{session.removeEventListener('visibilitychange',partCutVis)}catch{}stopPair();pairHost=null;try{tutVr?.dispose()}catch(e){console.warn('[tutorial] dispose',e)}for(const g of [glowHelp,glowMenu]){try{g.geometry.dispose();g.material.dispose()}catch{}}try{ctlHints.dispose();edgeArrow.dispose();boardArrow.dispose()}catch(e){console.warn('[tutorial] 3D guides dispose',e)}
-  partDispose();renderer.setAnimationLoop(null);if(probeReq){const q=probeReq;probeReq=null;q.res(null)}selfCheck.dispose(); // a pending self-check probe resolves (no frame will serve it) //: unwinds a running scenario, shows the result panel on the page
+ const cleanup=()=>{perfHideOff();post.clear();document.removeEventListener('visibilitychange',partCutVis);try{session.removeEventListener('visibilitychange',partCutVis)}catch{}stopPair();pairHost=null;try{tutVr?.dispose()}catch(e){console.warn('[tutorial] dispose',e)}for(const g of [glowHelp,glowMenu]){try{g.geometry.dispose();g.material.dispose()}catch{}}try{ctlHints.dispose();edgeArrow.dispose();boardArrow.dispose()}catch(e){console.warn('[tutorial] 3D guides dispose',e)}
+  partDispose();renderer.setAnimationLoop(null);if(probeReq){const q=probeReq;probeReq=null;q.res(null)}selfCheck.dispose();if(gx)releaseXrLoop(renderer); /* WebGPU: three.js' XR manager must not start the app's loop again when it ends the session (it does, right after this handler: see bindGxSession) */ // a pending self-check probe resolves (no frame will serve it) //: unwinds a running scenario, shows the result panel on the page
   vrCacheNotify=null;vrSaveGate.frame.live=false;vrSaveGate.frame.fast=0;vrSaveGate.frame.slow=0;vrHold(false);swapGuard.cancel();abortVrPrepare();uploadQueue.clear();frameGaps.stop();for(const t of swapMade)t.dispose();swapMade.length=0;loadBoard.dispose();sliceToast.dispose();probeTarget.dispose();volTex?.dispose();brickTex?.dispose();comboT?.combo?.dispose();comboTs.forEach(t=>{t.rb.dispose();t.rb=null});comboTs.length=0;disposeExtra();disposeEdits();for(const st of msets.values()){Object.values(st.variants).forEach(m=>m.dispose());Object.values(st.rays).forEach(m=>m.dispose())}gpuWarm.forEach(m=>m.dispose());compMaterial?.dispose();lowTarget?.dispose();periTarget?.dispose();mesh?.geometry.dispose();scaleTag.dispose();menu.dispose();help.dispose();ev?.dispose();unsubHist();unsubLabelHist();labelHist.dispose();hist.dispose();shadeAuto.reset();shadeHist.dispose();unsubShade();unsubRegionVis();unsubRegionHid();unsubLook();unsubShadeKids();clearTimeout(childSyncTimer);regionLut.dispose();childLutTex?.dispose();badge.userData.dispose();
   background.traverse(o=>{o.geometry?.dispose();o.material?.dispose()});planes.forEach(disposePlane);flying.forEach(f=>disposePlane(f.pl));flying.length=0;secUndo.clear();undoBtn.dispose();flingDbg?.dispose();unsubComments();huLine.dispose();setHuLineDeferred(false);vpMarkers.dispose();anchorDots.dispose();labelBatch.dispose();vpMeasure.dispose();cancelMeasure();surfCursors.forEach(x=>x.dispose());wheel.dispose();pointWheel.dispose();ringGeo.dispose();ring.material.dispose();
   // the session's WebGL context is ended now, not left to the garbage collector: headless, it was still alive (not lost) after the session ended and
   // a forced GC; every session start makes a new one (prepareVrGpu). On Quest VR -> AR -> VR crashed the browser
-  renderer.dispose();try{renderer.forceContextLoss?.()}catch{}renderer.domElement.remove();running=null;setShadeAutoPageHeld(false);
+  if(gx){gxRec.gen++;gxRec.on=false;try{gx.vol?.dispose()}catch(e){console.warn(e)}} // a recording that is still running or being compiled is cancelled (dispose lets its resources go)
+  renderer.dispose();try{renderer.forceContextLoss?.()}catch{}renderer.domElement.remove();running=null;setShadeAutoPageHeld(false);if(gx){try{gx.device.destroy()}catch{}}
   showShotsPanel(ja);showBenchPanel(ja);
  };
  session.addEventListener('end',()=>{if(activeSwapPf)activeSwapPf.cancelled=true;emit('session-end');cleanup();step('ended')},{once:true});
+ // WebGPU: now, after the animation loop above is set (see the comment where the WebGL session is set). three.js' XR manager restores that loop and restarts it on window when the session ends
+ // (its 'end' listener runs after cleanup above): bindGxSession removes it again once that has happened. A failure here ends the session and the page says so (the immersive view would draw nothing).
+ let gxBindTimer=0;if(gx){gxD.stage('setSession');gxBindTimer=setTimeout(()=>{if(!gxS.bound&&running?.session===session){gxD.stage('auto-end','setSession did not finish within 20 s');step('gpu-closed');try{session.end()?.catch?.(()=>{})}catch{}}},20000)} // the session has no layer before setSession: no XR frame comes, so this is a timer, not the heartbeat
+ if(gx&&gxCaps){try{gxUndoWrap=installLayerWrap(globalThis.XRGPUBinding?.prototype,gxCaps,{launch:effectiveFlag('gxLayerUsage',false)})}catch(e){gxD.error('caps layer',e)}session.addEventListener('end',()=>{try{gxUndoWrap?.()}catch{}},{once:true})} // three.js' createProjectionLayer call is wrapped while setSession runs (the display layer is the plain call unless the debug switch gxLayerUsage is on)
+ if(gx&&!await bindGxSession(renderer,session,e=>{console.warn('WebGPU VR: the XR session could not be taken by the renderer:',e);gxD.error('setSession',e);step('gpu-closed')},()=>!!running))return;
+ markStart('bound');
+ if(gx){const xr=renderer.xr;try{gxS.binding=xr.getWebGPUBinding?.()||null;gxS.layer=xr._glProjLayer||null;gxS.ref=xr.getReferenceSpace?.()||null}catch(e){gxD.error('bind-read',e)}clearTimeout(gxBindTimer);gxS.bound=true;gxD.value('atSetSession',gxSessionValues(renderer,session,gx.device));gxD.stage('setSession done')} // the projection layer, formats and colour spaces as three.js set them up
+ if(gx&&gxCaps){try{gxUndoWrap?.();gxUndoWrap=null;gxCaps.publish()}catch(e){gxD.error('caps layer',e)}} // setSession is over: three.js' call is put back; the layer trial's result is in the record
  document.addEventListener('visibilitychange',partCutVis);session.addEventListener('visibilitychange',partCutVis); // n736: the cut-out board goes when the page / the headset session is hidden (removed in cleanup)
  try{
   // prepared before the session (or now, if the data changed meanwhile)
   P=await prepareVrData(({phase,done,total})=>{ui.status=L.preparing+(phase==='read'?done+' / '+total:phase);menu.refresh()});
-  vd=P.vd;
+  vd=P.vd;markStart('data');
   if(!running)return;
   const makeTextures=makeVolumeTextures,allCompiled=!!gpu&&gpu.key===P.key&&!!gpu.compiledAll; // allCompiled: prepareVrGpu compiled every program set (no parallel compile: see shouldPrecompileSets)
   // a 512³ upload without the page-side preparation runs here, inside the session: say so before the view stalls
@@ -4890,7 +5386,8 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    cbSegLo=new Float64Array(3),cbSegHi=new Float64Array(3),cbSliLo=new Float64Array(3),cbSliHi=new Float64Array(3),cbLo=new Float64Array(3),cbHi=new Float64Array(3),cbOut={c:[0,0,0],h:[0,0,0]};
   // 512 / 256 data (256 made on first use, kept for the session)
   useData=i=>{
-   partBakeDrop(); // n734: another grid / texture: the baked bytes are those of the old one
+   if(gx)i=dataSel(); // WebGPU: the 256 grid whatever was asked (the stored setting is left as it is)
+   partBakeDrop('grid'); // n734: another grid / texture: the baked bytes are those of the old one
    const wantHalf=!!P.half&&(i===1||!fullReady),t=wantHalf?(half||=makeTextures(P.half)):full; // until the 512 grid is in the GPU (a switch shows the 256 grid first) the 256 grid is used whatever the setting says
    material.uniforms.sliceVol.value=fullReady&&full.v?full.v:dummyEdit;
    // n731: the diagnostic switch (classification off) draws from the HU of this grid: its thin structures are put into a copy of it (vr-volume-prep.js thinHuData), built once, only while the switch is on
@@ -4978,7 +5475,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
   const hideZero=new Uint8Array(256),hideCurR=new Uint8Array(256),hideCurC=new Uint8Array(256);
   const hideSrcs=()=>[P.region?.rg||null,P.child?.rg||null,partHideSrc()?.ids||null];
   const pageHides=()=>{for(let i=1;i<256;i++)if(hideBitsR[i]|hideBitsC[i])return true;return false}; // the page itself hides a result / child: only then is the body's cut also a source of the visible-content field (without it the blocks wholly inside the cut are left out by partOcc: no field to build)
-  const bodyCutDraws=()=>!!(parts.length&&partHideSrc()&&!diagAn.noRegion&&partBodyDraws(variantKey())); // (n734: partBodyDraws = partBodySet without the bake: the hidden state of the combined texture is the same either way) the body is drawn by the VRL_PART programs with the field on the GPU (its cut = the field), not by the ordinary ones with the targets hidden by their voxels in its tables
+  const bodyCutDraws=()=>!!(parts.length&&(partHideSrc()||(gx&&!pageHides()&&partBakeCan()))&&!diagAn.noRegion&&partBodyDraws(variantKey())); // (n734: partBodyDraws = partBodySet without the bake: the hidden state of the combined texture is the same either way) the body is drawn by the VRL_PART programs with the field on the GPU (its cut = the field), not by the ordinary ones with the targets hidden by their voxels in its tables
   const hideCur=()=>{if(!parts.length)return[hideBitsR,hideBitsC,hideZero];hideCurR.set(hideBitsR);hideCurC.set(hideBitsC);
    if(bodyCutDraws()){for(const q of parts){const tg=q.target,i=(tg?.index|0)+1;if(i>0&&i<256)(tg.kind==='region'?hideCurR:hideCurC)[i]=0}const ph=partHideSrc();return[hideCurR,hideCurC,ph&&pageHides()?ph.bits:hideZero]}
    for(const q of parts){const tg=q.target,i=(tg?.index|0)+1;if(i>0&&i<256)(tg.kind==='region'?hideCurR:hideCurC)[i]|=q.mask} // the ordinary programs (no field on the GPU yet, the VRL_PART set not compiled, the diagnostic without results): the tables hide each target on its slots (patchRegionLutMany / patchChildLutMany), so the hidden state is the page's and the targets'
@@ -5092,13 +5589,15 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    volPick=P.cls?{cls:P.cls,dims:(P.half||vd).dims,halfExt:vd.halfExt,rg:P.region?.rg&&P.region.dims.join()===(P.half||vd).dims.join()?P.region.rg:null}:null;regionList=P.region?.list||[];evLabels=TRIGGER_AT_START==='label';initialVrModes(); // the data of this session is known: the trigger starts in point mode again (also when a level / dataset was changed since the page loaded)
    cbGrid=null;cbOff=null;cbSegOk=false;cbSl=null;cbAir=NaN;cbDirty=true;cbKey.fill(NaN);cbScan=createSegScan();cbSliceIdx=sliceIndex(vd);
    full=assets.full;half=assets.half;fullReady=assets.fullReady!==false;volTex=full.v;brickTex=full.b;
-   childList=P.child?.list||[];four=P4(P);editTex=assets.edit;editActive=P.edit.active;regionTex=assets.region;childTex=assets.child||null;
+   childList=P.child?.list||[];
+   four=P4(P);editTex=assets.edit;editActive=P.edit.active;regionTex=assets.region;childTex=assets.child||null;
    comboT=null;comboMask=-1;
    if(first){
     unifs=volumeUniforms(vd,full,settings);unifs.clsTex.value=dummyEdit;unifs.cls4Tex.value=dummyEdit;unifs.editTex.value=dummyEdit;unifs.distTex.value=dummyEdit;
     const st=getSet(P);
     // BackSide: rays start at the eye when the head is inside the box
     meshObj=new THREE.Mesh(new THREE.BoxGeometry(2,2,2),st.base);meshObj.frustumCulled=false;meshObj.renderOrder=1;
+    if(gx){Object.defineProperty(meshObj,'material',{get:()=>gx.vol.material,set(){},configurable:true});gx.vol.composite.u.halfExt.value.set(...vd.halfExt)} // WebGPU session: the box is only the composite (vr-wgpu.js; every assignment of a material to it is ignored), the ray pass is the WGSL one
     compMaterial=new THREE.ShaderMaterial({glslVersion:THREE.GLSL3,vertexShader:compositeVertex,fragmentShader:compositeFragment,side:THREE.BackSide,toneMapped:false,depthWrite:true,transparent:false,
      blending:THREE.CustomBlending,blendSrc:THREE.OneFactor,blendDst:THREE.OneMinusSrcAlphaFactor,uniforms:compositeUniforms(vd.halfExt)});
     // the offscreen target is cleared to 0 and written with plain premultiplied
@@ -5110,7 +5609,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    }else{
     const u=unifs;u.halfExt.value.set(...vd.halfExt);u.calib.value.set(...vd.calibration);u.boxC.value.set(0,0,0);u.boxH.value.set(0,0,0);u.useSkip.value=0;u.skipTex.value=skipDummy();u.distInCls.value=0;u.useDist.value=0;u.useCls.value=0;
     u.clsTex.value=dummyEdit;u.cls4Tex.value=dummyEdit;u.editTex.value=dummyEdit;u.distTex.value=dummyEdit;u.regionTex.value=dummyEdit;u.childTex.value=dummyEdit;
-    compMaterial.uniforms.halfExt.value.set(...vd.halfExt);
+    if(gx)gx.vol.composite.u.halfExt.value.set(...vd.halfExt);else compMaterial.uniforms.halfExt.value.set(...vd.halfExt);
     adoptSet(getSet(P));
    }
    mesh=meshObj;
@@ -5157,7 +5656,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
   // the coarse step of a switch: the 256 grid with everything the picture needs (the combined classification + distance texture, the fourth segment's bytes, the processing mask, the analysis index)
   // goes into the GPU in slices (the frame loop runs uploadQueue.tick); resolves when all of it is there. When the data has no 256 copy (it is 256 or less already) its grid is the coarse one.
   const uploadCoarse=async (Pn,syncDone=()=>{})=>{
-   const vdN=Pn.vd,plan=swapPlan({hasHalf:!!Pn.half,dataSetting:settings.data}),grid=Pn.half||vdN,keys=[];
+   const vdN=Pn.vd,plan=swapPlan({hasHalf:!!Pn.half,dataSetting:dataSel()}),grid=Pn.half||vdN,keys=[];
    const key=n=>{keys.push(n);return n};
    const gv=slicedTexture(key('vol'),grid.data,grid.dims,2,THREE.RGFormat,THREE.UnsignedByteType,THREE.LinearFilter),gb=smallTexture(grid.bricks,grid.brickDims);
    const gt=gridAsset(grid,gv,gb);
@@ -5204,7 +5703,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    if(!t.rb)t.rb=createComboRebuild({dist:pt.P2.dist,chan:pt.cls.chan,dims:t.dims,data:t.combo.image.data,mask:t.comboMask,upload:(z0,z1)=>pairUploadCombo(t,z0,z1)});
    t.rb.request(mask);t.comboMask=t.rb.contentMask;pairApplyCombo(pt);
   };
-  const pairShow=pt=>{if(!pt.mesh.parent)holder.add(pt.mesh);if(!pt.rayMesh.parent)volScene.add(pt.rayMesh);pt.rayMesh.visible=true;pt.on=true};
+  const pairShow=pt=>{if(!pt.mesh.parent)holder.add(pt.mesh);if(!gx&&!pt.rayMesh.parent)volScene.add(pt.rayMesh);pt.rayMesh.visible=true;pt.on=true};
   const pairHide=pt=>{pt.mesh.parent?.remove(pt.mesh);volScene.remove(pt.rayMesh);if(pt.outline)pt.outline.visible=false;pt.on=false};
   // every frame, after the primary's own uniforms are set: the partner's rebuild step, the planes in its object space, the march step, the per-slot segment values
   // the section's box outlined in the section's colour while its frame glows (the same condition as the glow band: pl.lit) or for OWNER_SHOW_MS after its holder changed; nothing while the frames are hidden / the sections are off
@@ -5489,16 +5988,18 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
     u2.voxelMin.value=Math.min(2*vdN.halfExt[0]/dims[0],2*vdN.halfExt[1]/dims[1],2*vdN.halfExt[2]/dims[2]);u2.voxelSize.value.set(...depthVoxelSize(vdN.halfExt,dims,[series.columns,series.rows,series.slices.length]));
     lut=new THREE.DataTexture(new Float32Array(256*4),256,1,THREE.RGBAFormat,THREE.FloatType);lut.minFilter=lut.magFilter=THREE.NearestFilter;lut.generateMipmaps=false;lut.needsUpdate=true;u2.regionLut.value=lut;
     // the program set of the partner's data (with / without analysis results; the same programs as the primary's when the defines agree), compiled BEFORE it is shown
-    const base=makeVolumeBase(definesOfKey(setKeyOf(P2)),u2);vars=materialVariants(base);rays=rayVariantsOf(vars);
-    comp=new THREE.ShaderMaterial({glslVersion:THREE.GLSL3,vertexShader:compositeVertex,fragmentShader:compositeFragment,side:THREE.BackSide,toneMapped:false,depthWrite:true,transparent:false,
+    if(gx){vars={};rays={}} // WebGPU: no GLSL programs; the WGSL ones are compiled below, the partner's box composites with a material of the volume renderer's own images
+    else{const base=makeVolumeBase(definesOfKey(setKeyOf(P2)),u2);vars=materialVariants(base);rays=rayVariantsOf(vars)}
+    comp=gx?gx.vol.composite.boxMaterial(vdN.halfExt,true):new THREE.ShaderMaterial({glslVersion:THREE.GLSL3,vertexShader:compositeVertex,fragmentShader:compositeFragment,side:THREE.BackSide,toneMapped:false,depthWrite:true,transparent:false,
      depthFunc:THREE.LessDepth, // where the two boxes overlap on the screen both composites read the same low-resolution pixel at the same depth: the later one must not blend it a second time (Less: an equal depth is rejected)
      blending:THREE.CustomBlending,blendSrc:THREE.OneFactor,blendDst:THREE.OneMinusSrcAlphaFactor,uniforms:{...compMaterial.uniforms,halfExt:{value:new THREE.Vector3(...vdN.halfExt)}}}); // the low-resolution target and its sizes are the primary's objects
     const vk=four?[...VARIANT_KEYS,...VARIANT_KEYS4]:VARIANT_KEYS;
-    await compileVariantPrograms(renderer,vk.map(k=>vars[k]),vk.map(k=>rays[k]),[comp],live);
+    if(gx){await gx.vol.warmWays(gxVariants(P4(P),P,true)); await gx.vol.preload(u2,gxVariants(four,{region:{data:P2.region?.data,rg:P2.region?.rg}},true))} // WebGPU: the body's programs of the depth axis (a frame of two volumes) and the partner's programs, waited for BEFORE it is shown
+    else await compileVariantPrograms(renderer,vk.map(k=>vars[k]),vk.map(k=>rays[k]),[comp],live);
     if(!live())throw new Error('cancelled');
-    const m2=new THREE.Mesh(meshObj.geometry,vars.full);m2.frustumCulled=false;m2.renderOrder=1.5; // after the primary's (1): its composite comes second
+    const m2=new THREE.Mesh(meshObj.geometry,gx?comp:vars.full);m2.frustumCulled=false;m2.renderOrder=1.5; // after the primary's (1): its composite comes second
     const delta=[pairOffsetX(vd.halfExt,vdN.halfExt),0,0];m2.position.set(delta[0],0,0);
-    const r2=new THREE.Mesh(meshObj.geometry,rays.full);r2.matrixAutoUpdate=false;r2.matrixWorldAutoUpdate=false;r2.frustumCulled=false;
+    const r2=gx?new THREE.Object3D():new THREE.Mesh(meshObj.geometry,rays.full);r2.matrixAutoUpdate=false;r2.matrixWorldAutoUpdate=false;r2.frustumCulled=false;
     const pt={job,P2,order,cls:{chan:cls.chan},four,u:u2,grid:{bricks:grid.bricks,brickDims:grid.brickDims,dims},cb:createContentBox(),t:{combo:gc,cls4:g4,comboMask:cmask,rb:null,dims,comboSrc:null},cls4On:false,reqMask:-1,mesh:m2,rayMesh:r2,comp,vars,rays,lut,regionList:P2.region?.list||[],atlasOf:new Map((inp.regions||[]).filter(r=>r.atlasId!=null).map(r=>[r.id,r.atlasId])),sink,delta,baseStep:step,segs:inp.segments,colors:inp.segmentColors,on:false,apos:new THREE.Vector3(),aquat:new THREE.Quaternion(),
      // stage 3: the picking / points / name cards of the partner
      fp:datasetFingerprint(series),srcDims:{columns:series.columns,rows:series.rows,slices:series.slices.length},halfExt:vdN.halfExt,spacing:seriesSpacing(series),
@@ -5510,14 +6011,15 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
      pt.markers=createVrPointMarkers(THREE,scene,deps);pt.measure=createVrMeasure(THREE,scene,deps);pt.offStore=store.onChange(pointsChanged)}
     P2.vd.data=null;P2.combo=null;P2.cls4=null;P2.cls=null; // the textures hold their own copies of what is drawn; the rest of the CPU copies of the 512 grid go (dist stays: the combined texture's rebuild)
     holder.add(pt.outline);pair=pt;job.pt=pt;pairAnchorReset();ok=true;
-    pt.k=setKeyOf(P2);hideFreeCompile(pt,u2,four,()=>!!running&&pair===pt); // view-perf: the partner's hide-free copy, in the background (it is shown with its own programs meanwhile)
+    pt.k=setKeyOf(P2);if(!gx)hideFreeCompile(pt,u2,four,()=>!!running&&pair===pt); // view-perf: the partner's hide-free copy, in the background (it is shown with its own programs meanwhile)
     pairRefreshCombo(pt);pairRegionLut();pairShow(pt);
     return pt;
    }finally{
     if(!ok){uploadQueue.drop(k=>k.startsWith('pair'+job.gen+'-'));vars&&Object.values(vars).forEach(m=>m.dispose());rays&&Object.values(rays).forEach(m=>m.dispose());comp?.dispose();lut?.dispose();for(const x of sink)x.dispose();sink.length=0}
    }
   };
-  pairHost={ready:()=>!!running&&!!mesh&&!!material&&!ui.swapBusy,bind:bindPair,unbind:job=>{if(job)uploadQueue.drop(k=>k.startsWith('pair'+job.gen+'-'));unbindPair(job?.pt||pair)},shown:()=>!!pair?.on}; // unbind: the uploads of a job still preparing / binding go too (it has no pt yet)
+  pairHost={ready:()=>!!running&&!!mesh&&!!material&&!ui.swapBusy,
+   bind:bindPair,unbind:job=>{if(job)uploadQueue.drop(k=>k.startsWith('pair'+job.gen+'-'));unbindPair(job?.pt||pair)},shown:()=>!!pair?.on}; // unbind: the uploads of a job still preparing / binding go too (it has no pt yet)
   // ---- an earlier change: regions / child segments taken OUT of the body, any number, each moved by its own grip (VR / AR only; not saved; vr-part-view.js: the rules). The method is the Issue's 案A: the SAME textures are drawn again in another box
   // per part (its own pose), where everything but the part's target is "not tissue" (the shader block PART_GLSL, compiled only with VRL_PART, only for the parts' programs; every part shares the compiled programs). The body hides every target by
   // patching its look-up tables right after they are written (partPatchRegion / partPatchChild: a run-time overlay, region.hidden / child.visible are never written); ONE shared copy of the tables, with the targets shown, is the parts' own, so
@@ -5528,11 +6030,13 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    const PT=PART_TEXT[ja?'ja':'en'];
    // n736: the name of the target on the cut-out board: the one the ring and the menu show (a result's chip title, a child segment's name)
    const cutNameOf=tg=>{try{if(tg.kind==='region'){const e=regionById(tg.rid);return e?regionChipTitle(e,tr):''}return segmentById(tg.key)?.name||''}catch{return ''}};
-   let partRes=null,partBusy=false,partUid=0,partRunner=null; // partRunner: the worker that makes the fields of the cut and keeps the answers for the groups it has made (a group seen again costs nothing); let go with the last part and with the session
+   let partRes=null,partBusy=false,partUid=0,partRunner=null,cutNo=0;const partRunnerOf=()=>createPartSetRunner(undefined,{partOcc:!!gx,give:!!gx}); // perf2: the WebGPU view's runner makes the parts' occupancy on the worker (4-4) and is given the bake's arrays (4-6); the WebGL view's does what it did
+   const cutEv=(k,d)=>perfLog?.cut(k,cutNo,d); // perf2 (measurement only): cutNo = the number of the latest cut-out of the session, cutEv = a line of the record's cut-out timeline (vr-perf-log.js cut)
+    // partRunner: the worker that makes the fields of the cut and keeps the answers for the groups it has made (a group seen again costs nothing); let go with the last part and with the session
    const partQ=new THREE.Quaternion(),partM1=new THREE.Matrix4(),partM2=new THREE.Matrix4(),partS=new THREE.Vector3(),partV=new THREE.Vector3(),partV2=new THREE.Vector3(),partV3=new THREE.Vector3();
    const fieldOwn=()=>({partField:{value:partRes.fieldDummy},partOcc:{value:partRes.occDummy},partFieldScale:{value:new THREE.Vector3(1,1,1)},partFieldOff:{value:new THREE.Vector3()},partFieldA:{value:[0,1,2,3].map(()=>new THREE.Vector4())},partFieldB:{value:[0,1,2,3].map(()=>new THREE.Vector4())}}); // an earlier change: the field of the cut (vr-part-view.js partFieldSet; a = b = 0: never cut)
    const ownOf=lutR=>({boxC:{value:new THREE.Vector3()},boxH:{value:new THREE.Vector3()},boxEntry:{value:1},planeCount:{value:0},planeCut:{value:0},regionLut:{value:lutR},regionAnyHidden:{value:1},childLut:{value:partRes.lutC},clsTex:{value:partOrigCls().tex},cls4Tex:{value:partOrigCls().cls4},partKind:{value:0},partId:{value:0},partMask:{value:0},...fieldOwn()});
-   const partMaterials=own=>{const u=partUniforms(unifs,own),m=partMaterialsOf(setKey,u);return{u,vars:m.vars,rays:m.rays}}; // n736: the maker the page's preparation uses (prepareVrGpu compiles these programs before the session)
+   const partMaterials=own=>{const u=partUniforms(unifs,own);if(gx)return{u,vars:{},rays:{}};const m=partMaterialsOf(setKey,u);return{u,vars:m.vars,rays:m.rays}}; // WebGPU: the uniforms only (the WGSL P programs are made at the session start: gxVariants parts) // n736: the maker the page's preparation uses (prepareVrGpu compiles these programs before the session)
    // an earlier change: a field as a texture (C = 1 / 2 / 4 channels: R8 / RG8 / RGBA8, LINEAR, clamped: read as the processing mask is), allocated now and filled in slices by uploadQueue (slicedTexture: a few ms a frame) -> {tex, done: Promise<bool>}
    let fieldSeq=0;
    const fieldTexture=(f,C=1)=>{const key='partField'+(++fieldSeq),tex=slicedTexture(key,f.data,f.size,C,C===4?THREE.RGBAFormat:C===2?THREE.RGFormat:THREE.RedFormat,THREE.UnsignedByteType,THREE.LinearFilter,[]);tex.wrapS=tex.wrapT=tex.wrapR=THREE.ClampToEdgeWrapping;return{tex,key,done:uploadQueue.whenDone(key)}};
@@ -5540,7 +6044,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    const fieldDrop=(tex,key)=>{if(key)uploadQueue.drop(k=>k===key);tex?.dispose()};
    // n731 perf 案②: a part's occupancy texture (vr-part-view.js partOccOf: one R8 texel per 8x8x8 cells of its field, a few hundred bytes: uploaded at once), made for the field and the a / b the part reads; null = none (the dummy: every block in)
    const occBodyTexture=o=>{const t=new THREE.Data3DTexture(o.data,...o.dims);t.format=THREE.RGBAFormat;t.type=THREE.UnsignedByteType;t.minFilter=t.magFilter=THREE.NearestFilter;t.unpackAlignment=1;t.needsUpdate=true;return t}; // n731 perf ③: the body's blocks wholly inside the cut (RGBA: slot s)
-   const occTexture=pf=>{const o=partOccOf(pf),t=new THREE.Data3DTexture(o.data,...o.dims);t.format=THREE.RedFormat;t.type=THREE.UnsignedByteType;t.minFilter=t.magFilter=THREE.NearestFilter;t.unpackAlignment=1;t.needsUpdate=true;return t};
+   const occTexture=pf=>{const o=pf.occ||partOccOf(pf),t=new THREE.Data3DTexture(o.data,...o.dims);t.format=THREE.RedFormat;t.type=THREE.UnsignedByteType;t.minFilter=t.magFilter=THREE.NearestFilter;t.unpackAlignment=1;t.needsUpdate=true;return t};
    // the body while parts are out (partKind 0): the same VRL_PART programs as the parts' (three.js shares a program by its text and defines), its own uniforms = the body's (every one by reference) + the field of all the parts.
    // Drawn only when its variant is compiled and the field of the parts out is on the GPU (partBodySet); otherwise the body draws as before (its tables hide the targets by their voxels).
    // an earlier change: the fields of the cut of a set of parts (vr-part-view.js partFieldSet: the body's, each part's on its own box; where parts touch, their joint
@@ -5572,7 +6076,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    // channel's), made once per set of parts off the frame (vr-part-view.js partBakeRun on the part-set worker: the classification bytes lowered where the field cuts a slot, the distance alpha made conservative for the new surfaces; only the field's box),
    // so that the body is drawn by the ORDINARY program (no VRL_PART: no partOcc / partField / hideAt reads in its rays; the hide-free program while the page hides nothing). The parts keep reading the ORIGINAL texture (PART_OWN clsTex / cls4Tex).
    // The state: r.bake = {tex, cls4Tex (GPU copies), ready (mirrored and the box patched), gen, bodyGen, mask, src (the combined texture it was made from)}, r.bakeBound = the body reads it NOW (the textures, the GPU tables, the programs: one synchronous step,
-   // bakeSet). Any change of what it was made from drops it AT ONCE (bakeDrop: the body reads the original again and draws by its field, as 734 does): a change of the parts (partApply), of the shown set or of the combined texture's bytes (a rebuild is running,
+   // bakeSet). Any change of what it was made from drops it AT ONCE (bakeDrop: the body reads the original again and draws by its field, as 734 does): a change of the parts (partApply: at its start; the WebGPU view's cut-out keeps it until the new set is installed), of the shown set or of the combined texture's bytes (a rebuild is running,
    // another texture), of the diagnostic, of the data. Nothing happens without a part.
    let bakeApplying=0,bakeGen=0; // partApply calls in flight (no bake starts meanwhile); the number of the bake wanted (a stale answer is dropped)
    const bakeBoxR=new THREE.Box3(),bakeAt=new THREE.Vector3();
@@ -5586,7 +6090,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
     const r=partRes;if(!r||!material||!!r.bakeBound===on)return;
     const u=material.uniforms,t=comboT,b=r.bake;
     r.bakeBound=on;
-    if(on){u.clsTex.value=b.tex;if(b.cls4Tex)u.cls4Tex.value=b.cls4Tex}
+    if(on){cutEv('bake*',{ms:Math.round(performance.now()-b.t0)});perfLog?.tally('bake','bound');u.clsTex.value=b.tex;if(b.cls4Tex)u.cls4Tex.value=b.cls4Tex}
     else if(t?.combo){u.clsTex.value=t.combo;if(four&&t.cls4)u.cls4Tex.value=t.cls4}
     bakeLight(on?b:null);
     partClsSync();
@@ -5594,10 +6098,12 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    };
    // n740: the baked cut is lit as the VRL_PART body lights it (the fragment shader's bakeGrad): the field the body is drawn with (r.body.u: partField .. partFieldB, by value) on the slots the bake lowered (b.cut)
    const bakeLight=b=>{const u=material.uniforms,f=b&&partRes?.body?.u;u.bakeCut.value=f?b.cut|0:0;u.bakeField.value=f?f.partField.value:null;if(!f)return;u.bakeFieldScale.value.copy(f.partFieldScale.value);u.bakeFieldOff.value.copy(f.partFieldOff.value);u.bakeFieldA.value.forEach((v,s)=>v.copy(f.partFieldA.value[s]));u.bakeFieldB.value.forEach((v,s)=>v.copy(f.partFieldB.value[s]))};
-   const bakeDrop=()=>{
+   const bakeDrop=why=>{ // perf2 (measurement only): why = the reason, counted and put on the cut-out timeline when a bake existed ('apply' = the caller that gives none: partApply's start)
     bakeGen++;const r=partRes;if(!r)return;
+    const wasBound=!!r.bakeBound;
     if(r.bakeBound)bakeSet(false);
     const b=r.bake;r.bake=null;
+    if(b){const w=why||'apply';perfLog?.tally('bake-drop',w);cutEv('bake-',{why:w,age:Math.round(performance.now()-b.t0),bound:wasBound?1:0})}
     if(b){b.tex?.dispose();b.cls4Tex?.dispose();b.origTex?.dispose();b.orig4Tex?.dispose();b.srcTex?.dispose();b.src4Tex?.dispose()}
    };
    partBakeDrop=bakeDrop;
@@ -5617,58 +6123,73 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    };
    const bakeStart=(r,t)=>{
     const set=r.bodySet,body=set.body,cdims=t.dims,chan=P.cls.chan,box=partBakeBoxOf(body,set.dims,cdims),slots=partBakeSlots(body,chan,15);
-    if(!box||!slots){r.bakeSkip=r.bodyGen;return}
+    if(!box||!slots){r.bakeSkip=r.bodyGen;perfLog?.tally('bake','skip:nobox');return}
     const mask=t.comboMask,four4=!!(four&&t.cls4?.image?.data);
     let tex=null,cls4Tex=null;
-    try{tex=bakeTex(t.combo,THREE.RGBAFormat);if(four4)cls4Tex=bakeTex(t.cls4,THREE.RedFormat)}catch(e){console.warn('[VR] part bake textures:',e);tex?.dispose();r.bakeSkip=r.bodyGen;return}
-    const b={gen:bakeGen,bodyGen:r.bodyGen,mask,src:t.combo,tex,cls4Tex,box,z:0,patch:null,pz:0,ready:false,cut:0,origTex:null,orig4Tex:null,srcTex:null,src4Tex:null};r.bake=b;
+    try{tex=bakeTex(t.combo,THREE.RGBAFormat);if(four4)cls4Tex=bakeTex(t.cls4,THREE.RedFormat)}catch(e){console.warn('[VR] part bake textures:',e);tex?.dispose();r.bakeSkip=r.bodyGen;perfLog?.tally('bake','skip:textures');return}
+    const b={gen:bakeGen,bodyGen:r.bodyGen,mask,src:t.combo,tex,cls4Tex,box,z:0,patch:null,pz:0,ready:false,cut:0,origTex:null,orig4Tex:null,srcTex:null,src4Tex:null,t0:performance.now()};r.bake=b;perfLog?.tally('bake','start');cutEv('bake+',{g:bakeGen,mask});
     const job={rgba:partBakeCrop(t.combo.image.data,cdims,box,4),c4:four4?partBakeCrop(t.cls4.image.data,cdims,box,1):null,box,cdims:Array.from(cdims),idims:Array.from(set.dims),chan:Array.from(chan),body:{data:body.data,lo:body.lo,size:body.size,C:body.C,a:body.a,b:body.b},mask,hide:bakeHideOf(t,box,mask)};
-    (partRunner||(partRunner=createPartSetRunner())).bake(job).then(res=>{if(partRes===r&&r.bake===b){b.patch=res;b.cut=res.slots|0}},e=>{if(partRes===r&&r.bake===b){console.warn('[VR] part bake (the body keeps drawing by its field):',e?.message||e);r.bakeSkip=b.bodyGen;bakeDrop()}});
+    (partRunner||(partRunner=partRunnerOf())).bake(job).then(res=>{if(partRes===r&&r.bake===b){b.patch=res;b.cut=res.slots|0}},e=>{if(partRes===r&&r.bake===b){console.warn('[VR] part bake (the body keeps drawing by its field):',e?.message||e);r.bakeSkip=b.bodyGen;bakeDrop('worker')}});
    };
    // the copy in slabs a frame (vr-part-view.js partBakeStep): first the whole original, then the baked box from the worker's bytes; a frame's bytes = the upload queue's current slab size (adaptive: what a copy from memory costs on this device)
    const bakeOps={
     wrap:(data,dims,C)=>{const x=new THREE.Data3DTexture(data,...dims);x.format=C===4?THREE.RGBAFormat:THREE.RedFormat;x.type=THREE.UnsignedByteType;x.unpackAlignment=1;return x},
     copy:(src,dst,lo,hi,at)=>{bakeBoxR.min.set(lo[0],lo[1],lo[2]);bakeBoxR.max.set(hi[0],hi[1],hi[2]);bakeAt.set(at[0],at[1],at[2]);renderer.copyTextureToTexture(src,dst,bakeBoxR,bakeAt)},
-    drop:x=>x.dispose()};
-   const bakeStep=(b,t)=>partBakeStep(b,t,uploadQueue.bytesPerTickNow,bakeOps);
+    drop:x=>x.dispose(),
+    gpuCopy:gx?(pairs,done)=>gx.vol.volume.copyGpu(pairs,ok=>{if(!ok)perfLog?.tally('bake','gpuCopyErr');done(ok)}):null}; // perf2 (4-5): the WebGPU view copies the combined texture into the baked one on the GPU (vr-wgpu.js copyGpu); the WebGL view keeps the copy from memory (null)
+   const bakeStep=(b,t)=>{const t0=performance.now();try{return partBakeStep(b,t,uploadQueue.bytesPerTickNow,bakeOps)}finally{perfLog?.stage('bs',performance.now()-t0)}}; // the baking steps are timed (the record's bs column)
+   const bakeOkNow=r=>{const t=comboT,u=material?.uniforms;return !!(parts.length&&r.body?.ok&&r.bodySet&&t?.combo&&u&&!diagAn.noRegion&&u.distInCls.value>0&&u.useCls.value>0)}; // the guard of partBakeFrame (a bake can be held), also what partBakeCan reads
+   // perf2 (4-3, the WebGPU view only): a bake of this body can start (the guard holds and no earlier try for this body failed). bodyCutDraws reads it when the page hides nothing, so that the hidden state asked for by the shown-set change (hideTick), by the combined texture's
+   // rebuild (refreshCombo) and by the bake's hide (bakeHideOf) is the same one at once: the targets of the parts are not hidden by the page's tables, and the bake starts without a rebuild of the combined texture in front of it
+   partBakeCan=()=>{const r=partRes;return !!(gx&&r&&r.bakeSkip!==r.bodyGen&&bakeOkNow(r))};
    partBakeFrame=()=>{
     const r=partRes;if(!r)return;
-    const t=comboT,b=r.bake,u=material?.uniforms;
-    const ok=!!(parts.length&&r.body?.ok&&r.bodySet&&t?.combo&&u&&!diagAn.noRegion&&u.distInCls.value>0&&u.useCls.value>0);
-    if(b&&(!ok||b.src!==t.combo||t.rb?.busy||t.comboMask!==b.mask||b.bodyGen!==r.bodyGen||b.gen!==bakeGen||bakeApplying>0))bakeDrop(); // anything it was made from changed: the original again, at once
+    const t=comboT,b=r.bake;
+    const ok=bakeOkNow(r);
+    if(b){const why=!ok?'notOk':b.src!==t.combo?'src':t.rb?.busy?'rbBusy':t.comboMask!==b.mask?'mask':b.bodyGen!==r.bodyGen?'bodyGen':b.gen!==bakeGen?'gen':'';if(why)bakeDrop(why)} // anything it was made from changed: the original again, at once (why: the first reason that holds, counted in the record)
     if(!ok){if(r.bakeBound)bakeSet(false);return}
     if(!r.bake){
-     if(bakeApplying>0||t.rb?.busy||r.bakeSkip===r.bodyGen||ui.swapBusy||t.comboMask!==comboMask||comboMask<0)return;
+     const why=bakeApplying>0?'applying':t.rb?.busy?'rbBusy':r.bakeSkip===r.bodyGen?'skipSet':ui.swapBusy?'swap':(t.comboMask!==comboMask||comboMask<0)?'mask':'';
+     if(why){perfLog?.tally('bake-wait',why);return}
+     // perf2 (4-3, the WebGPU view only): the hidden-state rebuild of the combined texture that hideTick asks for later in this same frame (the targets of the parts taken out are hidden by the page's tables until the body is drawn with the field) is asked for NOW, with the very inputs hideTick
+     // gets (the shown set and the shader's set are known before this step, and nothing between here and hideTick changes them): a bake started in front of that rebuild is dropped by the next frame (rbBusy) and made again from the rebuilt bytes. The rebuild, its bytes and the bake that follows it are the same as before; only the wasted start is gone.
+     if(gx){hideTick(comboShaderMask(),shownMask());if(t.rb?.busy){perfLog?.tally('bake-wait','hideRebuild');return}} // (the WebGPU view only: the WebGL view starts the bake as it did)
      bakeStart(r,t);
     }
     const nb=r.bake;if(!nb)return;
     if(!nb.ready){bakeStep(nb,t);if(!nb.ready)return}
     bakeSet(true);
    };
+   {const f0=partBakeFrame;partBakeFrame=()=>{const t0=performance.now();try{f0()}finally{perfLog?.stage('bk',performance.now()-t0)}}} // the CPU ms of the baked cut's per-frame step (the record's bk column)
    let cfgChain=Promise.resolve();
-   const partApply=(listOf,done=()=>{},upStage=()=>{})=>{
-    bakeDrop();bakeApplying++; // n734: the parts are about to change: the baked bytes are the old set's (the body draws by its field until the new set is in place and baked again)
+   const partApply=(listOf,done=()=>{},upStage=()=>{},hold=false)=>{
+    if(!hold)bakeDrop();bakeApplying++; // n734: the parts are about to change: the baked bytes are the old set's (the body draws by its field until the new set is in place and baked again)
     const run=async()=>{
+     let pm=performance.now(); // the CPU ms of each stretch of this function between its awaits goes to the record's pa column
+     const paEnd=()=>perfLog?.stage('pa',performance.now()-pm);
      for(let tries=0;tries<4;tries++){
       const r=partRes;if(!r?.body||!running)return false;const b=r.body,list=listOf();
       if(!list||list.some(q=>q.freed))return false;
       if(!list.length){partRunner?.clear();b.ok=false;r.bodyGen++;r.bodySet=null;fieldDrop(b.tex,b.texKey);b.tex=null;b.texKey=null;b.sig=null;b.u.partOcc.value=r.occBodyDummy;b.otex?.dispose();b.otex=null;fieldUniforms(b.u,{lo:[0,0,0],size:[1,1,1]},r.fieldDummy,[0,1,2,3].map(()=>[0,0,0,0]),[0,1,2,3].map(()=>[0,0,0,0]),[1,1,1]);if(r.hide||r.hidArgs){r.hide=null;r.hidArgs=null;hideSourcesChanged()}done();return true}
       const dims=list[0].fieldDims;if(list.some(q=>q.fieldDims.join()!==dims.join()))throw new Error('the parts are not of one grid');
-      const set=await (partRunner||(partRunner=createPartSetRunner())).run(list.map(q=>({...q.field,kind:q.target.kind,id:q.uid})));
+      const setP=(partRunner||(partRunner=partRunnerOf())).run(list.map(q=>({...q.field,kind:q.target.kind,id:q.uid})));paEnd();const set=await setP;pm=performance.now();
       if(!set)return false;if(set.plain)console.warn('[VR] part seams: unsmoothed in '+set.plain+' group(s) (the worker failed)');if(set.merged)console.warn('[VR] part seams: '+set.merged+' merged (more than 4 on a part)');
       for(const o of set.own){const q=list[o.p];if(q&&!q.freed&&!q.field.data){q.field.data=o.data;q.field.codes=null}} // the own fields it smoothed (a part that was alone): kept, the next set reads them
       if(partRes!==r||!running)return false;
+      {const tm=set.tm,r1=v=>Math.round(v*10)/10,nImg=(b.tex&&b.sig===set.body.sig?0:1)+list.filter((q,i)=>{const pf=set.parts[i];return !(q.ftex&&q.fsig===pf.sig&&q.fC===pf.C)}).length; // (measurement only) the set's timing record (partFieldSet tm), the cache's hits / misses and the fields whose texture is made again (img: the textures of the 'upload' line)
+       cutEv('calc',{parts:list.length,img:nImg,own:set.own.length,hit:set.cache?.hit??0,miss:set.cache?.miss??0,...(tm?{tot:r1(tm.tot),ownMs:r1(tm.own),ownWall:r1(tm.ow),occ:r1(tm.occ),grp:tm.groups.slice(0,8).map(g=>'c'+g.c+'/'+g.n+'p j'+r1(g.j)+' l'+r1(g.l)+' s'+r1(g.s)+' w'+r1(g.w)+' h'+g.h+' m'+g.m).join(' ; ')+(tm.groups.length>8?' ; +'+(tm.groups.length-8)+' more':'')}:{})})}
       upStage(); // n736: the fields are made: the uploads / the installation follow (the cut-out board: 仕上げ中)
       // a field whose bytes are those the texture has (the same sig) keeps its texture: nothing is made or uploaded again (the body's after a set that came out as before; a part whose group did not change)
       const keepB=b.tex&&b.sig===set.body.sig,ups=keepB?[]:[fieldTexture(set.body,set.body.C)],pts=list.map((q,i)=>{const pf=set.parts[i];if(q.ftex&&q.fsig===pf.sig&&q.fC===pf.C)return null;const t=fieldTexture(pf,pf.C);ups.push(t);return t});
-      const oks=await Promise.all(ups.map(t=>t.done.catch(()=>false)));
+      const oksP=Promise.all(ups.map(t=>t.done.catch(()=>false)));paEnd();const oks=await oksP;pm=performance.now();cutEv('upload',{n:ups.length});
       const stale=partRes!==r||!running||list.some(q=>q.freed);
       if(stale||oks.some(x=>!x)){for(const t of ups)fieldDrop(t.tex,t.key);if(stale&&partRes===r&&running&&!listOf()?.some(q=>q.freed))continue;return false}
+      if(hold)bakeDrop('install'); // perf2 (4-9, the WebGPU view's cut-out only): the baked bytes were held while the new set was made (the body's field and tables are still the old set's, the bake is the same picture); here, in the one step that puts the new set in place, they go (the next frame reads the new field: never the old bake with the new set)
       if(!keepB){const ob=b.tex,obk=b.texKey;b.tex=ups[0].tex;b.texKey=ups[0].key;b.sig=set.body.sig;fieldDrop(ob,obk)}
       fieldUniforms(b.u,set.body,b.tex,set.body.a,set.body.b,dims);if(set.body.occ){const ot=b.otex;b.otex=occBodyTexture(set.body.occ);b.u.partOcc.value=b.otex;ot?.dispose()}else{b.u.partOcc.value=r.occBodyDummy;b.otex?.dispose();b.otex=null}b.ok=true;r.bodyGen++;r.bodySet={body:set.body,dims:dims.slice()};if(!keepB||(!r.hide&&!r.hidArgs))partHideSet(r,set.body,dims); // n731 perf ③: the body's cut as a hide source, with the field it is made from
       list.forEach((q,i)=>{const pf=set.parts[i],t=pts[i];if(t){fieldDrop(q.ftex,q.ftexKey);q.ftex=t.tex;q.ftexKey=t.key;q.fsig=pf.sig;q.fC=pf.C}fieldUniforms(q.u,pf,q.ftex,pf.a,pf.b,dims);
        {const os=pf.sig+'|'+pf.C+'|'+JSON.stringify(pf.a)+JSON.stringify(pf.b);if(q.osig!==os||!q.otex){q.otex?.dispose();q.otex=occTexture(pf);q.osig=os}q.u.partOcc.value=q.otex}}); // n731 perf 案②: the part's occupancy, with its field (the same set)
-      done();return true;
+      paEnd();done();return true;
      }
      return false;
     };
@@ -5677,11 +6198,12 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    // -> {vars, rays, k}: the body's VRL_PART set and the variant to draw (vk when compiled, else the full one, right for every state, while vk compiles), or null (no part out / the field not on the GPU yet)
    const partBodySetRaw=vk=>{
     const r=partRes;if(!parts.length||!r?.body?.ok)return null;
+    if(gx)return{vars:null,rays:null,k:vk}; // WebGPU: the body's P programs exist from the session start (the uniforms r.body.u are what the WGSL pass draws: partGxU)
     if(r.compiled.has(vk))return{vars:r.body.vars,rays:r.body.rays,k:vk};
     if(!r.kick){r.kick=true;partEnsure().catch(e=>console.warn('part programs:',e)).finally(()=>{r.kick=false})}
     const f=partFull();return r.compiled.has(f)?{vars:r.body.vars,rays:r.body.rays,k:f}:null;
    };
-   partBodyDraws=partBodySetRaw;partBodySet=vk=>partRes?.bakeBound?null:partBodySetRaw(vk); // n734: while the cut is baked the body is the ordinary program's (null: as without a part); partBodyDraws keeps the VRL_PART answer for the hidden state
+   partBodyDraws=partBodySetRaw;partBodySet=vk=>partRes?.bakeBound?null:partBodySetRaw(vk);partGxU=vk=>partBodySet(vk)?partRes.body.u:null; // n734: while the cut is baked the body is the ordinary program's (null: as without a part); partBodyDraws keeps the VRL_PART answer for the hidden state
    // the program variant of a part: the body's rule (variantKey) with no sections ever (planeCount 0 -> noEvents when the combined texture is in use); an uncompiled one is drawn with 'full' (right for every state) while it compiles
    const partVariantKey=u=>{const k=!(u.distInCls.value>0&&u.useCls.value>0)||(settings.diag|0)?'full':'noEvents';return cls4On?k+'4':k};
    const partFull=()=>cls4On?'full4':'full';
@@ -5693,7 +6215,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    // the parts' shared state (once per session data): the two tables (the parts' own copies), the template materials the programs are compiled with (the parts' own materials have the same programs: three.js shares a program by its text and defines),
    // the composite material. Compiled before a part is shown, as the partner's. Called when a part is cut out, and again by a variant that is needed later.
    const partEnsure=async()=>{
-    if(!running||!P||!material||!unifs||!compMaterial)throw new Error('the session has no data');
+    if(!running||!P||!material||!unifs||(!gx&&!compMaterial))throw new Error('the session has no data');
     if(!partRes){
      const lutR=new THREE.DataTexture(new Float32Array(256*4),256,1,THREE.RGBAFormat,THREE.FloatType);lutR.minFilter=lutR.magFilter=THREE.NearestFilter;lutR.generateMipmaps=false;lutR.needsUpdate=true;
      const fieldDummy=new THREE.Data3DTexture(new Uint8Array(1),1,1,1);fieldDummy.format=THREE.RedFormat;fieldDummy.type=THREE.UnsignedByteType;fieldDummy.minFilter=fieldDummy.magFilter=THREE.LinearFilter;fieldDummy.needsUpdate=true;
@@ -5704,11 +6226,15 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
      const own=ownOf(lutR);for(const k of PART_OWN)if(!(k in own))throw new Error('part uniform missing: '+k);
      partRes.tpl=partMaterials(own);
      {const bm=partMaterials({partKind:{value:0},partId:{value:0},partMask:{value:0},...fieldOwn()});partRes.body={...bm,tex:null,ok:false};bm.u.partOcc.value=occBodyDummy} // an earlier change: the body's own uniforms on the same programs
-     partRes.comp=new THREE.ShaderMaterial({glslVersion:THREE.GLSL3,vertexShader:compositeVertex,fragmentShader:compositeFragment,side:THREE.BackSide,depthWrite:true,toneMapped:false,transparent:false,
+     partRes.comp=gx?gx.vol.composite.boxMaterial(vd.halfExt,true):new THREE.ShaderMaterial({glslVersion:THREE.GLSL3,vertexShader:compositeVertex,fragmentShader:compositeFragment,side:THREE.BackSide,depthWrite:true,toneMapped:false,transparent:false,
       depthFunc:THREE.LessDepth, // as the partner's composite: where two boxes overlap on the screen the later one must not blend the same low-resolution pixel a second time
       blending:THREE.CustomBlending,blendSrc:THREE.OneFactor,blendDst:THREE.OneMinusSrcAlphaFactor,uniforms:{...compMaterial.uniforms,halfExt:{value:new THREE.Vector3(...vd.halfExt)}}});
     }
     const res=partRes;
+    if(gx){ // WebGPU: the parts' WGSL programs were made at the session start / the data switch; the boxes' composite (a node material of the main pass) is compiled here, before a part is shown, as the WebGL view compiles res.comp below
+     if(!res.compWarm)res.compWarm=(async()=>{const g=new THREE.BoxGeometry(2,2,2),m=new THREE.Mesh(g,res.comp);m.frustumCulled=false;try{await renderer.compileAsync(m,camera,scene)}catch(e){console.warn('[VR] part composite:',e)}finally{g.dispose()}})();
+     await res.compWarm;gx.vol?.prepareMulti?.();return res; // the depth buffers of the volume passes' targets are made now, not in the first frame that draws the part
+    }
     const job=(res.job||Promise.resolve()).then(async()=>{
      const wanted=[partVariantKey(unifs),partFull(),variantKey()].filter((k,i,a)=>a.indexOf(k)===i&&!res.compiled.has(k)); // an earlier change: and the body's own variant while a part is out (while a part is out its cut is drawn by these programs; without sections it is the part's own variant)
      if(!wanted.length)return;
@@ -5717,7 +6243,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
     });
     res.job=job.catch(()=>{});await job;return res;
    };
-   const partShow=q=>{if(!q.mesh.parent)holder.add(q.mesh);if(!q.rayMesh.parent)volScene.add(q.rayMesh);q.rayMesh.visible=true;q.on=true};
+   const partShow=q=>{if(!q.mesh.parent)holder.add(q.mesh);if(!gx&&!q.rayMesh.parent)volScene.add(q.rayMesh);q.rayMesh.visible=true;q.on=true};
    const partHide=q=>{q.mesh.parent?.remove(q.mesh);volScene.remove(q.rayMesh);q.on=false};
    const partFree=q=>{partHide(q);q.held=null;for(const m of Object.values(q.mats.vars))m.dispose();for(const m of Object.values(q.mats.rays))m.dispose();q.geo.dispose();q.lutOwnR?.dispose();q.lutOwnC?.dispose();fieldDrop(q.ftex,q.ftexKey);q.ftex=null;q.otex?.dispose();q.otex=null;q.freed=true}; // freed: a set of fields being made with it is made again without it (partApply)
    const partTargetOfRing=(reg,child)=>{ // the ring's target as a part target (the same shape partTargetOf makes)
@@ -5732,14 +6258,14 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
     if(pair?.on||pairLoading){flashMsg(PT.pairBusy,3000);return false}
     if(partBusy){flashMsg(PT.busy,2500);return false}
     if(parts.some(q=>partSame(q.target,tg)))return false;
-    partBusy=true;flashMsg(PT.preparing,5000);menu.refresh();const P0=P;
+    partBusy=true;cutNo++;cutEv('op',{kind:tg.kind,id:tg.id});flashMsg(PT.preparing,5000);menu.refresh();const P0=P;
     // n736: the board in front of the head (the one of the data switch: loadBoard) says the cut-out is under way, from here to the part being shown / the failure / the end of the session; ended in the finally below, by partDispose (data switch, session end) and by the frame (partCutLive)
     const cutInfo={cut:true,name:cutNameOf(tg),stage:'prep',text:'',t0:performance.now(),error:'',frac:0,sub:0,peak:0};loadInfo=cutInfo;loadBoard.refresh();placeLoadNow();
     const cutStage=n=>{if(loadInfo!==cutInfo||cutInfo.stage===n)return;cutInfo.stage=n;loadBoard.refresh()};
     try{
-     const isReg=tg.kind==='region',src=isReg?P.region:P.child,ids=hideIndexPlane(src?.rg),dims=src?.dims,ent=isReg?regionList[tg.index]:childList[tg.index];
+     const isReg=tg.kind==='region',src=isReg?P.region:P.child,ids=gx?hideIndexPlaneCached(src?.rg):hideIndexPlane(src?.rg),dims=src?.dims,ent=isReg?regionList[tg.index]:childList[tg.index];
      if(!ids||!dims||!ent||(isReg?ent.rid!==tg.rid:ent.key!==tg.key))throw new Error('the target is gone');
-     const mask=isReg?regionSlotMask(ent,gpuSegmentOrder()):ent.segMask|0,box=partBoundsOf(ids,dims,tg.id,vrHalfExt,2);
+     const mask=isReg?regionSlotMask(ent,gpuSegmentOrder()):ent.segMask|0,box=partBoundsOf(ids,dims,tg.id,vrHalfExt,2,gx&&ids&&dims?partIdBoxesOf(ids,dims):null); // perf2 (4-6, the WebGPU view): the index plane and every id's box are made once per index array (not a loop over the volume at each cut-out)
      if(!box)throw new Error('the target has no voxel');
      // an earlier change: the field of the cut (vr-part-view.js partFieldOf) on a worker, on the part's own box, while the programs compile
      const fbox=partFieldBoxOf(box.vox,dims),vp=volPick,fcodes=fbox?await partFieldCodesAsync(ids,dims,tg.id,fbox,vp?partAirOf(vp.cls,vp.dims,dims,mask):null):null;
@@ -5748,7 +6274,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
      const res=await partEnsure();cutStage('calc'); // the programs are in place (compiled before the session: nothing to wait for here); the fields are made now
      const fdata=await fieldJob.catch(e=>{if(!fcodes)throw e;console.warn('[VR] part field: unsmoothed ('+(e?.message||e)+')');return partFieldPlain(fcodes,fbox.size)}); // the smoothed field failed (out of memory on a very large part): the cut as its voxels
      if(!running||P!==P0||partRes!==res||!material)return false;
-     const prox=partProxyBox(box,vrHalfExt,dims,4),he=vrHalfExt;
+     cutEv('own');const prox=partProxyBox(box,vrHalfExt,dims,4),he=vrHalfExt;
      const ownL=ownOf(res.lutR),own1=()=>{const t=new THREE.DataTexture(new Float32Array(256*4),256,1,THREE.RGBAFormat,THREE.FloatType);t.minFilter=t.magFilter=THREE.NearestFilter;t.generateMipmaps=false;t.needsUpdate=true;return t};
      const lutOwnR=own1(),lutOwnC=makeChildLutTexture(); // (review): BOTH tables the part's own: the other kind's one keeps only the hidden bits of the shared one (partHideOnlyRegionLut / partHideOnlyChildLut)
      // the part's OWN table (partOwnRegionLut / partOwnChildLut): every entry is the part's, so the neighbour's id the grown colour index may hold at its surface gives no neighbour colour
@@ -5756,8 +6282,8 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
      const mats=partMaterials(ownL),u=mats.u; // its field: partApply below
      u.boxC.value.set(box.c[0],box.c[1],box.c[2]);u.boxH.value.set(box.h[0],box.h[1],box.h[2]);u.partKind.value=isReg?1:2;u.partId.value=tg.id;u.partMask.value=mask;
      const geo=new THREE.BoxGeometry(2*prox.h[0]/he[0],2*prox.h[1]/he[1],2*prox.h[2]/he[2]);geo.translate(prox.c[0]/he[0],prox.c[1]/he[1],prox.c[2]/he[2]); // the proxy: vertex shader position * halfExt
-     const m=new THREE.Mesh(geo,mats.vars[partFull()]);m.frustumCulled=false;m.renderOrder=1.5;
-     const r=new THREE.Mesh(geo,mats.rays[partFull()]);r.matrixAutoUpdate=false;r.matrixWorldAutoUpdate=false;r.frustumCulled=false;
+     const m=new THREE.Mesh(geo,gx?res.comp:mats.vars[partFull()]);m.frustumCulled=false;m.renderOrder=1.5; // WebGPU: the box composites the volume pass' images (its rays are drawn by gx.vol.draw: gxExtras)
+     const r=gx?new THREE.Object3D():new THREE.Mesh(geo,mats.rays[partFull()]);r.matrixAutoUpdate=false;r.matrixWorldAutoUpdate=false;r.frustumCulled=false;
      scene.updateMatrixWorld();holder.updateWorldMatrix(true,false);readHead();
      const apos=new THREE.Vector3(box.c[0],box.c[1],box.c[2]);holder.localToWorld(apos);const aquat=new THREE.Quaternion();holder.getWorldQuaternion(aquat);
      const to=apos.clone().addScaledVector(partV.subVectors(head,apos).normalize(),PART_OUT_M);
@@ -5768,8 +6294,8 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
      const shown=await partApply(()=>[...parts,q],()=>{
       parts.push(q);
       refreshRegionLut();refreshChildLut(); // the body's tables lose the target (partPatch*), the parts' copies keep it
-      partShow(q);partPose();
-     },()=>cutStage('finish')).catch(e=>{console.warn('part fields:',e);return false});
+      partShow(q);partPose();cutEv('attach');
+     },()=>cutStage('finish'),!!gx).catch(e=>{console.warn('part fields:',e);return false}); // hold (4-9): the WebGPU view keeps the earlier bake until the new set is installed (partApply); the put direction (partApplyLeft) and the WebGL view drop it at the start
      if(!shown||!running||P!==P0||partRes!==res||!material){if(!parts.includes(q))partFree(q);return false}
      flashMsg(PT.done,3500);return true;
     }catch(e){console.warn('part cut-out:',e);if(running)flashMsg(PT.failed,3500);return false}
@@ -5850,7 +6376,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    };
    partGripEnd=c=>{let r=false;for(const q of parts)if(q.held?.c===c){q.held=null;pulse(c,0.2);r=true}return r};
    // after a part is put back: the fields of the parts left. When that fails (false, or an exception) the body's field is off (ok=false: it draws by its tables, where the restored part's hide is already gone), so a part put back is never left invisible
-   const partApplyLeft=()=>{const bad=()=>{const b=partRes?.body;if(b)b.ok=false};partApply(()=>parts).then(ok=>{if(!ok)bad()},e=>{console.warn('[VR] part fields (restore):',e);bad()})};
+   const partApplyLeft=()=>{cutEv('put');const bad=()=>{const b=partRes?.body;if(b)b.ok=false};partApply(()=>parts).then(ok=>{if(!ok)bad()},e=>{console.warn('[VR] part fields (restore):',e);bad()})};
    const partRestoreOne=q=>{
     const i=parts.indexOf(q);if(i<0)return false;
     parts.splice(i,1);partFree(q);partApplyLeft(); // the fields of the parts left (until they are in place the body keeps the old ones: its hole stays a moment, nothing is drawn twice)
@@ -5927,11 +6453,12 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
      console.warn('VR data switch: the data changed while it was converted, converting again');stageLog.push(['prepare:again',Math.round(performance.now()-t0)]);swapOwn.reprepare=(swapOwn.reprepare||0)+1;gate.reset();await env.settle()}},
     prepareOnce:()=>{let lastPhase='';return prepareVrData(({phase,done,total})=>{if(phase!==lastPhase){lastPhase=phase;stageLog.push(['prepare:'+phase,Math.round(performance.now()-t0)])}
      if(!loadInfo)return;loadInfo.text=L.sw.phases[phase]?L.sw.phases[phase]+(phase==='read'||phase==='copy'?' '+done+' / '+total:phase==='cache'&&total?' '+Math.round(done*100/total)+' %':''):'';loadInfo.sub=(phase==='read'||phase==='copy'||phase==='cache')&&total?done/total:0;loadBoard.refresh()},{sliceMs:4,deferBody:true,prefetch:pfSwap,fresh:true}).then(Pn=>{prepTimes=Object.fromEntries(Object.entries(Pn.times||{}).map(([k,v])=>[k,Math.round(v)]));prepInfo=Pn.prepInfo||null;if(swapOwn&&Pn.times?.collect!=null)swapOwn.prepareCollect=Math.round(Pn.times.collect*10)/10;return Pn})},
-    compile:async Pn=>{const st=getSet(Pn);await compileSet(Pn,st)},
+    compile:async Pn=>{const st=getSet(Pn);await compileSet(Pn,st);if(gx)try{await gx.vol.warmWays(gxVariants(P4(Pn),Pn))}catch(e){console.warn('WebGPU: the display programs of the new data:',e)}}, // the display's ways of the new data's variants (four stored segments or not) are compiled here, while the loading board is up: bind finds them ready
     uploadCoarse:Pn=>{const t=performance.now();return uploadCoarse(Pn,()=>ownNote('allocate',t))},
     bind:(Pn,assets)=>{
      resetForNewData();swapPlace=true;
      {const t=performance.now();install(Pn,assets,false);ownNote('install',t)}
+     if(gx)void gx.vol.preload(unifs,gxVariants(four,P)).catch(e=>console.warn('WebGPU: pipelines after the data switch:',e)); // the switch's textures are on the GPU already (initTexture / copyTextureToTexture above); this makes sure of the pipelines (four stored segments)
      loadBoard.mesh.visible=false;loadInfo=null;
      refreshEvBoard();
      ui.status=L.stNone;menu.refresh();void refreshPairInfo(); // the new data's partner (the old one went with stopPair)
@@ -5956,6 +6483,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    }else if(r.status==='cancelled'&&loadInfo&&!running)loadInfo=null;
    return r.status==='done';
   };
+  { const swapData0=swapData; swapData=async setId=>{if(identRun?.active){flashMsg(ja?'ほかの記録・ベンチが終わってから押してください':'Press after the other recording or bench ends',4000);return false}return swapData0(setId)} } // the same-picture check runs on this data: no data switch (a practice / tutorial data starts from one) until it ends
   // the session's state for the new data: what 最初の状態に戻す puts back (resetToStart) for the parts that live here
   const resetForNewData=()=>{
    if(pw?.kind==='region')closePointWheel(); // stage 3: a region / child ring belongs to the data in view (a region id of the new data may equal the old one's)
@@ -5969,11 +6497,24 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
   // first start: the page-prepared assets (or fresh ones) are bound as before
   const gpuOk=!!gpu&&gpu.key===P.key;
   ui.status=L.compiling;menu.refresh();await nextFrames(session);if(!running)return; // the first volume frame compiles the shaders; the menu says so first
-  install(P,{full:(gpuOk&&gpu.full)||makeTextures(vd),half:(gpuOk&&gpu.half)||null,edit:(gpuOk&&gpu.edit)||makeEditTexture(P),region:(gpuOk&&gpu.region)||makeRegionTexture(P),child:(gpuOk&&gpu.child)||makeChildTexture(P)},true);
-  gpu=null;
+  markStart('frames');install(P,{full:(gpuOk&&gpu.full)||makeTextures(vd),half:(gpuOk&&gpu.half)||null,edit:(gpuOk&&gpu.edit)||makeEditTexture(P),region:(gpuOk&&gpu.region)||makeRegionTexture(P),child:(gpuOk&&gpu.child)||makeChildTexture(P)},true);
+  gpu=null;markStart('installed');
+  if(gx){ui.status=L.uploading;menu.refresh();await nextFrames(session);if(!running)return;
+   // WebGPU (a failed upload / pipeline ends the session: nothing could be drawn): the textures go to the GPU and the display programs that were not made before the session are made now, before the first volume frame.
+   // The frames go on meanwhile (the textures in slices, the programs through the compile gate: docs/vr-wgpu-gate.js) and the 「読み込み中」 board hangs in the air with the share made; the volume is shown when everything it can need is there
+   // (a frame is never drawn with another program). frameGaps: the longest gap between two frames in this load (the console line / __vrFirstLoad)
+   const fl={first:true,name:(globalThis.__vrlOpenSample?levelNameOf(globalThis.__vrlOpenSample):''),stage:'upload',text:'',t0:performance.now(),error:'',frac:0,sub:0,peak:0};
+   loadInfo=fl;loadBoard.refresh();placeLoadNow();frameGaps.begin('first load');frameGaps.observe();
+   const t1=performance.now();markStart('preload');
+   try{await gx.vol.preload(unifs,gxVariants(four,P),pr=>{if(loadInfo!==fl)return;fl.stage='compile';fl.sub=pr.fraction;fl.text=pr.done+' / '+pr.total})}catch(e){frameGaps.end();gxFail(e);return}
+   if(!running)return;
+   gx.ready=true;markStart('ready');const rep=frameGaps.end(),ms=Math.round(performance.now()-t1);
+   if(loadInfo===fl){loadInfo=null;loadBoard.mesh.visible=false}
+   if(rep){const res={...rep,ms,build:APP_BUILD,prepared:!!preGx,marks:startMarks.slice(),programs:gx.vol.volume.displayNp().inst.gate?.stats?.()};console.log('[VR first load]',JSON.stringify(res));globalThis.__vrFirstLoad=res;try{gxD?.value('first load',JSON.stringify(res))}catch{}}
+  }
   ui.status=L.stNone;menu.refresh();vrHold(false,4000); // the saves wait for the first seconds of the picture
   void refreshPairInfo(); // stage 3: does the data in view have a partner (sample-pairs.json)
  }catch(e){
-  console.error(e);ui.status=L.failed+String(e.message||e).slice(0,40);menu.refresh();
+  console.error(e);ui.status=L.failed+String(e.message||e).slice(0,40);menu.refresh();if(gx)gxD.error('after setSession',e);
  }
 }

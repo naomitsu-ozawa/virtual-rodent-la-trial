@@ -42,6 +42,11 @@ export const JUMP = 1.3, JUMP_SAMPLES = 4, JUMP_SCALE = 0.5;
 // Recovery is the normal ladder. Scale constant, shrinking or growing slowly: no effect at all.
 export const GROW_SCALE = 1.12, GROW_WINDOW = 300, GROW_MAX_DROP = 0.6, GROW_SPACING = 30, GROW_RING = 16;
 
+// while a hand / controller holds the volume the WebGPU view draws it at holdK (< 1, vr-render-scale.js HOLD_SCALE) of the ladder's scale, so the volume pass measured then is about holdK^2 of what the ladder's own level costs.
+// freeVolMs converts a measured volume time back to the time it would be without the hold: ms / holdK^2. holdK = 1 (WebGL, not held, setting off): the value as it is.
+// It only acts where the ladder reads the GPU volume time (the timer path of update(), mainMs > 0). The WebGPU view does not feed the main-pass time (mainMs stays 0), so update() runs on the frame-interval path there and does not use volMs: freeVolMs has no effect on it.
+// That path is guarded by update()'s held input instead: in a window that contains a frame drawn at the hold scale, no level is raised.
+export const freeVolMs = (ms, holdK) => (holdK > 0 && holdK < 1 ? ms / (holdK * holdK) : ms);
 export const autoFloor = idx => AUTO_FLOORS[idx] ?? AUTO_FLOORS[0];
 
 export function createAutoQuality({ min = AUTO_FLOORS[0], baseStep = 0, f = AUTO_MAX } = {}) {
@@ -123,7 +128,9 @@ export function createAutoQuality({ min = AUTO_FLOORS[0], baseStep = 0, f = AUTO
     // sample: one 0.5 s window. volMs = GPU time of the low-resolution volume pass (0 when drawn directly),
     // mainMs = GPU time of the main pass (0 = no timer query: wall-clock interval only), interval = mean frame interval, budget = frame budget (ms)
     // cover = the screen pixels the volume covers (0 = unknown): a jump changes how fast the ladder moves (JUMP above)
-  update({ volMs = 0, mainMs = 0, interval = 0, budget, ctx = null, cover = 0 }) {
+    // held = true when a frame of this window was really drawn at the hold scale (holdK < 1, WebGPU only): the frames are lighter than the level's own cost, so the window says nothing about headroom.
+    // Such a window never raises anything (the frame-interval rise, the good count, the zoom-out rise, and the rise after a view change all stop; a lowering works as always). false / absent: as before.
+  update({ volMs = 0, mainMs = 0, interval = 0, budget, ctx = null, cover = 0, held = false }) {
       // the view changed (size, shown segments, section): what failed before says nothing about it
       if (ctx !== st.ctx) { st.ctx = ctx; st.failPos = null; st.lapse = FAIL_LAPSE; }
       if (st.failPos !== null && ++st.sinceFail >= st.lapse) st.failPos = null;
@@ -159,6 +166,8 @@ export function createAutoQuality({ min = AUTO_FLOORS[0], baseStep = 0, f = AUTO
           }
           st.over = 0;
         }
+      } else if (held) {
+        st.over = 0; st.good = 0; // lighter frames of the hold scale: no rise from this window (the good count starts again)
       } else if (shrunk > 0 && st.f < AUTO_MAX - 1e-6) {
         // the volume covers far fewer pixels now (zoomed out / moved away): the cost fell by about this ratio, raise at once
         st.over = 0; st.good = 0; st.f = Math.min(AUTO_MAX, st.f / Math.sqrt(shrunk)); st.failPos = null; changed = true; st.sinceUp = 0;

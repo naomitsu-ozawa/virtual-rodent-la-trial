@@ -18,8 +18,8 @@ export default defineConfig({
   plugins: [oneRegistryInstance],
   resolve: {
     alias: [
-      { find: './vendor/three@0.186.0/build/three.webgpu.js', replacement: 'three/webgpu' },
-      { find: './vendor/three@0.186.0/build/three.module.js', replacement: 'three' },
+      { find: './vendor/three@0.187.0/build/three.webgpu.js', replacement: 'three/webgpu' },
+      { find: './vendor/three@0.187.0/build/three.module.js', replacement: 'three' },
       { find: './vendor/dicom-parser@1.8.21/index.js', replacement: 'dicom-parser' },
       { find: './vendor/fflate@0.8.2/index.js', replacement: 'fflate' },
     ],

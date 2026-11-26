@@ -12,7 +12,14 @@
 // (What cannot be kept: the other things of renderOrder 6 - distance labels, point markers' core - sit in that order by their own depth; the lit cards now go before all of them.)
 // Pure parts (unit tests): keyOf, itemLess, planRuns.
 
+import { GX_THREE, createGxLegGeometry, createGxLegMaterial, LEG_WIDTH_M, LEG_MIN_ANGLE } from './vr-gx-looks.js?v=20261126-build767';
+
 export const SLOTS_MAX = 16;
+
+// a leg's ribbon vertices (A, B, A, B) and the opposite end of each (OA, OB, OA, OB) from the leg's two ends p (A, B) and o (the `other` of A, of B): the corners of vr-anchor-dots.js createLegMesh
+export function setLegEnds(pos, oth, p, o) {
+  for (let v = 0; v < 4; v++) { const e = (v & 1) * 3; for (let k = 0; k < 3; k++) { pos[v * 3 + k] = p[e + k]; oth[v * 3 + k] = o[e + k]; } }
+}
 
 // three's sort key of an object at (x, y, z) in the world: its projected depth z / w (V = the camera's matrixWorldInverse, P = its projection), the larger (the farther) first in three; ours is minus that, the smaller first
 export const keyOf = (V, P, x, y, z) => { const vx = V[0] * x + V[4] * y + V[8] * z + V[12], vy = V[1] * x + V[5] * y + V[9] * z + V[13], vz = V[2] * x + V[6] * y + V[10] * z + V[14]; return -(P[2] * vx + P[6] * vy + P[10] * vz + P[14]) / (P[3] * vx + P[7] * vy + P[11] * vz + P[15]); };
@@ -129,5 +136,47 @@ export function createLabelBatch(THREE, scene, { w, h, legWidth, legMinAngle }) 
       stats.draws = plan.length; stats.cards = nCards; stats.legs = nLegs;
     },
     dispose() { for (const r of pool) killRun(r); pool.length = 0; regs.clear(); dummy?.dispose(); dummy = null; slots = 0; },
+  };
+}
+
+// The WebGPU session's twin of createLabelBatch (the instanced GLSL shader above cannot run there): the same interface, but every card is its own plane mesh (MeshBasicMaterial, the card's own texture) and every leg
+// its own mesh: the ribbon of vr-anchor-dots.js createLegMesh in TSL (vr-gx-looks.js: turns to face each eye, legWidth / legMinAngle, soft edges): more draw calls, nothing else is different.
+// lb.m = the card's Object3D (its matrixWorld is the world matrix), lb.line = the leg's two ends (position, and `other` = the opposite end of each).
+export function createPlainLabelBatch(THREE, scene, { w, h, legWidth = LEG_WIDTH_M, legMinAngle = LEG_MIN_ANGLE }) {
+  const regs = new Map(); // lb -> { card, leg }
+  const stats = { draws: 0, cards: 0, legs: 0 };
+  const geo = new THREE.PlaneGeometry(w, h);
+  const make = lb => {
+    const card = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: lb.m.material.map, transparent: true, depthWrite: false, side: THREE.DoubleSide, toneMapped: false }));
+    card.matrixAutoUpdate = false; card.matrixWorldAutoUpdate = false; card.frustumCulled = false; card.raycast = () => {}; card.visible = false;
+    const leg = new GX_THREE.Mesh(createGxLegGeometry(), createGxLegMaterial({ width: legWidth, minAngle: legMinAngle }));
+    leg.frustumCulled = false; leg.raycast = () => {}; leg.visible = false;
+    scene.add(card, leg);
+    return { card, leg };
+  };
+  return {
+    add(lb) { regs.set(lb, make(lb)); },
+    remove(lb) { const r = regs.get(lb); if (!r) return; regs.delete(lb); scene.remove(r.card, r.leg); r.card.material.dispose(); r.leg.geometry.dispose(); r.leg.material.dispose(); },
+    get size() { return regs.size; },
+    stats,
+    flush() {
+      let cards = 0, legs = 0;
+      for (const [lb, r] of regs) {
+        const m = lb.m, ln = lb.line;
+        r.card.visible = !!m.visible;
+        if (m.visible) {
+          m.updateWorldMatrix(true, false); r.card.matrix.copy(m.matrixWorld); r.card.matrixWorld.copy(m.matrixWorld); cards++;
+          const mat = r.card.material; mat.map = m.material.map; mat.opacity = m.material.opacity; mat.depthTest = !!m.material.depthTest; r.card.renderOrder = m.renderOrder;
+        }
+        r.leg.visible = !!ln.visible;
+        if (ln.visible) {
+          const p = ln.geometry.attributes.position.array, o = ln.geometry.attributes.other?.array || p.subarray(0, 6).map((_, i) => p[(i + 3) % 6]), a = r.leg.geometry.attributes.position, ao = r.leg.geometry.attributes.other;
+          setLegEnds(a.array, ao.array, p, o); a.needsUpdate = true; ao.needsUpdate = true;
+          const c = ln.material.color, mat = r.leg.material; mat.color.setRGB(c.r, c.g, c.b); mat.opacity = ln.material.opacity; mat.depthTest = !!ln.material.depthTest; r.leg.renderOrder = ln.renderOrder; legs++;
+        }
+      }
+      stats.draws = cards + legs; stats.cards = cards; stats.legs = legs;
+    },
+    dispose() { for (const lb of [...regs.keys()]) this.remove(lb); geo.dispose(); },
   };
 }

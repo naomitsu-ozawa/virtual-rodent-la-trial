@@ -4,7 +4,7 @@
 // a perturbed threshold is visible. complex=true adds what makes fat hard for the shader: thin sheets with holes and hashed single-voxel specks.
 // four=true: a fourth segment with its own HU band (-800..-300, outside the other three ranges): a lung-like ball of -600 HU with a
 // 3-voxel ramp, off-centre in the soft tissue, so that a four-channel classification (chan 0..3) can be rendered and checked
-export function makePhantom(N, { complex = true, four = false } = {}) {
+export function makePhantom(N, { complex = true, four = false, skin = false, lungAt = [11, -7, 6] } = {}) {
   const hu = new Int16Array(N * N * N), c = N / 2, sc = N / 64;
   for (let z = 0; z < N; z++) for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
     const cx = x + 0.5 - c, cy = y + 0.5 - c, cz = z + 0.5 - c;
@@ -21,8 +21,9 @@ export function makePhantom(N, { complex = true, four = false } = {}) {
           if ((h % 1000) < 15) v = -150;
         } else if (rad > 18 * sc && rad < 22 * sc) v = -150; // one fat shell, 4 voxels thick
       }
-    } else if (r < 1 + 1 / (26 * sc) && !four) v = -1000 + (1 + 1 / (26 * sc) - r) * (26 * sc) * 1040; // one-voxel skin ramp (not with four: its -800..-300 part would be a one-voxel shell of the fourth segment)
-    if (four && r < 1) { const rl = Math.hypot(cx - 11 * sc, cy + 7 * sc, cz - 6 * sc), Rl = 6 * sc; if (rl < Rl) v = -600; else if (rl < Rl + 3 && v === 40) v = Math.round(-600 + (rl - Rl) * 213); }
+    } else if (r < 1 + 1 / (26 * sc) && four && skin) v = -250 + (1 + 1 / (26 * sc) - r) * (26 * sc) * 290; // skin (opt-in): a one-voxel ramp -250..40 outside the body, which stays out of the fourth segment's -800..-300. Without it the four-segment body is a hard air / soft step (the class changes linearly across one cell), where the secant of the surface search lands on the 0.5 level to rounding and the sign of the last bit decides the side the hit is on (WebGL and WebGPU differ at about 30 pixels of the plain picture; 0 with the ramp)
+    else if (r < 1 + 1 / (26 * sc) && !four) v = -1000 + (1 + 1 / (26 * sc) - r) * (26 * sc) * 1040; // one-voxel skin ramp (not with four: its -800..-300 part would be a one-voxel shell of the fourth segment)
+    if (four && r < 1) { const rl = Math.hypot(cx - lungAt[0] * sc, cy - lungAt[1] * sc, cz - lungAt[2] * sc), Rl = 6 * sc; if (rl < Rl) v = -600; else if (rl < Rl + 3 && v === 40) v = Math.round(-600 + (rl - Rl) * 213); }
     const rb = Math.hypot(cx, cy, cz), Rb = 9 * sc; // central bone ball: HU = 300 at Rb, +100 per voxel inwards (ramp 2.6 voxels outside)
     if (rb < Rb + 2.6) v = Math.max(v, rb >= Rb ? 40 + 100 * (Rb + 2.6 - rb) : Math.min(1500, 300 + 100 * (Rb - rb)));
     if (Math.abs(cy - 6 * sc) < 1.5 * sc && Math.abs(cx) < 15 * sc && Math.abs(cz) < 15 * sc) v = Math.max(v, 900); // bone plate
