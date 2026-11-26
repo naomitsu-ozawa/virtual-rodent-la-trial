@@ -4,7 +4,7 @@
 //   The run: prep (the check's programs, distance texture and grid are made; the body is left alone) -> auto (5 segments of 45 s, the body moved by the script of docs/vr-bench.js benchPose, at its largest size; the first 2 s of each segment are not counted;
 //   in near/fast and far/slow the first shown tissue is hidden at the middle of the segment and shown again 2 s later) -> hold (1 minute: the body is put within reach and the person holds and moves it) -> done.
 //   What it can say: with N comparisons of a way that really used it and no difference, the rate of a difference per comparison is at most about 3 / N at 95 % (the rule of three). It is no proof of sameness; the counts below decide "not judged".
-import { benchPose, benchSegmentsOf, createBenchScript, BENCH_SCENES, BENCH_SEGMENT_MS, BENCH_DISCARD_MS } from './vr-bench.js?v=20261126-build764';
+import { benchPose, benchSegmentsOf, createBenchScript, BENCH_SCENES, BENCH_SEGMENT_MS, BENCH_DISCARD_MS } from './vr-bench.js?v=20261126-build766';
 
 export const IDENT_WAYS = ['dist', 'coarse', 'both']; // the three new ways (the control `same` and the positive control `pos` are not ways)
 export const IDENT_HELD_MS = 30000;
@@ -201,14 +201,27 @@ export function identResultLine(v, ok, ja = true) {
   return (ok ? (ja ? '完了 差の出た比較 ' : 'Done, comparisons with a difference ') : (ja ? '途中終了 差の出た比較 ' : 'Ended early, comparisons with a difference ')) + parts.join(ja ? '・' : ' · ') + (v.valid ? '' : (ja ? '（検査は無効）' : ' (check invalid)'));
 }
 // the display's own use of a new way (its switches are code constants, off): frames drawn the new way, frames drawn the old way and why, and what stopped it
-export function newPathLines(np) {
+export function newPathLines(np, { sinceMs = null } = {}) {
   if (!np) return [];
   const L = ['display ways: drew ' + np.used + ' passes with a way' + (Object.keys(np.byWay || {}).length ? ' (' + Object.entries(np.byWay).map(([k, n]) => k + ' ' + n).join(', ') + ')' : '') + ', no way for ' + np.notUsed + ' passes' + (Object.keys(np.reasons || {}).length ? ' (' + Object.entries(np.reasons).map(([k, n]) => k + ' ' + n).join(', ') + ')' : '') + (np.errors ? ' · GPU errors of its own submits ' + np.errors : '')];
   for (const n of np.notes || []) L.push('  ' + n);
+  // perf2 (measurement only): the startup record. Each program of the display's ways: when its compile started and ended (s on the page clock, or since the session start when sinceMs is given; a negative time = made before the session, on the page) and how many passes of the display were drawn with it
+  if (Array.isArray(np.progs) && np.progs.length) {
+    const t = ms => (Number.isFinite(ms) ? ((sinceMs === null ? ms : ms - sinceMs) / 1000).toFixed(2) : '-');
+    L.push('display programs (' + np.progs.length + '): key, state, compile start s, end s, ms, passes drawn with it' + (sinceMs === null ? '' : ' (s since the session start)'));
+    for (const p of np.progs) L.push('  ' + String(p.k).padEnd(28) + ' ' + String(p.state).padEnd(8) + ' ' + t(p.t0).padStart(8) + ' ' + t(p.t1).padStart(8) + ' ' + (Number.isFinite(p.t1) && Number.isFinite(p.t0) ? Math.round(p.t1 - p.t0) : '-').toString().padStart(6) + ' ms · drawn ' + (p.draws | 0));
+    const unused = np.progs.filter(p => !(p.draws > 0)).length;
+    L.push('  ' + unused + ' of ' + np.progs.length + ' programs were never drawn with');
+  }
+  if (Array.isArray(np.gateTrace) && np.gateTrace.length) {
+    const t = ms => (Number.isFinite(ms) ? ((sinceMs === null ? ms : ms - sinceMs) / 1000).toFixed(2) : '-');
+    L.push('compile gate jobs (' + np.gateTrace.length + '): label, queued s, started s, settled s');
+    for (const j of np.gateTrace) L.push('  ' + String(j.label || '-').padEnd(28) + ' ' + t(j.q).padStart(8) + ' ' + t(j.s).padStart(8) + ' ' + t(j.e).padStart(8));
+  }
   return L;
 }
 const cell = (v, w = 7) => String(v === null || v === undefined ? '-' : v).padStart(w);
-export function identReportLines(log, { variant = {}, newPath = null, runInfo = null, ctlTolerance = IDENT_MIN.ctlTol, segments = IDENT_SEGMENTS } = {}) {
+export function identReportLines(log, { variant = {}, newPath = null, sinceMs = null, runInfo = null, ctlTolerance = IDENT_MIN.ctlTol, segments = IDENT_SEGMENTS } = {}) {
   const L = [], v = log.verdict(variant);
   L.push('-- same-picture check (the button 「同じ絵の検査」): ' + log.count + ' comparisons counted' + (runInfo ? ' · ' + runInfo : ''));
   L.push('note: each frame the centre pass is drawn once more with one of the ways (same = the display\'s own way, the control; dist = distSplit; coarse = proxyCoarse; both = the two in one program) into a target of its own and compared pixel by pixel (colour and packed depth) with the picture the display drew that frame; the display itself draws the old way during the check. A comparison counts for a way only when the way was really used (a frame that could not use it is drawn the old way and listed under not used with the reason). The first 2 s of each segment are left out. Every 20th comparison is the positive control (no surface search: it must differ).');
@@ -246,7 +259,7 @@ export function identReportLines(log, { variant = {}, newPath = null, runInfo = 
     }
   }
   L.push('segments where the control `same` median is further than ' + Math.round(ctlTolerance * 100) + ' % from 1 (the display\'s own way twice: the timing of this segment is not trusted): ' + (bad.length ? bad.join(', ') : 'none'));
-  if (newPath) L.push(...newPathLines(newPath));
+  if (newPath) L.push(...newPathLines(newPath, { sinceMs }));
   // the differences found (the first ones)
   if (log.diffs.length) {
     L.push('-- comparisons with a difference, the positive control left out (' + log.diffs.length + ' kept of ' + Object.entries(log.T).reduce((a, [m, t]) => a + (m === 'pos' ? 0 : t.diff), 0) + '): way, used, t s, segment, pixels / compared range, max colour, max depth byte, colour-only pixels, rectangle x0 y0 x1 y1, eyes L R, 4 x 4 blocks, first pixels (x y colourA colourB depthA depthB, hex)');

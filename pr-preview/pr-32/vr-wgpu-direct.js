@@ -15,7 +15,7 @@
 //
 // Exactness: the composite hands the blender the centre pass' colour at 8 bit per channel and its depth at 24 bit (the packed depth, decoded as the composite does); the wrapper quantises both in the same way, so the eye image
 // gets the same values. A pixel of the rect is the pixel of the centre pass at the same eye pixel (render scale 1: the centre pass' region is the eye image's pixels); the pre-pass' tiles are the centre pass' own (same texture).
-import { volumeWgsl, VOLUME_BINDINGS, PROXY } from './vr-wgsl-core.js?v=20261126-build764';
+import { volumeWgsl, VOLUME_BINDINGS, PROXY } from './vr-wgsl-core.js?v=20261126-build766';
 
 export const DIRECT_MIN_PX = 16; // a rect smaller than this (either side) is not worth a path of its own: the offscreen path draws it
 const intersect = (a, b) => ({ x0: Math.max(a.x0, b.x0), y0: Math.max(a.y0, b.y0), x1: Math.min(a.x1, b.x1), y1: Math.min(a.y1, b.y1) });

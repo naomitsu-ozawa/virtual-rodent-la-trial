@@ -348,13 +348,17 @@ export function startGxCaps(diag, d) {
 }
 // the per-frame hook of the session's heartbeat (vr-wgpu.js startGxHeartbeat onFrame): the trial layer's sub image once, then the foveation check. Nothing here throws into the heartbeat's own work.
 // hook.done (getter) = the foveation check has ended (finished / unsupported / failed / aborted); false until it exists. The heartbeat calls the hook every frame until then.
+// the foveation check draws invisible heavy full-eye passes for about 4 s (120 frames) at the start of every WebGPU session, so it runs only when the debug switch gxFovea is on (opts.fovea = true;
+// the page passes effectiveFlag('gxFovea')). Without it the hook reads the trial layer's sub image once, the record says the check is off, and hook.done is true from the first call (no per-frame pose reads, no draws).
 export function capsFrameHook(rec, device, opts = {}) {
+  const { fovea = false, ...probeOpts } = opts;
   let fov = null, trialDone = false;
   const hook = (frame, pose, s) => {
-    if (!fov) fov = createFoveaProbe({ device, binding: s.binding, layer: s.layer, rec, ...opts }); // rec.fovea is there (state 'waiting') before the first publish: the record never says 'not run' for a check that is about to run
+    if (fovea && !fov) fov = createFoveaProbe({ device, binding: s.binding, layer: s.layer, rec, ...probeOpts }); // rec.fovea is there (state 'waiting') before the first publish: the record never says 'not run' for a check that is about to run
+    if (!fovea && !rec.fovea) rec.fovea = { state: 'off', initial: null, steps: [], error: null, events: [], verdict: 'not run: the debug switch gxFovea is off, so no heavy full-eye draw was made in this session' };
     if (!trialDone) { trialDone = true; try { probeTrialSubImage(rec, s.binding, pose.views); rec.publish(); } catch { /* none */ } }
-    fov.frame(frame, pose);
+    fov?.frame(frame, pose);
   };
-  Object.defineProperty(hook, 'done', { get: () => !!fov && fov.done });
+  Object.defineProperty(hook, 'done', { get: () => (fovea ? !!fov && fov.done : trialDone) });
   return hook;
 }

@@ -11,8 +11,8 @@
 //     as the performance record counts them) and how far the head moved.
 //  2. createFrameRing: the last 2000 frames, one record each, with what happened in that frame interval; windows around the frames over 30 ms are kept for the report.
 //  3. createIsolation: the switches of the isolation run (volume timestamps and their read-back, the menu's once-a-second redraw, the diagnostics' heartbeat save, the performance record's 5 s save).
-import { gapBucket } from './vr-perf-log.js?v=20261126-build764';
-import { MAX_LONG_M, NORM_LONG } from './vr-real-scale.js?v=20261126-build764';
+import { gapBucket } from './vr-perf-log.js?v=20261126-build766';
+import { MAX_LONG_M, NORM_LONG } from './vr-real-scale.js?v=20261126-build766';
 
 export const BENCH_DISCARD_MS = 2000; // the first 2 s of every segment are left out of its numbers
 export const BENCH_SEGMENT_MS = 45000; // one segment (a scene in one period)
@@ -194,6 +194,7 @@ export function benchReportLines(runs, { kind = 'webgl', build = '', hz = null }
 
 // ---- the frame ring: the last 2000 frames ----
 export const RING_SIZE = 2000;
+export const RING_HEAD = 600; // perf2: the first frames of the session are kept as well (the ring itself only holds the last RING_SIZE): their records are copied out as they are made
 export const RING_SLOW_MS = 30; // an interval longer than this is a slow frame: the frames around it are kept
 export const RING_COUNTERS = ['menu', 'tex', 'dsave', 'psave', 'mk', 'maps', 'fv', 'pz', 'pms']; // running totals the host passes each frame (the ring keeps the difference since the previous frame)
 // menu = menu / help / mission board canvases redrawn, tex = canvas textures uploaded (the boards and the toast: the places that count it), dsave / psave = the diagnostics' / the performance record's localStorage writes,
@@ -207,7 +208,7 @@ const RING_STATE = ['hold', 'f', 'per', 'cov', 'ph', 'ml', 'gd', 'vol', 'lag'];
 // the session's table, kept for ALL frames (not only the ring's): ph (0 pre, 1 rec, 2 post) x since (frames since the interval the foveation check last drew in: 0..15, 16 = later or never) x measured (maps > 0)
 // -> frames, intervals over 21 ms, over 30 ms. And per phase the values of dt / cov / vol / ml / gd / lag, kept as a uniform sample of at most RING_SAMPLES (exact below that) for the medians and p95
 export const RING_PHASES = ['pre', 'rec', 'post'], RING_SINCE = 17, RING_SAMPLES = 4096, RING_SERIES = ['dt', 'cov', 'vol', 'ml', 'gd', 'lag'];
-export function createFrameRing({ size = RING_SIZE, slowMs = RING_SLOW_MS, before = 3, after = 3, maxWindows = 40 } = {}) {
+export function createFrameRing({ size = RING_SIZE, slowMs = RING_SLOW_MS, before = 3, after = 3, maxWindows = 40, headSize = RING_HEAD } = {}) {
   const cols = {}; for (const k of ['dt', 'cb', 'pre', ...RING_COUNTERS, 'heap', ...RING_STATE]) cols[k] = new Float32Array(size);
   const tt = new Float64Array(size);
   let n = 0, lastTs = null, pendCb = NaN, pendPre = NaN, prevHeap = 0, slow = 0, windowsDropped = 0, pend = null;
@@ -221,7 +222,7 @@ export function createFrameRing({ size = RING_SIZE, slowMs = RING_SLOW_MS, befor
     else { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; const j = Math.floor(seed / 4294967296 * (o.seen + 1)); if (j < RING_SAMPLES) o.buf[j] = v; }
     o.seen++;
   };
-  const windows = [];
+  const windows = [], head = []; // head: the records of the first headSize frames (plain objects, filled once)
   const rec = abs => { // the record of absolute index abs as a plain object (reporting only)
     const i = abs % size, o = { n: abs, t: tt[i] };
     for (const k in cols) o[k] = cols[k][i];
@@ -252,11 +253,14 @@ export function createFrameRing({ size = RING_SIZE, slowMs = RING_SLOW_MS, befor
         addSample('dt', ph, dt); addSample('cov', ph, cols.cov[i]); addSample('vol', ph, cols.vol[i]); addSample('ml', ph, cols.ml[i]); addSample('gd', ph, cols.gd[i]); addSample('lag', ph, cols.lag[i]);
       }
       if (dt > slowMs) { slow++; if (pend) pend.to = n + after; else pend = { from: n - before, to: n + after }; }
+      if (head.length < headSize) head.push(rec(n));
       n++;
       if (pend && n - 1 >= pend.to) finalize();
     },
     // the records of the ring, oldest first (plain objects; reporting)
     records() { const a = []; for (let i = lo(); i < n; i++) a.push(rec(i)); return a; },
+    // the first frames of the session (up to headSize records, oldest first), kept whatever the ring has overwritten since
+    first() { return head.slice(); },
     // the windows kept (a window still waiting for its frames after is included as far as it goes)
     allWindows() { const w = windows.slice(); if (pend) { const x = copyWindow(pend.from, pend.to); if (x.length) w.push(x); } return w; },
     // the session's table: cells [{ ph, since, mp, n, o21, o30 }] (only those with frames) and per phase the values' { n (seen), used (in the sample), med, p95 } for each of RING_SERIES
@@ -323,8 +327,7 @@ export function ringReportLines(ring, { longTasks = null, sinceMs = 0 } = {}) {
   L.push(RING_COLS.map(([k, w]) => k.padStart(w)).join(' '));
   const num = (v, d = 0) => (Number.isFinite(v) ? (d ? v.toFixed(d) : String(Math.round(v))) : '-');
   const nz = v => (Number.isFinite(v) && v > 0 ? String(Math.round(v)) : '-');
-  ws.forEach((w, wi) => {
-    if (wi) L.push('');
+  const emit = w => {
     w.forEach((r, i) => {
       const prevR = i > 0 ? w[i - 1] : null, lt = longTasks?.supported ? longTasks.overlap(r.t - r.dt, r.t) : NaN;
       const marks = (r.dt > st.slowMs ? '*' : ' ') + (prevR && prevR.hold !== r.hold ? 'H' : ' ') + (prevR && Number.isFinite(r.f) && Math.abs(prevR.f - r.f) > 0.01 ? 'F' : ' ') + (prevR && Number.isFinite(r.per) && Number.isFinite(prevR.per) && Math.abs(prevR.per - r.per) > 0.01 ? 'P' : ' ');
@@ -332,7 +335,10 @@ export function ringReportLines(ring, { longTasks = null, sinceMs = 0 } = {}) {
         (r.heap > 0 ? Math.round(r.heap) + 'K' : '-').padStart(6), num(r.hold).padStart(4), num(r.f, 2).padStart(5), num(r.cov).padStart(8), (lt > 0 ? lt.toFixed(0) : '-').padStart(5),
         nz(r.fv).padStart(3), nz(r.pz).padStart(3), (r.pms > 0 ? r.pms.toFixed(1) : '-').padStart(5), num(r.ml, 1).padStart(5), num(r.gd, 1).padStart(6), num(r.lag, 1).padStart(5), marks.padStart(4)].join(' '));
     });
-  });
+  };
+  ws.forEach((w, wi) => { if (wi) L.push(''); emit(w); });
+  const hd = ring.first ? ring.first() : [];
+  if (hd.length) { L.push(''); L.push('-- the first ' + hd.length + ' frames of the session (kept whatever the ring has overwritten since; the same columns; * = an interval over ' + st.slowMs + ' ms)'); L.push(RING_COLS.map(([k, w]) => k.padStart(w)).join(' ')); emit(hd); }
   return L;
 }
 
