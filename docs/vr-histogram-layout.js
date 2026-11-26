@@ -1,8 +1,8 @@
 // VR histogram board: pure layout and redraw rules, no THREE, no DOM (unit-tested: tests/unit/vr-histogram-layout.test.js).
 // one canvas texture — title, one stacked histogram of the whole volume (each bar split by the label the VR
 // volume draws there, vr-label-histogram.js), the axes and a colour legend — redrawn only when the data, the display range or the scale changed.
-import { HIST_BINS, HU_AXIS, MIN_WINDOW, windowBins, axisSnap, axisWidth } from './histogram.js?v=20261119-build751';
-import { LABELS, SLOTS, UNLABELED } from './vr-label-histogram.js?v=20261119-build751';
+import { HIST_BINS, HU_AXIS, MIN_WINDOW, windowBins, axisSnap, axisWidth } from './histogram.js?v=20261126-build752';
+import { LABELS, SLOTS, UNLABELED } from './vr-label-histogram.js?v=20261126-build752';
 
 // canvas size and the plot rectangle inside it (px)
 export const PANEL_W = 1024, PANEL_H = 640;
