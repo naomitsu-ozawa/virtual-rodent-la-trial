@@ -27,7 +27,7 @@
 // ---- what the volume pass does with (tA, tB) ----
 // The march starts one grid point before the one tA falls on (k = floor((tA - t0) / stp) - 1, never below 0: the display's rule, so a hit k* >= k + 1) and its end is min(endT, tB): the loop ends when t > endT, and no sample past tB is inside a shown segment,
 // so no hit, no accumulated colour and no depth mark happens there. Only the start and the end move; the samples, jumps, hit bracket, search and shading are the march's own.
-import { uniformLayout, uniformStruct, PROXY, PROXY_FIELDS, PROXY_DIFF_BINDINGS, volumeWgsl } from './vr-wgsl-core.js?v=20261125-build763';
+import { uniformLayout, uniformStruct, PROXY, PROXY_FIELDS, PROXY_DIFF_BINDINGS, volumeWgsl } from './vr-wgsl-core.js?v=20261126-build764';
 
 export const COARSE = { cell: 4, perTexel: 4, empty: PROXY.empty, rebuildEvery: 6 };
 // the variants of the shadow pass (docs/vr-perf-log.js BD_SPECS carries the same table under `coarse`)

@@ -2,14 +2,17 @@
 // Pure (no DOM, no three.js): vr-view.js feeds it (frame / add / row) and shows the text on the page after the session. Nothing here changes what is drawn.
 // A row: fps, how many frame intervals were 1 / 2 / 3+ refresh periods, the GPU ms of the volume pass and of the main render (WebGL: EXT_disjoint_timer_query; WebGPU: timestamp-query / three's timestamps),
 // the JS ms of the app's frame, the CPU ms of renderer.render(), (WebGPU only) the frame's GPU timeline and CPU timeline: span / gap / oth / cpu / swd, and wake / pre / vlat / vdrop (see the note lines of the report), and the state the drawing choices were made in (scale f, periphery, data cap, auto level / step, step in voxels, covered px, size, menu, target Hz, foveation).
-import { directReport } from './vr-direct-log.js?v=20261125-build763';
+import { directReport } from './vr-direct-log.js?v=20261126-build764';
 export const PERF_KEY = 'vrl-vr-perf'; // + '-webgl' / '-webgpu': one mirror per kind (a WebGPU session does not overwrite the WebGL one)
 export const PERF_MIRROR_ROWS = 120; // the last rows the localStorage mirror keeps (the whole log stays in memory and in the page's text)
 export const PERF_MAX_ROWS = 600; // 10 minutes of rows
 export const PERF_MIRROR_STALLS = 30; // the last stall lines the localStorage mirror keeps
-export const PERF_MAX_STALLS = 60; // the stall lines kept (the newest; older ones are counted in stallsDropped)
+export const PERF_MAX_STALLS = 60;
+export const PERF_MAX_SLOWCB = 60; // the slow-callback lines kept (the newest)
+export const SLOWCB_MS = 20; // a frame callback of at least this many CPU ms gets a line with its stages
+const STAGES = ['pa', 'bk', 'bs', 'rn', 'js']; // the CPU ms of the stages, summed since the previous frame callback started: pa = partApply (the part fields, their textures and uploads, all its steps), bk = partBakeFrame (the baked cut: guard / build / switch), bs = the baking steps inside bk, rn = the render, js = the app's JS before the render // the stall lines kept (the newest; older ones are counted in stallsDropped)
 const COUNTS = ['mk', 'tg', 'slotc', 'perc']; // per-second counts of what the WebGPU renderer made / changed: mk = targets + tile textures + bind groups made, tg = targets made, slotc = slot size changes, perc = periphery pass on / off switches
-const MEANS = ['vol', 'main', 'js', 'render', 'cpu', 'swd', 'wake', 'pre', 'vlat', 'vdrop', 'late', 'lpx']; // the per-frame ms, averaged over the second
+const MEANS = ['vol', 'main', 'js', 'render', 'cpu', 'swd', 'wake', 'pre', 'vlat', 'vdrop', 'late', 'lpx', 'nv', 'rp', 'bk']; // the per-frame ms, averaged over the second (lpx: px; nv: volumes drawn per frame (1 = the body alone); rp: render passes of the volume renderer per frame; bk: share of the frames the body was drawn from the baked cut)
 const MEDIANS = ['span', 'gap']; // the per-frame ms, the median of the second (WebGPU: the frame's GPU span and the GPU idle before it)
 const median = a => { const v = a.filter(x => Number.isFinite(x)).sort((p, q) => p - q); if (!v.length) return null; const m = v.length >> 1; return v.length & 1 ? v[m] : (v[m - 1] + v[m]) / 2; };
 export const perfMedian = median;
@@ -25,6 +28,7 @@ export function createPerfLog({ kind = 'webgl', mode = 'vr', now = () => perform
   const cnt = { mk: 0, tg: 0, slotc: 0, perc: 0 }, since = { mk: 0, tg: 0, slotc: 0, perc: 0 }; // the second's counts / those since the previous frame callback started (the stall's cause)
   const ipBins = new Uint16Array(IP_BINS); let ipN = 0; // the second's frame intervals as a frequency table (no array made per frame)
   let gfixOn = 0, fmin = Infinity, fsum = 0, fn = 0; // the second's: a guard held the scale / periphery (0 / 1), the lowest and the sum of the scale f over the frames
+  const stg = { pa: 0, bk: 0, bs: 0, rn: 0, js: 0 }, slowCbs = []; let slowCbsDropped = 0; // stg: the stages' CPU ms since the previous callback started; slowCbs: one entry per callback of SLOWCB_MS or more
   const stalls = []; // one entry per frame interval of two or more periods (up to PERF_MAX_STALLS)
   let saveOff = false, saves = 0; // saveOff: the periodic localStorage mirror is paused (an isolation run of the comparison bench, docs/vr-bench.js; a forced save still writes); saves = how many times the mirror was written
   const sections = [], ext = {}; // sections: text blocks the report shows after its header (each a string array, or a function returning one); ext: extra JSON the mirror keeps (the bench results)
@@ -42,17 +46,26 @@ export function createPerfLog({ kind = 'webgl', mode = 'vr', now = () => perform
       ipBins[Math.min(IP_BINS - 1, (g / IP_BIN_MS) | 0)]++; ipN++;
       if (b >= 1) { // a frame interval of two or more periods: one line (the flags are what happened in the callback of the frame before: since the previous frame() call)
         if (stalls.length >= PERF_MAX_STALLS) { stalls.shift(); stallsDropped++; }
-        stalls.push({ t: r1((ts - t0) / 1000), gap: r1(g), span: lastSpan, vol: lastVol, hold, slot: since.slotc > 0 ? 1 : 0, tg: since.tg > 0 ? 1 : 0, per: since.perc > 0 ? 1 : 0, cov: Number.isFinite(cov) ? Math.round(cov) : null });
+        stalls.push({ t: r1((ts - t0) / 1000), gap: r1(g), span: lastSpan, vol: lastVol, hold, slot: since.slotc > 0 ? 1 : 0, tg: since.tg > 0 ? 1 : 0, per: since.perc > 0 ? 1 : 0, cov: Number.isFinite(cov) ? Math.round(cov) : null, pa: r1(stg.pa), bk: r1(stg.bk), bs: r1(stg.bs), rn: r1(stg.rn), js: r1(stg.js) }); // pa / bk / bs / rn / js: the stages' CPU ms of the interval before (see STAGES)
       }
     }
+    for (const k of STAGES) stg[k] = 0;
     lastTs = ts; since.mk = since.tg = since.slotc = since.perc = 0;
+  };
+  // a stage's CPU ms (see STAGES); the stages of one callback are summed from its start (frame()) to its end (endCb)
+  const stage = (k, ms) => { if (k in stg && Number.isFinite(ms) && ms >= 0) stg[k] += ms; };
+  // the end of a frame callback (cb = its CPU ms from the start): a long one gets a line with the stages
+  const endCb = (cb, ts = now()) => {
+    if (!(cb >= SLOWCB_MS)) return;
+    if (slowCbs.length >= PERF_MAX_SLOWCB) { slowCbs.shift(); slowCbsDropped++; }
+    slowCbs.push({ t: r1((ts - t0) / 1000), cb: r1(cb), pa: r1(stg.pa), bk: r1(stg.bk), bs: r1(stg.bs), rn: r1(stg.rn), js: r1(stg.js), mk: since.mk, tg: since.tg });
   };
   // a count of the WebGPU renderer (see COUNTS)
   const count = (k, n = 1) => { if (k in cnt && n > 0) { cnt[k] += n; since[k] += n; } };
   // the volume's movement since the previous frame (cm, deg), summed over the second
   const move = (cm, deg) => { if (Number.isFinite(cm) && cm >= 0) mvp += cm; if (Number.isFinite(deg) && deg >= 0) mvr += deg; };
   // a ms value (n = how many frames it stands for: a sum taken over n frames)
-  const add = (k, ms, n = 1) => { const a = acc[k]; if (a && Number.isFinite(ms) && ms >= 0 && n > 0) { a.s += ms; a.n += n; if (k === 'vol') lastVol = r2(ms / n); } };
+  const add = (k, ms, n = 1) => { const a = acc[k]; if (a && Number.isFinite(ms) && ms >= 0 && n > 0) { a.s += ms; a.n += n; if (k === 'vol') lastVol = r2(ms / n); if (k === 'render') stg.rn += ms; else if (k === 'js') stg.js += ms; } }; // render / js also feed the stages (STAGES)
   // the render scale f of this frame (min / mean of the second)
   const fval = f => { if (Number.isFinite(f) && f > 0) { if (f < fmin) fmin = f; fsum += f; fn++; } };
   // p95 of the second's frame intervals (ms) from the frequency table; null with no interval
@@ -68,7 +81,7 @@ export function createPerfLog({ kind = 'webgl', mode = 'vr', now = () => perform
   const save = (at = now(), force = false) => {
     if (!force && (saveOff || at - savedAt < saveEveryMs)) return;
     savedAt = at; saves++;
-    try { store?.setItem(key, JSON.stringify({ kind, mode, dropped, meta, rows: rows.slice(-PERF_MIRROR_ROWS), stalls: stalls.slice(-PERF_MIRROR_STALLS), ...(Object.keys(ext).length ? { ext } : {}) })); } catch { /* private window / full */ }
+    try { store?.setItem(key, JSON.stringify({ kind, mode, dropped, meta, rows: rows.slice(-PERF_MIRROR_ROWS), stalls: stalls.slice(-PERF_MIRROR_STALLS), slowCbs: slowCbs.slice(-PERF_MIRROR_STALLS), ...(Object.keys(ext).length ? { ext } : {}) })); } catch { /* private window / full */ }
   };
   // the end of a second: the row = the accumulators + the state given; they start again. snap = { f, per, cap, auto, lv, si, step, cov, size, menu, hz, fov, ... }
   const row = (snap = {}, at = now()) => {
@@ -95,10 +108,11 @@ export function createPerfLog({ kind = 'webgl', mode = 'vr', now = () => perform
     const recLeft = rows.filter(r => !r.menu && r.rec && r.fps > 0).length;
     return { rows: rows.length, closedRows: closed.length, recLeft, dropped, fps: pick('fps'), vol: pick('vol'), main: pick('main'), render: pick('render'), js: pick('js'), span: pick('span'), gap: pick('gap'), oth: pick('oth'), cpu: pick('cpu'), swd: pick('swd'), wake: pick('wake'), pre: pick('pre'), vlat: pick('vlat'), vdrop: pick('vdrop'), f: pick('f'), step: pick('step'), g1: closed.reduce((s, r) => s + r.g1, 0), g2: closed.reduce((s, r) => s + r.g2, 0), g3: closed.reduce((s, r) => s + r.g3, 0) };
   };
-  return { kind, mode, rows, stalls, meta, sections, ext, setSaveOff(v) { saveOff = !!v; }, get saves() { return saves; }, get dropped() { return dropped; }, get stallsDropped() { return stallsDropped; }, frame, fval, count, move, add, sample, row, get lastDrops() { const r = rows[rows.length - 1]; return r ? r.g2 + r.g3 : null; }, save, flush, summary };
+  return { kind, mode, rows, stalls, slowCbs, meta, sections, ext, setSaveOff(v) { saveOff = !!v; }, get saves() { return saves; }, get dropped() { return dropped; }, get stallsDropped() { return stallsDropped; }, get slowCbsDropped() { return slowCbsDropped; }, stage, endCb, frame, fval, count, move, add, sample, row, get lastDrops() { const r = rows[rows.length - 1]; return r ? r.g2 + r.g3 : null; }, save, flush, summary };
 }
-const COLS = [['t', 4], ['fps', 5], ['g1', 4], ['g2', 3], ['g3', 3], ['vol', 6], ['main', 6], ['render', 6], ['js', 6], ['span', 6], ['gap', 6], ['oth', 6], ['cpu', 6], ['swd', 6], ['wake', 6], ['pre', 6], ['vlat', 6], ['vdrop', 6], ['f', 5], ['per', 5], ['cap', 5], ['auto', 4], ['lv', 5], ['si', 3], ['step', 5], ['cov', 8], ['w', 5], ['h', 5], ['size', 6], ['menu', 4], ['hz', 4], ['fov', 4], ['rec', 3], ['hold', 4], ['mv', 6], ['mvr', 6], ['imax', 6], ['mk', 3], ['slotc', 5], ['perc', 4], ['hset', 5], ['hk', 5], ['gfix', 4], ['mlow', 4], ['tab', 3], ['fmin', 6], ['favg', 6], ['late', 5], ['ip95', 6], ['lpx', 8]];
-const STALL_COLS = [['t', 6], ['gap', 6], ['span', 6], ['vol', 6], ['hold', 4], ['slot', 4], ['tg', 3], ['per', 3], ['cov', 8]];
+const COLS = [['t', 4], ['fps', 5], ['g1', 4], ['g2', 3], ['g3', 3], ['vol', 6], ['main', 6], ['render', 6], ['js', 6], ['span', 6], ['gap', 6], ['oth', 6], ['cpu', 6], ['swd', 6], ['wake', 6], ['pre', 6], ['vlat', 6], ['vdrop', 6], ['f', 5], ['per', 5], ['cap', 5], ['auto', 4], ['lv', 5], ['si', 3], ['step', 5], ['cov', 8], ['w', 5], ['h', 5], ['size', 6], ['menu', 4], ['hz', 4], ['fov', 4], ['rec', 3], ['hold', 4], ['mv', 6], ['mvr', 6], ['imax', 6], ['mk', 3], ['slotc', 5], ['perc', 4], ['hset', 5], ['hk', 5], ['gfix', 4], ['mlow', 4], ['tab', 3], ['fmin', 6], ['favg', 6], ['late', 5], ['ip95', 6], ['lpx', 8], ['nv', 4], ['rp', 4], ['bk', 4]];
+const STALL_COLS = [['t', 6], ['gap', 6], ['span', 6], ['vol', 6], ['hold', 4], ['slot', 4], ['tg', 3], ['per', 3], ['cov', 8], ['pa', 6], ['bk', 6], ['bs', 6], ['rn', 6], ['js', 6]];
+const SLOWCB_COLS = [['t', 6], ['cb', 6], ['js', 6], ['pa', 6], ['bk', 6], ['bs', 6], ['rn', 6], ['mk', 3], ['tg', 3]];
 const cell = (v, w) => String(v === null || v === undefined ? '-' : (typeof v === 'boolean' ? +v : v)).padStart(w);
 // the text of the page panel / the copy button / the saved file: the header, the summary, then the rows
 export function perfReport(p, { build = '', ua = '', hz = null } = {}) {
@@ -122,6 +136,7 @@ export function perfReport(p, { build = '', ua = '', hz = null } = {}) {
   if (p.vb) for (const t of volBreakdownReport(p)) L.push(t);
   L.push('note: hold = the most hands holding the volume in that second (0 / 1 / 2; the volume or its pair partner, not a section or a board); mv / mvr = how far the volume moved in that second, cm/s of its world position and deg/s of its world rotation, whether held or not (scale changes are not in it); imax = the longest frame interval of the second in ms.');
   L.push('note: mk = offscreen targets + tile textures + bind groups made in that second; slotc = times a pass\'s target slot size changed; perc = times the periphery pass switched on or off (WebGPU only; WebGL "-").');
+  L.push('note: nv = the volumes drawn per frame (mean of the second; 1 = the body alone, 2 or more = the pair partner / parts taken out), rp = the render passes of the volume renderer per frame (mean; the centre pass and the periphery pass: all the volumes of a pass share one render pass; WebGPU only), bk = the share of the frames (0-1) in which the body was drawn by the ordinary program on the baked cut (0 with parts out = the body is drawn by the parts\' field).');
   L.push('note: hset = the held-scale setting of the WebGPU view in that second (the factor the slider is set to, 0.5-0.95; 0 = the setting is off); hk = the lowest factor really applied to the render scale in that second (1 = never lowered; compare with hset while hold > 0).');
   L.push('note: gfix = 1 when the flicker guard (scale or periphery) held its value at any frame of that second; mlow = the setting "simplify while held" (1 on, 0 off; WebGPU only); tab = the menu tab open ("-" = menu closed); fmin / favg = the lowest / mean render scale f over the frames of the second (f in the row is the last frame\'s); late = share 0-1 of the sampled onSubmittedWorkDone (every 4th frame, as wake) that returned after the next frame callback had started (taken only while the recording is prepared, as swd; "-" in the other seconds); ip95 = p95 of the frame intervals of the second in ms (a frequency table of 0.5 ms bins); lpx = mean px per frame the low pass drew (sum of its scissor rects over the eyes; WebGPU only, "-" otherwise).');
   L.push('note: stall lines (after the rows): one per frame interval of about two periods or more (over 1.5 periods), the newest ' + PERF_MAX_STALLS + '. t = s since the start, gap = the interval in ms, span / vol = the latest GPU span / volume ms read back when it ended (a read-back may lag a few frames: it is the frame before only roughly; "-" = none yet), hold = hands holding, slot / tg / per = 1 when a slot size changed / a target was made / the periphery switched during the frame before the gap, cov = covered px.');
@@ -129,9 +144,13 @@ export function perfReport(p, { build = '', ua = '', hz = null } = {}) {
   L.push(COLS.map(([k, w]) => k.padStart(w)).join(' '));
   for (const r of p.rows) L.push(COLS.map(([k, w]) => cell(r[k], w)).join(' '));
   const st = p.stalls || [];
-  L.push('-- stalls: frame intervals of two or more periods, ' + st.length + (p.stallsDropped ? ' newest (' + p.stallsDropped + ' older dropped)' : '') + ' (t s; gap ms; span / vol = latest GPU ms; hold = hands; slot / tg / per = 1 if a slot size changed / a target was made / the periphery switched just before; cov = covered px)');
+  L.push('-- stalls: frame intervals of two or more periods, ' + st.length + (p.stallsDropped ? ' newest (' + p.stallsDropped + ' older dropped)' : '') + ' (t s; gap ms; span / vol = latest GPU ms; hold = hands; slot / tg / per = 1 if a slot size changed / a target was made / the periphery switched just before; cov = covered px; pa / bk / bs / rn / js = CPU ms of the stages in the interval before, see the slow callbacks below)');
   L.push(STALL_COLS.map(([k, w]) => k.padStart(w)).join(' '));
   for (const r of st) L.push(STALL_COLS.map(([k, w]) => cell(r[k], w)).join(' '));
+  const sc = p.slowCbs || [];
+  L.push('-- slow callbacks: frame callbacks of ' + SLOWCB_MS + ' ms or more of CPU, ' + sc.length + (p.slowCbsDropped ? ' newest (' + p.slowCbsDropped + ' older dropped)' : '') + ' (t s; cb = the callback\'s CPU ms; js = the app JS before the render; pa = partApply (part fields / textures / uploads, also its steps between callbacks); bk = partBakeFrame; bs = the baking steps inside bk; rn = the render; stage ms are summed since the previous callback started; mk / tg = objects / targets made in that time)');
+  L.push(SLOWCB_COLS.map(([k, w]) => k.padStart(w)).join(' '));
+  for (const r of sc) L.push(SLOWCB_COLS.map(([k, w]) => cell(r[k], w)).join(' '));
   if (p.direct) for (const t of directReport(p)) L.push(t); // the WebGPU view's direct draw trial (vr-direct-log.js; nothing unless it was asked for)
   return L.join('\n');
 }

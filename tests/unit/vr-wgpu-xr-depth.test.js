@@ -88,10 +88,10 @@ describe('WebGPU: the XR passes do not store the depth', () => {
     expect(() => m3.b.finishRender(m3.ctx)).not.toThrow();
   });
   it('the passes of the volume (vr-wgpu.js) are not changed: their depth is a colour attachment that stays "store", and the only depthStoreOp in the file is the hook\'s', () => {
-    expect(host.match(/\{ view: [\w.]+\.depthView, loadOp: 'clear', storeOp: 'store'/g)).toHaveLength(4); // the breakdown's shadow and probe passes, and the specCfg shadow pass's two (the specialised and the generic copy)
-    expect(host.match(/\{ view: target\.depthView, loadOp: ld, storeOp: 'store'/g)).toHaveLength(1); // the display's pass (low / peri target): 'clear', or 'load' for the second volume of a frame (the depth axis)
+    expect(host.match(/\{ view: [\w.]+\.depthView, loadOp: 'clear', storeOp: 'store'/g)).toHaveLength(5); // the display's pass (low / peri target: one render pass for every volume of the frame), the breakdown's shadow and probe passes, and the specCfg shadow pass's two (the specialised and the generic copy)
+    expect(host.match(/\{ view: target\.depthView, loadOp: 'clear', storeOp: 'store'/g)).toHaveLength(1);
     const hook = host.slice(host.indexOf('// the depth of the headset'), host.indexOf('// the device is lost for another reason'));
-    const zAtt = "depthStencilAttachment: { view: ensureZ(target).zView, depthLoadOp: ld, depthStoreOp: 'store', depthClearValue: 1 }"; expect(host.split(zAtt)).toHaveLength(2); // the one depth buffer the volume's own offscreen target has (the depth axis, a frame of several volumes): not an XR pass's
+    const zAtt = "depthStencilAttachment: { view: ensureZ(target).zView, depthLoadOp: 'clear', depthStoreOp: 'discard', depthClearValue: 1 }"; expect(host.split(zAtt)).toHaveLength(2); // the one depth buffer the volume's own offscreen target has (the depth axis, a frame of several volumes, drawn in one render pass): cleared and never stored (nothing reads it after the pass); not an XR pass's
     expect(host.replace(hook, '').replace(zAtt, '')).not.toMatch(/depthStoreOp|depthStencilAttachment/);
     expect(host.replace(hook, '').match(/storeOp: 'discard'/g)).toHaveLength(1); // the frame marker's colour attachment, as before
   });
@@ -103,7 +103,7 @@ describe('WebGPU: the XR passes do not store the depth', () => {
   });
   it('vr-view.js: the hook is set once, right after the output path, on the WebGPU renderer only', () => {
     expect(vr).toContain("const out=useMaterialSrgbOutput(r,THREEG);gxD.value('output path',out.text);gxD.value('xr depth',discardXrDepth(r).text);const mainTs=");
-    expect(vr.match(/discardXrDepth\(/g)).toHaveLength(1);
+    expect(vr.match(/discardXrDepth\(/g)).toHaveLength(2); // once for each way the renderer is made: the session's own start and makeGxSide (the GPU side the page makes before the session); each renderer gets it once
     expect(host).toContain('export function discardXrDepth(renderer)');
   });
 });

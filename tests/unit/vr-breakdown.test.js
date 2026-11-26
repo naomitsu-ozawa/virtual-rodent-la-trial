@@ -298,7 +298,7 @@ describe('the collector (createVolBreakdown)', () => {
     expect(vb.addProbe('x', new Uint32Array(8), 1, 1)).toBe(false); expect(vb.addProbe('whole', new Uint32Array(8), 64, 64)).toBe(false);
     const log = createPerfLog({ kind: 'webgl', now: () => 1000, store: null }); log.row({ menu: 0, fps: 72 }, 1000);
     const t = perfReport(log, {}).split('\n'), h = t.findIndex(l => /^\s*t\s+fps\s+g1/.test(l));
-    expect(t[h]).toMatch(/fov\s+rec\s+hold\s+mv\s+mvr\s+imax\s+mk\s+slotc\s+perc\s+hset\s+hk\s+gfix\s+mlow\s+tab\s+fmin\s+favg\s+late\s+ip95\s+lpx$/); expect(t[h + 1].length).toBe(t[h].length); expect(t[h + 1]).toMatch(/\s-$/); expect(t.join('\n')).not.toContain('-- vol breakdown');
+    expect(t[h]).toMatch(/fov\s+rec\s+hold\s+mv\s+mvr\s+imax\s+mk\s+slotc\s+perc\s+hset\s+hk\s+gfix\s+mlow\s+tab\s+fmin\s+favg\s+late\s+ip95\s+lpx\s+nv\s+rp\s+bk$/); expect(t[h + 1].length).toBe(t[h].length); expect(t[h + 1]).toMatch(/\s-$/); expect(t.join('\n')).not.toContain('-- vol breakdown');
   });
   it('the table of variants: the ten (and the march variants of vr-wgpu-coarse-march.js and the coarse-grid pre-pass variants of vr-wgpu-coarse-proxy.js, then the compute-march variants after them), in the order they run, with the program / uniform change each needs (noJump leaves the pre-pass out too: it needs the jumps; noProxy only the pre-pass, and its turn runs the proxy comparison)', () => {
     { const ten = ['same', 'box', 'simple', 'noGrad', 'specCfg', 'noRefine', 'noShade', 'withCreep', 'noJump', 'noProxy']; expect(BD_VARIANTS.filter(v => ten.includes(v))).toEqual(ten); const march = ['distSplit', 'march2', 'march2c4']; expect(BD_VARIANTS.filter(v => march.includes(v))).toEqual(march); expect(BD_VARIANTS.indexOf('distSplit')).toBeGreaterThan(BD_VARIANTS.indexOf('noProxy')); const coarse = ['proxyTB', 'proxyCoarse8', 'proxyCoarse']; expect(BD_VARIANTS.filter(v => coarse.includes(v))).toEqual(coarse); /* (the coarse-grid pre-pass variants: tests/unit/vr-wgpu-coarse-proxy.test.js) */ const cs = ['cs', 'csHit', 'csWave', 'csTile', 'csShare', 'csTileSg', 'csShareSg']; expect(BD_VARIANTS.filter(v => cs.includes(v))).toEqual(cs); /* (the compute-march variants: tests/unit/vr-wgsl-cs.test.js) */ } expect(BD_SPECS.specCfg.spec).toBe(true); expect(BD_SPECS.specCfg.overrides).toBeUndefined(); // (A4: the program of the display built with the settings as pipeline constants; tests/unit/vr-wgsl-spec.test.js)
@@ -677,7 +677,7 @@ describe('vr-view.js wiring (static)', () => {
     expect(host).toContain("const lowDraw = multi ? drawVols(low, 'low', 0, 'low') : volume.drawPass(low.target, low.eyes, u, vr, 0, null, null, dnp ? { proxy: low.px, np: { ...dnp, auto: true, pass: 'low', skip: '' } } : { proxy: low.px });"); // the new ways' option is added only while a display switch asks (dnp null: the call of before, character for character)
     expect(host).toContain('\n    if (volume.bdActive()) {');
     expect(host).toContain('for (const sc of e.scissors || [[e.x, e.y, e.w, e.h]]) { pass.setScissorRect(sc[0], sc[1], sc[2], sc[3]); pass.draw(36); }');
-    expect(host).toContain('const timed = (o?.timed ?? !overrides) && GX_SWITCH.timers;'); // GX_SWITCH.timers: the isolation run's switch (true by default)
+    expect(host).toContain('const timed = (o0?.timed ?? !v0.overrides) && GX_SWITCH.timers;'); // GX_SWITCH.timers: the isolation run's switch (true by default)
     expect(vr).toContain('gx.vol.breakdown.begin(variant,'); expect(vr).toContain('if(gx){gxRec.gen++;gxRec.on=false;try{gx.vol?.dispose()}');
   });
 });

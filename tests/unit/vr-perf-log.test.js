@@ -1,7 +1,7 @@
 // The VR performance record (docs/vr-perf-log.js) and its wiring in vr-view.js: the same rows for the WebGL and the WebGPU session, a ring buffer, the summary of the menu-closed stretch, the file names.
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { createPerfLog, perfReport, perfFileName, gapBucket, perfMedian, PERF_KEY, PERF_MAX_ROWS, PERF_MIRROR_ROWS, PERF_MAX_STALLS } from '../../docs/vr-perf-log.js';
+import { createPerfLog, perfReport, perfFileName, gapBucket, perfMedian, PERF_KEY, PERF_MAX_ROWS, PERF_MIRROR_ROWS, PERF_MAX_STALLS, PERF_MAX_SLOWCB } from '../../docs/vr-perf-log.js';
 import { saveGxDiagText } from '../../docs/vr-wgpu.js';
 
 const vr = readFileSync(new URL('../../docs/vr-view.js', import.meta.url), 'utf8');
@@ -348,7 +348,7 @@ describe('the hold / movement / stall columns', () => {
     log.frame(BUDGET * 3, BUDGET, 2, 1); // one period: no line
     log.frame(BUDGET * 6, BUDGET, 1, 7); // three periods, nothing made before it
     expect(log.stalls).toHaveLength(2);
-    expect(log.stalls[0]).toEqual({ t: 0, gap: 27.8, span: 9.46, vol: 6, hold: 2, slot: 1, tg: 1, per: 0, cov: 12346 });
+    expect(log.stalls[0]).toEqual({ t: 0, gap: 27.8, span: 9.46, vol: 6, hold: 2, slot: 1, tg: 1, per: 0, cov: 12346, pa: 0, bk: 0, bs: 0, rn: 0, js: 0 });
     expect(log.stalls[1]).toMatchObject({ gap: 41.7, hold: 1, slot: 0, tg: 0, per: 0, cov: 7 });
     let t = 0; const big = createPerfLog({ now: () => clock, store: null });
     for (let i = 0; i < PERF_MAX_STALLS + 5; i++) { t += BUDGET * 3; big.frame(t, BUDGET, 0, i); }
@@ -359,12 +359,12 @@ describe('the hold / movement / stall columns', () => {
     let clock = 0; const st = memStore(), log = createPerfLog({ kind: 'webgpu', now: () => clock, store: st, saveEveryMs: 0 });
     log.frame(0, BUDGET, 1, 9); log.frame(BUDGET * 3, BUDGET, 1, 9); clock = 1000; log.row({ menu: 0, f: 1 }, clock);
     const t = perfReport(log, {}).split('\n'), h = t.findIndex(l => /^\s*t\s+fps\s+g1/.test(l));
-    expect(t[h]).toMatch(/rec\s+hold\s+mv\s+mvr\s+imax\s+mk\s+slotc\s+perc\s+hset\s+hk\s+gfix\s+mlow\s+tab\s+fmin\s+favg\s+late\s+ip95\s+lpx$/);
+    expect(t[h]).toMatch(/rec\s+hold\s+mv\s+mvr\s+imax\s+mk\s+slotc\s+perc\s+hset\s+hk\s+gfix\s+mlow\s+tab\s+fmin\s+favg\s+late\s+ip95\s+lpx\s+nv\s+rp\s+bk$/);
     expect(t[h + 1].trim().split(/\s+/)).toHaveLength(t[h].trim().split(/\s+/).length);
     const s = t.findIndex(l => l.startsWith('-- stalls'));
     expect(s).toBeGreaterThan(h + 1); expect(t[s]).toContain('1 ');
-    expect(t[s + 1]).toMatch(/^\s*t\s+gap\s+span\s+vol\s+hold\s+slot\s+tg\s+per\s+cov$/);
-    expect(t[s + 2].trim().split(/\s+/)).toHaveLength(9);
+    expect(t[s + 1]).toMatch(/^\s*t\s+gap\s+span\s+vol\s+hold\s+slot\s+tg\s+per\s+cov\s+pa\s+bk\s+bs\s+rn\s+js$/);
+    expect(t[s + 2].trim().split(/\s+/)).toHaveLength(14);
     const all = t.join('\n'); for (const w of ['note: hold = the most hands', 'note: mk = offscreen targets', 'note: stall lines']) expect(all, w).toContain(w);
     expect(JSON.parse(st.m.get(PERF_KEY + '-webgpu')).stalls).toHaveLength(1);
   });
@@ -394,5 +394,17 @@ describe('the hold / movement / stall columns', () => {
     expect(vr).toContain("perfLog.count('mk',d)"); expect(vr).toContain("perfLog.count('slotc',ds)"); expect(vr).toContain("perfLog.count('perc',dp)");
     expect(vr).toContain('perfLog.move(pmP.distanceTo(pmP0)*100,pmQ.angleTo(pmQ0)*57.29578)');
     expect(vr.indexOf('perfLog.move(')).toBeGreaterThan(vr.indexOf('if(gx)gxFrameEnd(fa0);'));
+  });
+  it('stage times: a stall carries the stages of the interval before, a callback of 20 ms or more gets a line, the report lists both', () => {
+    let clock = 0; const log = createPerfLog({ now: () => clock, store: null });
+    log.frame(0, BUDGET); log.stage('pa', 3); log.stage('bk', 4.04); log.stage('bs', 2); log.add('render', 30); log.add('js', 5); log.stage('zz', 9); log.stage('pa', NaN);
+    clock = 60; log.endCb(55, 60); log.endCb(5, 61); // the short one gets no line
+    log.frame(BUDGET * 3, BUDGET); // the stall line shows those stages; they start again
+    expect(log.stalls[0]).toMatchObject({ pa: 3, bk: 4, bs: 2, rn: 30, js: 5 });
+    expect(log.slowCbs).toHaveLength(1); expect(log.slowCbs[0]).toMatchObject({ cb: 55, pa: 3, bk: 4, rn: 30 });
+    log.endCb(25, 100); expect(log.slowCbs[1]).toMatchObject({ cb: 25, pa: 0, rn: 0 });
+    for (let i = 0; i < PERF_MAX_SLOWCB + 3; i++) log.endCb(21, 200);
+    expect(log.slowCbs).toHaveLength(PERF_MAX_SLOWCB); expect(log.slowCbsDropped).toBe(5);
+    expect(perfReport(log)).toContain('-- slow callbacks');
   });
 });

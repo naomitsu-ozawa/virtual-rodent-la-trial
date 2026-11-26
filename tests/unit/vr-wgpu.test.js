@@ -147,7 +147,7 @@ describe('vr-view.js wiring (static)', () => {
     expect(vr).toContain("const r=gpu?.renderer||new THREE.WebGLRenderer({antialias:false,alpha:ar,preserveDrawingBuffer:false});");
     expect(vr).toContain('if(vrGpuRequested()){');
     expect(vr).not.toMatch(/vrgpu=/);
-    expect(vr).toContain("if(vrGpuRequested()&&vrGpuAvailable())return null; // WebGPU trial");
+    expect(vr).toContain("if(vrGpuRequested()&&vrGpuAvailable())return prepareGxGpu(P,mode,onProgress); // WebGPU trial"); // (the page makes the GPU side of the WebGPU view itself: no WebGL renderer)
     expect(vr).toContain("gx?{...sessionOpts,optionalFeatures:[...sessionOpts.optionalFeatures,'layers'],requiredFeatures:['webgpu']}:sessionOpts"); // 'layers' only on the WebGPU request: the WebGL request is as before
     expect(vr).toContain("gxNote='refused'"); expect(vr).toContain("gxNote='unavailable'"); expect(vr).toContain("gxNote='failed'");
     expect(vr).toContain('renderer=makeGlRenderer();'); // the WebGPU session was refused: the WebGL one opens in the same click
@@ -579,7 +579,7 @@ describe('WebGPU: a failure after the session opened ends it and the page says s
     await new Promise(r => setTimeout(r)); expect(got).toEqual(['unknown']);
   });
   it('vr-view.js: the failing places end the session through the same line (step gpu-closed), the page and the headset say the same words in both languages', () => {
-    expect(vr).toContain("step('gpu-closed')"); expect(vr).toContain('gxFail(e);return}gx.ready=true'); expect(vr).toContain('watchDeviceLost(gx.device,');
+    expect(vr).toContain("step('gpu-closed')"); expect(vr).toContain('frameGaps.end();gxFail(e);return}'); expect(vr).toContain("gx.ready=true;markStart('ready');const rep=frameGaps.end()"); expect(vr).toContain('watchDeviceLost(gx.device,');
     expect(app).toContain("tr(s==='gpu-closed'?'vrGpuClosed':'vrGpuFallback')");
     const i18n = read('i18n.js');
     expect(i18n).toContain("vrGpuClosed:'WebGPUでは開けませんでした'"); expect(i18n).toContain("vrGpuClosed:'Could not open with WebGPU'");
@@ -822,7 +822,7 @@ describe('WebGPU: the output is encoded inside each material, three.js\' frame b
     expect(vr).toContain("await r.init();gxD.stage('renderer init');const out=useMaterialSrgbOutput(r,THREEG);gxD.value('output path',out.text);");
     expect(vr).toContain('makeBackground(!!gx,!!gx&&(gx.out?.materialSrgb||renderer.currentColorSpace===THREE.SRGBColorSpace))');
     expect(vr).toContain('decode:renderer.currentColorSpace===THREE.SRGBColorSpace'); // unchanged: false once the output colour space is linear, true if the material route failed and three.js' pass encodes
-    expect(vr.match(/useMaterialSrgbOutput\(/g)).toHaveLength(1);
+    expect(vr.match(/useMaterialSrgbOutput\(/g)).toHaveLength(2); // the session's own start and makeGxSide (the GPU side the page makes before the session): the same call after init
     expect(vr.match(/outputColorSpace\s*=/g)).toBeNull(); // nothing in the page sets it
     expect(host).toContain('export function useMaterialSrgbOutput(renderer, THREE)');
   });

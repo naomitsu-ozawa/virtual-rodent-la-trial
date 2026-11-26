@@ -22,6 +22,10 @@ const fixture = f => JSON.parse(readFileSync(new URL('./fixtures/' + f, import.m
 const sha = t => createHash('sha256').update(t).digest('hex');
 const withGpu = fn => async () => { for (const [k, v] of Object.entries(GPU_GLOBALS)) vi.stubGlobal(k, v); try { await fn(); } finally { vi.unstubAllGlobals(); } };
 const settle = () => new Promise(r => setTimeout(r, 0));
+// the programs go to the GPU through the compile gate (docs/vr-wgpu-gate.js): a few at a time, each job in a task of its own. waitQueue: until every job that waits has started; drain: until nothing is queued or compiling (the other fourth-segment variant's programs are queued behind the waited ones)
+const gateOf = r => r.volume.displayNp().inst.gate;
+const waitQueue = async (r, ms = 5000) => { for (const g = gateOf(r), t0 = Date.now(); g.queued > 0 && Date.now() - t0 < ms;) await new Promise(x => setTimeout(x, 3)); await settle(); };
+const drain = async (r, ms = 8000) => { for (const g = gateOf(r), t0 = Date.now(); g.busy && Date.now() - t0 < ms;) await new Promise(x => setTimeout(x, 3)); await settle(); };
 const vrView = read('vr-view.js'), wgpu = read('vr-wgpu.js');
 
 describe('the display has no switch and no way back to the old program', () => {
@@ -210,7 +214,8 @@ describe('the distance texture follows the combined texture\'s writes', () => {
 });
 
 // ---- the frame: which way a frame is drawn, with the real renderer and the recording device ----
-const mkR = (opts = {}, timestamps = false, dev = {}) => { const rec = recordingDevice({ timestamps, ...dev }); const r = createVrVolumeRenderer({ THREE: THREEG, device: rec.device, halfExt: [1, 1, 1], distSplitDisplay: false, coarseDisplay: false, ...opts }); return { r, ...rec }; };
+// (bgDelayMs 0: the programs of the other fourth-segment variant are queued at once in these cases: they look at them right after the start)
+const mkR = (opts = {}, timestamps = false, dev = {}) => { const rec = recordingDevice({ timestamps, ...dev }); const r = createVrVolumeRenderer({ THREE: THREEG, device: rec.device, halfExt: [1, 1, 1], distSplitDisplay: false, coarseDisplay: false, bgDelayMs: 0, ...opts }); return { r, ...rec }; };
 const frameOf = (r, u, over = {}) => r.draw({ u, cams: [eyeCam(1000, 1000), eyeCam(1000, 1000)], model: new THREEG.Matrix4(), f: 0.5, fov: false, fp: 0.5, rects: null, band: 1, variant: { cls4: false, events: false }, ...over });
 // the low pass's way in the log lines of one frame: the program of its first render pass and whether it had a group 1
 const lowWay = (rec, from) => {
@@ -218,7 +223,7 @@ const lowWay = (rec, from) => {
   const own = seg.slice(i, seg.findIndex((l, k) => k > i && l === 'render.end'));
   return { dist: /march=distSplit/.test(code), coarse: /coarse-tile=4/.test(code), group1: own.some(l => l.startsWith('render.setBindGroup 1 ')), pipe: id, tiles4: seg.slice(0, i).filter(l => l.startsWith('compute.dispatch')) };
 };
-const ready = async (r, u, v = [{ cls4: false, events: false }]) => { await r.preload(u, v); await settle(); await settle(); };
+const ready = async (r, u, v = [{ cls4: false, events: false }]) => { await r.preload(u, v); await drain(r); await settle(); await settle(); };
 
 describe('the display with a switch on: a way is chosen for every pass of every frame (chooseWay) and the old way is what is left where no way is made yet', () => {
   it('B: a frame that meets every condition is drawn B (the program of both substitutions, group 1 for the march layout, the 4 x 4 tiles over the coarse grid), and counted', withGpu(async () => {
@@ -303,7 +308,7 @@ describe('the display with a switch on: a way is chosen for every pass of every 
   it('the programs of B are not ready yet: D draws, and no frame waits for them', withGpu(async () => {
     const rec = mkR({ coarseDisplay: true }), u = sceneUniforms();
     const slow = rec.device.createRenderPipelineAsync; let release; rec.device.createRenderPipelineAsync = d => (/coarse-tile=4/.test(d.vertex.module.code) ? new Promise(res => { release = () => res(slow(d)); }) : slow(d)); // (the programs of the new way hang until released; the display's own are made as always)
-    void rec.r.preload(u, [{ cls4: false, events: false }]); await settle(); await settle(); // (preload waits for the programs of the ways: this one hangs, so it is not awaited; the frames go on)
+    void rec.r.preload(u, [{ cls4: false, events: false }]); await new Promise(r => setTimeout(r, 150)); await waitQueue(rec.r); // (preload waits for the programs of the ways: this one hangs, so it is not awaited; the frames go on. The jobs that wait start one after the other: the hung programs hold two of the gate's three places)
     for (let i = 0; i < 3; i++) frameOf(rec.r, u); // (the distance texture is made at the first frame)
     const n0 = rec.log.length; frameOf(rec.r, u); expect(lowWay(rec, n0).coarse).toBe(false); expect(rec.r.stats.np).toMatchObject({ use: true, way: 'D' }); // B's program is not there: D (distSplit, the 8 x 8 pre-pass) draws, nothing waits
     rec.r.dispose(); void release;
@@ -312,10 +317,12 @@ describe('the display with a switch on: a way is chosen for every pass of every 
     const rec = mkR({ distSplitDisplay: true, coarseDisplay: true }), u = sceneUniforms(), slow = rec.device.createRenderPipelineAsync, releases = [];
     rec.device.createRenderPipelineAsync = d => (/coarse-tile=4|skip-marks/.test(d.vertex.module.code) ? new Promise(res => { releases.push(() => res(slow(d))); }) : slow(d));
     let done = false; const p = rec.r.preload(u, [{ cls4: false, events: false }]).then(() => { done = true; });
-    await settle(); await settle(); await new Promise(r => setTimeout(r, 30)); expect(done).toBe(false); expect(releases.length).toBeGreaterThan(0); // (held by the programs of the ways)
-    const c4Held = releases.length; for (const r of releases.splice(0)) r(); await p; expect(done).toBe(true);
-    expect(c4Held).toBe(8); // c3: B (both), OS (tileSkip), S (skip), EvS (skipEv) and the general loop's S and EvS (genSkip, genSkipEv) and of the HU data (genSkipHu, genSkipHuEv) are the ones held here (the c4 ones are started after the wait, not waited for)
-    await settle(); const progs = rec.stats.shaders.filter(c => /march=distSplit|skip-marks/.test(c)); expect(progs.length).toBeGreaterThanOrEqual(8 + 8); // every way of c3, then (started, not waited for) every way of c4
+    await new Promise(r => setTimeout(r, 150)); expect(done).toBe(false); expect(releases.length).toBeGreaterThan(0); // (held by the programs of the ways: the gate has three places, the held programs fill them)
+    let held = 0; for (let i = 0; i < 600 && !done; i++) { held += releases.length; for (const r of releases.splice(0)) r(); await new Promise(r => setTimeout(r, 4)); } // (released as they come: each release makes room for the next job)
+    await p; expect(done).toBe(true);
+    expect(held).toBe(8); // c3: B (both), OS (tileSkip), S (skip), EvS (skipEv) and the general loop's S and EvS (genSkip, genSkipEv) and of the HU data (genSkipHu, genSkipHuEv) are the ones held here (the c4 ones are queued after the wait, not waited for)
+    for (let i = 0; i < 600 && gateOf(rec.r).busy; i++) { for (const r of releases.splice(0)) r(); await new Promise(r => setTimeout(r, 4)); } // (the c4 programs, started behind the waited ones)
+    await settle(); const progs = rec.stats.shaders.filter(c => /march=distSplit|skip-marks/.test(c)); expect(progs.length).toBeGreaterThanOrEqual(8 + 8); // every way of c3, then (queued, not waited for) every way of c4
     frameOf(rec.r, u); expect(rec.r.stats.np.use).toBe(true);
     rec.r.dispose();
   }));

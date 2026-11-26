@@ -172,7 +172,7 @@ describe('the wait after the submit: off by default, and what it tells', () => {
     expect(vr).toContain("if(effectiveFlag('gxWait3',false))gxWait=createWaitProbe({device:d.device,rec:gxCaps,volMs:cb=>gx?.vol?.volume.onFrameVolMs?.(cb)})");
     expect(vr).toContain('let gxCaps=null,gxWait=null,gxUndoWrap=null;');
     expect(vr).toContain('if(gxWait&&!gxMeasure())gxWait.afterSubmit();'); expect(vr).toContain('gxWait?.frameEnd(t1);');
-    expect(vr.match(/createWaitProbe\(/g)).toHaveLength(1);
+    expect(vr.match(/createWaitProbe\(/g)).toHaveLength(2); // the session's own start and makeGxSide (the page's preparation of the GPU side): the same call
     expect(src('vr-wgpu-caps.js')).toContain('export const GXC_WAIT_MS = 3;');
   });
   it('only every 4th call samples, alternately without and with the 3 ms wait; the other calls do not wait or call the queue', async () => {

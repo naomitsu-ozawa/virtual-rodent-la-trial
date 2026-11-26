@@ -28,6 +28,19 @@ describe('chooseWay: the table of chapter 6', () => {
     expect(ch({ jumpOn: false, diag: 4 })).toBe('OS'); expect(ch({ jumpOn: false, diag: 4, pass: 'peri' })).toBe('OS');
     for (const o of [{ diag: 2 }, { diag: 5 }, { pass: 'probe', diag: 4 }, { diag: 4, matrixOk: false }, { diag: 4, distField: false }, { diag: 0, distField: false }, { diag: 4, gridReady: false }]) expect(ch({ jumpOn: false, ...o }), JSON.stringify(o)).toBe('S');
   });
+  it('a part taken out of the body (boxed: its rays start at its own box) never uses a way that makes a pre-pass over the whole pass: D0 where the whole-pass way would be B or D, S where it would be OS; the other rows of the table are the same', () => {
+    for (const diag of [0, 3]) for (const pass of ['low', 'peri']) expect(ch({ pass, diag, boxed: true })).toBe('D0');
+    for (const o of [{ walkOk: false }, { gridReady: false }]) for (const pass of ['low', 'peri']) expect(ch({ ...o, pass, boxed: true })).toBe('D0');
+    for (const pass of ['low', 'peri', 'probe']) for (const diag of [0, 1, 2, 3, 5]) expect(ch({ pass, diag, boxed: true, section: true })).toBe('EvD'); // (a section row is not changed: the parts have none)
+    expect(ch({ jumpOn: false, diag: 4, boxed: true })).toBe('S'); expect(ch({ jumpOn: false, diag: 4, boxed: true, pass: 'peri' })).toBe('S');
+    expect(ch({ distField: false, jumpOn: false, boxed: true })).toBe('S'); // the general loop's rows: S whatever
+    expect(chooseWay({ ...base, general: true, boxed: true })).toBe('S');
+    for (const pass of ['low', 'peri', 'probe']) for (const jumpOn of [true, false]) for (const diag of [0, 1, 2, 3, 4, 5]) for (const distField of [true, false]) for (const walkOk of [true, false]) for (const matrixOk of [true, false]) for (const gridReady of [true, false]) {
+      const o = { pass, jumpOn, section: false, diag, distField, walkOk, matrixOk, gridReady }, w = chooseWay({ ...o, boxed: true });
+      expect(['D0', 'S'], JSON.stringify(o)).toContain(w);
+      if (!['B', 'D', 'OS'].includes(chooseWay(o))) expect(w, JSON.stringify(o)).toBe(chooseWay(o)); // a row that was not a whole-pass way is the same
+    }
+  });
   it('over the whole product of what the choice reads, a way of the list comes back: there is no branch that returns the old way (or nothing)', () => {
     let n = 0;
     for (const pass of ['low', 'peri', 'probe']) for (const jumpOn of [true, false]) for (const section of [true, false]) for (const diag of [0, 1, 2, 3, 4, 5]) for (const distField of [true, false]) for (const walkOk of [true, false]) for (const matrixOk of [true, false]) for (const gridReady of [true, false]) {
@@ -87,7 +100,7 @@ describe('13 of the plan: the display\'s four entrances take their programs from
     expect(drawFn).toContain("pass: 'low'"); expect(drawFn).toContain("pass: 'peri'"); expect(probeFn).toContain("pass: 'probe'");
   });
   it('drawPass: a display pass (auto) sets its way\'s program or none (noWay), and pipeFor is only the chain of the passes that are not the display\'s (the check\'s ruler, the recording\'s); specs.pick is not called anywhere in the renderer', () => {
-    const dp = between(wgpu, '  const drawPassInner = (target, eyes, u, variant, slot0', '  // the display\'s own pass (o.np.auto) runs inside');
+    const dp = between(wgpu, '  const drawVolumesInner = (target, vs', '  // the display\'s own pass (o.np.auto) runs inside');
     expect(dp).toContain('const noWay = !!autoNp && !npd?.use;'); expect(dp).toContain('if (!noWay) pass.setPipeline(o?.pipeline ?? (npd?.use ? npd.pipeline : null) ?? pipeFor(variant));');
     expect((dp.match(/pipeFor\(/g) || []).length).toBe(1); expect(dp).not.toMatch(/specs\./);
     expect(wgpu).not.toMatch(/specs\.pick\(/);
