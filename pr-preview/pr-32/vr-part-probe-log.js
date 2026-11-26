@@ -11,7 +11,7 @@
 //   before 1st read  = the partOcc skips made before the ray's first march sample was read (partSkips0, clsReads still 0)
 //   skip-only ray    = a ray whose every iteration was a partOcc skip (iters > 0 and partSkips == iters): it never read a march sample
 //   skip-only tile   = a tile whose rays (those with iters > 0) are all skip-only; mixed = some are; none = none is; empty = no ray was marched in it (all discard)
-import { PART_COUNTER_FIELDS } from './vr-wgsl-core.js?v=20261126-build766';
+import { PART_COUNTER_FIELDS } from './vr-wgsl-core.js?v=20261126-build767';
 
 export const PP_BLOCK = 8; // the tile of the pre-pass is 8 x 8 px
 const F = Object.fromEntries(PART_COUNTER_FIELDS.map((k, i) => [k, i]));

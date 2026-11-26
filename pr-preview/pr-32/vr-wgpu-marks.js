@@ -12,9 +12,9 @@
 //   - Channel 3 is the fourth class texture's byte (cls4) when there is one, else the texture's alpha; in a combined texture that alpha is the distance and no shown segment has channel 3 (the bit is set and never read), in a classification-only texture of a four-segment data set it is the fourth class.
 // OS = S on the 4 x 4 pre-pass tiles' walk (the start and the end of the ray are moved by tA / tB: nothing before tA and after tB can be inside) with the loop's own limit kept: the display's loop ends after 4096 iterations from the grid
 // point 0; a walk that starts at k0 > 0 ends at k = 4096, so a ray the limit would have ended ends at the same sample.
-import { uniformLayout, uniformStruct, PROXY, volumeWgsl } from './vr-wgsl-core.js?v=20261126-build766';
-import { featOf } from './vr-wgsl-feat.js?v=20261126-build766';
-import { coarseVolumeWgsl, COARSE, coarseDims, packedDims } from './vr-wgpu-coarse-proxy.js?v=20261126-build766';
+import { uniformLayout, uniformStruct, PROXY, volumeWgsl } from './vr-wgsl-core.js?v=20261126-build767';
+import { featOf } from './vr-wgsl-feat.js?v=20261126-build767';
+import { coarseVolumeWgsl, COARSE, coarseDims, packedDims } from './vr-wgpu-coarse-proxy.js?v=20261126-build767';
 
 export const MARK_FIELDS = [['dims', 'vec4i'], ['cdims', 'vec4i']]; // dims = (w, h, d, the first row of cells of this build), cdims = the cells (x, y, z)
 export const MARK_BINDINGS = { params: 0, cls: 1, cls4: 2, out: 3, alpha: 4 }; // out = the channel marks, alpha = the least distance byte of the footprint (both packed four cells along x an rgba8uint texel)

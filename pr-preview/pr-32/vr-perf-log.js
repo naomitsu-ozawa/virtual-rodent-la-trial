@@ -2,7 +2,7 @@
 // Pure (no DOM, no three.js): vr-view.js feeds it (frame / add / row) and shows the text on the page after the session. Nothing here changes what is drawn.
 // A row: fps, how many frame intervals were 1 / 2 / 3+ refresh periods, the GPU ms of the volume pass and of the main render (WebGL: EXT_disjoint_timer_query; WebGPU: timestamp-query / three's timestamps),
 // the JS ms of the app's frame, the CPU ms of renderer.render(), (WebGPU only) the frame's GPU timeline and CPU timeline: span / gap / oth / cpu / swd, and wake / pre / vlat / vdrop (see the note lines of the report), and the state the drawing choices were made in (scale f, periphery, data cap, auto level / step, step in voxels, covered px, size, menu, target Hz, foveation).
-import { directReport } from './vr-direct-log.js?v=20261126-build766';
+import { directReport } from './vr-direct-log.js?v=20261126-build767';
 export const PERF_KEY = 'vrl-vr-perf'; // + '-webgl' / '-webgpu': one mirror per kind (a WebGPU session does not overwrite the WebGL one)
 export const PERF_MIRROR_ROWS = 120; // the last rows the localStorage mirror keeps (the whole log stays in memory and in the page's text)
 export const PERF_MAX_ROWS = 600; // 10 minutes of rows
@@ -183,6 +183,7 @@ export function cutReport(p) {
   const g = Object.entries(tl);
   L.push('-- counters: ' + (g.length ? '' : 'none'));
   for (const [name, o] of g) L.push('  ' + name + ': ' + Object.entries(o).map(([k, n]) => k + ' ' + n).join(' · '));
+  L.push('note: calc line (measurement only): parts = the parts in the set, img = the fields whose texture is made again (the upload line\'s n), own = the parts\' own smoothed fields handed back, hit / miss = the worker\'s group cache, tot = the worker\'s whole set ms, ownMs / ownWall = the parts\' own smoothing (sum of the tasks / wall), occ = the occupancy fields ms; grp = one entry a group: c = channel / parts in it, j / l / s = the ms of its joint / label / smooth tasks (tasks that run at the same time add up; a cache hit is about 0), w = the group\'s wall ms, h / m = the cache\'s hits / misses in it.');
   L.push('note: stall lines within ' + PERF_CUT_NEAR_MS / 1000 + ' s of a cut-out event (cut = 1) are kept beside the newest ' + PERF_MAX_STALLS + ' (up to ' + PERF_MAX_STALLS_KEPT + ' of them). cvb / cvp = covered px of the body / of the parts taken out (mean of the second), rbs = share of the frames the combined texture was being rebuilt (0-1); nv / bk are filled by the WebGL view too (nv = the body + the partner + the parts shown; bk = share of the frames the body was drawn from the baked cut; rp stays WebGPU only).');
   return L;
 }
