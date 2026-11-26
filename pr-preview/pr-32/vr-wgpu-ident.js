@@ -4,7 +4,7 @@
 //   dist / coarse / both : the new ways (docs/vr-wgpu-newpath.js, the same code the display's switches use: drawPass with `np`)
 //   pos      : the positive control (every 20th comparison): the display's program without the shading maths (the performance record's noShade, abl 'shade'): every pixel of the body that is drawn is lit differently, whatever tissues are shown and whatever the surface search setting: the difference must be there (a picture with no body in it is not counted at all)
 // The check shares nothing with the performance record's breakdown: own instance of the new ways (own distance texture, grid, tiles, uniform buffers 9 and up), own targets, own comparison pipeline / counters, own timestamp query sets.
-import { identDiffWgsl, identDiffDecode, IDENT_DIFF, IDENT_DIFF_BINDINGS } from './vr-wgsl-core.js?v=20261125-build763';
+import { identDiffWgsl, identDiffDecode, IDENT_DIFF, IDENT_DIFF_BINDINGS } from './vr-wgsl-core.js?v=20261126-build764';
 
 export const IDENT_ROTATION = ['same', 'dist', 'coarse', 'both']; // the order the ways take turns in
 export const IDENT_CONTROL_EVERY = 20; // every 20th comparison is the positive control (the rotation goes on without it)

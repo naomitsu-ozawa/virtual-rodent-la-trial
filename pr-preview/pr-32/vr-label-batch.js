@@ -12,7 +12,7 @@
 // (What cannot be kept: the other things of renderOrder 6 - distance labels, point markers' core - sit in that order by their own depth; the lit cards now go before all of them.)
 // Pure parts (unit tests): keyOf, itemLess, planRuns.
 
-import { GX_THREE, createGxLegGeometry, createGxLegMaterial, LEG_WIDTH_M, LEG_MIN_ANGLE } from './vr-gx-looks.js?v=20261125-build763';
+import { GX_THREE, createGxLegGeometry, createGxLegMaterial, LEG_WIDTH_M, LEG_MIN_ANGLE } from './vr-gx-looks.js?v=20261126-build764';
 
 export const SLOTS_MAX = 16;
 
