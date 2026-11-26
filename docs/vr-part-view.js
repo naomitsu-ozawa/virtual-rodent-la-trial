@@ -6,10 +6,10 @@
 //   - which uniforms the part owns (the rest is the body's by reference: PART_OWN), the target a grip takes (partTargetOf), the part's own box (partBoundsOf), the laser's rule on the CPU (partKeepVoxelOf),
 //   - several parts at once: every part has its own box, uniforms and pose; the tables are patched for all of them (patchRegionLutMany / patchChildLutMany); a part's proxy box is its own bounding box (partProxyBox) and its laser march
 //     runs only inside it (partRayRange), the texts. The way in is the long-press ring (region-ring.js 切り出す / 戻す); the grip stays the body's grab and takes a part only where the laser meets one.
-import { regionLutAlpha } from './region-visibility.js?v=20261119-build751';
-import { boxFromRange } from './vr-content-box.js?v=20261119-build751';
-import { euclideanDistanceBytes, morph3 } from './distance-field.js?v=20261119-build751';
-import { hiddenClassBytes } from './vr-hide-field.js?v=20261119-build751';
+import { regionLutAlpha } from './region-visibility.js?v=20261126-build769';
+import { boxFromRange } from './vr-content-box.js?v=20261126-build769';
+import { euclideanDistanceBytes, morph3 } from './distance-field.js?v=20261126-build769';
+import { hiddenClassBytes } from './vr-hide-field.js?v=20261126-build769';
 
 // ---- the shader block. Spliced into the volume fragment shader once (vr-view.js ${PART_GLSL}, after the hidden-shape block A and BEFORE the an earlier change hide helpers hideAnyOn / hideAt / hideGrad, so that they read the re-pointed functions too), so that no existing line of the shader has to change. Without VRL_PART (every program but the
 // part's) the preprocessor drops all of it: the body's programs are the ones they were. With VRL_PART the two functions the marching loops ask "is this voxel a hidden shape?" (regionHiddenAt / childHiddenAt) are
@@ -1008,7 +1008,7 @@ function partSigOf(x) { return partHash64(x.data) + ':' + x.C + ':' + x.size.joi
 export function partSetWorkerSource(limit = PART_CACHE_BYTES) {
   return ['const PART_SEAM_TIE=' + PART_SEAM_TIE + ';', 'const partBoxesMeet=' + partBoxesMeet.toString() + ';', 'const partIsChild=' + partIsChild.toString() + ';', 'const PART_FIELD=' + JSON.stringify(PART_FIELD) + ';',
     partHash64, partGroupCacheOf, partCachedOps, partSigOf, partOpsOfRun,
-    partFieldOf, partFieldPlain, partGroupLabelOf, partGroupJointOf, partFieldHaloOf, partBodyHidOf, partBodyOccOf, partFieldReach, partFieldDilate, partFieldNearOf, partFieldChannels, partFieldUnion, partFieldPutMax, partFieldTouching, partSeamOrder, partFieldJointGroups, partFieldSet, morph3, euclideanDistanceBytes, hiddenClassBytes, partBakeCls, partBakeAlpha, partBakeRun, 'const PART_BAKE_LIB={edt:euclideanDistanceBytes,hidden:hiddenClassBytes};'].map(f => (typeof f === 'string' ? f : f.toString())).join('\n') +
+    partFieldOf, partFieldPlain, partGroupLabelOf, partGroupJointOf, partFieldHaloOf, partBodyHidOf, partBodyOccOf, partFieldReach, partFieldDilate, partFieldNearOf, partFieldChannels, partFieldUnion, partFieldPutMax, partFieldTouching, partSeamOrder, partFieldJointGroups, partFieldSet, morph3, euclideanDistanceBytes, hiddenClassBytes, partBakeCls, partBakeOwn, partBakeAlpha, partBakeRun, 'const PART_BAKE_LIB={edt:euclideanDistanceBytes,hidden:hiddenClassBytes};'].map(f => (typeof f === 'string' ? f : f.toString())).join('\n') +
     '\nconst cache=partGroupCacheOf(' + (+limit || 0) + '),state={rank:new Map(),next:0};let seq=0;const pend=new Map(),rpc=(msg,buf)=>new Promise((res,rej)=>{const id=++seq;pend.set(id,{res,rej});postMessage({...msg,id},[buf])});' +
     '\nconst taskOf=(kind,k,bytes,size,opt)=>{const c=bytes.slice(),o=opt||{};return rpc({rpc:"task",kind,k,bytes:c.buffer,size:[...size],opt:{band:o.band,sigma:o.sigma,margin:o.margin,budget:o.budget}},c.buffer).then(r=>new Uint8Array(r.bytes))};' +
     '\nconst rpcOps={joint:(lab,size,opt)=>taskOf("J",0,lab,size,opt),label:(lab,size,k,opt)=>taskOf("L",k,lab,size,opt),smooth:(codes,size,opt)=>taskOf("F",0,codes,size,opt)};' +
@@ -1252,6 +1252,56 @@ export function partBakeCls({ rgba, c4, box, cdims, idims, chan, body, mask }) {
   }
   return { lowered, slots };
 }
+// a detached part's OWN classification (the part is drawn by the ORDINARY program on it, not by VRL_PART): the mirror of partBakeCls. The part is tissue where the field of its share is >= 0.5 on a slot, so each stored slot's byte becomes
+// min(byte, round(255 f_s)) inside the field's box (f_s as the shader's partFieldAt reads it: the same map, trilinear, clamp to edge; a = b = 0: f_s = 0, the slot is not the part's: the byte goes to 0) and 0 outside the field's box (partFieldAt is 0 there:
+// the shader hides it). The byte crosses 127.5 where the field crosses 0.5 (the same slope as partBakeCls, mirrored), so the trilinear class is the cut the VRL_PART part draws. rgba / c4 = the box's bytes of the combined texture (partBakeCrop), changed IN PLACE;
+// the alpha is made by partBakeAlpha (fresh). Only the slots of `mask` with a stored channel (chan 3 needs c4). Self-contained. -> {lowered, slots}
+export function partBakeOwn({ rgba, c4, box, cdims, idims, chan, body, mask }) {
+  const [bw, bh, bd] = box.size, C = body.C || 1, [fw, fh, fd] = body.size, data = body.data, act = [];
+  let slots = 0, lowered = 0;
+  for (let s = 0; s < 4; s++) {
+    if (!(chan[s] >= 0) || !(((mask == null ? 15 : mask) >> s) & 1)) continue;
+    if (chan[s] === 3 && !c4) continue;
+    const a = body.a[s] || [0, 0, 0, 0], b = body.b[s] || [0, 0, 0, 0];
+    act.push({ s, c: chan[s], a: [+a[0] || 0, +a[1] || 0, +a[2] || 0, +a[3] || 0], b: [+b[0] || 0, +b[1] || 0, +b[2] || 0, +b[3] || 0] }); slots |= 1 << s;
+  }
+  if (!act.length) return { lowered: 0, slots: 0 };
+  const tab = a => {
+    const n = box.size[a], size = body.size[a], k = idims[a] / cdims[a], i0 = new Int32Array(n), i1 = new Int32Array(n), w = new Float64Array(n), inn = new Uint8Array(n);
+    for (let X = 0; X < n; X++) {
+      const p = (box.lo[a] + X + 0.5) * k - body.lo[a] - 0.5, u = (p + 0.5) / size;
+      inn[X] = u >= 0 && u <= 1 ? 1 : 0;
+      const f = Math.floor(p); w[X] = p - f; i0[X] = Math.min(size - 1, Math.max(0, f)); i1[X] = Math.min(size - 1, Math.max(0, f + 1));
+    }
+    return { i0, i1, w, inn };
+  };
+  const tx = tab(0), ty = tab(1), tz = tab(2), tex = [0, 0, 0, 1];
+  const rd = (i, c) => data[i * C + c] / 255;
+  for (let z = 0; z < bd; z++) {
+    const z0 = tz.i0[z], z1 = tz.i1[z], wz = tz.w[z];
+    for (let y = 0; y < bh; y++) {
+      const y0 = ty.i0[y], y1 = ty.i1[y], wy = ty.w[y], r00 = fw * (y0 + fh * z0), r10 = fw * (y1 + fh * z0), r01 = fw * (y0 + fh * z1), r11 = fw * (y1 + fh * z1), rowIn = tz.inn[z] && ty.inn[y];
+      for (let x = 0; x < bw; x++) {
+        const vi = x + bw * (y + bh * z);
+        if (!(rowIn && tx.inn[x])) { for (const e of act) { if (e.c === 3) { if (c4[vi]) { c4[vi] = 0; lowered++; } } else { const o = vi * 4 + e.c; if (rgba[o]) { rgba[o] = 0; lowered++; } } } continue; }
+        const x0 = tx.i0[x], x1 = tx.i1[x], wx = tx.w[x], j000 = r00 + x0, j100 = r00 + x1, j010 = r10 + x0, j110 = r10 + x1, j001 = r01 + x0, j101 = r01 + x1, j011 = r11 + x0, j111 = r11 + x1;
+        for (let c = 0; c < 4; c++) {
+          if (c >= C) { tex[c] = c === 3 ? 1 : 0; continue; }
+          const v00 = rd(j000, c) * (1 - wx) + rd(j100, c) * wx, v10 = rd(j010, c) * (1 - wx) + rd(j110, c) * wx, v01 = rd(j001, c) * (1 - wx) + rd(j101, c) * wx, v11 = rd(j011, c) * (1 - wx) + rd(j111, c) * wx;
+          tex[c] = (v00 * (1 - wy) + v10 * wy) * (1 - wz) + (v01 * (1 - wy) + v11 * wy) * wz;
+        }
+        for (const e of act) {
+          const a = e.a, b = e.b;
+          let f = a[0] * tex[0] + b[0]; const m1 = a[1] * tex[1] + b[1], m2 = a[2] * tex[2] + b[2], m3 = a[3] * tex[3] + b[3];
+          if (m1 < f) f = m1; if (m2 < f) f = m2; if (m3 < f) f = m3;
+          let g = Math.round(255 * f); g = g < 0 ? 0 : g > 255 ? 255 : g;
+          if (e.c === 3) { if (g < c4[vi]) { c4[vi] = g; lowered++; } } else { const o = vi * 4 + e.c; if (g < rgba[o]) { rgba[o] = g; lowered++; } }
+        }
+      }
+    }
+  }
+  return { lowered, slots };
+}
 // the two imported helpers partBakeAlpha calls, by name in ONE place: the worker's text defines the same name from the source texts of the two functions (an imported name inside a stringified function is not defined in a worker)
 export const PART_BAKE_LIB = { edt: euclideanDistanceBytes, hidden: hiddenClassBytes };
 // the distance alpha of the box after partBakeCls (rgba / c4 = the baked bytes; the alpha byte of rgba is the OLD one and is changed IN PLACE). Never above the old alpha, and a lower bound of the distance (voxel units, floored) to every surface the baked
@@ -1259,7 +1309,7 @@ export const PART_BAKE_LIB = { edt: euclideanDistanceBytes, hidden: hiddenClassB
 // visible tissue only, hiddenClassBytes), its exact Euclidean distance to the surface seeds inside the box (distance-field.js euclideanDistanceBytes: the 26-neighbour seeds; the box's own margin voxel is unchanged, so every new seed is inside), capped by the
 // distance to a face of the box that has volume beyond it (a ray inside the box never jumps out of it on a number made inside it). A surface the baking did not touch is in the old alpha (it was a min over every shown slot), so the min with the old alpha
 // is a lower bound of the distance to every surface of the baked volume. Voxels outside the box are not touched (the caller leaves them as they are). Self-contained but for euclideanDistanceBytes / morph3 / hiddenClassBytes. -> how many alpha bytes got lower
-export function partBakeAlpha({ rgba, c4, box, cdims, chan, mask, slots, hide }, lib = PART_BAKE_LIB) {
+export function partBakeAlpha({ rgba, c4, box, cdims, chan, mask, slots, hide, fresh }, lib = PART_BAKE_LIB) {
   const [bw, bh, bd] = box.size, n = bw * bh * bd, wh = bw * bh;
   const chs = []; for (let s = 0; s < 4; s++) if (((slots >> s) & 1) && ((mask >> s) & 1) && chan[s] >= 0 && (chs.length === 0 || !chs.some(e => e.c === chan[s]))) chs.push({ c: chan[s], s });
   if (!chs.length) return 0;
@@ -1272,7 +1322,7 @@ export function partBakeAlpha({ rgba, c4, box, cdims, chan, mask, slots, hide },
     const d = lib.edt(inside, [bw, bh, bd], scratch);
     for (let i = 0; i < n; i++) if (d[i] < best[i]) best[i] = d[i];
   }
-  const capLo = [box.lo[0] > 0, box.lo[1] > 0, box.lo[2] > 0], capHi = [box.lo[0] + bw < cdims[0], box.lo[1] + bh < cdims[1], box.lo[2] + bd < cdims[2]];
+  const capLo = fresh ? [true, true, true] : [box.lo[0] > 0, box.lo[1] > 0, box.lo[2] > 0], capHi = fresh ? [true, true, true] : [box.lo[0] + bw < cdims[0], box.lo[1] + bh < cdims[1], box.lo[2] + bd < cdims[2]]; // fresh (a part's own texture, partBakeOwn): the box is all there is (zero beyond it), so every face caps the jump
   let lowered = 0;
   for (let z = 0; z < bd; z++) {
     let cz = 255; if (capLo[2]) cz = z; if (capHi[2] && bd - 1 - z < cz) cz = bd - 1 - z;
@@ -1281,15 +1331,16 @@ export function partBakeAlpha({ rgba, c4, box, cdims, chan, mask, slots, hide },
       for (let x = 0, i = wh * z + bw * y; x < bw; x++, i++) {
         let v = best[i], cx = cy; if (capLo[0] && x < cx) cx = x; if (capHi[0] && bw - 1 - x < cx) cx = bw - 1 - x;
         if (cx < v) v = cx;
-        if (v < rgba[i * 4 + 3]) { rgba[i * 4 + 3] = v; lowered++; }
+        if (fresh) { rgba[i * 4 + 3] = v; lowered++; } else if (v < rgba[i * 4 + 3]) { rgba[i * 4 + 3] = v; lowered++; } // fresh: the alpha is the new distance itself (the part's texture holds one shape: the jumps may be longer than the body's)
       }
     }
   }
   return lowered;
 }
-// both steps on the box's bytes: job = {rgba, c4, box, cdims, idims, chan, body, mask (the shown slots), hide?} -> {rgba, c4, lowered, alphaLowered, slots} (rgba / c4 changed in place and handed back)
+// both steps on the box's bytes: job = {rgba, c4, box, cdims, idims, chan, body, mask (the shown slots), hide?, own?} -> {rgba, c4, lowered, alphaLowered, slots} (rgba / c4 changed in place and handed back). own: a detached part's own texture
+// (partBakeOwn + the fresh alpha) instead of the body's cut (partBakeCls + the lowered alpha)
 export function partBakeRun(job) {
-  const r = partBakeCls(job), alphaLowered = r.slots ? partBakeAlpha({ rgba: job.rgba, c4: job.c4, box: job.box, cdims: job.cdims, chan: job.chan, mask: job.mask == null ? 15 : job.mask, slots: r.slots, hide: job.hide }) : 0;
+  const own = !!job.own, r = own ? partBakeOwn(job) : partBakeCls(job), alphaLowered = r.slots ? partBakeAlpha({ rgba: job.rgba, c4: job.c4, box: job.box, cdims: job.cdims, chan: job.chan, mask: job.mask == null ? 15 : job.mask, slots: r.slots, hide: job.hide, fresh: own }) : 0;
   return { rgba: job.rgba, c4: job.c4, lowered: r.lowered, alphaLowered, slots: r.slots };
 }
 // one step of building the baked texture b.tex (and b.cls4Tex) that the body reads while the cut is baked (vr-view.js partBakeFrame): first the whole original, then the baked box from the worker's bytes (b.patch), at most `budget`

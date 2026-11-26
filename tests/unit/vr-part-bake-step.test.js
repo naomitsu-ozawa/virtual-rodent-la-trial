@@ -103,7 +103,7 @@ describe('the light of a baked cut', () => {
     const h = src.slice(src.indexOf('vec3 hideGrad('), src.indexOf('vec3 hideGrad(') + 1600); // the same band and the same difference formula as the VRL_PART body
     expect(h).toContain('if(abs(f0-0.5)<0.08)');
     expect(h).toContain('vec3 vx=2.0*halfExt*d;return vec3(g.x/max(vx.x,1e-6),-g.y/max(vx.y,1e-6),g.z/max(vx.z,1e-6));');
-    expect(g).toContain('vec3 vx=2.0*halfExt*d;return vec3(g.x/max(vx.x,1e-6),-g.y/max(vx.y,1e-6),g.z/max(vx.z,1e-6));');
+    expect(g).toContain('vec3 vx=2.0*halfExt*d;vec3 bn=vec3(g.x/max(vx.x,1e-6),-g.y/max(vx.y,1e-6),g.z/max(vx.z,1e-6));return ((bakeCut>>4)&1)==1?-bn:bn;'); // bit 4: a part drawn on its own bytes (the normal out of the part)
   });
   it('vr-view.js: bakeSet sets the light with the textures (from the body\'s field) and clears it when the bake goes; volumeUniforms has the keys (0 / null), the partner keeps its own', () => {
     const set = src.slice(src.indexOf('const bakeSet=on=>{'), src.indexOf('const bakeDrop=()=>{'));
