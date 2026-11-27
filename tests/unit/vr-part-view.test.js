@@ -419,7 +419,7 @@ describe('several parts at once', () => {
     expect(src).toContain('const r=new THREE.Mesh(geo,mats.rays[partFull()])');
     expect(src).not.toMatch(/new THREE\.Mesh\(meshObj\.geometry,(mats|res\.|q\.)/); // no part is drawn on the body's box
     expect(src).toContain('u.boxEntry'.slice(0, 0) + 'boxEntry:{value:1}'); // the march starts at the content box
-    expect(src).toContain('partFree=q=>{partHide(q);q.held=null;'); expect(src).toContain('q.geo.dispose()');
+    expect(src).toContain('partFree=q=>{partRehomeFrames(q);partHide(q);q.held=null;'); expect(src).toContain('q.geo.dispose()');
     expect(src).toContain('partMaterials=own=>'); // one material set per part, the compiled programs shared (template compiled once)
     expect((src.match(/compileVariantPrograms\(renderer,wanted/g) || []).length).toBe(1);
   });
@@ -487,7 +487,8 @@ describe('several parts at once', () => {
     const pc = src.slice(src.indexOf(' const partCtxOf=q=>{'), src.indexOf(' // two judgements'));
     expect(pc).toContain('skip=partSkipOf(q)');
     expect(pc).toContain('classifiedAt(p,he,dm,vp.cls,chs,skip)');
-    expect(pc).not.toContain('cutPlanes'); // the part\'s march has no section planes
+    expect(pc).toContain('q.u.cutPlanes.value.slice(0,np)'); // the part\'s own sections cut its tissue away, as the body\'s do (a snapshot per judgement)
+    expect(pc).toContain('!clippedAt(p,planes,np,cut)&&classifiedAt(p,he,dm,vp.cls,chs,skip)');
     // embedLabel: the card's frame and the part's context
     expect(src).toContain('if(!occ||held||lb.hid||!vrHalfExt||!vrDims||!mesh){lb.ref=null;');
     expect(src).toContain('const fm=lbMesh(lb),pq=fm!==mesh?lb.pq:null;');
@@ -503,7 +504,7 @@ describe('several parts at once', () => {
     expect(src).toContain("+'|p'+parts.map(q=>q.on&&q.mesh.parent?q.uid:0).join(',')");
     // the anchor's dot: behind the part's own tissue, from the eye in the part's space, no planes
     expect(src).toContain('filter(lb=>!lb.hid);');
-    expect(src).toContain('pointIsHidden(pl,covEyeP,{...opt,planes:[],count:0,cut:0,skip:partSkipOf(own)})');
+    expect(src).toContain('pointIsHidden(pl,covEyeP,{...opt,planes:own.u.cutPlanes.value,count:own.u.planeCount.value,cut:own.u.planeCut.value,skip:partSkipOf(own)})');
     expect(src).not.toContain('filter(lb=>!lb.hid&&!lb.pmesh)');
   });
   it('the hover cards and the pin tap read the part\'s hit (the nearest of it, the partner\'s and the body\'s)', () => {
@@ -872,5 +873,214 @@ describe('n734: the cut baked into the data the ordinary program reads', () => {
       expect(d).toContain('if(pair?.on||pairLoading)'); expect(d).toContain('if(partBusy)');
       expect(d).toContain('partBusy=false;partCutEnd(cutInfo)');
     });
+  });
+});
+
+describe('the sections of the parts (each frame belongs to the body or to ONE part; only that holder is cut)', () => {
+  it('PART_OWN has the part\'s own cutPlanes (not the body\'s array) beside planeCount / planeCut', () => {
+    for (const k of ['cutPlanes', 'planeCount', 'planeCut']) expect(PART_OWN).toContain(k);
+    expect(src).toContain('boxEntry:{value:1},cutPlanes:{value:Array.from({length:MAX_SECTION_PLANES},()=>new THREE.Vector4(1,0,0,PLANE_PARK_W))},planeCount:{value:0},planeCut:{value:0}');
+  });
+  it('partBoxHas: the box {c, h} in the part\'s space', () => {
+    const box = { c: [1, 2, 3], h: [0.5, 1, 2] };
+    expect(PV.partBoxHas({ x: 1, y: 2, z: 3 }, box)).toBe(true);
+    expect(PV.partBoxHas({ x: 1.5, y: 3, z: 5 }, box)).toBe(true);
+    for (const p of [{ x: 1.51, y: 2, z: 3 }, { x: 1, y: 3.01, z: 3 }, { x: 1, y: 2, z: -0.01 }]) expect(PV.partBoxHas(p, box)).toBe(false);
+    // a frame clamped onto the face (up to rounding) is still inside: its holder does not flip
+    expect(PV.partBoxHas({ x: 1.5 + PV.PART_BOX_EPS / 2, y: 2, z: 3 }, box)).toBe(true);
+    expect(PV.partBoxHas({ x: 1, y: 2 - 1 - PV.PART_BOX_EPS / 2, z: 3 }, box)).toBe(true);
+    expect(PV.partBoxHas({ x: 1.5 + PV.PART_BOX_EPS * 4, y: 2, z: 3 }, box)).toBe(false);
+  });
+  it('partScrollKeeps: a scroll never changes the holder, but a frame already lying in another holder\'s box still scrolls', () => {
+    const A = { n: 'A' }, B = { n: 'B' };
+    expect(PV.partScrollKeeps(A, A, A)).toBe(true); // inside its own box
+    expect(PV.partScrollKeeps(null, null, null)).toBe(true);
+    expect(PV.partScrollKeeps(A, A, B)).toBe(false); // would cross into another box
+    expect(PV.partScrollKeeps(null, null, A)).toBe(false); // a body frame slides into a part's box
+    expect(PV.partScrollKeeps(null, A, A)).toBe(true); // a body frame whose centre is already in A's box (a part cut out over it): the box test does not change, it scrolls
+    expect(PV.partScrollKeeps(null, A, null)).toBe(true); // and out of it
+    expect(PV.partScrollKeeps(null, A, B)).toBe(false); // but not into another part's box
+    expect(PV.partScrollKeeps(undefined, undefined, null)).toBe(true);
+  });
+  it('partSectionHolderOf: one part\'s box holds the centre -> that part (over the body\'s box); none -> the body in its box, else the earlier holder; several -> the earlier holder', () => {
+    const A = { n: 'A' }, B = { n: 'B' };
+    expect(PV.partSectionHolderOf(null, true, 1, A)).toBe(A); // a part's box over the body's hole
+    expect(PV.partSectionHolderOf(B, false, 1, A)).toBe(A);
+    expect(PV.partSectionHolderOf(A, true, 0, null)).toBe(null); // only the body's box
+    expect(PV.partSectionHolderOf(A, false, 0, null)).toBe(A); // in none: stays
+    expect(PV.partSectionHolderOf(null, false, 0, null)).toBe(null);
+    expect(PV.partSectionHolderOf(B, true, 2, A)).toBe(B); // touching parts: stays
+    expect(PV.partSectionHolderOf(null, true, 2, A)).toBe(null);
+    expect(PV.partSectionHolderOf(undefined, false, 0, null)).toBe(null);
+  });
+  it('partSectionStartOf: a new frame takes the part whose box holds it, else the body in its box, else the nearest centre', () => {
+    const A = { n: 'A' }, B = { n: 'B' };
+    expect(PV.partSectionStartOf(true, A, B)).toBe(A);
+    expect(PV.partSectionStartOf(true, null, B)).toBe(null);
+    expect(PV.partSectionStartOf(false, null, B)).toBe(B);
+    expect(PV.partSectionStartOf(false, null, null)).toBe(null);
+  });
+  it('partSectionCount / partSectionPark: a holder with no frame has count 0 (no section code); one with frames covers up to its highest number and parks the numbers that are not its', () => {
+    expect(PV.partSectionCount(0)).toBe(0);
+    expect(PV.partSectionCount(0b1)).toBe(1);
+    expect(PV.partSectionCount(0b100)).toBe(3);
+    expect(PV.partSectionCount(1 << 9)).toBe(10);
+    const mk = () => Array.from({ length: 10 }, (_, i) => ({ v: [i, i, i, i], set(x, y, z, w) { this.v = [x, y, z, w]; } }));
+    const a = mk();
+    expect(PV.partSectionPark(a, 0b101, 1e6)).toBe(3);
+    expect(a[0].v).toEqual([0, 0, 0, 0]); expect(a[2].v).toEqual([2, 2, 2, 2]); // its own: untouched
+    expect(a[1].v).toEqual([1, 0, 0, 1e6]); // not its: parked
+    expect(a[3].v).toEqual([3, 3, 3, 3]); // above the count: never read
+    const b = mk();
+    expect(PV.partSectionPark(b, 0, 1e6)).toBe(0);
+    expect(b.every((p, i) => p.v[0] === i)).toBe(true);
+  });
+  it('the frame loop writes a part\'s frame to that part (its own space, its own eye for the near side), parks the body\'s entry, and finishes the counts; nothing without a part', () => {
+    const f = src.slice(src.indexOf('     if(parts.length){ // an earlier change: the holder of a frame'), src.indexOf('     const own=pOn&&planeOwnerPair(pl)'));
+    expect(f).toContain('?partHolderNow(pl):planePart(pl);'); // judged again only when the frame has moved
+    expect(f).toContain('pl.px=po.x;pl.py=po.y;pl.pz=po.z;pl.part=hq;');
+    expect(f).toContain('hq.mesh.worldToLocal(tmpP);hq.mesh.worldToLocal(tmpQ)');
+    expect(f).toContain('tmpEq.copy(head);hq.mesh.worldToLocal(tmpEq);');
+    expect(f).toContain('if(settings.cut===2){if(pl.side<0)tmpN.negate()}else if(tmpN.dot(tmpEq)-tmpN.dot(tmpP)>0)tmpN.negate();'); // the body's rule for the sides
+    expect(f).toContain('u.cutPlanes.value[n].set(1,0,0,PLANE_PARK_W);if(pOn)pairPl[n].set(1,0,0,PLANE_PARK_W);hq.u.cutPlanes.value[n].set(tmpN.x,tmpN.y,tmpN.z,tmpN.dot(tmpP));hq.secBits|=1<<n;if(pl.cut&&settings.cut)hq.secCut|=1<<n;');
+    expect(f).toContain('n++;continue;');
+    expect(src).toContain('for(const q of parts){q.secBits=0;q.secCut=0}');
+    expect(src).toContain('if(parts.length)n=partSecFinish(n,bench.noSection);');
+    const fin = src.slice(src.indexOf(' const partSecFinish=(n,off)=>{'), src.indexOf(' const tmpEq='));
+    expect(fin).toContain('partSectionPark(u.cutPlanes.value,b,PLANE_PARK_W)');
+    expect(fin).toContain('if(!b){if(u.planeCount.value)u.planeCount.value=0;'); // a part that holds none: count 0, no write per frame
+    expect(fin).toContain('if(!planes[i].part)bodyN=i+1'); // the body's count: up to the last frame it holds
+  });
+  it('the holder is decided by the box the centre is in (no allocation per part, stops at the second box), a new / restored frame by partStartHolder; a scroll never changes it', () => {
+    const h = src.slice(src.indexOf(' const partHolderNow=pl=>{'), src.indexOf(' const partStartHolder='));
+    expect(h).toContain('if(++cnt>1)break');
+    expect(h).toContain('partSectionHolderOf(planePart(pl),');
+    expect(src.match(/pl\.part=partStartHolder\(pl\)/g).length).toBe(2); // addPlane, restoreSection
+    const sc = src.slice(src.indexOf('const hOld=parts.length?partHolderNow(sp):null,ps='), src.indexOf('// frame: own colour; a glow band'));
+    expect(sc).toContain('const hNew=partHolderNow(sp),own=planePart(sp);if(!partScrollKeeps(own,hOld,hNew))sp.obj.position.set(sx0,sy0,sz0);');
+    expect(sc).toContain('else if(hNew!==own){sp.px=sp.obj.position.x;');
+  });
+  it('the clamp / snap of a frame held by a part goes into that part\'s box', () => {
+    expect(src).toContain('const fq=partOfFrame(pos);if(fq)return intoPart(fn,pos,n,fq);');
+    const ip = src.slice(src.indexOf(' const intoPart=(fn,pos,n,q)=>{'), src.indexOf(' // after the frame loop wrote the planes'));
+    expect(ip).toContain('.sub(q.c)'); expect(ip).toContain('q.box.h'); expect(ip).toContain('.add(q.c)');
+  });
+  it('a part without a section keeps the noEvents program; one that holds a section is drawn by the section variant (combined; full while it compiles), baked or not', () => {
+    expect(src).toContain("const partVariantKey=(u,np=0)=>{const k=!(u.distInCls.value>0&&u.useCls.value>0)||(settings.diag|0)?'full':np>0?'combined':'noEvents';return cls4On?k+'4':k};");
+    const r = src.slice(src.indexOf('partRender=low=>{'), src.indexOf('partLogSnap=()=>{'));
+    expect(r).toContain('if(q.u.planeCount.value>0){');
+    expect(r).toContain('partVariantKey(unifs,1)');
+    expect(r).toContain('q.nmats.rays[kns]:q.mats.rays[ks]');
+    expect(r).toContain('q.nmats.vars[kns]:q.mats.vars[ks]');
+    expect(src).toContain('kn=partVariantKey(unifs,q.u.planeCount.value)'); // nEnsure: the part's own variant
+    expect(src).toContain('if(parts.some(q=>q.u.planeCount.value>0)&&!res.compiled.has(ks)&&!wanted.includes(ks))wanted.push(ks)'); // no extra compile without a part section
+  });
+  it('no new uniform and no section plane in the part block (a part\'s sections are the body\'s uniform names, per part)', () => {
+    expect(PART_GLSL).not.toContain('cutPlanes');
+    expect(PART_EXTRA).not.toContain('cutPlanes');
+  });
+  it('the laser, the points, the cards\' tissue, the section point and the markers read the part\'s own sections', () => {
+    expect(src).toContain('marchClassificationHitInfo(o,d,vp.halfExt,vp.dims,vp.cls,chs,q.u.cutPlanes.value,q.u.planeCount.value,q.u.planeCut.value,rg[0],rg[1],sk)');
+    const sp = src.slice(src.indexOf(' const sectionPointOf=c=>{'), src.indexOf(' // record the place a laser points at'));
+    expect(sp).toContain('const hq=planePart(section.selected),u=hq?hq.u:material.uniforms,M=hq?hq.mesh:mesh');
+    expect(sp).toContain('if(r&&hq&&!partBoxHas(r.point,hq.box))return null;');
+    expect(src).toContain('if(hit.part)return classifiedAt(hit.point,vp.halfExt,vp.dims,vp.cls,chs,partSkipOf(hit.part));');
+    expect(src).toContain('if(parts.length&&section.on&&section.selected&&planePart(section.selected))secPl=null;'); // no part plane is given to the markers (they would read it for the body\'s points too)
+    expect(src).toContain("pl+='|P'+q.uid+'|'+q.u.planeCut.value;"); // the cards are judged again when a part's section moves
+  });
+});
+
+describe('the frames a part holds go with it', () => {
+  it('partPose carries them by the change of the part\'s matrix (new * old^-1), only for the parts that hold one, and rewrites nothing when the part did not move', () => {
+    const pp = src.slice(src.indexOf('   partPose=()=>{'), src.indexOf('   partFrame=()=>{'));
+    expect(pp).toContain('for(const pl of planes){const k=pl.part;if(k)k.carry=true}');
+    expect(pp).toContain('const carry=q.carry===true;q.carry=false;if(carry)partCa.copy(q.mesh.matrix);');
+    expect(pp).toContain('if(carry)partCarryFrames(q);');
+    const cf = src.slice(src.indexOf(' const partCarryFrames=q=>{'), src.indexOf(' // after the frame loop wrote the planes'));
+    expect(cf).toContain('if(still)return;');
+    expect(cf).toContain('partCb.copy(partCa).invert().premultiply(q.mesh.matrix)');
+    expect(cf).toContain('pl.part!==q||pl.obj.parent!==holder||draggedBy(pl,null)'); // a frame a hand holds follows that hand
+    expect(cf).toContain('o.scale.setScalar(sc)');
+  });
+});
+
+describe('the cut face (cap) of a part is only on the part\'s own tissue', async () => {
+  const { shaderTemplate, preprocess } = await import('../helpers/glsl-preprocess.js');
+  const t = shaderTemplate(src);
+  it('both cap sites ask partCapVis after regionVis, before the child block, only under VRL_PART', () => {
+    expect(src.match(/#ifdef VRL_PART\n {4}ci=partCapVis\(cp,ci\);/g)).toHaveLength(2);
+    const i = src.indexOf('ci=partCapVis(cp,ci);');
+    expect(src.lastIndexOf('ci=regionVis(cp,ci);', i)).toBeGreaterThan(i - 700);
+    expect(src.indexOf('ci=childVis(cp,ci);', i)).toBeGreaterThan(i);
+    expect(src.slice(i, src.indexOf('ci=childVis(cp,ci);', i))).not.toContain('ci=regionVis(');
+  });
+  it('partCapVis reads the part\'s own tests (not regionVis / childVis, which are defined before the block); the body (partKind 0) is untouched', () => {
+    const f = PART_GLSL.slice(PART_GLSL.indexOf('int partCapVis('), PART_GLSL.indexOf('// ==== end of DETACHED PART'));
+    expect(f).toContain('if(s<0||partKind==0)return s;');
+    expect(f).toContain('if(regionHiddenAtP(tc,s))return -1;');
+    expect(f).toContain('if(childHiddenAtP(tc,s))return -1;');
+    expect(f).not.toMatch(/regionVis|childVis/);
+    expect(PART_GLSL.indexOf('int partCapVis(')).toBeGreaterThan(PART_GLSL.indexOf('bool childHiddenAtP('));
+  });
+  it('compiled only with VRL_PART, and (the cap code being outside VRL_NO_EVENTS) not in the noEvents variant', () => {
+    const base = ['VRL_REGIONS', 'VRL_CHILDREN'];
+    expect(preprocess(t, new Set(base))).not.toContain('partCapVis');
+    const full = preprocess(t, new Set([...base, 'VRL_PART']));
+    expect(full.match(/ci=partCapVis\(cp,ci\);/g)).toHaveLength(2);
+    expect(full).toContain('int partCapVis(vec3 p,int s){');
+    const ne = preprocess(t, new Set([...base, 'VRL_PART', 'VRL_NO_GENERAL', 'VRL_NO_EVENTS', 'VRL_OPAQUE']));
+    expect(ne).not.toContain('ci=partCapVis');
+  });
+});
+
+describe('the frames a part held when it goes back into the body, and the other places that read the holder', () => {
+  it('partFree hands the frames back first (partRehomeFrames): the holder is the body again, the same place seen from the body\'s box, inside it; a frame a hand holds only changes holder', () => {
+    expect(src).toContain('const partFree=q=>{partRehomeFrames(q);partHide(q);');
+    const f = src.slice(src.indexOf(' const partRehomeFrames=q=>{'), src.indexOf(' // after the frame loop wrote the planes'));
+    expect(f).toContain('if(pl.part!==q)continue;');
+    expect(f).toContain('pl.part=null;');
+    expect(f).toContain('if(pl.obj.parent!==holder||draggedBy(pl,null))continue;');
+    expect(f).toContain('partLocalOf(q,o.position,tmpPv);o.quaternion.premultiply(tmpPq);');
+    expect(f).toContain('snapPlaneCenterIntoBox(c,');
+    expect(f).toContain('vrHalfExt');
+    // every way a part leaves goes through partFree (restore one / all, the pair, a data switch, a failed cut)
+    const rest = src.slice(src.indexOf('   const partRestoreOne=q=>{'), src.indexOf('   // an earlier change: すべて切り出す'));
+    expect((rest.match(/partFree\(q\)/g) || []).length).toBe(2);
+    expect(src).toContain("partRestoreAll(); // an earlier change: a part taken out and a pair are not shown together");
+    expect(src).toContain('bakeDrop();partRestoreAll();partRunner?.dispose();');
+  });
+  it('a part\'s frame is parked in the partner\'s array too (as the body\'s own entry in the frame loop)', () => {
+    expect(src).toContain('u.cutPlanes.value[n].set(1,0,0,PLANE_PARK_W);if(pOn)pairPl[n].set(1,0,0,PLANE_PARK_W);hq.u.cutPlanes.value[n].set(');
+  });
+  it('the HU line started on a part\'s section is drawn in that part\'s space (the voxels are shown there), chosen at the start only; the body when the part is gone', () => {
+    expect(src).toContain('mesh:()=>huPart&&huPart.on&&!huPart.freed&&huPart.mesh.parent?huPart.mesh:mesh,');
+    expect(src).toContain("if(!huLine.isDragging())huPart=src==='section'&&sh.part?sh.part:null;");
+  });
+});
+
+describe('the slice fill / tint of a part is only on the part\'s own tissue', async () => {
+  const { shaderTemplate, preprocess } = await import('../helpers/glsl-preprocess.js');
+  const t = shaderTemplate(src);
+  const sliceFns = (txt, fn) => txt.slice(txt.indexOf('vec4 ' + fn + '('), txt.indexOf('#define sliceColor(p,rd,ro) ' + fn));
+  it('with VRL_PART both slice functions ask partCapVis (after regionVis, before childVis); the grey CT image path is not touched', () => {
+    const r = sliceFns(preprocess(t, new Set(['VRL_REGIONS', 'VRL_PART'])), 'sliceColorR');
+    expect(r.match(/partCapVis\(p,regionVis\(p,segmentIndexAt\(texCoord\(p\)\)\)\)/g)).toHaveLength(2);
+    expect(r).toContain('return vec4(vec3(g),a);');
+    const c = sliceFns(preprocess(t, new Set(['VRL_REGIONS', 'VRL_CHILDREN', 'VRL_PART'])), 'sliceColorC');
+    expect(c.match(/childVis\(p,partCapVis\(p,CHILD_REG_VIS\(p,segmentIndexAt\(texCoord\(p\)\)\)\)\)/g)).toHaveLength(2);
+    expect(c).toContain('return vec4(vec3(g),a);');
+  });
+  it('without VRL_PART the slice functions are the original lines (the body\'s programs and the other programs are unchanged)', () => {
+    const x = sliceFns(preprocess(t, new Set(['VRL_REGIONS'])), 'sliceColorR');
+    expect(x).not.toContain('partCapVis');
+    expect(x).toContain('?regionVis(p,segmentIndexAt(texCoord(p))):-1;');
+    const y = sliceFns(preprocess(t, new Set(['VRL_REGIONS', 'VRL_CHILDREN'])), 'sliceColorC');
+    expect(y).not.toContain('partCapVis');
+    expect(y).toContain('?childVis(p,CHILD_REG_VIS(p,segmentIndexAt(texCoord(p)))):-1;');
+  });
+  it('partCapVis is declared before the slice functions, and the body (partKind 0) keeps its value', () => {
+    expect(PART_GLSL.includes('int partCapVis(vec3 p,int s){')).toBe(true);
+    expect(src.indexOf('${PART_GLSL}')).toBeLessThan(src.indexOf('vec4 sliceColorR('));
+    expect(PART_GLSL).toContain('if(s<0||partKind==0)return s;');
   });
 });

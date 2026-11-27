@@ -18,7 +18,7 @@
 
 - アグーチ頭蓋: アグーチ（Dasyprocta agouti）頭蓋 microCT・骨ラベル14クラス付き（{mb}）
 - コアリクイ頭蓋: コアリクイ（Tamandua sp.）頭蓋 microCT・骨ラベル15クラス付き（{mb}）
-- イエネコ頭蓋: イエネコ（Felis catus）頭蓋 microCT・骨ラベル15クラス付き（{mb}）
+- イエネコ頭蓋: イエネコ（Felis catus）頭蓋 microCT・骨ラベル15クラス付き（歯・骨（未分類）は当方が追加）（{mb}）
 - ニワトリ胚の心臓（正常）: ニワトリ胚心臓の microCT・正常（対照）個体（{mb}）
 - ニワトリ胚の心臓（ファロー四徴症モデル）: ニワトリ胚心臓の microCT・ファロー四徴症モデル個体（{mb}）
 - イヌ前肢CT・骨ラベル4クラス付き（名称なし、約9MB）（{mb}）
@@ -31,6 +31,9 @@
 - マーモセット脳 MRI（50 µm）
 - ジカウイルス EMD-8116
 - マウス後足 microCT（{mb}）
+- マウス全身・造影（腫瘍）: マウス全身 microCT（造影剤あり）・臓器＋腫瘍ラベル付き（{mb}）
+- ラット内耳 microCT・側頭骨と内耳ラベル付き（{mb}）
+- マウス脳・脳血管: マウス脳の光子計数 microCT・脳血管ラベル付き（{mb}）
 
 ## VR / AR で観察する
 
@@ -105,7 +108,7 @@ All practice data is bundled with this site.
 
 - Agouti skull: Agouti (Dasyprocta agouti) skull micro-CT with 14 labelled bone classes ({mb})
 - Anteater skull: Anteater (Tamandua sp.) skull micro-CT with 15 labelled bone classes ({mb})
-- Cat skull: Domestic cat (Felis catus) skull micro-CT with 15 labelled bone classes ({mb})
+- Cat skull: Domestic cat (Felis catus) skull micro-CT with 15 labelled bone classes, plus teeth and unclassified-bone segments added by the converter ({mb})
 - Chick embryo heart (control): Micro-CT of a chick embryo heart, control ({mb})
 - Chick embryo heart (tetralogy of Fallot model): Micro-CT of a chick embryo heart, tetralogy of Fallot model ({mb})
 - Dog forelimb CT with four bone label classes, unnamed ({mb})
@@ -118,6 +121,9 @@ All practice data is bundled with this site.
 - Marmoset brain MRI (50 µm)
 - Zika virus EMD-8116
 - Mouse hindpaw micro-CT ({mb})
+- Mouse whole body, contrast-enhanced (tumor): Mouse whole-body contrast-enhanced micro-CT with organ and tumor labels ({mb})
+- Rat inner ear: Rat inner-ear micro-CT with temporal-bone and inner-ear labels ({mb})
+- Mouse brain and cerebrovasculature: Photon-counting micro-CT of a mouse brain with cerebrovascular labels ({mb})
 
 ### Viewing in VR / AR
 

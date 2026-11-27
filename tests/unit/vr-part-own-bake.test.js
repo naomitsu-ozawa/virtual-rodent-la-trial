@@ -86,7 +86,7 @@ describe('vr-view.js: the wiring of the parts\' own bake', () => {
     expect(src).not.toContain('PART_BAKE_BYTES_MAX');
     expect(src.slice(src.indexOf('const pbStart='), src.indexOf('const pbBind='))).toContain('(four&&!four4)'); // never the whole body's fourth segment inside a part
     expect(src).toContain('partBakeDrop=()=>{bakeDrop();for(const q of parts)pbDrop(q)}'); // a part holding only its old bake (a) drops it too
-    expect(src).toContain('const partFree=q=>{partHide(q);q.held=null;pbDrop(q);');
+    expect(src).toContain('const partFree=q=>{partRehomeFrames(q);partHide(q);q.held=null;pbDrop(q);');
   });
   it('the part\'s own hidden flags follow its own tables', () => {
     expect(src).toContain('q.nu.regionAnyHidden.value=anyHiddenIn(q.lutOwnR.image.data,regionList.length)');
