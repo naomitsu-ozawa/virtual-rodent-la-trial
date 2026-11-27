@@ -152,7 +152,7 @@ describe('VR: the card of a pinned child lights under the laser like a result\'s
 describe('the name label of a child goes through the machinery of 711 like a result\'s label', () => {
   it('VR: a child\'s card is a pin in the same map; leader limit (pinPlace), push out (embedLabel), hiding (pinOcclusion), thinning (thinPins) and the card layout run over `pins`, with no result-only branch', () => {
     const v = src('vr-view.js');
-    expect(v).toContain('for(const lb of pins.values()){lb.lit=pinLit.has(lb.rid);embedLabel(lb,occ,pinHeld.has(lb.rid));placeLabel(lb)}thinPins(occ);for(const lb of pins.values())pinOcclusion(lb,lb.lit||lb.glow)');
+    expect(v).toContain('for(const lb of pins.values()){lb.lit=pinLit.has(lb.rid);embedLabel(lb,occ,pinHeld.has(lb.rid));placeLabel(lb)}coverPins(occ);thinPins(occ);for(const lb of pins.values())pinOcclusion(lb,lb.lit||lb.glow)');
     expect(v).toContain('lb.rid=reg.id;pins.set(reg.id,lb)'); expect((v.match(/lb\.rid=reg\.id;pins\.set\(reg\.id,lb\)/g) || []).length).toBe(2); // results and children
     expect(v).toContain('const cl=cardLayout((i,t)=>measureText(i?FT2:FT1,t)'); // one drawLabel for result, child and plain hover cards
     const place = v.slice(v.indexOf('const pinPlace=lb=>'), v.indexOf('const placeLabel=lb=>')), thin = v.slice(v.indexOf('const thinCompute=()=>'), v.indexOf('const spacingNote='));

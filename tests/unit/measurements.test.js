@@ -289,11 +289,13 @@ describe('VR distance on parts taken out (vr-measure.js partMeshOf, an earlier c
     v.update({ ...base, partMeshOf: null }); [e0, e1] = ends(scene); expect(e0.distanceTo(world(mesh, A))).toBeLessThan(1e-6); expect(e1.distanceTo(world(mesh, B))).toBeLessThan(1e-6); // everything back: the body's places
     v.dispose();
   });
-  it('the start ring follows the part; the CPU hidden probes leave out a line with an end on a part (the body\'s tissue is not there)', () => {
-    pt('p1', 2, 3, 1); pt('p2', 12, 9, 8); addMeasurement('p1', 'p2');
+  it('the start ring follows the part; the CPU hidden probes include a line on a part and name the part (its mesh) that owns them', () => {
+    pt('p1', 2, 3, 1); pt('p2', 3, 9, 8); pt('p3', 12, 9, 8); addMeasurement('p1', 'p2');
     const { scene, part, base } = setup(), v = createVrMeasure(THREE, scene);
-    v.update({ ...base }); expect(v.probes().length).toBe(LINE_SAMPLES + 1);
-    v.update({ ...base, partMeshOf: ownerOf(part) }); expect(v.probes().length).toBe(0);
+    v.update({ ...base }); expect(v.probes().length).toBe(LINE_SAMPLES + 1); expect(v.probes().every(p => p.mesh === null)).toBe(true); // the body's line: no host part
+    v.update({ ...base, partMeshOf: ownerOf(part) }); expect(v.probes().length).toBe(LINE_SAMPLES + 1); expect(v.probes().every(p => p.mesh === part)).toBe(true); // both ends on one part: judged in that part's frame
+    addMeasurement('p1', 'p3'); v.update({ ...base, partMeshOf: ownerOf(part) }); // a second line: p1 on the part, p3 on the body (different meshes: a line in the world)
+    expect(v.probes().length).toBe(2 * (LINE_SAMPLES + 1)); expect(v.probes().filter(p => p.mesh === part).length).toBe(LINE_SAMPLES + 1); expect(v.probes().filter(p => p.mesh === null).length).toBe(LINE_SAMPLES + 1);
     v.update({ ...base, partMeshOf: ownerOf(part), startId: 'p1' }); const ring = scene.children.find(o => o.isMesh && o.renderOrder === 2);
     expect(ring.position.distanceTo(world(part, A))).toBeLessThan(1e-6); v.dispose();
   });

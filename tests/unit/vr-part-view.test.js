@@ -466,7 +466,8 @@ describe('several parts at once', () => {
     expect(po.indexOf("target.kind==='child'")).toBeLessThan(po.indexOf("target.kind==='region'"));
     expect(src).toContain('const partMeshOfLocal=l=>partOfLocal(l)?.mesh||null;'); // the distance lines / labels follow the part (vr-measure.js partMeshOf)
     expect(src).toContain('mesh:mesh?.parent?mesh:null,partMeshOf:mesh?.parent&&parts.length?partMeshOfLocal:null,head,');
-    expect(src).toContain('vpMarkers.centres().filter(partOffPoint)'); // the CPU hidden judgement is the body's tissue: not made for a point on a part
+    expect(src).toContain('pts=gpuOcc?[]:vpMarkers.centres(),'); // 案A: a point on a part is judged too (hiddenFor: its own part's tissue, then the body and the other parts as occluders)
+    expect(src).toContain('const own=partPtOwn.get(p.id)||null;'); expect(src).not.toContain('partOffPoint');
     expect(src).toContain('ids,idims:dims.slice(),'); // the part's own index plane: which voxel is the part\'s
   });
   it('a card of a part taken out stands in the part\'s space (it moves with the part); without the part it is the body\'s again', () => {
@@ -495,14 +496,14 @@ describe('several parts at once', () => {
     expect(src).toContain("lineM=lbMesh(lb);"); // the leader's length is measured in the card's own frame
     expect(src).toContain('applyMatrix4((lineM||mesh).matrixWorld)');
     // thinning: covered by the part's tissue, head and card in the part's space
-    expect(src).toContain('px0=fm===mesh?cx:occ&&lb.pq?partCtxOf(lb.pq):null;');
-    expect(src).toContain('fm.worldToLocal(tmpTc);if(rayCovered(hd,tmpTc,px0.isInside,px0.halfExt,px0.voxel))');
+    expect(src).toContain('if(cov&&!lb.lit&&!lb.glow&&!lb.trans&&coveredBy(lb.m.position,null,true)){lb.cov=true;lb.thin=false;continue}');
+    expect(src).toContain('const cx=partCtxOf(q);if(!cx)continue;q.mesh.updateWorldMatrix(true,false);add(q,cx,q.mesh.matrixWorld)'); // each part that is out is an occluder: its own tissue, its own box
     // pulled into the tissue; the parts that are out are an input of the judgement
     expect(src).toContain('pinPulledIntoTissue(pp,fm===mesh?embedCtx():lb.pq?partCtxOf(lb.pq):null)');
     expect(src).toContain("+'|p'+parts.map(q=>q.on&&q.mesh.parent?q.uid:0).join(',')");
     // the anchor's dot: behind the part's own tissue, from the eye in the part's space, no planes
     expect(src).toContain('filter(lb=>!lb.hid);');
-    expect(src).toContain('pointIsHidden(lb.anchor,tmpHp,{...opt,planes:[],count:0,cut:0,skip:partSkipOf(pq)})');
+    expect(src).toContain('pointIsHidden(pl,covEyeP,{...opt,planes:[],count:0,cut:0,skip:partSkipOf(own)})');
     expect(src).not.toContain('filter(lb=>!lb.hid&&!lb.pmesh)');
   });
   it('the hover cards and the pin tap read the part\'s hit (the nearest of it, the partner\'s and the body\'s)', () => {
