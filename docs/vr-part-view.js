@@ -6,10 +6,10 @@
 //   - which uniforms the part owns (the rest is the body's by reference: PART_OWN), the target a grip takes (partTargetOf), the part's own box (partBoundsOf), the laser's rule on the CPU (partKeepVoxelOf),
 //   - several parts at once: every part has its own box, uniforms and pose; the tables are patched for all of them (patchRegionLutMany / patchChildLutMany); a part's proxy box is its own bounding box (partProxyBox) and its laser march
 //     runs only inside it (partRayRange), the texts. The way in is the long-press ring (region-ring.js 切り出す / 戻す); the grip stays the body's grab and takes a part only where the laser meets one.
-import { regionLutAlpha } from './region-visibility.js?v=20261127-build775';
-import { boxFromRange } from './vr-content-box.js?v=20261127-build775';
-import { euclideanDistanceBytes, morph3 } from './distance-field.js?v=20261127-build775';
-import { hiddenClassBytes } from './vr-hide-field.js?v=20261127-build775';
+import { regionLutAlpha } from './region-visibility.js?v=20261127-build776';
+import { boxFromRange } from './vr-content-box.js?v=20261127-build776';
+import { euclideanDistanceBytes, morph3 } from './distance-field.js?v=20261127-build776';
+import { hiddenClassBytes } from './vr-hide-field.js?v=20261127-build776';
 
 // ---- the shader block. Spliced into the volume fragment shader once (vr-view.js ${PART_GLSL}, after the hidden-shape block A and BEFORE the an earlier change hide helpers hideAnyOn / hideAt / hideGrad, so that they read the re-pointed functions too), so that no existing line of the shader has to change. Without VRL_PART (every program but the
 // part's) the preprocessor drops all of it: the body's programs are the ones they were. With VRL_PART the two functions the marching loops ask "is this voxel a hidden shape?" (regionHiddenAt / childHiddenAt) are
@@ -70,6 +70,19 @@ bool childHiddenAtP(vec3 tc,int s){ // as regionHiddenAtP: one read each, a chil
 }
 #define childHiddenAt(tc,s) childHiddenAtP(tc,s)
 #endif
+// the cut face (a section plane's cap) of a part: only where the part's own tissue is, by the same tests as the part's hits (regionHiddenAtP / childHiddenAtP: its field, its own tables). The caps' regionVis / childVis are defined BEFORE this block, so the
+// #define above does not reach them (they read the table alone: a part's box would show the cap on the other tissue in it). The body (partKind 0) keeps its own; read once per cap, only in the programs that have the cap code (not the noEvents variants)
+int partCapVis(vec3 p,int s){
+ if(s<0||partKind==0)return s;
+ vec3 tc=texCoord(p);
+#ifdef VRL_REGIONS
+ if(regionHiddenAtP(tc,s))return -1;
+#endif
+#ifdef VRL_CHILDREN
+ if(childHiddenAtP(tc,s))return -1;
+#endif
+ return s;
+}
 #endif
 // ==== end of DETACHED PART ====
 `;
@@ -78,13 +91,39 @@ bool childHiddenAtP(vec3 tc,int s){ // as regionHiddenAtP: one read each, a chil
 export const PART_CALL_SITES = Object.freeze(['passH=childHiddenAt(tcO+tcD*t,idx)', 'passH=childHiddenAt(tc0,idx)', 'passH=regionHiddenAt(tcO+tcD*t,idx)', 'passH=regionHiddenAt(tc0,idx)', ' if(childHiddenAt(tc,s))return true;', ' if(regionAnyHidden!=0&&regionHiddenAt(tc,s))return true;']);
 
 // the uniforms the part owns (all of them are keys of volumeUniforms); every other uniform of the volume shader is the BODY's OWN object (shared by reference: the data, the view, the shown set, the march step ...).
-//   boxC / boxH / boxEntry: the part's own content box, and the march starts at it (boxEntry 1); planeCount / planeCut: 0, a part is never cut by the sections and draws no slice;
+//   boxC / boxH / boxEntry: the part's own content box, and the march starts at it (boxEntry 1); cutPlanes / planeCount / planeCut: the part's OWN sections (the planes that belong to it, in its object space; 0 planes = no slice code, the noEvents variant,
+//   see partSectionHolderOf and partSectionPark below);
 //   regionLut / childLut: the part's own copies of the tables (the target NOT hidden: the body's has it hidden); regionAnyHidden: the part's own.
-export const PART_OWN = Object.freeze(['boxC', 'boxH', 'boxEntry', 'planeCount', 'planeCut', 'regionLut', 'regionAnyHidden', 'childLut', 'clsTex', 'cls4Tex']);
+export const PART_OWN = Object.freeze(['boxC', 'boxH', 'boxEntry', 'cutPlanes', 'planeCount', 'planeCut', 'regionLut', 'regionAnyHidden', 'childLut', 'clsTex', 'cls4Tex']);
 // the part's uniform names that volumeUniforms does NOT have (made only for the part's materials)
 export const PART_EXTRA = Object.freeze(['partKind', 'partId', 'partMask', 'partField', 'partFieldScale', 'partFieldOff', 'partFieldA', 'partFieldB', 'partOcc']);
 // the part's uniforms: the body's (every key by reference) with `own` ({name: {value}}) put over them
 export function partUniforms(primary, own) { return { ...primary, ...own }; }
+
+// ---- the sections of a part. Every section frame belongs to ONE holder: the body or one part (the way a section belongs to one dataset of a sample pair): the plane is written, in the holder's own object space, to the holder's own uniforms
+// (cutPlanes / planeCount / planeCut) and is parked (far outside every box, no clip bit) in the others', so the numbers stay the section numbers and a section cuts only its holder. Pure rules (vr-view.js applies them):
+// is the point p ({x, y, z}, the part mesh's local space = the body's object space) inside the part's box {c, h}?
+// A frame clamped to the box edge (the clamp / snap of a section) is exactly on the face up to the rounding of the part's pose maths: PART_BOX_EPS (object-space metres) of tolerance keeps it inside, so a rounding error never flips its holder.
+export const PART_BOX_EPS = 5e-5;
+export const partBoxHas = (p, box) => Math.abs(p.x - box.c[0]) <= box.h[0] + PART_BOX_EPS && Math.abs(p.y - box.c[1]) <= box.h[1] + PART_BOX_EPS && Math.abs(p.z - box.c[2]) <= box.h[2] + PART_BOX_EPS;
+// the holder of a frame from where its centre is NOW. count = how many parts' boxes hold the centre, first = the first of them, inBody = it is inside the body's box, prev = the earlier holder (a part, or null = the body).
+// Inside exactly one part's box: that part (a part's box lies over the body's hole, so it is the more specific: the body's box counts only where no part's does); inside none: the body when the centre is in its box, else the earlier
+// holder stays; inside several (touching parts): the earlier holder stays, so a small shake never flips it.
+export const partSectionHolderOf = (prev, inBody, count, first) => (count === 1 ? first : count === 0 && inBody ? null : prev || null);
+// may a thumbstick scroll move the frame? A scroll never changes the holder: holder = the holder now, before / after = the holder judged from the centre before / after the move (partSectionHolderOf; null = the body). It may when the centre stays
+// with the holder (after === holder), or when the move does not change what the box test says (after === before: a body frame whose centre already lies in a part's box, e.g. a part cut out over it, must still scroll). Else the scroll stops there.
+export const partScrollKeeps = (holder, before, after) => after === (holder || null) || after === (before || null);
+// the holder of a NEW / restored frame (no earlier holder): the part whose box holds the centre (the nearest of them), else the body when the centre is in its box, else the nearest of the box centres
+// (nearestIn / nearest: a part or null = none / the body is nearest)
+export const partSectionStartOf = (inBody, nearestIn, nearest) => nearestIn || (inBody ? null : nearest || null);
+// the number of planes a holder's uniforms must cover: the highest section number it owns (ownBits: bit i = section i is its), 0 = it owns none (no section code in its program)
+export const partSectionCount = ownBits => 32 - Math.clz32(ownBits >>> 0);
+// park the entries of the planes the holder does not own, below its count: planes = its cutPlanes uniform array (objects with .set(x, y, z, w)). Returns the count.
+export function partSectionPark(planes, ownBits, parkW) {
+  const n = partSectionCount(ownBits);
+  for (let i = 0; i < n; i++) if (!((ownBits >>> i) & 1)) planes[i].set(1, 0, 0, parkW);
+  return n;
+}
 
 // ---- the target of a pull-out. hit = the laser's volume hit {id (1-based position in regionList, 0 = none), childKey ('' = none)} (vr-view.js volumeHitRay); regionList / childList = the prepared lists
 // (regionList[i].rid, childList[j].key). Where a child segment lies inside a result (they overlap) the CHILD is taken: it is the smaller, more specific thing (decision of this prototype; the ring offers both).
