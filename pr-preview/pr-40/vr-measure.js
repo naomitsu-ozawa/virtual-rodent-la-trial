@@ -5,11 +5,11 @@
 // distance is being made, the START point with a pulsing ring and the hint 「終点のポイントを選んでください」 next to it.
 // vr-view.js calls createVrMeasure(THREE, scene) -> { update, probes, pickLabel, dragLabel, dispose } every frame and does everything else (the flow, haptics, undo) itself; the state is
 // measurements.js (the same for the PC / iPad). The value follows the points: it is recomputed from their voxels each frame (a point being moved included, preview).
-import { getComments, getMarkersShown, commentMatchesSeries, commentTarget } from './comments.js?v=20261127-build772';
-import { getMeasurements, setLabelOffset, distanceMm, measureLabel } from './measurements.js?v=20261127-build772';
-import { nearLabelWorld, stepDelta, offsetFromDelta, LINE_SAMPLES, probeKey, fadeAlpha, approachAlpha, OCCLUDED_ALPHA } from './measure-label.js?v=20261127-build772';
-import { voxelToLocal } from './vr-point.js?v=20261127-build772';
-import { GHOST_ALPHA, occludedPass } from './vr-depth.js?v=20261127-build772';
+import { getComments, getMarkersShown, commentMatchesSeries, commentTarget } from './comments.js?v=20261127-build773';
+import { getMeasurements, setLabelOffset, distanceMm, measureLabel } from './measurements.js?v=20261127-build773';
+import { nearLabelWorld, stepDelta, offsetFromDelta, LINE_SAMPLES, probeKey, fadeAlpha, approachAlpha, OCCLUDED_ALPHA } from './measure-label.js?v=20261127-build773';
+import { voxelToLocal } from './vr-point.js?v=20261127-build773';
+import { GHOST_ALPHA, occludedPass } from './vr-depth.js?v=20261127-build773';
 export const VR_MEASURE_COLOR=0xffd23d,MEASURE_LABEL_W_M=0.045,MEASURE_LABEL_H_M=0.0132,MEASURE_HINT_W_M=0.2,MEASURE_HINT_H_M=0.026;
 // The hint 「終点のポイントを選んでください」 used to sit right above the START point, on top of everything (no depth test, opaque): in front of the very points the visitor has to aim at.
 // Now it is HEAD-LOCKED at the top edge of the view (HINT_ELEV rad above the gaze, HINT_DIST m away, facing the eyes), drawn at HINT_ALPHA, and after HINT_FADE_AFTER_MS it fades
@@ -77,7 +77,7 @@ export function createVrMeasure(THREE,scene,deps={getComments,getMarkersShown,ge
  };
  const disposeLabel=lb=>{scene.remove(lb.mesh);lb.tex.dispose();lb.mesh.material.dispose();lb.ghost?.material.dispose()};
  const items=new Map(); // measurement id -> {line,leader,label,va,la,t,probes,lprobe}
- const probeList=[]; // the places to judge (hidden behind the volume's surface), rebuilt by update: [{id:probeKey,world:Vector3}]
+ const probeList=[]; // the places to judge (hidden behind the volume's surface), rebuilt by update: [{id:probeKey,world:Vector3,mesh}]; mesh = the mesh of the part taken out that both ends of the line stand on (the line is drawn through it, so the place is in that part's frame), or null = the body's / a line between different meshes (a place in the world)
  let start=null; // {ring,hint}
  const a=new THREE.Vector3(),b=new THREE.Vector3(),mid=new THREE.Vector3(),s=new THREE.Vector3(),lab=new THREE.Vector3(),inv=new THREE.Matrix4(),lo=new THREE.Vector3(),ld=new THREE.Vector3(),hit=new THREE.Vector3();
  const mv={i:0,j:0,k:0};
@@ -109,7 +109,7 @@ export function createVrMeasure(THREE,scene,deps={getComments,getMarkersShown,ge
       const lm=makeLeaderMat(),leader=new THREE.Line(makeLine(2),lm);leader.renderOrder=4;leader.frustumCulled=false;scene.add(leader);const leaderGhost=addGhost(leader,ghostOf(lm,LEADER_OPACITY*GHOST_ALPHA));
       it={line,leader,leaderGhost,label:makeLabel(256,72,MEASURE_LABEL_W_M,MEASURE_LABEL_H_M,true),va:new Array(LINE_SAMPLES+1).fill(1),la:1,t:0,dragged:false,probes:Array.from({length:LINE_SAMPLES+1},(_,i)=>({id:probeKey(m.id,i),world:new THREE.Vector3()})),lprobe:{id:probeKey(m.id,'L'),world:new THREE.Vector3()}};items.set(m.id,it);
      }
-     a.set(A.local.x,A.local.y,A.local.z);mA.localToWorld(a);b.set(B.local.x,B.local.y,B.local.z);mB.localToWorld(b);it.part=mA!==mesh||mB!==mesh;
+     a.set(A.local.x,A.local.y,A.local.z);mA.localToWorld(a);b.set(B.local.x,B.local.y,B.local.z);mB.localToWorld(b);it.part=mA!==mesh||mB!==mesh;{const own=same&&mA!==mesh?mA:null;for(const p of it.probes)p.mesh=own;it.lprobe.mesh=own} // the host of the probes (probeList): vr-view.js judges a line on a part by that part's tissue, then the body and the other parts
      const pos=it.line.geometry.attributes.position;
      for(let i=0;i<=LINE_SAMPLES;i++){const f=i/LINE_SAMPLES,pr=it.probes[i].world;pr.set(a.x+(b.x-a.x)*f,a.y+(b.y-a.y)*f,a.z+(b.z-a.z)*f);pos.setXYZ(i,pr.x,pr.y,pr.z)}
      pos.needsUpdate=true;
@@ -158,7 +158,7 @@ export function createVrMeasure(THREE,scene,deps={getComments,getMarkersShown,ge
     }else dropStart();
    }else dropStart();
    for(const [id,it] of [...items])if(!keep.has(id))dropItem(id,it);
-   probeList.length=0;for(const it of items.values()){if(it.part)continue;for(const p of it.probes)probeList.push(p);if(it.dragged)probeList.push(it.lprobe)} // a line with an end on a part is not at the body's place: the body's tissue (the CPU judgement) does not hide it (as partOffPoint for a point)
+   probeList.length=0;for(const it of items.values()){for(const p of it.probes)probeList.push(p);if(it.dragged)probeList.push(it.lprobe)} // a line on a part is judged too (vr-view.js updateHidden: by its own part's tissue, then the body's and the other parts': the probe's mesh says which part)
   },
   // the places whose "hidden behind the volume" is judged by vr-view.js (about 10 times a second, vr-point.js pointIsHidden): the 9 samples of every line and the label that was dragged.
   // [{id:probeKey,world:Vector3}] of the last update (the list is reused: read it, do not keep it)
