@@ -52,7 +52,7 @@ describe('vr-view.js wiring', () => {
   const block = vr.slice(vr.indexOf('pinGlow.clear();'), vr.indexOf('   {const occ=occlusionGpu();if(occ&&pins.size)'));
   it('the glow set is rebuilt every frame from each controller (a cleared Set: no stale state across frames)', () => {
     expect(block).toContain('pinGlow.clear();for(const x of controllers)');
-    expect(block).toContain("blocked=rs?.kind==='mlabel'||(u.lblDrag&&u.press)||wheelOwner===x||pw?.c===x;for(const rid of u.hrids){const g=glowRid(on,x.visible!==false,rid,blocked)");
+    expect(block).toContain("blocked=rs?.kind==='mlabel'||(u.lblDrag&&u.press)||wheelOwner===x||pw?.c===x||u.partHit?.part?.held?.c===x;for(const rid of u.hrids){const g=glowRid(on,x.visible!==false,rid,blocked)");
   });
   it('the cards: glow = not lit by the card rule, from the set; the face is the lit face (white outline), the card is the lit size, the leader gets the bone colour', () => {
     expect(vr).toContain('lb.glow=!pinLit.has(lb.rid)&&pinGlow.has(lb.rid)');

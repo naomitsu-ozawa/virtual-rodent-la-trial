@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { rectEdgePoint } from '../../docs/analysis-label.js';
 // Pinned result labels (docs/vr-label-occlusion.js, pure): embedded judgement + push out to the surface, thinning of overlapping cards. vr-view.js is checked on the source.
 const ver = JSON.parse(readFileSync(new URL('../../docs/version.json', import.meta.url), 'utf8')).version, tag = '?v=' + ver.replace(/\./g, '').replace(/-(\d+)$/, '-build$1');
-const { pushOut, pinLine, pinPlaceLimited, pinPulledIntoTissue, pinDue, pinJudge, createScaleSettle, PIN_SETTLE_MS, PIN_LINE_EPS, createLabelThinner, coverHoldStep, COVER_HOLD, screenRect, gazeBasis, PUSH_FREE_VOXELS, PUSH_MARGIN_VOXELS, PUSH_DIRECTIONS, setLeaderIfMoved, createFaceCache, clippedAt, rayCovered, CARD_W0, CARD_W_MAX, CARD_PAD_R, CARD_H0, CARD_LINE_H, CARD_MAX_LINES, cardLayout, cardHalfW, cardHalfH } = await import(/* @vite-ignore */ '../../docs/vr-label-occlusion.js' + tag);
+const { pushOut, pinLine, pinPlaceLimited, pinPulledIntoTissue, pinDue, pinJudge, createScaleSettle, PIN_SETTLE_MS, PIN_LINE_EPS, createLabelThinner, screenRect, gazeBasis, PUSH_FREE_VOXELS, PUSH_MARGIN_VOXELS, PUSH_DIRECTIONS, setLeaderIfMoved, createFaceCache, clippedAt, rayCovered, CARD_W0, CARD_W_MAX, CARD_PAD_R, CARD_H0, CARD_LINE_H, CARD_MAX_LINES, cardLayout, cardHalfW, cardHalfH } = await import(/* @vite-ignore */ '../../docs/vr-label-occlusion.js' + tag);
 const src = readFileSync(new URL('../../docs/vr-view.js', import.meta.url), 'utf8');
 
 // a box of side 2 (+-1), voxel 0.02; a solid ball of radius R around the origin, optionally with a hollow cavity of radius r
@@ -215,14 +215,6 @@ describe('rayCovered: a card behind tissue from the head (coarse walk)', () => {
     expect(rayCovered(toL(head), toL(front), tissue, box.h, VOX, 2.5, box.c)).toBe(false); // in front of it
     expect(rayCovered(toL(head), toL(aside), tissue, box.h, VOX, 2.5, box.c)).toBe(false); // beside it: the line misses the box
     expect(rayCovered({ x: head.x, y: head.y, z: head.z }, { x: behind.x, y: behind.y, z: behind.z }, tissue, he, VOX)).toBe(false); // in the body's frame, where the part is not, there is nothing: why the parts need their own judgement
-  });
-  it('the cover verdict is held: covered hides at once and refills; it comes back after COVER_HOLD verdicts of "not covered" in a row (no flicker at an edge)', () => {
-    expect(COVER_HOLD).toBe(3);
-    let c = 0; c = coverHoldStep(c, true); expect(c).toBe(COVER_HOLD);
-    c = coverHoldStep(c, false); expect(c).toBe(2); c = coverHoldStep(c, false); expect(c).toBe(1); // still hidden
-    c = coverHoldStep(c, true); expect(c).toBe(COVER_HOLD); // covered again at the edge: refilled
-    for (let i = 0; i < COVER_HOLD; i++) c = coverHoldStep(c, false);
-    expect(c).toBe(0); expect(coverHoldStep(0, false)).toBe(0); expect(coverHoldStep(undefined, false)).toBe(0);
   });
   it('cost (node): 33 cards across a 256-voxel box walk in well under 5 ms', () => {
     const t0 = performance.now(), v = 2 / 256; for (let i = 0; i < 33; i++) rayCovered({ x: 0.3, y: 0.2, z: 3 }, { x: -0.3 + i * 0.01, y: 0, z: -0.9 }, () => false, he, v); expect(performance.now() - t0).toBeLessThan(500);
@@ -455,22 +447,18 @@ describe('vr-view.js: the body and every part that is out cover a card from the 
     expect(cp).toContain('if(withBody&&mesh?.parent){const cx=embedCtx();');
     expect(cp).toContain('if(o.q===host&&!withOwn)continue;');
   });
-  it('an embedded card (no depth test) is hidden with its leader while covered by another occluder; held COVER_HOLD judgements; lit / glow / held cards stay; run before the thinning, whatever the overlap mode', () => {
-    const cp = src.slice(src.indexOf(' let coverFrame=0;'), src.indexOf(' // two judgements'));
-    expect(cp).toContain('if(!occ||!parts.length||!lb.trans||lb.lit||lb.glow||lb.hand||!lb.m.visible){lb.ucnt=0;continue}');
-    expect(cp).toContain('lb.ucnt=coverHoldStep(lb.ucnt,coveredBy(lb.m.position,lbMesh(lb)===mesh?null:lb.pq,false))');
-    expect(cp).toContain('if(lb.ucnt>0){lb.m.visible=false;lb.line.visible=false}');
-    expect(cp).toContain('coverFrame++%3===0');
-    expect(src).toContain('placeLabel(lb)}coverPins(occ);thinPins(occ);'); // after placeLabel (which shows every card), before the thinning (which counts the shown ones)
+  it('a card that has no depth test (embedded, lit, glowing, held) is NOT hidden by a part any more than by the body: no part-only hiding or exception (no coverPins, no hold)', () => {
+    expect(src).not.toContain('coverPins'); expect(src).not.toContain('coverHoldStep'); expect(src).not.toContain('ucnt');
+    expect(src).toContain('placeLabel(lb)}thinPins(occ);for(const lb of pins.values())pinOcclusion(lb,lb.lit||lb.glow)'); // the card state is judged by embedLabel / pinOcclusion alone, whatever stands in front
   });
   it('薄くする: the points / the anchors / the distance probes are judged with the parts as occluders; the pose of the parts is an input of the probe gate; the head is the frame\'s (partPose runs before the label block)', () => {
     expect(src).toContain('if(parts.length){embedInputs(now);coverPrep(tmpEyeR,false)}else covOcc.length=0;');
-    expect(src).toContain("if(hiddenFor('p'+p.id,p.world,own,tmpHp))next.add(p.id)");
-    expect(src).toContain('if(hiddenFor(null,p.world,own,tmpHp))nextM.add(p.id)'); expect(src).toContain('const own=p.mesh?parts.find(q=>q.mesh===p.mesh&&q.on&&q.mesh.parent)||null:null;'); // a distance on a part (probe.mesh) too
+    expect(src).toContain('if(hiddenFor(p.world,own,tmpHp))next.add(p.id)');
+    expect(src).toContain('if(hiddenFor(p.world,own,tmpHp))nextM.add(p.id)'); expect(src).toContain('const own=p.mesh?parts.find(q=>q.mesh===p.mesh&&q.on&&q.mesh.parent)||null:null;'); // a distance on a part (probe.mesh) too
     expect(src).toContain("key+='|P'+q.uid+'@'+q.mesh.matrixWorld.elements.map(e=>e.toFixed(4)).join(',')");
     expect(src.indexOf('  partPose(); // an earlier change')).toBeGreaterThan(-1);
-    expect(src.indexOf('  partPose(); // an earlier change')).toBeLessThan(src.indexOf('placeLabel(lb)}coverPins(occ);'));
-    expect(src.indexOf('placeLabel(lb)}coverPins(occ);')).toBeLessThan(src.indexOf('if(nowH-vpHiddenAt>=100)updateHidden(nowH);'));
+    expect(src.indexOf('  partPose(); // an earlier change')).toBeLessThan(src.indexOf('placeLabel(lb)}thinPins(occ);'));
+    expect(src.indexOf('placeLabel(lb)}thinPins(occ);')).toBeLessThan(src.indexOf('if(nowH-vpHiddenAt>=100)updateHidden(nowH);'));
   });
 });
 
@@ -500,7 +488,7 @@ describe('vr-view.js: overlapping cards follow the device setting labelOverlap (
   it('the anchor of a pinned label is judged with the CPU probes in 薄くする only (updateHidden), and the dot follows it', () => {
     expect(src).toContain('aps=gpuOcc?[]:[...pins.values()].filter(lb=>!lb.hid)');
     expect(src).toContain('for(const lb of aps){');
-    expect(src).toContain("if(hiddenFor('a'+lb.rid,lb.world,pq,lb.anchor))nextA.add(lb.rid);"); // the body's cards by the body's tissue, a card on a part that is out by that part's; both then by the other occluders (hiddenFor, 案A)
+    expect(src).toContain("if(hiddenFor(lb.world,pq,lb.anchor))nextA.add(lb.rid);"); // the body's cards by the body's tissue, a card on a part that is out by that part's; both then by the other occluders (hiddenFor, 案A)
     expect(src).toContain('}vpAnchorHidden=nextA');
     expect(src).toContain('d.hidden=!gpu&&vpAnchorHidden.has(lb.rid)');
     expect(src).toContain('syncAnchorDots(occ)');
