@@ -5,7 +5,7 @@
 //    (depthFunc GreaterDepth, GHOST_ALPHA = 0.15, the ghost of the point markers / distance labels: vr-point-markers.js ghostOf).
 //  - 「薄くする」 (no usable GPU depth): no depth test; the dots whose anchor the CPU judgement found behind tissue (vr-view.js updateHidden / pointIsHidden) go to the ghost (GHOST_ALPHA), the others to the body.
 // Pure part: dotSets (which dots are in which pass). The rest builds the meshes from the THREE it is given (vr-view.js passes its own).
-import { GHOST_ALPHA } from './vr-depth.js?v=20261126-build770';
+import { GHOST_ALPHA } from './vr-depth.js?v=20261127-build771';
 
 export const ANCHOR_DOT_DIAMETER_M = 0.005; // world metres: fixed, the model's scale does not change it
 const CAPACITY0 = 32;

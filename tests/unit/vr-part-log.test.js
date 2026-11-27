@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { createRing, createPartLog, formatRow, formatEvent, formatHeader, partLogFileName, PART_LOG_MAX_ROWS, PART_LOG_MAX_EVENTS, PART_LOG_KEY } from '../../docs/vr-part-log.js';
+import { createRing, createPartLog, formatRow, formatEvent, formatHeader, partLogFileName, PART_LOG_MAX_ROWS, PART_LOG_MAX_EVENTS, PART_LOG_KEEP_EVENTS, PART_LOG_KEY } from '../../docs/vr-part-log.js';
 
 describe('vr-part-log.js: the ring buffer', () => {
   it('keeps the newest entries, oldest first, and counts what was pushed', () => {
@@ -9,6 +9,15 @@ describe('vr-part-log.js: the ring buffer', () => {
     expect(r.toArray()).toEqual([3, 4, 5]);
     expect(r.length).toBe(3);
     expect(r.total).toBe(5);
+  });
+  it('keepHead pins the first entries; only the ones after them are dropped', () => {
+    const r = createRing(5, 2);
+    for (let i = 1; i <= 4; i++) r.push(i);
+    expect(r.toArray()).toEqual([1, 2, 3, 4]);
+    for (let i = 5; i <= 9; i++) r.push(i);
+    expect(r.toArray()).toEqual([1, 2, 7, 8, 9]);
+    expect(r.length).toBe(5); expect(r.total).toBe(9);
+    r.clear(); expect(r.toArray()).toEqual([]); r.push(1); expect(r.toArray()).toEqual([1]);
   });
   it('is empty at first and after clear', () => {
     const r = createRing(2);
@@ -58,17 +67,22 @@ describe('vr-part-log.js: the lines', () => {
 });
 
 describe('vr-part-log.js: the log', () => {
-  it('keeps at most 600 rows and 300 events', () => {
-    expect(PART_LOG_MAX_ROWS).toBe(600); expect(PART_LOG_MAX_EVENTS).toBe(300);
+  it('keeps at most 600 rows; events: a 770-sized session is whole, and past 5000 the first 300 stay', () => {
+    expect(PART_LOG_MAX_ROWS).toBe(600); expect(PART_LOG_MAX_EVENTS).toBe(5000); expect(PART_LOG_KEEP_EVENTS).toBe(300);
+    const small = createPartLog();
+    for (let i = 0; i < 640; i++) small.event(i, 'e', 'n=' + i);
+    expect(small.stats().eventsDropped).toBe(0);
+    expect(small.text()).not.toContain('dropped');
     const log = createPartLog();
     for (let i = 0; i < 700; i++) log.row(i * 1000, { fps: 72 });
-    for (let i = 0; i < 400; i++) log.event(i, 'e', 'n=' + i);
-    expect(log.stats()).toEqual({ rows: 600, events: 300, rowsDropped: 100, eventsDropped: 100 });
+    for (let i = 0; i < 5400; i++) log.event(i, 'e', 'n=' + i);
+    expect(log.stats()).toEqual({ rows: 600, events: 5000, rowsDropped: 100, eventsDropped: 400 });
     const t = log.text();
     expect(t.split('\n').filter(l => l.startsWith('S ')).length).toBe(600);
-    expect(t.split('\n').filter(l => l.startsWith('E ')).length).toBe(300);
+    expect(t.split('\n').filter(l => l.startsWith('E ')).length).toBe(5000);
     expect(t).toContain('S 699.0s'); expect(t).not.toContain('S 99.0s');
-    expect(t).toContain('n=399'); expect(t).not.toContain('n=99\n');
+    expect(t).toContain('n=5399'); expect(t).toContain('n=0\n'); expect(t).toContain('n=299\n'); expect(t).not.toContain('n=300\n'); expect(t).not.toContain('n=699\n'); expect(t).toContain('n=700\n');
+    expect(t).toContain('(400 dropped after the first 300)');
   });
   it('rows and events are merged by time; the header comes first', () => {
     const log = createPartLog();
@@ -121,7 +135,7 @@ describe('vr-view.js: the wiring of the part log (a WebXR file: checked on its s
   });
   it('the part block reports the row\'s part state and the events of the cut and of both bakes', () => {
     const snap = sec('partLogSnap=()=>{', '// the tables (called from refreshRegionLut');
-    expect(snap).toContain('q.pb&&q.pb.bound&&q.pb.bkey===q.bkey'); // the draw as partRender chooses it
+    expect(snap).toContain('nOk&&q.nmats&&pbBoundOf(q)'); // the draw as partRender chooses it (the held bake of the set before counts: (a))
     for (const s of ["'done'", "'making'", "'skip'", "'idle'", 'bodyBound', 'bodyReady', 'bytes']) expect(snap).toContain(s);
     expect(snap).not.toMatch(/readRenderTargetPixels/);
     for (const ev of ["'cutStart'", "'shown'", "'cutFail'", "'attach'", "'partApply'", "'partApplyEnd'", "'bakeSet'", "'bakeStart'", "'bakeSkip'", "'pbStart'", "'pbDone'", "'pbDrop'", "'pbSkip'", "'texExc'"]) expect(src, ev).toContain('partLogEv(' + ev);
@@ -133,7 +147,7 @@ describe('vr-view.js: the wiring of the part log (a WebXR file: checked on its s
     expect(f).toContain('nCompiling.has(id)');
     for (const d of ["'start k='", "'done ms='", "'fail "]) expect(f).toContain("partLogEv('nCompile'," + d);
     expect(sec('const pbBind=', 'const pbFrame=')).toContain('nEnsure(q);');
-    expect(sec('partRender=low=>{', 'partLogSnap=()=>{')).toContain('if(!nOk&&q.nmats&&q.pb?.bound)nEnsure(q);');
+    expect(sec('partRender=low=>{', 'partLogSnap=()=>{')).toContain('if(!nOk&&q.nmats&&pbBoundOf(q))nEnsure(q);');
     expect(src).toContain('partLog.setMeta({prep:{gpu:!!gpu,');
   });
   it('a rebuild that only changes the hidden state does not drop the parts\' own bakes (the body\'s bake keeps its own rule)', () => {
@@ -141,7 +155,7 @@ describe('vr-view.js: the wiring of the part log (a WebXR file: checked on its s
     expect(sec('const pbOk=', 'const pbStart=')).toContain('(t.rb?.hideOnly?t.rb.skipContent===comboMask:t.comboMask===comboMask)');
     const fr = sec('const pbFrame=', 'partBakeFrame=()=>');
     expect(fr).toContain('cm=t?.rb?.hideOnly?t.rb.skipContent:t?.comboMask');
-    expect(fr).toContain("cm!==b.mask?'mask-changed'");
+    expect(fr).toContain("cm!==x.mask?'mask-changed'");
     expect(fr).toContain('if(!ok||bakeApplying>0||t.rb?.busy)return;');
     expect(sec('const bodyBakeFrame=', 'const pbOk=')).not.toContain('hideOnly');
   });

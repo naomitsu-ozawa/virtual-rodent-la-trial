@@ -11,10 +11,14 @@ const localRun = async (lab, size, nn, opt) => partGroupFieldsOf(lab, size, nn, 
 const same = (a, b) => expect(Array.from(a)).toEqual(Array.from(b));
 const view = x => ({ ...x, data: Array.from(x.data) });
 // what the worker answers to one message, with the context a worker has (postMessage / onmessage, the typed arrays) and nothing else
-const viaWorkerText = async (fields, plainOnly = false) => {
-  const out = []; const ctx = { postMessage: m => out.push(m), console };
+const workerAnswers = async (data, ctx) => {
+  const out = []; ctx.postMessage = m => out.push(m);
   vm.runInNewContext(partSetWorkerSource(), ctx);
-  await ctx.onmessage({ data: { fields: fields.map(f => ({ bytes: f.data.slice().buffer, codes: false, lo: f.lo, size: f.size, mask: f.mask, kind: f.kind })), opt: PART_FIELD, plainOnly } });
+  await ctx.onmessage({ data });
+  return out;
+};
+const viaWorkerText = async (fields, plainOnly = false) => {
+  const out = await workerAnswers({ fields: fields.map(f => ({ bytes: f.data.slice().buffer, codes: false, lo: f.lo, size: f.size, mask: f.mask, kind: f.kind })), opt: PART_FIELD, plainOnly }, { console });
   expect(out.length).toBe(1); expect(out[0].message).toBeUndefined(); expect(out[0].ok).toBe(true);
   return out[0].set;
 };
@@ -29,7 +33,7 @@ describe('partFieldSet on a worker (runPartSet)', () => {
       expect(got.parts.length).toBe(want.parts.length);
       got.parts.forEach((p, i) => { same(slot(p, fields), want.parts[i].data); expect(p.C).toBe(want.parts[i].C); expect(p.a).toEqual(want.parts[i].a); expect(p.b).toEqual(want.parts[i].b); expect(p.same != null).toBe(want.parts[i].data === fields[i].data); });
     }
-    expect(await (async () => { const out = []; const ctx = { postMessage: m => out.push(m) }; vm.runInNewContext(partSetWorkerSource(), ctx); await ctx.onmessage({ data: { fields: [], opt: PART_FIELD } }); return out[0]; })()).toEqual({ ok: true, set: null });
+    expect((await workerAnswers({ fields: [], opt: PART_FIELD }, {}))[0]).toEqual({ ok: true, set: null });
   }, 60000);
   it('plainOnly: every group unsmoothed and counted, as a failing group run is', async () => {
     const got = await viaWorkerText([A, B], true), want = await partFieldSet([A, B], async () => { throw new Error('x'); });
@@ -321,4 +325,24 @@ describe('n731 perf: one smoothing per seam, the joint field once, the same byte
       }
     }
   }, 300000);
+});
+
+// (c): which parts a new part reaches (set.touch): the new part and the parts that touch it, not a part beside them that does not
+describe('the parts a new part touches (set.touch)', () => {
+  const A = blob((x, y, z) => x < 12 && z < 12), B = blob((x, y, z) => x >= 12 && z < 12), lone = { ...blob((x, y, z) => z >= 14 && y < 6), lo: [60, 0, 0] };
+  it('this thread: the first set has none (every part is new); a part added next to one part touches that one and itself, not the part far away; a part that left leaves none', async () => {
+    const r = createPartSetRunner(PART_FIELD, { cacheBytes: 50e6 });
+    const s1 = await r.run([{ ...A, id: 1 }, { ...lone, id: 3 }]); expect(s1.touch).toBe(null);
+    const s2 = await r.run([{ ...A, id: 1 }, { ...lone, id: 3 }, { ...B, id: 2 }]); expect(s2.touch).toEqual([true, false, true]);
+    const s3 = await r.run([{ ...A, id: 1 }, { ...B, id: 2 }]); expect(s3.touch).toBe(null); // nothing new
+    r.dispose();
+  }, 120000);
+  it('the worker text answers it too', async () => {
+    const out = []; const ctx = { postMessage: m => out.push(m), console };
+    vm.runInNewContext(partSetWorkerSource(), ctx);
+    const ask = async fields => { out.length = 0; await ctx.onmessage({ data: { fields: fields.map(f => ({ bytes: f.data.slice().buffer, codes: false, lo: f.lo, size: f.size, mask: f.mask, kind: f.kind, id: f.id })), opt: PART_FIELD, plainOnly: false } }); expect(out[0].ok).toBe(true); return out[0].set; };
+    await ask([{ ...A, id: 1 }, { ...lone, id: 3 }]);
+    const s = await ask([{ ...A, id: 1 }, { ...lone, id: 3 }, { ...B, id: 2 }]);
+    expect(s.touch).toEqual([true, false, true]);
+  }, 120000);
 });
