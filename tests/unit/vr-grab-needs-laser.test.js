@@ -75,7 +75,7 @@ describe('trigger: a section is taken only with the laser on it (pressDragSectio
   });
   it('vr-view.js: the press asks pressDragSection once; the glow uses the same res.kind; the old empty-space pick is gone; a started drag is not re-picked', () => {
     expect(src).not.toContain('sectionForEmpty');
-    expect(src).toContain("const pd=pressDragSection(res,{recordOk:!surfaceActive()&&!labelMode(),selected:section.selected});");
+    expect(src).toContain("const pd=pressDragSection(res,{recordOk:!surfaceActive()&&!labelMode()&&!res.ref?.part,selected:section.selected});");
     expect(src.match(/pressDragSection\(/g)).toHaveLength(1); // the call (the import is `pressDragSection,`)
     expect(src).toContain('pl=glowPl(rr)||'); // the white glow: kind 'section', and a record on the selected plane
     const up = sliceBetween('const startDrag=(c,pr,hp)=>{', 'const updatePress=');

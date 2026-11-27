@@ -6,10 +6,10 @@
 //   - which uniforms the part owns (the rest is the body's by reference: PART_OWN), the target a grip takes (partTargetOf), the part's own box (partBoundsOf), the laser's rule on the CPU (partKeepVoxelOf),
 //   - several parts at once: every part has its own box, uniforms and pose; the tables are patched for all of them (patchRegionLutMany / patchChildLutMany); a part's proxy box is its own bounding box (partProxyBox) and its laser march
 //     runs only inside it (partRayRange), the texts. The way in is the long-press ring (region-ring.js 切り出す / 戻す); the grip stays the body's grab and takes a part only where the laser meets one.
-import { regionLutAlpha } from './region-visibility.js?v=20261127-build771';
-import { boxFromRange } from './vr-content-box.js?v=20261127-build771';
-import { euclideanDistanceBytes, morph3 } from './distance-field.js?v=20261127-build771';
-import { hiddenClassBytes } from './vr-hide-field.js?v=20261127-build771';
+import { regionLutAlpha } from './region-visibility.js?v=20261127-build772';
+import { boxFromRange } from './vr-content-box.js?v=20261127-build772';
+import { euclideanDistanceBytes, morph3 } from './distance-field.js?v=20261127-build772';
+import { hiddenClassBytes } from './vr-hide-field.js?v=20261127-build772';
 
 // ---- the shader block. Spliced into the volume fragment shader once (vr-view.js ${PART_GLSL}, after the hidden-shape block A and BEFORE the an earlier change hide helpers hideAnyOn / hideAt / hideGrad, so that they read the re-pointed functions too), so that no existing line of the shader has to change. Without VRL_PART (every program but the
 // part's) the preprocessor drops all of it: the body's programs are the ones they were. With VRL_PART the two functions the marching loops ask "is this voxel a hidden shape?" (regionHiddenAt / childHiddenAt) are
@@ -218,6 +218,23 @@ export function partBoundsOf(ids, dims, id, he, pad = 2) {
   const lo = [Math.max(0, x0 - pad) / w, Math.max(0, y0 - pad) / h, Math.max(0, z0 - pad) / d], hi = [Math.min(w, x1 + 1 + pad) / w, Math.min(h, y1 + 1 + pad) / h, Math.min(d, z1 + 1 + pad) / d];
   const b = boxFromRange(he, lo, hi, { c: [0, 0, 0], h: [0, 0, 0] });
   return { c: b.c, h: b.h, count, full: !!b.full, vox: { lo: [x0, y0, z0], hi: [x1, y1, z1] } };
+}
+// every id's box in ONE scan of the grid (すべて切り出す: partBoundsOf for each of up to 255 ids would scan the whole grid for each): Map id -> the box partBoundsOf(ids, dims, id, he, pad) gives (the same fields and values)
+export function partBoundsAllOf(ids, dims, he, pad = 2) {
+  const out = new Map();
+  if (!ids || !dims || !he) return out;
+  const [w, h, d] = dims, x0 = new Int32Array(256).fill(w), x1 = new Int32Array(256).fill(-1), y0 = new Int32Array(256).fill(h), y1 = new Int32Array(256).fill(-1), z0 = new Int32Array(256).fill(d), z1 = new Int32Array(256).fill(-1), n = new Float64Array(256);
+  for (let z = 0; z < d; z++) for (let y = 0, k = w * h * z; y < h; y++, k += w) for (let x = 0; x < w; x++) {
+    const v = ids[k + x]; if (!v) continue;
+    n[v]++; if (x < x0[v]) x0[v] = x; if (x > x1[v]) x1[v] = x; if (y < y0[v]) y0[v] = y; if (y > y1[v]) y1[v] = y; if (z < z0[v]) z0[v] = z; if (z > z1[v]) z1[v] = z;
+  }
+  for (let v = 1; v < 256; v++) {
+    if (!n[v]) continue;
+    const lo = [Math.max(0, x0[v] - pad) / w, Math.max(0, y0[v] - pad) / h, Math.max(0, z0[v] - pad) / d], hi = [Math.min(w, x1[v] + 1 + pad) / w, Math.min(h, y1[v] + 1 + pad) / h, Math.min(d, z1[v] + 1 + pad) / d];
+    const b = boxFromRange(he, lo, hi, { c: [0, 0, 0], h: [0, 0, 0] });
+    out.set(v, { c: b.c, h: b.h, count: n[v], full: !!b.full, vox: { lo: [x0[v], y0[v], z0[v]], hi: [x1[v], y1[v], z1[v]] } });
+  }
+  return out;
 }
 
 // the box a part's proxy geometry (the box the GPU rasterises: its rays, its composite) is drawn on: the content box grown by `pad` voxels of the data grid on every side (the composite's bilinear upscale reaches a texel past the silhouette), clamped to
@@ -1426,13 +1443,17 @@ export function markCutChildLut(a, indices, stride = 1024) { let n = 0; for (con
 export const PART_TEXT = Object.freeze({
   ja: { restore: 'すべて元に戻す', pairBusy: '並べて表示中は切り出せません', preparing: '切り出しを準備中…', done: '切り出しました。握って動かせます', back: '元に戻しました', failed: '切り出せませんでした', busy: '切り出し中です。少し待ってください',
     cutTitle: '切り出し中', cutPrep: '準備中', cutCalc: '計算中', cutFinish: '仕上げ中', cutSecs: '経過 {s} 秒',
-    ringDetach: '切り出す', ringRegionDetach: '領域の切り出す', ringChildDetach: '子の切り出す', ringBack: '戻す' },
+    cutAll: 'すべて切り出す', ringDetach: '切り出す', ringRegionDetach: '領域の切り出す', ringChildDetach: '子の切り出す', ringBack: '戻す' },
   en: { restore: 'Put all back', pairBusy: 'Not while a pair is shown', preparing: 'Preparing the cut-out...', done: 'Cut out. Grab it to move it', back: 'Put back', failed: 'Could not cut it out', busy: 'Cutting out, please wait',
     cutTitle: 'Cutting out', cutPrep: 'Preparing', cutCalc: 'Computing', cutFinish: 'Finishing', cutSecs: '{s} s elapsed',
-    ringDetach: 'Cut out', ringRegionDetach: 'Region cut out', ringChildDetach: 'Child cut out', ringBack: 'Put back' },
+    cutAll: 'Cut out all', ringDetach: 'Cut out', ringRegionDetach: 'Region cut out', ringChildDetach: 'Child cut out', ringBack: 'Put back' },
 });
 
 // ---- where the button sits (menu canvas px, the header row y 18..90: the title 'Virtual Rodent Lab' ends near x 400, 「閉じる」 starts at 780): between them, on every page of the menu
-export const PART_BTN_X = 412, PART_RESTORE_W = 360; // 412 + 360 = 772
+export const PART_BTN_X = 412, PART_RESTORE_W = 176, PART_ALL_X = 596, PART_ALL_W = 176; // すべて元に戻す, then すべて切り出す: 412 + 176 + 8 + 176 = 772
 // a part that was just cut out comes this far toward the viewer (world metres) and glides there in PART_ANIM_MS
 export const PART_OUT_M = 0.05, PART_ANIM_MS = 300;
+// すべて切り出す: every part leaves along the line from the body's centre to its own centre (where it is in the body), to PART_OUT_M + PART_SPREAD_K * (its distance from the body's centre) + its own half-diagonal (world metres):
+// the distance term spreads neighbours apart in proportion (their gap grows by 1 + K), the half-diagonal term clears a part near the centre of its own size. A part at the centre has no direction: it goes toward the viewer, as a single cut-out does.
+export const PART_SPREAD_K = 0.5;
+export const partSpreadDist = (r, halfDiag) => PART_OUT_M + PART_SPREAD_K * Math.max(0, r) + Math.max(0, halfDiag);

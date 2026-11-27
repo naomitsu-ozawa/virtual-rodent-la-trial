@@ -58,7 +58,7 @@ describe('vr-view.js wiring of stage 3 (static)', () => {
     const rp = src.slice(src.indexOf('const recordPoint=(c,hit)=>{'), src.indexOf('const selectPoint'));
     expect(rp).toContain('...(X?{store:X.store}:{})');
     expect(src).toContain('c.userData.volHit=vh;c.userData.secHit=sh;c.userData.pairHit=vp2;'); // the HU line / grips keep reading the primary's hits
-    expect(src).toContain('const vx=vp2&&(!vh||vp2.distance<vh.distance)?vp2:vh,sx=sp2&&(!sh||sp2.distance<sh.distance)?sp2:sh;');
+    expect(src).toContain('const vx=pth||(vp2&&(!vh||vp2.distance<vh.distance)?vp2:vh),sx=sp2&&(!sh||sp2.distance<sh.distance)?sp2:sh;');
     expect(src).toContain('pulse(c,0.15,30);flashMsg(L.ptDistOtherPair,3000);return}'); // a distance is between two points of one volume (never between the two datasets of a pair: its own refusal text, a weak pulse)
     expect(src).toContain('msCancel();pstore()?.clear();'); // 最初の状態に戻す
   });

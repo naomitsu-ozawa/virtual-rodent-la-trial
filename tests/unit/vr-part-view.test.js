@@ -339,15 +339,15 @@ describe('すべて元に戻す: one button in the header, no list row gives up 
   });
   it('it sits between the title (ends near x 400) and 「閉じる」 (x 780) in the header row (y 18, 72 px like 閉じる), over nothing of the board; the 取り出す button is gone (the ring does it)', () => {
     expect(PART_BTN_X).toBeGreaterThanOrEqual(400);
-    expect(PART_BTN_X + PART_RESTORE_W).toBeLessThanOrEqual(780);
+    expect(PART_BTN_X + PART_RESTORE_W).toBeLessThanOrEqual(PV.PART_ALL_X); expect(PV.PART_ALL_X + PV.PART_ALL_W).toBeLessThanOrEqual(780); // すべて元に戻す, then すべて切り出す: no overlap
     for (const [nr, nk] of [[4, 0], [12, 5]]) for (const o of board(nr, nk)) if (o.type !== 'label') expect(o.y, o.id).toBeGreaterThanOrEqual(90);
     expect(src).toMatch(/btn\(PART_BTN_X,18,PART_RESTORE_W,dm\.text\.restore,false,\(\)=>partRestorePress\(\)/);
     expect(src).not.toContain('partArmPress'); expect(src).not.toContain('PART_ARM_W');
   });
   it('drawn on every page of both menus, except where 「かんたん」 sits in the same place (the full menu of 体験会モード); only with results / child segments (or a part out); disabled while nothing is out', () => {
-    expect(src).toContain('if(dm&&!(evMenu&&ui.tab!==10))btn(PART_BTN_X');
+    expect(src).toContain('if(dm&&!(evMenu&&ui.tab!==10)){btn(PART_BTN_X');
     expect(src).toContain('disabled:!dm.active||dm.busy');
-    expect(src).toContain('partMenuInfo=()=>regionList.length||childList.length||parts.length?{active:parts.length>0,busy:partBusy,text:{restore:PT.restore}}:null;');
+    expect(src).toContain('partMenuInfo=()=>regionList.length||childList.length||parts.length?{active:parts.length>0,busy:partBusy,canAll:partAllTargets().length>0,text:{restore:PT.restore,all:PT.cutAll}}:null;');
     const hdr = src.slice(src.indexOf("btn(780,18,200,L.close,false,()=>setMenuOpen(false),{size:28});"), src.indexOf('// tabs\n'));
     expect(hdr).toContain("btn(560,18,200,tr('evSimple')");
   });
@@ -427,8 +427,89 @@ describe('several parts at once', () => {
     expect(src).toContain('const u=c.userData,ph=partHitOf(c,true);if(!ph)return false;');
     expect(src).toContain('if(vh&&vh.distance<=ph.distance)return false;');
     expect(src).toContain('partHold(ph.part,c);pulse(c);return true;');
-    expect(src).toContain('if(hi&&(!best||hi.t<best.distance))best={part:q,distance:hi.t};');
+    expect(src).toContain('if(hi&&(!best||hi.t<best.distance)){');
     expect(src).toContain('partGripEnd=c=>{let r=false;for(const q of parts)if(q.held?.c===c){q.held=null;');
+  });
+  it('the laser stops on a part (also a held one, the holding hand\'s too): its hit reads like the body\'s (target id / childKey, key, local, voxel) and the nearer of it and the body / partner hit ends the laser', () => {
+    expect(src).toContain('partHitOf=(c,skipHeld=false)=>{');
+    expect(src).toContain("best={part:q,distance:hi.t,key:gpuSegmentOrder()[si]||'',id:isR?(regionCountedVr(tg.rid)?tg.id:0):idC,childKey:isR?'':tg.key,voxel,local:new THREE.Vector3(");
+    expect(src).toContain('if(parts.length){const ph=partHitOf(c);if(ph){const vb=surfaceActive()||labelMode()||anyOk?vh:volumeHit(c),'); // the loop meets held parts too; only the grip's start (partGripStart: partHitOf(c,true)) leaves a held part out
+    expect(src).toContain('if(!v0||ph.distance<v0.distance)pth=ph}}');
+    expect(src).toContain('c.userData.partHit=pth;c.userData.volHit=vh;');
+    expect(src).toContain('const vx=pth||(vp2&&(!vh||vp2.distance<vh.distance)?vp2:vh),sx=');
+  });
+  it('a child part\'s hit carries the result at the hit voxel, found as volumeHitRay finds it (R, the hide index G where R is hidden, a hidden shape not picked)', () => {
+    const ph = src.slice(src.indexOf('   partHitOf=(c,skipHeld=false)=>{'), src.indexOf('   partGripStart=c=>{'));
+    expect(ph).toContain('idR=vp.rg?vp.rg[2*hk]:0,idG=vp.rg?vp.rg[2*hk+1]:0,id0=idR&&regionHiddenVr(regionList[idR-1]?.rid)&&idG!==idR?idG:idR,idC=id0&&!regionCountedVr(regionList[id0-1]?.rid)?0:id0;');
+    expect(ph).toContain('const sk=partSkipOf(q);');
+  });
+  it('断面 mode too: the part hit carries the surface voxel, and a laser on a part nearer than the selected plane records on the part (the surface rule), not on the plane', () => {
+    const ph = src.slice(src.indexOf('   partHitOf=(c,skipHeld=false)=>{'), src.indexOf('   partGripStart=c=>{'));
+    expect(ph).toContain('voxel=vrHalfExt&&vrDims?surfaceVoxelFromHit(hi,o,d,');
+    expect(ph).not.toContain('surfaceActive()?surfaceVoxelFromHit');
+    expect(src).toContain("const partRec=!!pth&&vx===pth&&!!pth.voxel&&vrPointMode!=='surface'&&!analysisOn()&&!(sx&&sx.distance<=pth.distance+occEps);");
+    expect(src).toContain('mode:partRec?\'surface\':vrPointMode,');
+    expect(src).toContain('curSurf=cur&&(surfaceActive()||!!ref.part),curSec=cur&&!curSurf;');
+    expect(src).toContain('const placement=surfaceActive()||partRec?(vx&&vx.voxel?vx:null):'); // a point being moved lands on a part in 断面 mode too
+    expect(src).toContain('&&!res.ref?.part,selected:section.selected}'); // a record on a part never starts a drag of the selected section
+  });
+  it('a point on a part: the part\'s voxel is recorded as the body\'s (the part\'s local space is the body\'s grid), the cursor sits on the part, and the marker follows the part (the part that owns the voxel, a child before a result)', () => {
+    expect(src).toContain('vx&&vx.voxel?vx:null');
+    expect(src).toContain('cur=!busy&&rec&&!!ref?.voxel,');
+    expect(src).toContain('if(!hit?.voxel||!(X?X.fp:vrFp))return null;');
+    expect(src).not.toContain('hit.part||!(X?X.fp:vrFp)');
+    expect(src).toContain('m=X?X.mesh:sf.part?.mesh.parent?sf.part.mesh:mesh,');
+    expect(src).toContain('localToWorld:v=>{if(!pmCentre)pmCentre=v;if(v===pmCentre)pmPart=partOfLocal(v);return (pmPart?pmPart.mesh:mesh).localToWorld(v)}};'); // the foot of the perpendicular goes through the mesh chosen for its centre
+    expect(src).toContain('mesh:mesh?.parent?parts.length?partMarkMesh:mesh:null,head,hidden:vpHidden,');
+    const po = src.slice(src.indexOf(' const partOfLocal=l=>{'), src.indexOf(' // the part that is out for a card\'s target'));
+    expect(po.indexOf("target.kind==='child'")).toBeGreaterThan(-1);
+    expect(po.indexOf("target.kind==='child'")).toBeLessThan(po.indexOf("target.kind==='region'"));
+    expect(src).toContain('const partMeshOfLocal=l=>partOfLocal(l)?.mesh||null;'); // the distance lines / labels follow the part (vr-measure.js partMeshOf)
+    expect(src).toContain('mesh:mesh?.parent?mesh:null,partMeshOf:mesh?.parent&&parts.length?partMeshOfLocal:null,head,');
+    expect(src).toContain('vpMarkers.centres().filter(partOffPoint)'); // the CPU hidden judgement is the body's tissue: not made for a point on a part
+    expect(src).toContain('ids,idims:dims.slice(),'); // the part's own index plane: which voxel is the part\'s
+  });
+  it('a card of a part taken out stands in the part\'s space (it moves with the part); without the part it is the body\'s again', () => {
+    expect(src).toContain('const lbMesh=lb=>lb.pmesh&&lb.pmesh.parent?lb.pmesh:mesh;');
+    expect(src).toContain("pinAnchor(lb,reg);pinFrame(lb,'region',reg.id);");
+    expect(src).toContain("pinAnchor(lb,reg);pinFrame(lb,'child',reg.key);");
+    expect(src).toContain('const pinFrame=(lb,kind,k)=>{const q=partOfLocal(lb.anchor)||partOfTarget(kind,k);lb.pq=q;lb.pmesh=q?q.mesh:null};');
+    expect(src).toContain("const partOfTarget=(kind,k)=>{for(const q of parts){const t=q.target;if(q.on&&q.mesh.parent&&t.kind===kind&&(kind==='child'?t.key===k:t.rid===k))return q}return null};");
+    const pl = src.slice(src.indexOf(' const placeLabel=lb=>{'), src.indexOf(' const hideLabel='));
+    expect(pl).toContain('const fm=lbMesh(lb);');
+    expect(pl).not.toMatch(/[^f]mesh\.localToWorld/); // every world conversion of a pinned card goes through its own frame (fm)
+    const dp = src.slice(src.indexOf(' const dragPin=(rid,P)=>{'), src.indexOf(' const resetPin='));
+    expect(dp).toContain('fm.worldToLocal(tmpPl)');
+  });
+  it('a card of a part is judged by the part\'s OWN shape (partSkipOf: partKeepVoxelOf / q.skip, in the part\'s local space): embedded, covered, pulled into the tissue, anchor hidden', () => {
+    expect(src).toContain('const partSkipOf=q=>{const kids=q.target.kind===\'region\'?parts.filter(k=>k!==q&&k.target.kind===\'child\'&&k.skip):[];');
+    const pc = src.slice(src.indexOf(' const partCtxOf=q=>{'), src.indexOf(' // two judgements'));
+    expect(pc).toContain('skip=partSkipOf(q)');
+    expect(pc).toContain('classifiedAt(p,he,dm,vp.cls,chs,skip)');
+    expect(pc).not.toContain('cutPlanes'); // the part\'s march has no section planes
+    // embedLabel: the card's frame and the part's context
+    expect(src).toContain('if(!occ||held||lb.hid||!vrHalfExt||!vrDims||!mesh){lb.ref=null;');
+    expect(src).toContain('const fm=lbMesh(lb),pq=fm!==mesh?lb.pq:null;');
+    expect(src).toContain('if(lb.fq!==pq){lb.fq=pq;lb.ref=null;lb.emb=null}'); // a judgement of another frame (the body\'s before the part came out, or the reverse) is not kept
+    expect(src).toContain('fm===mesh?embedCtx():pq?partCtxOf(pq):null,lineOf);');
+    expect(src).toContain("lineM=lbMesh(lb);"); // the leader's length is measured in the card's own frame
+    expect(src).toContain('applyMatrix4((lineM||mesh).matrixWorld)');
+    // thinning: covered by the part's tissue, head and card in the part's space
+    expect(src).toContain('px0=fm===mesh?cx:occ&&lb.pq?partCtxOf(lb.pq):null;');
+    expect(src).toContain('fm.worldToLocal(tmpTc);if(rayCovered(hd,tmpTc,px0.isInside,px0.halfExt,px0.voxel))');
+    // pulled into the tissue; the parts that are out are an input of the judgement
+    expect(src).toContain('pinPulledIntoTissue(pp,fm===mesh?embedCtx():lb.pq?partCtxOf(lb.pq):null)');
+    expect(src).toContain("+'|p'+parts.map(q=>q.on&&q.mesh.parent?q.uid:0).join(',')");
+    // the anchor's dot: behind the part's own tissue, from the eye in the part's space, no planes
+    expect(src).toContain('filter(lb=>!lb.hid);');
+    expect(src).toContain('pointIsHidden(lb.anchor,tmpHp,{...opt,planes:[],count:0,cut:0,skip:partSkipOf(pq)})');
+    expect(src).not.toContain('filter(lb=>!lb.hid&&!lb.pmesh)');
+  });
+  it('the hover cards and the pin tap read the part\'s hit (the nearest of it, the partner\'s and the body\'s)', () => {
+    expect(src).toContain('hit=on?(u.partHit||ph||u.volHit):null;');
+    expect(src).toContain('ph=on&&!u.partHit&&u.pairHit&&');
+    const tp = src.slice(src.indexOf(' const togglePin=(c,hit)=>{'), src.indexOf(' const hovR='));
+    expect(tp).toContain('voxelFromLocalVr(hit.local,vrHalfExt,vrDims)'); // the part mesh\'s local space is the body\'s object space: the same voxel
   });
   it('a part that was cut out starts where the target is, comes PART_OUT_M toward the viewer and glides there; a grip stops the glide', () => {
     expect(PART_OUT_M).toBeGreaterThan(0); expect(PART_OUT_M).toBeLessThanOrEqual(0.1); expect(PART_ANIM_MS).toBeGreaterThan(0);
@@ -446,7 +527,7 @@ describe('several parts at once', () => {
     expect(src).toContain('const all=parts.splice(0);for(const q of all)partFree(q);');
     const one = src.slice(src.indexOf('const partRestoreOne=q=>{'), src.indexOf('   partRestoreAll=()=>{'));
     expect(one).toContain('refreshRegionLut();refreshChildLut()');
-    const all = src.slice(src.indexOf('   partRestoreAll=()=>{'), src.indexOf('   partDispose=()=>{'));
+    const all = src.slice(src.indexOf('   partRestoreAll=()=>{'), src.indexOf('   // an earlier change: すべて切り出す'));
     expect(all).toContain('refreshRegionLut();refreshChildLut()');
   });
 });
@@ -753,5 +834,42 @@ describe('n734: the cut baked into the data the ordinary program reads', () => {
     const c = new Float32Array(1024 * 3); c[1 * 4 + 3] = 3; c[1024 + 1 * 4 + 3] = 3; c[1024 + 2 * 4 + 3] = 0; const co = new Float32Array(c.length);
     expect(bakeChildLut(c, co, [0])).toBe(1); expect(co[1 * 4 + 3]).toBe(0); expect(co[1024 + 1 * 4 + 3]).toBe(0); expect(c[1024 + 4 + 3]).toBe(3);
     expect(bakeChildAnyHidden(c, 2)).toBe(1); expect(bakeChildAnyHidden(co, 2)).toBe(0);
+  });
+
+  describe('すべて切り出す (every target at once)', () => {
+    it('partBoundsAllOf gives, in one scan, the box partBoundsOf gives for each id', () => {
+      const dims = [9, 7, 6], ids = new Uint8Array(9 * 7 * 6), he = [2, 1.5, 1];
+      for (let i = 0; i < ids.length; i++) ids[i] = (i * 7 + (i >> 3)) % 11 < 3 ? ((i % 5) + 1) : 0;
+      const all = PV.partBoundsAllOf(ids, dims, he, 2);
+      expect(all.size).toBeGreaterThan(1);
+      for (let id = 1; id < 256; id++) { const one = partBoundsOf(ids, dims, id, he, 2); if (!one) { expect(all.has(id)).toBe(false); continue; } expect(all.get(id)).toEqual(one); }
+      expect(PV.partBoundsAllOf(null, dims, he).size).toBe(0);
+    });
+    it('the spread distance grows with the distance from the body\'s centre and with the part\'s own size, and is never less than PART_OUT_M', () => {
+      expect(PV.partSpreadDist(0, 0)).toBe(PART_OUT_M);
+      expect(PV.partSpreadDist(0.2, 0)).toBeGreaterThan(PV.partSpreadDist(0.1, 0));
+      expect(PV.partSpreadDist(0.1, 0.05)).toBeGreaterThan(PV.partSpreadDist(0.1, 0));
+      expect(PV.partSpreadDist(0.1, 0)).toBeCloseTo(PART_OUT_M + PV.PART_SPREAD_K * 0.1, 9);
+    });
+    it('the texts: 切り出す ones exist in both languages; the menu has the button beside すべて元に戻す, disabled while busy or when nothing is left to cut', () => {
+      expect(PART_TEXT.ja.cutAll).toBe('すべて切り出す'); expect(PART_TEXT.en.cutAll).toBeTruthy();
+      expect(src).toContain('btn(PART_ALL_X,18,PART_ALL_W,dm.text.all,false,()=>partAllPress(),{size:24,disabled:!dm.canAll||dm.busy})');
+      expect(src).toContain('partAllPress=()=>{void partDetachAll()};');
+    });
+    it('partDetachAll: the same targets as the ring (list positions < 255, regions and children), no upper number, ONE set of fields for all of them (partApply once), shown together, the log has its start and its end', () => {
+      const d = src.slice(src.indexOf('   const partAllTargets='), src.indexOf('   partDispose=()=>{'));
+      expect(d).toContain("if(i<255)t.push({kind:'region'"); expect(d).toContain("if(j<255)t.push({kind:'child'");
+      expect(d).toContain("!parts.some(q=>partSame(q.target,tg))");
+      expect(d.match(/partApply\(/g)).toHaveLength(1);
+      expect(d.match(/partFieldCodesAsync\(/g)).toHaveLength(1);
+      expect(d).toContain('partBoundsAllOf(idsOf.region');
+      expect(d).not.toMatch(/MAX_|\.slice\(0,\s*\d|length>\d+\)/);
+      expect(d).toContain('partSpreadDist(rr,');
+      expect(d.indexOf("partLogEv('cutStart','partDetachAll n='")).toBeGreaterThan(-1);
+      expect(d.indexOf("partLogEv('cutStart'")).toBeLessThan(d.indexOf("partLogEv('shownAll'"));
+      expect(d).toContain("partLogEv('cutAllDone'");
+      expect(d).toContain('if(pair?.on||pairLoading)'); expect(d).toContain('if(partBusy)');
+      expect(d).toContain('partBusy=false;partCutEnd(cutInfo)');
+    });
   });
 });

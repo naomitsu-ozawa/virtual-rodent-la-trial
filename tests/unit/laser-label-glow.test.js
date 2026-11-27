@@ -63,7 +63,7 @@ describe('vr-view.js wiring', () => {
   it('a glowing card is always shown: the depth / thin / cover rules treat it like a lit one (on top, kept, never covered, never thinned); a hidden RESULT (lb.hid) still has no card', () => {
     expect(vr).toContain('pinOcclusion(lb,lb.lit||lb.glow)');
     expect(vr).toContain('if(lb.lit||lb.glow)lb.thin=false;');
-    expect(vr).toContain('if(cx&&mesh&&!lb.lit&&!lb.glow&&!lb.trans)');
+    expect(vr).toContain('if(px0&&!lb.lit&&!lb.glow&&!lb.trans)');
     expect(vr).toContain('it.lit=lb.lit||lb.glow;');
     expect(vr).toContain('const k=labelScale()*(lb.lit||lb.glow?LABEL_LIT_SCALE:1),p=lb.m.position');
     expect(vr).toContain('if(lb.hid){lb.m.visible=false;lb.line.visible=false;return}');

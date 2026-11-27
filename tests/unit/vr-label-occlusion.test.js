@@ -257,12 +257,12 @@ describe('vr-view.js wiring (source)', () => {
     expect(src).toContain('const due=pinDue(lb,embGen,holder.scale.x,K,pinSettled);'); // the place of the initial display: per label / input (as 708); the enlarged one: once each time the scale has stopped
     expect(src).toContain('if(occ&&pins.size){const now=performance.now();embedInputs(now);embBudget=EMB_PER_FRAME;pinSettled=pinSettle.step(holder.scale.x,now)}'); expect(src).toContain('if(due&&embBudget>0){embBudget--;'); // a queue: a few stale cards per frame
     expect(src).toContain('if(now-embAt<EMB_CHECK_MS)return;'); // the signature strings only every 100 ms
-    expect(src).toContain('pinJudge(lb,due,a,lb.off?labelLocal(a,lb.off,vrVoxelStep(vrHalfExt,vrDims)):a,K,holder.scale.x,embGen,embedCtx(),lineOf);'); expect(src).not.toContain('embUp'); // the shortest of 26 directions (no up rule), so a turned volume needs no re-judging
-    expect(src).toContain('rayCovered(tmpTh,tmpTc,cx.isInside,cx.halfExt,cx.voxel)'); // covered cards are out of the thinning
+    expect(src).toContain('pinJudge(lb,due,a,lb.off?labelLocal(a,lb.off,vrVoxelStep(vrHalfExt,vrDims)):a,K,holder.scale.x,embGen,fm===mesh?embedCtx():pq?partCtxOf(pq):null,lineOf);'); expect(src).not.toContain('embUp'); // the shortest of 26 directions (no up rule), so a turned volume needs no re-judging
+    expect(src).toContain('rayCovered(hd,tmpTc,px0.isInside,px0.halfExt,px0.voxel)'); // covered cards are out of the thinning
     // the place drawn goes through pinPlaceLimited every frame; the line is placeLabel's (pinLine with the head, the card's size and the volume's world matrix of the frame); no caller asks pushOut to move a surface voxel
-    expect(src).toContain('return pinPlaceLimited(a,v0,K,em?em.v:null,lineOf,tmpPp);'); expect(src).toContain('const lineOf=p=>pinLine(lineA,tmpLq.set(p.x,p.y,p.z).applyMatrix4(mesh.matrixWorld),head,lineG);');
+    expect(src).toContain('return pinPlaceLimited(a,v0,K,em?em.v:null,lineOf,tmpPp);'); expect(src).toContain('const lineOf=p=>pinLine(lineA,tmpLq.set(p.x,p.y,p.z).applyMatrix4((lineM||mesh).matrixWorld),head,lineG);');
     expect(src).toContain('lineG.off=!!lb.off;lineG.hw=cardHalfW(LABEL_W,lb.wr,k);lineG.hh=cardHalfH(LABEL_H,lb.hr,k);lineG.rise=labelRise(lb)-cardHalfH(LABEL_H,lb.hr,k)'); expect(src).toContain('addScaledVector(tmpLb,0.012);lb.m.position.y+=labelRise(lb);'); // the same numbers as placeLabel draws with
-    expect(src).toContain('const pp=pinPlace(lb);if(pp&&!lb.trans&&pinPulledIntoTissue(pp,embedCtx()))lb.trans=true;'); // a pushed place pulled back into the tissue by the limit: translucent for that frame
+    expect(src).toContain('const pp=pinPlace(lb);if(pp&&!lb.trans&&pinPulledIntoTissue(pp,fm===mesh?embedCtx():lb.pq?partCtxOf(lb.pq):null))lb.trans=true;'); // a pushed place pulled back into the tissue by the limit: translucent for that frame
     expect(src).not.toContain('freeVoxels'); expect(src).not.toContain('pushOut('); expect(src).not.toContain('cappedPlace');
   });
   it('an embedded (translucent) card stays pickable; a pushed card sits at its pushed place (within the leader cap, pinPlace) and the leader still starts at the anchor; thinned cards are hidden, lit never', () => {
@@ -441,7 +441,9 @@ describe('vr-view.js: overlapping cards follow the device setting labelOverlap (
   });
   it('the anchor of a pinned label is judged with the CPU probes in 薄くする only (updateHidden), and the dot follows it', () => {
     expect(src).toContain('aps=gpuOcc?[]:[...pins.values()].filter(lb=>!lb.hid)');
-    expect(src).toContain('for(const lb of aps)if(pointIsHidden(lb.anchor,tmpEyeL,opt))nextA.add(lb.rid);vpAnchorHidden=nextA');
+    expect(src).toContain('for(const lb of aps){');
+    expect(src).toContain('if(!pq){if(pointIsHidden(lb.anchor,tmpEyeL,opt))nextA.add(lb.rid);continue}'); // the body\'s cards; a card on a part that is out is judged by that part (vr-part-view.test.js)
+    expect(src).toContain('}vpAnchorHidden=nextA');
     expect(src).toContain('d.hidden=!gpu&&vpAnchorHidden.has(lb.rid)');
     expect(src).toContain('syncAnchorDots(occ)');
   });
