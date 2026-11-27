@@ -52,7 +52,7 @@ describe('vr-view.js wiring', () => {
   const block = vr.slice(vr.indexOf('pinGlow.clear();'), vr.indexOf('   {const occ=occlusionGpu();if(occ&&pins.size)'));
   it('the glow set is rebuilt every frame from each controller (a cleared Set: no stale state across frames)', () => {
     expect(block).toContain('pinGlow.clear();for(const x of controllers)');
-    expect(block).toContain("blocked=rs?.kind==='mlabel'||(u.lblDrag&&u.press)||wheelOwner===x||pw?.c===x;for(const rid of u.hrids){const g=glowRid(on,x.visible!==false,rid,blocked)");
+    expect(block).toContain("blocked=rs?.kind==='mlabel'||(u.lblDrag&&u.press)||wheelOwner===x||pw?.c===x||u.partHit?.part?.held?.c===x;for(const rid of u.hrids){const g=glowRid(on,x.visible!==false,rid,blocked)");
   });
   it('the cards: glow = not lit by the card rule, from the set; the face is the lit face (white outline), the card is the lit size, the leader gets the bone colour', () => {
     expect(vr).toContain('lb.glow=!pinLit.has(lb.rid)&&pinGlow.has(lb.rid)');
@@ -63,7 +63,7 @@ describe('vr-view.js wiring', () => {
   it('a glowing card is always shown: the depth / thin / cover rules treat it like a lit one (on top, kept, never covered, never thinned); a hidden RESULT (lb.hid) still has no card', () => {
     expect(vr).toContain('pinOcclusion(lb,lb.lit||lb.glow)');
     expect(vr).toContain('if(lb.lit||lb.glow)lb.thin=false;');
-    expect(vr).toContain('if(cx&&mesh&&!lb.lit&&!lb.glow&&!lb.trans)');
+    expect(vr).toContain('if(cov&&!lb.lit&&!lb.glow&&!lb.trans&&coveredBy(');
     expect(vr).toContain('it.lit=lb.lit||lb.glow;');
     expect(vr).toContain('const k=labelScale()*(lb.lit||lb.glow?LABEL_LIT_SCALE:1),p=lb.m.position');
     expect(vr).toContain('if(lb.hid){lb.m.visible=false;lb.line.visible=false;return}');

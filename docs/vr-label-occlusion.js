@@ -210,14 +210,16 @@ export function clippedAt(p, planes, count, cut) {
 // is the card at `to` hidden from the eye `from` behind shown tissue? A coarse walk (one voxel per step) over the part of the segment inside the box; the last
 // endSkip voxels before the card are not looked at (a card at / just in front of a surface is not covered by it: the depth bias, vr-depth.js).
 // isInside(p) -> tissue here; halfExt = box half extents; voxel = the smallest voxel side. All object space.
-export function rayCovered(from, to, isInside, halfExt, voxel, endSkip = 2.5) {
+// center (optional, [x,y,z], default the origin): the middle of the box the walk is limited to. A part taken out is covered by its own box only (vr-view.js coveredBy: box = q.box.c / q.box.h), so
+// a card is tested against 17 parts at the cost of a slab test each plus a short walk through the boxes the line really crosses. isInside still gets points in the same object space (not shifted).
+export function rayCovered(from, to, isInside, halfExt, voxel, endSkip = 2.5, center = null) {
   const dx = to.x - from.x, dy = to.y - from.y, dz = to.z - from.z, L = Math.hypot(dx, dy, dz);
   if (!(L > 1e-9)) return false;
-  const O = [from.x, from.y, from.z], D = [dx / L, dy / L, dz / L];
+  const O = [from.x, from.y, from.z], D = [dx / L, dy / L, dz / L], C = center || [0, 0, 0];
   let t0 = 0, t1 = L - endSkip * voxel;
   for (let a = 0; a < 3; a++) {
-    if (Math.abs(D[a]) < 1e-12) { if (Math.abs(O[a]) > halfExt[a]) return false; continue; }
-    const ta = (-halfExt[a] - O[a]) / D[a], tb = (halfExt[a] - O[a]) / D[a];
+    if (Math.abs(D[a]) < 1e-12) { if (Math.abs(O[a] - C[a]) > halfExt[a]) return false; continue; }
+    const ta = (C[a] - halfExt[a] - O[a]) / D[a], tb = (C[a] + halfExt[a] - O[a]) / D[a];
     t0 = Math.max(t0, Math.min(ta, tb)); t1 = Math.min(t1, Math.max(ta, tb));
   }
   const q = { x: 0, y: 0, z: 0 };

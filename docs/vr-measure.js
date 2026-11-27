@@ -5,11 +5,11 @@
 // distance is being made, the START point with a pulsing ring and the hint 「終点のポイントを選んでください」 next to it.
 // vr-view.js calls createVrMeasure(THREE, scene) -> { update, probes, pickLabel, dragLabel, dispose } every frame and does everything else (the flow, haptics, undo) itself; the state is
 // measurements.js (the same for the PC / iPad). The value follows the points: it is recomputed from their voxels each frame (a point being moved included, preview).
-import { getComments, getMarkersShown, commentMatchesSeries, commentTarget } from './comments.js?v=20261126-build770';
-import { getMeasurements, setLabelOffset, distanceMm, measureLabel } from './measurements.js?v=20261126-build770';
-import { nearLabelWorld, stepDelta, offsetFromDelta, LINE_SAMPLES, probeKey, fadeAlpha, approachAlpha, OCCLUDED_ALPHA } from './measure-label.js?v=20261126-build770';
-import { voxelToLocal } from './vr-point.js?v=20261126-build770';
-import { GHOST_ALPHA, occludedPass } from './vr-depth.js?v=20261126-build770';
+import { getComments, getMarkersShown, commentMatchesSeries, commentTarget } from './comments.js?v=20261127-build774';
+import { getMeasurements, setLabelOffset, distanceMm, measureLabel } from './measurements.js?v=20261127-build774';
+import { nearLabelWorld, stepDelta, offsetFromDelta, LINE_SAMPLES, probeKey, fadeAlpha, approachAlpha, OCCLUDED_ALPHA } from './measure-label.js?v=20261127-build774';
+import { voxelToLocal } from './vr-point.js?v=20261127-build774';
+import { GHOST_ALPHA, occludedPass } from './vr-depth.js?v=20261127-build774';
 export const VR_MEASURE_COLOR=0xffd23d,MEASURE_LABEL_W_M=0.045,MEASURE_LABEL_H_M=0.0132,MEASURE_HINT_W_M=0.2,MEASURE_HINT_H_M=0.026;
 // The hint 「終点のポイントを選んでください」 used to sit right above the START point, on top of everything (no depth test, opaque): in front of the very points the visitor has to aim at.
 // Now it is HEAD-LOCKED at the top edge of the view (HINT_ELEV rad above the gaze, HINT_DIST m away, facing the eyes), drawn at HINT_ALPHA, and after HINT_FADE_AFTER_MS it fades
@@ -77,7 +77,7 @@ export function createVrMeasure(THREE,scene,deps={getComments,getMarkersShown,ge
  };
  const disposeLabel=lb=>{scene.remove(lb.mesh);lb.tex.dispose();lb.mesh.material.dispose();lb.ghost?.material.dispose()};
  const items=new Map(); // measurement id -> {line,leader,label,va,la,t,probes,lprobe}
- const probeList=[]; // the places to judge (hidden behind the volume's surface), rebuilt by update: [{id:probeKey,world:Vector3}]
+ const probeList=[]; // the places to judge (hidden behind the volume's surface), rebuilt by update: [{id:probeKey,world:Vector3,mesh}]; mesh = the mesh of the part taken out that both ends of the line stand on (the line is drawn through it, so the place is in that part's frame), or null = the body's / a line between different meshes (a place in the world)
  let start=null; // {ring,hint}
  const a=new THREE.Vector3(),b=new THREE.Vector3(),mid=new THREE.Vector3(),s=new THREE.Vector3(),lab=new THREE.Vector3(),inv=new THREE.Matrix4(),lo=new THREE.Vector3(),ld=new THREE.Vector3(),hit=new THREE.Vector3();
  const mv={i:0,j:0,k:0};
@@ -86,8 +86,8 @@ export function createVrMeasure(THREE,scene,deps={getComments,getMarkersShown,ge
  const dropStart=()=>{if(!start)return;scene.remove(start.ring);disposeLabel(start.hint);start=null};
  return{
   // fingerprint / dims / halfExt / mesh: as vpMarkers.update; head: the head's world position; spacing: [sx,sy,sz] mm; warn: the series has a slice-spacing warning;
-  // startId: the point a distance starts at (or null); hint: its text; now: ms; preview: {id,voxel} a point being moved (voxel null = still at its place)
-  update({fingerprint,dims,halfExt,mesh,head,gaze=null,handPos=null,spacing,warn=false,startId=null,hint='',now=performance.now(),preview=null,lit=null,hidden=null,occlusion=false}){ // occlusion: true = the volume's depth hides. lit: a Set of measurement ids whose label is lit (laser on it / grabbed), or null. hidden: a Set of probe keys behind the volume's surface (probes()), or null
+  // startId: the point a distance starts at (or null); hint: its text; partMeshOf(local {x,y,z}): the mesh of the part taken out that owns that voxel's place, or null = the body's (vr-view.js partOfLocal; an earlier change: a point on a part is drawn at the part, so its line / label follow it); now: ms; preview: {id,voxel} a point being moved (voxel null = still at its place)
+  update({fingerprint,dims,halfExt,mesh,partMeshOf=null,head,gaze=null,handPos=null,spacing,warn=false,startId=null,hint='',now=performance.now(),preview=null,lit=null,hidden=null,occlusion=false}){ // occlusion: true = the volume's depth hides. lit: a Set of measurement ids whose label is lit (laser on it / grabbed), or null. hidden: a Set of probe keys behind the volume's surface (probes()), or null
    const all=fingerprint&&dims&&halfExt&&mesh&&deps.getMarkersShown()?deps.getComments():[],byId=new Map();
    for(const c of all){
     if(!commentMatchesSeries(c,fingerprint))continue;
@@ -96,18 +96,20 @@ export function createVrMeasure(THREE,scene,deps={getComments,getMarkersShown,ge
     byId.set(c.id,{vox,local:voxelToLocal(vox,halfExt,dims)});
    }
    const keep=new Set();
+   const meshFor=l=>{const q=partMeshOf?partMeshOf(l):null;if(!q||q===mesh)return mesh;q.updateWorldMatrix(true,false);return q}; // a part's matrix is read before it is used (the part may have moved this frame)
    if(occlusion)hidden=null;lineMat.depthTest=occlusion;lineGhost.visible=occlusion; // the line material is shared: depth tested + ghost, or the plain line
    if(byId.size){
     mesh.updateWorldMatrix(true,false);mesh.getWorldScale(s);const unit=s.x||1,r0=Math.max(0.003,0.045*unit),step=voxelStep(halfExt,dims);
     for(const m of deps.getMeasurements()){
      const A=byId.get(m.a),B=byId.get(m.b);if(!A||!B)continue;
      keep.add(m.id);let it=items.get(m.id);
+     const mA=meshFor(A.local),mB=meshFor(B.local),same=mA===mB; // both ends on one mesh (the body, or the same part): everything is drawn through it; ends on different meshes: each end where its own point is drawn
      if(!it){
       const line=new THREE.Line(makeLine(LINE_SAMPLES+1),lineMat);line.renderOrder=4;line.frustumCulled=false;scene.add(line);addGhost(line,lineGhost);
       const lm=makeLeaderMat(),leader=new THREE.Line(makeLine(2),lm);leader.renderOrder=4;leader.frustumCulled=false;scene.add(leader);const leaderGhost=addGhost(leader,ghostOf(lm,LEADER_OPACITY*GHOST_ALPHA));
       it={line,leader,leaderGhost,label:makeLabel(256,72,MEASURE_LABEL_W_M,MEASURE_LABEL_H_M,true),va:new Array(LINE_SAMPLES+1).fill(1),la:1,t:0,dragged:false,probes:Array.from({length:LINE_SAMPLES+1},(_,i)=>({id:probeKey(m.id,i),world:new THREE.Vector3()})),lprobe:{id:probeKey(m.id,'L'),world:new THREE.Vector3()}};items.set(m.id,it);
      }
-     a.set(A.local.x,A.local.y,A.local.z);mesh.localToWorld(a);b.set(B.local.x,B.local.y,B.local.z);mesh.localToWorld(b);
+     a.set(A.local.x,A.local.y,A.local.z);mA.localToWorld(a);b.set(B.local.x,B.local.y,B.local.z);mB.localToWorld(b);it.part=mA!==mesh||mB!==mesh;{const own=same&&mA!==mesh?mA:null;for(const p of it.probes)p.mesh=own;it.lprobe.mesh=own} // the host of the probes (probeList): vr-view.js judges a line on a part by that part's tissue, then the body and the other parts
      const pos=it.line.geometry.attributes.position;
      for(let i=0;i<=LINE_SAMPLES;i++){const f=i/LINE_SAMPLES,pr=it.probes[i].world;pr.set(a.x+(b.x-a.x)*f,a.y+(b.y-a.y)*f,a.z+(b.z-a.z)*f);pos.setXYZ(i,pr.x,pr.y,pr.z)}
      pos.needsUpdate=true;
@@ -115,10 +117,15 @@ export function createVrMeasure(THREE,scene,deps={getComments,getMarkersShown,ge
      // the label (60 % size, scaled with the head distance): where the user left it (labelOffset: voxel units from the midpoint) or, by default, NEAR the line
      // (beside it as seen from the head); a thin leader joins it to the midpoint
      mid.addVectors(a,b).multiplyScalar(0.5);
-     const k=labelScaleFor(head?head.distanceTo(mid):0.6)*(isLit?LABEL_LIT_SCALE:1),ctx=it.ctx||(it.ctx={mesh:null,step:null,ml:{x:0,y:0,z:0}}),ml=ctx.ml;
+     const k=labelScaleFor(head?head.distanceTo(mid):0.6)*(isLit?LABEL_LIT_SCALE:1),ctx=it.ctx||(it.ctx={mesh:null,step:null,ml:{x:0,y:0,z:0},mid:new THREE.Vector3(),mlw:new THREE.Vector3(),mixed:false}),ml=ctx.ml;
      mv.i=(A.vox.i+B.vox.i)/2;mv.j=(A.vox.j+B.vox.j)/2;mv.k=(A.vox.k+B.vox.k)/2;ml.x=((mv.i+.5)/dims.columns-.5)*2*halfExt[0];ml.y=(.5-(mv.j+.5)/dims.rows)*2*halfExt[1];ml.z=((mv.k+.5)/dims.slices-.5)*2*halfExt[2]; // = voxelToLocal(mv), without a new object per frame
-     ctx.mesh=mesh;ctx.step=step; // for dragLabel
-     if(m.labelOffset){const d=stepDelta(m.labelOffset,step);lab.set(ml.x+d.x,ml.y+d.y,ml.z+d.z);mesh.localToWorld(lab)}
+     ctx.mesh=same?mA:mesh;ctx.step=step;ctx.mixed=!same; // for dragLabel
+     if(!same){ctx.mlw.set(ml.x,ml.y,ml.z);mesh.localToWorld(ctx.mlw);ctx.mid.copy(mid)}
+     if(m.labelOffset){
+      const d=stepDelta(m.labelOffset,step);lab.set(ml.x+d.x,ml.y+d.y,ml.z+d.z);
+      if(same)mA.localToWorld(lab);
+      else{mesh.localToWorld(lab);lab.sub(ctx.mlw).add(mid)} // the ends are on different meshes: the offset is the body's frame vector from the midpoint of the two drawn ends
+     }
      else{const p=nearLabelWorld(a,b,head||{x:mid.x,y:mid.y+1,z:mid.z+1},(MEASURE_LABEL_W_M*0.35+0.008)*k);lab.set(p.x,p.y,p.z)}
      it.label.mesh.position.copy(lab);it.label.mesh.scale.set(MEASURE_LABEL_W_M*k,MEASURE_LABEL_H_M*k,1);if(head)it.label.mesh.lookAt(head);it.label.mesh.visible=true;it.label.mesh.updateMatrixWorld(true);
      const lg=it.leader.geometry.attributes.position;lg.setXYZ(0,mid.x,mid.y,mid.z);lg.setXYZ(1,lab.x,lab.y,lab.z);lg.needsUpdate=true;
@@ -141,7 +148,7 @@ export function createVrMeasure(THREE,scene,deps={getComments,getMarkersShown,ge
       start={ring,hint:makeLabel(512,64,MEASURE_HINT_W_M,MEASURE_HINT_H_M),id:startId,t0:now};
      }
      if(start.id!==startId){start.id=startId;start.t0=now} // another start point: the hint is read again (full strength, then fades)
-     a.set(S.local.x,S.local.y,S.local.z);mesh.localToWorld(a);
+     a.set(S.local.x,S.local.y,S.local.z);meshFor(S.local).localToWorld(a);
      start.ring.position.copy(a);start.ring.scale.setScalar(r0*0.4*(2.1+0.9*pulsePhase(now)));
      drawText(start.hint,hint,'bold 30px system-ui,sans-serif',false,true);
      const hh=hintHandPlace(handPos),hp=hh||hintPlace(head,gaze);
@@ -151,7 +158,7 @@ export function createVrMeasure(THREE,scene,deps={getComments,getMarkersShown,ge
     }else dropStart();
    }else dropStart();
    for(const [id,it] of [...items])if(!keep.has(id))dropItem(id,it);
-   probeList.length=0;for(const it of items.values()){for(const p of it.probes)probeList.push(p);if(it.dragged)probeList.push(it.lprobe)}
+   probeList.length=0;for(const it of items.values()){for(const p of it.probes)probeList.push(p);if(it.dragged)probeList.push(it.lprobe)} // a line on a part is judged too (vr-view.js updateHidden: by its own part's tissue, then the body's and the other parts': the probe's mesh says which part)
   },
   // the places whose "hidden behind the volume" is judged by vr-view.js (about 10 times a second, vr-point.js pointIsHidden): the 9 samples of every line and the label that was dragged.
   // [{id:probeKey,world:Vector3}] of the last update (the list is reused: read it, do not keep it)
@@ -173,7 +180,9 @@ export function createVrMeasure(THREE,scene,deps={getComments,getMarkersShown,ge
   // move the label so that it sits at the world point P: stored as labelOffset (voxel units from the midpoint). false when the measurement is not shown.
   dragLabel(id,P){
    const it=items.get(id);if(!it||!it.ctx)return false;
-   lo.set(P.x,P.y,P.z);it.ctx.mesh.worldToLocal(lo);
+   lo.set(P.x,P.y,P.z);
+   if(it.ctx.mixed)lo.sub(it.ctx.mid).add(it.ctx.mlw); // ends on different meshes: the same body-frame offset from the drawn midpoint (update)
+   it.ctx.mesh.worldToLocal(lo);
    return deps.setLabelOffset(id,offsetFromDelta({x:lo.x-it.ctx.ml.x,y:lo.y-it.ctx.ml.y,z:lo.z-it.ctx.ml.z},it.ctx.step));
   },
   dispose(){for(const [id,it] of [...items])dropItem(id,it);dropStart();planeGeo.dispose();sphereGeo.dispose();lineMat.dispose();lineGhost.dispose();pulseMat.dispose()},

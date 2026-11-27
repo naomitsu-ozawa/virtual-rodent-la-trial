@@ -151,12 +151,12 @@ describe('vr-view.js wiring of the visible-content field', () => {
     expect(vsrc).toMatch(/   refreshContentBox\(\);\n   hideTick\(vis,sh\);[^\n]*\n   skipTick\(\);/);
     expect(vsrc).toContain("hide:{cls:P.cls,rgs:hideSrcs()}");
     expect(vsrc).toContain("const hideSrcs=()=>[P.region?.rg||null,P.child?.rg||null,partHideSrc()?.ids||null];");
-    expect(vsrc).toContain('u.hideVMode.value=rb&&rb.hideValid(cur,vis)?1:0;');
+    expect(vsrc).toContain('u.hideVMode.value=rb&&rb.hideValid(cur,vis)&&!partHideLoose(cutDraws)?1:0;');
     // a part taken out (n731 perf ③): the old rule unless the body's cut is a hide source for the field the body draws with, and the VRL_PART programs draw the body; the state leaves every part's target out
     expect(vsrc).toContain('if(!t||!(u.distInCls.value>0)){u.hideVMode.value=0;return}');
     expect(vsrc).not.toContain('if(parts.length&&(!partHideSrc()||diagAn.noRegion||!partBodySet(variantKey()))){u.hideVMode.value=0;return}'); // no state keeps the old rule now: hideCur is that of the way the body is drawn (bodyCutDraws)
-    expect(vsrc).toContain('const bodyCutDraws=()=>!!(parts.length&&partHideSrc()&&!diagAn.noRegion&&partBodyDraws(variantKey()));'); // n734: partBodyDraws = partBodySet without the bake (the baked body has the same hidden state)
-    expect(vsrc).toContain('const cur=hideCur();let rb=t.rb;');
+    expect(vsrc).toContain('const bodyCutDraws=()=>!!(parts.length&&(partHideSrc()||(!pageHides()&&partBakeCan()))&&!diagAn.noRegion&&partBodyDraws(variantKey()));'); // n734: partBodyDraws = partBodySet without the bake (the baked body has the same hidden state)
+    expect(vsrc).toContain('const cur=hideCur(),cutDraws=!!(parts.length&&bodyCutDraws());let rb=t.rb;');
     expect(vsrc).toContain("for(const q of parts){const tg=q.target,i=(tg?.index|0)+1;if(i>0&&i<256)(tg.kind==='region'?hideCurR:hideCurC)[i]=0}");
     expect(vsrc).toContain("(tg.kind==='region'?hideCurR:hideCurC)[i]|=q.mask");
     expect(vsrc).toContain('partHideSrc=()=>{const r=partRes;if(!(parts.length&&r?.body?.ok))return null;if(!r.hide&&r.hidArgs&&comboT&&pageHides())partHideBuild(r,r.hidArgs.body,r.hidArgs.dims);return r.hide&&r.hide.td===(comboT?.dims||[]).join()?r.hide:null};'); // the cut source is made when the page hides something

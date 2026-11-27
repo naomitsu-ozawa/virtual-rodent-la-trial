@@ -421,7 +421,7 @@ describe('vr-view.js: the data of the session can be replaced (static wiring)', 
     for (const t of ['let body=V.arrays.data||null,loadBody=null;', 'if(!body){', 'const bd=await buildVolumeData(inp,maxDim', 'vd={data:body,dims:meta.dims,']) expect(src, t).toContain(t);
     expect(src).toContain('material.uniforms.sliceVol.value=fullReady&&full.v?full.v:dummyEdit'); // the 256 grid is never the source of the cross-sections
     expect(src).toContain("document.dispatchEvent(new CustomEvent('vrl-event-sample',{detail}))"); expect(src).not.toMatch(/deferLoad|releasePageFor|loadDeferredPage|vrSnap/);
-    expect(src).toContain("withTimeout(prefetch.ready,CACHE_READ_TIMEOUT_MS,'read ahead')"); expect(src).toContain("if(activeSwapPf)activeSwapPf.cancelled=true;emit('session-end')");
+    expect(src).toContain("withTimeout(prefetch.ready,CACHE_READ_TIMEOUT_MS,'read ahead')"); expect(src).toContain("if(activeSwapPf)activeSwapPf.cancelled=true;partLogEv('sessionEnd','');emit('session-end')");
   });
 
   it('the saves wait for the session (hold: start, a switch, the first seconds of the picture) and for long frames; the flush of a switch is not held; the 512 upload starts small', () => {

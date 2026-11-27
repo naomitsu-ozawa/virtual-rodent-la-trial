@@ -7,105 +7,105 @@
 // fragment shader is a GLSL port of volumeShader() (medical-volume.js): same
 // segment test, 6-step hit refinement, gradient normal and shading constants.
 // Not shown yet: processed edits, cuts, section view, MPR planes.
-import { effectiveFlag } from './debug-flags.js?v=20261126-build770';
+import { effectiveFlag } from './debug-flags.js?v=20261127-build774';
 import * as THREE from './vendor/three@0.186.0/build/three.module.js';
-import { reduceSliceArea, packedRgSlice, packCtSlice, gpuRunsForTexture } from './medical-volume.js?v=20261126-build770';
-import { ensureSegmentBaseRuns } from './segment-runs.js?v=20261126-build770';
-import { gpuVolumeTarget, gpuVolumeEditDescriptors, volumeCache, volumeCacheBudget, volumeCacheBudgetInfo } from './gpu-volume-data.js?v=20261126-build770';
-import { pruneOtherFilterSettings } from './gpu-volume-cache.js?v=20261126-build770';
-import { packEntry, storeEntry, loadEntry, pruneSiblings, removeOldBuilds, storeStatus, noteStore, partsOf, keyOfParts, explainMiss, isStandardOpen, copyPackedSlice } from './vr-prep-cache.js?v=20261126-build770';
-import { vrStateSignature } from './vr-data-key.js?v=20261126-build770'; // the state of the page now, to tell whether a practice level is still in its standard state //: the finished VR data is kept on the device (vr-prep-cache.js)
-import { SEGMENT_PRESET_ORDER, gpuSegmentOrder, segmentHasProcessedMask, segmentState, segmentEditState, segmentSourceSignature, segmentShadeRange, segmentShadeSpan, setSegmentShadeEnd, resetSegmentShadeRange, shadeDataRange, applyShadeAutoHistograms, onShadeAutoChange } from './segments.js?v=20261126-build770'; import { segmentById, childRenderEntries, onChildRenderChange, setChildLook } from './segments.js?v=20261126-build770'; import { setShadeAutoPageHeld } from './segments.js?v=20261126-build770';
-import { sceneState, analysisRegions, activeSeries } from './state.js?v=20261126-build770';
-import { datasetFingerprint, unpackProject } from './project-file.js?v=20261126-build770';
-import { PAIR_UNIFORMS, pairUniforms, pairShapeShown, pairOffsetX, pairBoxHas, pairSectionOwnerIn, planeNearerPartner, grabTargetOf, pairGrabPlan, PLANE_PARK_W, pairShownMask, pairHeldMask, pairSlotShown, createAtlasIndex, atlasPrimary } from './vr-pair-view.js?v=20261126-build770'; // stage 2 of the sample pairs: the partner volume drawn beside the primary (the rules; the GPU side is the `pair` block of startVrView)
-import { PART_GLSL, PART_OWN, PART_OUT_M, PART_ANIM_MS, partUniforms, partSame, regionSlotMask, patchRegionLutMany, patchChildLutMany, anyHiddenIn, partBoundsOf, partProxyBox, partRayRange, partKeepVoxelOf, hideIndexPlane, partOwnRegionLut, partOwnChildLut, partHideOnlyRegionLut, partHideOnlyChildLut, PART_TEXT, PART_BTN_X, PART_RESTORE_W, runPartField, partFieldPlain, partFieldBoxOf, PART_FIELD, partFieldCodesAsync, createPartSetRunner, partOccOf, partBodyHidOf, partFieldNeedsOwn, partFieldMap, partAirOf, markCutRegionLut, markCutChildLut, partBakeBoxOf, partBakeSlots, partBakeCrop, partBakeStep, bakeRegionLut, bakeChildLut, bakeRegionAnyHidden, bakeChildAnyHidden } from './vr-part-view.js?v=20261126-build770'; // an earlier change: regions / child segments taken out of the body (the rules; the GPU side is the `part` block of startVrView)
-import { partnerInputs, unitsPerMmOfSeries, resultRepresentativeVoxel } from './vr-pair-data.js?v=20261126-build770';
-import { findSamplePartners, loadSamplePartnerFiles, loadSamplePartnerProject, loadSamplePairs } from './data-load.js?v=20261126-build770';
-import { samplePartners } from './sample-sets.js?v=20261126-build770';
-import { analysisRunsContain } from './run-length.js?v=20261126-build770';
-import { createPairStore, isPairId } from './vr-pair-store.js?v=20261126-build770'; // stage 3: the partner's own points / distances
-import { loadPartnerName, practiceSeriesName } from './sample-registry.js?v=20261126-build770'; // the sample pair row of the menu (stage 3): which partner the open dataset has (sample-pairs.json) and its name (the partner's sample.json)
-import { parseFiles, groupSeries } from './dicom.js?v=20261126-build770';
-import { HAND_PICK_TOL, sectionRayHit, recordVrPoint, resolveTriggerTarget, volumeGripAllowed, pressDragSection, createTriggerPress, dragShouldStart, DRAG_RECORD, sectionFollowStart, sectionFollowStep, sectionWristTurn, snapPlaneCenterIntoBox, rayLocalPlaneX, squareBandContains, squareContains, createHoverPulse, qMul, qInv, qRot, qAngleDeg, clampPlaneCenter, HAPTIC, normalizePointMode, surfaceVoxelFromHit, voxelToLocal, voxelSize, createStickGate, deleteSelected, createUndoStack, applyUndo, pointIsHidden } from './vr-point.js?v=20261126-build770';
-import { createVrPointMarkers, createSurfaceCursor } from './vr-point-markers.js?v=20261126-build770';
-import { createAnchorDots, dotBehindCard, ANCHOR_DOT_DIAMETER_M, LEG_WIDTH_M, LEG_MIN_ANGLE } from './vr-anchor-dots.js?v=20261126-build770'; // the dot at the foot of a pinned label's leader
-import { createLabelBatch } from './vr-label-batch.js?v=20261126-build770'; // the name cards and their legs drawn in a few calls
-import { buildClsData } from './point-cls.js?v=20261126-build770';
-import { createHiddenClsManager } from './hidden-cls-state.js?v=20261126-build770';
-import { onDatasetChange } from './dataset-reset.js?v=20261126-build770';
-import { shadeRangeStep, shadeValueAt, shadePosOf, createShadeAutoScheduler } from './cap-shade.js?v=20261126-build770'; // the per-segment shading range (slider positions <-> data values);: the scheduler of the auto range
-import { STEP_PRESS, stepClamp, createStepHold } from './value-step.js?v=20261126-build770'; // ＋ / − of the data-value sliders: 10 per press, hold repeats and speeds up to 100
-import { formatCtValue } from './utils.js?v=20261126-build770';
-import { createHoldTracker, createHoldRing, HOLD_RING_RADIUS, HOLD_RING_MIN_DIST } from './vr-hold-ring.js?v=20261126-build770';
-import { WHEEL_ITEMS, DEFAULT_WHEEL, normalizeWheelItems, migrateWheelSectionFlip, setWheelItem, moveWheelItem, clearWheelItem, createRingMenu, createWheelStick, createButtonPress } from './vr-ring.js?v=20261126-build770';
-import { getComments, getMarkersShown, onCommentsChange, commentMatchesSeries, removeComment, restoreComment, updateCommentPosition, updateCommentText, updateCommentColor } from './comments.js?v=20261126-build770';
-import { POINT_PALETTE, pointColor, normalizeColor } from './point-colors.js?v=20261126-build770';
-import { combineClassificationDistance, fourthChannelBytes } from './distance-field.js?v=20261126-build770';
-export { WebGlVolumeRenderer, webglVolumeEnabled } from './webgl-volume.js?v=20261126-build770'; // the page's WebGL volume (no WebGPU) is handed to app.js through this module's existing lazy load
-import { BRICK as PREP_BRICK, thinHuData, sourceRangeInit, sourceRangeAdd, computeBricksOf, halveData, buildEditMaskOf, buildChildIndexOf, packIndexRg, createVolumePrep } from './vr-volume-prep.js?v=20261126-build770'; // the heavy pure steps of the preparation (bricks, the 256 copy, classification, distance field) run in a worker
-import { createSwapGuard, runDataSwap, createUploadQueue, createSettleGate, createFrameGapMonitor, swapPlan, SWAP_STAGES, SETTLE_TIMEOUT_MS, LOAD_TIMEOUT_MS, CACHE_READ_TIMEOUT_MS, VR_STORE_FLUSH_MS, saveShouldWait, withTimeout } from './vr-data-switch.js?v=20261126-build770'; // switching the data inside a running session
-import { classifiedAt, marchClassificationHitInfo } from './vr-pick.js?v=20261126-build770';
-import { VR_TARGET_SIDE, volumeMeta, editDescsOf, regionItemsOf, childItemsOf, classifyStateOf, shownMask as shownMaskOf, shownRegions as shownRegionsOf, shownChildren as shownChildrenOf } from './vr-prep-inputs.js?v=20261126-build770'; // stage 1 of the sample pairs: what the preparation reads is ONE object (inp); the page's own is pageInputs below
-import { createSkipState, skipGrid } from './vr-skip-occupancy.js?v=20261126-build770'; // the creep-skip occupancy bits of the combined texture (VR max-zoom cost)
-import { createComboRebuild } from './vr-combo-rebuild.js?v=20261126-build770';
-import { hideBitsOn, hideBitsSame, hideBitsAny } from './vr-hide-field.js?v=20261126-build770'; // the distance field of the visible content while a result / child is hidden //: the combined texture rebuilt off the frame when the shown segments change
-import { setBusySlot, reportBusyProgress } from './progress-modal.js?v=20261126-build770';
-import { tr } from './i18n.js?v=20261126-build770';
-import { regionCustomName, regionChipTitle } from './region-name.js?v=20261126-build770'; // the shared region name rule (name, else ID <atlas id>)
+import { reduceSliceArea, packedRgSlice, packCtSlice, gpuRunsForTexture } from './medical-volume.js?v=20261127-build774';
+import { ensureSegmentBaseRuns } from './segment-runs.js?v=20261127-build774';
+import { gpuVolumeTarget, gpuVolumeEditDescriptors, volumeCache, volumeCacheBudget, volumeCacheBudgetInfo } from './gpu-volume-data.js?v=20261127-build774';
+import { pruneOtherFilterSettings } from './gpu-volume-cache.js?v=20261127-build774';
+import { packEntry, storeEntry, loadEntry, pruneSiblings, removeOldBuilds, storeStatus, noteStore, partsOf, keyOfParts, explainMiss, isStandardOpen, copyPackedSlice } from './vr-prep-cache.js?v=20261127-build774';
+import { vrStateSignature } from './vr-data-key.js?v=20261127-build774'; // the state of the page now, to tell whether a practice level is still in its standard state //: the finished VR data is kept on the device (vr-prep-cache.js)
+import { SEGMENT_PRESET_ORDER, gpuSegmentOrder, segmentHasProcessedMask, segmentState, segmentEditState, segmentSourceSignature, segmentShadeRange, segmentShadeSpan, setSegmentShadeEnd, resetSegmentShadeRange, shadeDataRange, applyShadeAutoHistograms, onShadeAutoChange } from './segments.js?v=20261127-build774'; import { segmentById, childRenderEntries, onChildRenderChange, setChildLook } from './segments.js?v=20261127-build774'; import { setShadeAutoPageHeld } from './segments.js?v=20261127-build774';
+import { sceneState, analysisRegions, activeSeries } from './state.js?v=20261127-build774';
+import { datasetFingerprint, unpackProject } from './project-file.js?v=20261127-build774';
+import { PAIR_UNIFORMS, pairUniforms, pairShapeShown, pairOffsetX, pairBoxHas, pairSectionOwnerIn, planeNearerPartner, grabTargetOf, pairGrabPlan, PLANE_PARK_W, pairShownMask, pairHeldMask, pairSlotShown, createAtlasIndex, atlasPrimary } from './vr-pair-view.js?v=20261127-build774'; // stage 2 of the sample pairs: the partner volume drawn beside the primary (the rules; the GPU side is the `pair` block of startVrView)
+import { PART_GLSL, PART_OWN, PART_OUT_M, PART_ANIM_MS, partUniforms, partSame, regionSlotMask, patchRegionLutMany, patchChildLutMany, anyHiddenIn, partBoundsOf, partBoundsAllOf, partSpreadDist, PART_ALL_X, PART_ALL_W, partProxyBox, partRayRange, partKeepVoxelOf, hideIndexPlane, partOwnRegionLut, partOwnChildLut, partHideOnlyRegionLut, partHideOnlyChildLut, PART_TEXT, PART_BTN_X, PART_RESTORE_W, runPartField, partFieldPlain, partFieldBoxOf, PART_FIELD, partFieldCodesAsync, createPartSetRunner, partOccOf, partBodyHidOf, partFieldNeedsOwn, partFieldMap, partAirOf, markCutRegionLut, markCutChildLut, partBakeBoxOf, partBakeSlots, partBakeCrop, partBakeRewrite, partBakeStep, bakeRegionLut, bakeChildLut, bakeRegionAnyHidden, bakeChildAnyHidden } from './vr-part-view.js?v=20261127-build774'; // an earlier change: regions / child segments taken out of the body (the rules; the GPU side is the `part` block of startVrView)
+import { partnerInputs, unitsPerMmOfSeries, resultRepresentativeVoxel } from './vr-pair-data.js?v=20261127-build774';
+import { findSamplePartners, loadSamplePartnerFiles, loadSamplePartnerProject, loadSamplePairs } from './data-load.js?v=20261127-build774';
+import { samplePartners } from './sample-sets.js?v=20261127-build774';
+import { analysisRunsContain } from './run-length.js?v=20261127-build774';
+import { createPairStore, isPairId } from './vr-pair-store.js?v=20261127-build774'; // stage 3: the partner's own points / distances
+import { loadPartnerName, practiceSeriesName } from './sample-registry.js?v=20261127-build774'; // the sample pair row of the menu (stage 3): which partner the open dataset has (sample-pairs.json) and its name (the partner's sample.json)
+import { parseFiles, groupSeries } from './dicom.js?v=20261127-build774';
+import { HAND_PICK_TOL, sectionRayHit, recordVrPoint, resolveTriggerTarget, volumeGripAllowed, pressDragSection, createTriggerPress, dragShouldStart, DRAG_RECORD, sectionFollowStart, sectionFollowStep, sectionWristTurn, snapPlaneCenterIntoBox, rayLocalPlaneX, squareBandContains, squareContains, createHoverPulse, qMul, qInv, qRot, qAngleDeg, clampPlaneCenter, HAPTIC, normalizePointMode, surfaceVoxelFromHit, voxelToLocal, voxelSize, createStickGate, deleteSelected, createUndoStack, applyUndo, pointIsHidden } from './vr-point.js?v=20261127-build774';
+import { createVrPointMarkers, createSurfaceCursor } from './vr-point-markers.js?v=20261127-build774';
+import { createAnchorDots, dotBehindCard, ANCHOR_DOT_DIAMETER_M, LEG_WIDTH_M, LEG_MIN_ANGLE } from './vr-anchor-dots.js?v=20261127-build774'; // the dot at the foot of a pinned label's leader
+import { createLabelBatch } from './vr-label-batch.js?v=20261127-build774'; // the name cards and their legs drawn in a few calls
+import { buildClsData } from './point-cls.js?v=20261127-build774';
+import { createHiddenClsManager } from './hidden-cls-state.js?v=20261127-build774';
+import { onDatasetChange } from './dataset-reset.js?v=20261127-build774';
+import { shadeRangeStep, shadeValueAt, shadePosOf, createShadeAutoScheduler } from './cap-shade.js?v=20261127-build774'; // the per-segment shading range (slider positions <-> data values);: the scheduler of the auto range
+import { STEP_PRESS, stepClamp, createStepHold } from './value-step.js?v=20261127-build774'; // ＋ / − of the data-value sliders: 10 per press, hold repeats and speeds up to 100
+import { formatCtValue } from './utils.js?v=20261127-build774';
+import { createHoldTracker, createHoldRing, HOLD_RING_RADIUS, HOLD_RING_MIN_DIST } from './vr-hold-ring.js?v=20261127-build774';
+import { WHEEL_ITEMS, DEFAULT_WHEEL, normalizeWheelItems, migrateWheelSectionFlip, setWheelItem, moveWheelItem, clearWheelItem, createRingMenu, createWheelStick, createButtonPress } from './vr-ring.js?v=20261127-build774';
+import { getComments, getMarkersShown, onCommentsChange, commentMatchesSeries, commentTarget, removeComment, restoreComment, updateCommentPosition, updateCommentText, updateCommentColor } from './comments.js?v=20261127-build774';
+import { POINT_PALETTE, pointColor, normalizeColor } from './point-colors.js?v=20261127-build774';
+import { combineClassificationDistance, fourthChannelBytes } from './distance-field.js?v=20261127-build774';
+export { WebGlVolumeRenderer, webglVolumeEnabled } from './webgl-volume.js?v=20261127-build774'; // the page's WebGL volume (no WebGPU) is handed to app.js through this module's existing lazy load
+import { BRICK as PREP_BRICK, thinHuData, sourceRangeInit, sourceRangeAdd, computeBricksOf, halveData, buildEditMaskOf, buildChildIndexOf, packIndexRg, createVolumePrep } from './vr-volume-prep.js?v=20261127-build774'; // the heavy pure steps of the preparation (bricks, the 256 copy, classification, distance field) run in a worker
+import { createSwapGuard, runDataSwap, createUploadQueue, createSettleGate, createFrameGapMonitor, swapPlan, SWAP_STAGES, SETTLE_TIMEOUT_MS, LOAD_TIMEOUT_MS, CACHE_READ_TIMEOUT_MS, VR_STORE_FLUSH_MS, saveShouldWait, withTimeout } from './vr-data-switch.js?v=20261127-build774'; // switching the data inside a running session
+import { classifiedAt, marchClassificationHitInfo } from './vr-pick.js?v=20261127-build774';
+import { VR_TARGET_SIDE, volumeMeta, editDescsOf, regionItemsOf, childItemsOf, classifyStateOf, shownMask as shownMaskOf, shownRegions as shownRegionsOf, shownChildren as shownChildrenOf } from './vr-prep-inputs.js?v=20261127-build774'; // stage 1 of the sample pairs: what the preparation reads is ONE object (inp); the page's own is pageInputs below
+import { createSkipState, skipGrid } from './vr-skip-occupancy.js?v=20261127-build774'; // the creep-skip occupancy bits of the combined texture (VR max-zoom cost)
+import { createComboRebuild } from './vr-combo-rebuild.js?v=20261127-build774';
+import { hideBitsOn, hideBitsSame, hideBitsAny } from './vr-hide-field.js?v=20261127-build774'; // the distance field of the visible content while a result / child is hidden //: the combined texture rebuilt off the frame when the shown segments change
+import { setBusySlot, reportBusyProgress } from './progress-modal.js?v=20261127-build774';
+import { tr } from './i18n.js?v=20261127-build774';
+import { regionCustomName, regionChipTitle } from './region-name.js?v=20261127-build774'; // the shared region name rule (name, else ID <atlas id>)
 // ONE name rule for a result in every list (the 3D chip, the VR tree rows, the VR 解析 tab, the かんたん menu): "<number>. <name | ID <atlasId> | the segment names joined with +>" (region-name.js regionChipTitle)
 const vrChipTitle=r=>{const g=analysisRegions.find(x=>x.id===r.rid);return g?regionChipTitle(g,tr):r.rid+'. '+r.segmentKeys.map(k=>tr(k)||k).join('+')};
-import { wrapMenuText, stackMenuRows } from './vr-menu-text.js?v=20261126-build770';
-import { activeEventLevel, levelForSample, chooseEventLevel, levelSwitchItems, sampleHasLevel, levelSwitchTargets, canSwitchData, EVENT_LEVELS, datasetForSample, datasetLabel, eventModeOn, missionLines, simpleMenuSegments, triggerModeRow, labelTargets, triggerMode, TRIGGER_AT_START, resetPress, resetArmed, RESET_ARM_MS, simpleMenuLayout, SIMPLE_MENU, sliceOpacityValue, sliceDrawState, sliderHitTest, sliderGrabOffset, sliderValueAt, KNOB_GRAB_PX } from './event-mode.js?v=20261126-build770'; // 体験会モード - the chosen level's mission on the help board, the かんたん menu
-import { VIEW_TOGGLE_ID, VIEW_TOGGLE_BUTTON, SECTION_DELETE_ID, createViewToggle, createDoublePress, ringIdsFor } from './vr-view-toggle.js?v=20261126-build770';
-import { vrSpacingNote, vrVolumeText } from './vr-spacing-note.js?v=20261126-build770';
-import { NORM_LONG, physicalExtentsMm, longestMm, realMagnification, realHolderScale, startHolderScale, tutorialHolderScale, smallForTutorial, TUT_VOLUME_FWD, TUT_VOLUME_DOWN, magnificationText, createScaleTag, clampScale, pinchScale, scaleLimits, oversizeNote, planeFrameLocalScale, planeTagLocalScale, scaleLineText, scalePosOf, posToScale, scaleStep, viewTabScaleLayout } from './vr-real-scale.js?v=20261126-build770';
-import { createAutoQuality, autoFloor, STEP_LEVELS, STEP_CHOICES, stepChoiceScale, marchStep } from './vr-auto-quality.js?v=20261126-build770';
-import { createVrHuLine } from './vr-hu-line.js?v=20261126-build770';
-import { huMenuTexts, voxelFromHits } from './vr-hu-line-core.js?v=20261126-build770';
-import { setHuLineDeferred } from './hu-line-model.js?v=20261126-build770';
-import { createVrMeasure, LABEL_LIT_SCALE } from './vr-measure.js?v=20261126-build770';
-import { resetUserState } from './event-fresh.js?v=20261126-build770'; // 最初から in the tutorial (practice data only, see tutorial-ui.js resetTutorialAll)
-import { tutorialModeOn, createTutorialVr, createSlideViewer, panelTabs, TAB_H, PAGE_H, layoutLevelSlide, levelBoardH, menuAnnotation, menuTargetRect } from './tutorial-vr.js?v=20261126-build770'; // チュートリアル on the help board (only made when tutorialMode is on);: the read-only guide, the level slide, the menu pointer
-import { levelSlide, createSlideImages } from './tutorial-slides.js?v=20261126-build770'; // the 体験会 level slides (ev board: the slide's picture)
-import { vrInitialScaleOf } from './sample-registry.js?v=20261126-build770';
-import { TUT_SAMPLE } from './tutorial-data.js?v=20261126-build770'; // the live tutorial runs on its practice data only
-import { emit, scaleChanged, poseMoved } from './tutorial-signal.js?v=20261126-build770'; // tutorial: one-line signals at the action sites (no-op without a listener)
-import { horizAngleDeg } from './tutorial-orient.js?v=20261126-build770'; // the tutorial's entry guidance (look right / left): head turn toward a board
-import { createControllerHints, createEdgeArrow, createBoardArrow, boardSide, edgeArrowShown } from './tutorial-3d.js?v=20261126-build770'; // the tutorial's 3D guides (controller button, edge arrow, arrow over the menu)
-import { MAX_SECTION_PLANES, nextPlaneColor, frameDepthTest, ARROW_LEN, ARROW_FLASH_MS, arrowFade, arrowShown, tagBehindTissue, sectionPage, pageOfPlane, SECTION_ROWS_PER_PAGE, FLING_UNDO_MS, FLING_DEBUG_MS, createVelocityTracker, flingDecision, frameOutOfView, outOfViewNow, createOutOfViewTracker, outOfViewRelease, flingDebugLines, capVelocity, flyStep, makeSectionSnapshot, restorePlan, createSectionUndo, undoButtonPlace } from './vr-section-frame.js?v=20261126-build770';
-import { createUndoButton } from './vr-undo-button.js?v=20261126-build770';
-import { createFlingDebugTag } from './vr-fling-debug.js?v=20261126-build770';
-import { EMPTY_PINCH, isHand, wristScrollGain, wristScrollSign, wristScrollKeep, NEAR_KINDS, boxDist, centeredBoxDist, squareOutlineDist, pickNearGrab, HAND_RAY_MODES, normalizeHandRay } from './vr-hand.js?v=20261126-build770'; // hand tracking (Quest 3): pure helpers
-import { createHandInput, HAND_LABEL_MOVE_M } from './vr-hand-view.js?v=20261126-build770'; // the hand's ray, wrist menu, fingertips
-import { LABEL_HIDE_DEFAULT, normalizeLabelHide, gpuOcclusionActive, depthVoxelSize, boardVisible, GHOST_ALPHA, EMBEDDED_ALPHA, occludedPass, pinMaterialState } from './vr-depth.js?v=20261126-build770';
-import { highlightColor, highlightIndex, createHighlightTracker, anyLit } from './region-highlight.js?v=20261126-build770';
-import { pinLine, pinPlaceLimited, pinPulledIntoTissue, pinDue, pinJudge, createScaleSettle, createLabelThinner, setLeaderIfMoved, createFaceCache, clippedAt, rayCovered, CARD_W0, CARD_H0, cardLayout, cardHalfW, cardHalfH } from './vr-label-occlusion.js?v=20261126-build770';
-import { brickOccupancy, writeBrickOccupancy } from './vr-brick-occupancy.js?v=20261126-build770';
-import { createProbeGate } from './measure-label.js?v=20261126-build770';
-import { sliceIndex, sliceRange, boxFromRange, createSegScan, segScanStart, segScanStep, segsSubset, segsFromUniforms, contentKeyChanged, KEY_LEN, createContentBox } from './vr-content-box.js?v=20261126-build770'; // the proxy box = the box of what can be drawn
-import { regionVisible, setRegionVisible, onRegionVisibleChange, regionHidden, setRegionHidden, onRegionHiddenChange, regionLutAlpha, regionLutHiddenSlots, hiddenRegionVoxelOf, anyHiddenVoxel } from './region-visibility.js?v=20261126-build770';
-import { buildSegmentTree, pageTreeLines, ellipsize } from './segment-tree.js?v=20261126-build770';
-import { setRegionLabel, setRegionLabelOffset, withOffset, surfaceAnchor, voxelFromLocalVr, clampVoxel, labelLocal, offsetForLocal, vrVoxelStep, rectEdgePoint, leaderVisible, labelSegmentsShown, glowRid, keepLengthFactor, scaledStep, normalizeLabelOverlap, thinActive, LABEL_OVERLAP_MODES } from './analysis-label.js?v=20261126-build770';
-import { childLabelItem, childLabelItems, childLabelItemById, hasChildLabels, childLabelTitle, childVolumeMm3, childKeyAtHit, hitLabelRids, labelToggle, pairShifts } from './child-labels.js?v=20261126-build770'; // a child segment's name label (hover card, pinned card) is the analysis label's, kept on the child
-import { childByKey } from './child-segments.js?v=20261126-build770';
-import { hiddenShapeCount, showAllHiddenShapes } from './segments.js?v=20261126-build770'; // stage 3: 「すべて表示（隠 N）」 of the かんたん menu
-import { ringState, regionRingItems, partRingItems, regionRingName, applyRingItem, ringTargetOf } from './region-ring.js?v=20261126-build770'; // stage 3: the long-press ring of a region / a child
-import { createVrSelfCheck, selfCheckTexts } from './vr-self-check.js?v=20261126-build770'; // 詳細 > 自己診断 (automated frame-time scenarios)
-import { createScaleGuard, createFlapGuard, variantFallback } from './vr-flicker-guard.js?v=20261126-build770'; // flicker safety guard
-import { eyeMetrics, capFromPpv, capFromBudget, nextCap, foveaRect, outsideFovea, foveaWorth, qualityText, FOVEA_K, CAP_MIN, addVolumeEye, boxCoversView, pairComposites } from './vr-render-scale.js?v=20261126-build770'; // data-resolution render scale + offscreen foveation
-import { getMeasureStart, startMeasure, cancelMeasure, pickMeasureEnd, onMeasureStartChange, removeMeasurement, restoreMeasurements, measurementsOfPoint, seriesSpacing } from './measurements.js?v=20261126-build770';
-import { APP_BUILD } from './version.js?v=20261126-build770';
-import { wc, ww } from './ui-shell.js?v=20261126-build770';
-import { VOLUME_FWD, VOLUME_DOWN, MENU_OFFSET, HELP_OFFSET, HU_PANEL_OFFSET, EV_OFFSET, EV_WIDTH, EV_RES, MENU_WIDTH, MENU_CANVAS, HELP_WIDTH, HELP_RES, HIST_OFFSET, HIST_WIDTH, FOLLOW_ANGLE, FOLLOW_DIST } from './vr-layout.js?v=20261126-build770';
-import { onHistogramChange, getHistogramRange, getHistogramLog, setHistogramLog, setHistogramRange } from './histogram-ui.js?v=20261126-build770';
-import { createVrLabelHistogram, UNLABELED_COLOR, labelSlot, labelRegion } from './vr-label-histogram.js?v=20261126-build770';
-import { rangeRes } from './vr-histogram-layout.js?v=20261126-build770';
-import { dataAxis } from './segments.js?v=20261126-build770'; // the histogram axis of the data (histogram.js axisFor + the series' value step)
-import { getHuMode, setHuMode, HU_MODE_FILTERED, HU_MODE_RAW } from './effective-hu.js?v=20261126-build770';
-import { createVrHistogramPanel } from './vr-histogram-panel.js?v=20261126-build770';
-import { createPartLog, partLogFileName, PART_LOG_KEY } from './vr-part-log.js?v=20261126-build770'; // the part-cut diagnostic log (kept in memory during the session, offered as a text file after it)
-import { lightingGLSL, lightingVertexGLSL, materialVec, MATERIALS, materialKey } from './lighting.js?v=20261126-build770'; // one lighting model for the desktop volume, this VR / AR volume and the 3D-view meshes
+import { wrapMenuText, stackMenuRows } from './vr-menu-text.js?v=20261127-build774';
+import { activeEventLevel, levelForSample, chooseEventLevel, levelSwitchItems, sampleHasLevel, levelSwitchTargets, canSwitchData, EVENT_LEVELS, datasetForSample, datasetLabel, eventModeOn, missionLines, simpleMenuSegments, triggerModeRow, labelTargets, triggerMode, TRIGGER_AT_START, resetPress, resetArmed, RESET_ARM_MS, simpleMenuLayout, SIMPLE_MENU, sliceOpacityValue, sliceDrawState, sliderHitTest, sliderGrabOffset, sliderValueAt, KNOB_GRAB_PX } from './event-mode.js?v=20261127-build774'; // 体験会モード - the chosen level's mission on the help board, the かんたん menu
+import { VIEW_TOGGLE_ID, VIEW_TOGGLE_BUTTON, SECTION_DELETE_ID, createViewToggle, createDoublePress, ringIdsFor } from './vr-view-toggle.js?v=20261127-build774';
+import { vrSpacingNote, vrVolumeText } from './vr-spacing-note.js?v=20261127-build774';
+import { NORM_LONG, physicalExtentsMm, longestMm, realMagnification, realHolderScale, startHolderScale, tutorialHolderScale, smallForTutorial, TUT_VOLUME_FWD, TUT_VOLUME_DOWN, magnificationText, createScaleTag, clampScale, pinchScale, scaleLimits, oversizeNote, planeFrameLocalScale, planeTagLocalScale, scaleLineText, scalePosOf, posToScale, scaleStep, viewTabScaleLayout } from './vr-real-scale.js?v=20261127-build774';
+import { createAutoQuality, autoFloor, STEP_LEVELS, STEP_CHOICES, stepChoiceScale, marchStep } from './vr-auto-quality.js?v=20261127-build774';
+import { createVrHuLine } from './vr-hu-line.js?v=20261127-build774';
+import { huMenuTexts, voxelFromHits } from './vr-hu-line-core.js?v=20261127-build774';
+import { setHuLineDeferred } from './hu-line-model.js?v=20261127-build774';
+import { createVrMeasure, LABEL_LIT_SCALE } from './vr-measure.js?v=20261127-build774';
+import { resetUserState } from './event-fresh.js?v=20261127-build774'; // 最初から in the tutorial (practice data only, see tutorial-ui.js resetTutorialAll)
+import { tutorialModeOn, createTutorialVr, createSlideViewer, panelTabs, TAB_H, PAGE_H, layoutLevelSlide, levelBoardH, menuAnnotation, menuTargetRect } from './tutorial-vr.js?v=20261127-build774'; // チュートリアル on the help board (only made when tutorialMode is on);: the read-only guide, the level slide, the menu pointer
+import { levelSlide, createSlideImages } from './tutorial-slides.js?v=20261127-build774'; // the 体験会 level slides (ev board: the slide's picture)
+import { vrInitialScaleOf } from './sample-registry.js?v=20261127-build774';
+import { TUT_SAMPLE } from './tutorial-data.js?v=20261127-build774'; // the live tutorial runs on its practice data only
+import { emit, scaleChanged, poseMoved } from './tutorial-signal.js?v=20261127-build774'; // tutorial: one-line signals at the action sites (no-op without a listener)
+import { horizAngleDeg } from './tutorial-orient.js?v=20261127-build774'; // the tutorial's entry guidance (look right / left): head turn toward a board
+import { createControllerHints, createEdgeArrow, createBoardArrow, boardSide, edgeArrowShown } from './tutorial-3d.js?v=20261127-build774'; // the tutorial's 3D guides (controller button, edge arrow, arrow over the menu)
+import { MAX_SECTION_PLANES, nextPlaneColor, frameDepthTest, ARROW_LEN, ARROW_FLASH_MS, arrowFade, arrowShown, tagBehindTissue, sectionPage, pageOfPlane, SECTION_ROWS_PER_PAGE, FLING_UNDO_MS, FLING_DEBUG_MS, createVelocityTracker, flingDecision, frameOutOfView, outOfViewNow, createOutOfViewTracker, outOfViewRelease, flingDebugLines, capVelocity, flyStep, makeSectionSnapshot, restorePlan, createSectionUndo, undoButtonPlace } from './vr-section-frame.js?v=20261127-build774';
+import { createUndoButton } from './vr-undo-button.js?v=20261127-build774';
+import { createFlingDebugTag } from './vr-fling-debug.js?v=20261127-build774';
+import { EMPTY_PINCH, isHand, wristScrollGain, wristScrollSign, wristScrollKeep, NEAR_KINDS, boxDist, centeredBoxDist, squareOutlineDist, pickNearGrab, HAND_RAY_MODES, normalizeHandRay } from './vr-hand.js?v=20261127-build774'; // hand tracking (Quest 3): pure helpers
+import { createHandInput, HAND_LABEL_MOVE_M } from './vr-hand-view.js?v=20261127-build774'; // the hand's ray, wrist menu, fingertips
+import { LABEL_HIDE_DEFAULT, normalizeLabelHide, gpuOcclusionActive, depthVoxelSize, boardVisible, GHOST_ALPHA, EMBEDDED_ALPHA, occludedPass, pinMaterialState } from './vr-depth.js?v=20261127-build774';
+import { highlightColor, highlightIndex, createHighlightTracker, anyLit } from './region-highlight.js?v=20261127-build774';
+import { pinLine, pinPlaceLimited, pinPulledIntoTissue, pinDue, pinJudge, createScaleSettle, createLabelThinner, setLeaderIfMoved, createFaceCache, clippedAt, rayCovered, CARD_W0, CARD_H0, cardLayout, cardHalfW, cardHalfH } from './vr-label-occlusion.js?v=20261127-build774';
+import { brickOccupancy, writeBrickOccupancy } from './vr-brick-occupancy.js?v=20261127-build774';
+import { createProbeGate } from './measure-label.js?v=20261127-build774';
+import { sliceIndex, sliceRange, boxFromRange, createSegScan, segScanStart, segScanStep, segsSubset, segsFromUniforms, contentKeyChanged, KEY_LEN, createContentBox } from './vr-content-box.js?v=20261127-build774'; // the proxy box = the box of what can be drawn
+import { regionVisible, setRegionVisible, onRegionVisibleChange, regionHidden, setRegionHidden, onRegionHiddenChange, regionLutAlpha, regionLutHiddenSlots, hiddenRegionVoxelOf, anyHiddenVoxel } from './region-visibility.js?v=20261127-build774';
+import { buildSegmentTree, pageTreeLines, ellipsize } from './segment-tree.js?v=20261127-build774';
+import { setRegionLabel, setRegionLabelOffset, withOffset, surfaceAnchor, voxelFromLocalVr, clampVoxel, labelLocal, offsetForLocal, vrVoxelStep, rectEdgePoint, leaderVisible, labelSegmentsShown, glowRid, keepLengthFactor, scaledStep, normalizeLabelOverlap, thinActive, LABEL_OVERLAP_MODES } from './analysis-label.js?v=20261127-build774';
+import { childLabelItem, childLabelItems, childLabelItemById, hasChildLabels, childLabelTitle, childVolumeMm3, childKeyAtHit, hitLabelRids, labelToggle, pairShifts } from './child-labels.js?v=20261127-build774'; // a child segment's name label (hover card, pinned card) is the analysis label's, kept on the child
+import { childByKey } from './child-segments.js?v=20261127-build774';
+import { hiddenShapeCount, showAllHiddenShapes } from './segments.js?v=20261127-build774'; // stage 3: 「すべて表示（隠 N）」 of the かんたん menu
+import { ringState, regionRingItems, partRingItems, regionRingName, applyRingItem, ringTargetOf } from './region-ring.js?v=20261127-build774'; // stage 3: the long-press ring of a region / a child
+import { createVrSelfCheck, selfCheckTexts } from './vr-self-check.js?v=20261127-build774'; // 詳細 > 自己診断 (automated frame-time scenarios)
+import { createScaleGuard, createFlapGuard, variantFallback } from './vr-flicker-guard.js?v=20261127-build774'; // flicker safety guard
+import { eyeMetrics, capFromPpv, capFromBudget, nextCap, foveaRect, outsideFovea, foveaWorth, qualityText, FOVEA_K, CAP_MIN, addVolumeEye, boxCoversView, pairComposites } from './vr-render-scale.js?v=20261127-build774'; // data-resolution render scale + offscreen foveation
+import { getMeasureStart, startMeasure, cancelMeasure, pickMeasureEnd, onMeasureStartChange, removeMeasurement, restoreMeasurements, measurementsOfPoint, seriesSpacing } from './measurements.js?v=20261127-build774';
+import { APP_BUILD } from './version.js?v=20261127-build774';
+import { wc, ww } from './ui-shell.js?v=20261127-build774';
+import { VOLUME_FWD, VOLUME_DOWN, MENU_OFFSET, HELP_OFFSET, HU_PANEL_OFFSET, EV_OFFSET, EV_WIDTH, EV_RES, MENU_WIDTH, MENU_CANVAS, HELP_WIDTH, HELP_RES, HIST_OFFSET, HIST_WIDTH, FOLLOW_ANGLE, FOLLOW_DIST } from './vr-layout.js?v=20261127-build774';
+import { onHistogramChange, getHistogramRange, getHistogramLog, setHistogramLog, setHistogramRange } from './histogram-ui.js?v=20261127-build774';
+import { createVrLabelHistogram, UNLABELED_COLOR, labelSlot, labelRegion } from './vr-label-histogram.js?v=20261127-build774';
+import { rangeRes } from './vr-histogram-layout.js?v=20261127-build774';
+import { dataAxis } from './segments.js?v=20261127-build774'; // the histogram axis of the data (histogram.js axisFor + the series' value step)
+import { getHuMode, setHuMode, HU_MODE_FILTERED, HU_MODE_RAW } from './effective-hu.js?v=20261127-build774';
+import { createVrHistogramPanel } from './vr-histogram-panel.js?v=20261127-build774';
+import { createPartLog, partLogFileName, PART_LOG_KEY } from './vr-part-log.js?v=20261127-build774'; // the part-cut diagnostic log (kept in memory during the session, offered as a text file after it)
+import { lightingGLSL, lightingVertexGLSL, materialVec, MATERIALS, materialKey } from './lighting.js?v=20261127-build774'; // one lighting model for the desktop volume, this VR / AR volume and the 3D-view meshes
 
 const BG=new THREE.Color(0.035,0.045,0.05);
 const BRICK=PREP_BRICK;
@@ -2348,12 +2348,29 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
  let pairHeld=null,pairHold=()=>{},pairPose=()=>{},pairAnchorReset=()=>{};
  // an earlier change: parts (regions / child segments) taken out of the body, any number, each moved by its own grip. parts = their states ([] = nothing is out: every hook below returns at once, the frame is exactly the body's); the hooks are
  // assigned by the `part` block below (as the pair's are): partPatchRegion / partPatchChild = after refreshRegionLut / refreshChildLut wrote the body's table (the body's copy loses every target, the parts' shared copy keeps them), partPose / partFrame / partRender = the frame,
- // partGripStart / partGripEnd = the grip, partRingStart = the long-press ring on a part, partDetachRing / partBackPress = the ring's 切り出す / 戻す, partRestoreAll = every part back in the body (the shape-hide of the body is only a run-time patch: nothing saved was
+ // partGripStart / partGripEnd = the grip, partHitOf = the laser on the parts (the controller loop: where it ends, the hover / pinned cards), partRingStart = the long-press ring on a part, partDetachRing / partBackPress = the ring's 切り出す / 戻す, partRestoreAll = every part back in the body (the shape-hide of the body is only a run-time patch: nothing saved was
  // written), partDispose = and the parts' programs freed.
- let parts=[],partHideSrc=()=>null,partBodySet=()=>null,partPatchRegion=()=>{},partPatchChild=()=>{},partPose=()=>{},partFrame=()=>{},partRender=()=>{},partGripStart=()=>false,partGripEnd=()=>false,partRestoreAll=()=>{},partDispose=()=>{},partMenuInfo=()=>null,partRestorePress=()=>{},partRingStart=()=>false,partBackPress=()=>false,partDetachRing=()=>{};
+ let parts=[],partHideSrc=()=>null,partBodySet=()=>null,partPatchRegion=()=>{},partPatchChild=()=>{},partPose=()=>{},partFrame=()=>{},partRender=()=>{},partGripStart=()=>false,partHitOf=()=>null,partGripEnd=()=>false,partRestoreAll=()=>{},partDispose=()=>{},partMenuInfo=()=>null,partRestorePress=()=>{},partAllPress=()=>{},partRingStart=()=>false,partBackPress=()=>false,partDetachRing=()=>{};
+ // an earlier change: what the body-side judgements (the points, the cards' tissue tests) read of a part that is out, all in the part mesh's local space (= the body's object space). partSkipOf(q) = the part's own tissue rule, the one the laser marches by (partKeepVoxelOf;
+ // a result's part leaves a child part's tissue to the child, the shader's seams); partOfLocal(l) = the part that is out and has a voxel at the local point l (a child part before a result's: the shader's order), or null = the body's.
+ const partSkipOf=q=>{const kids=q.target.kind==='region'?parts.filter(k=>k!==q&&k.target.kind==='child'&&k.skip):[];return kids.length?(x,y,z,c)=>q.skip(x,y,z,c)||kids.some(k=>!k.skip(x,y,z,c)):q.skip};
+ const partIdAt=(q,l)=>{
+  const he=volPick?.halfExt,ids=q.ids;if(!he||!ids||!q.idims)return false;
+  const [w,h,d]=q.idims,fx=l.x/(2*he[0])+0.5,fy=0.5-l.y/(2*he[1]),fz=l.z/(2*he[2])+0.5;
+  if(!(fx>=0&&fx<=1&&fy>=0&&fy<=1&&fz>=0&&fz<=1))return false;
+  return ids[Math.min(w-1,Math.floor(fx*w))+w*(Math.min(h-1,Math.floor(fy*h))+h*Math.min(d-1,Math.floor(fz*d)))]===q.target.id;
+ };
+ const partOfLocal=l=>{
+  if(!parts.length)return null;
+  for(const q of parts)if(q.on&&q.mesh.parent&&q.target.kind==='child'&&partIdAt(q,l))return q;
+  for(const q of parts)if(q.on&&q.mesh.parent&&q.target.kind==='region'&&partIdAt(q,l))return q;
+  return null;
+ };
+ // the part that is out for a card's target (a result's rid / a child's key), or null
+ const partOfTarget=(kind,k)=>{for(const q of parts){const t=q.target;if(q.on&&q.mesh.parent&&t.kind===kind&&(kind==='child'?t.key===k:t.rid===k))return q}return null};
  // n734: the baked cut (the `part` block below): partBakeOn = the body is drawn by the ordinary program on the baked bytes, partBakeTex = {tex, cls4} it reads (or null), partBakeFrame = once per frame (guard, build, switch),
  // partBakeDrop = the baked bytes are not valid any more (the body reads the original again at once), partBakeRegion / partBakeChild = the GPU's copy of the tables while the bake is on, partClsSync = the parts read the ORIGINAL classification, partBodyDraws = partBodySet without the bake
- let partBakeOn=()=>false,partBakeTex=()=>null,partBakeFrame=()=>{},partBakeDrop=()=>{},partBakeRegion=()=>{},partBakeChild=()=>{},partClsSync=()=>{},partBodyDraws=()=>null;
+ let partBakeOn=()=>false,partBakeCan=()=>false,partHideLoose=()=>false,partBakeTex=()=>null,partBakeFrame=()=>{},partBakeDrop=()=>{},partBakeRegion=()=>{},partBakeChild=()=>{},partClsSync=()=>{},partBodyDraws=()=>null;
  // stage 3 (the laser / points / distances / name cards of the partner): the functions of the pair block below, called from the controller loop and the frame; no-ops while there is no partner
  const NO_CARDS=new Map(),px={hit:()=>null,sec:()=>null,sectionTissue:()=>false,pins:()=>{},primaryOf:()=>null,card:()=>null,toggle:()=>false,unpin:()=>false,drag:()=>false,reset:()=>false,cards:()=>NO_CARDS};
  // the data of the session can be REPLACED (swapData, in the try block at the end): everything bound to the data is a variable (P: the prepared CPU data, vd: its full grid, full / half: the
@@ -2977,12 +2994,24 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
  // the shader variants without VRL_REGIONS, diagAn.noLabels skips the laser's volume march and the labels
  const diagAn={noRegion:false,noLabels:false};
  // VR position points (stage 3; vr-point.js): vrHalfExt / vrDims / vrFp are set when the data is ready (null before)
+ // an earlier change: a point (stored as the body's voxel, unchanged) whose voxel is inside a part that is out is drawn at that voxel of the PART's mesh: it moves with the part; with the part back it is the body's place again. The marker module converts every point
+ // with mesh.localToWorld of the one mesh it is given, so while a part is out it gets this stand-in: the same conversion, by the mesh of the part that owns the voxel (partOfLocal), else the body's.
+ // The module converts a point's centre first and, for a point off the active section, the foot of its perpendicular (a second vector) right after it: the foot goes through the mesh chosen for its own centre, so the line never stretches from the part to the body.
+ let pmCentre=null,pmPart=null;
+ const partMarkMesh={updateWorldMatrix:(a,b)=>mesh.updateWorldMatrix(a,b),getWorldScale:v=>mesh.getWorldScale(v),localToWorld:v=>{if(!pmCentre)pmCentre=v;if(v===pmCentre)pmPart=partOfLocal(v);return (pmPart?pmPart.mesh:mesh).localToWorld(v)}};
+ const partMeshOfLocal=l=>partOfLocal(l)?.mesh||null; // vpMeasure.update: the mesh of the part that owns a point's voxel (the distance lines / labels follow the part: a line with both ends on one part is drawn through that part's mesh, other ends each at their own point's place)
+ const partPtOwn=new Map(); // the points that stand on a part that is out: id -> that part
+ // the CPU hidden judgement (updateHidden) is made for a point on a part in the part's own frame (its own tissue, then the body's and the other parts' as occluders: hiddenFor), not by the body's tissue at the body's place
+ const partPointsSync=()=>{
+  partPtOwn.clear();if(!parts.length||!vrFp||!vrDims||!vrHalfExt)return;
+  for(const c of getComments()){if(!commentMatchesSeries(c,vrFp))continue;const t=commentTarget(c,vrDims),q=t?partOfLocal(voxelToLocal(t,vrHalfExt,vrDims)):null;if(q)partPtOwn.set(c.id,q)}
+ };
  let vrHalfExt=null,vrDims=null,vrFp=null,vrSpacing=null;const vpMarkers=createVrPointMarkers(THREE,scene),vpMeasure=createVrMeasure(THREE,scene),lblLit=new Set(); // lblLit: the distance labels lit this frame (laser on them / grabbed). vrSpacing: the series' voxel spacing [x,y,z] mm (the adopted one: z from the slice-spacing check), for the distances
  // surface mode (vrPointMode, kept while the page lives, default 表面). It is in force except while the 解析 tab is open (the trigger pins labels there)
  const surfaceActive=()=>vrPointMode==='surface'&&!(ui.open&&ui.tab===5),surfCursors=controllers.map(()=>createSurfaceCursor(THREE,scene)),tmpSc=new THREE.Vector3(),tmpSh=new THREE.Vector3(),tmpSs=new THREE.Vector3();
  // the cursor sits at the CENTRE of the voxel that will be recorded (sf.voxel), as a small dot
  const placeSurfCursor=(c,sf)=>{
-  const X=sf.pair?pair:null,m=X?X.mesh:mesh,he=X?X.halfExt:vrHalfExt,dm=X?X.srcDims:vrDims; // a hit on the partner: its box, its grid
+  const X=sf.pair?pair:null,m=X?X.mesh:sf.part?.mesh.parent?sf.part.mesh:mesh,he=X?X.halfExt:vrHalfExt,dm=X?X.srcDims:vrDims; // a hit on the partner: its box, its grid; on a part taken out: the part's mesh (its local space is the body's grid)
   if(!m?.parent||!he||!dm){surfCursors[controllers.indexOf(c)].set(null);return}
   const l=voxelToLocal(sf.voxel,he,dm),vs=voxelSize(he,dm);m.localToWorld(tmpSc.set(l.x,l.y,l.z));m.getWorldScale(tmpSs);
   renderer.xr.getCamera().getWorldPosition(tmpSh);
@@ -3074,7 +3103,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
  const sectionTissue=hit=>{const vp=volPick;if(!vp||!hit?.point)return false;const mask=shownMask(),chs=[];for(let i=0;i<4;i++)if(mask>>i&1&&vp.cls.chan[i]>=0)chs.push(vp.cls.chan[i]);return classifiedAt(hit.point,vp.halfExt,vp.dims,vp.cls,chs,hiddenVoxel())}; // an earlier change: nor a hidden result;: a hidden child shows no tissue on a section
  const recordPoint=(c,hit)=>{
   const X=hit?.pair?pair:null;if(hit?.pair&&!X)return null; // a hit on the partner records in the partner's store (series = the partner's); its partner gone: nothing
-  if(!hit?.voxel||!(X?X.fp:vrFp))return null;
+  if(!hit?.voxel||!(X?X.fp:vrFp))return null; // a hit on a part taken out records its voxel as the body's does (the part's local space is the body's grid; the marker follows the part: partOfLocal)
   if(hit.plane!==undefined&&!(X?px.sectionTissue(X,hit):sectionTissue(hit)))return null;
   const rec=recordVrPoint({voxel:hit.voxel,series:X?X.fp:vrFp,language:ja?'ja':'en',...(X?{store:X.store}:{})});
   if(!rec)return null;
@@ -3120,11 +3149,12 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
  };
  // hidden behind tissue: refreshed about 10 times a second (not every frame); the rule is vr-point.js pointIsHidden. The head is the middle of both eyes.
  // the distances' probes (9 per line, up to ~890 march steps each) are re-judged only when an input of pointIsHidden changed (createProbeGate), not every 100 ms
- const measGate=createProbeGate(0.005);let vpHidden=new Set(),vpHiddenAt=0,vpMeasHidden=new Set(),vpAnchorHidden=new Set();const tmpEyeL=new THREE.Vector3(),tmpEyeR=new THREE.Vector3(),tmpHp=new THREE.Vector3();
+ const measGate=createProbeGate(0.005);let vpHidden=new Set(),vpHiddenAt=0,vpMeasHidden=new Set(),vpAnchorHidden=new Set();const tmpEyeL=new THREE.Vector3(),tmpEyeR=new THREE.Vector3(),tmpHp=new THREE.Vector3(),covEyeP=new THREE.Vector3(),covPtB=new THREE.Vector3();
  const occlusionGpu=()=>gpuOcclusionActive(settings.labelHide,renderer.capabilities); // 「実際に隠す」 and the renderer's depth is the standard one
  const updateHidden=now=>{
   vpHiddenAt=now;
   // the distance lines / labels are judged by the same rule (vpMeasure.probes(): 9 samples of every line + a dragged label) and drawn faint when hidden (vr-measure.js)
+  partPointsSync();
   const gpuOcc=occlusionGpu(),vp=volPick,pts=gpuOcc?[]:vpMarkers.centres(),mps=gpuOcc?[]:vpMeasure.probes(),aps=gpuOcc?[]:[...pins.values()].filter(lb=>!lb.hid); // with the GPU depth occlusion the distances' probes are not needed at all;: nor are the point markers' (their depth test + ghost do it)
   if(!vp||!mesh?.parent||!material||(!pts.length&&!mps.length&&!aps.length)){if(vpAnchorHidden.size)vpAnchorHidden=new Set();if(vpHidden.size)vpHidden=new Set();if(vpMeasHidden.size)vpMeasHidden=new Set();measGate.reset();return}
   const mask=shownMask(),chs=[];for(let i=0;i<4;i++)if(mask>>i&1&&vp.cls.chan[i]>=0)chs.push(vp.cls.chan[i]);
@@ -3132,18 +3162,31 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
   if(cams&&cams.length>=2){cams[0].getWorldPosition(tmpEyeL);cams[1].getWorldPosition(tmpEyeR);tmpEyeL.add(tmpEyeR).multiplyScalar(0.5)}else tmpEyeL.copy(head);
   tmpEyeR.copy(tmpEyeL); // the eye in the world (kept for the probe gate: the head's sway is judged in metres)
   mesh.worldToLocal(tmpEyeL);
+  if(parts.length){embedInputs(now);coverPrep(tmpEyeR,false)}else covOcc.length=0; // 薄くする: embedInputs is not run for the GPU occlusion here, so the parts' contexts (partCtxOf) are brought up to date now; the parts that are out are occluders of every point / card (案A), the body's own tissue is pointIsHidden as ever
   const u=material.uniforms,opt={cls:vp.cls,dims:vp.dims,halfExt:vp.halfExt,chs,planes:u.cutPlanes.value,count:u.planeCount.value,cut:u.planeCut.value,skip:hiddenVoxel()},next=new Set(); // a hidden child segment hides no point (an earlier change: nor a hidden result)
-  for(const p of pts){tmpHp.copy(p.world);mesh.worldToLocal(tmpHp);if(pointIsHidden(tmpHp,tmpEyeL,opt))next.add(p.id)}
+  // + 案A: a point / a card's anchor is hidden when the body's tissue (or, for one that stands on a part, that part's own tissue) covers it from the head (pointIsHidden), or when the body or any OTHER part that is out covers it
+  // (coveredBy: rayCovered through the part's own box). own = the part it stands on or null (the body); pl = its place in its own frame (the body's object space; for a part, the part mesh's local space = the same voxel space).
+  const hiddenFor=(wp,own,pl)=>{
+   let h;
+   if(own){own.mesh.updateWorldMatrix(true,false);covEyeP.copy(tmpEyeR);own.mesh.worldToLocal(covEyeP);h=pointIsHidden(pl,covEyeP,{...opt,planes:[],count:0,cut:0,skip:partSkipOf(own)});if(!h){covPtB.copy(wp);mesh.worldToLocal(covPtB);h=pointIsHidden(covPtB,tmpEyeL,opt)}}
+   else h=pointIsHidden(pl,tmpEyeL,opt);
+   return h||coveredBy(wp,own,false); // the body's own judgement and the parts': the same rule for every occluder (no hold, no exception)
+  };
+  for(const p of pts){const own=partPtOwn.get(p.id)||null;tmpHp.copy(p.world);if(own){own.mesh.updateWorldMatrix(true,false);own.mesh.worldToLocal(tmpHp)}else mesh.worldToLocal(tmpHp);if(hiddenFor(p.world,own,tmpHp))next.add(p.id)}
   vpHidden=next;
-  {const nextA=new Set();for(const lb of aps)if(pointIsHidden(lb.anchor,tmpEyeL,opt))nextA.add(lb.rid);vpAnchorHidden=nextA} // the anchor of a pinned label (the foot of its leader: lb.anchor is in the volume's local space) behind tissue: its dot is drawn faint (「薄くする」)
+  {const nextA=new Set();for(const lb of aps){
+    const pq=lb.pq&&lb.pq.mesh.parent?lb.pq:null; // a card on a part that is out: the part's own tissue, in the part's space (its eye, its rule: no section planes), then the body's and the other parts' as occluders
+    if(hiddenFor(lb.world,pq,lb.anchor))nextA.add(lb.rid);
+   }vpAnchorHidden=nextA} // the anchor of a pinned label (the foot of its leader: lb.anchor is in the volume's local space) behind tissue: its dot is drawn faint (「薄くする」)
   if(!mps.length){if(vpMeasHidden.size)vpMeasHidden=new Set();measGate.reset();return}
   // the inputs of pointIsHidden for a probe: its place (and so the volume's matrix), the eye (tmpEyeL is local: moved by the volume too), the shown segments' classification, the section planes
   const pl=u.cutPlanes.value,np=u.planeCount.value;let key=mesh.matrixWorld.elements.join(',')+'|'+mask+'|'+np+'|'+u.planeCut.value+'|'+vp.dims.join(',')+'|'+gpuSegmentOrder().join('>')+'|'+SEGMENT_PRESET_ORDER.map(k=>{const g=segmentState[k]||{};return g.min+','+g.max+','+(segmentEditState[k]?.revision|0)}).join(';'); // the slot assignment too; thresholds / edits of the segments (the classification is rebuilt for them: vp.cls changes too)
   for(let i=0;i<np&&i<pl.length;i++)key+='|'+pl[i].x+','+pl[i].y+','+pl[i].z+','+pl[i].w;
+  for(const q of parts)if(q.on&&q.mesh.parent)key+='|P'+q.uid+'@'+q.mesh.matrixWorld.elements.map(e=>e.toFixed(4)).join(','); // 案A: the parts that are out cover a probe too: their place is an input
   key+='|kids'+childHideSig()+'|rh'+regionHideSig(); // hiding / showing a child changes what covers a probe (an earlier change: a result's shape too)
   for(const p of mps)key+='|'+p.id+'@'+p.world.x.toFixed(4)+','+p.world.y.toFixed(4)+','+p.world.z.toFixed(4);
   if(!measGate.shouldRun(key,[vp.cls,mesh],tmpEyeR))return; // nothing changed: the previous judgement stands
-  const nextM=new Set();for(const p of mps){tmpHp.copy(p.world);mesh.worldToLocal(tmpHp);if(pointIsHidden(tmpHp,tmpEyeL,opt))nextM.add(p.id)}
+  const nextM=new Set();for(const p of mps){const own=p.mesh?parts.find(q=>q.mesh===p.mesh&&q.on&&q.mesh.parent)||null:null;tmpHp.copy(p.world);if(own){own.mesh.updateWorldMatrix(true,false);own.mesh.worldToLocal(tmpHp)}else mesh.worldToLocal(tmpHp);if(hiddenFor(p.world,own,tmpHp))nextM.add(p.id)} // a distance on a part (p.mesh): its own part's tissue, the body's and the other parts'; any other: the body's tissue and the parts (案A)
   vpMeasHidden=nextM;
  };
  const pointsChanged=()=>{const ids=new Set([...getComments(),...(pstore()?.getComments()||[])].map(c=>c.id));if(vpSel&&!ids.has(vpSel))vpSel=null;for(const c of controllers)if(c.userData.moving&&!ids.has(c.userData.moving.id))c.userData.moving=null;if(pw?.kind==='point'&&!ids.has(pw.id))closePointWheel();if(ui.tab===6)menu.refresh()},unsubComments=onCommentsChange(pointsChanged); // the partner's store calls pointsChanged too (bindPair)
@@ -3224,7 +3267,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
   // line = the leg (its two ends in geometry.attributes.position / other, as the ribbon of vr-anchor-dots.js createLegMesh had them; colour / opacity / depth test / renderOrder / visible)
   const m=Object.assign(new THREE.Object3D(),{material:{map:tex,opacity:1,depthTest:false}});m.renderOrder=5;m.visible=false;
   const line={geometry:{attributes:{position:new THREE.Float32BufferAttribute(12,3),other:new THREE.Float32BufferAttribute(12,3)}},material:{color:new THREE.Color(0xffffff),opacity:1,depthTest:false},renderOrder:5,visible:false};
-  const lb={m,line,ctx:face.ctx,tex,wr:1,hr:1,cache:null,spare:face,key:null,anchor:new THREE.Vector3(),world:new THREE.Vector3(),rid:null,off:null,shift:0,lab:null,lit:false,glow:false,glowLine:false,ref:null,trans:false,thin:false,cov:false,emb:null};
+  const lb={m,line,ctx:face.ctx,tex,wr:1,hr:1,cache:null,spare:face,key:null,anchor:new THREE.Vector3(),world:new THREE.Vector3(),rid:null,pmesh:null,pq:null,fq:null,off:null,shift:0,lab:null,lit:false,glow:false,glowLine:false,ref:null,trans:false,thin:false,cov:false,emb:null};
   lb.cache=faces||createFaceCache(2,faceDispose,f=>f.tex===lb.tex);labelBatch.add(lb);return lb;
  };
  // pinned labels follow the 「ラベルの隠れ方」 setting: 実際に隠す = depth tested, what the tissue covers is not drawn at all (no ghost); otherwise as before (always drawn).
@@ -3242,7 +3285,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
   const vp=volPick;
   if(vp!==embFor||vp?.cls!==embCls){embFor=vp;embCls=vp?.cls;embAt=0;embPlaneAt=0;embSig='';embPlaneSig=''} // a new data / classification: looked at at once (no string work in the frames in between)
   if(now-embAt<EMB_CHECK_MS)return;embAt=now;
-  const sig=vp?shownMask()+'|'+gpuSegmentOrder().join('>')+'|'+childHideSig()+'|'+regionHideSig()+'|'+SEGMENT_PRESET_ORDER.map(k=>{const g=segmentState[k]||{};return g.min+','+g.max+','+(segmentEditState[k]?.revision|0)}).join(';'):''; // the same inputs as the probe gate (updateHidden): thresholds / edits rebuild the classification
+  const sig=vp?shownMask()+'|'+gpuSegmentOrder().join('>')+'|'+childHideSig()+'|'+regionHideSig()+'|'+SEGMENT_PRESET_ORDER.map(k=>{const g=segmentState[k]||{};return g.min+','+g.max+','+(segmentEditState[k]?.revision|0)}).join(';')+'|p'+parts.map(q=>q.on&&q.mesh.parent?q.uid:0).join(','):''; // the same inputs as the probe gate (and the parts that are out: a part's own judgement) (updateHidden): thresholds / edits rebuild the classification
   let bump=false;if(sig!==embSig){embSig=sig;bump=true}
   const u=material?.uniforms;let pl='';if(u){const np=u.planeCount.value,ps=u.cutPlanes.value;pl=np+'|'+u.planeCut.value;for(let i=0;i<np&&i<ps.length;i++)pl+='|'+ps[i].x+','+ps[i].y+','+ps[i].z+','+ps[i].w}
   if(pl!==embPlaneSig&&now-embPlaneAt>=EMB_PLANE_MS){embPlaneSig=pl;embPlaneAt=now;bump=true} // the section planes (cut away = not tissue: the same sides as the laser's march)
@@ -3256,6 +3299,31 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
   embCtx={isInside:p=>!clippedAt(p,planes,np,cut)&&classifiedAt(p,he,dm,vp.cls,chs,skip),halfExt:he,inBox:p=>Math.abs(p.x)<=he[0]&&Math.abs(p.y)<=he[1]&&Math.abs(p.z)<=he[2],voxel:Math.min(2*he[0]/dm[0],2*he[1]/dm[1],2*he[2]/dm[2])};
   return embCtx;
  };
+ // an earlier change: the same context for a card that stands on a part that is out: the part's own tissue (partSkipOf: the laser's rule, in the part's local space), no section planes (the part's march has none). Kept per part until an input of the judgement (embGen) or the parts change
+ const partCtxOf=q=>{
+  if(q.ectxGen===embGen&&q.ectxN===parts.length)return q.ectx;
+  q.ectxGen=embGen;q.ectxN=parts.length;q.ectx=null;const vp=volPick;if(!vp||!vp.cls||!vp.halfExt||!q.skip)return null;
+  const mask=shownMask(),chs=[];for(let i=0;i<4;i++)if(mask>>i&1&&vp.cls.chan[i]>=0)chs.push(vp.cls.chan[i]);if(!chs.length)return null;
+  const he=vp.halfExt,dm=vp.dims,skip=partSkipOf(q);
+  q.ectx={isInside:p=>classifiedAt(p,he,dm,vp.cls,chs,skip),halfExt:he,inBox:p=>Math.abs(p.x)<=he[0]&&Math.abs(p.y)<=he[1]&&Math.abs(p.z)<=he[2],voxel:Math.min(2*he[0]/dm[0],2*he[1]/dm[1],2*he[2]/dm[2])};
+  return q.ectx;
+ };
+ // 案A: "covered from the head" by the shown tissue of the body AND of every part that is out (the original rule of the body, vr-label-occlusion.js rayCovered, widened to the parts). coverPrep(headW, withBody) lists the occluders of this
+ // judgement: each part that is out (partCtxOf: its own tissue, in the part's space = the body's object space; the walk is limited to the part's own box q.box) and, with withBody, the body (embedCtx, its whole box); the world -> local matrices
+ // and the head in each local space are worked out ONCE per judgement (not per card). coveredBy(pw, host, withOwn): is the world point pw (a card's centre / an anchor) hidden from the head behind one of them; host = the part the card stands
+ // on (null = the body); withOwn false leaves the host's own tissue out (a card embedded in its own tissue is not covered by that). The user's view decides: a straight line head -> card through shown tissue, never a count of anything.
+ const covOcc=[],covPool=[];
+ const coverPrep=(headW,withBody)=>{
+  covOcc.length=0;let n=0;
+  const add=(q,cx,m)=>{const o=covPool[n]||(covPool[n]={q:null,cx:null,inv:new THREE.Matrix4(),hd:new THREE.Vector3(),pt:new THREE.Vector3()});n++;o.q=q;o.cx=cx;o.inv.copy(m).invert();o.hd.copy(headW).applyMatrix4(o.inv);covOcc.push(o)};
+  for(const q of parts){if(!q.on||!q.mesh.parent||!q.box)continue;const cx=partCtxOf(q);if(!cx)continue;q.mesh.updateWorldMatrix(true,false);add(q,cx,q.mesh.matrixWorld)}
+  if(withBody&&mesh?.parent){const cx=embedCtx();if(cx){mesh.updateWorldMatrix(true,false);add(null,cx,mesh.matrixWorld)}}
+  return covOcc.length>0;
+ };
+ const coveredBy=(pw,host,withOwn)=>{
+  for(const o of covOcc){if(o.q===host&&!withOwn)continue;o.pt.copy(pw).applyMatrix4(o.inv);const b=o.q?o.q.box:null;if(rayCovered(o.hd,o.pt,o.cx.isInside,b?b.h:o.cx.halfExt,o.cx.voxel,undefined,b?b.c:null))return true}
+  return false;
+ };
  // two judgements per card, both in the queue (a few cards per frame; one turn does what is due for its card). vr-label-occlusion.js pinDue / pinJudge:
  //  lb.ref = the place of the initial display: {lab,gen,v,len,trans}, v = anchor -> the anchor + the stored offset, or where that card is pushed out of the tissue (object space; null = the
  //           card sits at its anchor). The judgement of: it does not depend on the scale, redone when the label or an input (embGen) changes.
@@ -3268,15 +3336,17 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
  const pinSettle=createScaleSettle();let pinSettled=false;
  const embedLabel=(lb,occ,held)=>{
   if(!occ||held||lb.hid||!vrHalfExt||!vrDims||!mesh){lb.ref=null;lb.emb=null;lb.trans=false;return} // old mode / being moved by hand / no card: nothing is judged (pinPlace limits the stored offset alone)
+  const fm=lbMesh(lb),pq=fm!==mesh?lb.pq:null; // an earlier change: a card on a part that is out is judged against that part's own tissue, in the part's space; a judgement made in another frame (the body's, before the part came out, or the reverse) is not kept
+  if(lb.fq!==pq){lb.fq=pq;lb.ref=null;lb.emb=null}
   const K=labelK(),a=lb.anchor;if(K>=1)lb.emb=null;
   const due=pinDue(lb,embGen,holder.scale.x,K,pinSettled);
   if(due&&embBudget>0){embBudget--; // the queue: the stale cards wait for their turn (a few per frame); until then a card keeps what it had (for the same label)
-   lb.world.copy(a);mesh.localToWorld(lb.world);lineFor(lb); // the anchor in the world and the card's size, for the lines of this judgement
-   pinJudge(lb,due,a,lb.off?labelLocal(a,lb.off,vrVoxelStep(vrHalfExt,vrDims)):a,K,holder.scale.x,embGen,embedCtx(),lineOf);
+   if(fm!==mesh)fm.updateWorldMatrix(true,false);lb.world.copy(a);fm.localToWorld(lb.world);lineFor(lb); // the anchor in the world and the card's size, for the lines of this judgement
+   pinJudge(lb,due,a,lb.off?labelLocal(a,lb.off,vrVoxelStep(vrHalfExt,vrDims)):a,K,holder.scale.x,embGen,fm===mesh?embedCtx():pq?partCtxOf(pq):null,lineOf);
   }
   lb.trans=K<1&&lb.emb&&lb.emb.lab===lb.lab?lb.emb.trans:lb.ref&&lb.ref.lab===lb.lab?lb.ref.trans:false;
  };
- const labelThinner=createLabelThinner();let thinFrame=0;const thinItems=[],thinHead={x:0,y:0,z:0},thinPool=[],tmpTh=new THREE.Vector3(),tmpTc=new THREE.Vector3();
+ const labelThinner=createLabelThinner();let thinFrame=0;const thinItems=[],thinHead={x:0,y:0,z:0},thinPool=[];
  // overlapping cards (device setting labelOverlap, analysis-label.js): the nearer card is drawn on top (the sort of the transparent cards; a lit card above all: pinOcclusion) and the laser takes the nearer one (pickPin).
  // Only when the mode thins them ('always', or 'many' with LABEL_MANY_COUNT or more labels in sight: thinActive) the farther of two overlapping VISIBLE cards is hidden, with its leader and anchor dot. This does not depend on
  // 「ラベルの隠れ方」: a card is thinned the same in 実際に隠す and in 薄くする ('keep' = the default: nothing is judged, no cost).
@@ -3290,11 +3360,11 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
  const inSight=(p,r)=>{sightSp.center.copy(p);sightSp.radius=r;const cams=renderer.xr.getCamera().cameras;if(!cams||!cams.length)return true;for(const c of cams){sightPv.multiplyMatrices(c.projectionMatrix,c.matrixWorldInverse);sightFr.setFromProjectionMatrix(sightPv);if(sightFr.intersectsSphere(sightSp))return true}return false};
  const thinCompute=occ=>{
   // a card the tissue covers from the head (a coarse walk, rayCovered) is not drawn (depth test, 実際に隠す only): it takes no place on the screen, is not counted and does not hide a visible card. Not for a lit or an embedded (translucent, on top) card.
-  const cx=occ?embedCtx():null;if(cx&&mesh){tmpTh.copy(head);mesh.worldToLocal(tmpTh)}
+  const cov=occ&&coverPrep(head,true); // 案A: the occluders are the body and every part that is out (coverPrep / coveredBy), not only the card's own tissue
   let n=0,seen=0;
   for(const lb of pins.values()){
    lb.cov=false;if(!lb.m.visible)continue;
-   if(cx&&mesh&&!lb.lit&&!lb.glow&&!lb.trans){tmpTc.copy(lb.m.position);mesh.worldToLocal(tmpTc);if(rayCovered(tmpTh,tmpTc,cx.isInside,cx.halfExt,cx.voxel)){lb.cov=true;lb.thin=false;continue}}
+   if(cov&&!lb.lit&&!lb.glow&&!lb.trans&&coveredBy(lb.m.position,null,true)){lb.cov=true;lb.thin=false;continue}
    const k=labelScale()*(lb.lit||lb.glow?LABEL_LIT_SCALE:1),p=lb.m.position,it=thinPool[n]||(thinPool[n]={});n++;
    it.id=lb.rid;it.x=p.x;it.y=p.y;it.z=p.z;it.halfW=cardHalfW(LABEL_W,lb.wr,k);it.halfH=cardHalfH(LABEL_H,lb.hr,k);it.lit=lb.lit||lb.glow;thinItems[n-1]=it;
    if(inSight(p,Math.hypot(it.halfW,it.halfH)))seen++; // the labels the user sees: shown (placeLabel showed every card that is not hidden by its segments / the label switch; tissue cover is skipped above) and on the screen (inside the view of an eye)
@@ -3331,14 +3401,17 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
  const labelStep=()=>scaledStep(vrVoxelStep(vrHalfExt,vrDims),labelK());
  // the line placeLabel draws for a card at p (object space): vr-label-occlusion.js pinLine with the volume's world matrix, the head and the card's size of this frame. lineFor(lb)
  // sets the card (its anchor in the world lb.world must be current); the numbers are placeLabel's: a moved card's half size, the default place 0.012 towards the head and labelScale * 0.045 up.
- const lineG={off:false,hw:0,hh:0,fwd:0.012,rise:0},tmpLq=new THREE.Vector3();let lineA=null;
+ const lineG={off:false,hw:0,hh:0,fwd:0.012,rise:0},tmpLq=new THREE.Vector3();let lineA=null,lineM=null; // lineM: the frame of the card the line is for (lineFor)
  // the default place's rise: labelScale * 0.045 as ever, plus the extra half height of a taller card (at the unlit size), so a taller card grows upward and its lower edge stays where a one-line card's is
  const labelRise=lb=>labelScale()*0.045+(lb.hr-1)*LABEL_H*labelScale()/2;
- const lineFor=lb=>{const k=labelScale()*(lb.lit?LABEL_LIT_SCALE:1);lineA=lb.world;lineG.off=!!lb.off;lineG.hw=cardHalfW(LABEL_W,lb.wr,k);lineG.hh=cardHalfH(LABEL_H,lb.hr,k);lineG.rise=labelRise(lb)-cardHalfH(LABEL_H,lb.hr,k)};
- const lineOf=p=>pinLine(lineA,tmpLq.set(p.x,p.y,p.z).applyMatrix4(mesh.matrixWorld),head,lineG);
+ const lineFor=lb=>{const k=labelScale()*(lb.lit?LABEL_LIT_SCALE:1);lineA=lb.world;lineM=lbMesh(lb);lineG.off=!!lb.off;lineG.hw=cardHalfW(LABEL_W,lb.wr,k);lineG.hh=cardHalfH(LABEL_H,lb.hr,k);lineG.rise=labelRise(lb)-cardHalfH(LABEL_H,lb.hr,k)};
+ const lineOf=p=>pinLine(lineA,tmpLq.set(p.x,p.y,p.z).applyMatrix4((lineM||mesh).matrixWorld),head,lineG);
  // the pinned card's place (object space; the same object every call) under the limit, or null = the card sits at its anchor (the default place). Without a judgement (old mode / held / not
  // judged yet for this label) the stored offset alone is limited; a place pushed out of the tissue (lb.ref / lb.emb, embedLabel) goes through the same limit (vr-label-occlusion.js pinPlaceLimited).
  // lb.world (the anchor in the world) and mesh.matrixWorld must be current (placeLabel).
+ // an earlier change: a pinned card whose target is a part taken out (lb.pmesh = that part's mesh, set by syncPins every frame) stands in the part's space: the card moves with the part (the anchor is the same voxel, in the part mesh's space = the body's object space).
+ // The body's tissue judgements (embedded / covered / hidden anchor) do not apply there: the body is not at the part's place, so a part's card is not judged by them (it is drawn by the depth test alone). Without a part: the body's mesh, as before.
+ const lbMesh=lb=>lb.pmesh&&lb.pmesh.parent?lb.pmesh:mesh;
  const tmpPp={x:0,y:0,z:0,kappa:-1},tmpOv={x:0,y:0,z:0};
  const pinPlace=lb=>{
   if(!vrHalfExt||!vrDims)return null;
@@ -3354,15 +3427,16 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
   if(labelsHidden){lb.m.visible=false;lb.line.visible=false;return} // stick click with no section: all label cards (pinned + hover chips) hidden, so the laser cannot pick them either
   const k=labelScale()*(lb.lit||lb.glow?LABEL_LIT_SCALE:1);lb.m.scale.set(k*lb.wr,k*lb.hr,k);
   if(lb.hand){const o=HAND_CHIP[lb.hand.userData.source?.handedness]||HAND_CHIP.right;lb.m.position.set(o[0],o[1],o[2]);lb.hand.updateWorldMatrix(true,false);lb.hand.localToWorld(lb.m.position);lb.m.lookAt(head);if(lb.shift)lb.m.translateX(lb.shift);lb.m.visible=true;lb.line.visible=false;return}
-  lb.world.copy(lb.anchor);mesh.localToWorld(lb.world);
-  const pp=pinPlace(lb);if(pp&&!lb.trans&&pinPulledIntoTissue(pp,embedCtx()))lb.trans=true; // a pushed place the limit changed in this frame and that now lies in the tissue: translucent for this frame (embedLabel sets lb.trans anew every frame)
+  const fm=lbMesh(lb);if(fm!==mesh)fm.updateWorldMatrix(true,false);
+  lb.world.copy(lb.anchor);fm.localToWorld(lb.world);
+  const pp=pinPlace(lb);if(pp&&!lb.trans&&pinPulledIntoTissue(pp,fm===mesh?embedCtx():lb.pq?partCtxOf(lb.pq):null))lb.trans=true; // a pushed place the limit changed in this frame and that now lies in the tissue: translucent for this frame (embedLabel sets lb.trans anew every frame)
   if(lb.off&&pp){ // a MOVED label sits where the user left it (anchor + offset in voxel units: it moves / turns with the volume); the leader runs from the anchor to the card's edge facing it. An embedded label pushed out of the tissue sits at the pushed place instead (with an offset: here; without: the default place from that point, below), the leader still from the anchor.: pinPlace limits either place, so enlarged past the initial display the line drawn is never longer than the line the initial scale draws from where the head is now (a card with no free place within the limit stays in the tissue, translucent: lb.trans); shrunk it follows the volume
-   const d=pp;lb.m.position.set(d.x,d.y,d.z);mesh.localToWorld(lb.m.position);lb.m.lookAt(head);lb.m.updateMatrixWorld(true);
+   const d=pp;lb.m.position.set(d.x,d.y,d.z);fm.localToWorld(lb.m.position);lb.m.lookAt(head);lb.m.updateMatrixWorld(true);
    tmpLb.copy(lb.world);lb.m.worldToLocal(tmpLb);const e=rectEdgePoint(tmpLb.x,tmpLb.y,LABEL_W/2,LABEL_H/2); /* tmpLb is in the plane's own space (unscaled), where a wide / tall card (m.scale = k*wr, k*hr) is still LABEL_W x LABEL_H: its edge there is its edge in the world */tmpLe.set(e.x,e.y,0);lb.m.localToWorld(tmpLe);
    setLeaderIfMoved(lb.line.geometry.attributes.position,lb.world.x,lb.world.y,lb.world.z,tmpLe.x,tmpLe.y,tmpLe.z,undefined,lb.line.geometry.attributes.other); // weight: the vertex buffer goes to the GPU only when an end moved
    lb.m.visible=true;lb.line.visible=true;return;
   }
-  const bw=pp?tmpLe.set(pp.x,pp.y,pp.z):null;if(bw)mesh.localToWorld(bw); // an embedded label pushed out (no offset): the default place formula from the pushed point (limited, pinPlace), the leader still from the anchor
+  const bw=pp?tmpLe.set(pp.x,pp.y,pp.z):null;if(bw)fm.localToWorld(bw); // an embedded label pushed out (no offset): the default place formula from the pushed point (limited, pinPlace), the leader still from the anchor
   tmpLb.subVectors(head,bw||lb.world).normalize();lb.m.position.copy(bw||lb.world).addScaledVector(tmpLb,0.012);lb.m.position.y+=labelRise(lb);lb.m.lookAt(head);
   setLeaderIfMoved(lb.line.geometry.attributes.position,lb.world.x,lb.world.y,lb.world.z,lb.m.position.x,lb.m.position.y-cardHalfH(LABEL_H,lb.hr,k),lb.m.position.z,undefined,lb.line.geometry.attributes.other);
   lb.m.visible=true;lb.line.visible=true;
@@ -3387,6 +3461,9 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
  const dropPin=(rid,lb)=>{pins.delete(rid);labelBatch.remove(lb);lb.m.removeFromParent();lb.cache.clear();lb.spare?.tex.dispose();};
  const pinAnchor=(lb,reg)=>{if(lb.lab!==reg.label){lb.lab=reg.label;const p=voxelToLocal(reg.label.anchor,vrHalfExt,vrDims);lb.anchor.set(p.x,p.y,p.z);lb.off=leaderVisible(reg.label)?reg.label.offset:null}};
  const childPrepared=key=>childList.some(e=>e.key===key); // a child segment has a card while the session has its voxels (the prepared child list)
+ // an earlier change: the part a card stands on (lb.pq; lb.pmesh = its mesh), or null = the body's: the part that is out and has the card's anchor voxel (what the card points at moves with the part: a result's card pinned on a child that is out stands on the child),
+ // else the part that is out for the card's target (a result's rid / a child's key)
+ const pinFrame=(lb,kind,k)=>{const q=partOfLocal(lb.anchor)||partOfTarget(kind,k);lb.pq=q;lb.pmesh=q?q.mesh:null};
  const syncPins=()=>{
   const ri=ridIndex();
   for(const [rid,lb] of pins){const reg=regionByRid(rid);if(!reg?.label||!(rid<0?childPrepared(reg.key):ri.has(rid)))dropPin(rid,lb)} // deleting the visited entry while iterating a Map is safe
@@ -3396,14 +3473,14 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    let lb=pins.get(reg.id);if(!lb){lb=makeLabel();lb.rid=reg.id;pins.set(reg.id,lb)}
    lb.hid=!labelSegmentsShown(reg.segmentKeys,vrSegShown);if(regionHidden(reg))lb.hid=true; // a hidden result has no card either; an earlier change stage 3: hidden = its SHAPE (a result with its colour off keeps its card)
    drawLabel(lb,{id:idx,key:''},false,pinLit.has(reg.id)||pinGlow.has(reg.id));lb.dotColor=regionList[idx-1].color; // the dot at the foot of the leader takes the result's colour
-   pinAnchor(lb,reg);
+   pinAnchor(lb,reg);pinFrame(lb,'region',reg.id);
   }
   if(childList.length&&hasChildLabels())for(const reg of childLabelItems()){ // the child segments' name labels (the same cards, kept on the child: child-labels.js)
    if(!childPrepared(reg.key))continue;
    let lb=pins.get(reg.id);if(!lb){lb=makeLabel();lb.rid=reg.id;pins.set(reg.id,lb)}
    lb.hid=!(reg.visible&&vrSegShown(reg.child.parentKey)); // a hidden child (or one whose parent is hidden) has no card
    drawLabel(lb,{id:0,key:'',childKey:reg.key},false,pinLit.has(reg.id)||pinGlow.has(reg.id));lb.dotColor=childByKey(reg.key)?.color||0xffffff;
-   pinAnchor(lb,reg);
+   pinAnchor(lb,reg);pinFrame(lb,'child',reg.key);
   }
  };
  // one trigger tap on a hit: with a result AND a child there (overlap) the first card not pinned yet is pinned (the result, then the child), with both pinned both are unpinned (child-labels.js labelToggle);
@@ -3464,7 +3541,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
  const dragPin=(rid,P)=>{
   if(typeof rid==='string'&&rid.startsWith('pp'))return px.drag(rid,P); // a card of the partner (ids 'pp<n>'): its own place in the partner's space (pairDragCard)
   const reg=regionByRid(rid),lb=pins.get(rid);if(!reg?.label||!lb||!mesh||!vrHalfExt||!vrDims)return false;
-  tmpPl.set(P.x,P.y,P.z);mesh.worldToLocal(tmpPl);
+  const fm=lbMesh(lb);if(fm!==mesh)fm.updateWorldMatrix(true,false);tmpPl.set(P.x,P.y,P.z);fm.worldToLocal(tmpPl);
   return setRegionLabelOffset(reg,offsetForLocal(lb.anchor,tmpPl,labelStep()));
  };
  const resetPin=c=>{const ld=c.userData.lblDrag;
@@ -3691,7 +3768,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    // the section this press may drag: a band / tag = that section; on the selected section's point (section mode) = the selected one, with the higher threshold;
    // empty space (not on tissue) = the section the laser passes through
    if(section.on&&vrHalfExt&&!framesHidden()){ // frames hidden (thumbstick click held): no section is dragged
-    const pd=pressDragSection(res,{recordOk:!surfaceActive()&&!labelMode(),selected:section.selected}); // only where the laser is on a section (the lit frame, or the selected section's plane); empty space no longer takes the nearest section
+    const pd=pressDragSection(res,{recordOk:!surfaceActive()&&!labelMode()&&!res.ref?.part,selected:section.selected}); // only where the laser is on a section (the lit frame, or the selected section's plane); empty space no longer takes the nearest section
     if(pd){pr.dragPl=pd.pl;pr.dragRec=pd.rec}
     if(pr.dragPl&&draggedBy(pr.dragPl,c))pr.dragPl=null;
    }
@@ -4108,7 +4185,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
   if(evMenu&&ui.tab!==10)btn(560,18,200,tr('evSimple'),false,()=>{ui.tab=10},{size:28}); // back to the かんたん menu
   // an earlier change: すべて元に戻す (every part taken out goes back) sits in the header, between the title and 「閉じる」, on EVERY page of both menus (no list row gives up its room); the way out of the body is the long-press ring (切り出す). Only when the data has
   // results or child segments (partMenuInfo); on the pages of 体験会モード's full menu the 「かんたん」 button is there instead.
-  {const dm=partMenuInfo();if(dm&&!(evMenu&&ui.tab!==10))btn(PART_BTN_X,18,PART_RESTORE_W,dm.text.restore,false,()=>partRestorePress(),{size:24,disabled:!dm.active||dm.busy})}
+  {const dm=partMenuInfo();if(dm&&!(evMenu&&ui.tab!==10)){btn(PART_BTN_X,18,PART_RESTORE_W,dm.text.restore,false,()=>partRestorePress(),{size:24,disabled:!dm.active||dm.busy});btn(PART_ALL_X,18,PART_ALL_W,dm.text.all,false,()=>partAllPress(),{size:24,disabled:!dm.canAll||dm.busy})}} // すべて切り出す: every result / child segment taken out at once (partDetachAll)
   // tabs
   // six tabs (解析 added) share the width
   if(ui.tab===11&&!(levelSwitchOn()||pairRowOn()))ui.tab=0; // the データ tab exists only for a practice dataset with a level (levelSwitchOn)
@@ -4554,7 +4631,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    const rOff=!handIn.rayOn(c),bd=rOff?noHits:histAxis===c?histAxisBd:boardHits(c),h=bd.menu,hh=bd.help,rh=bd.wheel||bd.pwheel,board=h||hh||bd.hist||bd.undoBtn||bd.hu||bd.ev||bd.wrist||(rh&&rh.slot!==null?rh:null),ray=c.userData.ray,nowF=performance.now();
    if(bd.undoBtn)undoLit=true;
    if(bd.wrist)handIn.hover(bd.wrist.slot);
-   let tab=null,pt=null,mlb=null,band=null,vh=null,sh=null,gl=null,vp2=null,sp2=null;
+   let tab=null,pt=null,mlb=null,band=null,vh=null,sh=null,gl=null,vp2=null,sp2=null,pth=null;
    const selOk=!!(section.on&&section.selected&&!draggedBy(section.selected,c)),anyOk=section.on&&planes.some(p=>!draggedBy(p,c));
    if(!board&&!rh&&!rOff){
     const vis=section.on&&!fHide?planes.filter(p=>!draggedBy(p,c)):[]; // frames hidden (thumbstick click held): no tag, band or glass for the laser
@@ -4566,14 +4643,15 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
     if(vis.length)gl=glassHit(c,vis); // the empty inside of a frame: counts only when nothing else is hit (resolveTriggerTarget)
     if(surfaceActive()||labelMode()||anyOk){vh=volumeHit(c);c.userData.vhFrame=frameNo} // in 断面 mode too, to tell "laser on the 3D object" (no section grab) from empty space
     if(!surfaceActive()&&selOk){sh=sectionPointOf(c);c.userData.secFrame=frameNo}
+    if(parts.length){const ph=partHitOf(c);if(ph){const vb=surfaceActive()||labelMode()||anyOk?vh:volumeHit(c),v0=vp2&&(!vb||vp2.distance<vb.distance)?vp2:vb;if(!v0||ph.distance<v0.distance)pth=ph}} // an earlier change: the laser meets a part taken out (also one a hand holds, the holding hand's laser too: only the grip's start, partGripStart, leaves a held part out); where it is nearer than the body's / the partner's hit (the partner's rule: the nearer one wins) the laser ends on it
     if(pair?.on){ // stage 3: the laser meets the partner's box too (its own candidates; c.userData.volHit / secHit stay the primary's: the HU line and the grips read them)
      if(surfaceActive()||labelMode()||anyOk)vp2=px.hit(c);
      if(!surfaceActive()&&selOk)sp2=px.sec(c);
     }
    }
-   c.userData.volHit=vh;c.userData.secHit=sh;c.userData.pairHit=vp2;c.userData.helpHit=!!hh;c.userData.evHit=!!bd.ev;c.userData.histHit=!!bd.hist;c.userData.wristOn=!!bd.wrist; // a hand's fist on the wrist menu does not grab
+   c.userData.partHit=pth;c.userData.volHit=vh;c.userData.secHit=sh;c.userData.pairHit=vp2;c.userData.helpHit=!!hh;c.userData.evHit=!!bd.ev;c.userData.histHit=!!bd.hist;c.userData.wristOn=!!bd.wrist; // a hand's fist on the wrist menu does not grab
    if(bd.hist&&!histHov&&histAxis!==c)histHov=histTargetOf(bd.hist); // the grab target under a laser is lit
-   const vx=vp2&&(!vh||vp2.distance<vh.distance)?vp2:vh,sx=sp2&&(!sh||sp2.distance<sh.distance)?sp2:sh; // the nearer of the two volumes' hits is what the laser meets
+   const vx=pth||(vp2&&(!vh||vp2.distance<vh.distance)?vp2:vh),sx=sp2&&(!sh||sp2.distance<sh.distance)?sp2:sh; // the nearer of the two volumes' hits is what the laser meets
    // how much nearer than the plane the object surface must be to hide it (0.75 voxel in world metres: the surface march and the plane meet at a cut face)
    let occEps=1e-4;if(vx&&(sx||tab)&&vrHalfExt&&vrDims&&mesh?.parent){const vs=voxelSize(vrHalfExt,vrDims);mesh.getWorldScale(tmpSs);occEps=0.75*Math.min(vs[0]*tmpSs.x,vs[1]*tmpSs.y,vs[2]*tmpSs.z)}
    // under 「実際に隠す」 a number tag the tissue covers (the frame is not drawn there) is not there for the laser or the trigger: the tag is picked before everything else (resolveTriggerTarget), so
@@ -4581,9 +4659,11 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    if(tab&&vx&&!draggedBy(tab.pl,null)&&tagBehindTissue(occlusionGpu(),tab.t,vx.distance,occEps))tab=null;
    // a pinned card the tissue covers (not drawn under 「実際に隠す」) is not there for the laser, unless it is held or it is an embedded card (translucent, drawn on top)
    if(mlb&&mlb.pin&&vx&&!(c.userData.lblDrag&&c.userData.press)&&!pins.get(mlb.id)?.trans&&tagBehindTissue(occlusionGpu(),mlb.distance,vx.distance,occEps))mlb=null;
-   // where a moved point would land (the current mode's rule): the surface voxel or the selected section's voxel
-   const placement=surfaceActive()?(vx&&vx.voxel?vx:null):(sx&&sx.voxel&&!(vx&&vx.distance<sx.distance-occEps)?sx:null);c.userData.placement=placement; // a plane behind the object surface is not a place to put a point
-   const res=rOff||rh&&!board&&wheelOwner!==c&&pw?.c!==c?{kind:'none',ref:null}:resolveTriggerTarget({board:board?bd:null,ringOwnOpen:wheelOwner===c||pw?.c===c,ringHighlight:c.userData.ringHl??null,moving:!!c.userData.moving,placement,tab,point:pt,mlabel:mlb,band,glass:gl,tissue:vx,plane:sx,occludeEps:occEps,mode:vrPointMode,analysis:analysisOn(),canDrag:anyOk&&!fHide&&(surfaceActive()||labelMode()||!vx)});
+   // 断面 mode: the laser on a part taken out (nearer than the selected plane's hit) records on the part's surface voxel, as 表面 does: that call resolves in the surface rule; the body's 断面 rule (the plane) is as before
+   const partRec=!!pth&&vx===pth&&!!pth.voxel&&vrPointMode!=='surface'&&!analysisOn()&&!(sx&&sx.distance<=pth.distance+occEps);
+   // where a moved point would land (the current mode's rule): the surface voxel (a part's too, in 断面 mode as well) or the selected section's voxel
+   const placement=surfaceActive()||partRec?(vx&&vx.voxel?vx:null):(sx&&sx.voxel&&!(vx&&vx.distance<sx.distance-occEps)?sx:null);c.userData.placement=placement; // a plane behind the object surface is not a place to put a point
+   const res=rOff||rh&&!board&&wheelOwner!==c&&pw?.c!==c?{kind:'none',ref:null}:resolveTriggerTarget({board:board?bd:null,ringOwnOpen:wheelOwner===c||pw?.c===c,ringHighlight:c.userData.ringHl??null,moving:!!c.userData.moving,placement,tab,point:pt,mlabel:mlb,band,glass:gl,tissue:vx,plane:sx,occludeEps:occEps,mode:partRec?'surface':vrPointMode,analysis:analysisOn(),canDrag:anyOk&&!fHide&&(surfaceActive()||labelMode()||!vx)});
    c.userData.res=res;const hovPt=res.kind==='point'&&!measureOtherData(res.ref.id)?res.ref.id:null;if(hovPt)hoverIds.add(hovPt); // while a distance is made, a point of the OTHER dataset of a pair does not light (it cannot be the end)
    if(!c.userData.press&&!c.userData.drag&&!huLine.isDragging()){const hpz=c.userData.hoverPulse||=createHoverPulse({debounceMs:HAPTIC.hover.debounceMs});if(hpz.update(hovPt,nowF))pulse(c,HAPTIC.hover.amp,HAPTIC.hover.ms)}
    updatePress(c,nowF);updateFistDrag(c); // a fist holding a section (hands only: drag.fist)
@@ -4595,7 +4675,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
     if(dg&&planes.includes(dg.pl))(dg.oov||=createOutOfViewTracker()).update(js0,!dg.volTouched&&sectionOutOfView(dg.pl))}
    {const ld=c.userData.lblDrag;if(ld&&c.userData.press){setRay(c);const o=raycaster.ray.origin,q=raycaster.ray.direction;tmpRc.set(o.x+q.x*ld.dist+ld.grab.x,o.y+q.y*ld.dist+ld.grab.y,o.z+q.z*ld.dist+ld.grab.z);if(ld.pin){if(!ld.moved&&!ld.done&&tmpRc.distanceTo(ld.pos0)>(isHand(c.userData.source)?HAND_LABEL_MOVE_M:0.008))ld.moved=true;if(ld.moved&&!ld.done)dragPin(ld.id,tmpRc)}else (isPairId(ld.id)?pair?.measure:vpMeasure)?.dragLabel(ld.id,tmpRc)}} // the grabbed label follows the laser
    const ref=res.ref,dist=board?board.distance:rh?rh.distance:(ref&&(res.kind==='point'||res.kind==='mlabel'||res.kind==='section'||res.kind==='record'||res.kind==='label'||res.kind==='move'||res.kind==='tissue')?(ref.t??ref.distance):null);
-   const busy=!!c.userData.drag,rec=res.kind==='record'||res.kind==='move',cur=!busy&&rec&&!!ref?.voxel,curSurf=cur&&surfaceActive(),curSec=cur&&!surfaceActive();
+   const busy=!!c.userData.drag,rec=res.kind==='record'||res.kind==='move',cur=!busy&&rec&&!!ref?.voxel,curSurf=cur&&(surfaceActive()||!!ref.part),curSec=cur&&!curSurf; // a part's record in 断面 mode: the cursor sits on the part's surface voxel
    const hc=laserColorOf(c),dot=c.userData.dot;ray.material.color.setHex(hc);dot.material.color.setHex(hc);dot.visible=dist!=null&&!cur&&!busy;
    // a ring is drawn without depth (depthTest:false, renderOrder 7) after the laser, so it covered the laser's last part and its end dot:
    // the laser looked as if it went on behind the ring. While this laser ends on a ring, the laser and the dot are drawn after it, on top.
@@ -4648,9 +4728,9 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
   flingDbg?.update(performance.now()); // debug readout hides after FLING_DEBUG_MS
   // faint label of what each laser points at (not when that result is already pinned); pinned labels follow the volume
   {snFrame=undefined;const on=labelMode()&&!diagAn.noLabels;if(on||pins.size||analysisRegions.some(r=>r.label)||hasChildLabels()||pair?.on)readHead();anBenchTick();
-   for(const c of controllers){const u=c.userData,ph=on&&u.pairHit&&(!u.volHit||u.pairHit.distance<u.volHit.distance)?u.pairHit:null,hit=on?(ph||u.volHit):null;if(ph)(u.hrids||(u.hrids=[])).length=0;hoverCards(c,hit,ph?u.hrids:hitLabelRids(hit,regionList,childByKey,u.hrids||(u.hrids=[])));
+   for(const c of controllers){const u=c.userData,ph=on&&!u.partHit&&u.pairHit&&(!u.volHit||u.pairHit.distance<u.volHit.distance)?u.pairHit:null,hit=on?(u.partHit||ph||u.volHit):null;if(ph)(u.hrids||(u.hrids=[])).length=0;hoverCards(c,hit,ph?u.hrids:hitLabelRids(hit,regionList,childByKey,u.hrids||(u.hrids=[])));
     if(ph&&ph.id){const e=pair.regionList[ph.id-1],pp=e&&px.primaryOf(pair,e);if(pp)u.hrids.push(pp.id)}} // stage 3: the laser on the partner's result lights the primary's result of the same bone (atlas ID): its card glows, and the highlight reaches both volumes' tables (the partner's own side highlights the primary too) // the partner's result under the laser: its own card (hit.pr), nothing of the primary lights
-   pinGlow.clear();for(const x of controllers){const u=x.userData,rs=u.res,blocked=rs?.kind==='mlabel'||(u.lblDrag&&u.press)||wheelOwner===x||pw?.c===x;for(const rid of u.hrids){const g=glowRid(on,x.visible!==false,rid,blocked);if(g)pinGlow.add(g)}} // the shown result (and, where one covers it, the child) under a laser makes its own label glow (a few Set ops per frame, no allocation); not while that hand is on / holds a card (that one is lit by pinLit) or has its quick / point ring open
+   pinGlow.clear();for(const x of controllers){const u=x.userData,rs=u.res,blocked=rs?.kind==='mlabel'||(u.lblDrag&&u.press)||wheelOwner===x||pw?.c===x||u.partHit?.part?.held?.c===x;for(const rid of u.hrids){const g=glowRid(on,x.visible!==false,rid,blocked);if(g)pinGlow.add(g)}} /* a hand that holds a part taken out keeps its laser on that part for the whole hold (the grip fixes the laser on it): that laser lights none of its cards, so a card behind the held part is hidden by the depth test, as after the release */ // the shown result (and, where one covers it, the child) under a laser makes its own label glow (a few Set ops per frame, no allocation); not while that hand is on / holds a card (that one is lit by pinLit) or has its quick / point ring open
    pinLit.clear();pinHeld.clear();for(const x of controllers){const r=x.userData.res;if(r&&r.kind==='mlabel'&&r.ref?.pin)pinLit.add(r.ref.id);const ld=x.userData.lblDrag;if(ld?.pin&&x.userData.press){pinLit.add(ld.id);if(ld.moved&&!ld.done)pinHeld.add(ld.id)}}
    {const hh=[],hc=[],pinOk=analysisOn();for(const x of controllers){const r=x.userData.res,ld=x.userData.lblDrag;let pin=0;if(pinOk){if(r&&r.kind==='mlabel'&&r.ref?.pin)pin=r.ref.id;if(ld?.pin&&x.userData.press)pin=ld.id} // the pinned card the laser is on / holds (priority over the volume); only in the analysis state
      let hover=0,hoverC=0;for(const rid of x.userData.hrids)if(rid>0)hover=rid;else hoverC=rid; // the shown result (and the child) under the laser on the volume (pinned or not: the card may not be shown for a pinned one, the body still lights). Overlap: both light
@@ -4728,10 +4808,10 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    lblLit.clear();for(const x of controllers){const r=x.userData.res;if(r&&r.kind==='mlabel'&&r.ref&&!r.ref.pin)lblLit.add(r.ref.id);if(x.userData.lblDrag&&!x.userData.lblDrag.pin&&x.userData.press)lblLit.add(x.userData.lblDrag.id)} // the label the laser is on stays lit while it is grabbed
    // the active section = the selected one while sections are on, as the shader's plane (object space, unit normal, same index as planes)
    let secPl=null;if(section.on&&section.selected&&material&&!bench.noSection&&!planeOwnerPair(section.selected)){const i=planes.indexOf(section.selected);if(i>=0&&i<material.uniforms.planeCount.value){const q=material.uniforms.cutPlanes.value[i];secPl={x:q.x,y:q.y,z:q.z,w:q.w}}}
-   vpMarkers.update({fingerprint:vrFp,dims:vrDims,halfExt:vrHalfExt,mesh:mesh?.parent?mesh:null,head,hidden:vpHidden,section:secPl,selectedId:vpSel,hover:hoverIds,preview:previewArg,occlusion:occlusionGpu()});
+   vpMarkers.update({fingerprint:vrFp,dims:vrDims,halfExt:vrHalfExt,mesh:mesh?.parent?parts.length?partMarkMesh:mesh:null,head,hidden:vpHidden,section:secPl,selectedId:vpSel,hover:hoverIds,preview:previewArg,occlusion:occlusionGpu()});
    const msId=getMeasureStart(),mh=msId&&measureHintHand?.id===msId&&measureHintHand.c.visible!==false?measureHintHand.c:null; // the hint floats above the controller that placed the start point
    if(mh){mh.updateWorldMatrix(true,false);mh.getWorldPosition(tmpHintHand)}
-   vpMeasure.update({fingerprint:vrFp,dims:vrDims,halfExt:vrHalfExt,mesh:mesh?.parent?mesh:null,head,spacing:vrSpacing,warn:!!spacingNote(),startId:getMeasureStart(),hint:measureHint(),gaze:headGaze,handPos:mh?tmpHintHand:null,now:nowH,preview:previewArg,lit:lblLit,hidden:vpMeasHidden,occlusion:occlusionGpu()});
+   vpMeasure.update({fingerprint:vrFp,dims:vrDims,halfExt:vrHalfExt,mesh:mesh?.parent?mesh:null,partMeshOf:mesh?.parent&&parts.length?partMeshOfLocal:null,head,spacing:vrSpacing,warn:!!spacingNote(),startId:getMeasureStart(),hint:measureHint(),gaze:headGaze,handPos:mh?tmpHintHand:null,now:nowH,preview:previewArg,lit:lblLit,hidden:vpMeasHidden,occlusion:occlusionGpu()});
    const pt2=pair;if(pt2?.markers){ // stage 3: the partner's points and distances (its own store, its own box; nothing is judged hidden on the CPU for them: the GPU depth does it, or they are always drawn)
     const mesh2=pt2.on&&pt2.mesh.parent?pt2.mesh:null;let secP2=null;if(mesh2&&section.on&&section.selected&&!bench.noSection&&planeOwnerPair(section.selected)){const i=planes.indexOf(section.selected);if(i>=0&&i<pt2.u.planeCount.value){const q=pt2.u.cutPlanes.value[i];secP2={x:q.x,y:q.y,z:q.z,w:q.w}}}
     pt2.markers.update({fingerprint:pt2.fp,dims:pt2.srcDims,halfExt:pt2.halfExt,mesh:mesh2,head,hidden:null,section:secP2,selectedId:vpSel,hover:hoverIds,preview:previewArg,occlusion:occlusionGpu()});
@@ -5000,7 +5080,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
   const hideZero=new Uint8Array(256),hideCurR=new Uint8Array(256),hideCurC=new Uint8Array(256);
   const hideSrcs=()=>[P.region?.rg||null,P.child?.rg||null,partHideSrc()?.ids||null];
   const pageHides=()=>{for(let i=1;i<256;i++)if(hideBitsR[i]|hideBitsC[i])return true;return false}; // the page itself hides a result / child: only then is the body's cut also a source of the visible-content field (without it the blocks wholly inside the cut are left out by partOcc: no field to build)
-  const bodyCutDraws=()=>!!(parts.length&&partHideSrc()&&!diagAn.noRegion&&partBodyDraws(variantKey())); // (n734: partBodyDraws = partBodySet without the bake: the hidden state of the combined texture is the same either way) the body is drawn by the VRL_PART programs with the field on the GPU (its cut = the field), not by the ordinary ones with the targets hidden by their voxels in its tables
+  const bodyCutDraws=()=>!!(parts.length&&(partHideSrc()||(!pageHides()&&partBakeCan()))&&!diagAn.noRegion&&partBodyDraws(variantKey())); // G2: a bake of the body that can start counts as the page hiding nothing for the hidden state (the targets are not hidden by the page's tables: no hide-only rebuild of the combined texture in front of the bake, which the bake would have to wait for); // (n734: partBodyDraws = partBodySet without the bake: the hidden state of the combined texture is the same either way) the body is drawn by the VRL_PART programs with the field on the GPU (its cut = the field), not by the ordinary ones with the targets hidden by their voxels in its tables
   const hideCur=()=>{if(!parts.length)return[hideBitsR,hideBitsC,hideZero];hideCurR.set(hideBitsR);hideCurC.set(hideBitsC);
    if(bodyCutDraws()){for(const q of parts){const tg=q.target,i=(tg?.index|0)+1;if(i>0&&i<256)(tg.kind==='region'?hideCurR:hideCurC)[i]=0}const ph=partHideSrc();return[hideCurR,hideCurC,ph&&pageHides()?ph.bits:hideZero]}
    for(const q of parts){const tg=q.target,i=(tg?.index|0)+1;if(i>0&&i<256)(tg.kind==='region'?hideCurR:hideCurC)[i]|=q.mask} // the ordinary programs (no field on the GPU yet, the VRL_PART set not compiled, the diagnostic without results): the tables hide each target on its slots (patchRegionLutMany / patchChildLutMany), so the hidden state is the page's and the targets'
@@ -5012,12 +5092,12 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    const u=material?.uniforms;if(!u)return;
    const t=comboT;if(!t||!(u.distInCls.value>0)){u.hideVMode.value=0;return}
    // a part taken out: the hidden state is that of the way the body is drawn now (hideCur: with the VRL_PART programs and the field on the GPU the body's cut is a hidden source; otherwise the tables hide the targets by their voxels): the field of the visible content is built for exactly that
-   const cur=hideCur();let rb=t.rb;
+   const cur=hideCur(),cutDraws=!!(parts.length&&bodyCutDraws());let rb=t.rb;
    if(hideBitsOn(cur,sh)){
     if(!rb)rb=getRb(t);
     if(!(rb.hideValid(cur,vis)&&hideBitsSame(rb.contentHide,cur)))rb.requestHide(cur); // a job in flight for this state is left alone (request compares)
    }
-   u.hideVMode.value=rb&&rb.hideValid(cur,vis)?1:0;
+   u.hideVMode.value=rb&&rb.hideValid(cur,vis)&&!partHideLoose(cutDraws)?1:0; // the bytes are for exactly this hidden state: while a part's target is hidden by something the state does not name (below), the old rule stays (hiding more than was built is not safe: vr-hide-field.js)
   };
   // once per frame (before the render): the rebuild's next step; the jumps come back when it is complete
   comboTick=()=>{const t=comboT;if(!t?.rb?.busy)return;const done=t.rb.tick();t.comboMask=t.rb.contentMask;if(done)applyCombo(t)};
@@ -5600,15 +5680,16 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    let bakeApplying=0,bakeGen=0; // partApply calls in flight (no bake starts meanwhile); the number of the bake wanted (a stale answer is dropped)
    const bakeBoxR=new THREE.Box3(),bakeAt=new THREE.Vector3();
    partBakeOn=()=>!!partRes?.bakeBound;
-   partBakeTex=()=>partRes?.bakeBound&&partRes.bake?{tex:partRes.bake.tex,cls4:partRes.bake.cls4Tex}:null;
+   partBakeTex=()=>partRes?.bakeBound&&partRes.boundB?{tex:partRes.boundB.tex,cls4:partRes.boundB.cls4Tex}:null; // boundB: the bake the body reads NOW (F: the one of the set before while the next is made)
    // the classification the PARTS read: the combined texture itself while the body reads the baked one, else what the body reads
    const partOrigCls=()=>{const t=comboT;return partRes?.bakeBound&&t?.combo?{tex:t.combo,cls4:t.cls4||material.uniforms.cls4Tex.value}:{tex:material.uniforms.clsTex.value,cls4:material.uniforms.cls4Tex.value}};
    partClsSync=()=>{if(!parts.length||!material)return;const o=partOrigCls();for(const q of parts){q.u.clsTex.value=o.tex;q.u.cls4Tex.value=o.cls4}};
    // the one synchronous step: the textures, the GPU's tables, the program choice (partBodySet / hideFreeOf read partRes.bakeBound) -- never a frame with the baked bytes and the tables of the other state
    const bakeSet=on=>{
-    const r=partRes;if(!r||!material||!!r.bakeBound===on)return;
-    const u=material.uniforms,t=comboT,b=r.bake;
-    r.bakeBound=on;partLogEv('bakeSet',on?'on':'off');
+    const r=partRes;if(!r||!material)return;
+    const u=material.uniforms,t=comboT,b=on?r.bake:null,swap=!!(on&&r.bakeBound&&r.boundB!==b); // swap (F): the next bake replaces the bound one of the set before, in this one step
+    if(!!r.bakeBound===on&&!swap)return;
+    r.bakeBound=on;r.boundB=b;partLogEv('bakeSet',on?(swap?'swap':'on'):'off');
     if(on){u.clsTex.value=b.tex;if(b.cls4Tex)u.cls4Tex.value=b.cls4Tex}
     else if(t?.combo){u.clsTex.value=t.combo;if(four&&t.cls4)u.cls4Tex.value=t.cls4}
     bakeLight(on?b:null);
@@ -5617,13 +5698,13 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    };
    // n740: the baked cut is lit as the VRL_PART body lights it (the fragment shader's bakeGrad): the field the body is drawn with (r.body.u: partField .. partFieldB, by value) on the slots the bake lowered (b.cut)
    const bakeLight=b=>{const u=material.uniforms,f=b&&partRes?.body?.u;u.bakeCut.value=f?b.cut|0:0;u.bakeField.value=f?f.partField.value:null;if(!f)return;u.bakeFieldScale.value.copy(f.partFieldScale.value);u.bakeFieldOff.value.copy(f.partFieldOff.value);u.bakeFieldA.value.forEach((v,s)=>v.copy(f.partFieldA.value[s]));u.bakeFieldB.value.forEach((v,s)=>v.copy(f.partFieldB.value[s]))};
+   const bakeFree=b=>{if(!b)return;if(!b.shared){b.tex?.dispose();b.cls4Tex?.dispose()}b.keep=null;b.origTex?.dispose();b.orig4Tex?.dispose();b.srcTex?.dispose();b.src4Tex?.dispose();if(b.fld){fieldDrop(b.fld.tex,b.fld.key);b.fld=null}}; // b.fld: the body's field texture its cut's light reads (kept by partApply while the bake is bound after a new set is installed: F)
    const bakeDrop=()=>{
     bakeGen++;const r=partRes;if(!r)return;
     if(r.bakeBound)bakeSet(false);
-    const b=r.bake;r.bake=null;
-    if(b){b.tex?.dispose();b.cls4Tex?.dispose();b.origTex?.dispose();b.orig4Tex?.dispose();b.srcTex?.dispose();b.src4Tex?.dispose()}
+    const b=r.bake,h=r.held;r.bake=null;r.held=null;bakeFree(b);bakeFree(h);
    };
-   partBakeDrop=()=>{bakeDrop();for(const q of parts)q.pb&&pbDrop(q)}; // another grid / texture: the parts' baked bytes are those of the old one too (pbDrop: defined below)
+   partBakeDrop=()=>{bakeDrop();for(const q of parts)pbDrop(q)}; // another grid / texture: the parts' baked bytes are those of the old one too (pbDrop: defined below)
    partBakeRegion=()=>{const r=partRes;if(!r?.bakeBound||!material)return;material.uniforms.regionLut.value=r.lutBakeR;material.uniforms.regionAnyHidden.value=bakeRegionAnyHidden(r.lutBakeR.image.data,regionList.length)};
    partBakeChild=()=>{const r=partRes;if(!r?.bakeBound||!material||!childList.length)return;material.uniforms.childLut.value=r.lutBakeC;material.uniforms.childAnyHidden.value=bakeChildAnyHidden(r.lutBakeC.image.data,childList.length)};
    // a copy of a combined texture's storage (nothing is sent: the bytes follow from the GPU, bakeStep); the same format / filter as the original
@@ -5642,11 +5723,13 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
     const set=r.bodySet,body=set.body,cdims=t.dims,chan=P.cls.chan,box=partBakeBoxOf(body,set.dims,cdims),slots=partBakeSlots(body,chan,15);
     if(!box||!slots){r.bakeSkip=r.bodyGen;partLogEv('bakeSkip','body no-box-slot');return}
     const mask=t.comboMask,four4=!!(four&&t.cls4?.image?.data);
+    // (b): the bake bound now (r.held: the set before) has the same box, slots, mask and source bytes, and the bytes it was baked to are kept (keep): the new bake shares its texture (shared / upd) and, when the worker's bytes come, only the box of the voxels that differ is rewritten in it (bakeInPlace); else a new texture as before
+    const o=r.held,inPlace=!!(o&&o.ready&&o.keep&&r.bakeBound&&r.boundB===o&&o.slots===slots&&o.src===t.combo&&o.mask===mask&&!!o.cls4Tex===four4&&o.box.lo.every((v,i)=>v===box.lo[i])&&o.box.size.every((v,i)=>v===box.size[i]));
     let tex=null,cls4Tex=null;
-    try{tex=bakeTex(t.combo,THREE.RGBAFormat);if(four4)cls4Tex=bakeTex(t.cls4,THREE.RedFormat)}catch(e){console.warn('[VR] part bake textures:',e);partLogEv('texExc','body '+(e?.message||e));tex?.dispose();r.bakeSkip=r.bodyGen;partLogEv('bakeSkip','body tex-exc');return}
-    const b={gen:bakeGen,bodyGen:r.bodyGen,mask,src:t.combo,tex,cls4Tex,box,z:0,patch:null,pz:0,ready:false,cut:0,origTex:null,orig4Tex:null,srcTex:null,src4Tex:null};r.bake=b;partLogEv('bakeStart','body');
+    try{if(inPlace){tex=o.tex;cls4Tex=o.cls4Tex}else{tex=bakeTex(t.combo,THREE.RGBAFormat);if(four4)cls4Tex=bakeTex(t.cls4,THREE.RedFormat)}}catch(e){console.warn('[VR] part bake textures:',e);partLogEv('texExc','body '+(e?.message||e));tex?.dispose();r.bakeSkip=r.bodyGen;partLogEv('bakeSkip','body tex-exc');return}
+    const b={gen:bakeGen,bodyGen:r.bodyGen,mask,src:t.combo,tex,cls4Tex,box,slots,z:inPlace?cdims[2]:0,patch:null,keep:null,shared:inPlace,upd:inPlace?o:null,pz:0,ready:false,cut:0,origTex:null,orig4Tex:null,srcTex:null,src4Tex:null,uids:new Set(parts.map(q=>q.uid)),fld:null};r.bake=b;partLogEv('bakeStart','body');
     const job={rgba:partBakeCrop(t.combo.image.data,cdims,box,4),c4:four4?partBakeCrop(t.cls4.image.data,cdims,box,1):null,box,cdims:Array.from(cdims),idims:Array.from(set.dims),chan:Array.from(chan),body:{data:body.data,lo:body.lo,size:body.size,C:body.C,a:body.a,b:body.b},mask,hide:bakeHideOf(t,box,mask)};
-    (partRunner||(partRunner=createPartSetRunner())).bake(job).then(res=>{if(partRes===r&&r.bake===b){b.patch=res;b.cut=res.slots|0}},e=>{if(partRes===r&&r.bake===b){console.warn('[VR] part bake (the body keeps drawing by its field):',e?.message||e);partLogEv('bakeSkip','body worker-fail');r.bakeSkip=b.bodyGen;bakeDrop()}});
+    (partRunner||(partRunner=createPartSetRunner())).bake(job).then(res=>{if(partRes===r&&r.bake===b){b.patch=res;b.keep=res;b.cut=res.slots|0}},e=>{if(partRes===r&&r.bake===b){console.warn('[VR] part bake (the body keeps drawing by its field):',e?.message||e);partLogEv('bakeSkip','body worker-fail');r.bakeSkip=b.bodyGen;bakeDrop()}});
    };
    // the copy in slabs a frame (vr-part-view.js partBakeStep): first the whole original, then the baked box from the worker's bytes; a frame's bytes = the upload queue's current slab size (adaptive: what a copy from memory costs on this device)
    const bakeOps={
@@ -5654,19 +5737,47 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
     copy:(src,dst,lo,hi,at)=>{bakeBoxR.min.set(lo[0],lo[1],lo[2]);bakeBoxR.max.set(hi[0],hi[1],hi[2]);bakeAt.set(at[0],at[1],at[2]);renderer.copyTextureToTexture(src,dst,bakeBoxR,bakeAt)},
     drop:x=>x.dispose()};
    const bakeStep=(b,t)=>partBakeStep(b,t,uploadQueue.bytesPerTickNow,bakeOps);
+   // (b): the new bytes of the body's box (b.patch) against the bytes the bound bake was made from (b.upd.keep, the same box): the box of the voxels that differ is written into the bound bake's texture (b.tex is that texture) in this one step, and bodyBakeFrame binds
+   // the new bake in the same step (bakeSet), so no frame shows a half-written body. Nothing differs: nothing is written. More than a frame's bytes (uploadQueue.bytesPerTickNow) differ: a new texture is made and filled in slabs as for any bake (the bound one is drawn meanwhile).
+   const bakeInPlace=(r,b,t)=>{
+    const o=b.upd,w=partBakeRewrite(b,o.keep,b.patch,uploadQueue.bytesPerTickNow,bakeOps);
+    if(w.state==='big'){
+     const four4=!!b.patch.c4;let tx=null,c4=null;
+     try{tx=bakeTex(t.combo,THREE.RGBAFormat);if(four4)c4=bakeTex(t.cls4,THREE.RedFormat)}catch(e){console.warn('[VR] part bake textures:',e);partLogEv('texExc','body '+(e?.message||e));tx?.dispose();r.bakeSkip=b.bodyGen;partLogEv('bakeSkip','body tex-exc');bakeDrop();return}
+     b.tex=tx;b.cls4Tex=c4;b.shared=false;b.upd=null;b.z=0;b.pz=0;partLogEv('bakeInPlace','body too-much bytes='+w.bytes);return;
+    }
+    partLogEv('bakeInPlace','body bytes='+w.bytes);
+    o.tex=null;o.cls4Tex=null;b.shared=false;b.upd=null;b.patch=null;b.ready=true; // the bound bake gives its textures to the new one (bakeFree frees what is left of it once the new one is bound)
+   };
+   const bakeOkNow=r=>{const t=comboT,u=material?.uniforms;return !!(parts.length&&r.body?.ok&&r.bodySet&&t?.combo&&u&&!diagAn.noRegion&&u.distInCls.value>0&&u.useCls.value>0)}; // the guard of bodyBakeFrame (a bake can be held), also what partBakeCan reads
+   // G2: a bake of this body can start (the guard holds and no earlier try for this body failed): bodyCutDraws reads it while the page hides nothing, so that the hidden state asked for by the shown-set change (hideTick), by the combined texture's rebuild
+   // and by the bake's hide (bakeHideOf) is the same one at once (the parts' targets are not hidden by the page's tables)
+   partBakeCan=()=>{const r=partRes;return !!(r&&r.bakeSkip!==r.bodyGen&&bakeOkNow(r))};
+   // true while some part's target is hidden in the body by something that the hidden state of the combined texture (hideCur) does not name: a part shown before its set is installed (A: its voxels), a part cut out after the bound bake was made (F: its
+   // voxels in lutBakeR / lutBakeC), or the body's cut by the field / the bake while the page hides nothing (G2: hideCur leaves every target out). hideTick keeps hideVMode 0 then
+   partHideLoose=cutDraws=>{const r=partRes;if(!parts.length||!r)return false;if(parts.some(q=>!q.pf))return true;if(r.bakeBound&&r.boundB&&parts.some(q=>!r.boundB.uids.has(q.uid)))return true;return !!cutDraws&&!partHideSrc()};
    const bodyBakeFrame=()=>{
     const r=partRes;if(!r)return;
-    const t=comboT,b=r.bake,u=material?.uniforms;
-    const ok=!!(parts.length&&r.body?.ok&&r.bodySet&&t?.combo&&u&&!diagAn.noRegion&&u.distInCls.value>0&&u.useCls.value>0);
-    if(b&&(!ok||b.src!==t.combo||t.rb?.busy||t.comboMask!==b.mask||b.bodyGen!==r.bodyGen||b.gen!==bakeGen||bakeApplying>0))bakeDrop(); // anything it was made from changed: the original again, at once
+    const t=comboT;
+    const ok=bakeOkNow(r);
+    const bad=x=>!ok||x.src!==t.combo||t.rb?.busy||t.comboMask!==x.mask||x.gen!==bakeGen;
+    if((r.bake&&bad(r.bake))||(r.held&&bad(r.held)))bakeDrop(); // anything it was made from changed: the original again, at once
+    // F: a new set of parts was installed (partApply with hold: bodyGen): the bake the body reads stays bound as r.held (the body keeps its ordinary draw on the picture of the set before) while the next one is made; one that was only being made is dropped
+    if(r.bake&&r.bake.bodyGen!==r.bodyGen){const x=r.bake;r.bake=null;if(r.boundB===x){r.held=x;partLogEv('bakeStale','body')}else bakeFree(x)}
     if(!ok){if(r.bakeBound)bakeSet(false);return}
     if(!r.bake){
-     if(bakeApplying>0||t.rb?.busy||r.bakeSkip===r.bodyGen||ui.swapBusy||t.comboMask!==comboMask||comboMask<0)return;
-     bakeStart(r,t);
+     if(bakeApplying>0||t.rb?.busy||ui.swapBusy||t.comboMask!==comboMask||comboMask<0)return;
+     if(r.bakeSkip!==r.bodyGen)bakeStart(r,t);
+     if(!r.bake){if(r.held)bakeDrop();return} // no new bake can be made (skipped / failed): the held one is not kept (the body draws by its field)
     }
-    const nb=r.bake;if(!nb)return;
-    if(!nb.ready){bakeStep(nb,t);if(!nb.ready)return}
+    const nb=r.bake;
+    if(!nb.ready){
+     if(nb.upd){if(nb.patch)bakeInPlace(r,nb,t);if(r.bake!==nb)return} // (b): waiting for the worker's bytes (the bound bake is drawn), then the changed box is written and the bake is bound below in this very step
+     if(!nb.ready&&!nb.upd)bakeStep(nb,t);
+     if(!nb.ready)return;
+    }
     bakeSet(true);
+    if(r.held&&r.boundB===nb){const h=r.held;r.held=null;bakeFree(h)} // the new bake is bound in the step above: the held one goes
    };
    // ---- an earlier change: each detached part drawn by the ORDINARY program on ITS OWN baked bytes (the body's bake above, mirrored). The part's texture is a combined-texture-sized storage that holds ONLY the part (zero elsewhere: a fresh texture storage is
    // zero, so nothing is mirrored; the part's box is what is uploaded): the classification of every shown slot is min(original, the part's field as a byte) (vr-part-view.js partBakeOwn, on the part-set worker), the distance alpha is the part's own
@@ -5674,11 +5785,15 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    // normal points out of the part). Until a part is baked (and whenever its bake is dropped) it is drawn by its VRL_PART programs exactly as before (partRender); the texture is a copy of the part's field only: a change of the field (q.bkey), of the combined
    // texture's bytes / mask, of the diagnostic or of the data drops it at once. One part is made at a time; every part is baked, however many there are.
    const partNuOf=u=>({...u,clsTex:{value:u.clsTex.value},cls4Tex:{value:u.cls4Tex.value},hideVMode:{value:0},regionAnyHidden:{value:1},childAnyHidden:{value:1},bakeCut:{value:0},bakeField:{value:null},bakeFieldScale:{value:new THREE.Vector3(1,1,1)},bakeFieldOff:{value:new THREE.Vector3()},bakeFieldA:{value:[0,1,2,3].map(()=>new THREE.Vector4())},bakeFieldB:{value:[0,1,2,3].map(()=>new THREE.Vector4())}});
-   const pbUnbind=q=>{const b=q.pb,nu=q.nu;if(!b||!b.bound)return;b.bound=false;nu.clsTex.value=q.u.clsTex.value;nu.cls4Tex.value=q.u.cls4Tex.value;nu.bakeCut.value=0;nu.bakeField.value=null};
+   // (a): a part's bake whose field changed (q.bkey: a new set) is not dropped: it stays bound as q.pbOld and the part keeps its ORDINARY draw on it (the picture of the old set) while the next one is made as q.pb; the swap is one synchronous
+   // step (pbBind). pbOld owns the field texture its cut's light reads (fld: the old q.ftex, kept by partApply). Every other reason (the bytes it was made from changed, the part is gone) drops both at once.
+   const pbBoundOf=q=>q.pb?.bound?q.pb:q.pbOld?.bound?q.pbOld:null;
+   const pbUnbind=q=>{const nu=q.nu;if(q.pb)q.pb.bound=false;if(q.pbOld)q.pbOld.bound=false;nu.clsTex.value=q.u.clsTex.value;nu.cls4Tex.value=q.u.cls4Tex.value;nu.bakeCut.value=0;nu.bakeField.value=null};
+   const pbFree=b=>{if(!b)return;if(!b.shared){b.tex?.dispose();b.cls4Tex?.dispose()}b.origTex?.dispose();b.orig4Tex?.dispose();b.srcTex?.dispose();b.src4Tex?.dispose();if(b.fld){fieldDrop(b.fld.tex,b.fld.key);b.fld=null}};
    const pbDrop=(q,why='other(free / grid change)')=>{
-    const b=q.pb;if(!b)return;
-    partLogEv('pbDrop','u'+q.uid+' '+why);pbUnbind(q);q.pb=null;
-    b.tex?.dispose();b.cls4Tex?.dispose();b.origTex?.dispose();b.orig4Tex?.dispose();b.srcTex?.dispose();b.src4Tex?.dispose();
+    const b=q.pb,o=q.pbOld;if(!b&&!o)return;
+    partLogEv('pbDrop','u'+q.uid+' '+why);if(pbBoundOf(q))pbUnbind(q);q.pb=null;q.pbOld=null;
+    pbFree(b);pbFree(o);
    };
    const pbDropAll=()=>{for(const q of parts)pbDrop(q)};
    const pbOk=()=>{const t=comboT,u=material?.uniforms;return !!(t?.combo&&u&&!diagAn.noRegion&&u.distInCls.value>0&&u.useCls.value>0&&(!t.rb?.busy||t.rb.hideOnly)&&comboMask>=0&&(t.rb?.hideOnly?t.rb.skipContent===comboMask:t.comboMask===comboMask)&&!ui.swapBusy)}; // a rebuild that only changes the hidden state (vr-combo-rebuild.js hideOnly) keeps the classification bytes the parts' bakes were made from; its mask is skipContent meanwhile (contentMask reads -1 while it uploads)
@@ -5687,11 +5802,13 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
     let slots=0;for(let s=0;s<4;s++)if(((mask>>s)&1)&&chan[s]>=0&&(chan[s]!==3||four4))slots|=1<<s;
     if(!box||!slots||(four&&!four4)){q.pbSkip=q.bkey;partLogEv('pbSkip','u'+q.uid+(!box||!slots?' no-box-slot':' no-ch4'));return} // four stored segments without the fourth channel's bytes: the part would read the whole body's fourth segment (it keeps its VRL_PART draw)
     const bytes=cdims[0]*cdims[1]*cdims[2]*(four4?5:4);
+    // (b): the held bake of the set before (q.pbOld) has the same box, slots and bytes it was made from: its texture is rewritten in place where the new bytes differ (pbInPlace), no second texture is made; else (or when too much changed) a new texture as before
+    const o=q.pbOld,inPlace=!!(o&&o.ready&&o.keep&&o.slots===slots&&o.src===t.combo&&o.mask===mask&&!!o.cls4Tex===four4&&o.box.lo.every((v,i)=>v===box.lo[i])&&o.box.size.every((v,i)=>v===box.size[i]));
     let tex=null,cls4Tex=null;
-    try{tex=bakeTex(t.combo,THREE.RGBAFormat);if(four4)cls4Tex=bakeTex(t.cls4,THREE.RedFormat)}catch(e){console.warn('[VR] part own bake textures:',e);partLogEv('texExc','u'+q.uid+' '+(e?.message||e));tex?.dispose();q.pbSkip=q.bkey;partLogEv('pbSkip','u'+q.uid+' tex-exc');return}
-    const b={src:t.combo,mask,bkey:q.bkey,tex,cls4Tex,box,z:cdims[2],patch:null,pz:0,ready:false,bound:false,cut:0,bytes,origTex:null,orig4Tex:null,srcTex:null,src4Tex:null,t0:performance.now()};q.pb=b;partLogEv('pbStart','u'+q.uid+' bytes='+bytes+' box='+box.size.join('x')+' slots='+slots);
+    try{if(inPlace){tex=o.tex;cls4Tex=o.cls4Tex}else{tex=bakeTex(t.combo,THREE.RGBAFormat);if(four4)cls4Tex=bakeTex(t.cls4,THREE.RedFormat)}}catch(e){console.warn('[VR] part own bake textures:',e);partLogEv('texExc','u'+q.uid+' '+(e?.message||e));tex?.dispose();q.pbSkip=q.bkey;partLogEv('pbSkip','u'+q.uid+' tex-exc');return}
+    const b={src:t.combo,mask,bkey:q.bkey,tex,cls4Tex,box,slots,z:cdims[2],patch:null,keep:null,pz:0,ready:false,bound:false,cut:0,bytes:inPlace?0:bytes,shared:inPlace,upd:inPlace?o:null,origTex:null,orig4Tex:null,srcTex:null,src4Tex:null,t0:performance.now()};q.pb=b;partLogEv('pbStart','u'+q.uid+' bytes='+bytes+' box='+box.size.join('x')+' slots='+slots);
     const job={own:true,rgba:partBakeCrop(t.combo.image.data,cdims,box,4),c4:four4?partBakeCrop(t.cls4.image.data,cdims,box,1):null,box,cdims:Array.from(cdims),idims:Array.from(q.fieldDims),chan:Array.from(chan),body:{data:pf.data,lo:pf.lo,size:pf.size,C:pf.C,a:pf.a,b:pf.b},mask,hide:null},r=partRes;
-    (partRunner||(partRunner=createPartSetRunner())).bake(job).then(res=>{if(partRes===r&&q.pb===b){b.patch=res;b.cut=res.slots|0}},e=>{if(partRes===r&&q.pb===b){console.warn('[VR] part own bake (the part keeps drawing by its field):',e?.message||e);q.pbSkip=b.bkey;partLogEv('pbSkip','u'+q.uid+' worker-fail');pbDrop(q,'worker-fail')}});
+    (partRunner||(partRunner=createPartSetRunner())).bake(job).then(res=>{if(partRes===r&&q.pb===b){b.patch=res;b.keep=res;b.cut=res.slots|0}},e=>{if(partRes===r&&q.pb===b){console.warn('[VR] part own bake (the part keeps drawing by its field):',e?.message||e);q.pbSkip=b.bkey;partLogEv('pbSkip','u'+q.uid+' worker-fail');pbDrop(q,'worker-fail')}});
    };
    // the ordinary variant a baked part is drawn by (partVariantKey) may not be in the body set's compiled keys (a session started without the page's prepared programs compiles only what it shows): it is compiled
    // here once (async, on the part's own nmats: three.js shares the program with the body set's by its text) and added to the set's keys; partRender keeps the VRL_PART draw until then
@@ -5714,24 +5831,44 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
     const u=q.u;nu.bakeCut.value=(b.cut&15)|16;nu.bakeField.value=u.partField.value;nu.bakeFieldScale.value.copy(u.partFieldScale.value);nu.bakeFieldOff.value.copy(u.partFieldOff.value);
     nu.bakeFieldA.value.forEach((v,s)=>v.copy(u.partFieldA.value[s]));nu.bakeFieldB.value.forEach((v,s)=>v.copy(u.partFieldB.value[s]));
     b.bound=true;partLogEv('pbDone','u'+q.uid+' ms='+Math.round(performance.now()-b.t0));
+    if(q.pbOld){const o=q.pbOld;q.pbOld=null;pbFree(o)} // (a): the new bake is bound in this very step: the held old one goes
     nEnsure(q);
+   };
+   // (b): the new bytes of the part's box (b.patch) against the bytes the held bake was made from (b.upd.keep, the same box): the box of the voxels that differ is written into the held texture (b.tex is that texture) in this one step and the new bake is
+   // bound in it (pbBind), so no frame sees a half-written part. Nothing differs: nothing is written. More than a frame's bytes (uploadQueue.bytesPerTickNow) differ: a new texture is made and filled in slabs as for any bake (the held one stays bound meanwhile).
+   const pbInPlace=(q,b,t)=>{
+    const o=b.upd,r=partBakeRewrite(b,o.keep,b.patch,uploadQueue.bytesPerTickNow,bakeOps);
+    if(r.state==='big'){ // too much changed for one step: its own texture, filled as any bake (the textures are not shared any more)
+     const four4=!!b.patch.c4;
+     try{b.tex=bakeTex(t.combo,THREE.RGBAFormat);if(four4)b.cls4Tex=bakeTex(t.cls4,THREE.RedFormat)}catch(e){b.tex?.dispose();partLogEv('texExc','u'+q.uid+' '+(e?.message||e));q.pbSkip=q.bkey;partLogEv('pbSkip','u'+q.uid+' tex-exc');pbDrop(q,'worker-fail');return}
+     b.shared=false;b.upd=null;b.bytes=t.dims[0]*t.dims[1]*t.dims[2]*(four4?5:4);partLogEv('pbInPlace','u'+q.uid+' too-much bytes='+r.bytes);return;
+    }
+    partLogEv('pbInPlace','u'+q.uid+' bytes='+r.bytes);
+    b.bytes=o.bytes;o.bytes=0;o.tex=null;o.cls4Tex=null;b.shared=false;b.upd=null;b.patch=null;b.ready=true; // the held bake gives its textures (and its bytes' count) to the new one (pbBind frees what is left of it)
    };
    const pbFrame=()=>{
     if(!partRes||!parts.length)return;
     const t=comboT,ok=pbOk(),cm=t?.rb?.hideOnly?t.rb.skipContent:t?.comboMask; // cm: the mask of the classification bytes (through a hide-only rebuild, the one they keep)
-    for(const q of parts){const b=q.pb;if(b&&(!ok||q.freed||b.src!==t.combo||cm!==b.mask||b.bkey!==q.bkey))pbDrop(q,!ok?'not-ok':q.freed?'freed':b.src!==t.combo?'texture-changed':cm!==b.mask?'mask-changed':'field-changed')}
+    for(const q of parts){
+     const b=q.pb,o=q.pbOld,x=b||o;
+     if(x&&(!ok||q.freed||x.src!==t.combo||cm!==x.mask||(o&&(o.src!==t.combo||cm!==o.mask)))){pbDrop(q,!ok?'not-ok':q.freed?'freed':x.src!==t.combo?'texture-changed':cm!==x.mask?'mask-changed':'texture-changed');continue}
+     if(b&&b.bkey!==q.bkey){ // (a): the field changed (a new set): the bound bake is held (the ordinary draw goes on) and a new one is made; one that was only being made is dropped
+      if(b.bound){q.pbOld=b;q.pb=null;partLogEv('pbStale','u'+q.uid+' field-changed')}
+      else{q.pb=null;pbFree(b);partLogEv('pbDrop','u'+q.uid+' field-changed')}
+     }
+    }
     if(!ok||bakeApplying>0||t.rb?.busy)return; // through a hide-only rebuild the bakes in place are kept; none is started or stepped until it is over
     let cur=parts.find(q=>q.pb&&!q.pb.ready);
-    if(!cur){const nx=parts.find(q=>!q.pb&&q.pf&&q.on&&!q.freed&&q.pbSkip!==q.bkey);if(nx){pbStart(nx,t);if(nx.pb)cur=nx}}
+    if(!cur){const nx=parts.find(q=>!q.pb&&q.pf&&q.on&&!q.freed&&q.pbSkip!==q.bkey);if(nx){pbStart(nx,t);if(nx.pb)cur=nx;else if(nx.pbOld)pbDrop(nx,'skip')}} // (a): no new bake can be made: the held old one is not kept (the part draws by its VRL_PART programs)
     if(!cur)return;
-    const b=cur.pb;if(!b.ready&&b.patch)partBakeStep(b,t,uploadQueue.bytesPerTickNow,bakeOps);
-    if(b.ready)pbBind(cur);
+    const b=cur.pb;if(!b.ready&&b.patch){if(b.upd)pbInPlace(cur,b,t);if(!b.upd&&!b.ready&&cur.pb===b)partBakeStep(b,t,uploadQueue.bytesPerTickNow,bakeOps)}
+    if(cur.pb===b&&b.ready)pbBind(cur);
    };
    partBakeFrame=()=>{bodyBakeFrame();pbFrame()};
    let cfgChain=Promise.resolve();
-   const partApply=(listOf,done=()=>{},upStage=()=>{})=>{
+   const partApply=(listOf,done=()=>{},upStage=()=>{},hold=false)=>{
     const pa0=performance.now();try{partLogEv('partApply','n='+listOf()?.length)}catch{}
-    bakeDrop();bakeApplying++; // n734: the parts are about to change: the baked bytes are the old set's (the body draws by its field until the new set is in place and baked again)
+    if(!hold)bakeDrop();bakeApplying++; // F (hold: the cut-out of a part): the bake the body reads stays until the next one is made (bodyBakeFrame: held); the put direction drops it here // n734: the parts are about to change: the baked bytes are the old set's (the body draws by its field until the new set is in place and baked again)
     const run=async()=>{
      for(let tries=0;tries<4;tries++){
       const r=partRes;if(!r?.body||!running)return false;const b=r.body,list=listOf();
@@ -5742,15 +5879,18 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
       if(!set)return false;if(set.plain)console.warn('[VR] part seams: unsmoothed in '+set.plain+' group(s) (the worker failed)');if(set.merged)console.warn('[VR] part seams: '+set.merged+' merged (more than 4 on a part)');
       for(const o of set.own){const q=list[o.p];if(q&&!q.freed&&!q.field.data){q.field.data=o.data;q.field.codes=null}} // the own fields it smoothed (a part that was alone): kept, the next set reads them
       if(partRes!==r||!running)return false;
+      // (c): a part that does not touch a part new in this set keeps the field it has (its picture, its bake and its textures stay): only the new part and the parts that touch it read a new seam / a changed joint field there
+      if(set.touch)for(let i=0;i<list.length;i++){const q=list[i];if(!set.touch[i]&&q.pf&&q.ftex&&q.pf.sig===q.fsig)set.parts[i]=q.pf}
       upStage(); // n736: the fields are made: the uploads / the installation follow (the cut-out board: 仕上げ中)
       // a field whose bytes are those the texture has (the same sig) keeps its texture: nothing is made or uploaded again (the body's after a set that came out as before; a part whose group did not change)
       const keepB=b.tex&&b.sig===set.body.sig,ups=keepB?[]:[fieldTexture(set.body,set.body.C)],pts=list.map((q,i)=>{const pf=set.parts[i];if(q.ftex&&q.fsig===pf.sig&&q.fC===pf.C)return null;const t=fieldTexture(pf,pf.C);ups.push(t);return t});
       const oks=await Promise.all(ups.map(t=>t.done.catch(()=>false)));
       const stale=partRes!==r||!running||list.some(q=>q.freed);
       if(stale||oks.some(x=>!x)){for(const t of ups)fieldDrop(t.tex,t.key);if(stale&&partRes===r&&running&&!listOf()?.some(q=>q.freed))continue;return false}
-      if(!keepB){const ob=b.tex,obk=b.texKey;b.tex=ups[0].tex;b.texKey=ups[0].key;b.sig=set.body.sig;fieldDrop(ob,obk)}
+      if(!keepB){const ob=b.tex,obk=b.texKey;b.tex=ups[0].tex;b.texKey=ups[0].key;b.sig=set.body.sig;const bb=r.boundB;if(bb&&!bb.fld&&ob)bb.fld={tex:ob,key:obk};else fieldDrop(ob,obk)} // F: the bound bake's cut is lit by the old field texture (u.bakeField): it is kept with that bake
       fieldUniforms(b.u,set.body,b.tex,set.body.a,set.body.b,dims);if(set.body.occ){const ot=b.otex;b.otex=occBodyTexture(set.body.occ);b.u.partOcc.value=b.otex;ot?.dispose()}else{b.u.partOcc.value=r.occBodyDummy;b.otex?.dispose();b.otex=null}b.ok=true;r.bodyGen++;r.bodySet={body:set.body,dims:dims.slice()};if(!keepB||(!r.hide&&!r.hidArgs))partHideSet(r,set.body,dims); // n731 perf ③: the body's cut as a hide source, with the field it is made from
-      list.forEach((q,i)=>{const pf=set.parts[i],t=pts[i];if(t){fieldDrop(q.ftex,q.ftexKey);q.ftex=t.tex;q.ftexKey=t.key;q.fsig=pf.sig;q.fC=pf.C}fieldUniforms(q.u,pf,q.ftex,pf.a,pf.b,dims);q.pf=pf;q.bkey=pf.sig+'|'+pf.C+'|'+JSON.stringify(pf.a)+JSON.stringify(pf.b)+'|'+pf.lo.join()+'|'+pf.size.join(); // an earlier change: the field the part's own baked bytes are made from (a new key drops them)
+      list.forEach((q,i)=>{const pf=set.parts[i],t=pts[i];if(t){if(q.pb?.bound&&!q.pb.fld&&q.ftex)q.pb.fld={tex:q.ftex,key:q.ftexKey};else fieldDrop(q.ftex,q.ftexKey); // (a): the bound bake's cut is lit by this texture (nu.bakeField): it is kept with the bake and goes with it
+       q.ftex=t.tex;q.ftexKey=t.key;q.fsig=pf.sig;q.fC=pf.C}fieldUniforms(q.u,pf,q.ftex,pf.a,pf.b,dims);q.pf=pf;q.bkey=pf.sig+'|'+pf.C+'|'+JSON.stringify(pf.a)+JSON.stringify(pf.b)+'|'+pf.lo.join()+'|'+pf.size.join(); // an earlier change: the field the part's own baked bytes are made from (a new key drops them)
       
        {const os=pf.sig+'|'+pf.C+'|'+JSON.stringify(pf.a)+JSON.stringify(pf.b);if(q.osig!==os||!q.otex){q.otex?.dispose();q.otex=occTexture(pf);q.osig=os}q.u.partOcc.value=q.otex}}); // n731 perf 案②: the part's occupancy, with its field (the same set)
       done();return true;
@@ -5785,7 +5925,7 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
      const occDummy=new THREE.Data3DTexture(new Uint8Array([255]),1,1,1);occDummy.format=THREE.RedFormat;occDummy.type=THREE.UnsignedByteType;occDummy.minFilter=occDummy.magFilter=THREE.NearestFilter;occDummy.unpackAlignment=1;occDummy.needsUpdate=true; // n731 perf 案②: every block in (nothing left out)
      const occBodyDummy=new THREE.Data3DTexture(new Uint8Array(4),1,1,1);occBodyDummy.format=THREE.RGBAFormat;occBodyDummy.type=THREE.UnsignedByteType;occBodyDummy.minFilter=occBodyDummy.magFilter=THREE.NearestFilter;occBodyDummy.unpackAlignment=1;occBodyDummy.needsUpdate=true; // no block left out
      const lutBakeR=new THREE.DataTexture(new Float32Array(256*4),256,1,THREE.RGBAFormat,THREE.FloatType);lutBakeR.minFilter=lutBakeR.magFilter=THREE.NearestFilter;lutBakeR.generateMipmaps=false;lutBakeR.needsUpdate=true; // n734: the GPU's copy of the results' table while the cut is baked (vr-part-view.js bakeRegionLut)
-     partRes={lutR,lutC:makeChildLutTexture(),lutBakeR,lutBakeC:makeChildLutTexture(),fieldDummy,occDummy,occBodyDummy,tpl:null,comp:null,body:null,compiled:new Set(),job:null,kick:false,extra:true,bake:null,bakeBound:false,bodyGen:0,bodySet:null,bakeSkip:-1};
+     partRes={lutR,lutC:makeChildLutTexture(),lutBakeR,lutBakeC:makeChildLutTexture(),fieldDummy,occDummy,occBodyDummy,tpl:null,comp:null,body:null,compiled:new Set(),job:null,kick:false,extra:true,bake:null,held:null,boundB:null,bakeBound:false,bodyGen:0,bodySet:null,bakeSkip:-1};
      const own=ownOf(lutR);for(const k of PART_OWN)if(!(k in own))throw new Error('part uniform missing: '+k);
      partRes.tpl=partMaterials(own);
      {const bm=partMaterials({partKind:{value:0},partId:{value:0},partMask:{value:0},...fieldOwn()});partRes.body={...bm,tex:null,ok:false};bm.u.partOcc.value=occBodyDummy} // an earlier change: the body's own uniforms on the same programs
@@ -5847,15 +5987,36 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
      const apos=new THREE.Vector3(box.c[0],box.c[1],box.c[2]);holder.localToWorld(apos);const aquat=new THREE.Quaternion();holder.getWorldQuaternion(aquat);
      const to=apos.clone().addScaledVector(partV.subVectors(head,apos).normalize(),PART_OUT_M);
      const q={uid:++partUid,target:tg,u,mats,lutOwnR,lutOwnC,geo,mesh:m,rayMesh:r,c:new THREE.Vector3(box.c[0],box.c[1],box.c[2]),box,prox,mask,apos,aquat,on:false,nearer:false,held:null,anim:{from:apos.clone(),to,t0:performance.now()},
-      rsEyes:[{},{}],rsBox:{c:[0,0,0],h:[1,1,1]},field:{data:fdata,codes:fdata?null:fcodes,lo:fbox.lo,size:fbox.size,mask},fieldDims:dims.slice(),ftex:null,ftexKey:null,fsig:null,fC:0,freed:false,nu:partNuOf(u),nmats:null,pb:null,pf:null,bkey:'',pbSkip:'',
+      ids,idims:dims.slice(),ectx:null,ectxGen:-1,ectxN:-1,rsEyes:[{},{}],rsBox:{c:[0,0,0],h:[1,1,1]},field:{data:fdata,codes:fdata?null:fcodes,lo:fbox.lo,size:fbox.size,mask},fieldDims:dims.slice(),ftex:null,ftexKey:null,fsig:null,fC:0,freed:false,nu:partNuOf(u),nmats:null,pb:null,pbOld:null,pf:null,bkey:'',pbSkip:'',
       skip:vp?partKeepVoxelOf({ids,idims:dims,cdims:vp.dims,id:tg.id,mask,chan:vp.cls.chan}):null};
      // an earlier change: the fields of the parts with this one (its own, the body's, and those of the parts it touches: the joint field and the seams) are made and put in place for all of them at once, and it is shown in that go
-     const shown=await partApply(()=>[...parts,q],()=>{
-      parts.push(q);partLogEv('shown','u'+q.uid+' wait='+Math.round(performance.now()-cutInfo.t0)+'ms');
+     // A: when a set of parts is already in place (the body's field is on the GPU), the part is shown as soon as ITS OWN smoothed field is on the GPU, drawn by its VRL_PART programs on that field alone (no seam, no joint field: where it touches a part out,
+     // a groove / film may show); the set that follows replaces its field (and the fields of the parts it touches) in the one step that installs it. Until then the body's bake (or its field) is the set before's: the part's target is hidden in the body
+     // by its voxels (partPatch*: not in the bound bake's uids). A part that is gone / freed meanwhile is not shown; a set that fails takes it out again.
+     const attach=why=>{
+      if(q.freed||parts.includes(q))return;
+      parts.push(q);partLogEv('shown','u'+q.uid+' wait='+Math.round(performance.now()-cutInfo.t0)+'ms '+why);
       refreshRegionLut();refreshChildLut(); // the body's tables lose the target (partPatch*), the parts' copies keep it
       partShow(q);partPose();
-     },()=>cutStage('finish')).catch(e=>{console.warn('part fields:',e);return false});
-     if(!shown||!running||P!==P0||partRes!==res||!material){partLogEv('cutFail','not shown');if(!parts.includes(q))partFree(q);return false}
+     };
+     const early=!!(res.body?.ok&&parts.length&&fcodes);
+     if(early){
+      const ownP=fdata?Promise.resolve(fdata):runPartField(fcodes,fbox.size).catch(()=>null);
+      ownP.then(async d=>{
+       const live=()=>!q.freed&&!parts.includes(q)&&running&&P===P0&&partRes===res&&!!material;
+       if(!d||!live())return;
+       const a=[0,1,2,3].map(s=>((mask>>s)&1)?[1,0,0,0]:[0,0,0,0]),b=[0,1,2,3].map(s=>((mask>>s)&1)?[0,1,1,1]:[0,0,0,0]); // a part alone: its own field on its slots (partFieldSet)
+       const pf0={data:d,lo:fbox.lo,size:fbox.size,C:1,a,b},ft=fieldTexture(pf0,1),ok=await ft.done.catch(()=>false);
+       if(!ok||!live()||q.ftex){fieldDrop(ft.tex,ft.key);return}
+       q.ftex=ft.tex;q.ftexKey=ft.key;fieldUniforms(q.u,pf0,q.ftex,a,b,q.fieldDims);attach('own-field'); // q.fsig / q.pf stay unset: the set's install gives it its field (a new texture) and its bake
+      }).catch(e=>console.warn('part early show:',e));
+     }
+     const shown=await partApply(()=>parts.includes(q)||q.freed?[...parts]:[...parts,q],()=>attach('set'),()=>cutStage('finish'),true).catch(e=>{console.warn('part fields:',e);return false}); // hold (F): the body's bake stays until the next is made
+     if(!shown||!running||P!==P0||partRes!==res||!material||q.freed){
+      partLogEv('cutFail','not shown');
+      if(!q.freed){const i=parts.indexOf(q);if(i>=0){parts.splice(i,1);try{refreshRegionLut();refreshChildLut()}catch(e2){console.warn(e2)}}partFree(q)} // shown early and the set failed: it is taken out again (its target is back in the body)
+      return false;
+     }
      flashMsg(PT.done,3500);return true;
     }catch(e){console.warn('part cut-out:',e);partLogEv('cutFail',e?.message||e);if(running)flashMsg(PT.failed,3500);return false}
     finally{partBusy=false;partCutEnd(cutInfo);if(running)menu.refresh()}
@@ -5888,8 +6049,8 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
     for(const q of parts){
      if(!q.on)continue;
      q.mesh.renderOrder=low?(q.nearer?0.5:1.5):(q.nearer?1.5:0.5); // the partner's rule: translucent volumes blend back to front, the low-resolution pass wants the nearer first
-     if(!nOk&&q.nmats&&q.pb?.bound)nEnsure(q); // the variant changed after the bind (or its compile is still to start): nEnsure starts it once
-     const nb=nOk&&q.nmats&&q.pb&&q.pb.bound&&q.pb.bkey===q.bkey; // baked and still the bytes of its field: the ordinary program (no VRL_PART), else the part's VRL_PART programs as before
+     if(!nOk&&q.nmats&&pbBoundOf(q))nEnsure(q); // the variant changed after the bind (or its compile is still to start): nEnsure starts it once
+     const nb=nOk&&q.nmats&&!!pbBoundOf(q); // baked (the bake of its field, or the held one of the set before while the new one is made: (a)): the ordinary program (no VRL_PART), else the part's VRL_PART programs as before
      if(low){q.rayMesh.matrixWorld.copy(q.mesh.matrixWorld);q.rayMesh.material=nb?q.nmats.rays[kn]:q.mats.rays[k];q.mesh.material=partRes.comp}
      else q.mesh.material=nb?q.nmats.vars[kn]:q.mats.vars[k];
     }
@@ -5897,28 +6058,31 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    // part log (vr-part-log.js): the parts' state for the once-a-second row; the draw is read as partRender reads it (N = the ordinary program, P = VRL_PART), no GPU call
    partLogSnap=()=>{
     const r=partRes,nOk=!!msets.get(setKey)?.compiled.has(partVariantKey(unifs));let bytes=0;
-    const ps=parts.map(q=>{const b=q.pb;if(b)bytes+=b.bytes|0;return{id:q.uid,n:!!(nOk&&q.nmats&&q.pb&&q.pb.bound&&q.pb.bkey===q.bkey),s:b?(b.ready?'done':'making'):(q.pbSkip&&q.pbSkip===q.bkey?'skip':'idle')}});
-    return{parts:ps,bodyBound:!!r?.bakeBound,bodyReady:!!r?.bake?.ready,bytes};
+    const ps=parts.map(q=>{const b=q.pb;if(b)bytes+=b.bytes|0;if(q.pbOld)bytes+=q.pbOld.bytes|0;return{id:q.uid,n:!!(nOk&&q.nmats&&pbBoundOf(q)),s:b?(b.ready?'done':'making'):q.pbOld?'making':(q.pbSkip&&q.pbSkip===q.bkey?'skip':'idle')}});
+    return{parts:ps,bodyBound:!!r?.bakeBound,bodyReady:!!(r?.boundB?.ready||r?.bake?.ready),bytes};
    };
    // the tables (called from refreshRegionLut / refreshChildLut after the body's was written): the body's copy loses every target, the parts' ONE shared copy keeps them
+   // A: a part shown before its set is installed (no q.pf) is not cut by the body's field yet: its target is not marked cut-out (the VRL_PART body then hides it by its voxels, as before any field), so it is not drawn twice
+   const pfUid=new Set(),pfUidOf=()=>{pfUid.clear();for(const q of parts)if(q.pf)pfUid.add(q.uid)};
    partPatchRegion=a=>{
-    if(!parts.length)return;
-    const targets=[];for(const q of parts){const t=q.target;if(t.kind!=='region')continue;const e=regionList[t.index];if(e&&e.rid===t.rid)targets.push({i:t.index,mask:q.mask,colorShown:regionColorSeen(e.rid)})}
-    const out=partRes.lutR.image.data;patchRegionLutMany(a,out,targets);if(partRes.body)markCutRegionLut(a,targets.map(t=>t.i)); // an earlier change: the body's PART programs cut these by the field
-    {const bt=partRes.lutBakeR;bakeRegionLut(a,bt.image.data,targets.map(t=>t.i));bt.needsUpdate=true} // n734: the GPU's copy while the cut is baked: the targets' entries empty (the table `a`, which the laser reads, keeps the hidden bits)
+    if(!parts.length)return;pfUidOf();
+    const targets=[];for(const q of parts){const t=q.target;if(t.kind!=='region')continue;const e=regionList[t.index];if(e&&e.rid===t.rid)targets.push({i:t.index,mask:q.mask,colorShown:regionColorSeen(e.rid),uid:q.uid})}
+    const out=partRes.lutR.image.data;patchRegionLutMany(a,out,targets);if(partRes.body)markCutRegionLut(a,targets.filter(t=>pfUid.has(t.uid)).map(t=>t.i)); // an earlier change: the body's PART programs cut these by the field
+    {const bt=partRes.lutBakeR,bb=partRes.boundB;bakeRegionLut(a,bt.image.data,targets.filter(t=>!bb||bb.uids.has(t.uid)).map(t=>t.i));bt.needsUpdate=true} // n734: the GPU's copy while the cut is baked: the entries of the targets whose cut is in the bound bake empty (the table `a`, which the laser reads, keeps the hidden bits); F: a part cut out after that bake was made keeps its hidden bits (hidden by its voxels) until the next bake is bound
     for(const q of parts){if(q.target.kind==='region')partOwnRegionLut(out,q.target.index,q.lutOwnR.image.data);else partHideOnlyRegionLut(out,q.lutOwnR.image.data);q.lutOwnR.needsUpdate=true} // each result part's own table (its colour on every entry); a child part's: the hidden results only
     const any=anyHiddenIn(out,regionList.length);for(const q of parts){q.u.regionAnyHidden.value=q.target.kind==='region'?1:any;q.nu.regionAnyHidden.value=anyHiddenIn(q.lutOwnR.image.data,regionList.length)} // a result's box always asks (it keeps only its own); a child's asks only when the table has a hidden result
     partRes.lutR.needsUpdate=true;
    };
    partPatchChild=a=>{
-    if(!parts.length)return;
-    const targets=[];for(const q of parts){const t=q.target;if(t.kind!=='child')continue;const e=childList[t.index];if(e&&e.key===t.key)targets.push({j:t.index,mask:q.mask,colorOn:childColorSeen(e.key)})}
-    patchChildLutMany(a,partRes.lutC.image.data,targets);if(partRes.body)markCutChildLut(a,targets.map(t=>t.j));partRes.lutC.needsUpdate=true; // (as the results')
-    {const bt=partRes.lutBakeC;bakeChildLut(a,bt.image.data,targets.map(t=>t.j));bt.needsUpdate=true} // n734 (as the results')
+    if(!parts.length)return;pfUidOf();
+    const targets=[];for(const q of parts){const t=q.target;if(t.kind!=='child')continue;const e=childList[t.index];if(e&&e.key===t.key)targets.push({j:t.index,mask:q.mask,colorOn:childColorSeen(e.key),uid:q.uid})}
+    patchChildLutMany(a,partRes.lutC.image.data,targets);if(partRes.body)markCutChildLut(a,targets.filter(t=>pfUid.has(t.uid)).map(t=>t.j));partRes.lutC.needsUpdate=true; // (as the results')
+    {const bt=partRes.lutBakeC,bb=partRes.boundB;bakeChildLut(a,bt.image.data,targets.filter(t=>!bb||bb.uids.has(t.uid)).map(t=>t.j));bt.needsUpdate=true} // n734 (as the results'; F: as there)
     for(const q of parts){if(q.target.kind==='child')partOwnChildLut(partRes.lutC.image.data,q.target.index,q.lutOwnC.image.data);else partHideOnlyChildLut(partRes.lutC.image.data,q.lutOwnC.image.data);q.lutOwnC.needsUpdate=true;q.nu.childAnyHidden.value=bakeChildAnyHidden(q.lutOwnC.image.data,childList.length)} // each child part's own table (its colour, range and material on every entry); a result part's: the hidden children only
    };
-   // the laser on the parts (CPU, in each part's own space, only inside its box: only the target's voxels are tissue): the nearest hit {part, distance} (world metres along the ray), or null; skip = a part a hand holds
-   const partHitOf=(c,skipHeld=false)=>{
+   // the laser on the parts (CPU, in each part's own space, only inside its box: only the target's voxels are tissue): the nearest hit, or null; skip = a part a hand holds. The hit reads like the body's (volumeHitRay): {part, distance (world metres along the ray),
+   // key (the segment), id / childKey (the part's target: a result's 1-based list position, a child's key), local (the part mesh's space = the body's object space, so voxelFromLocalVr reads it as it does the body's), voxel (both point modes)}
+   partHitOf=(c,skipHeld=false)=>{
     const vp=volPick;if(!parts.length||!vp||diagAn.noLabels)return null;
     const mk=shownMask(),chs=[];for(let i=0;i<4;i++)if(mk>>i&1&&vp.cls.chan[i]>=0)chs.push(vp.cls.chan[i]);if(!chs.length)return null;
     setRay(c);let best=null;
@@ -5927,10 +6091,14 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
      q.mesh.updateWorldMatrix(true,false);
      const o=tmpVo.copy(raycaster.ray.origin),d=tmpVq.copy(o).add(raycaster.ray.direction);q.mesh.worldToLocal(o);q.mesh.worldToLocal(d);d.sub(o);
      const rg=partRayRange(o,d,q.prox);if(!rg)continue;
-     const kids=q.target.kind==='region'?parts.filter(k=>k!==q&&k.target.kind==='child'&&k.skip):[]; // a result's part leaves a child part's tissue to it (the shader's seams: a child before a result): the laser does not take it from the child
-     const sk=kids.length?(x,y,z,c)=>q.skip(x,y,z,c)||kids.some(k=>!k.skip(x,y,z,c)):q.skip;
+     const sk=partSkipOf(q); // a result's part leaves a child part's tissue to it (the shader's seams: a child before a result): the laser does not take it from the child
      const hi=marchClassificationHitInfo(o,d,vp.halfExt,vp.dims,vp.cls,chs,[],0,0,rg[0],rg[1],sk);
-     if(hi&&(!best||hi.t<best.distance))best={part:q,distance:hi.t};
+     if(hi&&(!best||hi.t<best.distance)){
+      const tg=q.target,isR=tg.kind==='region',si=vp.cls.chan.indexOf(hi.ch),voxel=vrHalfExt&&vrDims?surfaceVoxelFromHit(hi,o,d,{halfExt:vrHalfExt,dims:vrDims,clsDims:vp.dims}):null; // the surface voxel in both point modes (断面 too: a point is put on the part's surface there)
+      // a result's part: the part's own result (a result whose shape is hidden is not picked: as the body's hit). A child's part: the result at the hit voxel, found as volumeHitRay finds it (the colour index R, where that result is hidden the hide index G; a hidden shape is not picked), so the hit carries both targets of an overlap (hitLabelRids)
+      const w=vp.dims[0],hk=hi.x+w*(hi.y+vp.dims[1]*hi.z),idR=vp.rg?vp.rg[2*hk]:0,idG=vp.rg?vp.rg[2*hk+1]:0,id0=idR&&regionHiddenVr(regionList[idR-1]?.rid)&&idG!==idR?idG:idR,idC=id0&&!regionCountedVr(regionList[id0-1]?.rid)?0:id0;
+      best={part:q,distance:hi.t,key:gpuSegmentOrder()[si]||'',id:isR?(regionCountedVr(tg.rid)?tg.id:0):idC,childKey:isR?'':tg.key,voxel,local:new THREE.Vector3(o.x+d.x*hi.t,o.y+d.y*hi.t,o.z+d.z*hi.t)}; // a result whose shape is hidden is not picked (as the body's hit)
+     }
     }
     return best;
    };
@@ -5956,6 +6124,73 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
     try{refreshRegionLut();refreshChildLut()}catch(e){console.warn(e)}
     if(ui.open)menu.refresh();
    };
+   // an earlier change: すべて切り出す: every result and every child segment that partDetach takes (the same range: list positions 0..254, as partTargetOfRing makes them) not yet out. One pass finds every box, one set of fields is made for ALL of them (partApply, hold), and they
+   // are shown together; no early show (the set is the only step). Each goes from where it is in the body outward along the line from the body's centre (partSpreadDist); no upper number.
+   const partAllTargets=()=>{const t=[];regionList.forEach((e,i)=>{if(i<255)t.push({kind:'region',index:i,id:i+1,rid:e.rid})});childList.forEach((e,j)=>{if(j<255)t.push({kind:'child',index:j,id:j+1,key:e.key})});return t.filter(tg=>!parts.some(q=>partSame(q.target,tg)))};
+   const partDetachAll=async()=>{
+    if(!running||!P||!material||ui.swapBusy)return false;
+    if(pair?.on||pairLoading){flashMsg(PT.pairBusy,3000);return false}
+    if(partBusy){flashMsg(PT.busy,2500);return false}
+    const tgs=partAllTargets();if(!tgs.length)return false;
+    partBusy=true;flashMsg(PT.preparing,5000);menu.refresh();const P0=P,t0=performance.now();partLogEv('cutStart','partDetachAll n='+tgs.length+' parts='+parts.length);
+    const cutInfo={cut:true,name:String(tgs.length),stage:'prep',text:'',t0,error:'',frac:0,sub:0,peak:0};loadInfo=cutInfo;loadBoard.refresh();placeLoadNow();
+    const cutStage=n=>{if(loadInfo!==cutInfo||cutInfo.stage===n)return;cutInfo.stage=n;loadBoard.refresh()};
+    const made=[];let skipped=0,ok=false;
+    try{
+     const res=await partEnsure();
+     if(!running||P!==P0||partRes!==res||!material)return false;
+     const he=vrHalfExt,vp=volPick,idsOf={region:hideIndexPlane(P.region?.rg),child:hideIndexPlane(P.child?.rg)},dimsOf={region:P.region?.dims,child:P.child?.dims};
+     const boxOf={region:partBoundsAllOf(idsOf.region,dimsOf.region,he,2),child:partBoundsAllOf(idsOf.child,dimsOf.child,he,2)}; // one scan of each index grid
+     partLogEv('cutAllBoxes','ms='+Math.round(performance.now()-t0));
+     const own1=()=>{const t=new THREE.DataTexture(new Float32Array(256*4),256,1,THREE.RGBAFormat,THREE.FloatType);t.minFilter=t.magFilter=THREE.NearestFilter;t.generateMipmaps=false;t.needsUpdate=true;return t};
+     const g0=parts.length?parts[0].fieldDims.join():'';let gridKey=g0,tText=0; // one set is made on one grid (partApply): a target on another grid than the parts out (or than the first taken) is not taken
+     for(let n=0;n<tgs.length;n++){
+      const tg=tgs[n],isReg=tg.kind==='region',ids=idsOf[tg.kind],dims=dimsOf[tg.kind],ent=isReg?regionList[tg.index]:childList[tg.index],box=boxOf[tg.kind].get(tg.id);
+      if(!ids||!dims||!ent||(isReg?ent.rid!==tg.rid:ent.key!==tg.key)||!box){skipped++;continue}
+      {const dk=dims.join();if(!gridKey)gridKey=dk;else if(dk!==gridKey){skipped++;continue}}
+      const mask=isReg?regionSlotMask(ent,gpuSegmentOrder()):ent.segMask|0,fbox=partFieldBoxOf(box.vox,dims);
+      if(!fbox){skipped++;continue}
+      const fcodes=await partFieldCodesAsync(ids,dims,tg.id,fbox,vp?partAirOf(vp.cls,vp.dims,dims,mask):null); // the codes only: the set smooths the fields of all of them (the own field of one that is alone too)
+      if(!running||P!==P0||partRes!==res||!material)return false;
+      const nowT=performance.now();if(nowT-tText>250||n===tgs.length-1){tText=nowT;cutInfo.text=(n+1)+' / '+tgs.length;loadBoard.refresh()}
+      const prox=partProxyBox(box,he,dims,4),ownL=ownOf(res.lutR),lutOwnR=own1(),lutOwnC=makeChildLutTexture();
+      ownL.regionLut.value=lutOwnR;ownL.childLut.value=lutOwnC;
+      const mats=partMaterials(ownL),u=mats.u;
+      u.boxC.value.set(box.c[0],box.c[1],box.c[2]);u.boxH.value.set(box.h[0],box.h[1],box.h[2]);u.partKind.value=isReg?1:2;u.partId.value=tg.id;u.partMask.value=mask;
+      const geo=new THREE.BoxGeometry(2*prox.h[0]/he[0],2*prox.h[1]/he[1],2*prox.h[2]/he[2]);geo.translate(prox.c[0]/he[0],prox.c[1]/he[1],prox.c[2]/he[2]);
+      const m=new THREE.Mesh(geo,mats.vars[partFull()]);m.frustumCulled=false;m.renderOrder=1.5;
+      const r=new THREE.Mesh(geo,mats.rays[partFull()]);r.matrixAutoUpdate=false;r.matrixWorldAutoUpdate=false;r.frustumCulled=false;
+      made.push({uid:++partUid,target:tg,u,mats,lutOwnR,lutOwnC,geo,mesh:m,rayMesh:r,c:new THREE.Vector3(box.c[0],box.c[1],box.c[2]),box,prox,mask,apos:new THREE.Vector3(),aquat:new THREE.Quaternion(),on:false,nearer:false,held:null,anim:null,
+       ids,idims:dims.slice(),ectx:null,ectxGen:-1,ectxN:-1,rsEyes:[{},{}],rsBox:{c:[0,0,0],h:[1,1,1]},field:{data:null,codes:fcodes,lo:fbox.lo,size:fbox.size,mask},fieldDims:dims.slice(),ftex:null,ftexKey:null,fsig:null,fC:0,freed:false,nu:partNuOf(u),nmats:null,pb:null,pbOld:null,pf:null,bkey:'',pbSkip:'',
+       skip:vp?partKeepVoxelOf({ids,idims:dims,cdims:vp.dims,id:tg.id,mask,chan:vp.cls.chan}):null});
+     }
+     partLogEv('cutAllPrep','made='+made.length+' skipped='+skipped+' ms='+Math.round(performance.now()-t0));
+     if(!made.length)return false;
+     // shown together, when the set is in place: where each is in the body NOW (the body may have been moved meanwhile) -> outward from the body's centre
+     const attachAll=()=>{
+      const live=made.filter(q=>!q.freed&&!parts.includes(q));if(!live.length)return;
+      scene.updateMatrixWorld();holder.updateWorldMatrix(true,false);readHead();
+      const cen=holder.localToWorld(new THREE.Vector3()),sc=holder.getWorldScale(new THREE.Vector3()),sk=(sc.x+sc.y+sc.z)/3,aq=holder.getWorldQuaternion(new THREE.Quaternion()),dir=new THREE.Vector3(),now=performance.now();
+      for(const q of live){
+       q.apos.copy(q.c);holder.localToWorld(q.apos);q.aquat.copy(aq);
+       dir.subVectors(q.apos,cen);const rr=dir.length();if(rr>1e-4)dir.divideScalar(rr);else dir.subVectors(head,q.apos).normalize(); // at the centre: toward the viewer
+       q.anim={from:q.apos.clone(),to:q.apos.clone().addScaledVector(dir,partSpreadDist(rr,Math.hypot(q.box.h[0],q.box.h[1],q.box.h[2])*sk)),t0:now};
+       parts.push(q);
+      }
+      refreshRegionLut();refreshChildLut(); // the body's tables lose every target (partPatch*), the parts' copies keep them
+      for(const q of live)partShow(q);
+      partPose();partLogEv('shownAll','n='+live.length+' wait='+Math.round(now-t0)+'ms');
+     };
+     cutStage('calc');
+     const shown=await partApply(()=>[...parts,...made.filter(q=>!q.freed&&!parts.includes(q))],attachAll,()=>cutStage('finish'),true).catch(e=>{console.warn('part fields (all):',e);return false}); // one set for all of them
+     if(!shown||!running||P!==P0||partRes!==res||!material||made.some(q=>q.freed)){partLogEv('cutFail','all not shown');return false}
+     ok=true;partLogEv('cutAllDone','n='+made.length+' skipped='+skipped+' ms='+Math.round(performance.now()-t0));flashMsg(PT.done,3500);return true;
+    }catch(e){console.warn('part cut-out (all):',e);partLogEv('cutFail','all '+(e?.message||e));if(running)flashMsg(PT.failed,3500);return false}
+    finally{
+     if(!ok){let any=false;for(const q of made){if(q.freed)continue;const i=parts.indexOf(q);if(i>=0){parts.splice(i,1);any=true}partFree(q)}if(any&&running){try{refreshRegionLut();refreshChildLut()}catch(e2){console.warn(e2)}}} // shown and the set failed / pending ones: taken out again (their targets are back in the body)
+     partBusy=false;partCutEnd(cutInfo);if(running)menu.refresh();
+    }
+   };
    partDispose=()=>{
     partCutEnd(); // n736: a cut-out under way is over with the data / the session (its board goes)
     bakeDrop();partRestoreAll();partRunner?.dispose();partRunner=null;
@@ -5975,7 +6210,8 @@ export async function startVrView({language='ja',mode='vr',onStep=()=>{}}={}){
    partBackPress=uid=>{const q=parts.find(x=>x.uid===uid);return q?partRestoreOne(q):false};
    partRestorePress=()=>{if(parts.length){partRestoreAll();flashMsg(PT.back,2500)}};
    partDetachRing=(reg,child)=>{void partDetach(partTargetOfRing(reg,child))}; // 切り出す of the ring: the target the laser was on, as it is (the ring was opened on it)
-   partMenuInfo=()=>regionList.length||childList.length||parts.length?{active:parts.length>0,busy:partBusy,text:{restore:PT.restore}}:null;
+   partAllPress=()=>{void partDetachAll()}; // すべて切り出す: the same place and shape as すべて元に戻す
+   partMenuInfo=()=>regionList.length||childList.length||parts.length?{active:parts.length>0,busy:partBusy,canAll:partAllTargets().length>0,text:{restore:PT.restore,all:PT.cutAll}}:null;
    partCutLive=()=>partBusy&&!!running;
   }
   // ---- swapData(setId): switch the practice data without ending the session. The ORDER (vr-data-switch.js runDataSwap): hide + free the old data -> the page opens the new data ->

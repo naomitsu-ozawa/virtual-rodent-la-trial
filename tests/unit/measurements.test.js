@@ -243,6 +243,64 @@ describe('VR display (vr-measure.js)', () => {
   });
 });
 
+describe('VR distance on parts taken out (vr-measure.js partMeshOf, an earlier change)', () => {
+  const ctx = new Proxy({}, { get: (t, k) => (k in t ? t[k] : () => {}), set: (t, k, v) => { t[k] = v; return true } });
+  beforeEach(() => vi.stubGlobal('document', { createElement: () => ({ width: 0, height: 0, getContext: () => ctx }) }));
+  afterEach(() => vi.unstubAllGlobals());
+  const dims = { columns: 16, rows: 16, slices: 12 }, halfExt = [8, 8, 6];
+  const setup = () => {
+    const scene = new THREE.Scene(), mesh = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 2)), holder = new THREE.Group(), part = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 2)), part2 = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 2));
+    holder.position.set(0, 1.3, -0.6); holder.scale.setScalar(0.05); holder.add(mesh); scene.add(holder);
+    part.position.set(0.4, 1.0, -0.3); part.scale.setScalar(0.05); part.rotation.y = 0.7; scene.add(part);
+    part2.position.set(-0.3, 1.2, -0.4); part2.scale.setScalar(0.05); scene.add(part2); scene.updateMatrixWorld(true);
+    return { scene, mesh, part, part2, base: { fingerprint: fp, dims, halfExt, mesh, head: new THREE.Vector3(0, 1.6, 0), spacing: [0.1, 0.2, 0.5], hint: '終点' } };
+  };
+  const world = (m, v) => { const l = voxelToLocal(v, halfExt, dims); return new THREE.Vector3(l.x, l.y, l.z).applyMatrix4(m.matrixWorld) };
+  const ends = scene => { const p = scene.children.find(o => o.isLine).geometry.attributes.position, n = p.count - 1; return [new THREE.Vector3(p.getX(0), p.getY(0), p.getZ(0)), new THREE.Vector3(p.getX(n), p.getY(n), p.getZ(n))] };
+  const A = { i: 2, j: 3, k: 1 }, B = { i: 12, j: 9, k: 8 };
+  // a point at voxel i < 6 is on `which`, the others are the body's
+  const ownerOf = which => l => (l.x < 0 ? which : null);
+  it('both ends on one part: the line and the label follow that part (and the dragged label too); the value is unchanged', () => {
+    pt('p1', 2, 3, 1); pt('p2', 3, 9, 8); const m = addMeasurement('p1', 'p2');
+    const { scene, mesh, part, base } = setup(), v = createVrMeasure(THREE, scene);
+    v.update({ ...base }); const lab0 = scene.children.find(o => o.isMesh && o.renderOrder === 6), body0 = lab0.position.clone(), text0 = measureLabel(distanceMm(A, { i: 3, j: 9, k: 8 }, [0.1, 0.2, 0.5]), false);
+    v.update({ ...base, partMeshOf: () => part });
+    const [e0, e1] = ends(scene); expect(e0.distanceTo(world(part, A))).toBeLessThan(1e-6); expect(e1.distanceTo(world(part, { i: 3, j: 9, k: 8 }))).toBeLessThan(1e-6);
+    const lab = scene.children.find(o => o.isMesh && o.renderOrder === 6), mid = e0.clone().add(e1).multiplyScalar(0.5);
+    expect(lab.position.distanceTo(mid)).toBeLessThan(0.06); expect(lab.position.distanceTo(body0)).toBeGreaterThan(0.1);
+    expect(text0).toBe(measureLabel(distanceMm(A, { i: 3, j: 9, k: 8 }, [0.1, 0.2, 0.5]), false));
+    const target = lab.position.clone().add(new THREE.Vector3(0.03, 0.04, -0.02));
+    expect(v.dragLabel(m.id, target)).toBe(true); v.update({ ...base, partMeshOf: () => part }); expect(lab.position.distanceTo(target)).toBeLessThan(1e-4);
+    part.position.x += 0.2; part.updateMatrixWorld(true); v.update({ ...base, partMeshOf: () => part }); // the part moves: the label keeps its place relative to the part
+    expect(lab.position.distanceTo(target.clone().add(new THREE.Vector3(0.2, 0, 0)))).toBeLessThan(1e-4);
+    v.update({ ...base, partMeshOf: () => null }); // the part is back: the body's place
+    expect(ends(scene)[0].distanceTo(world(mesh, A))).toBeLessThan(1e-6); expect(lab.position.distanceTo(target)).toBeGreaterThan(0.05);
+    v.dispose();
+  });
+  it('the ends on different parts, or one on a part and one on the body: each end is drawn where its own point is; a label dragged there keeps its offset', () => {
+    pt('p1', 2, 3, 1); pt('p2', 12, 9, 8); const m = addMeasurement('p1', 'p2');
+    const { scene, mesh, part, part2, base } = setup(), v = createVrMeasure(THREE, scene);
+    v.update({ ...base, partMeshOf: ownerOf(part) }); // p1 on the part, p2 on the body
+    let [e0, e1] = ends(scene); expect(e0.distanceTo(world(part, A))).toBeLessThan(1e-6); expect(e1.distanceTo(world(mesh, B))).toBeLessThan(1e-6);
+    const lab = scene.children.find(o => o.isMesh && o.renderOrder === 6), target = lab.position.clone().add(new THREE.Vector3(0.02, -0.03, 0.01));
+    expect(v.dragLabel(m.id, target)).toBe(true); v.update({ ...base, partMeshOf: ownerOf(part) }); expect(lab.position.distanceTo(target)).toBeLessThan(1e-4);
+    v.update({ ...base, partMeshOf: l => (l.x < 0 ? part : part2) }); // p1 on one part, p2 on another
+    [e0, e1] = ends(scene); expect(e0.distanceTo(world(part, A))).toBeLessThan(1e-6); expect(e1.distanceTo(world(part2, B))).toBeLessThan(1e-6);
+    v.update({ ...base, partMeshOf: null }); [e0, e1] = ends(scene); expect(e0.distanceTo(world(mesh, A))).toBeLessThan(1e-6); expect(e1.distanceTo(world(mesh, B))).toBeLessThan(1e-6); // everything back: the body's places
+    v.dispose();
+  });
+  it('the start ring follows the part; the CPU hidden probes include a line on a part and name the part (its mesh) that owns them', () => {
+    pt('p1', 2, 3, 1); pt('p2', 3, 9, 8); pt('p3', 12, 9, 8); addMeasurement('p1', 'p2');
+    const { scene, part, base } = setup(), v = createVrMeasure(THREE, scene);
+    v.update({ ...base }); expect(v.probes().length).toBe(LINE_SAMPLES + 1); expect(v.probes().every(p => p.mesh === null)).toBe(true); // the body's line: no host part
+    v.update({ ...base, partMeshOf: ownerOf(part) }); expect(v.probes().length).toBe(LINE_SAMPLES + 1); expect(v.probes().every(p => p.mesh === part)).toBe(true); // both ends on one part: judged in that part's frame
+    addMeasurement('p1', 'p3'); v.update({ ...base, partMeshOf: ownerOf(part) }); // a second line: p1 on the part, p3 on the body (different meshes: a line in the world)
+    expect(v.probes().length).toBe(2 * (LINE_SAMPLES + 1)); expect(v.probes().filter(p => p.mesh === part).length).toBe(LINE_SAMPLES + 1); expect(v.probes().filter(p => p.mesh === null).length).toBe(LINE_SAMPLES + 1);
+    v.update({ ...base, partMeshOf: ownerOf(part), startId: 'p1' }); const ring = scene.children.find(o => o.isMesh && o.renderOrder === 2);
+    expect(ring.position.distanceTo(world(part, A))).toBeLessThan(1e-6); v.dispose();
+  });
+});
+
 describe('review fixes: series, id renames, per-series saved state', () => {
   const fp2 = datasetFingerprint(series({ slices: Array.from({ length: 12 }, (_, i) => (i ? {} : { studyUid: 's', seriesUid: '2' })) }));
   it('a distance between points of different series is refused (the flow stays armed)', () => {

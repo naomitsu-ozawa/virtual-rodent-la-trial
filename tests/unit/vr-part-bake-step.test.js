@@ -110,7 +110,7 @@ describe('the light of a baked cut', () => {
     expect(set).toContain('bakeLight(on?b:null);');
     expect(set).toContain('const bakeLight=b=>{const u=material.uniforms,f=b&&partRes?.body?.u;u.bakeCut.value=f?b.cut|0:0;u.bakeField.value=f?f.partField.value:null;');
     expect(src).toContain('bakeCut:{value:0},bakeField:{value:null},');
-    expect(src).toContain('{b.patch=res;b.cut=res.slots|0}');
+    expect(src).toContain('{b.patch=res;b.keep=res;b.cut=res.slots|0}');
     for (const k of ['bakeCut', 'bakeField', 'bakeFieldScale', 'bakeFieldOff', 'bakeFieldA', 'bakeFieldB']) expect(PAIR_UNIFORMS.own).toContain(k);
   });
 });
