@@ -496,7 +496,7 @@ describe('several parts at once', () => {
     expect(src).toContain("lineM=lbMesh(lb);"); // the leader's length is measured in the card's own frame
     expect(src).toContain('applyMatrix4((lineM||mesh).matrixWorld)');
     // thinning: covered by the part's tissue, head and card in the part's space
-    expect(src).toContain('if(cov&&!lb.lit&&!lb.glow&&!lb.trans&&coveredBy(lb.m.position,null,true)){lb.cov=true;lb.thin=false;continue}');
+    expect(src).toContain('if(cov&&!lb.trans&&coveredBy(lb.m.position,null,true)){lb.cov=true;lb.thin=false;continue}');
     expect(src).toContain('const cx=partCtxOf(q);if(!cx)continue;q.mesh.updateWorldMatrix(true,false);add(q,cx,q.mesh.matrixWorld)'); // each part that is out is an occluder: its own tissue, its own box
     // pulled into the tissue; the parts that are out are an input of the judgement
     expect(src).toContain('pinPulledIntoTissue(pp,fm===mesh?embedCtx():lb.pq?partCtxOf(lb.pq):null)');

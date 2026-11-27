@@ -1,15 +1,15 @@
 // occlusion by the GPU (update({occlusion:true})): the volume writes depth (vr-depth.js); the line, the leader and the label are drawn with a depth test (the part behind the tissue is clipped at its
 // outline) and again as a faint "ghost" (a child object sharing the geometry, depthFunc GreaterDepth, GHOST_ALPHA) so the hidden part stays findable. A LIT label (the laser on it / grabbed) and its
-// leader are drawn without a depth test, fully on top, so the laser target stays reachable. With occlusion off (setting 「薄くする」) nothing is depth tested and the fade is used.
+// leader are drawn the same way (depth tested + ghost: hidden by the body or a part nearer to the head, as an unlit one). With occlusion off (setting 「薄くする」) nothing is depth tested and the fade is used.
 // VR display of the distances between two points: a line A-B with the value in mm on a label (billboard) at its midpoint, and, while a
 // distance is being made, the START point with a pulsing ring and the hint 「終点のポイントを選んでください」 next to it.
 // vr-view.js calls createVrMeasure(THREE, scene) -> { update, probes, pickLabel, dragLabel, dispose } every frame and does everything else (the flow, haptics, undo) itself; the state is
 // measurements.js (the same for the PC / iPad). The value follows the points: it is recomputed from their voxels each frame (a point being moved included, preview).
-import { getComments, getMarkersShown, commentMatchesSeries, commentTarget } from './comments.js?v=20261127-build774';
-import { getMeasurements, setLabelOffset, distanceMm, measureLabel } from './measurements.js?v=20261127-build774';
-import { nearLabelWorld, stepDelta, offsetFromDelta, LINE_SAMPLES, probeKey, fadeAlpha, approachAlpha, OCCLUDED_ALPHA } from './measure-label.js?v=20261127-build774';
-import { voxelToLocal } from './vr-point.js?v=20261127-build774';
-import { GHOST_ALPHA, occludedPass } from './vr-depth.js?v=20261127-build774';
+import { getComments, getMarkersShown, commentMatchesSeries, commentTarget } from './comments.js?v=20261127-build775';
+import { getMeasurements, setLabelOffset, distanceMm, measureLabel } from './measurements.js?v=20261127-build775';
+import { nearLabelWorld, stepDelta, offsetFromDelta, LINE_SAMPLES, probeKey, fadeAlpha, approachAlpha, OCCLUDED_ALPHA } from './measure-label.js?v=20261127-build775';
+import { voxelToLocal } from './vr-point.js?v=20261127-build775';
+import { GHOST_ALPHA, markPass } from './vr-depth.js?v=20261127-build775';
 export const VR_MEASURE_COLOR=0xffd23d,MEASURE_LABEL_W_M=0.045,MEASURE_LABEL_H_M=0.0132,MEASURE_HINT_W_M=0.2,MEASURE_HINT_H_M=0.026;
 // The hint 「終点のポイントを選んでください」 used to sit right above the START point, on top of everything (no depth test, opaque): in front of the very points the visitor has to aim at.
 // Now it is HEAD-LOCKED at the top edge of the view (HINT_ELEV rad above the gaze, HINT_DIST m away, facing the eyes), drawn at HINT_ALPHA, and after HINT_FADE_AFTER_MS it fades
@@ -131,14 +131,14 @@ export function createVrMeasure(THREE,scene,deps={getComments,getMarkersShown,ge
      const lg=it.leader.geometry.attributes.position;lg.setXYZ(0,mid.x,mid.y,mid.z);lg.setXYZ(1,lab.x,lab.y,lab.z);lg.needsUpdate=true;
      it.lprobe.world.copy(lab);it.dragged=!!m.labelOffset;
      // depth cue: the parts behind the surface fade towards OCCLUDED_ALPHA (smoothly: the judgement is ~10 Hz); the label and its leader follow the dragged label's own
-     // place, or (not dragged) the line's midpoint; a LIT label (laser on it / grabbed) stays fully visible so it can still be used
+     // place, or (not dragged) the line's midpoint; a LIT label (laser on it / grabbed) fades the same way (lit or not)
      const dt=it.t?Math.min(250,now-it.t):0;it.t=now;
      const col=it.line.geometry.attributes.color;let ch=false;
      for(let i=0;i<=LINE_SAMPLES;i++){const v=approachAlpha(it.va[i],hidden&&hidden.has(it.probes[i].id)?OCCLUDED_ALPHA:1,dt);if(v!==it.va[i]){it.va[i]=v;col.setW(i,v);ch=true}}
      if(ch)col.needsUpdate=true;
-     const lh=!!hidden&&hidden.has(m.labelOffset?it.lprobe.id:it.probes[LINE_SAMPLES/2].id),la=approachAlpha(it.la,fadeAlpha(lh,isLit),dt);
-     // occlusion: a lit label and its leader are drawn on top (no depth test, no ghost); the others are depth tested + ghost
-     {const top=!occludedPass(occlusion,isLit);it.label.mesh.material.depthTest=!top;it.label.ghost.material.visible=!top;it.leader.material.depthTest=!top;it.leaderGhost.material.visible=!top}
+     const lh=!!hidden&&hidden.has(m.labelOffset?it.lprobe.id:it.probes[LINE_SAMPLES/2].id),la=approachAlpha(it.la,fadeAlpha(lh),dt);
+     // occlusion: the label and its leader are depth tested + ghost, lit or not
+     {const top=!markPass(occlusion);it.label.mesh.material.depthTest=!top;it.label.ghost.material.visible=!top;it.leader.material.depthTest=!top;it.leaderGhost.material.visible=!top}
      if(la!==it.la){it.la=la;it.label.mesh.material.opacity=la;it.label.ghost.material.opacity=la*GHOST_ALPHA;const lc=it.leader.geometry.attributes.color;lc.setW(0,la);lc.setW(1,la);lc.needsUpdate=true}
     }
     const S=startId?byId.get(startId):null;

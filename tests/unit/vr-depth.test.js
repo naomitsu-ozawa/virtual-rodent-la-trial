@@ -149,7 +149,7 @@ describe('collateral: what lies inside the volume stays visible (source checks)'
   });
 });
 
-describe('vr-measure.js: depth test + ghost, lit on top, fade mode unchanged', () => {
+describe('vr-measure.js: depth test + ghost, lit or not', () => {
   const ctx = new Proxy({}, { get: (t, k) => (k in t ? t[k] : () => {}), set: (t, k, v) => { t[k] = v; return true } });
   beforeEach(() => { vi.stubGlobal('document', { createElement: () => ({ width: 0, height: 0, getContext: () => ctx }) }); setComments([]); resetMeasurements(); setMarkersShown(true); });
   afterEach(() => vi.unstubAllGlobals());
@@ -176,10 +176,10 @@ describe('vr-measure.js: depth test + ghost, lit on top, fade mode unchanged', (
     expect(label.children[0].material.opacity).toBeCloseTo(GHOST_ALPHA, 6); expect(line.children[0].material.opacity).toBeCloseTo(0.95 * GHOST_ALPHA, 6); expect(leader.children[0].material.opacity).toBeCloseTo(0.6 * GHOST_ALPHA, 6);
     expect(label.material.opacity).toBe(1); v.dispose();
   });
-  it('a lit (laser on it / grabbed) label and its leader are fully on top (no depth test, no ghost); the line keeps the depth test', () => {
+  it('a lit (laser on it / grabbed) label and its leader are depth tested + ghost like unlit ones (hidden by the body or a part nearer to the head); the line keeps the depth test', () => {
     const { m, v, base, label, line, leader, settle } = make();
     settle({ ...base, occlusion: true, lit: new Set([m.id]) });
-    expect(label.material.depthTest).toBe(false); expect(label.children[0].material.visible).toBe(false); expect(leader.material.depthTest).toBe(false); expect(leader.children[0].material.visible).toBe(false);
+    expect(label.material.depthTest).toBe(true); expect(label.children[0].material.visible).toBe(true); expect(leader.material.depthTest).toBe(true); expect(leader.children[0].material.visible).toBe(true);
     expect(line.material.depthTest).toBe(true); expect(line.children[0].material.visible).toBe(true);
     settle({ ...base, occlusion: true }); expect(label.material.depthTest).toBe(true); expect(label.children[0].material.visible).toBe(true);
     v.dispose();
@@ -214,14 +214,20 @@ describe('GHOST_ALPHA and the pass rule', () => {
     expect(has(src, 'lb.mg')).toBe(false); expect(has(src, 'lb.lg')).toBe(false); expect(has(src, 'mg=new THREE.Mesh')).toBe(false);
     expect(has(src, 'const hoverLabelOf=c=>c.userData.hoverLabel||=Object.assign(makeLabel(hoverFaces),{hand:c});')).toBe(true);
   });
+  it('markPass (points, distance labels, leaders): depth tested + ghost whenever the GPU occlusion is on, lit or not; occludedPass (section frames) unchanged', async () => {
+    const { markPass, occludedPass } = await load('vr-depth');
+    expect(markPass(true)).toBe(true); expect(markPass(false)).toBe(false); expect(markPass(undefined)).toBe(false);
+    expect(occludedPass(true, false)).toBe(true); expect(occludedPass(true, true)).toBe(false); expect(occludedPass(false, false)).toBe(false);
+  });
   it('pinMaterialState: every combination of the setting (gpu), lit and embedded (trans)', async () => {
     const { pinMaterialState, EMBEDDED_ALPHA } = await load('vr-depth');
     const on = { depthTest: false, card: 1, line: 0.9 }, hidden = { depthTest: true, card: 1, line: 0.9 }, emb = { depthTest: false, card: EMBEDDED_ALPHA, line: EMBEDDED_ALPHA };
     for (const trans of [false, true]) {
       expect(pinMaterialState(false, false, trans)).toEqual(on); // old mode (薄くする / no usable GPU depth): on top, card 1, leader 0.9, no depth test, whatever the card state
       expect(pinMaterialState(false, true, trans)).toEqual(on);
-      expect(pinMaterialState(true, true, trans)).toEqual(on); // lit: on top, opaque
     }
+    expect(pinMaterialState(true, true, false)).toEqual(hidden); // lit / glowing: depth tested like an unlit card (hidden by the body or a part nearer to the head)
+    expect(pinMaterialState(true, true, true)).toEqual(emb); // lit and embedded: translucent on top, as when not lit
     expect(pinMaterialState(true, false, false)).toEqual(hidden); // 実際に隠す: depth tested, what the tissue covers is not drawn (no ghost)
     expect(pinMaterialState(true, false, true)).toEqual(emb); // embedded and not pushed out: translucent, drawn on top
     expect(pinMaterialState(true, false, undefined)).toEqual(hidden); expect(pinMaterialState(undefined, undefined, undefined)).toEqual(on);
@@ -233,7 +239,7 @@ describe('GHOST_ALPHA and the pass rule', () => {
   });
 });
 
-describe('vr-point-markers.js: depth test + ghost, lit on top, fade mode unchanged', () => {
+describe('vr-point-markers.js: depth test + ghost, lit or not; fade mode unchanged', () => {
   const ctx = new Proxy({}, { get: (t, k) => (k in t ? t[k] : () => {}), set: (t, k, v) => { t[k] = v; return true } });
   beforeEach(() => { vi.stubGlobal('document', { createElement: () => ({ width: 0, height: 0, getContext: () => ctx }) }); setComments([]); setMarkersShown(true) });
   afterEach(() => vi.unstubAllGlobals());
@@ -264,13 +270,15 @@ describe('vr-point-markers.js: depth test + ghost, lit on top, fade mode unchang
     m.update({ ...base, occlusion: true }); const a = [sphere.material.color.getHex(), rim.visible]; m.update({ ...base, occlusion: true, hidden: new Set([id]) });
     expect([sphere.material.color.getHex(), rim.visible]).toEqual(a); m.dispose();
   });
-  it('a hovered / selected / moved point is fully on top: no depth test, no ghost, halo drawn; the neighbours stay depth tested', async () => {
+  it('a hovered / selected / moved point is depth tested + ghost like the others (hidden by the body or a part nearer to the head); its halo is drawn and depth tested', async () => {
     const { m, base, sphere, rim, line, chip, halo, id } = await make();
     for (const extra of [{ hover: new Set([id]) }, { selectedId: id }, { preview: { id, voxel: { i: 4, j: 3, k: 2 } } }]) {
       m.update({ ...base, occlusion: true, section: SEC, ...extra });
-      for (const o of [sphere, rim, line, chip]) { expect(o.material.depthTest, Object.keys(extra)[0] + ' ' + o.type).toBe(false); expect(o.children[0].visible, Object.keys(extra)[0] + ' ' + o.type).toBe(false); }
+      for (const o of [sphere, rim, line, chip]) { expect(o.material.depthTest, Object.keys(extra)[0] + ' ' + o.type).toBe(true); expect(o.children[0].visible, Object.keys(extra)[0] + ' ' + o.type).toBe(true); }
     }
-    m.update({ ...base, occlusion: true, hover: new Set([id]) }); expect(halo.visible).toBe(true);
+    m.update({ ...base, occlusion: true, hover: new Set([id]) }); expect(halo.visible).toBe(true); expect(halo.material.depthTest).toBe(true);
+    m.update({ ...base, occlusion: true, selectedId: id }); expect(halo.visible).toBe(true); expect(halo.material.depthTest).toBe(true);
+    m.update({ ...base, occlusion: false, selectedId: id }); expect(halo.visible).toBe(true); expect(halo.material.depthTest).toBe(false); // 薄くする: the halo as before
     m.update({ ...base, occlusion: true, hover: new Set(['other']) }); expect(sphere.material.depthTest).toBe(true); expect(sphere.children[0].visible).toBe(true);
     m.dispose();
   });
