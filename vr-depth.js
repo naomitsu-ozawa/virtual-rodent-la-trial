@@ -15,8 +15,11 @@ export const GHOST_ALPHA = 0.15;
 // a pinned result label whose base point is inside shown tissue and cannot be pushed out (vr-label-occlusion.js): card + leader opacity, drawn without a depth test
 export const EMBEDDED_ALPHA = 0.45;
 // which pass an object gets: true = depth tested + a ghost (GreaterDepth, GHOST_ALPHA) child; false = drawn on top without a depth test and without a ghost.
-// occlusion = gpuOcclusionActive(); lit = the object is operable right now (laser on it, grabbed, selected, being moved) and must stay fully visible.
+// occlusion = gpuOcclusionActive(); lit = the object is operable right now (laser on it, grabbed, selected, being moved) and must stay fully visible. (Used by the section frames.)
 export const occludedPass = (occlusion, lit) => !!occlusion && !lit;
+// the same choice for the label cards' kin (point markers, distance labels and leaders): depth tested + ghost whenever the GPU occlusion is on, lit or not. A lit / glowing one is hidden by
+// whatever is nearer to the head (the body or a part) exactly as an unlit one; it only looks lit (its own colour / size rules).
+export const markPass = occlusion => !!occlusion;
 // how far behind the surface the volume's written depth lies (object space, along the unit ray direction): DEPTH_BIAS_RAY * (the voxel's extent along the ray) + DEPTH_BIAS_MIN * voxelMin.
 // Points / lines are recorded at a voxel CENTRE on a surface voxel or a cut face (up to half a voxel inside along the ray, so 0.5 * dot(|dir|, voxelSize), which follows an
 // anisotropic spacing such as 0.1 / 0.1 / 0.5), plus up to 1.5 voxels of the surface march (grazing rays). For isotropic data this is 2.0 .. 2.4 voxels (never less than the
@@ -53,7 +56,8 @@ export function perspectiveDepth(zEye, near, far) {
 export const boardVisible = (hit, tissueDistance) => !!hit && !(tissueDistance != null && tissueDistance < hit.distance);
 
 // the material state of a pinned result label (card + leader) from the setting and the card's state (vr-view.js pinOcclusion):
-// gpu = gpuOcclusionActive(); lit = the laser on it / held; trans = embedded in shown tissue and not pushed out (vr-label-occlusion.js).
+// gpu = gpuOcclusionActive(); lit = the laser on it / held / glowing; trans = embedded in shown tissue and not pushed out (vr-label-occlusion.js).
 // depthTest false = drawn on top. Old mode (no GPU occlusion): on top, opaque (card 1, leader 0.9: the values drawLabel gives a pinned card). One shared object per state (no allocation per frame).
+// GPU occlusion: lit or not, the same state: depth tested (hidden by the body or a part nearer to the head), or embedded = translucent on top. lit stays in the signature (callers); it no longer changes the state.
 const PIN_ON_TOP = Object.freeze({ depthTest: false, card: 1, line: 0.9 }), PIN_HIDDEN = Object.freeze({ depthTest: true, card: 1, line: 0.9 }), PIN_EMBEDDED = Object.freeze({ depthTest: false, card: EMBEDDED_ALPHA, line: EMBEDDED_ALPHA });
-export const pinMaterialState = (gpu, lit, trans) => !gpu || lit ? PIN_ON_TOP : trans ? PIN_EMBEDDED : PIN_HIDDEN;
+export const pinMaterialState = (gpu, lit, trans) => !gpu ? PIN_ON_TOP : trans ? PIN_EMBEDDED : PIN_HIDDEN;
