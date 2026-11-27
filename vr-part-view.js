@@ -6,10 +6,10 @@
 //   - which uniforms the part owns (the rest is the body's by reference: PART_OWN), the target a grip takes (partTargetOf), the part's own box (partBoundsOf), the laser's rule on the CPU (partKeepVoxelOf),
 //   - several parts at once: every part has its own box, uniforms and pose; the tables are patched for all of them (patchRegionLutMany / patchChildLutMany); a part's proxy box is its own bounding box (partProxyBox) and its laser march
 //     runs only inside it (partRayRange), the texts. The way in is the long-press ring (region-ring.js 切り出す / 戻す); the grip stays the body's grab and takes a part only where the laser meets one.
-import { regionLutAlpha } from './region-visibility.js?v=20261126-build770';
-import { boxFromRange } from './vr-content-box.js?v=20261126-build770';
-import { euclideanDistanceBytes, morph3 } from './distance-field.js?v=20261126-build770';
-import { hiddenClassBytes } from './vr-hide-field.js?v=20261126-build770';
+import { regionLutAlpha } from './region-visibility.js?v=20261127-build774';
+import { boxFromRange } from './vr-content-box.js?v=20261127-build774';
+import { euclideanDistanceBytes, morph3 } from './distance-field.js?v=20261127-build774';
+import { hiddenClassBytes } from './vr-hide-field.js?v=20261127-build774';
 
 // ---- the shader block. Spliced into the volume fragment shader once (vr-view.js ${PART_GLSL}, after the hidden-shape block A and BEFORE the an earlier change hide helpers hideAnyOn / hideAt / hideGrad, so that they read the re-pointed functions too), so that no existing line of the shader has to change. Without VRL_PART (every program but the
 // part's) the preprocessor drops all of it: the body's programs are the ones they were. With VRL_PART the two functions the marching loops ask "is this voxel a hidden shape?" (regionHiddenAt / childHiddenAt) are
@@ -218,6 +218,23 @@ export function partBoundsOf(ids, dims, id, he, pad = 2) {
   const lo = [Math.max(0, x0 - pad) / w, Math.max(0, y0 - pad) / h, Math.max(0, z0 - pad) / d], hi = [Math.min(w, x1 + 1 + pad) / w, Math.min(h, y1 + 1 + pad) / h, Math.min(d, z1 + 1 + pad) / d];
   const b = boxFromRange(he, lo, hi, { c: [0, 0, 0], h: [0, 0, 0] });
   return { c: b.c, h: b.h, count, full: !!b.full, vox: { lo: [x0, y0, z0], hi: [x1, y1, z1] } };
+}
+// every id's box in ONE scan of the grid (すべて切り出す: partBoundsOf for each of up to 255 ids would scan the whole grid for each): Map id -> the box partBoundsOf(ids, dims, id, he, pad) gives (the same fields and values)
+export function partBoundsAllOf(ids, dims, he, pad = 2) {
+  const out = new Map();
+  if (!ids || !dims || !he) return out;
+  const [w, h, d] = dims, x0 = new Int32Array(256).fill(w), x1 = new Int32Array(256).fill(-1), y0 = new Int32Array(256).fill(h), y1 = new Int32Array(256).fill(-1), z0 = new Int32Array(256).fill(d), z1 = new Int32Array(256).fill(-1), n = new Float64Array(256);
+  for (let z = 0; z < d; z++) for (let y = 0, k = w * h * z; y < h; y++, k += w) for (let x = 0; x < w; x++) {
+    const v = ids[k + x]; if (!v) continue;
+    n[v]++; if (x < x0[v]) x0[v] = x; if (x > x1[v]) x1[v] = x; if (y < y0[v]) y0[v] = y; if (y > y1[v]) y1[v] = y; if (z < z0[v]) z0[v] = z; if (z > z1[v]) z1[v] = z;
+  }
+  for (let v = 1; v < 256; v++) {
+    if (!n[v]) continue;
+    const lo = [Math.max(0, x0[v] - pad) / w, Math.max(0, y0[v] - pad) / h, Math.max(0, z0[v] - pad) / d], hi = [Math.min(w, x1[v] + 1 + pad) / w, Math.min(h, y1[v] + 1 + pad) / h, Math.min(d, z1[v] + 1 + pad) / d];
+    const b = boxFromRange(he, lo, hi, { c: [0, 0, 0], h: [0, 0, 0] });
+    out.set(v, { c: b.c, h: b.h, count: n[v], full: !!b.full, vox: { lo: [x0[v], y0[v], z0[v]], hi: [x1[v], y1[v], z1[v]] } });
+  }
+  return out;
 }
 
 // the box a part's proxy geometry (the box the GPU rasterises: its rays, its composite) is drawn on: the content box grown by `pad` voxels of the data grid on every side (the composite's bilinear upscale reaches a texel past the silhouette), clamped to
@@ -686,12 +703,16 @@ export const PART_SEAM_TIE = 2 ** -24;
 export async function partFieldSet(fields, run = runPartGroup, opt = PART_FIELD, state = null) {
   const g0 = partFieldChannels(fields);
   if (!g0) return null;
+  const fresh = []; // (c): the indices of the parts new in this call (no age yet)
   if (state) { // the parts' ages (G): a part seen before keeps its age, a new one is the newest (later in `fields`: newer), a part that is gone is forgotten (it is new when it comes back)
     const ids = new Set(g0.list.map(f => f.id).filter(v => v != null)); for (const id of [...state.rank.keys()]) if (!ids.has(id)) state.rank.delete(id);
-    for (const f of g0.list) if (f.id != null && !state.rank.has(f.id)) state.rank.set(f.id, state.next++);
+    g0.list.forEach((f, p) => { if (f.id != null && !state.rank.has(f.id)) { state.rank.set(f.id, state.next++); fresh.push(p); } });
   }
   const ops = typeof run === 'function' ? partOpsOfRun(run) : run; // the tasks of a group: ops.joint / ops.label / ops.smooth (partOpsOfRun); a function is the whole group at once, as before
-  const near = partFieldNearOf(g0.list, PART_FIELD.pad), groups = partFieldJointGroups(fields, near), ownOut = []; // ownOut: [{p, data}] the own fields this call smoothed (a field given with plain = true: the unsmoothed bytes, 255 on the part and its skin, 0 elsewhere)
+  const near = partFieldNearOf(g0.list, PART_FIELD.pad), groups = partFieldJointGroups(fields, near), ownOut = [];
+  // (c): touch[p] = the part p is new or its field reaches a new part's (near: the rule of the groups: a part that touches it): only those read a new seam / a changed joint field there; the caller keeps the others' fields as they are (vr-view.js partApply).
+  // Null when nothing is new (a part left) or every part is (the first set): then every part is taken as made.
+  const touch = fresh.length && fresh.length < g0.list.length ? g0.list.map((_, p) => fresh.includes(p) || fresh.some(e => near(p, e))) : null; // ownOut: [{p, data}] the own fields this call smoothed (a field given with plain = true: the unsmoothed bytes, 255 on the part and its skin, 0 elsewhere)
   // a part in a group, on every channel it has, takes its bytes from the group's joint field and seams (the own smoothing is not read: the labels are its bytes >= 128, which the unsmoothed ones give as the smoothed ones do):
   // only a part that is alone on some channel it has needs its own smoothed field (the union and its own box read it there)
   const inGroup = g0.list.map(() => new Set()); for (const { channel, parts } of groups) for (const p of parts) inGroup[p].add(channel);
@@ -888,7 +909,7 @@ export async function partFieldSet(fields, run = runPartGroup, opt = PART_FIELD,
     return { data: out, lo: f.lo, size: f.size, C: Cp, a, b };
   });
   const a = [0, 1, 2, 3].map(s => [0, 1, 2, 3].map(c => (chOf[s] === c ? 1 : 0))), b = [0, 1, 2, 3].map(s => [0, 1, 2, 3].map(c => (chOf[s] < 0 ? 0 : chOf[s] === c ? 0 : 1)));
-  return { body: { data, lo, size, C, a, b, mask: un.mask, occ: partBodyOccOf({ data, size, C, a, b }) }, parts, plain, merged, own: ownOut.sort((u, v) => u.p - v.p) };
+  return { body: { data, lo, size, C, a, b, mask: un.mask, occ: partBodyOccOf({ data, size, C, a, b }) }, parts, plain, merged, own: ownOut.sort((u, v) => u.p - v.p), touch };
 }
 // n731 perf ③: the voxels the body's cut surely hides, for the distance field of the visible content (vr-hide-field.js: an index source, bit c of a voxel's byte = channel c of the body's field hides it). A voxel counts only when
 // the field's byte is at least PART_HID_MIN on that channel at the voxel and at all 26 of its neighbours inside the box (a voxel on the box's edge never): every sample whose nearest voxel it is reads the field LINEAR from those 8
@@ -1017,7 +1038,7 @@ export function partSetWorkerSource(limit = PART_CACHE_BYTES) {
     '\nonmessage=async e=>{const m=e.data;if(m.reply){const p=pend.get(m.id);pend.delete(m.id);if(p){if(m.ok)p.res(m);else p.rej(new Error(m.message))}return}if(m.clear){cache.clear();state.rank.clear();state.next=0;return}if(m.bake){try{const r=partBakeRun(m.job);postMessage({bake:true,id:m.id,ok:true,lowered:r.lowered,alphaLowered:r.alphaLowered,slots:r.slots,rgba:r.rgba.buffer,c4:r.c4?r.c4.buffer:null},r.c4?[r.rgba.buffer,r.c4.buffer]:[r.rgba.buffer])}catch(err){postMessage({bake:true,id:m.id,ok:false,message:String(err&&err.message||err)})}return}try{const fields=m.fields.map(f=>{const b=new Uint8Array(f.bytes);return f.codes?{data:partFieldPlain(b,f.size),plain:true,lo:f.lo,size:f.size,mask:f.mask,kind:f.kind,id:f.id}:{data:b,lo:f.lo,size:f.size,mask:f.mask,kind:f.kind,id:f.id}});' +
     'const stats={hit:0,miss:0},base=m.plainOnly?noOps:m.pool?rpcOps:localOps,set=await partFieldSet(fields,m.plainOnly?base:partCachedOps(cache,stats,base),m.opt,m.plainOnly?null:state);' +
     'if(!set){postMessage({ok:true,id:m.id,set:null});return}const idx=new Map(fields.map((f,i)=>[f.data,i])),tr=new Set(),pack=x=>{const i=idx.get(x.data);if(i!==undefined&&!fields[i].plain)return{...x,data:null,same:i,sig:partSigOf(x)};tr.add(x.data.buffer);return{...x,sig:partSigOf(x)}};' +
-    'if(set.body.hid)tr.add(set.body.hid.buffer);if(set.body.occ)tr.add(set.body.occ.data.buffer);const body=pack(set.body),parts=set.parts.map(pack),own=set.own.map(o=>{tr.add(o.data.buffer);return o});postMessage({ok:true,id:m.id,set:{body,parts,plain:set.plain,merged:set.merged,own,cache:{...stats,...cache.stats()}}},[...tr])}catch(err){postMessage({ok:false,id:m.id,message:String(err&&err.message||err)})}};';
+    'if(set.body.hid)tr.add(set.body.hid.buffer);if(set.body.occ)tr.add(set.body.occ.data.buffer);const body=pack(set.body),parts=set.parts.map(pack),own=set.own.map(o=>{tr.add(o.data.buffer);return o});postMessage({ok:true,id:m.id,set:{body,parts,plain:set.plain,merged:set.merged,own,touch:set.touch,cache:{...stats,...cache.stats()}}},[...tr])}catch(err){postMessage({ok:false,id:m.id,message:String(err&&err.message||err)})}};';
 }
 // partFieldSet on a worker that stays (so that its memory of the groups' answers does) -> {run(fields) -> Promise of {body, parts, plain, merged, own, cache} | null, clear(), dispose()}. A set is partFieldSet's answer, but for
 //  - a part's / the body's `data` is the very array of its field where partFieldSet gives that (a part alone in its channels), and every one has a `sig` (its bytes' signature: the same sig = the same texture),
@@ -1058,8 +1079,8 @@ export function createPartSetRunner(opt = PART_FIELD, cfg = {}) {
       j.finish();
       if (!d || !d.ok) { const er = new Error('part set: ' + (d && d.message)); er.answered = true; j.rej(er); return; } // answered: partFieldSet itself threw (as it does on this thread): not a worker failure, not tried again
       if (!d.set) { j.res(null); return; }
-      const back = x => { if (x.same == null) return x; const r = { ...x, data: j.valid[x.same].data }; delete r.same; return r; }, { body, parts, plain, merged, own, cache } = d.set;
-      j.res({ body: back(body), parts: parts.map(back), plain, merged, own, cache });
+      const back = x => { if (x.same == null) return x; const r = { ...x, data: j.valid[x.same].data }; delete r.same; return r; }, { body, parts, plain, merged, own, touch, cache } = d.set;
+      j.res({ body: back(body), parts: parts.map(back), plain, merged, own, touch, cache });
     };
     w.onerror = ev => { if (ev && ev.preventDefault) ev.preventDefault(); if (st.job) st.job.fail('part set worker: ' + ((ev && ev.message) || 'error')); failBakes(st, 'part set worker: ' + ((ev && ev.message) || 'error')); };
     w.onmessageerror = () => { if (st.job) st.job.fail('part set worker: message error'); failBakes(st, 'part set worker: message error'); };
@@ -1365,6 +1386,28 @@ export function partBakeStep(b, t, budget, ops) {
   if (z1 >= bd) { b.ready = true; b.patch = null; ops.drop(b.srcTex); b.srcTex = null; if (b.src4Tex) ops.drop(b.src4Tex); b.src4Tex = null; }
   return b.ready;
 }
+// (b): the new baked bytes B of a box (size = the box's size; rgba 4 bytes a voxel, c4 1 byte a voxel or null) against the bytes A it was baked to before (the same box): the box of the voxels where any byte differs, or null when none does.
+// -> {lo: [x, y, z], size: [w, h, d]} | null. A and B are the worker's own arrays (offset 0: read by words)
+export function partBakeDiffBox(A, B, size) {
+  const [bw, bh, bd] = size, n = bw * bh * bd, a32 = new Uint32Array(A.rgba.buffer, A.rgba.byteOffset, n), b32 = new Uint32Array(B.rgba.buffer, B.rgba.byteOffset, n), c4 = !!(B.c4 && A.c4);
+  let x0 = bw, y0 = bh, z0 = bd, x1 = -1, y1 = -1, z1 = -1;
+  for (let z = 0, i = 0; z < bd; z++) for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++, i++) {
+    if (a32[i] !== b32[i] || (c4 && A.c4[i] !== B.c4[i])) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; if (z < z0) z0 = z; if (z > z1) z1 = z; }
+  }
+  return x1 < 0 ? null : { lo: [x0, y0, z0], size: [x1 - x0 + 1, y1 - y0 + 1, z1 - z0 + 1] };
+}
+// (b): the changed box of the new bytes written into the texture the old bytes are in (b = {box, tex, cls4Tex}), in ONE step: 'same' (nothing differs: nothing is written), 'done' (written), or 'big' (the box is more than `budget` bytes: nothing is
+// written, the caller makes a texture of its own). ops as partBakeStep's: wrap(data, dims, C), copy(src, dst, min, max, at), drop(src). -> {state, bytes}
+export function partBakeRewrite(b, A, B, budget, ops) {
+  const d = partBakeDiffBox(A, B, b.box.size);
+  if (!d) return { state: 'same', bytes: 0 };
+  const c4 = !!(B.c4 && b.cls4Tex), bytes = d.size[0] * d.size[1] * d.size[2] * (c4 ? 5 : 4);
+  if (bytes > budget) return { state: 'big', bytes };
+  const at = [b.box.lo[0] + d.lo[0], b.box.lo[1] + d.lo[1], b.box.lo[2] + d.lo[2]], rg = ops.wrap(partBakeCrop(B.rgba, b.box.size, d, 4), d.size, 4), z = c4 ? ops.wrap(partBakeCrop(B.c4, b.box.size, d, 1), d.size, 1) : null;
+  ops.copy(rg, b.tex, [0, 0, 0], d.size, at); if (z) ops.copy(z, b.cls4Tex, [0, 0, 0], d.size, at);
+  ops.drop(rg); if (z) ops.drop(z);
+  return { state: 'done', bytes };
+}
 // a region of a 3D texture's bytes (x fastest, bytes per voxel `bpv`) cut out into its own array: the box's bytes of the combined texture (bpv 4) / of the fourth channel's texture (bpv 1)
 export function partBakeCrop(src, dims, box, bpv) {
   const [bw, bh, bd] = box.size, [bx, by, bz] = box.lo, out = new Uint8Array(bw * bh * bd * bpv);
@@ -1400,13 +1443,17 @@ export function markCutChildLut(a, indices, stride = 1024) { let n = 0; for (con
 export const PART_TEXT = Object.freeze({
   ja: { restore: 'すべて元に戻す', pairBusy: '並べて表示中は切り出せません', preparing: '切り出しを準備中…', done: '切り出しました。握って動かせます', back: '元に戻しました', failed: '切り出せませんでした', busy: '切り出し中です。少し待ってください',
     cutTitle: '切り出し中', cutPrep: '準備中', cutCalc: '計算中', cutFinish: '仕上げ中', cutSecs: '経過 {s} 秒',
-    ringDetach: '切り出す', ringRegionDetach: '領域の切り出す', ringChildDetach: '子の切り出す', ringBack: '戻す' },
+    cutAll: 'すべて切り出す', ringDetach: '切り出す', ringRegionDetach: '領域の切り出す', ringChildDetach: '子の切り出す', ringBack: '戻す' },
   en: { restore: 'Put all back', pairBusy: 'Not while a pair is shown', preparing: 'Preparing the cut-out...', done: 'Cut out. Grab it to move it', back: 'Put back', failed: 'Could not cut it out', busy: 'Cutting out, please wait',
     cutTitle: 'Cutting out', cutPrep: 'Preparing', cutCalc: 'Computing', cutFinish: 'Finishing', cutSecs: '{s} s elapsed',
-    ringDetach: 'Cut out', ringRegionDetach: 'Region cut out', ringChildDetach: 'Child cut out', ringBack: 'Put back' },
+    cutAll: 'Cut out all', ringDetach: 'Cut out', ringRegionDetach: 'Region cut out', ringChildDetach: 'Child cut out', ringBack: 'Put back' },
 });
 
 // ---- where the button sits (menu canvas px, the header row y 18..90: the title 'Virtual Rodent Lab' ends near x 400, 「閉じる」 starts at 780): between them, on every page of the menu
-export const PART_BTN_X = 412, PART_RESTORE_W = 360; // 412 + 360 = 772
+export const PART_BTN_X = 412, PART_RESTORE_W = 176, PART_ALL_X = 596, PART_ALL_W = 176; // すべて元に戻す, then すべて切り出す: 412 + 176 + 8 + 176 = 772
 // a part that was just cut out comes this far toward the viewer (world metres) and glides there in PART_ANIM_MS
 export const PART_OUT_M = 0.05, PART_ANIM_MS = 300;
+// すべて切り出す: every part leaves along the line from the body's centre to its own centre (where it is in the body), to PART_OUT_M + PART_SPREAD_K * (its distance from the body's centre) + its own half-diagonal (world metres):
+// the distance term spreads neighbours apart in proportion (their gap grows by 1 + K), the half-diagonal term clears a part near the centre of its own size. A part at the centre has no direction: it goes toward the viewer, as a single cut-out does.
+export const PART_SPREAD_K = 0.5;
+export const partSpreadDist = (r, halfDiag) => PART_OUT_M + PART_SPREAD_K * Math.max(0, r) + Math.max(0, halfDiag);

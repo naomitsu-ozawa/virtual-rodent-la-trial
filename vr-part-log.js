@@ -2,7 +2,7 @@
 //
 // What it is for: finding out, on the headset, how heavy it is to cut a part out of the body (partDetach .. the part's own bake)
 // and to keep it out. vr-view.js adds ONE line a second (the once-a-second block of the frame loop) and an event line at each
-// step of the cut and of the bakes; the text is kept in two ring buffers (the newest 600 rows, the newest 300 events) and is only
+// step of the cut and of the bakes; the text is kept in two ring buffers (the newest 600 rows; the events: the first 300 are pinned and the newest fill the rest of 5000) and is only
 // turned into a file by the page's 保存 / Save button after the session. Nothing here reads anything back from the GPU.
 //
 // The text: a header (# lines), then rows (S ...) and events (E ...) merged by time:
@@ -12,20 +12,23 @@
 //                                        bake  idle (not started) / making / done / skip (given up for this field)
 
 export const PART_LOG_MAX_ROWS = 600;
-export const PART_LOG_MAX_EVENTS = 300;
+export const PART_LOG_MAX_EVENTS = 5000; // a session makes 500-600 events; ~142 bytes each (measured); the worst case is ~0.9 MB
+export const PART_LOG_KEEP_EVENTS = 300; // the first events are pinned: past the cap only the middle is dropped, the opening (nCompile, prep, the first bake) stays
 export const PART_LOG_KEY = 'vrl-vr-part-log';
 const DETAIL_MAX = 200;
 
-// a ring buffer: push is O(1), toArray is oldest first; `total` counts every push (what was dropped = total - length)
-export function createRing(max) {
-  const cap = Math.max(1, max | 0), buf = new Array(cap);
+// a ring buffer: push is O(1), toArray is oldest first; `total` counts every push (what was dropped = total - length).
+// keepHead: the first `keepHead` pushes are pinned and never dropped (the session's opening steps: prep, nCompile, the first bake);
+// once the buffer is full only the entries after the pinned ones are dropped, oldest first. keepHead is clamped below max.
+export function createRing(max, keepHead = 0) {
+  const cap = Math.max(1, max | 0), hd = Math.min(Math.max(0, keepHead | 0), cap - 1), rc = cap - hd, buf = new Array(rc), pin = [];
   let head = 0, len = 0, total = 0;
   return {
-    push(x) { buf[head] = x; head = (head + 1) % cap; if (len < cap) len++; total++; },
-    toArray() { const out = new Array(len), s = (head - len + cap) % cap; for (let i = 0; i < len; i++) out[i] = buf[(s + i) % cap]; return out; },
-    get length() { return len; },
+    push(x) { total++; if (pin.length < hd) { pin.push(x); return; } buf[head] = x; head = (head + 1) % rc; if (len < rc) len++; },
+    toArray() { const out = pin.slice(), s = (head - len + rc) % rc; for (let i = 0; i < len; i++) out.push(buf[(s + i) % rc]); return out; },
+    get length() { return pin.length + len; },
     get total() { return total; },
-    clear() { head = 0; len = 0; total = 0; buf.fill(undefined); },
+    clear() { head = 0; len = 0; total = 0; pin.length = 0; buf.fill(undefined); },
   };
 }
 
@@ -80,12 +83,12 @@ export function formatHeader(meta, counts) {
     const p = m.prep, ks = Array.isArray(p.compiled) ? p.compiled.map(clean) : [];
     lines.push('# prep: gpu=' + bit(p.gpu) + ' gpuKey=' + bit(p.gpuKey) + ' allCompiled=' + bit(p.allCompiled) + ' set=' + clean(p.set ?? '?') + ' compiled=' + ks.length + ' [' + ks.join(' ') + ']');
   }
-  lines.push('# rows: ' + (c.rows | 0) + (c.rowsDropped ? ' (oldest ' + c.rowsDropped + ' dropped)' : '') + ' / events: ' + (c.events | 0) + (c.eventsDropped ? ' (oldest ' + c.eventsDropped + ' dropped)' : ''));
+  lines.push('# rows: ' + (c.rows | 0) + (c.rowsDropped ? ' (oldest ' + c.rowsDropped + ' dropped)' : '') + ' / events: ' + (c.events | 0) + (c.eventsDropped ? ' (' + c.eventsDropped + ' dropped after the first ' + PART_LOG_KEEP_EVENTS + ')' : ''));
   return lines.join('\n');
 }
 
 export function createPartLog({ maxRows = PART_LOG_MAX_ROWS, maxEvents = PART_LOG_MAX_EVENTS } = {}) {
-  const rows = createRing(maxRows), events = createRing(maxEvents);
+  const rows = createRing(maxRows), events = createRing(maxEvents, PART_LOG_KEEP_EVENTS);
   let meta = {};
   return {
     setMeta(o) { try { meta = { ...meta, ...o }; } catch { /* the log never throws */ } },
