@@ -229,11 +229,6 @@ export function rayCovered(from, to, isInside, halfExt, voxel, endSkip = 2.5, ce
   }
   return false;
 }
-// Hold (hysteresis) of the "covered from the head" verdict of a card that is hidden for it (vr-view.js coverPins): a covered verdict at once hides the card and refills the hold; it comes back
-// only after `hold` verdicts in a row that say "not covered" (one verdict a few frames: the coarse walk and the card's centre flicker at the edge of an occluder). count = the verdicts still held.
-// -> the new count; hidden = count > 0.
-export const COVER_HOLD = 3;
-export const coverHoldStep = (count, covered, hold = COVER_HOLD) => covered ? hold : Math.max(0, (count | 0) - 1);
 
 // ---- upload savers (build 7xx: weight) ----
 // a leader's two end points: the vertex buffer is re-sent to the GPU only when an end moved by more than eps (world metres: 1e-4 = 0.1 mm).
