@@ -13,10 +13,10 @@
 // (GPU occlusion, update({occlusion:true}), vr-depth.js): the sphere, its rim, the chip (number) and the perpendicular are drawn with a real depth test (clipped at the tissue outline) plus a faint
 // ghost child (depthFunc GreaterDepth, GHOST_ALPHA), and the CPU "hidden" look (small dot) is not used. A hovered / selected / moved point (and its chip) stays fully on top, so it can be operated.
 // With occlusion off (「薄くする」, or no usable GPU depth) nothing changes: no depth test, the CPU hidden look.
-import { getComments, getMarkersShown, commentMatchesSeries, commentTarget } from './comments.js?v=20261127-build774';
-import { voxelToLocal, sectionRelation, pickPoint } from './vr-point.js?v=20261127-build774';
-import { pointColor, colorToInt, darkFill, inkOn } from './point-colors.js?v=20261127-build774';
-import { GHOST_ALPHA, occludedPass } from './vr-depth.js?v=20261127-build774';
+import { getComments, getMarkersShown, commentMatchesSeries, commentTarget } from './comments.js?v=20261127-build775';
+import { voxelToLocal, sectionRelation, pickPoint } from './vr-point.js?v=20261127-build775';
+import { pointColor, colorToInt, darkFill, inkOn } from './point-colors.js?v=20261127-build775';
+import { GHOST_ALPHA, markPass } from './vr-depth.js?v=20261127-build775';
 export const VR_MARKER_COLOR=0x4dd8ff,VR_MARKER_FILL=0x0b6f8c,VR_RIM_COLOR=0xffffff,VR_HALO_HOVER=0xffffff,VR_HALO_SELECTED=0xffd23d;
 export const PICK_MIN_M=0.004,MARKER_SCALE=0.4; // MARKER_SCALE: the drawn radius as a factor of the base radius, the same in every state
 const RADIUS_UNITS=0.045,MIN_RADIUS_M=0.003; // radius in volume units (the longest side is 3.3) and the least radius in metres
@@ -40,7 +40,7 @@ export function createVrPointMarkers(THREE,scene,deps={getComments,getMarkersSho
  const depthOf=m=>{const c=m.clone();c.depthTest=true;c.depthWrite=false;return c};
  const ghostOf=m=>{const c=m.clone();c.depthFunc=THREE.GreaterDepth;c.depthTest=true;c.depthWrite=false;c.opacity=m.opacity*GHOST_ALPHA;return c};
  const mats={rim:mk(VR_RIM_COLOR,{side:THREE.BackSide}),hover:mk(VR_HALO_HOVER,{side:THREE.BackSide,opacity:0.9}),selected:mk(VR_HALO_SELECTED,{side:THREE.BackSide,opacity:0.95})};
- mats.rimD=depthOf(mats.rim);mats.rimG=ghostOf(mats.rim);
+ mats.rimD=depthOf(mats.rim);mats.rimG=ghostOf(mats.rim);mats.hoverD=depthOf(mats.hover);mats.selectedD=depthOf(mats.selected); // the halo: depth tested with its point (no ghost: what the tissue covers shows no halo)
  // per-colour materials: dot = the colour, solid = its dark body, ghost = the faint copy while moving, line = the perpendicular; made on first use.
  // ...D = depth tested, ...G = the ghost pass (see depthOf / ghostOf)
  const byColor=new Map();
@@ -70,7 +70,7 @@ export function createVrPointMarkers(THREE,scene,deps={getComments,getMarkersSho
   const halo=new THREE.Mesh(geo,mats.hover);halo.renderOrder=2;halo.frustumCulled=false;halo.visible=false;
   const line=new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(),new THREE.Vector3()]),colored('#19d3ee').line);line.renderOrder=3;line.frustumCulled=false;line.visible=false;
   const chip=new THREE.Mesh(chipGeo,new THREE.MeshBasicMaterial({map:tex,transparent:true,depthTest:false,depthWrite:false,toneMapped:false,side:THREE.DoubleSide}));chip.renderOrder=5;chip.frustumCulled=false;
-  // the ghost pass of each part is a child (shares the geometry, moves / scales / hides with it); shown only while the part is depth tested (occlusion on, not lit)
+  // the ghost pass of each part is a child (shares the geometry, moves / scales / hides with it); shown only while the part is depth tested (occlusion on, lit or not)
   const kid=(parent,o)=>{o.renderOrder=parent.renderOrder;o.frustumCulled=false;o.visible=false;parent.add(o);return o};
   const sphereG=kid(sphere,new THREE.Mesh(geo,colored('#19d3ee').solidG));
   const rimG=kid(rim,new THREE.Mesh(geo,mats.rimG));
@@ -97,8 +97,7 @@ export function createVrPointMarkers(THREE,scene,deps={getComments,getMarkersSho
      const hex=pointColor(c),col=colored(hex);
      if(it.no!==n+1||it.hex!==hex)drawChip(it,n+1,hex);
      const pv=preview&&preview.id===c.id?preview:null,ghost=!!pv&&!pv.voxel,l=voxelToLocal(pv&&pv.voxel?pv.voxel:t,halfExt,dims),rel=section?sectionRelation(l,section,halfExt,dims):null;
-     const lit=c.id===selectedId||!!hover?.has(c.id)||!!pv, // selected / laser on it / being moved: fully on top (operable), never ghosted
-      deep=occludedPass(occlusion,lit); // depth tested + ghost
+     const deep=markPass(occlusion); // depth tested + ghost; selected / laser on it / being moved (lit) too: hidden by the body or a part nearer to the head like any other point (its halo shows it is lit)
      const st=markerStyle({hidden:!occlusion&&!!hidden?.has(c.id),section:rel?(rel.onSection?'on':'off'):null,selected:c.id===selectedId,hover:!!hover?.has(c.id)}); // with the GPU depth the CPU judgement is not used
      v.set(l.x,l.y,l.z);mesh.localToWorld(v);
      const r=r0*st.scale;it.radius=Math.max(PICK_MIN_M,r0*1.3*1.2); // the hit radius stays what the normal-size disc had (base radius, rim included, +20 %), independent of the smaller drawn size; the least is PICK_MIN_M
@@ -106,7 +105,7 @@ export function createVrPointMarkers(THREE,scene,deps={getComments,getMarkersSho
      it.sphere.material=ghost?col.ghost:col[deep?fk+'D':fk];it.sphereG.visible=deep&&!ghost;it.sphereG.material=col[fk+'G'];
      it.sphere.position.copy(v);it.sphere.scale.setScalar(r);
      it.rim.visible=st.rim&&!ghost;it.rim.material=deep?mats.rimD:mats.rim;it.rimG.visible=deep;it.rim.position.copy(v);it.rim.scale.setScalar(r*1.3);
-     it.halo.visible=!!st.halo;if(st.halo){it.halo.material=mats[st.halo];it.halo.position.copy(v);it.halo.scale.setScalar(r*1.9)}
+     it.halo.visible=!!st.halo;if(st.halo){it.halo.material=mats[deep?st.halo+'D':st.halo];it.halo.position.copy(v);it.halo.scale.setScalar(r*1.9)}
      it.chip.material.depthTest=deep;it.chipG.visible=deep;
      const showLine=st.perpendicular&&!!rel;it.line.visible=showLine;it.line.material=deep?col.lineD:col.line;it.lineG.visible=deep;it.lineG.material=col.lineG;
      if(showLine){f.set(rel.foot.x,rel.foot.y,rel.foot.z);mesh.localToWorld(f);const a=it.line.geometry.attributes.position;a.setXYZ(0,v.x,v.y,v.z);a.setXYZ(1,f.x,f.y,f.z);a.needsUpdate=true}

@@ -441,12 +441,12 @@ describe('VR depth cue: behind the volume surface = faint (vr-measure.js)', () =
     expect(q[q.length - 1].world.distanceTo(new THREE.Vector3(0.1, 1.5, -0.55))).toBeLessThan(1e-4);
     removeMeasurement(m.id); v.update(base); expect(v.probes()).toEqual([]); v.dispose();
   });
-  it('nothing hidden: everything stays fully visible; the label behind the surface (the midpoint, not dragged) fades with its leader; lit = full again', () => {
+  it('nothing hidden: everything stays fully visible; the label behind the surface (the midpoint, not dragged) fades with its leader; lit fades the same', () => {
     const { m, v, base, label, leader } = make();
     settle(v, base); expect(label.material.opacity).toBe(1); expect(leader.geometry.attributes.color.getW(0)).toBe(1);
     const hid = new Set([probeKey(m.id, LABEL_MID)]);
     settle(v, { ...base, hidden: hid }); expect(label.material.opacity).toBeCloseTo(OCCLUDED_ALPHA, 6); expect(leader.geometry.attributes.color.getW(1)).toBeCloseTo(OCCLUDED_ALPHA, 6);
-    settle(v, { ...base, hidden: hid, lit: new Set([m.id]) }); expect(label.material.opacity).toBe(1); // grabbed / laser on it: operable
+    settle(v, { ...base, hidden: hid, lit: new Set([m.id]) }); expect(label.material.opacity).toBeCloseTo(OCCLUDED_ALPHA, 6); expect(leader.geometry.attributes.color.getW(1)).toBeCloseTo(OCCLUDED_ALPHA, 6); // grabbed / laser on it: faint behind the surface like an unlit label
     settle(v, { ...base, hidden: hid }); expect(label.material.opacity).toBeCloseTo(OCCLUDED_ALPHA, 6);
     settle(v, { ...base, hidden: new Set() }); expect(label.material.opacity).toBe(1);
     v.dispose();
